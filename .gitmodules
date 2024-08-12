@@ -1,0 +1,3 @@
+[submodule "External/NRI"]
+	path = External/NRI
+	url = https://github.com/NVIDIAGameWorks/NRI.git
