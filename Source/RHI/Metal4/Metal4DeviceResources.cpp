@@ -28,12 +28,6 @@ NS::UInteger mipExtent(uint32_t base, uint32_t level) {
 }
 
 //======================================================================================================================
-bool isMipmapGeneratableFormat(MTL::PixelFormat format) {
-    return format != MTL::PixelFormatBC1_RGBA && format != MTL::PixelFormatBC1_RGBA_sRGB &&
-           format != MTL::PixelFormatDepth32Float;
-}
-
-//======================================================================================================================
 MTL::SamplerMinMagFilter toMTLMinMag(FilterMode filter) {
     return filter == FilterMode::Linear ? MTL::SamplerMinMagFilterLinear
                                         : MTL::SamplerMinMagFilterNearest;
@@ -222,49 +216,6 @@ Result<std::unique_ptr<Sampler>> Metal4Device::createSampler(const SamplerDesc& 
     }
 
     return std::make_unique<Metal4Sampler>(std::move(sampler));
-}
-
-//======================================================================================================================
-void Metal4Device::generateMipmaps(Texture& texture) {
-    NS::SharedPtr<NS::AutoreleasePool> pool = NS::TransferPtr(NS::AutoreleasePool::alloc()->init());
-
-    LMX_ASSERT(!m_frameOpen, "generateMipmaps: must not be called while a frame is open -- it "
-                             "commits its own command buffer");
-    MTL::Texture* handle = static_cast<Metal4Texture&>(texture).handle();
-    LMX_ASSERT(handle->mipmapLevelCount() > 1,
-               "generateMipmaps: the texture has one mip level, so there is nothing to generate "
-               "-- create it with TextureDesc.mipLevels > 1");
-    LMX_ASSERT(isMipmapGeneratableFormat(handle->pixelFormat()),
-               "generateMipmaps: requires a filterable, color-renderable format -- a BC1 chain "
-               "comes precompressed from the asset, and a depth format cannot be filtered");
-
-    // Use dedicated objects so mip generation cannot reset an in-flight frame allocator.
-    NS::Error* error = nullptr;
-    auto allocatorDesc = NS::TransferPtr(MTL4::CommandAllocatorDescriptor::alloc()->init());
-    allocatorDesc->setLabel(makeString("lmx.device.mipmapAllocator").get());
-    NS::SharedPtr<MTL4::CommandAllocator> allocator =
-        NS::TransferPtr(m_device->newCommandAllocator(allocatorDesc.get(), &error));
-    LMX_ASSERT(allocator,
-               "generateMipmaps: failed to create a command allocator: " + describe(error));
-
-    NS::SharedPtr<MTL4::CommandBuffer> commandBuffer =
-        NS::TransferPtr(m_device->newCommandBuffer());
-    LMX_ASSERT(commandBuffer, "generateMipmaps: failed to create a command buffer");
-    commandBuffer->setLabel(makeString("lmx.device.mipmapCommandBuffer").get());
-
-    commandBuffer->beginCommandBuffer(allocator.get());
-    // Metal 4 exposes mip generation through its compute encoder rather than a blit encoder.
-    MTL4::ComputeCommandEncoder* encoder = commandBuffer->computeCommandEncoder();
-    LMX_ASSERT(encoder != nullptr, "generateMipmaps: failed to create a compute command encoder");
-    encoder->setLabel(makeString("lmx.device.mipmapEncoder").get());
-    encoder->generateMipmaps(handle);
-    encoder->endEncoding();
-    commandBuffer->endCommandBuffer();
-
-    const MTL4::CommandBuffer* commandBuffers[] = {commandBuffer.get()};
-    m_queue->commit(commandBuffers, 1);
-    // No other RHI edge orders the caller's next texture read after this upload.
-    drainQueue(m_queue.get());
 }
 
 } // namespace lmx::rhi::metal4

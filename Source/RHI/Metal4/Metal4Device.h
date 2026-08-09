@@ -46,7 +46,6 @@ public:
     CommandList& beginFrame() override;
     void endFrame(Swapchain* presentTo) override;
     void waitIdle() override;
-    void generateMipmaps(Texture& texture) override;
 
     std::span<const PassTiming> passTimings() const override { return m_passTimings; }
 
