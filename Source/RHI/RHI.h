@@ -237,6 +237,19 @@ public:
     virtual void resize(uint32_t width, uint32_t height) = 0;
 };
 
+// How long the GPU spent on one render pass, measured on the device timeline by timestamps the
+// backend writes at the pass boundaries -- callers record nothing.
+//
+// label is the RenderPassDesc label the pass was begun with, with the backend's unnamed-pass
+// fallback substituted for an empty one. gpuMilliseconds covers the whole pass, load and store
+// actions included, and is wall time on the GPU rather than a sum of shader costs: a pass that
+// overlaps another still reports its own span, so times across a frame may add up to more than
+// the frame took.
+struct PassTiming {
+    std::string label;
+    double gpuMilliseconds = 0.0;
+};
+
 struct DeviceDesc {
     bool enableValidation = true;
 };
@@ -267,6 +280,25 @@ public:
     virtual void waitIdle() = 0;
 
     virtual void generateMipmaps(Texture& texture) = 0;
+
+    // Per-pass GPU times of one past frame, in the order that frame began its passes.
+    //
+    // The reported frame is the newest one the GPU had finished by the time of the most recent
+    // beginFrame(). That lag is not an implementation detail to be tuned away: a frame's timestamps
+    // are written by the GPU as it executes, so they are readable only once that frame retires, and
+    // this RHI resolves them at the one point retirement is already proven -- beginFrame's pacing
+    // wait. Reading them any earlier would mean stalling the CPU on the GPU mid-frame.
+    //
+    // Consequences a caller can rely on:
+    //   - empty until a beginFrame() observes a retired frame, so the whole first frame reports
+    //     nothing;
+    //   - to obtain the timings of a *specific* frame, end it, waitIdle(), then call beginFrame()
+    //     once more -- that call publishes exactly that frame;
+    //   - in a continuous loop the readout trails the open frame by a few frames and never stalls.
+    // A frame with no passes reports an empty span, not the previous frame's numbers.
+    //
+    // The span is owned by the device and is invalidated by the next beginFrame().
+    virtual std::span<const PassTiming> passTimings() const = 0;
 
     virtual std::string_view deviceName() const = 0;
 };

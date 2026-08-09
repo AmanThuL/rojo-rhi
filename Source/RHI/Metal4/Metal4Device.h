@@ -9,6 +9,7 @@
 #include <optional>
 #include <span>
 #include <string>
+#include <vector>
 
 namespace lmx::rhi::metal4 {
 
@@ -47,6 +48,8 @@ public:
     void waitIdle() override;
     void generateMipmaps(Texture& texture) override;
 
+    std::span<const PassTiming> passTimings() const override { return m_passTimings; }
+
     std::string_view deviceName() const override { return m_deviceName; }
 
     // Backend-internal, same role as the handle() on every resource wrapper: sibling Metal 4
@@ -80,6 +83,15 @@ public:
 
 private:
     Metal4Device() = default;
+
+    // Republishes m_passTimings from the newest frame slot the pacing event proves retired and
+    // that has not been published already. Called by beginFrame after its wait, so it never blocks
+    // on the GPU and never reads a heap the GPU may still be writing.
+    void resolveRetiredPassTimings();
+
+    // Converts one pass's raw timestamp pair into milliseconds; asserts the pair is a resolved,
+    // ordered measurement rather than a counter Metal declined to write.
+    double passMilliseconds(uint64_t beginTicks, uint64_t endTicks) const;
 
     // Owns the characters the deviceName() view points at -- MTL::Device::name()'s
     // utf8String() buffer is only valid while the autorelease pool that produced it lives.
@@ -125,9 +137,23 @@ private:
         uint64_t bytesUsed = 0;
     };
     std::array<UniformRingUse, kFramesInFlight> m_uniformRingUse{};
+    // GPU pass timestamps, on the same rotation and for the same reason as the rings above: the
+    // GPU writes a frame's entries while that frame is in flight.
+    std::array<Metal4FrameTimestamps, kFramesInFlight> m_frameTimestamps;
     // Not a member by value: Metal4CommandList's constructor needs the command buffer above,
     // which does not exist until create() has run.
     std::optional<Metal4CommandList> m_commandList;
+
+    // What passTimings() hands out; see the contract on the RHI declaration. Rebuilt wholesale by
+    // resolveRetiredPassTimings, which is why the span is documented as valid only until the next
+    // beginFrame.
+    std::vector<PassTiming> m_passTimings;
+    // The frame m_passTimings describes, so a slot is never published twice and an older slot can
+    // never overwrite a newer publication.
+    uint64_t m_resolvedFrame = 0;
+    // GPU timestamp ticks per second, queried once from the device. Fixed at creation because the
+    // conversion must be identical for every frame the readout compares.
+    uint64_t m_timestampTicksPerSecond = 0;
 
     uint64_t m_frameNumber = 0;
     // Guards the beginFrame/endFrame pairing; see the assertions in both.

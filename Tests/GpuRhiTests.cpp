@@ -1,5 +1,7 @@
 #include "GpuTestSupport.h"
 
+#include <chrono>
+
 namespace {
 
 //======================================================================================================================
@@ -906,4 +908,105 @@ TEST_CASE("pipeline raster state culls back faces and draws wireframes", "[gpu]"
     INFO("wireframe coverage: " + std::to_string(wireCoverage));
     REQUIRE(wireCoverage > 40);
     REQUIRE(wireCoverage < 250);
+}
+
+//======================================================================================================================
+// A GPU timestamp is readable only once the frame that wrote it retired, so nothing is reportable
+// until a beginFrame observes that retirement -- not at device creation, and not even after the
+// measured frame's own waitIdle.
+TEST_CASE("pass timings stay empty until a frame retirement is observed", "[gpu]") {
+    using namespace lmx::rhi;
+
+    auto device = createDevice();
+    INFO(errorOf(device));
+    REQUIRE(device.has_value());
+
+    REQUIRE((*device)->passTimings().empty());
+
+    auto target = makeProbeTarget(**device, "lmx.test.timingIdleTarget");
+    INFO(errorOf(target));
+    REQUIRE(target.has_value());
+
+    CommandList& commands = (*device)->beginFrame();
+    commands.beginRenderPass({.colorTarget = target->get(),
+                              .clearColor = {0.0f, 0.0f, 0.0f, 1.0f},
+                              .clear = true,
+                              .label = "lmx.test.timing.idle"});
+    commands.endRenderPass();
+    REQUIRE((*device)->passTimings().empty());
+    (*device)->endFrame(nullptr);
+    (*device)->waitIdle();
+
+    REQUIRE((*device)->passTimings().empty());
+}
+
+//======================================================================================================================
+TEST_CASE("pass timings report every pass of the retired frame", "[gpu]") {
+    using namespace lmx::rhi;
+
+    auto device = createDevice();
+    INFO(errorOf(device));
+    REQUIRE(device.has_value());
+
+    auto library = (*device)->loadShaderLibrary("Shaders/Triangle");
+    INFO(errorOf(library));
+    REQUIRE(library.has_value());
+
+    auto pipeline = (*device)->createGraphicsPipeline({.library = library->get(),
+                                                       .vertexEntry = "vertexMain",
+                                                       .fragmentEntry = "fragmentMain",
+                                                       .colorFormat = Format::BGRA8Unorm,
+                                                       .label = "lmx.test.timingPipeline"});
+    INFO(errorOf(pipeline));
+    REQUIRE(pipeline.has_value());
+
+    auto first = makeProbeTarget(**device, "lmx.test.timingFirstTarget");
+    INFO(errorOf(first));
+    REQUIRE(first.has_value());
+    auto second = makeProbeTarget(**device, "lmx.test.timingSecondTarget");
+    INFO(errorOf(second));
+    REQUIRE(second.has_value());
+
+    const auto frameStart = std::chrono::steady_clock::now();
+    CommandList& commands = (*device)->beginFrame();
+    const auto pass = [&](Texture& destination, const char* label) {
+        commands.beginRenderPass({.colorTarget = &destination,
+                                  .clearColor = {0.0f, 0.0f, 0.0f, 1.0f},
+                                  .clear = true,
+                                  .label = label});
+        commands.bindPipeline(**pipeline);
+        commands.setUniforms(kVertexBufferSlot, kTriangle.data(), sizeof(kTriangle));
+        commands.draw(static_cast<uint32_t>(kTriangle.size()));
+        commands.endRenderPass();
+    };
+    pass(**first, "lmx.test.timing.first");
+    pass(**second, "lmx.test.timing.second");
+    (*device)->endFrame(nullptr);
+    (*device)->waitIdle();
+    // Every tick these passes are credited with was spent inside this window: the work was not
+    // submitted before beginFrame and had finished before waitIdle returned. It is the one bound
+    // available without a second clock, and it is what a wrong tick-to-millisecond scale breaks --
+    // a raw tick delta is positive whatever the divisor is.
+    const std::chrono::duration<double, std::milli> wall =
+        std::chrono::steady_clock::now() - frameStart;
+
+    // waitIdle retires the measured frame; the next beginFrame is what publishes its counters.
+    (*device)->beginFrame();
+    (*device)->endFrame(nullptr);
+
+    const std::span<const PassTiming> timings = (*device)->passTimings();
+    REQUIRE(timings.size() == 2);
+    REQUIRE(timings[0].label == "lmx.test.timing.first");
+    REQUIRE(timings[1].label == "lmx.test.timing.second");
+    double reported = 0.0;
+    for (const PassTiming& timing : timings) {
+        INFO(timing.label + ": " + std::to_string(timing.gpuMilliseconds) + " ms of " +
+             std::to_string(wall.count()) + " ms wall");
+        REQUIRE(timing.gpuMilliseconds > 0.0);
+        REQUIRE(timing.gpuMilliseconds < wall.count());
+        reported += timing.gpuMilliseconds;
+    }
+    INFO("reported " + std::to_string(reported) + " ms across " + std::to_string(wall.count()) +
+         " ms wall");
+    REQUIRE(reported < wall.count());
 }

@@ -14,8 +14,8 @@ namespace lmx::rhi::metal4 {
 void Metal4CommandList::beginRenderPass(const RenderPassDesc& desc) {
     NS::SharedPtr<NS::AutoreleasePool> pool = NS::TransferPtr(NS::AutoreleasePool::alloc()->init());
 
-    // endFrameReset clears both pointers, making them the command list's open-frame sentinel.
-    LMX_ASSERT(m_argumentTable != nullptr && m_uniformRing != nullptr,
+    // endFrameReset clears every per-frame pointer, making them the open-frame sentinel.
+    LMX_ASSERT(m_argumentTable != nullptr && m_uniformRing != nullptr && m_timestamps != nullptr,
                "beginRenderPass: no frame is open -- this command list is only valid between "
                "Device::beginFrame and Device::endFrame");
     LMX_ASSERT(!m_encoder, "beginRenderPass: a render pass is already open on this command list");
@@ -25,6 +25,8 @@ void Metal4CommandList::beginRenderPass(const RenderPassDesc& desc) {
     LMX_ASSERT(desc.colorTarget != nullptr || desc.storeDepth,
                "RenderPassDesc: a depth-only pass must set storeDepth -- it has no other output, "
                "so discarding depth would make the whole pass dead work");
+
+    const std::string_view label = desc.label.empty() ? "lmx.pass.unnamed" : desc.label;
 
     auto* colorTarget = static_cast<Metal4Texture*>(desc.colorTarget);
 
@@ -60,9 +62,20 @@ void Metal4CommandList::beginRenderPass(const RenderPassDesc& desc) {
 
     passDesc->setDefaultRasterSampleCount(1);
 
+    // Timestamps are written on the command buffer rather than inside the encoder, which is what
+    // makes them pass boundaries: an encoder-stage timestamp would be ordered against a shader
+    // stage, and the pass's load and clear work happens before any stage runs. Both writes of a
+    // pass therefore straddle the encoder -- this one, and the one endRenderPass makes after
+    // endEncoding.
+    const size_t passIndex = m_timestamps->passLabels.size();
+    LMX_ASSERT(passIndex < kMaxTimedPassesPerFrame,
+               "beginRenderPass: this frame has more render passes than the per-frame timestamp "
+               "heap holds -- grow kMaxTimedPassesPerFrame");
+    m_timestamps->passLabels.emplace_back(label);
+    m_commandBuffer->writeTimestampIntoHeap(m_timestamps->heap.get(), passIndex * 2);
+
     m_encoder = NS::RetainPtr(m_commandBuffer->renderCommandEncoder(passDesc.get()));
     LMX_ASSERT(m_encoder, "beginRenderPass: failed to create a render command encoder");
-    const std::string_view label = desc.label.empty() ? "lmx.pass.unnamed" : desc.label;
     m_encoder->setLabel(makeString(label).get());
 
     // Metal barriers are encoder operations, so a between-pass RHI barrier is emitted by the
@@ -192,6 +205,10 @@ void Metal4CommandList::endRenderPass() {
     LMX_ASSERT(m_encoder, "endRenderPass: no render pass is open on this command list");
     m_encoder->endEncoding();
     m_encoder.reset();
+
+    // Closes the pair beginRenderPass opened; the label pushed there names this index.
+    const size_t passIndex = m_timestamps->passLabels.size() - 1;
+    m_commandBuffer->writeTimestampIntoHeap(m_timestamps->heap.get(), passIndex * 2 + 1);
 }
 
 //======================================================================================================================
@@ -208,15 +225,20 @@ void Metal4CommandList::textureBarrier(Texture& texture, TextureUse from, Textur
 
 //======================================================================================================================
 void Metal4CommandList::resetForFrame(MTL4::ArgumentTable* argumentTable, MTL::Buffer* uniformRing,
-                                      uint64_t* uniformOffset) {
+                                      uint64_t* uniformOffset, Metal4FrameTimestamps* timestamps) {
     // Never retarget per-frame storage while an encoder can still reference the old slot.
     LMX_ASSERT(!m_encoder, "resetForFrame: a render pass is still open from the previous frame");
     LMX_ASSERT(argumentTable != nullptr, "resetForFrame: argument table must not be null");
     LMX_ASSERT(uniformRing != nullptr && uniformOffset != nullptr,
                "resetForFrame: uniform ring and its offset cursor must not be null");
+    LMX_ASSERT(timestamps != nullptr && timestamps->heap,
+               "resetForFrame: the frame's timestamp slot must carry a counter heap");
+    LMX_ASSERT(timestamps->passLabels.empty(),
+               "resetForFrame: the frame's timestamp slot still holds the previous frame's passes");
     m_argumentTable = argumentTable;
     m_uniformRing = uniformRing;
     m_uniformOffset = uniformOffset;
+    m_timestamps = timestamps;
 }
 
 //======================================================================================================================
@@ -227,6 +249,9 @@ void Metal4CommandList::endFrameReset() {
     m_argumentTable = nullptr;
     m_uniformRing = nullptr;
     m_uniformOffset = nullptr;
+    // The slot itself outlives the frame -- the device reads its labels when the frame retires --
+    // but this list must not be able to append to it outside a frame.
+    m_timestamps = nullptr;
     m_pendingBarrier = false;
 }
 

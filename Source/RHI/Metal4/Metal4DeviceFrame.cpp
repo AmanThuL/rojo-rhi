@@ -8,6 +8,63 @@
 namespace lmx::rhi::metal4 {
 
 //======================================================================================================================
+double Metal4Device::passMilliseconds(uint64_t beginTicks, uint64_t endTicks) const {
+    // An entry the GPU never wrote still holds the value invalidateCounterRange left there.
+    // Reporting a duration for one would be inventing a measurement.
+    LMX_ASSERT(beginTicks != MTL::CounterErrorValue && endTicks != MTL::CounterErrorValue,
+               "pass timing: the GPU left a timestamp of an encoded pass unwritten");
+    LMX_ASSERT(endTicks >= beginTicks,
+               "pass timing: a pass ended at an earlier GPU timestamp than it began");
+    return static_cast<double>(endTicks - beginTicks) * 1000.0 /
+           static_cast<double>(m_timestampTicksPerSecond);
+}
+
+//======================================================================================================================
+void Metal4Device::resolveRetiredPassTimings() {
+    NS::SharedPtr<NS::AutoreleasePool> pool = NS::TransferPtr(NS::AutoreleasePool::alloc()->init());
+
+    // The event is the only proof that a slot's timestamps are finished being written.
+    const uint64_t retired = m_frameEvent->signaledValue();
+
+    // With three frames in flight two slots can be retired and unpublished at the same time;
+    // publishing the older one would walk the readout backwards.
+    const Metal4FrameTimestamps* newest = nullptr;
+    for (const Metal4FrameTimestamps& candidate : m_frameTimestamps) {
+        if (candidate.frameNumber <= m_resolvedFrame || candidate.frameNumber > retired) {
+            continue;
+        }
+        if (newest == nullptr || candidate.frameNumber > newest->frameNumber) {
+            newest = &candidate;
+        }
+    }
+    if (newest == nullptr) {
+        return;
+    }
+
+    m_resolvedFrame = newest->frameNumber;
+    m_passTimings.clear();
+    if (newest->passLabels.empty()) {
+        return;
+    }
+
+    const NS::UInteger entryCount = newest->passLabels.size() * 2;
+    NS::Data* resolved = newest->heap->resolveCounterRange(NS::Range::Make(0, entryCount));
+    LMX_ASSERT(resolved != nullptr,
+               "beginFrame: the timestamp heap of a retired frame refused to resolve");
+    LMX_ASSERT(resolved->length() == entryCount * sizeof(MTL4::TimestampHeapEntry),
+               "beginFrame: the resolved timestamp heap is not a plain array of heap entries");
+    const auto* entries = static_cast<const MTL4::TimestampHeapEntry*>(resolved->bytes());
+
+    m_passTimings.reserve(newest->passLabels.size());
+    for (size_t pass = 0; pass < newest->passLabels.size(); ++pass) {
+        m_passTimings.push_back(
+            {.label = newest->passLabels[pass],
+             .gpuMilliseconds =
+                 passMilliseconds(entries[pass * 2].timestamp, entries[pass * 2 + 1].timestamp)});
+    }
+}
+
+//======================================================================================================================
 CommandList& Metal4Device::beginFrame() {
     NS::SharedPtr<NS::AutoreleasePool> pool = NS::TransferPtr(NS::AutoreleasePool::alloc()->init());
 
@@ -37,14 +94,22 @@ CommandList& Metal4Device::beginFrame() {
                            m_frameNumber, lastUse.bytesUsed, lastUse.frameNumber,
                            m_frameEvent->signaledValue()));
 
+    // Publish before the slot is recycled below: this is the last moment the retiring frame's
+    // timestamps still exist, and the event above has already proven they are readable.
+    resolveRetiredPassTimings();
+
     MTL4::CommandAllocator* allocator = m_allocators[slot].get();
     allocator->reset();
     m_commandBuffer->beginCommandBuffer(allocator);
 
     // The retirement wait makes this slot's uniform bytes safe to overwrite.
     m_uniformOffsets[slot] = 0;
+    Metal4FrameTimestamps& timestamps = m_frameTimestamps[slot];
+    timestamps.heap->invalidateCounterRange(NS::Range::Make(0, kTimestampsPerFrame));
+    timestamps.passLabels.clear();
+    timestamps.frameNumber = 0;
     m_commandList->resetForFrame(m_argumentTables[slot].get(), m_uniformRings[slot].get(),
-                                 &m_uniformOffsets[slot]);
+                                 &m_uniformOffsets[slot], &timestamps);
 
     m_frameOpen = true;
     return *m_commandList;
@@ -85,6 +150,9 @@ void Metal4Device::endFrame(Swapchain* presentTo) {
     // Record ownership only after work consuming the ring has been submitted.
     const uint32_t slot = static_cast<uint32_t>(m_frameNumber % kFramesInFlight);
     m_uniformRingUse[slot] = {.frameNumber = m_frameNumber, .bytesUsed = m_uniformOffsets[slot]};
+    // Claims this slot's timestamps for this frame -- only now is there submitted work that will
+    // eventually make the pacing event vouch for them.
+    m_frameTimestamps[slot].frameNumber = m_frameNumber;
 
     // Drop CPU-side frame pointers while the GPU owns the submitted slot.
     m_commandList->endFrameReset();
