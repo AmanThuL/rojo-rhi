@@ -13,7 +13,10 @@ using device_detail::fail;
 using device_detail::toStdString;
 
 constexpr NS::UInteger kMaxBufferBindCount = 8;
-constexpr NS::UInteger kMaxTextureBindCount = 8;
+// The texture slot budget holds a pass-wide set and a per-draw material set at the same time, and
+// eight no longer covers both. Buffers and samplers keep their own index spaces at eight; neither
+// of those grew.
+constexpr NS::UInteger kMaxTextureBindCount = 16;
 constexpr NS::UInteger kMaxSamplerStateBindCount = 8;
 
 //======================================================================================================================
