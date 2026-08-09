@@ -1142,15 +1142,18 @@ static_assert(sizeof(DepthVertex) == 12, "must match Slang's packed_float3 Verte
 
 //======================================================================================================================
 // Counter-clockwise seen from the front, matching the project winding, so the default back-face
-// culling keeps it.
-std::array<DepthVertex, 6> depthQuad(float z) {
+// culling keeps it. halfExtent 1 covers the whole target, which is what a case needs when every
+// texel of the result has to hold the same answer.
+std::array<DepthVertex, 6> depthQuad(float z, float halfExtent = 0.5f) {
+    const float lo = -halfExtent;
+    const float hi = halfExtent;
     return {{
-        {-0.5f, -0.5f, z},
-        {0.5f, -0.5f, z},
-        {0.5f, 0.5f, z},
-        {-0.5f, -0.5f, z},
-        {0.5f, 0.5f, z},
-        {-0.5f, 0.5f, z},
+        {lo, lo, z},
+        {hi, lo, z},
+        {hi, hi, z},
+        {lo, lo, z},
+        {hi, hi, z},
+        {lo, hi, z},
     }};
 }
 
@@ -1269,4 +1272,161 @@ TEST_CASE("a Greater depth test keeps the nearer fragment in reversed-Z", "[gpu]
     const Pixel untouched = pixelAt(pixels, 2, 2);
     INFO(describe("outside the quads", 2, 2, untouched));
     REQUIRE(untouched.r == 0);
+}
+
+namespace {
+
+constexpr uint32_t kCompareTextureSlot = 3;
+constexpr uint32_t kCompareSamplerSlot = 1;
+
+//======================================================================================================================
+// The NDC-to-texcoord map fitShadowOrtho bakes into shadowTransform: x [-1,1] -> u [0,1] and
+// y [-1,1] -> v [1,0]. Written out here rather than borrowed because this suite tests the RHI,
+// which knows nothing of Render's matrices -- what it shares with them is only the convention.
+glm::mat4 ndcToTexcoord() {
+    glm::mat4 map{1.0f};
+    map[0][0] = 0.5f;
+    map[1][1] = -0.5f;
+    map[3][0] = 0.5f;
+    map[3][1] = 0.5f;
+    return map;
+}
+
+} // namespace
+
+//======================================================================================================================
+// A comparison sampler answers a question, and its CompareFunc is the question. Everything else
+// about a shadow lookup can be right while that one field is wrong, and the result is a scene lit
+// exactly where it should be dark -- so it gets an oracle that reads the two functions back to
+// back off one depth map and one receiver.
+//
+// The map holds 0.25 everywhere and the receiver draws at 0.75, which under reversed-Z means the
+// receiver is *nearer* the light than anything recorded and must come out fully lit. PCF adds its
+// 0.004 bias to the reference, so the sampler is asked to compare 0.754 against 0.25:
+// GreaterEqual answers 1 and the probe reads white, LessEqual answers 0 and it reads black. The
+// two are each other's complement here, which is what makes a swapped CompareFunc impossible to
+// mistake for a filtering or addressing problem.
+TEST_CASE("a comparison sampler's function decides which depth reads as lit", "[gpu]") {
+    using namespace lmx::rhi;
+
+    auto device = createDevice();
+    INFO(errorOf(device));
+    REQUIRE(device.has_value());
+
+    auto depthTarget = (*device)->createTexture({.width = kSize,
+                                                 .height = kSize,
+                                                 .format = Format::D32Float,
+                                                 .renderTarget = true,
+                                                 .sampled = true,
+                                                 .label = "lmx.test.compareDepthTarget"});
+    INFO(errorOf(depthTarget));
+    REQUIRE(depthTarget.has_value());
+
+    auto greaterEqualImage = makeProbeTarget(**device, "lmx.test.compareGreaterEqualImage");
+    INFO(errorOf(greaterEqualImage));
+    REQUIRE(greaterEqualImage.has_value());
+    auto lessEqualImage = makeProbeTarget(**device, "lmx.test.compareLessEqualImage");
+    INFO(errorOf(lessEqualImage));
+    REQUIRE(lessEqualImage.has_value());
+
+    auto library = (*device)->loadShaderLibrary("Shaders/ShadowSmoke");
+    INFO(errorOf(library));
+    REQUIRE(library.has_value());
+
+    auto depthPipeline =
+        (*device)->createGraphicsPipeline({.library = library->get(),
+                                           .vertexEntry = "vertexMain",
+                                           .fragmentEntry = "fragmentDepthOnly",
+                                           .colorFormat = Format::Unknown,
+                                           .depthFormat = Format::D32Float,
+                                           .depthTestEnable = true,
+                                           .depthWriteEnable = true,
+                                           .depthCompare = DepthCompare::Greater,
+                                           .label = "lmx.test.compareDepthPipeline"});
+    INFO(errorOf(depthPipeline));
+    REQUIRE(depthPipeline.has_value());
+
+    auto comparePipeline = (*device)->createGraphicsPipeline({.library = library->get(),
+                                                              .vertexEntry = "vertexMain",
+                                                              .fragmentEntry = "fragmentMain",
+                                                              .colorFormat = Format::BGRA8Unorm,
+                                                              .label = "lmx.test.comparePipeline"});
+    INFO(errorOf(comparePipeline));
+    REQUIRE(comparePipeline.has_value());
+
+    const auto makeCompareSampler = [&](CompareFunc compare, const char* label) {
+        return (*device)->createSampler({.filter = FilterMode::Linear,
+                                         .addressMode = AddressMode::Clamp,
+                                         .compare = compare,
+                                         .label = label});
+    };
+    auto greaterEqualSampler =
+        makeCompareSampler(CompareFunc::GreaterEqual, "lmx.test.greaterEqualSampler");
+    INFO(errorOf(greaterEqualSampler));
+    REQUIRE(greaterEqualSampler.has_value());
+    auto lessEqualSampler = makeCompareSampler(CompareFunc::LessEqual, "lmx.test.lessEqualSampler");
+    INFO(errorOf(lessEqualSampler));
+    REQUIRE(lessEqualSampler.has_value());
+
+    DepthPassUniforms uniforms{};
+    uniforms.shadowTransform = ndcToTexcoord();
+
+    // Both quads cover the whole target, so the map is uniformly 0.25 and PCF's kernel reads the
+    // same texel value at every offset -- there is no edge for a filtering difference to hide in.
+    const std::array<DepthVertex, 6> blocker = depthQuad(0.25f, 1.0f);
+    const std::array<DepthVertex, 6> receiver = depthQuad(0.75f, 1.0f);
+
+    CommandList& commands = (*device)->beginFrame();
+
+    commands.beginRenderPass({.depthTarget = depthTarget->get(),
+                              .clearDepth = 0.0f,
+                              .storeDepth = true,
+                              .label = "lmx.test.compare.write"});
+    commands.bindPipeline(**depthPipeline);
+    commands.setUniforms(kDepthPassSlot, &uniforms, sizeof(uniforms));
+    commands.setUniforms(kVertexBufferSlot, blocker.data(), sizeof(blocker));
+    commands.draw(static_cast<uint32_t>(blocker.size()));
+    commands.endRenderPass();
+
+    commands.textureBarrier(**depthTarget, TextureUse::RenderTarget, TextureUse::ShaderRead);
+
+    const auto comparePass = [&](Texture& destination, Sampler& sampler) {
+        commands.beginRenderPass({.colorTarget = &destination,
+                                  .clearColor = {1.0f, 0.0f, 1.0f, 1.0f},
+                                  .clear = true,
+                                  .label = "lmx.test.compare.probe"});
+        commands.bindPipeline(**comparePipeline);
+        commands.bindTexture(kCompareTextureSlot, **depthTarget);
+        commands.bindSampler(kCompareSamplerSlot, sampler);
+        commands.setUniforms(kDepthPassSlot, &uniforms, sizeof(uniforms));
+        commands.setUniforms(kVertexBufferSlot, receiver.data(), sizeof(receiver));
+        commands.draw(static_cast<uint32_t>(receiver.size()));
+        commands.endRenderPass();
+    };
+    comparePass(**greaterEqualImage, **greaterEqualSampler);
+    comparePass(**lessEqualImage, **lessEqualSampler);
+
+    (*device)->endFrame(nullptr);
+    (*device)->waitIdle();
+
+    std::vector<uint8_t> pixels(size_t{kSize} * kSize * 4);
+
+    // Two probes rather than one: a lookup that answered correctly only where the kernel happened
+    // to stay inside the texture would read differently at the centre and near the corner.
+    const auto requireUniform = [&](const char* what, int want) {
+        for (const auto& at :
+             {std::pair<uint32_t, uint32_t>{32, 32}, std::pair<uint32_t, uint32_t>{4, 4}}) {
+            const Pixel probe = pixelAt(pixels, at.first, at.second);
+            INFO(describe(what, at.first, at.second, probe));
+            REQUIRE(int{probe.r} == want);
+            REQUIRE(int{probe.g} == want);
+            REQUIRE(int{probe.b} == want);
+        }
+    };
+
+    (*greaterEqualImage)->readback(pixels.data(), pixels.size());
+    requireUniform("GreaterEqual: receiver nearer than the blocker", 255);
+
+    (*lessEqualImage)->readback(pixels.data(), pixels.size());
+    requireUniform("LessEqual: the same geometry, the opposite answer", 0);
 }
