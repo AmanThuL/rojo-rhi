@@ -55,10 +55,15 @@ private:
 
 class Metal4Texture final : public Texture {
 public:
+    // readbackBytesPerPixel is rhi::bytesPerPixel of the desc format for a texture created with
+    // TextureDesc.cpuReadback, and 0 for every other texture -- including the swapchain's
+    // drawables, which are never read back. It is what readback() sizes its destination and row
+    // stride from, so the format that produced it need not be carried any further.
     Metal4Texture(NS::SharedPtr<MTL::Texture> texture, uint32_t width, uint32_t height,
-                  bool cpuReadback, NS::SharedPtr<MTL::ResidencySet> residency)
+                  uint32_t readbackBytesPerPixel, NS::SharedPtr<MTL::ResidencySet> residency)
         : m_texture(std::move(texture)), m_width(width), m_height(height),
-          m_cpuReadback(cpuReadback), m_residency(std::move(residency), m_texture.get()) {}
+          m_readbackBytesPerPixel(readbackBytesPerPixel),
+          m_residency(std::move(residency), m_texture.get()) {}
 
     // Drops this texture's capture-schema entry -- same identity contract as ~Metal4Buffer, with
     // the MTL::Texture pointer Metal4Device::createTexture registered.
@@ -77,7 +82,7 @@ private:
     NS::SharedPtr<MTL::Texture> m_texture;
     uint32_t m_width = 0;
     uint32_t m_height = 0;
-    bool m_cpuReadback = false;
+    uint32_t m_readbackBytesPerPixel = 0;
     // Declared last -- see the note in Metal4Buffer.
     ResidencyRegistration m_residency;
 };

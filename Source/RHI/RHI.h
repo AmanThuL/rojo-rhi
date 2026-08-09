@@ -23,11 +23,16 @@ struct Error {
 template <typename T>
 using Result = std::expected<T, Error>;
 
+// RGBA16Float is the scene-linear color format: half precision keeps radiance above 1.0 that an
+// 8-bit unorm target would clamp away. RG16Float carries two-channel lookup tables and is sampled
+// only -- like the rest of this header it grows per real demand (ADR 0004).
 enum class Format {
     Unknown,
     BGRA8Unorm,
     RGBA8Unorm,
     RGBA8Unorm_sRGB,
+    RGBA16Float,
+    RG16Float,
     BC1Unorm,
     BC1Unorm_sRGB,
     D32Float
@@ -89,9 +94,10 @@ public:
     virtual ~Texture() = default;
     virtual uint32_t width() const = 0;
     virtual uint32_t height() const = 0;
-    // Blocking readback of the full texture (requires cpuReadback). out must hold
-    // width*height*4 bytes for 8-bit formats. Caller ensures GPU work completed
-    // (Device::waitIdle).
+    // Blocking readback of the full texture (requires cpuReadback). out must hold exactly
+    // width * height * bytesPerPixel(format) bytes, tightly packed, in the format's own channel
+    // order -- see bytesPerPixel in RHI/Validate.h, which also decides which formats readback
+    // accepts at all. Caller ensures GPU work completed (Device::waitIdle).
     virtual void readback(void* out, uint64_t outSize) = 0;
 };
 
@@ -101,7 +107,9 @@ enum class TextureUse { RenderTarget, ShaderRead };
 
 enum class FilterMode { Nearest, Linear };
 enum class AddressMode { Wrap, Clamp };
-enum class CompareFunc { Never, LessEqual }; // grows per demand; LessEqual = shadow compare
+// Grows per demand. LessEqual is the shadow compare for a conventional depth buffer; GreaterEqual
+// is its reversed-Z counterpart, where the larger stored depth is the nearer surface.
+enum class CompareFunc { Never, LessEqual, GreaterEqual };
 struct SamplerDesc {
     FilterMode filter = FilterMode::Linear;      // min/mag/mip together (thin on purpose)
     AddressMode addressMode = AddressMode::Wrap; // all axes
@@ -131,8 +139,10 @@ enum class FillMode { Solid, Wireframe };
 enum class CullMode { None, Back };
 // The depth comparison a pipeline draws with, when depthTestEnable is set. LessEqual exists for
 // the sky, which is drawn at exactly the far plane (the z = w trick) and would fail a strict Less
-// against a cleared depth buffer.
-enum class DepthCompare { Less, LessEqual };
+// against a cleared depth buffer. Greater and GreaterEqual are the reversed-Z pair: with the near
+// plane at 1 and the far plane at 0, the nearer fragment is the numerically larger one, so a pass
+// clears depth to 0 and keeps what compares Greater.
+enum class DepthCompare { Less, LessEqual, Greater, GreaterEqual };
 // Offsets a fragment's depth to keep a surface from shadowing itself. constant is in units of the
 // depth format's smallest resolvable difference; slopeScale multiplies the polygon's depth slope,
 // which is what covers steeply-angled geometry; clamp caps the total (0 = uncapped).

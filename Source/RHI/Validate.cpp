@@ -10,19 +10,22 @@ Result<void> invalid(const char* message) {
     return std::unexpected(Error{ErrorCode::InvalidDesc, message});
 }
 
-//======================================================================================================================
-// Readback supports tightly packed four-byte texels; sRGB qualifies, block compression does not.
-bool isEightBitFormat(Format format) {
-    return format == Format::BGRA8Unorm || format == Format::RGBA8Unorm ||
-           format == Format::RGBA8Unorm_sRGB;
-}
-
 constexpr uint32_t kMaxTextureDimension2D = 16384;
 
 //======================================================================================================================
 // Reject non-renderable formats before Metal's pipeline and layer validators abort. sRGB encodes
-// on write; block compression cannot run per fragment.
+// on write; block compression cannot run per fragment. RG16Float is renderable on the hardware but
+// stays out until a pass actually renders into one.
 bool isColorRenderableFormat(Format format) {
+    return format == Format::BGRA8Unorm || format == Format::RGBA8Unorm ||
+           format == Format::RGBA8Unorm_sRGB || format == Format::RGBA16Float;
+}
+
+//======================================================================================================================
+// The window path is intentionally SDR. RGBA16Float is a valid offscreen render target, but the
+// swapchain does not configure CAMetalLayer for an extended-range presentation mode, so accepting
+// it here would advertise a presentation capability the backend has never established or tested.
+bool isSwapchainFormat(Format format) {
     return format == Format::BGRA8Unorm || format == Format::RGBA8Unorm ||
            format == Format::RGBA8Unorm_sRGB;
 }
@@ -55,6 +58,28 @@ std::string extentOf(const Texture& texture) {
 }
 
 } // namespace
+
+//======================================================================================================================
+// Omitting default lets -Wswitch catch a newly added format that has not decided its answer here.
+uint32_t bytesPerPixel(Format format) {
+    switch (format) {
+    case Format::BGRA8Unorm:
+    case Format::RGBA8Unorm:
+    case Format::RGBA8Unorm_sRGB:
+        return 4;
+    case Format::RGBA16Float:
+        return 8;
+    // A BC1 block covers 4x4 texels, so "bytes per pixel" is not expressible; D32Float and
+    // RG16Float are packed formats with no readback caller.
+    case Format::BC1Unorm:
+    case Format::BC1Unorm_sRGB:
+    case Format::D32Float:
+    case Format::RG16Float:
+    case Format::Unknown:
+        break;
+    }
+    return 0;
+}
 
 //======================================================================================================================
 Result<void> validate(const BufferDesc& desc) {
@@ -100,8 +125,9 @@ Result<void> validate(const TextureDesc& desc) {
     if (desc.renderTarget && !isColorRenderableFormat(desc.format) && !isDepthFormat(desc.format)) {
         return invalid("TextureDesc.renderTarget requires a color-renderable or depth format");
     }
-    if (desc.cpuReadback && !isEightBitFormat(desc.format)) {
-        return invalid("TextureDesc.cpuReadback: readback supports 8-bit formats only");
+    if (desc.cpuReadback && bytesPerPixel(desc.format) == 0) {
+        return invalid("TextureDesc.cpuReadback: readback has no packed texel size for this "
+                       "format");
     }
     // The readback API cannot select cube faces and would otherwise return only slice zero.
     if (desc.cpuReadback && desc.kind == TextureKind::Cube) {
@@ -138,7 +164,8 @@ Result<void> validate(const GraphicsPipelineDesc& desc) {
     }
     if (desc.colorFormat != Format::Unknown && !isColorRenderableFormat(desc.colorFormat)) {
         return invalid("GraphicsPipelineDesc.colorFormat must be a color-renderable format "
-                       "(an 8-bit unorm or sRGB one; depth and BC1 are not)");
+                       "(an 8-bit unorm, sRGB, or RGBA16Float one; depth, RG16Float and BC1 are "
+                       "not)");
     }
     if (desc.depthFormat != Format::Unknown && !isDepthFormat(desc.depthFormat)) {
         return invalid("GraphicsPipelineDesc.depthFormat must be a depth format (D32Float) or "
@@ -165,9 +192,9 @@ Result<void> validate(const SwapchainDesc& desc) {
     if (desc.format == Format::Unknown) {
         return invalid("SwapchainDesc.format must not be Format::Unknown");
     }
-    if (!isColorRenderableFormat(desc.format)) {
-        return invalid("SwapchainDesc.format must be a color-renderable format (an 8-bit unorm "
-                       "or sRGB one; depth and BC1 are not)");
+    if (!isSwapchainFormat(desc.format)) {
+        return invalid(
+            "SwapchainDesc.format must be an SDR color-renderable 8-bit unorm or sRGB format");
     }
     return {};
 }

@@ -116,7 +116,7 @@ TEST_CASE("TextureDesc with Format::Unknown is rejected", "[rhi]") {
 }
 
 //======================================================================================================================
-TEST_CASE("TextureDesc cpuReadback with a non-8-bit format is rejected", "[rhi]") {
+TEST_CASE("TextureDesc cpuReadback with a format readback does not support is rejected", "[rhi]") {
     TextureDesc desc{};
     desc.width = 64;
     desc.height = 64;
@@ -128,7 +128,7 @@ TEST_CASE("TextureDesc cpuReadback with a non-8-bit format is rejected", "[rhi]"
     REQUIRE_FALSE(r.has_value());
     REQUIRE(r.error().code == ErrorCode::InvalidDesc);
     REQUIRE(r.error().message.contains("cpuReadback"));
-    REQUIRE(r.error().message.contains("8-bit"));
+    REQUIRE(r.error().message.contains("format"));
 }
 
 //======================================================================================================================
@@ -308,6 +308,22 @@ TEST_CASE("SwapchainDesc with a depth format is rejected", "[rhi]") {
 }
 
 //======================================================================================================================
+// RGBA16Float is the renderer's offscreen scene-color format. The swapchain remains SDR until its
+// CAMetalLayer path explicitly configures and tests extended-range presentation.
+TEST_CASE("SwapchainDesc with the offscreen HDR format is rejected", "[rhi]") {
+    SwapchainDesc desc{};
+    desc.nativeLayer = reinterpret_cast<void*>(0x1);
+    desc.width = 1280;
+    desc.height = 720;
+    desc.format = Format::RGBA16Float;
+
+    const auto r = validate(desc);
+    REQUIRE_FALSE(r.has_value());
+    REQUIRE(r.error().code == ErrorCode::InvalidDesc);
+    REQUIRE(r.error().message.contains("SDR"));
+}
+
+//======================================================================================================================
 TEST_CASE("SwapchainDesc with a layer and non-zero extent is accepted", "[rhi]") {
     SwapchainDesc desc{};
     desc.nativeLayer = &dummyNativeLayer;
@@ -452,6 +468,16 @@ TEST_CASE("SamplerDesc with a comparison function is accepted", "[rhi]") {
 }
 
 //======================================================================================================================
+// The comparison a reversed-Z shadow map needs, where a larger stored depth is the nearer surface.
+TEST_CASE("SamplerDesc with a reversed-Z comparison function is accepted", "[rhi]") {
+    SamplerDesc desc{};
+    desc.compare = CompareFunc::GreaterEqual;
+    desc.label = "reversed shadow compare";
+
+    REQUIRE(validate(desc).has_value());
+}
+
+//======================================================================================================================
 // A cube's six faces are all one square size in Metal (MTLTextureDescriptor takes a single
 // width/height for the whole cube and ignores height for TypeCube), so a non-square desc is a
 // caller mistake that would otherwise turn into six silently-resized faces.
@@ -573,7 +599,7 @@ TEST_CASE("TextureDesc BC1 4x4 with three mip levels is accepted", "[rhi]") {
 
 //======================================================================================================================
 // sRGB differs from its linear twin only in how the sampler decodes the bytes -- the bytes
-// themselves are still four per texel, which is the whole of what readback assumes.
+// themselves are still four per texel, which is the whole of what readback needs to know.
 TEST_CASE("TextureDesc sRGB with cpuReadback is accepted", "[rhi]") {
     TextureDesc desc{};
     desc.width = 64;
@@ -586,8 +612,8 @@ TEST_CASE("TextureDesc sRGB with cpuReadback is accepted", "[rhi]") {
 }
 
 //======================================================================================================================
-// readback() takes one destination buffer sized width*height*4 and no face index, so the six
-// faces have nowhere to go; the desc has to be refused rather than quietly answering with one.
+// readback() takes one flat destination buffer and no face index, so the six faces have nowhere to
+// go; the desc has to be refused rather than quietly answering with one.
 TEST_CASE("TextureDesc cpuReadback on a Cube is rejected", "[rhi]") {
     TextureDesc desc{};
     desc.width = 64;
@@ -617,6 +643,114 @@ TEST_CASE("TextureDesc cpuReadback with a BC1 format is rejected", "[rhi]") {
     REQUIRE_FALSE(r.has_value());
     REQUIRE(r.error().code == ErrorCode::InvalidDesc);
     REQUIRE(r.error().message.contains("cpuReadback"));
+}
+
+//======================================================================================================================
+// The one place a format becomes readback-capable. Zero is the answer for every format readback
+// cannot express: block-compressed ones have no per-texel size at all, and the rest simply have no
+// readback caller yet.
+TEST_CASE("bytesPerPixel sizes the formats readback supports and zeroes the rest", "[rhi]") {
+    REQUIRE(bytesPerPixel(Format::BGRA8Unorm) == 4);
+    REQUIRE(bytesPerPixel(Format::RGBA8Unorm) == 4);
+    REQUIRE(bytesPerPixel(Format::RGBA8Unorm_sRGB) == 4);
+    REQUIRE(bytesPerPixel(Format::RGBA16Float) == 8);
+
+    REQUIRE(bytesPerPixel(Format::RG16Float) == 0);
+    REQUIRE(bytesPerPixel(Format::D32Float) == 0);
+    REQUIRE(bytesPerPixel(Format::BC1Unorm) == 0);
+    REQUIRE(bytesPerPixel(Format::BC1Unorm_sRGB) == 0);
+    REQUIRE(bytesPerPixel(Format::Unknown) == 0);
+}
+
+//======================================================================================================================
+// The scene-linear color format carries all three usages at once: a pass renders into it, a later
+// pass samples it, and an offscreen test reads it back to assert on the values it holds.
+TEST_CASE("TextureDesc RGBA16Float renders, samples, and reads back", "[rhi]") {
+    TextureDesc desc{};
+    desc.width = 64;
+    desc.height = 64;
+    desc.format = Format::RGBA16Float;
+    desc.renderTarget = true;
+    desc.sampled = true;
+    desc.cpuReadback = true;
+    desc.label = "hdr scene color";
+
+    REQUIRE(validate(desc).has_value());
+}
+
+//======================================================================================================================
+// The DFG lookup table is generated on the CPU and only ever sampled, so RG16Float stops there:
+// rendering into one and reading one back have no caller, and an untested capability is worse than
+// an absent one.
+TEST_CASE("TextureDesc RG16Float sampled is accepted", "[rhi]") {
+    TextureDesc desc{};
+    desc.width = 64;
+    desc.height = 64;
+    desc.format = Format::RG16Float;
+    desc.sampled = true;
+    desc.label = "dfg lut";
+
+    REQUIRE(validate(desc).has_value());
+}
+
+//======================================================================================================================
+TEST_CASE("TextureDesc RG16Float as a render target is rejected", "[rhi]") {
+    TextureDesc desc{};
+    desc.width = 64;
+    desc.height = 64;
+    desc.format = Format::RG16Float;
+    desc.renderTarget = true;
+    desc.label = "two-channel target";
+
+    const auto r = validate(desc);
+    REQUIRE_FALSE(r.has_value());
+    REQUIRE(r.error().code == ErrorCode::InvalidDesc);
+    REQUIRE(r.error().message.contains("renderTarget"));
+    REQUIRE(r.error().message.contains("color-renderable"));
+}
+
+//======================================================================================================================
+TEST_CASE("TextureDesc RG16Float with cpuReadback is rejected", "[rhi]") {
+    TextureDesc desc{};
+    desc.width = 64;
+    desc.height = 64;
+    desc.format = Format::RG16Float;
+    desc.cpuReadback = true;
+    desc.label = "two-channel readback";
+
+    const auto r = validate(desc);
+    REQUIRE_FALSE(r.has_value());
+    REQUIRE(r.error().code == ErrorCode::InvalidDesc);
+    REQUIRE(r.error().message.contains("cpuReadback"));
+}
+
+//======================================================================================================================
+TEST_CASE("GraphicsPipelineDesc with an RGBA16Float color format is accepted", "[rhi]") {
+    DummyShaderLibrary library;
+    GraphicsPipelineDesc desc{};
+    desc.library = &library;
+    desc.vertexEntry = "vertexMain";
+    desc.fragmentEntry = "fragmentMain";
+    desc.colorFormat = Format::RGBA16Float;
+    desc.label = "hdr scene pipeline";
+
+    REQUIRE(validate(desc).has_value());
+}
+
+//======================================================================================================================
+TEST_CASE("GraphicsPipelineDesc with an RG16Float color format is rejected", "[rhi]") {
+    DummyShaderLibrary library;
+    GraphicsPipelineDesc desc{};
+    desc.library = &library;
+    desc.vertexEntry = "vertexMain";
+    desc.fragmentEntry = "fragmentMain";
+    desc.colorFormat = Format::RG16Float;
+    desc.label = "lut pipeline";
+
+    const auto r = validate(desc);
+    REQUIRE_FALSE(r.has_value());
+    REQUIRE(r.error().code == ErrorCode::InvalidDesc);
+    REQUIRE(r.error().message.contains("colorFormat"));
 }
 
 //======================================================================================================================

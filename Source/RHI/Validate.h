@@ -15,4 +15,11 @@ Result<void> validate(const SwapchainDesc& desc);
 
 Result<void> validateRenderPassTargets(const Texture* color, const Texture* depth);
 
+// Bytes one texel of `format` occupies in the tightly packed image Texture::readback produces,
+// and 0 for every format this RHI does not read back: block-compressed formats, which have no
+// per-texel size at all, and formats no caller has needed a readback of yet. TextureDesc
+// validation and the backend's readback path share it, so a format becomes readback-capable --
+// and gains its buffer-size contract -- in exactly one place.
+uint32_t bytesPerPixel(Format format);
+
 } // namespace lmx::rhi

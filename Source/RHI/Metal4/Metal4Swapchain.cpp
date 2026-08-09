@@ -58,7 +58,7 @@ Result<Texture*> Metal4Swapchain::acquireNextTexture() {
     // Layer-owned drawables use the layer residency set instead of per-frame device registration.
     m_texture = std::make_unique<Metal4Texture>(
         NS::RetainPtr(texture), static_cast<uint32_t>(texture->width()),
-        static_cast<uint32_t>(texture->height()), /*cpuReadback=*/false,
+        static_cast<uint32_t>(texture->height()), /*readbackBytesPerPixel=*/0,
         /*residency=*/NS::SharedPtr<MTL::ResidencySet>{});
     return m_texture.get();
 }

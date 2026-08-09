@@ -32,6 +32,10 @@ inline MTL::PixelFormat toMTL(Format format) {
         return MTL::PixelFormatRGBA8Unorm;
     case Format::RGBA8Unorm_sRGB:
         return MTL::PixelFormatRGBA8Unorm_sRGB;
+    case Format::RGBA16Float:
+        return MTL::PixelFormatRGBA16Float;
+    case Format::RG16Float:
+        return MTL::PixelFormatRG16Float;
     // Metal names the DXT1 formats BC1_RGBA rather than BC1_RGB: the one-bit-alpha and
     // opaque encodings share a single pixel format, and which one a block uses is decided
     // per block by the ordering of its two endpoint colours.

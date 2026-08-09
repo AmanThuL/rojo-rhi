@@ -34,8 +34,17 @@ MTL::CullMode toMTL(CullMode mode) {
 
 //======================================================================================================================
 MTL::CompareFunction toMTL(DepthCompare compare) {
-    return compare == DepthCompare::LessEqual ? MTL::CompareFunctionLessEqual
-                                              : MTL::CompareFunctionLess;
+    switch (compare) {
+    case DepthCompare::Less:
+        return MTL::CompareFunctionLess;
+    case DepthCompare::LessEqual:
+        return MTL::CompareFunctionLessEqual;
+    case DepthCompare::Greater:
+        return MTL::CompareFunctionGreater;
+    case DepthCompare::GreaterEqual:
+        return MTL::CompareFunctionGreaterEqual;
+    }
+    return MTL::CompareFunctionLess;
 }
 
 //======================================================================================================================

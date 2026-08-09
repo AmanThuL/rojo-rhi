@@ -43,14 +43,17 @@ Metal4Texture::~Metal4Texture() {
 //======================================================================================================================
 void Metal4Texture::readback(void* out, uint64_t outSize) {
     LMX_ASSERT(out != nullptr, "Texture::readback: destination must not be null");
-    LMX_ASSERT(m_cpuReadback,
+    LMX_ASSERT(m_readbackBytesPerPixel > 0,
                "Texture::readback: texture was not created with TextureDesc.cpuReadback");
-    // Readback validation limits this path to tightly packed four-byte formats.
-    const uint64_t expected = uint64_t{m_width} * m_height * 4;
-    LMX_ASSERT(outSize == expected, "Texture::readback: outSize must be width*height*4");
+    // TextureDesc validation already refused every format without a packed texel size, so the
+    // destination and the source rows share this one stride.
+    const uint64_t bytesPerRow = uint64_t{m_width} * m_readbackBytesPerPixel;
+    const uint64_t expected = bytesPerRow * m_height;
+    LMX_ASSERT(outSize == expected,
+               "Texture::readback: outSize must be width*height*bytesPerPixel(format)");
 
     const MTL::Region region = MTL::Region::Make2D(0, 0, m_width, m_height);
-    m_texture->getBytes(out, m_width * 4, region, 0);
+    m_texture->getBytes(out, bytesPerRow, region, 0);
 }
 
 } // namespace lmx::rhi::metal4

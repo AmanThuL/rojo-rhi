@@ -1,6 +1,7 @@
 #include "GpuTestSupport.h"
 
 #include <chrono>
+#include <cstring>
 
 namespace {
 
@@ -1009,4 +1010,263 @@ TEST_CASE("pass timings report every pass of the retired frame", "[gpu]") {
     INFO("reported " + std::to_string(reported) + " ms across " + std::to_string(wall.count()) +
          " ms wall");
     REQUIRE(reported < wall.count());
+}
+
+namespace {
+
+//======================================================================================================================
+// Bit pattern of `value` in binary16 -- the layout an RGBA16Float readback hands back. The
+// round-trip check pins every caller to a value binary16 holds exactly, which is what lets the
+// oracle below compare readback bits for equality rather than within a tolerance.
+uint16_t halfBits(float value) {
+    const _Float16 half = static_cast<_Float16>(value);
+    REQUIRE(static_cast<float>(half) == value);
+    uint16_t bits = 0;
+    std::memcpy(&bits, &half, sizeof(bits));
+    return bits;
+}
+
+// One RGBA16Float texel, in the channel order readback() produces.
+struct HalfPixel {
+    uint16_t r = 0, g = 0, b = 0, a = 0;
+};
+
+//======================================================================================================================
+HalfPixel halfPixelAt(const std::vector<uint16_t>& rgba, uint32_t x, uint32_t y) {
+    const size_t offset = (size_t{y} * kSize + x) * 4;
+    return {rgba[offset], rgba[offset + 1], rgba[offset + 2], rgba[offset + 3]};
+}
+
+//======================================================================================================================
+std::string describeHalf(const char* what, uint32_t x, uint32_t y, const HalfPixel& p) {
+    return std::string(what) + " (" + std::to_string(x) + "," + std::to_string(y) +
+           "): R=" + std::to_string(p.r) + " G=" + std::to_string(p.g) +
+           " B=" + std::to_string(p.b) + " A=" + std::to_string(p.a) + " (binary16 bits)";
+}
+
+} // namespace
+
+//======================================================================================================================
+// An 8-bit target clamps at 1.0, which is exactly what a scene-linear target must not do: the
+// values above it are the radiance later stages tone map. Both the hardware clear and the fragment
+// write are probed, since they reach the attachment by different paths, and every constant is
+// exactly representable in binary16 -- 1.5, 2.0, 4.0, 8.0, 0.5, -0.25 -- so the assertions are
+// equalities rather than tolerances.
+TEST_CASE("an RGBA16Float target keeps values above 1.0 through readback", "[gpu]") {
+    using namespace lmx::rhi;
+
+    auto device = createDevice();
+    INFO(errorOf(device));
+    REQUIRE(device.has_value());
+
+    auto target = (*device)->createTexture({.width = kSize,
+                                            .height = kSize,
+                                            .format = Format::RGBA16Float,
+                                            .renderTarget = true,
+                                            .cpuReadback = true,
+                                            .label = "lmx.test.hdrTarget"});
+    INFO(errorOf(target));
+    REQUIRE(target.has_value());
+
+    auto library = (*device)->loadShaderLibrary("Shaders/Triangle");
+    INFO(errorOf(library));
+    REQUIRE(library.has_value());
+
+    auto pipeline = (*device)->createGraphicsPipeline({.library = library->get(),
+                                                       .vertexEntry = "vertexMain",
+                                                       .fragmentEntry = "fragmentMain",
+                                                       .colorFormat = Format::RGBA16Float,
+                                                       .label = "lmx.test.hdrPipeline"});
+    INFO(errorOf(pipeline));
+    REQUIRE(pipeline.has_value());
+
+    // A flat colour across all three vertices: interpolating equal values is exact, so the
+    // fragment writes the authored number itself and the readback can be compared bit for bit.
+    std::array<Vertex, 3> triangle = kTriangle;
+    for (Vertex& vertex : triangle) {
+        vertex.color[0] = 1.5f;
+        vertex.color[1] = 2.0f;
+        vertex.color[2] = 4.0f;
+    }
+
+    CommandList& commands = (*device)->beginFrame();
+    commands.beginRenderPass({.colorTarget = target->get(),
+                              .clearColor = {0.5f, -0.25f, 8.0f, 0.25f},
+                              .clear = true,
+                              .label = "lmx.test.hdr.write"});
+    commands.bindPipeline(**pipeline);
+    commands.setUniforms(kVertexBufferSlot, triangle.data(), sizeof(triangle));
+    commands.draw(static_cast<uint32_t>(triangle.size()));
+    commands.endRenderPass();
+    (*device)->endFrame(nullptr);
+    (*device)->waitIdle();
+
+    std::vector<uint16_t> texels(size_t{kSize} * kSize * 4);
+    (*target)->readback(texels.data(), texels.size() * sizeof(uint16_t));
+
+    const HalfPixel inside = halfPixelAt(texels, 32, 40);
+    INFO(describeHalf("inside the triangle", 32, 40, inside));
+    REQUIRE(inside.r == halfBits(1.5f));
+    REQUIRE(inside.g == halfBits(2.0f));
+    REQUIRE(inside.b == halfBits(4.0f));
+    REQUIRE(inside.a == halfBits(1.0f));
+
+    const HalfPixel cleared = halfPixelAt(texels, 2, 2);
+    INFO(describeHalf("cleared", 2, 2, cleared));
+    REQUIRE(cleared.r == halfBits(0.5f));
+    REQUIRE(cleared.g == halfBits(-0.25f));
+    REQUIRE(cleared.b == halfBits(8.0f));
+    REQUIRE(cleared.a == halfBits(0.25f));
+}
+
+namespace {
+
+constexpr uint32_t kDepthPassSlot = 2;
+
+// Mirrors ShadowSmoke.slang's PassUniforms. That shader's vertex entry is the one in this suite
+// whose vertices carry a z of their own, which is what a depth-compare oracle needs; identity
+// transforms pass the z straight through to clip space at w = 1, so a vertex's z is the depth
+// Metal compares.
+struct DepthPassUniforms {
+    glm::mat4 lightViewProj{1.0f};
+    glm::mat4 shadowTransform{1.0f};
+    int32_t filter = 0;
+    int32_t pad[3] = {0, 0, 0};
+};
+static_assert(sizeof(DepthPassUniforms) == 144, "must match ShadowSmoke.slang's PassUniforms");
+
+struct DepthVertex {
+    float x = 0.f, y = 0.f, z = 0.f;
+};
+static_assert(sizeof(DepthVertex) == 12, "must match Slang's packed_float3 Vertex layout");
+
+//======================================================================================================================
+// Counter-clockwise seen from the front, matching the project winding, so the default back-face
+// culling keeps it.
+std::array<DepthVertex, 6> depthQuad(float z) {
+    return {{
+        {-0.5f, -0.5f, z},
+        {0.5f, -0.5f, z},
+        {0.5f, 0.5f, z},
+        {-0.5f, -0.5f, z},
+        {0.5f, 0.5f, z},
+        {-0.5f, 0.5f, z},
+    }};
+}
+
+} // namespace
+
+//======================================================================================================================
+// Reversed-Z puts the near plane at 1 and the far plane at 0, so "nearer" is the numerically larger
+// depth and the winning comparison is Greater against a clear of 0. The three draws below cover
+// both directions of that rule in one sequence: 0.25 beats the clear, 0.75 replaces it because it
+// is nearer, and 0.5 is then rejected because it is not. Under the Less semantics this replaces,
+// every draw would fail against the 0.0 clear and the probe would read the clear back instead.
+TEST_CASE("a Greater depth test keeps the nearer fragment in reversed-Z", "[gpu]") {
+    using namespace lmx::rhi;
+
+    constexpr uint32_t kDepthTextureSlot = 0;
+    constexpr uint32_t kSamplerSlot = 0;
+
+    auto device = createDevice();
+    INFO(errorOf(device));
+    REQUIRE(device.has_value());
+
+    auto depthTarget = (*device)->createTexture({.width = kSize,
+                                                 .height = kSize,
+                                                 .format = Format::D32Float,
+                                                 .renderTarget = true,
+                                                 .sampled = true,
+                                                 .label = "lmx.test.reversedDepthTarget"});
+    INFO(errorOf(depthTarget));
+    REQUIRE(depthTarget.has_value());
+
+    auto destination = makeProbeTarget(**device, "lmx.test.reversedDepthDestination");
+    INFO(errorOf(destination));
+    REQUIRE(destination.has_value());
+
+    auto depthLibrary = (*device)->loadShaderLibrary("Shaders/ShadowSmoke");
+    INFO(errorOf(depthLibrary));
+    REQUIRE(depthLibrary.has_value());
+
+    auto depthPipeline =
+        (*device)->createGraphicsPipeline({.library = depthLibrary->get(),
+                                           .vertexEntry = "vertexMain",
+                                           .fragmentEntry = "fragmentDepthOnly",
+                                           .colorFormat = Format::Unknown,
+                                           .depthFormat = Format::D32Float,
+                                           .depthTestEnable = true,
+                                           .depthWriteEnable = true,
+                                           .depthCompare = DepthCompare::Greater,
+                                           .label = "lmx.test.reversedDepthPipeline"});
+    INFO(errorOf(depthPipeline));
+    REQUIRE(depthPipeline.has_value());
+
+    auto sampleLibrary = (*device)->loadShaderLibrary("Shaders/SamplerSmoke");
+    INFO(errorOf(sampleLibrary));
+    REQUIRE(sampleLibrary.has_value());
+
+    auto samplePipeline =
+        (*device)->createGraphicsPipeline({.library = sampleLibrary->get(),
+                                           .vertexEntry = "vertexMain",
+                                           .fragmentEntry = "fragmentIdentityUv",
+                                           .colorFormat = Format::BGRA8Unorm,
+                                           .label = "lmx.test.reversedDepthSamplePipeline"});
+    INFO(errorOf(samplePipeline));
+    REQUIRE(samplePipeline.has_value());
+
+    auto sampler = (*device)->createSampler(
+        {.addressMode = AddressMode::Clamp, .label = "lmx.test.reversedDepthSampler"});
+    INFO(errorOf(sampler));
+    REQUIRE(sampler.has_value());
+
+    const DepthPassUniforms uniforms{};
+    const std::array<DepthVertex, 6> far = depthQuad(0.25f);
+    const std::array<DepthVertex, 6> near = depthQuad(0.75f);
+    const std::array<DepthVertex, 6> middle = depthQuad(0.5f);
+
+    CommandList& commands = (*device)->beginFrame();
+
+    commands.beginRenderPass({.depthTarget = depthTarget->get(),
+                              .clearDepth = 0.0f,
+                              .storeDepth = true,
+                              .label = "lmx.test.reversedDepth.write"});
+    commands.bindPipeline(**depthPipeline);
+    commands.setUniforms(kDepthPassSlot, &uniforms, sizeof(uniforms));
+    const auto drawQuad = [&](const std::array<DepthVertex, 6>& quad) {
+        commands.setUniforms(kVertexBufferSlot, quad.data(), sizeof(quad));
+        commands.draw(static_cast<uint32_t>(quad.size()));
+    };
+    drawQuad(far);
+    drawQuad(near);
+    drawQuad(middle);
+    commands.endRenderPass();
+
+    commands.textureBarrier(**depthTarget, TextureUse::RenderTarget, TextureUse::ShaderRead);
+
+    commands.beginRenderPass({.colorTarget = destination->get(),
+                              .clearColor = {1.0f, 0.0f, 1.0f, 1.0f},
+                              .clear = true,
+                              .label = "lmx.test.reversedDepth.probe"});
+    commands.bindPipeline(**samplePipeline);
+    commands.bindTexture(kDepthTextureSlot, **depthTarget);
+    commands.bindSampler(kSamplerSlot, **sampler);
+    commands.draw(3);
+    commands.endRenderPass();
+
+    (*device)->endFrame(nullptr);
+    (*device)->waitIdle();
+
+    std::vector<uint8_t> pixels(size_t{kSize} * kSize * 4);
+    (*destination)->readback(pixels.data(), pixels.size());
+
+    // 0.75 through an 8-bit probe is 191.25; the tolerance covers the quantization and nothing
+    // else -- the losing depths would read 64 (0.25), 128 (0.5) and 0 (the clear).
+    const Pixel kept = pixelAt(pixels, 32, 32);
+    INFO(describe("inside the quads", 32, 32, kept));
+    REQUIRE(channelNear(kept.r, 191, 2));
+
+    const Pixel untouched = pixelAt(pixels, 2, 2);
+    INFO(describe("outside the quads", 2, 2, untouched));
+    REQUIRE(untouched.r == 0);
 }

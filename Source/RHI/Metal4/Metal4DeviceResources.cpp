@@ -52,10 +52,17 @@ MTL::SamplerAddressMode toMTL(AddressMode mode) {
 }
 
 //======================================================================================================================
-// CompareFunc::Never selects an ordinary sampler; LessEqual selects a comparison sampler.
+// CompareFunc::Never selects an ordinary sampler; the ordering functions select a comparison one.
 MTL::CompareFunction toMTL(CompareFunc compare) {
-    return compare == CompareFunc::LessEqual ? MTL::CompareFunctionLessEqual
-                                             : MTL::CompareFunctionNever;
+    switch (compare) {
+    case CompareFunc::Never:
+        return MTL::CompareFunctionNever;
+    case CompareFunc::LessEqual:
+        return MTL::CompareFunctionLessEqual;
+    case CompareFunc::GreaterEqual:
+        return MTL::CompareFunctionGreaterEqual;
+    }
+    return MTL::CompareFunctionNever;
 }
 
 } // namespace
@@ -183,7 +190,8 @@ Result<std::unique_ptr<Texture>> Metal4Device::createTexture(const TextureDesc& 
     }
 
     return std::make_unique<Metal4Texture>(std::move(texture), desc.width, desc.height,
-                                           desc.cpuReadback, m_residency);
+                                           desc.cpuReadback ? bytesPerPixel(desc.format) : 0,
+                                           m_residency);
 }
 
 //======================================================================================================================
