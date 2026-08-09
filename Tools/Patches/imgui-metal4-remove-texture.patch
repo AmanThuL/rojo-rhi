@@ -1,0 +1,46 @@
+diff --git a/backends/imgui_impl_metal4.h b/backends/imgui_impl_metal4.h
+index 61f797f..244fce3 100644
+--- a/backends/imgui_impl_metal4.h
++++ b/backends/imgui_impl_metal4.h
+@@ -64,7 +64,7 @@ IMGUI_IMPL_API void ImGui_ImplMetal4_UpdateTexture(ImTextureData* tex);
+ #ifndef __OBJC__
+ 
+ // Forward declare relevant classes from the MTL and MTL4 namespace
+-namespace MTL { class Device; }
++namespace MTL { class Device; class Texture; }
+ namespace MTL4 { class CommandQueue; class CommandBuffer; class RenderPassDescriptor; class RenderCommandEncoder; }
+ 
+ // Follow "Getting Started" link and check examples/ folder to learn about using backends!
+@@ -74,6 +74,7 @@ IMGUI_IMPL_API void ImGui_ImplMetal4_NewFrame(MTL4::RenderPassDescriptor* render
+ IMGUI_IMPL_API void ImGui_ImplMetal4_RenderDrawData(ImDrawData* draw_data,
+                                                    MTL4::CommandBuffer* commandBuffer,
+                                                    MTL4::RenderCommandEncoder* commandEncoder);
++IMGUI_IMPL_API bool ImGui_ImplMetal4_RemoveTexture(MTL::Texture* texture);
+ 
+ // Called by Init/NewFrame/Shutdown
+ IMGUI_IMPL_API bool ImGui_ImplMetal4_CreateDeviceObjects(MTL::Device* device);
+diff --git a/backends/imgui_impl_metal4.mm b/backends/imgui_impl_metal4.mm
+index 6044c23..89680bc 100644
+--- a/backends/imgui_impl_metal4.mm
++++ b/backends/imgui_impl_metal4.mm
+@@ -137,6 +137,20 @@ void ImGui_ImplMetal4_RenderDrawData(ImDrawData* draw_data,
+                                    (__bridge id<MTL4RenderCommandEncoder>)(commandEncoder));
+ }
+ 
++bool ImGui_ImplMetal4_RemoveTexture(MTL::Texture* texture)
++{
++    ImGui_ImplMetal4_Data* bd = ImGui_ImplMetal4_GetBackendData();
++    if (bd == nullptr || texture == nullptr)
++    {
++        IM_ASSERT(bd != nullptr && "Context or backend not initialized! Did you call ImGui_ImplMetal4_Init()?");
++        IM_ASSERT(texture != nullptr && "Texture must not be null!");
++        return false;
++    }
++    [bd->SharedMetalContext.residencySet removeAllocation:(__bridge id<MTLTexture>)(texture)];
++    [bd->SharedMetalContext.residencySet commit];
++    return true;
++}
++
+ bool ImGui_ImplMetal_CreateDeviceObjects(MTL::Device* device)
+ {
+     return ImGui_ImplMetal4_CreateDeviceObjects((__bridge id<MTLDevice>)(device));

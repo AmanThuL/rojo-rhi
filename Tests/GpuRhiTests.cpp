@@ -1,0 +1,909 @@
+#include "GpuTestSupport.h"
+
+namespace {
+
+//======================================================================================================================
+bool channelIs(uint8_t actual, float expected) {
+    return expected > 0.5f ? actual > 200 : actual < 55;
+}
+
+} // namespace
+
+//======================================================================================================================
+// A throwaway aligned upload puts the triangle away from offset zero, exposing lost offset
+// arithmetic.
+TEST_CASE("uniform ring feeds a draw from a non-zero offset", "[gpu]") {
+    using namespace lmx::rhi;
+
+    auto device = createDevice();
+    INFO(errorOf(device));
+    REQUIRE(device.has_value());
+
+    auto target = (*device)->createTexture({.width = kSize,
+                                            .height = kSize,
+                                            .format = Format::BGRA8Unorm,
+                                            .renderTarget = true,
+                                            .cpuReadback = true,
+                                            .label = "lmx.test.ringTarget"});
+    INFO(errorOf(target));
+    REQUIRE(target.has_value());
+
+    auto library = (*device)->loadShaderLibrary("Shaders/Triangle");
+    INFO(errorOf(library));
+    REQUIRE(library.has_value());
+
+    auto pipeline = (*device)->createGraphicsPipeline({.library = library->get(),
+                                                       .vertexEntry = "vertexMain",
+                                                       .fragmentEntry = "fragmentMain",
+                                                       .colorFormat = Format::BGRA8Unorm,
+                                                       .label = "lmx.test.ringPipeline"});
+    INFO(errorOf(pipeline));
+    REQUIRE(pipeline.has_value());
+
+    const std::array<uint8_t, 100> filler{};
+
+    CommandList& commands = (*device)->beginFrame();
+    commands.beginRenderPass({.colorTarget = target->get(),
+                              .clearColor = {0.0f, 0.0f, 0.0f, 1.0f},
+                              .clear = true,
+                              .label = "lmx.test.uniformUpload"});
+    commands.bindPipeline(**pipeline);
+    commands.setUniforms(kVertexBufferSlot, filler.data(), filler.size());
+    commands.setUniforms(kVertexBufferSlot, kTriangle.data(), sizeof(kTriangle));
+    commands.draw(static_cast<uint32_t>(kTriangle.size()));
+    commands.endRenderPass();
+    (*device)->endFrame(nullptr);
+    (*device)->waitIdle();
+
+    std::vector<uint8_t> pixels(size_t{kSize} * kSize * 4);
+    (*target)->readback(pixels.data(), pixels.size());
+
+    const Pixel corner = pixelAt(pixels, 2, 2);
+    INFO(describe("corner", 2, 2, corner));
+    REQUIRE(corner.b == 0);
+    REQUIRE(corner.g == 0);
+    REQUIRE(corner.r == 0);
+    REQUIRE(corner.a == 255);
+
+    const Pixel apex = pixelAt(pixels, 32, 24);
+    INFO(describe("apex", 32, 24, apex));
+    REQUIRE(apex.r > 128);
+    REQUIRE(apex.r > apex.g);
+    REQUIRE(apex.r > apex.b);
+
+    const Pixel bottomLeft = pixelAt(pixels, 20, 46);
+    INFO(describe("bottom-left", 20, 46, bottomLeft));
+    REQUIRE(bottomLeft.g > 128);
+    REQUIRE(bottomLeft.g > bottomLeft.r);
+    REQUIRE(bottomLeft.g > bottomLeft.b);
+
+    const Pixel bottomRight = pixelAt(pixels, 43, 46);
+    INFO(describe("bottom-right", 43, 46, bottomRight));
+    REQUIRE(bottomRight.b > 128);
+    REQUIRE(bottomRight.b > bottomRight.r);
+    REQUIRE(bottomRight.b > bottomRight.g);
+}
+
+//======================================================================================================================
+// Six drained frames rotate through all three ring slots twice; each image must retain its own
+// color.
+TEST_CASE("uniform ring keeps per-frame data across slot reuse", "[gpu]") {
+    using namespace lmx::rhi;
+
+    constexpr std::array<std::array<float, 3>, 6> kFrameColors = {{
+        {1.0f, 0.0f, 0.0f}, // frame 0 -> ring slot 1
+        {0.0f, 1.0f, 0.0f}, // frame 1 -> ring slot 2
+        {0.0f, 0.0f, 1.0f}, // frame 2 -> ring slot 0
+        {1.0f, 1.0f, 0.0f}, // frame 3 -> ring slot 1 again, first frame that waits
+        {0.0f, 1.0f, 1.0f}, // frame 4 -> ring slot 2 again
+        {1.0f, 0.0f, 1.0f}, // frame 5 -> ring slot 0 again
+    }};
+
+    auto device = createDevice();
+    INFO(errorOf(device));
+    REQUIRE(device.has_value());
+
+    auto target = (*device)->createTexture({.width = kSize,
+                                            .height = kSize,
+                                            .format = Format::BGRA8Unorm,
+                                            .renderTarget = true,
+                                            .cpuReadback = true,
+                                            .label = "lmx.test.rotationTarget"});
+    INFO(errorOf(target));
+    REQUIRE(target.has_value());
+
+    auto library = (*device)->loadShaderLibrary("Shaders/Triangle");
+    INFO(errorOf(library));
+    REQUIRE(library.has_value());
+
+    auto pipeline = (*device)->createGraphicsPipeline({.library = library->get(),
+                                                       .vertexEntry = "vertexMain",
+                                                       .fragmentEntry = "fragmentMain",
+                                                       .colorFormat = Format::BGRA8Unorm,
+                                                       .label = "lmx.test.rotationPipeline"});
+    INFO(errorOf(pipeline));
+    REQUIRE(pipeline.has_value());
+
+    std::vector<uint8_t> pixels(size_t{kSize} * kSize * 4);
+
+    for (uint32_t frame = 0; frame < kFrameColors.size(); ++frame) {
+        const std::array<float, 3>& color = kFrameColors[frame];
+
+        std::array<Vertex, 3> vertices = kTriangle;
+        for (Vertex& vertex : vertices) {
+            vertex.color[0] = color[0];
+            vertex.color[1] = color[1];
+            vertex.color[2] = color[2];
+        }
+
+        CommandList& commands = (*device)->beginFrame();
+        commands.beginRenderPass({.colorTarget = target->get(),
+                                  .clearColor = {0.0f, 0.0f, 0.0f, 1.0f},
+                                  .clear = true,
+                                  .label = "lmx.test.frameRotation"});
+        commands.bindPipeline(**pipeline);
+        commands.setUniforms(kVertexBufferSlot, vertices.data(), sizeof(vertices));
+        commands.draw(static_cast<uint32_t>(vertices.size()));
+        commands.endRenderPass();
+        (*device)->endFrame(nullptr);
+        (*device)->waitIdle();
+        (*target)->readback(pixels.data(), pixels.size());
+
+        const Pixel inside = pixelAt(pixels, 32, 40);
+        INFO("frame " + std::to_string(frame) + " expected R=" + std::to_string(color[0]) +
+             " G=" + std::to_string(color[1]) + " B=" + std::to_string(color[2]));
+        INFO(describe("inside", 32, 40, inside));
+        REQUIRE(channelIs(inside.r, color[0]));
+        REQUIRE(channelIs(inside.g, color[1]));
+        REQUIRE(channelIs(inside.b, color[2]));
+        REQUIRE(inside.a == 255);
+    }
+}
+
+//======================================================================================================================
+// Two coplanar draws pin Less testing and depth writes: red must survive the rejected green draw.
+TEST_CASE("depth test rejects a coplanar second draw", "[gpu]") {
+    using namespace lmx::rhi;
+
+    auto device = createDevice();
+    INFO(errorOf(device));
+    REQUIRE(device.has_value());
+
+    auto target = (*device)->createTexture({.width = kSize,
+                                            .height = kSize,
+                                            .format = Format::BGRA8Unorm,
+                                            .renderTarget = true,
+                                            .cpuReadback = true,
+                                            .label = "lmx.test.depthColorTarget"});
+    INFO(errorOf(target));
+    REQUIRE(target.has_value());
+
+    auto depthTarget = (*device)->createTexture({.width = kSize,
+                                                 .height = kSize,
+                                                 .format = Format::D32Float,
+                                                 .renderTarget = true,
+                                                 .label = "lmx.test.depthTarget"});
+    INFO(errorOf(depthTarget));
+    REQUIRE(depthTarget.has_value());
+
+    auto library = (*device)->loadShaderLibrary("Shaders/Triangle");
+    INFO(errorOf(library));
+    REQUIRE(library.has_value());
+
+    auto pipeline = (*device)->createGraphicsPipeline({.library = library->get(),
+                                                       .vertexEntry = "vertexMain",
+                                                       .fragmentEntry = "fragmentMain",
+                                                       .colorFormat = Format::BGRA8Unorm,
+                                                       .depthFormat = Format::D32Float,
+                                                       .depthTestEnable = true,
+                                                       .depthWriteEnable = true,
+                                                       .label = "lmx.test.depthPipeline"});
+    INFO(errorOf(pipeline));
+    REQUIRE(pipeline.has_value());
+
+    const auto flatTriangle = [](float r, float g, float b) {
+        std::array<Vertex, 3> vertices = kTriangle;
+        for (Vertex& vertex : vertices) {
+            vertex.color[0] = r;
+            vertex.color[1] = g;
+            vertex.color[2] = b;
+        }
+        return vertices;
+    };
+    const std::array<Vertex, 3> first = flatTriangle(1.0f, 0.0f, 0.0f);
+    const std::array<Vertex, 3> second = flatTriangle(0.0f, 1.0f, 0.0f);
+
+    CommandList& commands = (*device)->beginFrame();
+    commands.beginRenderPass({.colorTarget = target->get(),
+                              .clearColor = {0.0f, 0.0f, 0.0f, 1.0f},
+                              .clear = true,
+                              .depthTarget = depthTarget->get(),
+                              .clearDepth = 1.0f,
+                              .label = "lmx.test.depth.first"});
+    commands.bindPipeline(**pipeline);
+    commands.setUniforms(kVertexBufferSlot, first.data(), sizeof(first));
+    commands.draw(static_cast<uint32_t>(first.size()));
+    commands.setUniforms(kVertexBufferSlot, second.data(), sizeof(second));
+    commands.draw(static_cast<uint32_t>(second.size()));
+    commands.endRenderPass();
+    (*device)->endFrame(nullptr);
+    (*device)->waitIdle();
+
+    std::vector<uint8_t> pixels(size_t{kSize} * kSize * 4);
+    (*target)->readback(pixels.data(), pixels.size());
+
+    const Pixel inside = pixelAt(pixels, 32, 40);
+    INFO(describe("inside", 32, 40, inside));
+    REQUIRE(channelIs(inside.r, 1.0f));
+    REQUIRE(channelIs(inside.g, 0.0f));
+    REQUIRE(inside.a == 255);
+
+    const Pixel corner = pixelAt(pixels, 2, 2);
+    INFO(describe("corner", 2, 2, corner));
+    REQUIRE(corner.r == 0);
+    REQUIRE(corner.g == 0);
+    REQUIRE(corner.b == 0);
+    REQUIRE(corner.a == 255);
+
+    CommandList& secondFrame = (*device)->beginFrame();
+    secondFrame.beginRenderPass({.colorTarget = target->get(),
+                                 .clearColor = {0.0f, 0.0f, 0.0f, 1.0f},
+                                 .clear = true,
+                                 .depthTarget = depthTarget->get(),
+                                 .clearDepth = 0.0f,
+                                 .label = "lmx.test.depth.second"});
+    secondFrame.bindPipeline(**pipeline);
+    secondFrame.setUniforms(kVertexBufferSlot, first.data(), sizeof(first));
+    secondFrame.draw(static_cast<uint32_t>(first.size()));
+    secondFrame.endRenderPass();
+    (*device)->endFrame(nullptr);
+    (*device)->waitIdle();
+    (*target)->readback(pixels.data(), pixels.size());
+
+    const Pixel occluded = pixelAt(pixels, 32, 40);
+    INFO(describe("occluded", 32, 40, occluded));
+    REQUIRE(occluded.r == 0);
+    REQUIRE(occluded.g == 0);
+    REQUIRE(occluded.b == 0);
+    REQUIRE(occluded.a == 255);
+}
+
+//======================================================================================================================
+// UVs span 0..2 so the right-side probes distinguish wrap from clamp without filtering ambiguity.
+TEST_CASE("sampler address mode decides what a past-the-edge uv reads", "[gpu]") {
+    using namespace lmx::rhi;
+
+    constexpr uint32_t kSourceTextureSlot = 0;
+    constexpr uint32_t kSamplerSlot = 0;
+
+    constexpr std::array<Vertex, 12> kSplitQuads = {{
+        {{-1.0f, -1.0f}, {1.0f, 0.0f, 0.0f}},
+        {{0.0f, -1.0f}, {1.0f, 0.0f, 0.0f}},
+        {{0.0f, 1.0f}, {1.0f, 0.0f, 0.0f}},
+        {{-1.0f, -1.0f}, {1.0f, 0.0f, 0.0f}},
+        {{0.0f, 1.0f}, {1.0f, 0.0f, 0.0f}},
+        {{-1.0f, 1.0f}, {1.0f, 0.0f, 0.0f}},
+        {{0.0f, -1.0f}, {0.0f, 1.0f, 0.0f}},
+        {{1.0f, -1.0f}, {0.0f, 1.0f, 0.0f}},
+        {{1.0f, 1.0f}, {0.0f, 1.0f, 0.0f}},
+        {{0.0f, -1.0f}, {0.0f, 1.0f, 0.0f}},
+        {{1.0f, 1.0f}, {0.0f, 1.0f, 0.0f}},
+        {{0.0f, 1.0f}, {0.0f, 1.0f, 0.0f}},
+    }};
+
+    auto device = createDevice();
+    INFO(errorOf(device));
+    REQUIRE(device.has_value());
+
+    auto source = (*device)->createTexture({.width = 2,
+                                            .height = 2,
+                                            .format = Format::BGRA8Unorm,
+                                            .renderTarget = true,
+                                            .sampled = true,
+                                            .label = "lmx.test.samplerSource"});
+    INFO(errorOf(source));
+    REQUIRE(source.has_value());
+
+    const auto makeDestination = [&](const char* label) {
+        return (*device)->createTexture({.width = kSize,
+                                         .height = kSize,
+                                         .format = Format::BGRA8Unorm,
+                                         .renderTarget = true,
+                                         .cpuReadback = true,
+                                         .label = label});
+    };
+    auto wrapDestination = makeDestination("lmx.test.samplerWrapDestination");
+    INFO(errorOf(wrapDestination));
+    REQUIRE(wrapDestination.has_value());
+    auto clampDestination = makeDestination("lmx.test.samplerClampDestination");
+    INFO(errorOf(clampDestination));
+    REQUIRE(clampDestination.has_value());
+
+    auto fillLibrary = (*device)->loadShaderLibrary("Shaders/Triangle");
+    INFO(errorOf(fillLibrary));
+    REQUIRE(fillLibrary.has_value());
+
+    auto fillPipeline =
+        (*device)->createGraphicsPipeline({.library = fillLibrary->get(),
+                                           .vertexEntry = "vertexMain",
+                                           .fragmentEntry = "fragmentMain",
+                                           .colorFormat = Format::BGRA8Unorm,
+                                           .label = "lmx.test.samplerFillPipeline"});
+    INFO(errorOf(fillPipeline));
+    REQUIRE(fillPipeline.has_value());
+
+    auto sampleLibrary = (*device)->loadShaderLibrary("Shaders/SamplerSmoke");
+    INFO(errorOf(sampleLibrary));
+    REQUIRE(sampleLibrary.has_value());
+
+    auto samplePipeline =
+        (*device)->createGraphicsPipeline({.library = sampleLibrary->get(),
+                                           .vertexEntry = "vertexMain",
+                                           .fragmentEntry = "fragmentMain",
+                                           .colorFormat = Format::BGRA8Unorm,
+                                           .label = "lmx.test.samplerSamplePipeline"});
+    INFO(errorOf(samplePipeline));
+    REQUIRE(samplePipeline.has_value());
+
+    auto wrapSampler = (*device)->createSampler(
+        {.addressMode = AddressMode::Wrap, .label = "lmx.test.wrapSampler"});
+    INFO(errorOf(wrapSampler));
+    REQUIRE(wrapSampler.has_value());
+
+    auto clampSampler = (*device)->createSampler(
+        {.addressMode = AddressMode::Clamp, .label = "lmx.test.clampSampler"});
+    INFO(errorOf(clampSampler));
+    REQUIRE(clampSampler.has_value());
+
+    auto compareSampler = (*device)->createSampler(
+        {.compare = CompareFunc::LessEqual, .label = "lmx.test.compareSampler"});
+    INFO(errorOf(compareSampler));
+    REQUIRE(compareSampler.has_value());
+
+    CommandList& commands = (*device)->beginFrame();
+
+    commands.beginRenderPass({.colorTarget = source->get(),
+                              .clearColor = {0.0f, 0.0f, 0.0f, 1.0f},
+                              .clear = true,
+                              .label = "lmx.test.sampler.source"});
+    commands.bindPipeline(**fillPipeline);
+    commands.setUniforms(kVertexBufferSlot, kSplitQuads.data(), sizeof(kSplitQuads));
+    commands.draw(static_cast<uint32_t>(kSplitQuads.size()));
+    commands.endRenderPass();
+
+    commands.textureBarrier(**source, TextureUse::RenderTarget, TextureUse::ShaderRead);
+
+    const auto samplePass = [&](Texture& destination, Sampler& sampler) {
+        commands.beginRenderPass({.colorTarget = &destination,
+                                  .clearColor = {1.0f, 0.0f, 1.0f, 1.0f},
+                                  .clear = true,
+                                  .label = "lmx.test.sampler.probe"});
+        commands.bindPipeline(**samplePipeline);
+        commands.bindTexture(kSourceTextureSlot, **source);
+        commands.bindSampler(kSamplerSlot, sampler);
+        commands.draw(3);
+        commands.endRenderPass();
+    };
+    samplePass(**wrapDestination, **wrapSampler);
+    samplePass(**clampDestination, **clampSampler);
+
+    (*device)->endFrame(nullptr);
+    (*device)->waitIdle();
+
+    std::vector<uint8_t> pixels(size_t{kSize} * kSize * 4);
+
+    const auto requireChannels = [&](const char* what, uint32_t x, float r, float g) {
+        const Pixel probe = pixelAt(pixels, x, 32);
+        INFO(describe(what, x, 32, probe));
+        REQUIRE(channelIs(probe.r, r));
+        REQUIRE(channelIs(probe.g, g));
+        REQUIRE(probe.b == 0);
+        REQUIRE(probe.a == 255);
+    };
+
+    (*wrapDestination)->readback(pixels.data(), pixels.size());
+    requireChannels("wrap left", 8, 1.0f, 0.0f);
+    requireChannels("wrap right", 24, 0.0f, 1.0f);
+    requireChannels("wrap past the edge", 40, 1.0f, 0.0f);
+
+    (*clampDestination)->readback(pixels.data(), pixels.size());
+    requireChannels("clamp left", 8, 1.0f, 0.0f);
+    requireChannels("clamp right", 24, 0.0f, 1.0f);
+    requireChannels("clamp past the edge", 40, 0.0f, 1.0f);
+}
+
+namespace {} // namespace
+
+//======================================================================================================================
+// One uniform red BC1 block pins compressed upload stride and sampler-side block decoding.
+TEST_CASE("a BC1 block decodes to its endpoint colour when sampled", "[gpu]") {
+    using namespace lmx::rhi;
+
+    constexpr uint32_t kSourceTextureSlot = 0;
+
+    constexpr std::array<uint8_t, 8> kRedBlock = {0x00, 0xF8, 0x00, 0xF8, 0x00, 0x00, 0x00, 0x00};
+    const TextureMip mip{.data = kRedBlock.data(), .bytesPerRow = 8};
+
+    auto device = createDevice();
+    INFO(errorOf(device));
+    REQUIRE(device.has_value());
+
+    auto source = (*device)->createTexture({.width = 4,
+                                            .height = 4,
+                                            .format = Format::BC1Unorm,
+                                            .sampled = true,
+                                            .label = "lmx.test.bc1Source"},
+                                           std::span{&mip, 1});
+    INFO(errorOf(source));
+    REQUIRE(source.has_value());
+
+    auto destination = makeProbeTarget(**device, "lmx.test.bc1Destination");
+    INFO(errorOf(destination));
+    REQUIRE(destination.has_value());
+
+    auto library = (*device)->loadShaderLibrary("Shaders/SamplerSmoke");
+    INFO(errorOf(library));
+    REQUIRE(library.has_value());
+
+    auto pipeline = (*device)->createGraphicsPipeline({.library = library->get(),
+                                                       .vertexEntry = "vertexMain",
+                                                       .fragmentEntry = "fragmentMain",
+                                                       .colorFormat = Format::BGRA8Unorm,
+                                                       .label = "lmx.test.bc1Pipeline"});
+    INFO(errorOf(pipeline));
+    REQUIRE(pipeline.has_value());
+
+    auto sampler = (*device)->createSampler(
+        {.addressMode = AddressMode::Clamp, .label = "lmx.test.bc1Sampler"});
+    INFO(errorOf(sampler));
+    REQUIRE(sampler.has_value());
+
+    const std::vector<uint8_t> pixels = renderSampledImage(**device, **pipeline, kSourceTextureSlot,
+                                                           **source, **sampler, **destination);
+
+    const Pixel probe = pixelAt(pixels, 32, 32);
+    INFO(describe("bc1 centre", 32, 32, probe));
+    REQUIRE(channelIs(probe.r, 1.0f));
+    REQUIRE(channelIs(probe.g, 0.0f));
+    REQUIRE(channelIs(probe.b, 0.0f));
+    REQUIRE(probe.a == 255);
+}
+
+//======================================================================================================================
+// The same encoded byte in linear and sRGB textures must produce different values in a linear
+// target.
+TEST_CASE("an sRGB texture is linearised by the sampler, a linear one is not", "[gpu]") {
+    using namespace lmx::rhi;
+
+    constexpr uint32_t kSourceTextureSlot = 0;
+    constexpr uint8_t kEncoded = 188;
+    constexpr int kDecoded = 128;
+
+    constexpr std::array<uint8_t, 16> kGreyTexels = {
+        kEncoded, kEncoded, kEncoded, 255, kEncoded, kEncoded, kEncoded, 255,
+        kEncoded, kEncoded, kEncoded, 255, kEncoded, kEncoded, kEncoded, 255,
+    };
+    const TextureMip mip{.data = kGreyTexels.data(), .bytesPerRow = 2 * 4};
+
+    auto device = createDevice();
+    INFO(errorOf(device));
+    REQUIRE(device.has_value());
+
+    const auto makeSource = [&](Format format, const char* label) {
+        return (*device)->createTexture(
+            {.width = 2, .height = 2, .format = format, .sampled = true, .label = label},
+            std::span{&mip, 1});
+    };
+    auto linearSource = makeSource(Format::RGBA8Unorm, "lmx.test.linearSource");
+    INFO(errorOf(linearSource));
+    REQUIRE(linearSource.has_value());
+    auto srgbSource = makeSource(Format::RGBA8Unorm_sRGB, "lmx.test.srgbSource");
+    INFO(errorOf(srgbSource));
+    REQUIRE(srgbSource.has_value());
+
+    auto linearDestination = makeProbeTarget(**device, "lmx.test.linearDestination");
+    INFO(errorOf(linearDestination));
+    REQUIRE(linearDestination.has_value());
+    auto srgbDestination = makeProbeTarget(**device, "lmx.test.srgbDestination");
+    INFO(errorOf(srgbDestination));
+    REQUIRE(srgbDestination.has_value());
+
+    auto library = (*device)->loadShaderLibrary("Shaders/SamplerSmoke");
+    INFO(errorOf(library));
+    REQUIRE(library.has_value());
+
+    auto pipeline = (*device)->createGraphicsPipeline({.library = library->get(),
+                                                       .vertexEntry = "vertexMain",
+                                                       .fragmentEntry = "fragmentMain",
+                                                       .colorFormat = Format::BGRA8Unorm,
+                                                       .label = "lmx.test.srgbPipeline"});
+    INFO(errorOf(pipeline));
+    REQUIRE(pipeline.has_value());
+
+    auto sampler = (*device)->createSampler(
+        {.addressMode = AddressMode::Clamp, .label = "lmx.test.srgbSampler"});
+    INFO(errorOf(sampler));
+    REQUIRE(sampler.has_value());
+
+    const std::vector<uint8_t> linearPixels = renderSampledImage(
+        **device, **pipeline, kSourceTextureSlot, **linearSource, **sampler, **linearDestination);
+    const Pixel linearProbe = pixelAt(linearPixels, 32, 32);
+    INFO(describe("linear centre", 32, 32, linearProbe));
+    REQUIRE(channelNear(linearProbe.r, kEncoded, 6));
+
+    const std::vector<uint8_t> srgbPixels = renderSampledImage(
+        **device, **pipeline, kSourceTextureSlot, **srgbSource, **sampler, **srgbDestination);
+    const Pixel srgbProbe = pixelAt(srgbPixels, 32, 32);
+    INFO(describe("srgb centre", 32, 32, srgbProbe));
+    REQUIRE(channelNear(srgbProbe.r, kDecoded, 6));
+    REQUIRE(channelNear(srgbProbe.g, kDecoded, 6));
+    REQUIRE(channelNear(srgbProbe.b, kDecoded, 6));
+    REQUIRE(srgbProbe.a == 255);
+}
+
+//======================================================================================================================
+// A uniform +X face isolates cubemap slice ordering and direction lookup.
+TEST_CASE("a cubemap samples the face its direction points at", "[gpu]") {
+    using namespace lmx::rhi;
+
+    constexpr uint32_t kCubeTextureSlot = 2;
+
+    constexpr std::array<uint8_t, 4> kPlusX = {255, 0, 0, 255};      // red
+    constexpr std::array<uint8_t, 4> kMinusX = {0, 255, 0, 255};     // green
+    constexpr std::array<uint8_t, 4> kPlusY = {0, 0, 255, 255};      // blue
+    constexpr std::array<uint8_t, 4> kMinusY = {0, 0, 255, 255};     // blue
+    constexpr std::array<uint8_t, 4> kPlusZ = {255, 255, 255, 255};  // white
+    constexpr std::array<uint8_t, 4> kMinusZ = {255, 255, 255, 255}; // white
+
+    const std::array<TextureMip, 6> faces = {{
+        {.data = kPlusX.data(), .bytesPerRow = 4},
+        {.data = kMinusX.data(), .bytesPerRow = 4},
+        {.data = kPlusY.data(), .bytesPerRow = 4},
+        {.data = kMinusY.data(), .bytesPerRow = 4},
+        {.data = kPlusZ.data(), .bytesPerRow = 4},
+        {.data = kMinusZ.data(), .bytesPerRow = 4},
+    }};
+
+    auto device = createDevice();
+    INFO(errorOf(device));
+    REQUIRE(device.has_value());
+
+    auto source = (*device)->createTexture({.width = 1,
+                                            .height = 1,
+                                            .format = Format::RGBA8Unorm,
+                                            .kind = TextureKind::Cube,
+                                            .sampled = true,
+                                            .label = "lmx.test.cubeSource"},
+                                           faces);
+    INFO(errorOf(source));
+    REQUIRE(source.has_value());
+
+    auto destination = makeProbeTarget(**device, "lmx.test.cubeDestination");
+    INFO(errorOf(destination));
+    REQUIRE(destination.has_value());
+
+    auto library = (*device)->loadShaderLibrary("Shaders/CubeSmoke");
+    INFO(errorOf(library));
+    REQUIRE(library.has_value());
+
+    auto pipeline = (*device)->createGraphicsPipeline({.library = library->get(),
+                                                       .vertexEntry = "vertexMain",
+                                                       .fragmentEntry = "fragmentMain",
+                                                       .colorFormat = Format::BGRA8Unorm,
+                                                       .label = "lmx.test.cubePipeline"});
+    INFO(errorOf(pipeline));
+    REQUIRE(pipeline.has_value());
+
+    auto sampler = (*device)->createSampler(
+        {.addressMode = AddressMode::Clamp, .label = "lmx.test.cubeSampler"});
+    INFO(errorOf(sampler));
+    REQUIRE(sampler.has_value());
+
+    const std::vector<uint8_t> pixels = renderSampledImage(**device, **pipeline, kCubeTextureSlot,
+                                                           **source, **sampler, **destination);
+
+    const Pixel probe = pixelAt(pixels, 32, 32);
+    INFO(describe("cube +X", 32, 32, probe));
+    REQUIRE(channelIs(probe.r, 1.0f));
+    REQUIRE(channelIs(probe.g, 0.0f));
+    REQUIRE(channelIs(probe.b, 0.0f));
+    REQUIRE(probe.a == 255);
+}
+
+//======================================================================================================================
+// An explicit level-1 read distinguishes generated data from the deliberately wrong uploaded mip.
+TEST_CASE("generateMipmaps overwrites the levels above 0 from level 0", "[gpu]") {
+    using namespace lmx::rhi;
+
+    constexpr uint32_t kSourceTextureSlot = 0;
+
+    constexpr uint8_t kRed[4] = {255, 0, 0, 255};
+    constexpr std::array<uint8_t, 4 * 4 * 4> kRedLevel0 = [] {
+        std::array<uint8_t, 4 * 4 * 4> texels{};
+        for (size_t i = 0; i < texels.size(); ++i) {
+            texels[i] = kRed[i % 4];
+        }
+        return texels;
+    }();
+    constexpr std::array<uint8_t, 2 * 2 * 4> kGreenSentinel = {
+        0, 255, 0, 255, 0, 255, 0, 255, 0, 255, 0, 255, 0, 255, 0, 255,
+    };
+    const std::array<TextureMip, 3> mips = {{
+        {.data = kRedLevel0.data(), .bytesPerRow = 4 * 4},
+        {.data = kGreenSentinel.data(), .bytesPerRow = 2 * 4},
+        {}, // level 2: generated, never uploaded -- the null-entry contract in use
+    }};
+
+    auto device = createDevice();
+    INFO(errorOf(device));
+    REQUIRE(device.has_value());
+
+    auto source = (*device)->createTexture({.width = 4,
+                                            .height = 4,
+                                            .format = Format::RGBA8Unorm,
+                                            .mipLevels = 3,
+                                            .sampled = true,
+                                            .label = "lmx.test.mipSource"},
+                                           mips);
+    INFO(errorOf(source));
+    REQUIRE(source.has_value());
+
+    auto destination = makeProbeTarget(**device, "lmx.test.mipDestination");
+    INFO(errorOf(destination));
+    REQUIRE(destination.has_value());
+
+    auto library = (*device)->loadShaderLibrary("Shaders/SamplerSmoke");
+    INFO(errorOf(library));
+    REQUIRE(library.has_value());
+
+    auto pipeline = (*device)->createGraphicsPipeline({.library = library->get(),
+                                                       .vertexEntry = "vertexMain",
+                                                       .fragmentEntry = "fragmentMipLevel1",
+                                                       .colorFormat = Format::BGRA8Unorm,
+                                                       .label = "lmx.test.mipPipeline"});
+    INFO(errorOf(pipeline));
+    REQUIRE(pipeline.has_value());
+
+    auto sampler = (*device)->createSampler(
+        {.addressMode = AddressMode::Clamp, .label = "lmx.test.mipSampler"});
+    INFO(errorOf(sampler));
+    REQUIRE(sampler.has_value());
+
+    const std::vector<uint8_t> before = renderSampledImage(**device, **pipeline, kSourceTextureSlot,
+                                                           **source, **sampler, **destination);
+    const Pixel sentinel = pixelAt(before, 32, 32);
+    INFO(describe("level 1 sentinel", 32, 32, sentinel));
+    REQUIRE(channelIs(sentinel.g, 1.0f));
+    REQUIRE(channelIs(sentinel.r, 0.0f));
+
+    (*device)->generateMipmaps(**source);
+
+    const std::vector<uint8_t> after = renderSampledImage(**device, **pipeline, kSourceTextureSlot,
+                                                          **source, **sampler, **destination);
+    const Pixel generated = pixelAt(after, 32, 32);
+    INFO(describe("level 1 generated", 32, 32, generated));
+    REQUIRE(channelIs(generated.r, 1.0f));
+    REQUIRE(channelIs(generated.g, 0.0f));
+    REQUIRE(channelIs(generated.b, 0.0f));
+    REQUIRE(generated.a == 255);
+}
+
+//======================================================================================================================
+// The interior and clear exterior pin depth storage, the pass barrier, and subsequent D32 sampling.
+TEST_CASE("a depth-only pass stores depth a later pass can sample", "[gpu]") {
+    using namespace lmx::rhi;
+
+    constexpr uint32_t kDepthTextureSlot = 0;
+    constexpr uint32_t kSamplerSlot = 0;
+
+    auto device = createDevice();
+    INFO(errorOf(device));
+    REQUIRE(device.has_value());
+
+    auto depthTarget = (*device)->createTexture({.width = kSize,
+                                                 .height = kSize,
+                                                 .format = Format::D32Float,
+                                                 .renderTarget = true,
+                                                 .sampled = true,
+                                                 .label = "lmx.test.depthOnlyTarget"});
+    INFO(errorOf(depthTarget));
+    REQUIRE(depthTarget.has_value());
+
+    auto destination = makeProbeTarget(**device, "lmx.test.depthOnlyDestination");
+    INFO(errorOf(destination));
+    REQUIRE(destination.has_value());
+
+    auto triangleLibrary = (*device)->loadShaderLibrary("Shaders/Triangle");
+    INFO(errorOf(triangleLibrary));
+    REQUIRE(triangleLibrary.has_value());
+
+    auto depthPipeline = (*device)->createGraphicsPipeline({.library = triangleLibrary->get(),
+                                                            .vertexEntry = "vertexMain",
+                                                            .fragmentEntry = "fragmentDepthOnly",
+                                                            .colorFormat = Format::Unknown,
+                                                            .depthFormat = Format::D32Float,
+                                                            .depthTestEnable = true,
+                                                            .depthWriteEnable = true,
+                                                            .label = "lmx.test.depthOnlyPipeline"});
+    INFO(errorOf(depthPipeline));
+    REQUIRE(depthPipeline.has_value());
+
+    auto sampleLibrary = (*device)->loadShaderLibrary("Shaders/SamplerSmoke");
+    INFO(errorOf(sampleLibrary));
+    REQUIRE(sampleLibrary.has_value());
+
+    auto samplePipeline =
+        (*device)->createGraphicsPipeline({.library = sampleLibrary->get(),
+                                           .vertexEntry = "vertexMain",
+                                           .fragmentEntry = "fragmentIdentityUv",
+                                           .colorFormat = Format::BGRA8Unorm,
+                                           .label = "lmx.test.depthSamplePipeline"});
+    INFO(errorOf(samplePipeline));
+    REQUIRE(samplePipeline.has_value());
+
+    auto sampler = (*device)->createSampler(
+        {.addressMode = AddressMode::Clamp, .label = "lmx.test.depthSampler"});
+    INFO(errorOf(sampler));
+    REQUIRE(sampler.has_value());
+
+    CommandList& commands = (*device)->beginFrame();
+
+    commands.beginRenderPass({.depthTarget = depthTarget->get(),
+                              .clearDepth = 1.0f,
+                              .storeDepth = true,
+                              .label = "lmx.test.depthOnly.write"});
+    commands.bindPipeline(**depthPipeline);
+    commands.setUniforms(kVertexBufferSlot, kTriangle.data(), sizeof(kTriangle));
+    commands.draw(static_cast<uint32_t>(kTriangle.size()));
+    commands.endRenderPass();
+
+    commands.textureBarrier(**depthTarget, TextureUse::RenderTarget, TextureUse::ShaderRead);
+
+    commands.beginRenderPass({.colorTarget = destination->get(),
+                              .clearColor = {1.0f, 0.0f, 1.0f, 1.0f},
+                              .clear = true,
+                              .label = "lmx.test.depthOnly.probe"});
+    commands.bindPipeline(**samplePipeline);
+    commands.bindTexture(kDepthTextureSlot, **depthTarget);
+    commands.bindSampler(kSamplerSlot, **sampler);
+    commands.draw(3);
+    commands.endRenderPass();
+
+    (*device)->endFrame(nullptr);
+    (*device)->waitIdle();
+
+    std::vector<uint8_t> pixels(size_t{kSize} * kSize * 4);
+    (*destination)->readback(pixels.data(), pixels.size());
+
+    const Pixel inside = pixelAt(pixels, 32, 32);
+    INFO(describe("depth inside the triangle", 32, 32, inside));
+    REQUIRE(inside.r < 8);
+
+    const Pixel outside = pixelAt(pixels, 2, 2);
+    INFO(describe("depth outside the triangle", 2, 2, outside));
+    REQUIRE(outside.r == 255);
+}
+
+namespace {
+
+constexpr std::array<Vertex, 3> kWhiteTriangle = {{
+    {{0.0f, 0.5f}, {1.0f, 1.0f, 1.0f}},
+    {{-0.5f, -0.5f}, {1.0f, 1.0f, 1.0f}},
+    {{0.5f, -0.5f}, {1.0f, 1.0f, 1.0f}},
+}};
+constexpr std::array<Vertex, 3> kWhiteTriangleReversed = {{
+    kWhiteTriangle[0],
+    kWhiteTriangle[2],
+    kWhiteTriangle[1],
+}};
+
+//======================================================================================================================
+size_t coveredPixels(const std::vector<uint8_t>& bgra) {
+    size_t covered = 0;
+    for (uint32_t y = 0; y < kSize; ++y) {
+        for (uint32_t x = 0; x < kSize; ++x) {
+            const Pixel p = pixelAt(bgra, x, y);
+            if (p.r > 128 || p.g > 128 || p.b > 128) {
+                ++covered;
+            }
+        }
+    }
+    return covered;
+}
+
+} // namespace
+
+//======================================================================================================================
+// Coverage counts distinguish back-face culling, no culling, and wireframe fill without edge
+// probes.
+TEST_CASE("pipeline raster state culls back faces and draws wireframes", "[gpu]") {
+    using namespace lmx::rhi;
+
+    auto device = createDevice();
+    INFO(errorOf(device));
+    REQUIRE(device.has_value());
+
+    auto library = (*device)->loadShaderLibrary("Shaders/Triangle");
+    INFO(errorOf(library));
+    REQUIRE(library.has_value());
+
+    const auto makePipeline = [&](CullMode cull, FillMode fill, const char* label) {
+        return (*device)->createGraphicsPipeline({.library = library->get(),
+                                                  .vertexEntry = "vertexMain",
+                                                  .fragmentEntry = "fragmentMain",
+                                                  .colorFormat = Format::BGRA8Unorm,
+                                                  .fillMode = fill,
+                                                  .cullMode = cull,
+                                                  .label = label});
+    };
+    auto cullBack = makePipeline(CullMode::Back, FillMode::Solid, "lmx.test.cullBackPipeline");
+    INFO(errorOf(cullBack));
+    REQUIRE(cullBack.has_value());
+    auto cullNone = makePipeline(CullMode::None, FillMode::Solid, "lmx.test.cullNonePipeline");
+    INFO(errorOf(cullNone));
+    REQUIRE(cullNone.has_value());
+    auto wireframe =
+        makePipeline(CullMode::None, FillMode::Wireframe, "lmx.test.wireframePipeline");
+    INFO(errorOf(wireframe));
+    REQUIRE(wireframe.has_value());
+
+    const auto makeDestination = [&](const char* label) {
+        return (*device)->createTexture({.width = kSize,
+                                         .height = kSize,
+                                         .format = Format::BGRA8Unorm,
+                                         .renderTarget = true,
+                                         .cpuReadback = true,
+                                         .label = label});
+    };
+    auto culled = makeDestination("lmx.test.culledDestination");
+    INFO(errorOf(culled));
+    REQUIRE(culled.has_value());
+    auto kept = makeDestination("lmx.test.keptDestination");
+    INFO(errorOf(kept));
+    REQUIRE(kept.has_value());
+    auto outlined = makeDestination("lmx.test.wireframeDestination");
+    INFO(errorOf(outlined));
+    REQUIRE(outlined.has_value());
+
+    CommandList& commands = (*device)->beginFrame();
+    const auto pass = [&](Texture& destination, GraphicsPipeline& pipeline,
+                          const std::array<Vertex, 3>& vertices) {
+        commands.beginRenderPass({.colorTarget = &destination,
+                                  .clearColor = {0.0f, 0.0f, 0.0f, 1.0f},
+                                  .clear = true,
+                                  .label = "lmx.test.rasterState"});
+        commands.bindPipeline(pipeline);
+        commands.setUniforms(kVertexBufferSlot, vertices.data(), sizeof(vertices));
+        commands.draw(static_cast<uint32_t>(vertices.size()));
+        commands.endRenderPass();
+    };
+    pass(**culled, **cullBack, kWhiteTriangleReversed);
+    pass(**kept, **cullNone, kWhiteTriangleReversed);
+    pass(**outlined, **wireframe, kWhiteTriangle);
+    (*device)->endFrame(nullptr);
+    (*device)->waitIdle();
+
+    std::vector<uint8_t> pixels(size_t{kSize} * kSize * 4);
+
+    (*culled)->readback(pixels.data(), pixels.size());
+    INFO("clockwise triangle, CullMode::Back");
+    REQUIRE(coveredPixels(pixels) == 0);
+
+    (*kept)->readback(pixels.data(), pixels.size());
+    INFO("clockwise triangle, CullMode::None");
+    const size_t solidCoverage = coveredPixels(pixels);
+    INFO("solid coverage: " + std::to_string(solidCoverage));
+    REQUIRE(solidCoverage > 450);
+    REQUIRE(solidCoverage < 570);
+
+    (*outlined)->readback(pixels.data(), pixels.size());
+    const Pixel interior = pixelAt(pixels, 32, 40);
+    INFO(describe("wireframe interior", 32, 40, interior));
+    REQUIRE(interior.r == 0);
+    REQUIRE(interior.g == 0);
+    REQUIRE(interior.b == 0);
+    const size_t wireCoverage = coveredPixels(pixels);
+    INFO("wireframe coverage: " + std::to_string(wireCoverage));
+    REQUIRE(wireCoverage > 40);
+    REQUIRE(wireCoverage < 250);
+}
