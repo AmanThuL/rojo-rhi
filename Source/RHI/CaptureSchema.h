@@ -37,7 +37,6 @@ struct SchemaContext {
     std::array<float, 4> boundingSphere{}; // xyz center, w radius
     std::array<float, 3> light0Direction{};
     std::array<float, 3> light0Strength{};
-    std::array<float, 3> ambient{};
     std::string shadowFilter; // "PCF" | "PCSS"
 };
 

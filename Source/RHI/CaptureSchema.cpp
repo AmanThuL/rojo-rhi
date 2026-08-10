@@ -203,8 +203,6 @@ std::string CaptureSchema::renderJson() const {
     appendFloatArray(out, m_context.light0Direction);
     out += ",\n    \"light0Strength\": ";
     appendFloatArray(out, m_context.light0Strength);
-    out += ",\n    \"ambient\": ";
-    appendFloatArray(out, m_context.ambient);
     out += ",\n    \"shadowFilter\": ";
     appendJsonString(out, m_context.shadowFilter);
     out += "\n  },\n";
