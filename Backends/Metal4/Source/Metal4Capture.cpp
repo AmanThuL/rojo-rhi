@@ -1,9 +1,13 @@
+//----------------------------------------------------------------------------------------------------------------------
+/// @file Metal4Capture.cpp
+/// @brief Implements Xcode GPU capture lifecycle controls for the Metal 4 backend.
+//----------------------------------------------------------------------------------------------------------------------
 #include "RHI/Metal4/Metal4Capture.h"
 
 #include "Core/Log.h"
+#include "Metal4Common.h"
+#include "Metal4Device.h"
 #include "RHI/CaptureSchema.h"
-#include "RHI/Metal4/Metal4Common.h"
-#include "RHI/Metal4/Metal4Device.h"
 
 #include <filesystem>
 #include <string>

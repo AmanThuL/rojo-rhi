@@ -1,11 +1,15 @@
-#include "RHI/Metal4/Metal4Device.h"
+//----------------------------------------------------------------------------------------------------------------------
+/// @file Metal4DeviceResources.cpp
+/// @brief Implements Metal 4 resource and sampler creation for the device.
+//----------------------------------------------------------------------------------------------------------------------
+#include "Metal4Device.h"
 
 #include "Core/Assert.h"
 #include "Core/Log.h"
+#include "Metal4DevicePrivate.h"
+#include "Metal4Resources.h"
+#include "Metal4Swapchain.h"
 #include "RHI/CaptureSchema.h"
-#include "RHI/Metal4/Metal4DevicePrivate.h"
-#include "RHI/Metal4/Metal4Resources.h"
-#include "RHI/Metal4/Metal4Swapchain.h"
 #include "RHI/Validate.h"
 
 #include <cstring>

@@ -1,3 +1,7 @@
+//----------------------------------------------------------------------------------------------------------------------
+/// @file Metal4Common.h
+/// @brief Defines private Metal 4 ownership aliases, constants, and conversion helpers.
+//----------------------------------------------------------------------------------------------------------------------
 #pragma once
 // Shared plumbing for the Metal 4 backend: the metal-cpp umbrella includes plus the
 // handful of helpers every backend file needs. Private to the RHI target -- metal-cpp

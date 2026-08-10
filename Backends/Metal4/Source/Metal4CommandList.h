@@ -1,5 +1,9 @@
+//----------------------------------------------------------------------------------------------------------------------
+/// @file Metal4CommandList.h
+/// @brief Declares the Metal 4 command list and its per-frame transient binding state.
+//----------------------------------------------------------------------------------------------------------------------
 #pragma once
-#include "RHI/Metal4/Metal4Common.h"
+#include "Metal4Common.h"
 
 #include <cstdint>
 #include <string>

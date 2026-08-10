@@ -1,4 +1,8 @@
-#include "RHI/Metal4/Metal4Swapchain.h"
+//----------------------------------------------------------------------------------------------------------------------
+/// @file Metal4Swapchain.cpp
+/// @brief Implements drawable acquisition, presentation, resizing, and teardown for Metal 4.
+//----------------------------------------------------------------------------------------------------------------------
+#include "Metal4Swapchain.h"
 
 #include "Core/Assert.h"
 #include "Core/Log.h"

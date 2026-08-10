@@ -1,3 +1,7 @@
+//----------------------------------------------------------------------------------------------------------------------
+/// @file MetalCppImpl.cpp
+/// @brief Emits the single metal-cpp implementation translation unit required by the backend.
+//----------------------------------------------------------------------------------------------------------------------
 // Exactly one TU must emit metal-cpp's Objective-C class and selector tables. MTL4 uses the
 // MTL_PRIVATE_IMPLEMENTATION gate; defining these macros elsewhere violates the ODR.
 #define NS_PRIVATE_IMPLEMENTATION

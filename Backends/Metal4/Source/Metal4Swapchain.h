@@ -1,6 +1,10 @@
+//----------------------------------------------------------------------------------------------------------------------
+/// @file Metal4Swapchain.h
+/// @brief Declares the Metal 4 swapchain backed by a Core Animation Metal layer.
+//----------------------------------------------------------------------------------------------------------------------
 #pragma once
-#include "RHI/Metal4/Metal4Common.h"
-#include "RHI/Metal4/Metal4Resources.h"
+#include "Metal4Common.h"
+#include "Metal4Resources.h"
 
 #include <cstdint>
 #include <memory>

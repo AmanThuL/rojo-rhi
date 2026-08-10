@@ -1,7 +1,11 @@
-#include "RHI/Metal4/Metal4Device.h"
+//----------------------------------------------------------------------------------------------------------------------
+/// @file Metal4DeviceFrame.cpp
+/// @brief Implements Metal 4 frame pacing, submission, retirement, and GPU timing publication.
+//----------------------------------------------------------------------------------------------------------------------
+#include "Metal4Device.h"
 
 #include "Core/Assert.h"
-#include "RHI/Metal4/Metal4Swapchain.h"
+#include "Metal4Swapchain.h"
 
 #include <format>
 

@@ -1,5 +1,9 @@
+//----------------------------------------------------------------------------------------------------------------------
+/// @file Metal4Resources.h
+/// @brief Declares private Metal 4 wrappers for backend-owned GPU resources.
+//----------------------------------------------------------------------------------------------------------------------
 #pragma once
-#include "RHI/Metal4/Metal4Common.h"
+#include "Metal4Common.h"
 
 #include <cstdint>
 #include <utility>

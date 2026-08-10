@@ -1,6 +1,10 @@
+//----------------------------------------------------------------------------------------------------------------------
+/// @file Metal4Device.h
+/// @brief Declares the Metal 4 device and its frame-in-flight backend state.
+//----------------------------------------------------------------------------------------------------------------------
 #pragma once
-#include "RHI/Metal4/Metal4CommandList.h"
-#include "RHI/Metal4/Metal4Common.h"
+#include "Metal4CommandList.h"
+#include "Metal4Common.h"
 #include "RHI/RHI.h"
 
 #include <array>

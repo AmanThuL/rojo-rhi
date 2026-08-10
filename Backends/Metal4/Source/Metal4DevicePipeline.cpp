@@ -1,8 +1,12 @@
-#include "RHI/Metal4/Metal4Device.h"
+//----------------------------------------------------------------------------------------------------------------------
+/// @file Metal4DevicePipeline.cpp
+/// @brief Implements Metal shader-library loading and graphics-pipeline creation.
+//----------------------------------------------------------------------------------------------------------------------
+#include "Metal4Device.h"
 
 #include "Core/Log.h"
-#include "RHI/Metal4/Metal4DevicePrivate.h"
-#include "RHI/Metal4/Metal4Resources.h"
+#include "Metal4DevicePrivate.h"
+#include "Metal4Resources.h"
 #include "RHI/Validate.h"
 
 #include <filesystem>

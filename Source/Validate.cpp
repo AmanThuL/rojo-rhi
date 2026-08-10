@@ -1,3 +1,7 @@
+//----------------------------------------------------------------------------------------------------------------------
+/// @file Validate.cpp
+/// @brief Implements backend-neutral validation for RHI descriptors and pass attachments.
+//----------------------------------------------------------------------------------------------------------------------
 #include "RHI/Validate.h"
 
 #include <string>

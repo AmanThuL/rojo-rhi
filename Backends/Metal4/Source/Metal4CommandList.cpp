@@ -1,9 +1,13 @@
-#include "RHI/Metal4/Metal4CommandList.h"
+//----------------------------------------------------------------------------------------------------------------------
+/// @file Metal4CommandList.cpp
+/// @brief Encodes render passes, bindings, draws, and barriers into Metal 4 command buffers.
+//----------------------------------------------------------------------------------------------------------------------
+#include "Metal4CommandList.h"
 
 #include "Core/Align.h"
 #include "Core/Assert.h"
+#include "Metal4Resources.h"
 #include "RHI/CaptureSchema.h"
-#include "RHI/Metal4/Metal4Resources.h"
 #include "RHI/Validate.h"
 
 #include <cstring>

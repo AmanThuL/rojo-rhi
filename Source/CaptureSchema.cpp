@@ -1,3 +1,7 @@
+//----------------------------------------------------------------------------------------------------------------------
+/// @file CaptureSchema.cpp
+/// @brief Serializes deterministic resource and uniform metadata beside GPU captures.
+//----------------------------------------------------------------------------------------------------------------------
 #include "RHI/CaptureSchema.h"
 
 #include "Core/Log.h"

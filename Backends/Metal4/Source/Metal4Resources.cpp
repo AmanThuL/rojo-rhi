@@ -1,4 +1,8 @@
-#include "RHI/Metal4/Metal4Resources.h"
+//----------------------------------------------------------------------------------------------------------------------
+/// @file Metal4Resources.cpp
+/// @brief Implements Metal 4 buffer, texture, sampler, shader-library, and pipeline wrappers.
+//----------------------------------------------------------------------------------------------------------------------
+#include "Metal4Resources.h"
 
 #include "Core/Assert.h"
 #include "RHI/CaptureSchema.h"

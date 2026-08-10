@@ -1,7 +1,11 @@
-#include "RHI/Metal4/Metal4Device.h"
+//----------------------------------------------------------------------------------------------------------------------
+/// @file Metal4Device.cpp
+/// @brief Creates and initializes the Metal 4 device and its persistent backend state.
+//----------------------------------------------------------------------------------------------------------------------
+#include "Metal4Device.h"
 
+#include "Metal4DevicePrivate.h"
 #include "RHI/CaptureSchema.h"
-#include "RHI/Metal4/Metal4DevicePrivate.h"
 
 #include <cstdlib>
 

@@ -1,6 +1,10 @@
+//----------------------------------------------------------------------------------------------------------------------
+/// @file Metal4DevicePrivate.h
+/// @brief Declares private Metal 4 device conversion, validation, and error helpers.
+//----------------------------------------------------------------------------------------------------------------------
 #pragma once
 
-#include "RHI/Metal4/Metal4Common.h"
+#include "Metal4Common.h"
 #include "RHI/RHI.h"
 
 #include <string>

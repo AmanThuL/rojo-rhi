@@ -1,11 +1,15 @@
+//----------------------------------------------------------------------------------------------------------------------
+/// @file Metal4ImGui.cpp
+/// @brief Bridges Dear ImGui rendering and texture residency to the Metal 4 backend.
+//----------------------------------------------------------------------------------------------------------------------
 #include "RHI/Metal4/Metal4ImGui.h"
 
 #include "Core/Assert.h"
 #include "Core/Log.h"
-#include "RHI/Metal4/Metal4CommandList.h"
-#include "RHI/Metal4/Metal4Common.h"
-#include "RHI/Metal4/Metal4Device.h"
-#include "RHI/Metal4/Metal4Resources.h"
+#include "Metal4CommandList.h"
+#include "Metal4Common.h"
+#include "Metal4Device.h"
+#include "Metal4Resources.h"
 
 // Keep the Objective-C surface in imgui_impl_metal4.mm; this TU uses its metal-cpp declarations.
 #include <imgui_impl_metal4.h>
