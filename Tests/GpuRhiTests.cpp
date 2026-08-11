@@ -419,7 +419,7 @@ namespace {} // namespace
 
 //======================================================================================================================
 // One uniform red BC1 block pins compressed upload stride and sampler-side block decoding.
-TEST_CASE("a BC1 block decodes to its endpoint colour when sampled", "[gpu]") {
+TEST_CASE("a BC1 block decodes to its endpoint colour when sampled", "[gpu][checkpoint-a]") {
     using namespace lmx::rhi;
 
     constexpr uint32_t kSourceTextureSlot = 0;
@@ -475,7 +475,8 @@ TEST_CASE("a BC1 block decodes to its endpoint colour when sampled", "[gpu]") {
 //======================================================================================================================
 // The same encoded byte in linear and sRGB textures must produce different values in a linear
 // target.
-TEST_CASE("an sRGB texture is linearised by the sampler, a linear one is not", "[gpu]") {
+TEST_CASE("an sRGB texture is linearised by the sampler, a linear one is not",
+          "[gpu][checkpoint-a]") {
     using namespace lmx::rhi;
 
     constexpr uint32_t kSourceTextureSlot = 0;
@@ -510,6 +511,9 @@ TEST_CASE("an sRGB texture is linearised by the sampler, a linear one is not", "
     auto srgbDestination = makeProbeTarget(**device, "lmx.test.srgbDestination");
     INFO(errorOf(srgbDestination));
     REQUIRE(srgbDestination.has_value());
+    auto viewDestination = makeProbeTarget(**device, "lmx.test.srgbViewDestination");
+    INFO(errorOf(viewDestination));
+    REQUIRE(viewDestination.has_value());
 
     auto library = (*device)->loadShaderLibrary("Shaders/SamplerSmoke");
     INFO(errorOf(library));
@@ -542,11 +546,23 @@ TEST_CASE("an sRGB texture is linearised by the sampler, a linear one is not", "
     REQUIRE(channelNear(srgbProbe.g, kDecoded, 6));
     REQUIRE(channelNear(srgbProbe.b, kDecoded, 6));
     REQUIRE(srgbProbe.a == 255);
+
+    // The allocation is linear, but this sampled view asks Metal to apply its sRGB sibling's
+    // transfer function. It must match the native sRGB texture above without a second allocation.
+    const std::vector<uint8_t> viewPixels =
+        renderSampledImage(**device, **pipeline, kSourceTextureSlot, **linearSource, **sampler,
+                           **viewDestination, {.format = Format::RGBA8Unorm_sRGB});
+    const Pixel viewProbe = pixelAt(viewPixels, 32, 32);
+    INFO(describe("sRGB view centre", 32, 32, viewProbe));
+    REQUIRE(channelNear(viewProbe.r, kDecoded, 6));
+    REQUIRE(channelNear(viewProbe.g, kDecoded, 6));
+    REQUIRE(channelNear(viewProbe.b, kDecoded, 6));
+    REQUIRE(viewProbe.a == 255);
 }
 
 //======================================================================================================================
 // A uniform +X face isolates cubemap slice ordering and direction lookup.
-TEST_CASE("a cubemap samples the face its direction points at", "[gpu]") {
+TEST_CASE("a cubemap samples the face its direction points at", "[gpu][checkpoint-a]") {
     using namespace lmx::rhi;
 
     constexpr uint32_t kCubeTextureSlot = 2;
@@ -615,7 +631,7 @@ TEST_CASE("a cubemap samples the face its direction points at", "[gpu]") {
 
 //======================================================================================================================
 // The interior and clear exterior pin depth storage, the pass barrier, and subsequent D32 sampling.
-TEST_CASE("a depth-only pass stores depth a later pass can sample", "[gpu]") {
+TEST_CASE("a depth-only pass stores depth a later pass can sample", "[gpu][checkpoint-a]") {
     using namespace lmx::rhi;
 
     constexpr uint32_t kDepthTextureSlot = 0;
@@ -1087,7 +1103,7 @@ std::array<DepthVertex, 6> depthQuad(float z, float halfExtent = 0.5f) {
 // both directions of that rule in one sequence: 0.25 beats the clear, 0.75 replaces it because it
 // is nearer, and 0.5 is then rejected because it is not. Under the Less semantics this replaces,
 // every draw would fail against the 0.0 clear and the probe would read the clear back instead.
-TEST_CASE("a Greater depth test keeps the nearer fragment in reversed-Z", "[gpu]") {
+TEST_CASE("a Greater depth test keeps the nearer fragment in reversed-Z", "[gpu][checkpoint-a]") {
     using namespace lmx::rhi;
 
     constexpr uint32_t kDepthTextureSlot = 0;

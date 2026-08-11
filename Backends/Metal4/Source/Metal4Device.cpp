@@ -16,12 +16,12 @@ using device_detail::describe;
 using device_detail::fail;
 using device_detail::toStdString;
 
-constexpr NS::UInteger kMaxBufferBindCount = 8;
+constexpr NS::UInteger kMaxBufferBindCount = CommandList::kMaxBufferBindings;
 // The texture slot budget holds a pass-wide set and a per-draw material set at the same time, and
 // eight no longer covers both. Buffers and samplers keep their own index spaces at eight; neither
 // of those grew.
-constexpr NS::UInteger kMaxTextureBindCount = 16;
-constexpr NS::UInteger kMaxSamplerStateBindCount = 8;
+constexpr NS::UInteger kMaxTextureBindCount = CommandList::kMaxTextureBindings;
+constexpr NS::UInteger kMaxSamplerStateBindCount = CommandList::kMaxSamplerBindings;
 
 //======================================================================================================================
 // Metal reads this switch when the device is created. Preserve an externally supplied value.

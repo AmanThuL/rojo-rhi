@@ -42,16 +42,29 @@ public:
                                                  const void* initialData) override;
     Result<std::unique_ptr<Texture>> createTexture(const TextureDesc& desc,
                                                    std::span<const TextureMip> mips) override;
+    Result<std::unique_ptr<Heap>> createHeap(const HeapDesc& desc) override;
+    Result<std::unique_ptr<Texture>> createPlacedTexture(Heap& heap, uint64_t offset,
+                                                         const TextureDesc& desc) override;
+    Result<std::unique_ptr<Buffer>> createPlacedBuffer(Heap& heap, uint64_t offset,
+                                                       const BufferDesc& desc) override;
+    SizeAlign textureSizeAlign(const TextureDesc& desc) const override;
+    SizeAlign bufferSizeAlign(const BufferDesc& desc) const override;
     Result<std::unique_ptr<Sampler>> createSampler(const SamplerDesc& desc) override;
     Result<std::unique_ptr<ShaderLibrary>> loadShaderLibrary(std::string_view pathNoExt) override;
     Result<std::unique_ptr<GraphicsPipeline>>
     createGraphicsPipeline(const GraphicsPipelineDesc& desc) override;
+    Result<std::unique_ptr<ComputePipeline>>
+    createComputePipeline(const ComputePipelineDesc& desc) override;
 
     CommandList& beginFrame() override;
     void endFrame(Swapchain* presentTo) override;
     void waitIdle() override;
 
     std::span<const PassTiming> passTimings() const override { return m_passTimings; }
+
+    uint64_t passTimingsFrame() const override { return m_resolvedFrame; }
+
+    uint64_t frameNumber() const override { return m_frameNumber; }
 
     std::string_view deviceName() const override { return m_deviceName; }
 

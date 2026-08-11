@@ -12,6 +12,7 @@
 #include <filesystem>
 #include <fstream>
 #include <iterator>
+#include <limits>
 #include <optional>
 #include <utility>
 #include <vector>
@@ -102,6 +103,26 @@ std::string join(const std::vector<std::string>& items) {
 }
 
 //======================================================================================================================
+// Metal aborts on a nil or wrong-stage entry point, so both pipeline paths check the function they
+// are about to name before the compiler sees it. Returns the diagnostic for a rejected entry point.
+std::optional<std::string> rejectEntry(MTL::Library* library, std::string_view entry,
+                                       MTL::FunctionType expected) {
+    NS::SharedPtr<MTL::Function> function =
+        NS::TransferPtr(library->newFunction(makeString(entry).get()));
+    if (!function) {
+        return "shader entry point '" + std::string(entry) +
+               "' not found in library; available entry points: " +
+               join(libraryFunctionNames(library));
+    }
+    if (function->functionType() != expected) {
+        return "shader entry point '" + std::string(entry) + "' is a " +
+               describe(function->functionType()) + " function, but a " + describe(expected) +
+               " function is required here";
+    }
+    return std::nullopt;
+}
+
+//======================================================================================================================
 std::optional<std::string> readTextFile(const std::filesystem::path& path) {
     std::ifstream stream(path, std::ios::binary);
     if (!stream) {
@@ -183,28 +204,11 @@ Metal4Device::createGraphicsPipeline(const GraphicsPipelineDesc& desc) {
 
     auto* library = static_cast<Metal4ShaderLibrary*>(desc.library);
 
-    // Metal aborts on nil or wrong-stage entry points, so validate both before pipeline creation.
-    const auto rejectEntry = [&](std::string_view entry,
-                                 MTL::FunctionType expected) -> std::optional<std::string> {
-        NS::SharedPtr<MTL::Function> function =
-            NS::TransferPtr(library->handle()->newFunction(makeString(entry).get()));
-        if (!function) {
-            return "shader entry point '" + std::string(entry) +
-                   "' not found in library; available entry points: " +
-                   join(libraryFunctionNames(library->handle()));
-        }
-        if (function->functionType() != expected) {
-            return "shader entry point '" + std::string(entry) + "' is a " +
-                   describe(function->functionType()) + " function, but a " + describe(expected) +
-                   " function is required here";
-        }
-        return std::nullopt;
-    };
-
-    if (auto problem = rejectEntry(desc.vertexEntry, MTL::FunctionTypeVertex)) {
+    if (auto problem = rejectEntry(library->handle(), desc.vertexEntry, MTL::FunctionTypeVertex)) {
         return fail(ErrorCode::PipelineCreationFailed, std::move(*problem));
     }
-    if (auto problem = rejectEntry(desc.fragmentEntry, MTL::FunctionTypeFragment)) {
+    if (auto problem =
+            rejectEntry(library->handle(), desc.fragmentEntry, MTL::FunctionTypeFragment)) {
         return fail(ErrorCode::PipelineCreationFailed, std::move(*problem));
     }
 
@@ -265,6 +269,73 @@ Metal4Device::createGraphicsPipeline(const GraphicsPipelineDesc& desc) {
                                         .biasClamp = desc.depthBias.clamp};
 
     return std::make_unique<Metal4Pipeline>(std::move(state), std::move(depthState), rasterState);
+}
+
+//======================================================================================================================
+Result<std::unique_ptr<ComputePipeline>>
+Metal4Device::createComputePipeline(const ComputePipelineDesc& desc) {
+    if (auto ok = validate(desc); !ok) {
+        return std::unexpected(ok.error());
+    }
+    NS::SharedPtr<NS::AutoreleasePool> pool = NS::TransferPtr(NS::AutoreleasePool::alloc()->init());
+
+    auto* library = static_cast<Metal4ShaderLibrary*>(desc.library);
+    if (auto problem = rejectEntry(library->handle(), desc.computeEntry, MTL::FunctionTypeKernel)) {
+        return fail(ErrorCode::PipelineCreationFailed, std::move(*problem));
+    }
+
+    auto computeFunction = NS::TransferPtr(MTL4::LibraryFunctionDescriptor::alloc()->init());
+    computeFunction->setLibrary(library->handle());
+    computeFunction->setName(makeString(desc.computeEntry).get());
+
+    auto pipelineDesc = NS::TransferPtr(MTL4::ComputePipelineDescriptor::alloc()->init());
+    pipelineDesc->setComputeFunctionDescriptor(computeFunction.get());
+    // Pipeline-state labels are inherited from the descriptor; the state has no setter.
+    pipelineDesc->setLabel(labelOrFallback(desc.label, "lmx.pipeline.unnamed").get());
+
+    NS::Error* error = nullptr;
+    NS::SharedPtr<MTL::ComputePipelineState> state =
+        NS::TransferPtr(m_compiler->newComputePipelineState(
+            pipelineDesc.get(), /*compilerTaskOptions=*/nullptr, &error));
+    if (!state) {
+        return fail(ErrorCode::PipelineCreationFailed,
+                    "failed to create compute pipeline (kernel '" + std::string(desc.computeEntry) +
+                        "'): " + describe(error));
+    }
+
+    const MTL::Size threadsPerThreadgroup =
+        MTL::Size::Make(desc.threadsPerThreadgroup[0], desc.threadsPerThreadgroup[1],
+                        desc.threadsPerThreadgroup[2]);
+    // The compiled kernel's occupancy caps the threadgroup it can be dispatched with; catching the
+    // mismatch here names the pipeline, whereas Metal would abort inside an unrelated dispatch.
+    const MTL::Size deviceLimit = m_device->maxThreadsPerThreadgroup();
+    if (threadsPerThreadgroup.width > deviceLimit.width ||
+        threadsPerThreadgroup.height > deviceLimit.height ||
+        threadsPerThreadgroup.depth > deviceLimit.depth) {
+        return fail(ErrorCode::PipelineCreationFailed,
+                    "ComputePipelineDesc.threadsPerThreadgroup exceeds the device's per-axis limit "
+                    "of " +
+                        std::to_string(deviceLimit.width) + "x" +
+                        std::to_string(deviceLimit.height) + "x" +
+                        std::to_string(deviceLimit.depth));
+    }
+    uint64_t requestedThreads = 1;
+    for (const uint32_t component : desc.threadsPerThreadgroup) {
+        if (requestedThreads > std::numeric_limits<uint64_t>::max() / component) {
+            return fail(ErrorCode::PipelineCreationFailed,
+                        "ComputePipelineDesc.threadsPerThreadgroup total overflows uint64_t");
+        }
+        requestedThreads *= component;
+    }
+    if (requestedThreads > state->maxTotalThreadsPerThreadgroup()) {
+        return fail(ErrorCode::PipelineCreationFailed,
+                    "ComputePipelineDesc.threadsPerThreadgroup asks for " +
+                        std::to_string(requestedThreads) + " threads, but kernel '" +
+                        std::string(desc.computeEntry) + "' supports at most " +
+                        std::to_string(state->maxTotalThreadsPerThreadgroup()));
+    }
+
+    return std::make_unique<Metal4ComputePipeline>(std::move(state), threadsPerThreadgroup);
 }
 
 } // namespace lmx::rhi::metal4

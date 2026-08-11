@@ -13,10 +13,10 @@
 namespace lmx::rhi::metal4 {
 
 //======================================================================================================================
-Metal4Swapchain::Metal4Swapchain(NS::SharedPtr<CA::MetalLayer> layer,
+Metal4Swapchain::Metal4Swapchain(NS::SharedPtr<CA::MetalLayer> layer, Format format,
                                  NS::SharedPtr<MTL4::CommandQueue> queue,
                                  NS::SharedPtr<MTL::ResidencySet> layerResidency)
-    : m_layer(std::move(layer)), m_queue(std::move(queue)),
+    : m_layer(std::move(layer)), m_format(format), m_queue(std::move(queue)),
       m_layerResidency(std::move(layerResidency)) {
     // Attach the layer-owned drawable residency set for the swapchain lifetime.
     if (m_layerResidency) {
@@ -60,10 +60,14 @@ Result<Texture*> Metal4Swapchain::acquireNextTexture() {
     m_drawable = NS::RetainPtr(drawable);
     // Use the acquired texture's extent because resize may leave one old-sized drawable queued.
     // Layer-owned drawables use the layer residency set instead of per-frame device registration.
-    m_texture = std::make_unique<Metal4Texture>(
-        NS::RetainPtr(texture), static_cast<uint32_t>(texture->width()),
-        static_cast<uint32_t>(texture->height()), /*readbackBytesPerPixel=*/0,
-        /*residency=*/NS::SharedPtr<MTL::ResidencySet>{});
+    const Metal4TextureInfo info{.format = m_format,
+                                 .width = static_cast<uint32_t>(texture->width()),
+                                 .height = static_cast<uint32_t>(texture->height()),
+                                 .mipLevels = 1,
+                                 .arrayLayers = 1,
+                                 .readbackBytesPerPixel = 0};
+    m_texture = std::make_unique<Metal4Texture>(NS::RetainPtr(texture), info,
+                                                /*residency=*/NS::SharedPtr<MTL::ResidencySet>{});
     return m_texture.get();
 }
 

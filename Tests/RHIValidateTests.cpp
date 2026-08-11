@@ -2,6 +2,8 @@
 
 #include "RHI/Validate.h"
 
+#include <limits>
+
 using namespace lmx::rhi;
 
 namespace {
@@ -13,13 +15,16 @@ struct DummyShaderLibrary : ShaderLibrary {};
 // checks it against nullptr.
 int dummyNativeLayer = 0;
 
-// Texture is an interface and validateRenderPassTargets reads nothing but width()/height(), so an
-// attachment of a given extent is expressible without a device. readback() is never reached --
-// the helper does not call it -- so it is left empty rather than faked.
+// Texture is an interface and the helpers under test read nothing but its reported shape, so a
+// texture of a given extent, format, and subresource count is expressible without a device.
+// readback() is never reached -- no helper calls it -- so it is left empty rather than faked.
 struct FakeTexture final : Texture {
 
     //==================================================================================================================
-    FakeTexture(uint32_t width, uint32_t height) : m_width(width), m_height(height) {}
+    FakeTexture(uint32_t width, uint32_t height, Format format = Format::BGRA8Unorm,
+                uint32_t mipLevels = 1, uint32_t arrayLayers = 1)
+        : m_width(width), m_height(height), m_format(format), m_mipLevels(mipLevels),
+          m_arrayLayers(arrayLayers) {}
 
     //==================================================================================================================
     uint32_t width() const override { return m_width; }
@@ -28,12 +33,66 @@ struct FakeTexture final : Texture {
     uint32_t height() const override { return m_height; }
 
     //==================================================================================================================
+    Format format() const override { return m_format; }
+
+    //==================================================================================================================
+    uint32_t mipLevels() const override { return m_mipLevels; }
+
+    //==================================================================================================================
+    uint32_t arrayLayers() const override { return m_arrayLayers; }
+
+    //==================================================================================================================
     void readback(void*, uint64_t) override {}
 
 private:
     uint32_t m_width = 0;
     uint32_t m_height = 0;
+    Format m_format = Format::BGRA8Unorm;
+    uint32_t m_mipLevels = 1;
+    uint32_t m_arrayLayers = 1;
 };
+
+// Heap is an interface and validatePlacement reads nothing but its size, so the bound a placement
+// is checked against is expressible without a device.
+struct FakeHeap final : Heap {
+
+    //==================================================================================================================
+    explicit FakeHeap(uint64_t size) : m_size(size) {}
+
+    //==================================================================================================================
+    uint64_t size() const override { return m_size; }
+
+private:
+    uint64_t m_size = 0;
+};
+
+// The same for buffers: the copy, fill, and barrier helpers read nothing but the allocation size,
+// and identity comparisons between two of these stand in for "the same buffer twice".
+struct FakeBuffer final : Buffer {
+
+    //==================================================================================================================
+    explicit FakeBuffer(uint64_t size) : m_size(size) {}
+
+    //==================================================================================================================
+    uint64_t size() const override { return m_size; }
+
+    //==================================================================================================================
+    void readback(void*, uint64_t) override {}
+
+private:
+    uint64_t m_size = 0;
+};
+
+//======================================================================================================================
+// A region covering the whole of one mip level of a square texture, which is what most of the copy
+// cases below start from before perturbing one field.
+TextureCopyRegion wholeLevel(uint32_t extent, uint32_t mipLevel = 0, uint32_t arrayLayer = 0) {
+    const uint32_t levelExtent = mipExtent(extent, mipLevel);
+    return {.mipLevel = mipLevel,
+            .arrayLayer = arrayLayer,
+            .width = levelExtent,
+            .height = levelExtent};
+}
 } // namespace
 
 //======================================================================================================================
@@ -55,6 +114,21 @@ TEST_CASE("BufferDesc with a non-zero size is accepted", "[rhi]") {
     desc.label = "vertices";
 
     REQUIRE(validate(desc).has_value());
+}
+
+//======================================================================================================================
+// Binding capacities are part of the public contract because slot indices are caller supplied.
+TEST_CASE("argument table binding capacities are public", "[rhi]") {
+    STATIC_REQUIRE(CommandList::kMaxBufferBindings == 8);
+    STATIC_REQUIRE(CommandList::kMaxTextureBindings == 16);
+    STATIC_REQUIRE(CommandList::kMaxSamplerBindings == 8);
+}
+
+//======================================================================================================================
+TEST_CASE("resource alias barrier visibility composes with ordinary options", "[rhi]") {
+    constexpr BarrierOptions options = BarrierOptions::None | BarrierOptions::ResourceAlias;
+    STATIC_REQUIRE(hasBarrierOption(options, BarrierOptions::ResourceAlias));
+    STATIC_REQUIRE(!hasBarrierOption(BarrierOptions::None, BarrierOptions::ResourceAlias));
 }
 
 //======================================================================================================================
@@ -235,6 +309,199 @@ TEST_CASE("GraphicsPipelineDesc with a library and both entries is accepted", "[
     desc.label = "triangle";
 
     REQUIRE(validate(desc).has_value());
+}
+
+//======================================================================================================================
+TEST_CASE("ComputePipelineDesc with a null library is rejected", "[rhi]") {
+    ComputePipelineDesc desc{};
+    desc.computeEntry = "computeMain";
+
+    const auto r = validate(desc);
+    REQUIRE_FALSE(r.has_value());
+    REQUIRE(r.error().code == ErrorCode::InvalidDesc);
+    REQUIRE(r.error().message.contains("library"));
+}
+
+//======================================================================================================================
+TEST_CASE("ComputePipelineDesc with an empty computeEntry is rejected", "[rhi]") {
+    DummyShaderLibrary library;
+    ComputePipelineDesc desc{};
+    desc.library = &library;
+
+    const auto r = validate(desc);
+    REQUIRE_FALSE(r.has_value());
+    REQUIRE(r.error().code == ErrorCode::InvalidDesc);
+    REQUIRE(r.error().message.contains("computeEntry"));
+}
+
+//======================================================================================================================
+// A zero here reads as "this dimension is unused", which is what 1 means; taken literally it is a
+// grid of no threads at all.
+TEST_CASE("ComputePipelineDesc with a zero threadgroup dimension is rejected", "[rhi]") {
+    DummyShaderLibrary library;
+    ComputePipelineDesc desc{};
+    desc.library = &library;
+    desc.computeEntry = "computeMain";
+    desc.threadsPerThreadgroup[0] = 64;
+    desc.threadsPerThreadgroup[1] = 0;
+    desc.threadsPerThreadgroup[2] = 1;
+
+    const auto r = validate(desc);
+    REQUIRE_FALSE(r.has_value());
+    REQUIRE(r.error().code == ErrorCode::InvalidDesc);
+    REQUIRE(r.error().message.contains("threadsPerThreadgroup"));
+}
+
+//======================================================================================================================
+TEST_CASE("ComputePipelineDesc with a library, an entry, and threads is accepted", "[rhi]") {
+    DummyShaderLibrary library;
+    ComputePipelineDesc desc{};
+    desc.library = &library;
+    desc.computeEntry = "computeMain";
+    desc.threadsPerThreadgroup[0] = 64;
+    desc.label = "histogram";
+
+    REQUIRE(validate(desc).has_value());
+}
+
+//======================================================================================================================
+TEST_CASE("TextureDesc storage usage with an sRGB format is rejected", "[rhi]") {
+    TextureDesc desc{};
+    desc.width = 64;
+    desc.height = 64;
+    desc.format = Format::RGBA8Unorm_sRGB;
+    desc.storageWrite = true;
+
+    const auto r = validate(desc);
+    REQUIRE_FALSE(r.has_value());
+    REQUIRE(r.error().code == ErrorCode::InvalidDesc);
+    REQUIRE(r.error().message.contains("storage"));
+}
+
+//======================================================================================================================
+TEST_CASE("TextureDesc storage usage with a storage format is accepted", "[rhi]") {
+    TextureDesc desc{};
+    desc.width = 64;
+    desc.height = 64;
+    desc.format = Format::RGBA16Float;
+    desc.storageRead = true;
+    desc.storageWrite = true;
+    desc.label = "bloomChain";
+
+    REQUIRE(validate(desc).has_value());
+}
+
+//======================================================================================================================
+// The default range is the whole resource, which is what every whole-resource declaration passes.
+TEST_CASE("a default subresource range covers the whole texture", "[rhi]") {
+    const FakeTexture texture{64, 64, Format::RGBA8Unorm, /*mipLevels=*/4};
+
+    REQUIRE(validateSubresourceRange(texture, {}).has_value());
+}
+
+//======================================================================================================================
+TEST_CASE("a subresource range starting past the mip chain is rejected", "[rhi]") {
+    const FakeTexture texture{64, 64, Format::RGBA8Unorm, /*mipLevels=*/4};
+    TextureSubresourceRange range{};
+    range.baseMipLevel = 4;
+
+    const auto r = validateSubresourceRange(texture, range);
+    REQUIRE_FALSE(r.has_value());
+    REQUIRE(r.error().code == ErrorCode::InvalidDesc);
+    REQUIRE(r.error().message.contains("baseMipLevel"));
+}
+
+//======================================================================================================================
+TEST_CASE("a subresource range running past the mip chain is rejected", "[rhi]") {
+    const FakeTexture texture{64, 64, Format::RGBA8Unorm, /*mipLevels=*/4};
+    TextureSubresourceRange range{};
+    range.baseMipLevel = 2;
+    range.mipLevelCount = 3;
+
+    const auto r = validateSubresourceRange(texture, range);
+    REQUIRE_FALSE(r.has_value());
+    REQUIRE(r.error().code == ErrorCode::InvalidDesc);
+    REQUIRE(r.error().message.contains("3 mip level"));
+}
+
+//======================================================================================================================
+TEST_CASE("a subresource range covering no mip level is rejected", "[rhi]") {
+    const FakeTexture texture{64, 64, Format::RGBA8Unorm, /*mipLevels=*/4};
+    TextureSubresourceRange range{};
+    range.mipLevelCount = 0;
+
+    const auto r = validateSubresourceRange(texture, range);
+    REQUIRE_FALSE(r.has_value());
+    REQUIRE(r.error().code == ErrorCode::InvalidDesc);
+    REQUIRE(r.error().message.contains("at least one mip level"));
+}
+
+//======================================================================================================================
+TEST_CASE("a single-mip subresource range of a chain is accepted", "[rhi]") {
+    const FakeTexture texture{64, 64, Format::RGBA8Unorm, /*mipLevels=*/4};
+    TextureSubresourceRange range{};
+    range.baseMipLevel = 3;
+    range.mipLevelCount = 1;
+
+    REQUIRE(validateSubresourceRange(texture, range).has_value());
+}
+
+//======================================================================================================================
+TEST_CASE("a subresource range past a cubemap's faces is rejected", "[rhi]") {
+    const FakeTexture texture{64, 64, Format::RGBA8Unorm, /*mipLevels=*/1, /*arrayLayers=*/6};
+    TextureSubresourceRange range{};
+    range.baseArrayLayer = 4;
+    range.arrayLayerCount = 4;
+
+    const auto r = validateSubresourceRange(texture, range);
+    REQUIRE_FALSE(r.has_value());
+    REQUIRE(r.error().code == ErrorCode::InvalidDesc);
+    REQUIRE(r.error().message.contains("layer"));
+}
+
+//======================================================================================================================
+// The sRGB sibling describes the same bits under a different transfer function, which is the only
+// reinterpretation a view may perform.
+TEST_CASE("a texture view may reinterpret a format's sRGB sibling", "[rhi]") {
+    const FakeTexture texture{64, 64, Format::RGBA8Unorm};
+    TextureViewDesc view{};
+    view.format = Format::RGBA8Unorm_sRGB;
+
+    REQUIRE(validateTextureView(texture, view).has_value());
+}
+
+//======================================================================================================================
+TEST_CASE("a texture view may not reinterpret a different format family", "[rhi]") {
+    const FakeTexture texture{64, 64, Format::RGBA8Unorm};
+    TextureViewDesc view{};
+    view.format = Format::RGBA16Float;
+
+    const auto r = validateTextureView(texture, view);
+    REQUIRE_FALSE(r.has_value());
+    REQUIRE(r.error().code == ErrorCode::InvalidDesc);
+    REQUIRE(r.error().message.contains("format family"));
+}
+
+//======================================================================================================================
+TEST_CASE("a texture view may select a cubemap face subset", "[rhi]") {
+    const FakeTexture texture{64, 64, Format::RGBA8Unorm, /*mipLevels=*/1, /*arrayLayers=*/6};
+    TextureViewDesc view{};
+    view.range.baseArrayLayer = 2;
+    view.range.arrayLayerCount = 1;
+
+    REQUIRE(validateTextureView(texture, view).has_value());
+}
+
+//======================================================================================================================
+TEST_CASE("a texture view reports the range problem before the format one", "[rhi]") {
+    const FakeTexture texture{64, 64, Format::RGBA8Unorm, /*mipLevels=*/2};
+    TextureViewDesc view{};
+    view.range.baseMipLevel = 5;
+    view.format = Format::RGBA16Float;
+
+    const auto r = validateTextureView(texture, view);
+    REQUIRE_FALSE(r.has_value());
+    REQUIRE(r.error().message.contains("baseMipLevel"));
 }
 
 //======================================================================================================================
@@ -872,4 +1139,349 @@ TEST_CASE("color and depth attachments differing only in height are rejected", "
     const auto r = validateRenderPassTargets(&color, &depth);
     REQUIRE_FALSE(r.has_value());
     REQUIRE(r.error().message.contains("extent"));
+}
+
+//======================================================================================================================
+// The default range is the whole allocation, which is what a barrier with no byte detail means.
+TEST_CASE("a default buffer range covers the whole buffer", "[rhi]") {
+    const FakeBuffer buffer{256};
+
+    REQUIRE(validateBufferRange(buffer, {}).has_value());
+}
+
+//======================================================================================================================
+TEST_CASE("a buffer range starting past the allocation is rejected", "[rhi]") {
+    const FakeBuffer buffer{256};
+
+    const auto r = validateBufferRange(buffer, {.offset = 256});
+    REQUIRE_FALSE(r.has_value());
+    REQUIRE(r.error().code == ErrorCode::InvalidDesc);
+    REQUIRE(r.error().message.contains("256"));
+}
+
+//======================================================================================================================
+TEST_CASE("a buffer range running past the allocation is rejected", "[rhi]") {
+    const FakeBuffer buffer{256};
+
+    const auto r = validateBufferRange(buffer, {.offset = 128, .size = 200});
+    REQUIRE_FALSE(r.has_value());
+    REQUIRE(r.error().message.contains("past the buffer's"));
+}
+
+//======================================================================================================================
+TEST_CASE("a buffer range covering no bytes is rejected", "[rhi]") {
+    const FakeBuffer buffer{256};
+
+    const auto r = validateBufferRange(buffer, {.offset = 0, .size = 0});
+    REQUIRE_FALSE(r.has_value());
+    REQUIRE(r.error().message.contains("at least one byte"));
+}
+
+//======================================================================================================================
+// The whole-buffer sentinel resolves against this buffer's own size, so the tail of a large buffer
+// is expressible without the caller doing the subtraction.
+TEST_CASE("a buffer range from an offset to the end is accepted", "[rhi]") {
+    const FakeBuffer buffer{256};
+
+    REQUIRE(validateBufferRange(buffer, {.offset = 192}).has_value());
+}
+
+//======================================================================================================================
+TEST_CASE("a buffer copy between disjoint ranges of one buffer is accepted", "[rhi]") {
+    const FakeBuffer buffer{256};
+
+    REQUIRE(validateBufferCopy(buffer, 0, buffer, 128, 128).has_value());
+}
+
+//======================================================================================================================
+// Metal leaves the direction of an overlapping self-copy undefined, so the RHI refuses it rather
+// than shipping a result that depends on the hardware.
+TEST_CASE("a buffer copy between overlapping ranges of one buffer is rejected", "[rhi]") {
+    const FakeBuffer buffer{256};
+
+    const auto r = validateBufferCopy(buffer, 0, buffer, 64, 128);
+    REQUIRE_FALSE(r.has_value());
+    REQUIRE(r.error().message.contains("overlap"));
+}
+
+//======================================================================================================================
+// The same offsets in two different allocations are not an overlap; only identity makes them one.
+TEST_CASE("a buffer copy between two buffers at the same offsets is accepted", "[rhi]") {
+    const FakeBuffer source{256};
+    const FakeBuffer destination{256};
+
+    REQUIRE(validateBufferCopy(source, 0, destination, 0, 256).has_value());
+}
+
+//======================================================================================================================
+TEST_CASE("a buffer copy running past the source is rejected", "[rhi]") {
+    const FakeBuffer source{128};
+    const FakeBuffer destination{256};
+
+    const auto r = validateBufferCopy(source, 64, destination, 0, 128);
+    REQUIRE_FALSE(r.has_value());
+    REQUIRE(r.error().message.contains("past the buffer's"));
+}
+
+//======================================================================================================================
+// The region's extent is in texels of its own mip level, so the whole of level two of a 64x64 chain
+// is 16x16 -- not 64x64 clamped.
+TEST_CASE("a copy region covering a whole mip level is accepted", "[rhi]") {
+    const FakeTexture texture{64, 64, Format::RGBA8Unorm, /*mipLevels=*/4};
+
+    REQUIRE(validateTextureCopyRegion(texture, wholeLevel(64, /*mipLevel=*/2)).has_value());
+}
+
+//======================================================================================================================
+TEST_CASE("a copy region sized for level zero is rejected on a smaller mip level", "[rhi]") {
+    const FakeTexture texture{64, 64, Format::RGBA8Unorm, /*mipLevels=*/4};
+    TextureCopyRegion region = wholeLevel(64);
+    region.mipLevel = 2;
+
+    const auto r = validateTextureCopyRegion(texture, region);
+    REQUIRE_FALSE(r.has_value());
+    REQUIRE(r.error().code == ErrorCode::InvalidDesc);
+    REQUIRE(r.error().message.contains("16x16"));
+}
+
+//======================================================================================================================
+TEST_CASE("a copy region on a mip level past the chain is rejected", "[rhi]") {
+    const FakeTexture texture{64, 64, Format::RGBA8Unorm, /*mipLevels=*/2};
+
+    const auto r = validateTextureCopyRegion(texture, wholeLevel(64, /*mipLevel=*/2));
+    REQUIRE_FALSE(r.has_value());
+    REQUIRE(r.error().message.contains("mipLevel"));
+}
+
+//======================================================================================================================
+TEST_CASE("a copy region on a layer past a cubemap's faces is rejected", "[rhi]") {
+    const FakeTexture texture{64, 64, Format::RGBA8Unorm, /*mipLevels=*/1, /*arrayLayers=*/6};
+
+    const auto r = validateTextureCopyRegion(texture, wholeLevel(64, 0, /*arrayLayer=*/6));
+    REQUIRE_FALSE(r.has_value());
+    REQUIRE(r.error().message.contains("arrayLayer"));
+}
+
+//======================================================================================================================
+TEST_CASE("a copy region on one face of a cubemap is accepted", "[rhi]") {
+    const FakeTexture texture{64, 64, Format::RGBA8Unorm, /*mipLevels=*/3, /*arrayLayers=*/6};
+
+    REQUIRE(validateTextureCopyRegion(texture, wholeLevel(64, /*mipLevel=*/1, /*arrayLayer=*/4))
+                .has_value());
+}
+
+//======================================================================================================================
+// The third dimension exists in the vocabulary but has no texture kind behind it yet, so a caller
+// reaching for it gets told that rather than a silently ignored field.
+TEST_CASE("a copy region with a depth other than one is rejected", "[rhi]") {
+    const FakeTexture texture{64, 64, Format::RGBA8Unorm};
+    TextureCopyRegion region = wholeLevel(64);
+    region.depth = 2;
+
+    const auto r = validateTextureCopyRegion(texture, region);
+    REQUIRE_FALSE(r.has_value());
+    REQUIRE(r.error().message.contains("3D texture"));
+}
+
+//======================================================================================================================
+TEST_CASE("a copy region running past its mip level is rejected", "[rhi]") {
+    const FakeTexture texture{64, 64, Format::RGBA8Unorm};
+    TextureCopyRegion region = wholeLevel(64);
+    region.x = 1;
+
+    const auto r = validateTextureCopyRegion(texture, region);
+    REQUIRE_FALSE(r.has_value());
+    REQUIRE(r.error().message.contains("past mip level"));
+}
+
+//======================================================================================================================
+// A tightly packed destination for a whole 32x32 level of RGBA8: 4096 bytes at a 128-byte stride.
+TEST_CASE("a tightly packed buffer/texture copy is accepted", "[rhi]") {
+    const FakeTexture texture{64, 64, Format::RGBA8Unorm, /*mipLevels=*/2};
+    const FakeBuffer buffer{32 * 32 * 4};
+
+    REQUIRE(validateBufferTextureCopy(buffer, {.bytesPerRow = 32 * 4}, texture,
+                                      wholeLevel(64, /*mipLevel=*/1))
+                .has_value());
+}
+
+//======================================================================================================================
+TEST_CASE("a buffer/texture copy with too narrow a row stride is rejected", "[rhi]") {
+    const FakeTexture texture{64, 64, Format::RGBA8Unorm};
+    const FakeBuffer buffer{64 * 64 * 4};
+
+    const auto r =
+        validateBufferTextureCopy(buffer, {.bytesPerRow = 32 * 4}, texture, wholeLevel(64));
+    REQUIRE_FALSE(r.has_value());
+    REQUIRE(r.error().message.contains("bytesPerRow"));
+}
+
+//======================================================================================================================
+TEST_CASE("a buffer/texture copy running past the buffer is rejected", "[rhi]") {
+    const FakeTexture texture{64, 64, Format::RGBA8Unorm};
+    const FakeBuffer buffer{64 * 64 * 4};
+
+    const auto r = validateBufferTextureCopy(buffer, {.offset = 4, .bytesPerRow = 64 * 4}, texture,
+                                             wholeLevel(64));
+    REQUIRE_FALSE(r.has_value());
+    REQUIRE(r.error().message.contains("past the buffer's"));
+}
+
+//======================================================================================================================
+// Row padding after the final row is not read or written. A buffer ending at the final texel is
+// therefore large enough even when earlier rows use a wider stride.
+TEST_CASE("a padded buffer texture layout needs no padding after its final row", "[rhi]") {
+    const FakeTexture texture{2, 2, Format::RGBA8Unorm};
+    const FakeBuffer buffer{24}; // 16-byte first-row stride, then 8 bytes of final-row texels.
+
+    REQUIRE(
+        validateBufferTextureCopy(buffer, {.bytesPerRow = 16}, texture, {.width = 2, .height = 2})
+            .has_value());
+}
+
+//======================================================================================================================
+// A stride is caller-controlled uint64 data. It must not wrap the footprint arithmetic into a
+// small in-bounds value before the native copy encoder sees it.
+TEST_CASE("a buffer texture layout whose row footprint overflows is rejected", "[rhi]") {
+    const FakeTexture texture{1, 3, Format::RGBA8Unorm};
+    const FakeBuffer buffer{64};
+    constexpr uint64_t kHugeTexelAlignedStride = std::numeric_limits<uint64_t>::max() - 3;
+
+    const auto r = validateBufferTextureCopy(buffer, {.bytesPerRow = kHugeTexelAlignedStride},
+                                             texture, {.width = 1, .height = 3});
+    REQUIRE_FALSE(r.has_value());
+    REQUIRE(r.error().message.contains("overflow"));
+}
+
+//======================================================================================================================
+// A row stride that is not a whole number of texels is an addressing bug the hardware cannot
+// express, so it is rejected before Metal sees it.
+TEST_CASE("a buffer/texture copy with a partial-texel row stride is rejected", "[rhi]") {
+    const FakeTexture texture{64, 64, Format::RGBA8Unorm};
+    const FakeBuffer buffer{64 * 64 * 8};
+
+    const auto r =
+        validateBufferTextureCopy(buffer, {.bytesPerRow = 64 * 4 + 2}, texture, wholeLevel(64));
+    REQUIRE_FALSE(r.has_value());
+    REQUIRE(r.error().message.contains("multiples of the format's texel size"));
+}
+
+//======================================================================================================================
+TEST_CASE("a buffer/texture copy of a block-compressed format is rejected", "[rhi]") {
+    const FakeTexture texture{64, 64, Format::BC1Unorm};
+    const FakeBuffer buffer{64 * 64};
+
+    const auto r = validateBufferTextureCopy(buffer, {.bytesPerRow = 32}, texture, wholeLevel(64));
+    REQUIRE_FALSE(r.has_value());
+    REQUIRE(r.error().message.contains("packed texel size"));
+}
+
+//======================================================================================================================
+// Level one's top-left 16x16 corner into the whole of level two, which is the shape a downsample
+// chain's copies have: the extents match, and each region is in bounds of its own level.
+TEST_CASE("a texture copy between two mip levels of one texture is accepted", "[rhi]") {
+    const FakeTexture texture{64, 64, Format::RGBA8Unorm, /*mipLevels=*/3};
+
+    REQUIRE(validateTextureCopy(texture, {.mipLevel = 1, .width = 16, .height = 16}, texture,
+                                wholeLevel(64, /*mipLevel=*/2))
+                .has_value());
+}
+
+//======================================================================================================================
+TEST_CASE("a texture copy between regions of different extents is rejected", "[rhi]") {
+    const FakeTexture source{64, 64, Format::RGBA8Unorm};
+    const FakeTexture destination{32, 32, Format::RGBA8Unorm};
+
+    const auto r = validateTextureCopy(source, wholeLevel(64), destination, wholeLevel(32));
+    REQUIRE_FALSE(r.has_value());
+    REQUIRE(r.error().message.contains("same extent"));
+    REQUIRE(r.error().message.contains("64x64"));
+    REQUIRE(r.error().message.contains("32x32"));
+}
+
+//======================================================================================================================
+TEST_CASE("a texture copy between different formats is rejected", "[rhi]") {
+    const FakeTexture source{64, 64, Format::RGBA8Unorm};
+    const FakeTexture destination{64, 64, Format::RGBA16Float};
+
+    const auto r = validateTextureCopy(source, wholeLevel(64), destination, wholeLevel(64));
+    REQUIRE_FALSE(r.has_value());
+    REQUIRE(r.error().message.contains("same format"));
+}
+
+//======================================================================================================================
+TEST_CASE("a texture copy between overlapping regions of one subresource is rejected", "[rhi]") {
+    const FakeTexture texture{64, 64, Format::RGBA8Unorm};
+
+    const auto r = validateTextureCopy(texture, {.width = 32, .height = 32}, texture,
+                                       {.x = 16, .y = 16, .width = 32, .height = 32});
+    REQUIRE_FALSE(r.has_value());
+    REQUIRE(r.error().message.contains("overlap"));
+}
+
+//======================================================================================================================
+// Two rectangles of one subresource that share neither a column nor a row have no hazard, so the
+// disjointness check must not fire on them.
+TEST_CASE("a texture copy between disjoint regions of one subresource is accepted", "[rhi]") {
+    const FakeTexture texture{64, 64, Format::RGBA8Unorm};
+
+    REQUIRE(validateTextureCopy(texture, {.width = 32, .height = 32}, texture,
+                                {.x = 32, .y = 32, .width = 32, .height = 32})
+                .has_value());
+}
+
+//======================================================================================================================
+TEST_CASE("indirect arguments at an aligned in-bounds offset are accepted", "[rhi]") {
+    const FakeBuffer buffer{256};
+
+    REQUIRE(validateIndirectArgs(buffer, 64, sizeof(DrawIndexedIndirectArgs)).has_value());
+}
+
+//======================================================================================================================
+TEST_CASE("indirect arguments at an unaligned offset are rejected", "[rhi]") {
+    const FakeBuffer buffer{256};
+
+    const auto r = validateIndirectArgs(buffer, 6, sizeof(DispatchIndirectArgs));
+    REQUIRE_FALSE(r.has_value());
+    REQUIRE(r.error().code == ErrorCode::InvalidDesc);
+    REQUIRE(r.error().message.contains("multiple of 4"));
+}
+
+//======================================================================================================================
+// The whole struct has to fit: an offset four bytes short of the end is in bounds by itself and
+// still reads past the allocation.
+TEST_CASE("indirect arguments running past the buffer are rejected", "[rhi]") {
+    const FakeBuffer buffer{16};
+
+    const auto r = validateIndirectArgs(buffer, 8, sizeof(DrawIndirectArgs));
+    REQUIRE_FALSE(r.has_value());
+    REQUIRE(r.error().message.contains("past the buffer's"));
+}
+
+//======================================================================================================================
+// A heap with no bytes is a heap nothing can be placed in, which is a caller error rather than an
+// empty success.
+TEST_CASE("HeapDesc requires a size", "[rhi][validate]") {
+    REQUIRE_FALSE(validate(HeapDesc{.size = 0}).has_value());
+    REQUIRE(validate(HeapDesc{.size = 4096, .label = "lmx.test.heap"}).has_value());
+}
+
+//======================================================================================================================
+// The three ways a placement can be wrong, each caught before the driver sees it: a resource the
+// backend declined to size, an offset the resource's alignment does not divide, and a footprint
+// running off the end of the heap. The last is checked at the exact boundary from both sides,
+// because that is where an off-by-one lives.
+TEST_CASE("a placement is checked against its heap and its alignment", "[rhi][validate]") {
+    const FakeHeap heap{4096};
+
+    REQUIRE_FALSE(validatePlacement(heap, 0, {.size = 0, .alignment = 256}).has_value());
+    REQUIRE_FALSE(validatePlacement(heap, 0, {.size = 256, .alignment = 0}).has_value());
+
+    REQUIRE_FALSE(validatePlacement(heap, 128, {.size = 256, .alignment = 256}).has_value());
+    REQUIRE(validatePlacement(heap, 256, {.size = 256, .alignment = 256}).has_value());
+
+    // Exactly filling the heap is legal; one byte of size past it is not.
+    REQUIRE(validatePlacement(heap, 3840, {.size = 256, .alignment = 256}).has_value());
+    REQUIRE_FALSE(validatePlacement(heap, 3840, {.size = 512, .alignment = 256}).has_value());
+    REQUIRE_FALSE(validatePlacement(heap, 4096, {.size = 256, .alignment = 256}).has_value());
 }

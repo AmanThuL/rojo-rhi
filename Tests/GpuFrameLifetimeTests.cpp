@@ -29,10 +29,45 @@ constexpr int kOverlapTolerance = 3;
 } // namespace
 
 //======================================================================================================================
+// The number a caller joins its own per-frame state to. The case pins both halves of the contract:
+// the count starts at zero and follows beginFrame, and it names the frame being built rather than
+// the frame passTimingsFrame() reports, which is always an earlier one.
+TEST_CASE("the device numbers the frames beginFrame opens", "[gpu]") {
+    using namespace lmx::rhi;
+
+    auto device = createDevice();
+    INFO(errorOf(device));
+    REQUIRE(device.has_value());
+
+    REQUIRE((*device)->frameNumber() == 0);
+
+    for (uint64_t frame = 1; frame <= 3; ++frame) {
+        CommandList& commands = (*device)->beginFrame();
+        INFO("frame " + std::to_string(frame));
+        REQUIRE((*device)->frameNumber() == frame);
+        commands.beginComputePass("lmx.test.frameLifetime.empty");
+        commands.endComputePass();
+        // An open frame's number is fixed: everything recorded here belongs to that frame.
+        REQUIRE((*device)->frameNumber() == frame);
+        (*device)->endFrame(nullptr);
+        REQUIRE((*device)->frameNumber() == frame);
+    }
+
+    // The one sequence passTimings() documents as publishing a specific frame: end it, drain, then
+    // open one more frame. The measured frame is the drained one, three behind the open one.
+    (*device)->waitIdle();
+    (*device)->beginFrame();
+    REQUIRE((*device)->frameNumber() == 4);
+    REQUIRE((*device)->passTimingsFrame() == 3);
+    (*device)->endFrame(nullptr);
+    (*device)->waitIdle();
+}
+
+//======================================================================================================================
 // Twelve undrained frames recycle each of three ring slots three times.
 // Each frame fills 68% of its slot with a distinct color and renders to its own target, so a stomp
 // cannot be hidden by later draws. The only waitIdle occurs after all submissions.
-TEST_CASE("uniform ring survives twelve frames overlapping in flight", "[gpu]") {
+TEST_CASE("uniform ring survives twelve frames overlapping in flight", "[gpu][checkpoint-a]") {
     using namespace lmx::rhi;
 
     auto device = createDevice();

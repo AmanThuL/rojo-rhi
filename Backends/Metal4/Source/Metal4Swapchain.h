@@ -28,7 +28,8 @@ namespace lmx::rhi::metal4 {
 // the *device's* drain sufficient (device last) is exactly the order that puts it too late.
 class Metal4Swapchain final : public Swapchain {
 public:
-    Metal4Swapchain(NS::SharedPtr<CA::MetalLayer> layer, NS::SharedPtr<MTL4::CommandQueue> queue,
+    Metal4Swapchain(NS::SharedPtr<CA::MetalLayer> layer, Format format,
+                    NS::SharedPtr<MTL4::CommandQueue> queue,
                     NS::SharedPtr<MTL::ResidencySet> layerResidency);
     ~Metal4Swapchain() override;
 
@@ -45,6 +46,9 @@ public:
 
 private:
     NS::SharedPtr<CA::MetalLayer> m_layer;
+    // The presentation format the device configured the layer with, carried so a drawable's
+    // texture wrapper can report it without a Metal-to-RHI format lookup that exists nowhere else.
+    Format m_format = Format::Unknown;
     // Held so the destructor can drain, and can detach the layer's residency set from the same
     // queue the constructor attached it to.
     NS::SharedPtr<MTL4::CommandQueue> m_queue;

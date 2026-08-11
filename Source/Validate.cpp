@@ -4,6 +4,7 @@
 //----------------------------------------------------------------------------------------------------------------------
 #include "RHI/Validate.h"
 
+#include <limits>
 #include <string>
 
 namespace lmx::rhi {
@@ -57,8 +58,62 @@ constexpr uint32_t kMinAnisotropy = 1;
 constexpr uint32_t kMaxAnisotropy = 16;
 
 //======================================================================================================================
+std::string extentOf(uint64_t width, uint64_t height) {
+    return std::to_string(width) + "x" + std::to_string(height);
+}
+
+//======================================================================================================================
 std::string extentOf(const Texture& texture) {
-    return std::to_string(texture.width()) + "x" + std::to_string(texture.height());
+    return extentOf(texture.width(), texture.height());
+}
+
+//======================================================================================================================
+// Whether two half-open intervals share a byte or a texel. Sizes are added in 64 bits so a texel
+// interval taken from 32-bit extents cannot wrap.
+bool overlaps(uint64_t firstStart, uint64_t firstSize, uint64_t secondStart, uint64_t secondSize) {
+    return firstStart < secondStart + secondSize && secondStart < firstStart + firstSize;
+}
+
+//======================================================================================================================
+bool checkedMultiply(uint64_t a, uint64_t b, uint64_t& result) {
+    if (a != 0 && b > std::numeric_limits<uint64_t>::max() / a) {
+        return false;
+    }
+    result = a * b;
+    return true;
+}
+
+//======================================================================================================================
+bool checkedAdd(uint64_t a, uint64_t b, uint64_t& result) {
+    if (b > std::numeric_limits<uint64_t>::max() - a) {
+        return false;
+    }
+    result = a + b;
+    return true;
+}
+
+//======================================================================================================================
+// Two formats belong to one family when they describe the same bits and differ only in the transfer
+// function applied on access, which is the only reinterpretation a view may perform: anything else
+// would reinterpret the memory itself.
+bool isSameFormatFamily(Format a, Format b) {
+    const auto linearOf = [](Format format) {
+        switch (format) {
+        case Format::RGBA8Unorm_sRGB:
+            return Format::RGBA8Unorm;
+        case Format::BC1Unorm_sRGB:
+            return Format::BC1Unorm;
+        default:
+            return format;
+        }
+    };
+    return linearOf(a) == linearOf(b);
+}
+
+//======================================================================================================================
+// Resolves a range's "everything from here on" sentinel against a concrete extent.
+uint32_t resolveCount(uint32_t count, uint32_t sentinel, uint32_t base, uint32_t total) {
+    return count == sentinel ? (base < total ? total - base : 0) : count;
 }
 
 } // namespace
@@ -83,6 +138,14 @@ uint32_t bytesPerPixel(Format format) {
         break;
     }
     return 0;
+}
+
+//======================================================================================================================
+// The read-write set Apple silicon supports, intersected with this RHI's formats: the sRGB and
+// block-compressed members are excluded because a storage access performs no decode, and the packed
+// depth and two-channel formats have no read-write support to expose.
+bool isStorageFormat(Format format) {
+    return format == Format::RGBA8Unorm || format == Format::RGBA16Float;
 }
 
 //======================================================================================================================
@@ -122,9 +185,15 @@ Result<void> validate(const TextureDesc& desc) {
         return invalid("TextureDesc.mipLevels exceeds the chain the extent allows "
                        "(floor(log2(max(width, height))) + 1)");
     }
-    if (!desc.renderTarget && !desc.sampled && !desc.cpuReadback) {
-        return invalid("TextureDesc has no usage: set at least one of renderTarget, sampled, or "
-                       "cpuReadback");
+    if (!desc.renderTarget && !desc.sampled && !desc.storageRead && !desc.storageWrite &&
+        !desc.cpuReadback) {
+        return invalid("TextureDesc has no usage: set at least one of renderTarget, sampled, "
+                       "storageRead, storageWrite, or cpuReadback");
+    }
+    if ((desc.storageRead || desc.storageWrite) && !isStorageFormat(desc.format)) {
+        return invalid("TextureDesc storage usage requires a format the hardware can read and "
+                       "write without conversion (RGBA8Unorm or RGBA16Float); sRGB, "
+                       "block-compressed, depth, and two-channel formats are not among them");
     }
     if (desc.renderTarget && !isColorRenderableFormat(desc.format) && !isDepthFormat(desc.format)) {
         return invalid("TextureDesc.renderTarget requires a color-renderable or depth format");
@@ -139,6 +208,249 @@ Result<void> validate(const TextureDesc& desc) {
                        "express a Cube's six faces");
     }
     return {};
+}
+
+//======================================================================================================================
+Result<void> validateSubresourceRange(const Texture& texture,
+                                      const TextureSubresourceRange& range) {
+    const uint32_t mipLevels = texture.mipLevels();
+    const uint32_t arrayLayers = texture.arrayLayers();
+    if (range.baseMipLevel >= mipLevels) {
+        return std::unexpected(
+            Error{ErrorCode::InvalidDesc,
+                  "TextureSubresourceRange.baseMipLevel " + std::to_string(range.baseMipLevel) +
+                      " is outside the texture's " + std::to_string(mipLevels) + " mip level(s)"});
+    }
+    if (range.baseArrayLayer >= arrayLayers) {
+        return std::unexpected(
+            Error{ErrorCode::InvalidDesc,
+                  "TextureSubresourceRange.baseArrayLayer " + std::to_string(range.baseArrayLayer) +
+                      " is outside the texture's " + std::to_string(arrayLayers) + " layer(s)"});
+    }
+    const uint32_t mipCount =
+        resolveCount(range.mipLevelCount, kAllMipLevels, range.baseMipLevel, mipLevels);
+    const uint32_t layerCount =
+        resolveCount(range.arrayLayerCount, kAllArrayLayers, range.baseArrayLayer, arrayLayers);
+    if (mipCount == 0 || layerCount == 0) {
+        return invalid("TextureSubresourceRange must cover at least one mip level and one array "
+                       "layer (use kAllMipLevels/kAllArrayLayers for the whole resource)");
+    }
+    // Compare against the remaining extent so an enormous count cannot overflow the sum.
+    if (mipCount > mipLevels - range.baseMipLevel) {
+        return std::unexpected(Error{ErrorCode::InvalidDesc,
+                                     "TextureSubresourceRange covers " + std::to_string(mipCount) +
+                                         " mip level(s) from level " +
+                                         std::to_string(range.baseMipLevel) +
+                                         ", past the texture's " + std::to_string(mipLevels)});
+    }
+    if (layerCount > arrayLayers - range.baseArrayLayer) {
+        return std::unexpected(Error{ErrorCode::InvalidDesc,
+                                     "TextureSubresourceRange covers " +
+                                         std::to_string(layerCount) + " layer(s) from layer " +
+                                         std::to_string(range.baseArrayLayer) +
+                                         ", past the texture's " + std::to_string(arrayLayers)});
+    }
+    return {};
+}
+
+//======================================================================================================================
+Result<void> validateTextureView(const Texture& texture, const TextureViewDesc& view) {
+    if (auto ok = validateSubresourceRange(texture, view.range); !ok) {
+        return ok;
+    }
+    if (view.format != Format::Unknown && !isSameFormatFamily(view.format, texture.format())) {
+        return invalid("TextureViewDesc.format must belong to the texture's format family -- a "
+                       "view may only reinterpret the sRGB transfer, not the bit layout");
+    }
+    return {};
+}
+
+//======================================================================================================================
+// Integer shifts again, for the same reason maxMipLevels uses them: a mip extent is exact integer
+// arithmetic, and the chain floors at one texel rather than at zero.
+uint32_t mipExtent(uint32_t base, uint32_t level) {
+    const uint32_t extent = base >> level;
+    return extent > 0 ? extent : 1;
+}
+
+//======================================================================================================================
+Result<void> validateBufferRange(const Buffer& buffer, const BufferRange& range) {
+    const uint64_t bufferSize = buffer.size();
+    if (range.offset >= bufferSize) {
+        return std::unexpected(
+            Error{ErrorCode::InvalidDesc, "BufferRange.offset " + std::to_string(range.offset) +
+                                              " is outside the buffer's " +
+                                              std::to_string(bufferSize) + " bytes"});
+    }
+    const uint64_t size = range.size == kWholeBuffer ? bufferSize - range.offset : range.size;
+    return validateBufferBytes(buffer, range.offset, size);
+}
+
+//======================================================================================================================
+Result<void> validateBufferBytes(const Buffer& buffer, uint64_t offset, uint64_t size) {
+    const uint64_t bufferSize = buffer.size();
+    if (size == 0) {
+        return invalid("a buffer range must cover at least one byte (use kWholeBuffer for the "
+                       "whole allocation)");
+    }
+    if (offset >= bufferSize) {
+        return std::unexpected(
+            Error{ErrorCode::InvalidDesc, "a buffer range starts at byte " +
+                                              std::to_string(offset) + ", outside the buffer's " +
+                                              std::to_string(bufferSize) + " bytes"});
+    }
+    // Compare against the remaining bytes so an enormous size cannot overflow the sum.
+    if (size > bufferSize - offset) {
+        return std::unexpected(
+            Error{ErrorCode::InvalidDesc, "a buffer range covers " + std::to_string(size) +
+                                              " bytes from byte " + std::to_string(offset) +
+                                              ", past the buffer's " + std::to_string(bufferSize)});
+    }
+    return {};
+}
+
+//======================================================================================================================
+Result<void> validateBufferCopy(const Buffer& source, uint64_t sourceOffset,
+                                const Buffer& destination, uint64_t destinationOffset,
+                                uint64_t size) {
+    if (auto ok = validateBufferBytes(source, sourceOffset, size); !ok) {
+        return ok;
+    }
+    if (auto ok = validateBufferBytes(destination, destinationOffset, size); !ok) {
+        return ok;
+    }
+    // Metal leaves an overlapping self-copy undefined rather than defining a direction for it.
+    if (&source == &destination && overlaps(sourceOffset, size, destinationOffset, size)) {
+        return invalid("copyBuffer: the source and destination ranges of one buffer overlap -- a "
+                       "copy has no defined direction, so the result would depend on the hardware");
+    }
+    return {};
+}
+
+//======================================================================================================================
+Result<void> validateTextureCopyRegion(const Texture& texture, const TextureCopyRegion& region) {
+    if (region.mipLevel >= texture.mipLevels()) {
+        return std::unexpected(Error{ErrorCode::InvalidDesc,
+                                     "TextureCopyRegion.mipLevel " +
+                                         std::to_string(region.mipLevel) +
+                                         " is outside the texture's " +
+                                         std::to_string(texture.mipLevels()) + " mip level(s)"});
+    }
+    if (region.arrayLayer >= texture.arrayLayers()) {
+        return std::unexpected(
+            Error{ErrorCode::InvalidDesc, "TextureCopyRegion.arrayLayer " +
+                                              std::to_string(region.arrayLayer) +
+                                              " is outside the texture's " +
+                                              std::to_string(texture.arrayLayers()) + " layer(s)"});
+    }
+    if (region.z != 0 || region.depth != 1) {
+        return invalid("TextureCopyRegion.z must be 0 and .depth must be 1 -- this RHI models no "
+                       "3D texture kind, so there is no third dimension to address");
+    }
+    if (region.width == 0 || region.height == 0) {
+        return invalid("TextureCopyRegion must cover at least one texel in width and height");
+    }
+    const uint32_t levelWidth = mipExtent(texture.width(), region.mipLevel);
+    const uint32_t levelHeight = mipExtent(texture.height(), region.mipLevel);
+    if (uint64_t{region.x} + region.width > levelWidth ||
+        uint64_t{region.y} + region.height > levelHeight) {
+        return std::unexpected(Error{
+            ErrorCode::InvalidDesc,
+            "TextureCopyRegion covers " + extentOf(region.width, region.height) + " texels from (" +
+                std::to_string(region.x) + "," + std::to_string(region.y) + "), past mip level " +
+                std::to_string(region.mipLevel) + "'s " + extentOf(levelWidth, levelHeight)});
+    }
+    return {};
+}
+
+//======================================================================================================================
+Result<void> validateBufferTextureCopy(const Buffer& buffer, const BufferTextureLayout& layout,
+                                       const Texture& texture, const TextureCopyRegion& region) {
+    if (auto ok = validateTextureCopyRegion(texture, region); !ok) {
+        return ok;
+    }
+    const uint64_t texelBytes = bytesPerPixel(texture.format());
+    if (texelBytes == 0) {
+        return invalid("a buffer<->texture copy needs a format with a packed texel size; the "
+                       "block-compressed and packed depth formats have none, and no caller needs "
+                       "the block arithmetic they would require");
+    }
+    // Metal addresses both the buffer offset and the row stride in whole texels.
+    if (layout.offset % texelBytes != 0 || layout.bytesPerRow % texelBytes != 0) {
+        return invalid("BufferTextureLayout.offset and .bytesPerRow must both be multiples of the "
+                       "format's texel size");
+    }
+    const uint64_t rowBytes = uint64_t{region.width} * texelBytes;
+    if (layout.bytesPerRow < rowBytes) {
+        return std::unexpected(Error{ErrorCode::InvalidDesc,
+                                     "BufferTextureLayout.bytesPerRow " +
+                                         std::to_string(layout.bytesPerRow) +
+                                         " is narrower than the region's " +
+                                         std::to_string(rowBytes) + " bytes of texels per row"});
+    }
+    // A one-slice copy touches no padding after its last row. Compute exactly through the final
+    // texel rather than bytesPerRow * height, both to accept that legal footprint and to keep a
+    // caller-supplied stride from wrapping the bounds check.
+    uint64_t lastRowOffset = 0;
+    uint64_t footprint = 0;
+    if (!checkedMultiply(layout.bytesPerRow, uint64_t{region.height - 1}, lastRowOffset) ||
+        !checkedAdd(lastRowOffset, rowBytes, footprint)) {
+        return invalid("BufferTextureLayout row strides overflow the addressable buffer range");
+    }
+    if (layout.bytesPerSlice != 0 && layout.bytesPerSlice < footprint) {
+        return invalid("BufferTextureLayout.bytesPerSlice is smaller than the rows of one slice "
+                       "occupy (use 0 for a single-slice copy)");
+    }
+    return validateBufferBytes(buffer, layout.offset, footprint);
+}
+
+//======================================================================================================================
+Result<void> validateTextureCopy(const Texture& source, const TextureCopyRegion& sourceRegion,
+                                 const Texture& destination,
+                                 const TextureCopyRegion& destinationRegion) {
+    if (auto ok = validateTextureCopyRegion(source, sourceRegion); !ok) {
+        return ok;
+    }
+    if (auto ok = validateTextureCopyRegion(destination, destinationRegion); !ok) {
+        return ok;
+    }
+    if (sourceRegion.width != destinationRegion.width ||
+        sourceRegion.height != destinationRegion.height ||
+        sourceRegion.depth != destinationRegion.depth) {
+        return std::unexpected(
+            Error{ErrorCode::InvalidDesc,
+                  "copyTexture: the regions must have the same extent (source " +
+                      extentOf(sourceRegion.width, sourceRegion.height) + ", destination " +
+                      extentOf(destinationRegion.width, destinationRegion.height) +
+                      ") -- a copy neither filters nor rescales"});
+    }
+    // Reinterpreting one format's bits as another's is what a texture view is for; a copy that did
+    // it silently would make the destination's contents depend on the pair of formats involved.
+    if (source.format() != destination.format()) {
+        return invalid("copyTexture: the source and destination must have the same format");
+    }
+    if (&source == &destination && sourceRegion.mipLevel == destinationRegion.mipLevel &&
+        sourceRegion.arrayLayer == destinationRegion.arrayLayer &&
+        overlaps(sourceRegion.x, sourceRegion.width, destinationRegion.x,
+                 destinationRegion.width) &&
+        overlaps(sourceRegion.y, sourceRegion.height, destinationRegion.y,
+                 destinationRegion.height)) {
+        return invalid("copyTexture: the source and destination regions of one subresource overlap "
+                       "-- a copy has no defined direction, so the result would depend on the "
+                       "hardware");
+    }
+    return {};
+}
+
+//======================================================================================================================
+Result<void> validateIndirectArgs(const Buffer& buffer, uint64_t offset, uint64_t argsSize) {
+    if (offset % kIndirectArgsAlignment != 0) {
+        return std::unexpected(
+            Error{ErrorCode::InvalidDesc, "an indirect argument offset must be a multiple of " +
+                                              std::to_string(kIndirectArgsAlignment) +
+                                              " bytes, not " + std::to_string(offset)});
+    }
+    return validateBufferBytes(buffer, offset, argsSize);
 }
 
 //======================================================================================================================
@@ -183,6 +495,24 @@ Result<void> validate(const GraphicsPipelineDesc& desc) {
 }
 
 //======================================================================================================================
+Result<void> validate(const ComputePipelineDesc& desc) {
+    if (desc.library == nullptr) {
+        return invalid("ComputePipelineDesc.library must not be null");
+    }
+    if (desc.computeEntry.empty()) {
+        return invalid("ComputePipelineDesc.computeEntry must not be empty");
+    }
+    // A zero component would dispatch a grid of nothing while the kernel still declared threads.
+    for (const uint32_t threads : desc.threadsPerThreadgroup) {
+        if (threads == 0) {
+            return invalid("ComputePipelineDesc.threadsPerThreadgroup components must all be at "
+                           "least 1 (an unused dimension is 1, not 0)");
+        }
+    }
+    return {};
+}
+
+//======================================================================================================================
 Result<void> validate(const SwapchainDesc& desc) {
     if (desc.nativeLayer == nullptr) {
         return invalid("SwapchainDesc.nativeLayer must not be null");
@@ -199,6 +529,40 @@ Result<void> validate(const SwapchainDesc& desc) {
     if (!isSwapchainFormat(desc.format)) {
         return invalid(
             "SwapchainDesc.format must be an SDR color-renderable 8-bit unorm or sRGB format");
+    }
+    return {};
+}
+
+//======================================================================================================================
+Result<void> validate(const HeapDesc& desc) {
+    if (desc.size == 0) {
+        return invalid("HeapDesc.size must be greater than zero");
+    }
+    return {};
+}
+
+//======================================================================================================================
+// A zero footprint is checked as well as the bounds: it means the backend declined to size the
+// descriptor, and placing at an alignment of zero would divide by it below.
+Result<void> validatePlacement(const Heap& heap, uint64_t offset, const SizeAlign& footprint) {
+    if (footprint.size == 0 || footprint.alignment == 0) {
+        return invalid("a placed resource must have a non-zero size and alignment; this descriptor "
+                       "has none, so it cannot be positioned in a heap");
+    }
+    if (offset % footprint.alignment != 0) {
+        return std::unexpected(
+            Error{ErrorCode::InvalidDesc,
+                  "placement offset " + std::to_string(offset) + " is not a multiple of the " +
+                      std::to_string(footprint.alignment) + "-byte alignment this resource needs"});
+    }
+    // Subtraction rather than offset + size so a caller-supplied offset near the top of the range
+    // cannot wrap past the comparison.
+    if (offset > heap.size() || footprint.size > heap.size() - offset) {
+        return std::unexpected(
+            Error{ErrorCode::InvalidDesc, "a placement of " + std::to_string(footprint.size) +
+                                              " bytes at offset " + std::to_string(offset) +
+                                              " runs past the end of a " +
+                                              std::to_string(heap.size()) + "-byte heap"});
     }
     return {};
 }
