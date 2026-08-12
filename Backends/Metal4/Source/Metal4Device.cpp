@@ -139,24 +139,14 @@ Result<std::unique_ptr<Device>> Metal4Device::create(const DeviceDesc& desc) {
         }
     }
 
-    // Uniform rings share the frame rotation and device lifetime of the residency set.
+    // One normal page per slot up front, so a frame that stays inside its budget never allocates.
     for (uint32_t i = 0; i < kFramesInFlight; ++i) {
-        self->m_uniformRings[i] = NS::TransferPtr(
-            self->m_device->newBuffer(kUniformRingBytes, MTL::ResourceStorageModeShared));
-        if (!self->m_uniformRings[i]) {
-            return fail(ErrorCode::ResourceCreationFailed,
-                        "failed to create uniform ring " + std::to_string(i) + " of " +
-                            std::to_string(kUniformRingBytes) + " bytes");
+        const Result<void> arena =
+            self->m_frameArenas[i].create(self->m_device.get(), self->m_residency, i);
+        if (!arena) {
+            return std::unexpected(arena.error());
         }
-        const std::string ringLabel = "lmx.device.uniformRing." + std::to_string(i);
-        self->m_uniformRings[i]->setLabel(makeString(ringLabel).get());
-        // Device-owned rings bypass resource wrappers, so register their capture identity here.
-        debug::CaptureSchema::instance().registerBuffer(self->m_uniformRings[i].get(), ringLabel,
-                                                        kUniformRingBytes);
-        self->m_residency->addAllocation(self->m_uniformRings[i].get());
     }
-    // A residency commit republishes the full set, so batch all ring additions into one commit.
-    self->m_residency->commit();
 
     // Pass timings are read back through the CPU-side resolve on the heap itself, so the heaps
     // need no residency registration and no staging buffer.
@@ -186,7 +176,7 @@ Result<std::unique_ptr<Device>> Metal4Device::create(const DeviceDesc& desc) {
         timestamps.heap->invalidateCounterRange(NS::Range::Make(0, kTimestampsPerFrame));
     }
 
-    // Per-frame table and ring pointers are attached only while a frame is open.
+    // Per-frame table and arena pointers are attached only while a frame is open.
     self->m_commandList.emplace(self->m_commandBuffer.get());
 
     return self;
@@ -206,12 +196,22 @@ Metal4Device::~Metal4Device() {
         m_queue->removeResidencySet(m_residency.get());
     }
 
-    // Remove device-owned ring identities before their pointer values can be reused.
-    for (const NS::SharedPtr<MTL::Buffer>& ring : m_uniformRings) {
-        if (ring) {
-            debug::CaptureSchema::instance().unregisterResource(ring.get());
-        }
+    for (Metal4FrameArena& arena : m_frameArenas) {
+        arena.unregisterFromCapture();
     }
+}
+
+//======================================================================================================================
+FrameDataCounters Metal4Device::frameDataCounters() const {
+    FrameDataCounters counters;
+    counters.calls = m_frameDataTally.calls;
+    counters.bytes = m_frameDataTally.bytes;
+    counters.addressBinds = m_frameDataTally.addressBinds;
+    for (uint32_t slot = 0; slot < kFramesInFlight; ++slot) {
+        counters.pageCreations += m_frameArenas[slot].pageCreations();
+        counters.slots[slot] = m_frameArenas[slot].counters();
+    }
+    return counters;
 }
 
 } // namespace lmx::rhi::metal4

@@ -7,7 +7,9 @@
 /// feed, flushed to "<bundle>.schema.json" when a capture closes. Single-threaded by
 /// construction, like the backend it observes.
 #pragma once
-#include "RHI/RHI.h"
+#include "RHI/Format.h"
+#include "RHI/Texture.h"
+
 #include <array>
 #include <cstdint>
 #include <filesystem>
@@ -31,12 +33,17 @@ struct SchemaUniformStruct {
     uint32_t sizeBytes = 0;                 ///< Total structure size in bytes.
     std::vector<SchemaUniformField> fields; ///< Ordered field layout.
 };
-/// Records one upload from the transient uniform ring.
-struct SchemaUniformUpload {
-    std::string ringLabel;   ///< Diagnostic label of the transient uniform ring.
-    uint32_t slot = 0;       ///< Argument-table buffer slot receiving the upload.
-    uint64_t ringOffset = 0; ///< Byte offset into the transient ring.
-    uint64_t sizeBytes = 0;  ///< Uploaded byte count.
+/// Records one block published into a frame slot's per-frame data arena.
+///
+/// The page label plus the offset name exactly one range of one labeled allocation, which is what
+/// makes an address seen in a capture traceable back to the call that produced it.
+struct SchemaFrameDataUpload {
+    std::string pageLabel;       ///< Diagnostic label of the arena page holding the block.
+    uint32_t slot = 0;           ///< Argument-table buffer slot receiving the block's address.
+    uint64_t pageOffset = 0;     ///< Byte offset of the block from the page's base.
+    uint64_t sizeBytes = 0;      ///< Copied byte count, excluding alignment padding.
+    uint64_t alignmentBytes = 0; ///< Alignment the block was placed at.
+    uint64_t gpuAddress = 0;     ///< GPU address handed back to the caller.
 };
 /// Captures scene, camera, light, and shadow-filter context for one frame.
 struct SchemaContext {
@@ -69,14 +76,14 @@ public:
     void registerUniformStruct(SchemaUniformStruct layout);
 
     /// Frame-record window, driven by begin/endCapture.
-    /// Clears frame data and begins accepting uniform upload records.
+    /// Clears frame data and begins accepting frame-data upload records.
     void beginFrameRecords();
-    /// Stops accepting uniform upload records.
+    /// Stops accepting frame-data upload records.
     void endFrameRecords();
-    /// Returns whether uniform uploads are currently being recorded.
+    /// Returns whether frame-data uploads are currently being recorded.
     bool recordingUploads() const;
-    /// Records a uniform upload when the frame-record window is active.
-    void recordUniformUpload(SchemaUniformUpload upload);
+    /// Records a frame-data block when the frame-record window is active.
+    void recordFrameDataUpload(SchemaFrameDataUpload upload);
 
     /// Replaces the contextual metadata for the current capture frame.
     void setContext(SchemaContext context);
@@ -114,7 +121,7 @@ private:
     /// creation order is what makes two runs' sidecars diffable.
     std::vector<std::pair<const void*, Resource>> m_resources;
     std::vector<SchemaUniformStruct> m_uniformStructs;
-    std::vector<SchemaUniformUpload> m_uniformUploads;
+    std::vector<SchemaFrameDataUpload> m_frameDataUploads;
     SchemaContext m_context;
     bool m_recording = false;
 };

@@ -5,6 +5,9 @@
 #pragma once
 #include "Metal4Common.h"
 #include "Metal4Resources.h"
+#include "RHI/Result.h"
+#include "RHI/Swapchain.h"
+#include "RHI/Texture.h"
 
 #include <cstdint>
 #include <memory>

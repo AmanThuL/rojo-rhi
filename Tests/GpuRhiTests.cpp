@@ -15,7 +15,7 @@ bool channelIs(uint8_t actual, float expected) {
 //======================================================================================================================
 // A throwaway aligned upload puts the triangle away from offset zero, exposing lost offset
 // arithmetic.
-TEST_CASE("uniform ring feeds a draw from a non-zero offset", "[gpu]") {
+TEST_CASE("frame-data arena feeds a draw from a non-zero offset", "[gpu]") {
     using namespace lmx::rhi;
 
     auto device = createDevice();
@@ -27,7 +27,7 @@ TEST_CASE("uniform ring feeds a draw from a non-zero offset", "[gpu]") {
                                             .format = Format::BGRA8Unorm,
                                             .renderTarget = true,
                                             .cpuReadback = true,
-                                            .label = "lmx.test.ringTarget"});
+                                            .label = "lmx.test.arenaTarget"});
     INFO(errorOf(target));
     REQUIRE(target.has_value());
 
@@ -39,7 +39,7 @@ TEST_CASE("uniform ring feeds a draw from a non-zero offset", "[gpu]") {
                                                        .vertexEntry = "vertexMain",
                                                        .fragmentEntry = "fragmentMain",
                                                        .colorFormat = Format::BGRA8Unorm,
-                                                       .label = "lmx.test.ringPipeline"});
+                                                       .label = "lmx.test.arenaPipeline"});
     INFO(errorOf(pipeline));
     REQUIRE(pipeline.has_value());
 
@@ -49,10 +49,10 @@ TEST_CASE("uniform ring feeds a draw from a non-zero offset", "[gpu]") {
     commands.beginRenderPass({.colorTarget = target->get(),
                               .clearColor = {0.0f, 0.0f, 0.0f, 1.0f},
                               .clear = true,
-                              .label = "lmx.test.uniformUpload"});
+                              .label = "lmx.test.frameDataUpload"});
     commands.bindPipeline(**pipeline);
-    commands.setUniforms(kVertexBufferSlot, filler.data(), filler.size());
-    commands.setUniforms(kVertexBufferSlot, kTriangle.data(), sizeof(kTriangle));
+    commands.bindFrameData(kVertexBufferSlot, filler.data(), filler.size());
+    commands.bindFrameData(kVertexBufferSlot, kTriangle.data(), sizeof(kTriangle));
     commands.draw(static_cast<uint32_t>(kTriangle.size()));
     commands.endRenderPass();
     (*device)->endFrame(nullptr);
@@ -90,16 +90,16 @@ TEST_CASE("uniform ring feeds a draw from a non-zero offset", "[gpu]") {
 //======================================================================================================================
 // Six drained frames rotate through all three ring slots twice; each image must retain its own
 // color.
-TEST_CASE("uniform ring keeps per-frame data across slot reuse", "[gpu]") {
+TEST_CASE("frame-data arena keeps per-frame data across slot reuse", "[gpu]") {
     using namespace lmx::rhi;
 
     constexpr std::array<std::array<float, 3>, 6> kFrameColors = {{
-        {1.0f, 0.0f, 0.0f}, // frame 0 -> ring slot 1
-        {0.0f, 1.0f, 0.0f}, // frame 1 -> ring slot 2
-        {0.0f, 0.0f, 1.0f}, // frame 2 -> ring slot 0
-        {1.0f, 1.0f, 0.0f}, // frame 3 -> ring slot 1 again, first frame that waits
-        {0.0f, 1.0f, 1.0f}, // frame 4 -> ring slot 2 again
-        {1.0f, 0.0f, 1.0f}, // frame 5 -> ring slot 0 again
+        {1.0f, 0.0f, 0.0f}, // frame 0 -> arena slot 1
+        {0.0f, 1.0f, 0.0f}, // frame 1 -> arena slot 2
+        {0.0f, 0.0f, 1.0f}, // frame 2 -> arena slot 0
+        {1.0f, 1.0f, 0.0f}, // frame 3 -> arena slot 1 again, first frame that waits
+        {0.0f, 1.0f, 1.0f}, // frame 4 -> arena slot 2 again
+        {1.0f, 0.0f, 1.0f}, // frame 5 -> arena slot 0 again
     }};
 
     auto device = createDevice();
@@ -145,7 +145,7 @@ TEST_CASE("uniform ring keeps per-frame data across slot reuse", "[gpu]") {
                                   .clear = true,
                                   .label = "lmx.test.frameRotation"});
         commands.bindPipeline(**pipeline);
-        commands.setUniforms(kVertexBufferSlot, vertices.data(), sizeof(vertices));
+        commands.bindFrameData(kVertexBufferSlot, vertices.data(), sizeof(vertices));
         commands.draw(static_cast<uint32_t>(vertices.size()));
         commands.endRenderPass();
         (*device)->endFrame(nullptr);
@@ -224,9 +224,9 @@ TEST_CASE("depth test rejects a coplanar second draw", "[gpu]") {
                               .clearDepth = 1.0f,
                               .label = "lmx.test.depth.first"});
     commands.bindPipeline(**pipeline);
-    commands.setUniforms(kVertexBufferSlot, first.data(), sizeof(first));
+    commands.bindFrameData(kVertexBufferSlot, first.data(), sizeof(first));
     commands.draw(static_cast<uint32_t>(first.size()));
-    commands.setUniforms(kVertexBufferSlot, second.data(), sizeof(second));
+    commands.bindFrameData(kVertexBufferSlot, second.data(), sizeof(second));
     commands.draw(static_cast<uint32_t>(second.size()));
     commands.endRenderPass();
     (*device)->endFrame(nullptr);
@@ -256,7 +256,7 @@ TEST_CASE("depth test rejects a coplanar second draw", "[gpu]") {
                                  .clearDepth = 0.0f,
                                  .label = "lmx.test.depth.second"});
     secondFrame.bindPipeline(**pipeline);
-    secondFrame.setUniforms(kVertexBufferSlot, first.data(), sizeof(first));
+    secondFrame.bindFrameData(kVertexBufferSlot, first.data(), sizeof(first));
     secondFrame.draw(static_cast<uint32_t>(first.size()));
     secondFrame.endRenderPass();
     (*device)->endFrame(nullptr);
@@ -370,7 +370,7 @@ TEST_CASE("sampler address mode decides what a past-the-edge uv reads", "[gpu]")
                               .clear = true,
                               .label = "lmx.test.sampler.source"});
     commands.bindPipeline(**fillPipeline);
-    commands.setUniforms(kVertexBufferSlot, kSplitQuads.data(), sizeof(kSplitQuads));
+    commands.bindFrameData(kVertexBufferSlot, kSplitQuads.data(), sizeof(kSplitQuads));
     commands.draw(static_cast<uint32_t>(kSplitQuads.size()));
     commands.endRenderPass();
 
@@ -694,7 +694,7 @@ TEST_CASE("a depth-only pass stores depth a later pass can sample", "[gpu][check
                               .storeDepth = true,
                               .label = "lmx.test.depthOnly.write"});
     commands.bindPipeline(**depthPipeline);
-    commands.setUniforms(kVertexBufferSlot, kTriangle.data(), sizeof(kTriangle));
+    commands.bindFrameData(kVertexBufferSlot, kTriangle.data(), sizeof(kTriangle));
     commands.draw(static_cast<uint32_t>(kTriangle.size()));
     commands.endRenderPass();
 
@@ -814,7 +814,7 @@ TEST_CASE("pipeline raster state culls back faces and draws wireframes", "[gpu]"
                                   .clear = true,
                                   .label = "lmx.test.rasterState"});
         commands.bindPipeline(pipeline);
-        commands.setUniforms(kVertexBufferSlot, vertices.data(), sizeof(vertices));
+        commands.bindFrameData(kVertexBufferSlot, vertices.data(), sizeof(vertices));
         commands.draw(static_cast<uint32_t>(vertices.size()));
         commands.endRenderPass();
     };
@@ -914,7 +914,7 @@ TEST_CASE("pass timings report every pass of the retired frame", "[gpu]") {
                                   .clear = true,
                                   .label = label});
         commands.bindPipeline(**pipeline);
-        commands.setUniforms(kVertexBufferSlot, kTriangle.data(), sizeof(kTriangle));
+        commands.bindFrameData(kVertexBufferSlot, kTriangle.data(), sizeof(kTriangle));
         commands.draw(static_cast<uint32_t>(kTriangle.size()));
         commands.endRenderPass();
     };
@@ -1033,7 +1033,7 @@ TEST_CASE("an RGBA16Float target keeps values above 1.0 through readback", "[gpu
                               .clear = true,
                               .label = "lmx.test.hdr.write"});
     commands.bindPipeline(**pipeline);
-    commands.setUniforms(kVertexBufferSlot, triangle.data(), sizeof(triangle));
+    commands.bindFrameData(kVertexBufferSlot, triangle.data(), sizeof(triangle));
     commands.draw(static_cast<uint32_t>(triangle.size()));
     commands.endRenderPass();
     (*device)->endFrame(nullptr);
@@ -1173,9 +1173,9 @@ TEST_CASE("a Greater depth test keeps the nearer fragment in reversed-Z", "[gpu]
                               .storeDepth = true,
                               .label = "lmx.test.reversedDepth.write"});
     commands.bindPipeline(**depthPipeline);
-    commands.setUniforms(kDepthPassSlot, &uniforms, sizeof(uniforms));
+    commands.bindFrameData(kDepthPassSlot, uniforms);
     const auto drawQuad = [&](const std::array<DepthVertex, 6>& quad) {
-        commands.setUniforms(kVertexBufferSlot, quad.data(), sizeof(quad));
+        commands.bindFrameData(kVertexBufferSlot, quad.data(), sizeof(quad));
         commands.draw(static_cast<uint32_t>(quad.size()));
     };
     drawQuad(far);
@@ -1321,8 +1321,8 @@ TEST_CASE("a comparison sampler's function decides which depth reads as lit", "[
                               .storeDepth = true,
                               .label = "lmx.test.compare.write"});
     commands.bindPipeline(**depthPipeline);
-    commands.setUniforms(kDepthPassSlot, &uniforms, sizeof(uniforms));
-    commands.setUniforms(kVertexBufferSlot, blocker.data(), sizeof(blocker));
+    commands.bindFrameData(kDepthPassSlot, uniforms);
+    commands.bindFrameData(kVertexBufferSlot, blocker.data(), sizeof(blocker));
     commands.draw(static_cast<uint32_t>(blocker.size()));
     commands.endRenderPass();
 
@@ -1336,8 +1336,8 @@ TEST_CASE("a comparison sampler's function decides which depth reads as lit", "[
         commands.bindPipeline(**comparePipeline);
         commands.bindTexture(kCompareTextureSlot, **depthTarget);
         commands.bindSampler(kCompareSamplerSlot, sampler);
-        commands.setUniforms(kDepthPassSlot, &uniforms, sizeof(uniforms));
-        commands.setUniforms(kVertexBufferSlot, receiver.data(), sizeof(receiver));
+        commands.bindFrameData(kDepthPassSlot, uniforms);
+        commands.bindFrameData(kVertexBufferSlot, receiver.data(), sizeof(receiver));
         commands.draw(static_cast<uint32_t>(receiver.size()));
         commands.endRenderPass();
     };

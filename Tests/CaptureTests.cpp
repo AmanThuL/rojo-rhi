@@ -62,11 +62,11 @@ TEST_CASE("endCapture writes the schema sidecar next to the bundle", "[gpu]") {
     lmx::rhi::metal4::endCapture();
     const std::filesystem::path sidecar = bundle.string() + ".schema.json";
     REQUIRE(std::filesystem::exists(sidecar));
-    // The device's own uniform rings must be in the registry.
+    // The device's own frame-data arena pages must be in the registry.
     std::ifstream in(sidecar);
     std::stringstream text;
     text << in.rdbuf();
-    REQUIRE(text.str().find("lmx.device.uniformRing.0") != std::string::npos);
+    REQUIRE(text.str().find("lmx.device.frameData.0.page.0") != std::string::npos);
     std::filesystem::remove_all(bundle);
     std::filesystem::remove(sidecar);
 }
@@ -90,8 +90,8 @@ TEST_CASE("capture bundle carries a labeled texture's bytes", "[gpu][spike]") {
     using namespace lmx::rhi;
     auto device = createDevice();
     REQUIRE(device.has_value());
-    // 300x299, a size nothing engine-internal shares (the uniform rings are exactly 256 KiB):
-    // the blob stays findable by size alone even if label recovery fails.
+    // 300x299, a size nothing engine-internal shares (the frame-data arena's normal pages are
+    // exactly 256 KiB): the blob stays findable by size alone even if label recovery fails.
     constexpr uint32_t kW = 300, kH = 299;
     const std::vector<uint8_t> pattern = spikePatternBytes(kW, kH);
     const TextureMip mip{.data = pattern.data(), .bytesPerRow = kW * 4};

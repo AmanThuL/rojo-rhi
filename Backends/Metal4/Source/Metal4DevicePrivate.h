@@ -5,7 +5,7 @@
 #pragma once
 
 #include "Metal4Common.h"
-#include "RHI/RHI.h"
+#include "RHI/Result.h"
 
 #include <string>
 #include <string_view>

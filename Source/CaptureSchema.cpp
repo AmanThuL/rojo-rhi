@@ -151,7 +151,7 @@ void CaptureSchema::registerUniformStruct(SchemaUniformStruct layout) {
 //======================================================================================================================
 // Clear frame-local uploads and context while retaining device and shader metadata.
 void CaptureSchema::beginFrameRecords() {
-    m_uniformUploads.clear();
+    m_frameDataUploads.clear();
     m_context = SchemaContext{};
     m_recording = true;
 }
@@ -168,11 +168,11 @@ bool CaptureSchema::recordingUploads() const {
 }
 
 //======================================================================================================================
-void CaptureSchema::recordUniformUpload(SchemaUniformUpload upload) {
+void CaptureSchema::recordFrameDataUpload(SchemaFrameDataUpload upload) {
     if (!m_recording) {
         return;
     }
-    m_uniformUploads.push_back(std::move(upload));
+    m_frameDataUploads.push_back(std::move(upload));
 }
 
 //======================================================================================================================
@@ -251,16 +251,18 @@ std::string CaptureSchema::renderJson() const {
     }
     out += m_uniformStructs.empty() ? "],\n" : "\n  ],\n";
 
-    out += "  \"uniformUploads\": [";
-    for (size_t i = 0; i < m_uniformUploads.size(); ++i) {
-        const SchemaUniformUpload& upload = m_uniformUploads[i];
+    out += "  \"frameDataUploads\": [";
+    for (size_t i = 0; i < m_frameDataUploads.size(); ++i) {
+        const SchemaFrameDataUpload& upload = m_frameDataUploads[i];
         out += i == 0 ? "\n    " : ",\n    ";
-        out += "{\"ringLabel\": ";
-        appendJsonString(out, upload.ringLabel);
-        out += std::format(", \"slot\": {}, \"ringOffset\": {}, \"sizeBytes\": {}}}", upload.slot,
-                           upload.ringOffset, upload.sizeBytes);
+        out += "{\"pageLabel\": ";
+        appendJsonString(out, upload.pageLabel);
+        out += std::format(", \"slot\": {}, \"pageOffset\": {}, \"sizeBytes\": {}, "
+                           "\"alignmentBytes\": {}, \"gpuAddress\": {}}}",
+                           upload.slot, upload.pageOffset, upload.sizeBytes, upload.alignmentBytes,
+                           upload.gpuAddress);
     }
-    out += m_uniformUploads.empty() ? "]\n}\n" : "\n  ]\n}\n";
+    out += m_frameDataUploads.empty() ? "]\n}\n" : "\n  ]\n}\n";
 
     return out;
 }
@@ -304,7 +306,7 @@ bool CaptureSchema::writeJson(const std::filesystem::path& path) const {
 void CaptureSchema::resetForTest() {
     m_resources.clear();
     m_uniformStructs.clear();
-    m_uniformUploads.clear();
+    m_frameDataUploads.clear();
     m_context = SchemaContext{};
     m_recording = false;
 }

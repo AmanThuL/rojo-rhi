@@ -3,7 +3,10 @@
 /// @brief Declares the optional Dear ImGui bridge for the Metal 4 backend.
 //----------------------------------------------------------------------------------------------------------------------
 #pragma once
-#include "RHI/RHI.h"
+#include "RHI/CommandList.h"
+#include "RHI/Device.h"
+#include "RHI/Format.h"
+#include "RHI/Texture.h"
 
 #include <imgui.h>
 

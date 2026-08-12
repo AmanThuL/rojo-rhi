@@ -5,7 +5,9 @@
 #pragma once
 #include "Metal4CommandList.h"
 #include "Metal4Common.h"
-#include "RHI/RHI.h"
+#include "Metal4FrameArena.h"
+#include "RHI/Device.h"
+#include "RHI/Metal4/Metal4FrameData.h"
 
 #include <array>
 #include <cstdint>
@@ -19,7 +21,9 @@ namespace lmx::rhi::metal4 {
 
 inline constexpr uint32_t kFramesInFlight = 3;
 
-inline constexpr uint64_t kUniformRingBytes = 256 * 1024;
+static_assert(kFrameDataSlotCount == kFramesInFlight,
+              "the frame-data arena is per frame-in-flight slot, so the count the extension header "
+              "publishes must be the backend's own");
 
 // Ownership convention for the whole Metal 4 backend: every metal-cpp object this class
 // owns is held in an NS::SharedPtr obtained with NS::TransferPtr, because all the
@@ -80,9 +84,14 @@ public:
     // command buffers this device commits, without either side knowing about the other's set.
     MTL4::CommandQueue* queue() const { return m_queue.get(); }
 
-    // The slot of the per-frame ring (command allocator, argument table, uniform ring) belonging
-    // to the frame currently being built: the open frame while one is open, and the frame the
-    // next beginFrame() will open while none is.
+    // Backing implementation of metal4::frameDataCounters(). Backend-internal on the same terms as
+    // handle() and queue(): the counters are test and capture evidence, and putting them on the
+    // RHI Device interface would make them a permanent performance-query API instead.
+    FrameDataCounters frameDataCounters() const;
+
+    // The slot of the per-frame rotation (command allocator, argument table, frame-data arena)
+    // belonging to the frame currently being built: the open frame while one is open, and the
+    // frame the next beginFrame() will open while none is.
     //
     // The two cases are not cosmetic. beginFrame() increments m_frameNumber *before* deriving its
     // slot, so `m_frameNumber % kFramesInFlight` names the open frame only while a frame is open
@@ -126,34 +135,22 @@ private:
     // (plus the shared-event pacing) is what keeps a frame from overwriting in-flight work.
     NS::SharedPtr<MTL4::CommandBuffer> m_commandBuffer;
     std::array<NS::SharedPtr<MTL4::ArgumentTable>, kFramesInFlight> m_argumentTables;
-    // The transient-uniform ring, rotated on the *same* slot as the allocators and argument
-    // tables and for the same reason: a frame's uniform bytes are read by the GPU for as long
-    // as that frame is in flight, so only the beginFrame wait proves the slot is reusable.
-    // Deliberately raw MTL::Buffer rather than the Metal4Buffer wrapper -- these are
-    // device-internal (no RHI Buffer handle is ever handed out for them), and the wrapper's
-    // ResidencyRegistration exists to *unregister* on destruction, which for a device-lifetime
-    // allocation would only ever run while the residency set itself is being torn down.
-    std::array<NS::SharedPtr<MTL::Buffer>, kFramesInFlight> m_uniformRings;
-    // Bump allocator per ring, in bytes. beginFrame zeroes this frame's entry and hands the
-    // command list a pointer to it, so the list allocates without knowing about the rotation.
-    std::array<uint64_t, kFramesInFlight> m_uniformOffsets{};
-    // What the frame that last owned a ring slot left in it. Pure bookkeeping: nothing reads it
-    // to *decide* anything, and removing it would change no rendering. It exists so that the
-    // pacing guarantee every recycle in beginFrame stands on is checked against the GPU rather
-    // than assumed -- see the assert there.
-    struct UniformRingUse {
-        // The frame whose uniform bytes are sitting in this slot. Zero means "no frame has ever
-        // written it": beginFrame increments m_frameNumber *before* deriving a slot, so real
-        // frame numbers start at 1, and that is what lets the check in beginFrame need no
-        // special case for the first kFramesInFlight frames.
+    // The per-frame data arenas, on the same rotation as the allocators and argument tables and
+    // for the same reason: a slot's pages hold the blocks the GPU reads for as long as that frame
+    // is in flight, so only the beginFrame wait proves the slot is reusable.
+    std::array<Metal4FrameArena, kFramesInFlight> m_frameArenas;
+    // What the frame that last owned an arena slot left in it. Pure bookkeeping: nothing reads it
+    // to *decide* anything, and removing it would change no rendering. It turns the recycle assert
+    // in beginFrame from a claim about pacing into a check against the shared event, and names
+    // what would have been overwritten.
+    struct FrameArenaUse {
         uint64_t frameNumber = 0;
-        // How many bytes of the ring that frame consumed. Not part of the invariant -- it is the
-        // diagnostic that turns "the pacing broke" into "the pacing broke and N bytes of frame
-        // M's uniforms were about to be overwritten out from under the GPU".
         uint64_t bytesUsed = 0;
+        uint32_t pagesUsed = 0;
     };
-    std::array<UniformRingUse, kFramesInFlight> m_uniformRingUse{};
-    // GPU pass timestamps, on the same rotation and for the same reason as the rings above: the
+    std::array<FrameArenaUse, kFramesInFlight> m_frameArenaUse{};
+    Metal4FrameDataTally m_frameDataTally;
+    // GPU pass timestamps, on the same rotation and for the same reason as the arenas above: the
     // GPU writes a frame's entries while that frame is in flight.
     std::array<Metal4FrameTimestamps, kFramesInFlight> m_frameTimestamps;
     // Not a member by value: Metal4CommandList's constructor needs the command buffer above,

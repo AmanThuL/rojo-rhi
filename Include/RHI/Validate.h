@@ -3,7 +3,18 @@
 /// @brief Declares backend-neutral validation helpers for RHI descriptors.
 //----------------------------------------------------------------------------------------------------------------------
 #pragma once
-#include "RHI/RHI.h"
+#include "RHI/Buffer.h"
+#include "RHI/CommandList.h"
+#include "RHI/ComputePipeline.h"
+#include "RHI/Format.h"
+#include "RHI/GraphicsPipeline.h"
+#include "RHI/Heap.h"
+#include "RHI/Result.h"
+#include "RHI/Sampler.h"
+#include "RHI/Swapchain.h"
+#include "RHI/Texture.h"
+
+#include <cstdint>
 
 namespace lmx::rhi {
 
@@ -67,6 +78,14 @@ Result<void> validateTextureCopy(const Texture& source, const TextureCopyRegion&
 
 /// Validates that `argsSize` bytes of indirect arguments sit at an aligned, in-bounds offset.
 Result<void> validateIndirectArgs(const Buffer& buffer, uint64_t offset, uint64_t argsSize);
+
+/// Validates one CommandList::bindFrameData request: that `slot` names a buffer binding, that the
+/// block is a real one, and that `alignment` is a power of two of at least kFrameDataAlignment.
+///
+/// It deliberately says nothing about capacity. How much frame-owned memory exists is a backend's
+/// own growable resource rather than a limit the caller is asked to respect, so exhausting it is
+/// reported by the backend as device-resource failure and never surfaces as an invalid request.
+Result<void> validateFrameData(uint32_t slot, const void* data, uint64_t size, uint64_t alignment);
 
 /// Returns the extent of a mip level of a texture whose level-zero extent is `base`, floored at one
 /// texel exactly as the hardware's chain is.

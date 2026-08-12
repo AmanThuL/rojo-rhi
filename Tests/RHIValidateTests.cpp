@@ -1,6 +1,11 @@
 #include <catch2/catch_test_macros.hpp>
 
+#include "RHI/CommandList.h"
+#include "RHI/Indirect.h"
+#include "RHI/ShaderLibrary.h"
 #include "RHI/Validate.h"
+
+#include <limits>
 
 #include <limits>
 
@@ -122,6 +127,16 @@ TEST_CASE("argument table binding capacities are public", "[rhi]") {
     STATIC_REQUIRE(CommandList::kMaxBufferBindings == 8);
     STATIC_REQUIRE(CommandList::kMaxTextureBindings == 16);
     STATIC_REQUIRE(CommandList::kMaxSamplerBindings == 8);
+}
+
+//======================================================================================================================
+TEST_CASE("frame-data validation rejects size plus alignment overflow", "[rhi]") {
+    const uint32_t value = 1;
+    const auto result = validateFrameData(0, &value, std::numeric_limits<uint64_t>::max(), 256);
+
+    REQUIRE_FALSE(result.has_value());
+    REQUIRE(result.error().code == ErrorCode::InvalidDesc);
+    REQUIRE(result.error().message.contains("overflows"));
 }
 
 //======================================================================================================================
@@ -1456,6 +1471,46 @@ TEST_CASE("indirect arguments running past the buffer are rejected", "[rhi]") {
     const auto r = validateIndirectArgs(buffer, 8, sizeof(DrawIndirectArgs));
     REQUIRE_FALSE(r.has_value());
     REQUIRE(r.error().message.contains("past the buffer's"));
+}
+
+//======================================================================================================================
+// The shape a caller must get right before any frame-owned memory is touched. Capacity is
+// deliberately absent: the arena grows, so running out of it is the backend's failure to report,
+// not a request the caller could have made smaller.
+TEST_CASE("a frame-data request is checked for slot, block, and alignment", "[rhi][validate]") {
+    int block = 0;
+
+    REQUIRE(validateFrameData(0, &block, sizeof(block), kFrameDataAlignment).has_value());
+    REQUIRE(validateFrameData(CommandList::kMaxBufferBindings - 1, &block, 1, 4096).has_value());
+
+    const auto slot = validateFrameData(CommandList::kMaxBufferBindings, &block, 4, 256);
+    REQUIRE_FALSE(slot.has_value());
+    REQUIRE(slot.error().code == ErrorCode::InvalidDesc);
+    REQUIRE(slot.error().message.contains("buffer binding count"));
+
+    REQUIRE_FALSE(validateFrameData(0, nullptr, 4, 256).has_value());
+    REQUIRE_FALSE(validateFrameData(0, &block, 0, 256).has_value());
+}
+
+//======================================================================================================================
+// Both halves of the alignment rule, each with its own diagnostic: too small breaks the placement
+// contract a constant buffer is read through, and not a power of two is not an alignment at all.
+TEST_CASE("a frame-data alignment must be a power of two of at least 256", "[rhi][validate]") {
+    int block = 0;
+
+    REQUIRE(validateFrameData(0, &block, 4, 256).has_value());
+    REQUIRE(validateFrameData(0, &block, 4, 512).has_value());
+    REQUIRE(validateFrameData(0, &block, 4, 65536).has_value());
+
+    const auto small = validateFrameData(0, &block, 4, 128);
+    REQUIRE_FALSE(small.has_value());
+    REQUIRE(small.error().message.contains("at least 256"));
+
+    const auto odd = validateFrameData(0, &block, 4, 384);
+    REQUIRE_FALSE(odd.has_value());
+    REQUIRE(odd.error().message.contains("power of two"));
+
+    REQUIRE_FALSE(validateFrameData(0, &block, 4, 0).has_value());
 }
 
 //======================================================================================================================

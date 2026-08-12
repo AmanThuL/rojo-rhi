@@ -3,7 +3,7 @@
 /// @brief Declares optional Metal 4 GPU capture controls.
 //----------------------------------------------------------------------------------------------------------------------
 #pragma once
-#include "RHI/RHI.h"
+#include "RHI/Device.h"
 
 #include <string_view>
 

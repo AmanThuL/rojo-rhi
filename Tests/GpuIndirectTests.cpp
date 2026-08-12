@@ -142,7 +142,7 @@ TEST_CASE("an indirect dispatch reads its threadgroup counts from a buffer",
     commands.beginComputePass("lmx.test.indirect.dispatch");
     commands.bindComputePipeline(**pipeline);
     commands.bindStorageBuffer(0, **output, StorageAccess::Write);
-    commands.setUniforms(1, &params, sizeof(params));
+    commands.bindFrameData(1, params);
     commands.dispatchIndirect(**argumentBuffer, kArgsOffset);
     commands.endComputePass();
     (*device)->endFrame(nullptr);
@@ -341,7 +341,7 @@ TEST_CASE("an indirect dispatch consumes arguments a compute pass wrote", "[gpu]
     commands.beginComputePass("lmx.test.indirect.writeDispatchArgs");
     commands.bindComputePipeline(**writeArgsPipeline);
     commands.bindStorageBuffer(0, **argumentBuffer, StorageAccess::Write);
-    commands.setUniforms(1, &argsParams, sizeof(argsParams));
+    commands.bindFrameData(1, argsParams);
     commands.dispatch(1, 1, 1);
     commands.endComputePass();
 
@@ -350,7 +350,7 @@ TEST_CASE("an indirect dispatch consumes arguments a compute pass wrote", "[gpu]
     commands.beginComputePass("lmx.test.indirect.gpuDispatch");
     commands.bindComputePipeline(**fillPipeline);
     commands.bindStorageBuffer(0, **output, StorageAccess::Write);
-    commands.setUniforms(1, &fillParams, sizeof(fillParams));
+    commands.bindFrameData(1, fillParams);
     commands.dispatchIndirect(**argumentBuffer, kArgsOffset);
     commands.endComputePass();
     (*device)->endFrame(nullptr);
@@ -429,7 +429,7 @@ TEST_CASE("an indirect indexed draw consumes arguments a compute pass wrote", "[
     commands.beginComputePass("lmx.test.indirect.writeIndexedArgs");
     commands.bindComputePipeline(**writeArgsPipeline);
     commands.bindStorageBuffer(0, **argumentBuffer, StorageAccess::Write);
-    commands.setUniforms(1, &argsParams, sizeof(argsParams));
+    commands.bindFrameData(1, argsParams);
     commands.dispatch(1, 1, 1);
     commands.endComputePass();
 

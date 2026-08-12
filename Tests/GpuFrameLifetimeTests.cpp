@@ -119,7 +119,7 @@ TEST_CASE("uniform ring survives twelve frames overlapping in flight", "[gpu][ch
         commands.bindPipeline(**pipeline);
 
         for (uint32_t write = 0; write < kRingFillWrites; ++write) {
-            commands.setUniforms(kVertexBufferSlot, vertices.data(), sizeof(vertices));
+            commands.bindFrameData(kVertexBufferSlot, vertices.data(), sizeof(vertices));
         }
 
         commands.draw(static_cast<uint32_t>(vertices.size()));

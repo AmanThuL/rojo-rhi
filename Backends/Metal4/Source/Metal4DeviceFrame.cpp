@@ -84,19 +84,20 @@ CommandList& Metal4Device::beginFrame() {
                              "frame's command allocator within the timeout");
     }
 
-    // Allocator, argument table, and uniform ring share the same retirement proof.
+    // Allocator, argument table, and frame-data arena share the same retirement proof.
     const uint32_t slot = static_cast<uint32_t>(m_frameNumber % kFramesInFlight);
 
     // Check the shared-event invariant before Metal sees a premature allocator reset. Untouched
-    // slots use frame zero, which is already retired by the event's initial value.
-    const UniformRingUse& lastUse = m_uniformRingUse[slot];
-    LMX_ASSERT(m_frameEvent->signaledValue() >= lastUse.frameNumber,
-               std::format("beginFrame: frame {} is about to recycle the ring slot still holding "
-                           "{} bytes of frame {}'s uniforms, but the GPU has only retired through "
-                           "frame {} -- frame pacing is broken (the frame's allocator and argument "
-                           "table are equally unretired)",
-                           m_frameNumber, lastUse.bytesUsed, lastUse.frameNumber,
-                           m_frameEvent->signaledValue()));
+    // slots use frame zero, which is already retired by the event's initial value. A frame's
+    // blocks are spread over however many pages that frame needed, so the diagnostic names its own
+    // page and byte counts rather than a single ring's.
+    const FrameArenaUse& lastArena = m_frameArenaUse[slot];
+    LMX_ASSERT(m_frameEvent->signaledValue() >= lastArena.frameNumber,
+               std::format("beginFrame: frame {} is about to reset the frame-data arena of slot {} "
+                           "still holding {} bytes across {} page(s) of frame {}, but the GPU has "
+                           "only retired through frame {} -- frame pacing is broken",
+                           m_frameNumber, slot, lastArena.bytesUsed, lastArena.pagesUsed,
+                           lastArena.frameNumber, m_frameEvent->signaledValue()));
 
     // Publish before the slot is recycled below: this is the last moment the retiring frame's
     // timestamps still exist, and the event above has already proven they are readable.
@@ -106,14 +107,14 @@ CommandList& Metal4Device::beginFrame() {
     allocator->reset();
     m_commandBuffer->beginCommandBuffer(allocator);
 
-    // The retirement wait makes this slot's uniform bytes safe to overwrite.
-    m_uniformOffsets[slot] = 0;
+    // The retirement wait makes this slot's arena pages safe to overwrite.
+    m_frameArenas[slot].reset();
     Metal4FrameTimestamps& timestamps = m_frameTimestamps[slot];
     timestamps.heap->invalidateCounterRange(NS::Range::Make(0, kTimestampsPerFrame));
     timestamps.passLabels.clear();
     timestamps.frameNumber = 0;
-    m_commandList->resetForFrame(m_argumentTables[slot].get(), m_uniformRings[slot].get(),
-                                 &m_uniformOffsets[slot], &timestamps);
+    m_commandList->resetForFrame(m_argumentTables[slot].get(), &m_frameArenas[slot],
+                                 &m_frameDataTally, &timestamps);
 
     m_frameOpen = true;
     return *m_commandList;
@@ -157,9 +158,11 @@ void Metal4Device::endFrame(Swapchain* presentTo) {
     // Publish retirement after all commands and drawable signaling for this frame.
     m_queue->signalEvent(m_frameEvent.get(), m_frameNumber);
 
-    // Record ownership only after work consuming the ring has been submitted.
+    // Record ownership only after work consuming the arena has been submitted.
     const uint32_t slot = static_cast<uint32_t>(m_frameNumber % kFramesInFlight);
-    m_uniformRingUse[slot] = {.frameNumber = m_frameNumber, .bytesUsed = m_uniformOffsets[slot]};
+    m_frameArenaUse[slot] = {.frameNumber = m_frameNumber,
+                             .bytesUsed = m_frameArenas[slot].bytesUsed(),
+                             .pagesUsed = m_frameArenas[slot].pagesUsed()};
     // Claims this slot's timestamps for this frame -- only now is there submitted work that will
     // eventually make the pacing event vouch for them.
     m_frameTimestamps[slot].frameNumber = m_frameNumber;

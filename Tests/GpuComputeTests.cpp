@@ -76,7 +76,7 @@ TEST_CASE("a dispatch fills a storage buffer the CPU reads back", "[gpu]") {
     commands.beginComputePass("lmx.test.compute.fill");
     commands.bindComputePipeline(**pipeline);
     commands.bindStorageBuffer(0, **storage, StorageAccess::Write);
-    commands.setUniforms(1, &params, sizeof(params));
+    commands.bindFrameData(1, params);
     commands.dispatch(kElements / kFillThreadsPerGroup, 1, 1);
     commands.endComputePass();
     (*device)->endFrame(nullptr);
@@ -152,7 +152,7 @@ TEST_CASE("a dispatch writes a storage texture the CPU reads back", "[gpu]") {
     commands.beginComputePass("lmx.test.compute.writeImage");
     commands.bindComputePipeline(**pipeline);
     commands.bindStorageTexture(kImageSlot, **image, {}, StorageAccess::Write);
-    commands.setUniforms(kParamsSlot, &params, sizeof(params));
+    commands.bindFrameData(kParamsSlot, params);
     commands.dispatch(kSize / kImageThreadsPerGroup, kSize / kImageThreadsPerGroup, 1);
     commands.endComputePass();
     (*device)->endFrame(nullptr);
@@ -230,7 +230,7 @@ TEST_CASE("a storage texture written by one dispatch is read by the next", "[gpu
     commands.beginComputePass("lmx.test.compute.hazardWrite");
     commands.bindComputePipeline(**writePipeline);
     commands.bindStorageTexture(kImageSlot, **source, {}, StorageAccess::Write);
-    commands.setUniforms(kParamsSlot, &params, sizeof(params));
+    commands.bindFrameData(kParamsSlot, params);
     commands.dispatch(groups, groups, 1);
     commands.endComputePass();
 
@@ -240,7 +240,7 @@ TEST_CASE("a storage texture written by one dispatch is read by the next", "[gpu
     commands.bindComputePipeline(**invertPipeline);
     commands.bindStorageTexture(kImageSlot, **destination, {}, StorageAccess::Write);
     commands.bindStorageTexture(kStorageSourceSlot, **source, {}, StorageAccess::Read);
-    commands.setUniforms(kParamsSlot, &params, sizeof(params));
+    commands.bindFrameData(kParamsSlot, params);
     commands.dispatch(groups, groups, 1);
     commands.endComputePass();
     (*device)->endFrame(nullptr);
@@ -318,7 +318,7 @@ TEST_CASE("a storage texture written by a dispatch is sampled by a later draw",
     commands.beginComputePass("lmx.test.compute.sampleWrite");
     commands.bindComputePipeline(**pipeline);
     commands.bindStorageTexture(kImageSlot, **image, {}, StorageAccess::Write);
-    commands.setUniforms(kParamsSlot, &params, sizeof(params));
+    commands.bindFrameData(kParamsSlot, params);
     commands.dispatch(groups, groups, 1);
     commands.endComputePass();
 
@@ -420,7 +420,7 @@ TEST_CASE("a storage texture view addresses a single mip level", "[gpu][checkpoi
         commands.beginComputePass(label);
         commands.bindComputePipeline(**writePipeline);
         commands.bindStorageTexture(kImageSlot, **chain, view, StorageAccess::Write);
-        commands.setUniforms(kParamsSlot, &params, sizeof(params));
+        commands.bindFrameData(kParamsSlot, params);
         commands.dispatch(extent / kImageThreadsPerGroup, extent / kImageThreadsPerGroup, 1);
         commands.endComputePass();
     };
@@ -437,7 +437,7 @@ TEST_CASE("a storage texture view addresses a single mip level", "[gpu][checkpoi
         commands.bindComputePipeline(**invertPipeline);
         commands.bindStorageTexture(kImageSlot, destination, {}, StorageAccess::Write);
         commands.bindStorageTexture(kStorageSourceSlot, **chain, view, StorageAccess::Read);
-        commands.setUniforms(kParamsSlot, &params, sizeof(params));
+        commands.bindFrameData(kParamsSlot, params);
         commands.dispatch(extent / kImageThreadsPerGroup, extent / kImageThreadsPerGroup, 1);
         commands.endComputePass();
     };
@@ -512,7 +512,7 @@ TEST_CASE("pass timings cover a compute pass and name the frame they measured", 
     commands.beginComputePass("lmx.test.timing.compute");
     commands.bindComputePipeline(**pipeline);
     commands.bindStorageBuffer(0, **storage, StorageAccess::Write);
-    commands.setUniforms(1, &params, sizeof(params));
+    commands.bindFrameData(1, params);
     commands.dispatch(kElements / kFillThreadsPerGroup, 1, 1);
     commands.endComputePass();
     (*device)->endFrame(nullptr);

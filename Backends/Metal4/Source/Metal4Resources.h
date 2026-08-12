@@ -4,6 +4,13 @@
 //----------------------------------------------------------------------------------------------------------------------
 #pragma once
 #include "Metal4Common.h"
+#include "RHI/Buffer.h"
+#include "RHI/ComputePipeline.h"
+#include "RHI/GraphicsPipeline.h"
+#include "RHI/Heap.h"
+#include "RHI/Sampler.h"
+#include "RHI/ShaderLibrary.h"
+#include "RHI/Texture.h"
 
 #include <cstdint>
 #include <utility>

@@ -4,6 +4,12 @@
 //----------------------------------------------------------------------------------------------------------------------
 #pragma once
 #include "Metal4Common.h"
+#include "Metal4FrameArena.h"
+#include "RHI/Buffer.h"
+#include "RHI/CommandList.h"
+#include "RHI/GpuAddress.h"
+#include "RHI/RenderPass.h"
+#include "RHI/Texture.h"
 
 #include <cstdint>
 #include <string>
@@ -13,9 +19,9 @@ namespace lmx::rhi::metal4 {
 
 class Metal4ComputePipeline;
 
-// How many passes of one frame carry timestamps, counting every pass kind. Sized like
-// kUniformRingBytes -- a fixed per-frame budget that a real frame is expected to stay under, and
-// whose exhaustion is a hard error rather than a silently dropped measurement.
+// How many passes of one frame carry timestamps, counting every pass kind: a fixed per-frame
+// budget that a real frame is expected to stay under, and whose exhaustion is a hard error rather
+// than a silently dropped measurement.
 inline constexpr uint32_t kMaxTimedPassesPerFrame = 64;
 
 // Two timestamps per pass: one before its encoder opens, one after it closes.
@@ -23,10 +29,10 @@ inline constexpr uint32_t kTimestampsPerFrame = kMaxTimedPassesPerFrame * 2;
 
 // One frame slot's GPU timestamps, owned by Metal4Device and written by the command list.
 //
-// The heap rotates on the same recycle discipline as the command allocators and uniform rings: the
-// GPU writes into it for as long as the frame is in flight, so its entries may be read only after
-// the frame-pacing event proves that frame retired, and are invalidated before the slot is handed
-// to a new frame.
+// The heap rotates on the same recycle discipline as the command allocators and frame-data arenas:
+// the GPU writes into it for as long as the frame is in flight, so its entries may be read only
+// after the frame-pacing event proves that frame retired, and are invalidated before the slot is
+// handed to a new frame.
 struct Metal4FrameTimestamps {
     NS::SharedPtr<MTL4::CounterHeap> heap;
     // The frame's pass labels in encode order. Pass i owns heap entries 2i and 2i + 1, so this
@@ -42,30 +48,31 @@ struct Metal4FrameTimestamps {
 // back from every beginFrame(); it records into the device's single MTL4::CommandBuffer, which
 // beginFrame has already re-opened against this frame's allocator.
 //
-// It owns nothing that outlives a frame. The command buffer, the argument table and the uniform
-// ring belong to the device (which outlives every command list it hands out), so all three are
-// held as raw pointers; only the pass encoders -- each created and destroyed inside a single
+// It owns nothing that outlives a frame. The command buffer, the argument table and the frame-data
+// arena belong to the device (which outlives every command list it hands out), so all are held as
+// raw pointers; only the pass encoders -- each created and destroyed inside a single
 // begin/end pair -- are reference-counted here, because renderCommandEncoder() and
 // computeCommandEncoder() return autoreleased (+0) objects that must survive the local autorelease
 // pool they were created in.
 //
 // Those per-frame pointers are *not* fixed at construction: the device owns one argument table,
-// one uniform ring and one timestamp slot per frame in flight and hands this list the current
+// one frame-data arena and one timestamp slot per frame in flight and hands this list the current
 // frame's set through resetForFrame, so none is ever written outside the frame that owns it.
 // endFrameReset nulls them again at commit, which is what lets beginRenderPass's assert
 // distinguish "no frame is open" from "a frame is open" at all -- without it a stale pointer would
 // keep every check passing while the writes landed in a slot the GPU was still reading.
 //
 // Encoder-scoped calls (bindPipeline, bindComputePipeline, bindBuffer, bindStorageBuffer,
-// bindTexture, bindSampler, setUniforms, draw, drawIndexed, dispatch) assert rather than return
+// bindTexture, bindSampler, bindFrameData, draw, drawIndexed, dispatch) assert rather than return
 // errors: calling them outside a pass is a sequencing bug, and the RHI CommandList methods return
 // void.
 // They also hold no autorelease pool of their own: none of them invokes an autoreleasing
 // selector, so a per-call pool bought nothing and cost a create/drain on the hottest path in
 // the backend. Verified against the vendored headers rather than assumed: bindPipeline, bindBuffer,
-// draw are direct setters and draws on an already-retained encoder; setUniforms' whole call path
-// (MTL::Buffer::contents(), length(), gpuAddress(), and MTL4::ArgumentTable::setAddress()) is
-// scalar- and void-returning sendMessage; drawIndexed adds only MTL::Buffer::length() and
+// draw are direct setters and draws on an already-retained encoder; bindFrameData's whole call
+// path -- a bump allocation against the arena's precomputed CPU/GPU bases, a memcpy, and
+// MTL4::ArgumentTable::setAddress() -- touches no Metal accessor at all, only the one scalar- and
+// void-returning sendMessage that bind performs; drawIndexed adds only MTL::Buffer::length() and
 // gpuAddress() (scalar sends) plus drawIndexedPrimitives (a void send) on top of plain C++
 // Metal4Buffer::handle() getter; bindTexture is MTL::Texture::usage() and gpuResourceID()
 // (scalar sends, MTLTexture.hpp:293 and :241) into MTL4::ArgumentTable::setTexture() (a void
@@ -116,7 +123,12 @@ public:
     void bindBuffer(uint32_t slot, Buffer& buffer) override;
     void bindTexture(uint32_t slot, Texture& texture, const TextureViewDesc& view) override;
     void bindSampler(uint32_t slot, Sampler& sampler) override;
-    void setUniforms(uint32_t slot, const void* data, uint64_t size) override;
+    GpuAddress bindFrameData(uint32_t slot, const void* data, uint64_t size,
+                             uint64_t alignment) override;
+    // The non-virtual convenience and typed overloads would otherwise be hidden by the override
+    // above for anything holding this concrete type; production callers hold a CommandList&, but a
+    // backend-side caller should not have to know that to reach the default alignment.
+    using CommandList::bindFrameData;
     void draw(uint32_t vertexCount, uint32_t firstVertex) override;
     void drawIndexed(Buffer& indexBuffer, uint32_t indexCount, uint32_t firstIndex) override;
     void drawIndirect(Buffer& argumentBuffer, uint64_t offset) override;
@@ -128,14 +140,15 @@ public:
                        BarrierOptions options) override;
 
     // beginFrame's half of the per-frame rotation: point this command list at the frame's
-    // argument table, uniform ring and timestamp slot. `uniformOffset` is the device's bump cursor
-    // for that ring, already rewound to zero, and `timestamps` is the slot whose heap the device
-    // has already invalidated and whose label array it has already cleared. Must be called before
-    // any encoding in the frame; asserts no pass is open.
-    void resetForFrame(MTL4::ArgumentTable* argumentTable, MTL::Buffer* uniformRing,
-                       uint64_t* uniformOffset, Metal4FrameTimestamps* timestamps);
+    // argument table, data arena and timestamp slot. `frameArena` is the slot's arena, already
+    // reset under the same retirement proof, and `timestamps` is the slot whose heap the device has
+    // already invalidated and whose label array it has already cleared. `tally` is device-lifetime
+    // rather than per-frame, and is threaded through here so that endFrameReset drops it with
+    // everything else. Must be called before any encoding in the frame; asserts no pass is open.
+    void resetForFrame(MTL4::ArgumentTable* argumentTable, Metal4FrameArena* frameArena,
+                       Metal4FrameDataTally* tally, Metal4FrameTimestamps* timestamps);
 
-    // endFrame's half: forget the frame's table and ring once its work is committed, so that
+    // endFrame's half: forget the frame's table once its work is committed, so that
     // encoding after endFrame fails our assert rather than quietly writing a slot the GPU owns.
     // Also where an unconsumed textureBarrier is caught -- see the .cpp.
     void endFrameReset();
@@ -183,20 +196,20 @@ private:
     // second pass does not re-wait on a dependency already satisfied.
     void emitPendingBarrier(MTL4::CommandEncoder* encoder, MTL::Stages consumerStages);
 
-    // True while any pass is open. Bindings and the frame's uniform ring are shared by the render
+    // True while any pass is open. Bindings and the frame's data arena are shared by the render
     // and compute pass kinds, so their scope check is "a pass is open" rather than a specific
     // encoder; the barriers, which are valid only *between* passes, check the same thing inverted,
     // and a copy pass counts for that.
     bool inPass() const { return inRenderPass() || inComputePass() || inCopyPass(); }
 
-    // Bindings and uniforms belong only to shader-bearing passes; a copy pass has no argument
+    // Bindings and frame data belong only to shader-bearing passes; a copy pass has no argument
     // table.
     bool inShaderPass() const { return inRenderPass() || inComputePass(); }
 
     MTL4::CommandBuffer* m_commandBuffer = nullptr;
     MTL4::ArgumentTable* m_argumentTable = nullptr;
-    MTL::Buffer* m_uniformRing = nullptr;
-    uint64_t* m_uniformOffset = nullptr;
+    Metal4FrameArena* m_frameArena = nullptr;
+    Metal4FrameDataTally* m_frameDataTally = nullptr;
     Metal4FrameTimestamps* m_timestamps = nullptr;
     NS::SharedPtr<MTL4::RenderCommandEncoder> m_encoder;
     NS::SharedPtr<MTL4::ComputeCommandEncoder> m_computeEncoder;

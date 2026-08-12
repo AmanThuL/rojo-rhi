@@ -4,10 +4,10 @@
 //----------------------------------------------------------------------------------------------------------------------
 #include "Metal4CommandList.h"
 
-#include "Core/Align.h"
 #include "Core/Assert.h"
 #include "Metal4Resources.h"
 #include "RHI/CaptureSchema.h"
+#include "RHI/Indirect.h"
 #include "RHI/Validate.h"
 
 #include <cstring>
@@ -58,7 +58,7 @@ MTL::Stages stagesOf(TextureUse use) {
 MTL::Stages stagesOf(BufferUse use) {
     switch (use) {
     case BufferUse::ShaderRead:
-        // bindBuffer and setUniforms are also valid in compute passes.
+        // bindBuffer and bindFrameData are also valid in compute passes.
         return kRenderStages | MTL::StageDispatch;
     case BufferUse::StorageRead:
     case BufferUse::StorageWrite:
@@ -143,7 +143,7 @@ void Metal4CommandList::beginRenderPass(const RenderPassDesc& desc) {
     NS::SharedPtr<NS::AutoreleasePool> pool = NS::TransferPtr(NS::AutoreleasePool::alloc()->init());
 
     // endFrameReset clears every per-frame pointer, making them the open-frame sentinel.
-    LMX_ASSERT(m_argumentTable != nullptr && m_uniformRing != nullptr && m_timestamps != nullptr,
+    LMX_ASSERT(m_argumentTable != nullptr && m_frameArena != nullptr && m_timestamps != nullptr,
                "beginRenderPass: no frame is open -- this command list is only valid between "
                "Device::beginFrame and Device::endFrame");
     LMX_ASSERT(!inPass(), "beginRenderPass: a pass is already open on this command list");
@@ -267,33 +267,39 @@ void Metal4CommandList::bindSampler(uint32_t slot, Sampler& sampler) {
 }
 
 //======================================================================================================================
-void Metal4CommandList::setUniforms(uint32_t slot, const void* data, uint64_t size) {
-    LMX_ASSERT(inShaderPass(), "setUniforms must be called inside a render or compute pass");
-    LMX_ASSERT(slot < CommandList::kMaxBufferBindings,
-               "setUniforms: slot exceeds the argument table's buffer binding count");
-    LMX_ASSERT(data != nullptr && size > 0, "setUniforms: data must be non-null and non-empty");
-    const uint64_t offset = *m_uniformOffset;
-    const uint64_t capacity = m_uniformRing->length();
-    // Use subtraction after bounding size to avoid overflow in offset + size.
-    LMX_ASSERT(size <= capacity, "setUniforms: upload is larger than the entire per-frame uniform "
-                                 "ring -- grow kUniformRingBytes");
-    LMX_ASSERT(offset <= capacity - size,
-               "setUniforms: per-frame uniform ring exhausted -- grow kUniformRingBytes");
+// One allocation, one copy, one address bind, and no native object touched beyond the argument
+// table: everything the page contributes -- its mapped base, its GPU base and its label -- was
+// resolved when the page was created, which is what keeps this free of resource creation and
+// property queries once a slot has reached its high water.
+GpuAddress Metal4CommandList::bindFrameData(uint32_t slot, const void* data, uint64_t size,
+                                            uint64_t alignment) {
+    LMX_ASSERT(inShaderPass(),
+               "bindFrameData must be called inside a render or compute pass -- a copy pass has no "
+               "argument table and therefore no slot to bind into");
+    const Result<void> request = validateFrameData(slot, data, size, alignment);
+    LMX_ASSERT(request.has_value(), request.error().message);
 
-    // Record the ring range only during capture. The label getter may return an autoreleased
-    // string, so the otherwise allocation-free upload path creates a pool only in this branch.
+    const Metal4FrameDataBlock block = m_frameArena->allocate(size, alignment);
+
+    // Recorded only during capture. The page label is borrowed from the arena, so this needs no
+    // autorelease pool and no Metal property read.
     if (debug::CaptureSchema::instance().recordingUploads()) {
-        NS::SharedPtr<NS::AutoreleasePool> pool =
-            NS::TransferPtr(NS::AutoreleasePool::alloc()->init());
-        const NS::String* ringLabel = m_uniformRing->label();
-        const char* utf8 = ringLabel != nullptr ? ringLabel->utf8String() : nullptr;
-        debug::CaptureSchema::instance().recordUniformUpload(
-            {utf8 != nullptr ? utf8 : "", slot, offset, size});
+        debug::CaptureSchema::instance().recordFrameDataUpload(
+            {.pageLabel = std::string(m_frameArena->pageLabel(block.pageIndex)),
+             .slot = slot,
+             .pageOffset = block.pageOffset,
+             .sizeBytes = size,
+             .alignmentBytes = alignment,
+             .gpuAddress = block.gpuAddress});
     }
 
-    std::memcpy(static_cast<uint8_t*>(m_uniformRing->contents()) + offset, data, size);
-    m_argumentTable->setAddress(m_uniformRing->gpuAddress() + offset, slot);
-    *m_uniformOffset = alignUp(offset + size, kUniformOffsetAlignment);
+    std::memcpy(block.cpu, data, size);
+    m_argumentTable->setAddress(block.gpuAddress, slot);
+
+    ++m_frameDataTally->calls;
+    m_frameDataTally->bytes += size;
+    ++m_frameDataTally->addressBinds;
+    return GpuAddress{block.gpuAddress};
 }
 
 //======================================================================================================================
@@ -365,7 +371,7 @@ void Metal4CommandList::beginComputePass(std::string_view label) {
     // encoder, so this pool is load-bearing rather than symmetric.
     NS::SharedPtr<NS::AutoreleasePool> pool = NS::TransferPtr(NS::AutoreleasePool::alloc()->init());
 
-    LMX_ASSERT(m_argumentTable != nullptr && m_uniformRing != nullptr && m_timestamps != nullptr,
+    LMX_ASSERT(m_argumentTable != nullptr && m_frameArena != nullptr && m_timestamps != nullptr,
                "beginComputePass: no frame is open -- this command list is only valid between "
                "Device::beginFrame and Device::endFrame");
     LMX_ASSERT(!inPass(), "beginComputePass: a pass is already open on this command list");
@@ -490,7 +496,7 @@ void Metal4CommandList::beginCopyPass(std::string_view label) {
     // computeCommandEncoder() returns an autoreleased (+0) object; see beginComputePass.
     NS::SharedPtr<NS::AutoreleasePool> pool = NS::TransferPtr(NS::AutoreleasePool::alloc()->init());
 
-    LMX_ASSERT(m_argumentTable != nullptr && m_uniformRing != nullptr && m_timestamps != nullptr,
+    LMX_ASSERT(m_argumentTable != nullptr && m_frameArena != nullptr && m_timestamps != nullptr,
                "beginCopyPass: no frame is open -- this command list is only valid between "
                "Device::beginFrame and Device::endFrame");
     LMX_ASSERT(!inPass(), "beginCopyPass: a pass is already open on this command list");
@@ -630,20 +636,21 @@ void Metal4CommandList::bufferBarrier(Buffer& buffer, const BufferRange& range, 
 }
 
 //======================================================================================================================
-void Metal4CommandList::resetForFrame(MTL4::ArgumentTable* argumentTable, MTL::Buffer* uniformRing,
-                                      uint64_t* uniformOffset, Metal4FrameTimestamps* timestamps) {
+void Metal4CommandList::resetForFrame(MTL4::ArgumentTable* argumentTable,
+                                      Metal4FrameArena* frameArena, Metal4FrameDataTally* tally,
+                                      Metal4FrameTimestamps* timestamps) {
     // Never retarget per-frame storage while an encoder can still reference the old slot.
     LMX_ASSERT(!inPass(), "resetForFrame: a pass is still open from the previous frame");
     LMX_ASSERT(argumentTable != nullptr, "resetForFrame: argument table must not be null");
-    LMX_ASSERT(uniformRing != nullptr && uniformOffset != nullptr,
-               "resetForFrame: uniform ring and its offset cursor must not be null");
+    LMX_ASSERT(frameArena != nullptr && tally != nullptr,
+               "resetForFrame: the frame's data arena and its tally must not be null");
     LMX_ASSERT(timestamps != nullptr && timestamps->heap,
                "resetForFrame: the frame's timestamp slot must carry a counter heap");
     LMX_ASSERT(timestamps->passLabels.empty(),
                "resetForFrame: the frame's timestamp slot still holds the previous frame's passes");
     m_argumentTable = argumentTable;
-    m_uniformRing = uniformRing;
-    m_uniformOffset = uniformOffset;
+    m_frameArena = frameArena;
+    m_frameDataTally = tally;
     m_timestamps = timestamps;
 }
 
@@ -654,8 +661,8 @@ void Metal4CommandList::endFrameReset() {
                "a textureBarrier or bufferBarrier was recorded but no later pass consumed it");
     // Clearing per-frame pointers makes use outside a frame detectable.
     m_argumentTable = nullptr;
-    m_uniformRing = nullptr;
-    m_uniformOffset = nullptr;
+    m_frameArena = nullptr;
+    m_frameDataTally = nullptr;
     m_computePipeline = nullptr;
     // The slot itself outlives the frame -- the device reads its labels when the frame retires --
     // but this list must not be able to append to it outside a frame.

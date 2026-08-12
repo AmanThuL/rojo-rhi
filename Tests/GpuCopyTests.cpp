@@ -194,7 +194,7 @@ TEST_CASE("a filled buffer is read by a later dispatch through a buffer barrier"
     commands.bindComputePipeline(**pipeline);
     commands.bindStorageBuffer(kHazardOutputSlot, **resolved, StorageAccess::Write);
     commands.bindStorageBuffer(kHazardSourceSlot, **accumulator, StorageAccess::Read);
-    commands.setUniforms(kHazardParamsSlot, &params, sizeof(params));
+    commands.bindFrameData(kHazardParamsSlot, params);
     commands.dispatch(kElements / kHazardThreadsPerGroup, 1, 1);
     commands.endComputePass();
     (*device)->endFrame(nullptr);
@@ -258,7 +258,7 @@ TEST_CASE("a copy captures an intermediate mip level of a GPU-written chain",
     commands.beginComputePass("lmx.test.copy.mipWrite");
     commands.bindComputePipeline(**pipeline);
     commands.bindStorageTexture(kCopyImageSlot, **chain, level1, StorageAccess::Write);
-    commands.setUniforms(kCopyImageParamsSlot, &params, sizeof(params));
+    commands.bindFrameData(kCopyImageParamsSlot, params);
     commands.dispatch(kMipExtent / kCopyImageThreadsPerGroup,
                       kMipExtent / kCopyImageThreadsPerGroup, 1);
     commands.endComputePass();
@@ -583,7 +583,7 @@ TEST_CASE("pass timings cover a copy pass alongside the other pass kinds", "[gpu
     commands.beginComputePass("lmx.test.timing.compute");
     commands.bindComputePipeline(**pipeline);
     commands.bindStorageTexture(kCopyImageSlot, **image, {}, StorageAccess::Write);
-    commands.setUniforms(kCopyImageParamsSlot, &params, sizeof(params));
+    commands.bindFrameData(kCopyImageParamsSlot, params);
     commands.dispatch(kSize / kCopyImageThreadsPerGroup, kSize / kCopyImageThreadsPerGroup, 1);
     commands.endComputePass();
     commands.beginCopyPass("lmx.test.timing.copy");
