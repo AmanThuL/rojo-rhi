@@ -34,6 +34,12 @@ inline constexpr uint32_t kTimestampsPerFrame = kMaxTimedPassesPerFrame * 2;
 // after the frame-pacing event proves that frame retired, and are invalidated before the slot is
 // handed to a new frame.
 struct Metal4FrameTimestamps {
+    // The counter heap is a Metal object, so its release has to happen inside an autorelease pool
+    // (destructor rule in Metal4Common.h). The destructor lives on this struct rather than in
+    // ~Metal4Device because the SharedPtr does: the type that declares the ownership is the one
+    // that states how it ends, and no slot can be dropped elsewhere without the pool.
+    ~Metal4FrameTimestamps();
+
     NS::SharedPtr<MTL4::CounterHeap> heap;
     // The frame's pass labels in encode order. Pass i owns heap entries 2i and 2i + 1, so this
     // array's size is also the write cursor -- there is no separate counter to keep in step.

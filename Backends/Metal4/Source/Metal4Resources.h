@@ -38,6 +38,12 @@ public:
     ResidencyRegistration(const ResidencyRegistration&) = delete;
     ResidencyRegistration& operator=(const ResidencyRegistration&) = delete;
 
+    // Drops the membership now, rather than at the end of the owner's destructor. The owning
+    // wrapper calls this from inside its own pool so that the removal *and* the set's release
+    // happen there (see the destructor rule in Metal4Common.h); the destructor calls it too, so a
+    // registration that is never reset by hand still unregisters exactly once. Idempotent.
+    void reset();
+
 private:
     NS::SharedPtr<MTL::ResidencySet> m_residency;
     const MTL::Allocation* m_allocation = nullptr;
@@ -55,7 +61,8 @@ public:
           m_storageWrite(desc.storageWrite), m_cpuReadback(desc.cpuReadback),
           m_residency(std::move(residency), m_buffer.get()) {}
 
-    // Drops this buffer's capture-schema entry. Identity contract with
+    // Drops this buffer's capture-schema entry, then releases the Metal buffer explicitly inside
+    // a pool per the destructor rule in Metal4Common.h. Identity contract with
     // Metal4Device::createBuffer: the key is the MTL::Buffer pointer, which is m_buffer.get()
     // here and buffer.get() there -- the same object, since the wrapper took ownership of it.
     // Out of line so the header needs no CaptureSchema include.
@@ -71,7 +78,10 @@ public:
 
 private:
     // m_residency is declared last so it is destroyed *first* (reverse declaration order),
-    // while m_buffer still holds the allocation it has to unregister.
+    // while m_buffer still holds the allocation it has to unregister. The destructor performs the
+    // same order by hand -- m_residency.reset() before m_buffer.reset() -- because both have to
+    // happen inside its pool; the declaration order stays as the backstop for any path that does
+    // not go through the body.
     NS::SharedPtr<MTL::Buffer> m_buffer;
     bool m_storageRead = false;
     bool m_storageWrite = false;
@@ -88,12 +98,17 @@ public:
     Metal4Heap(NS::SharedPtr<MTL::Heap> heap, NS::SharedPtr<MTL::ResidencySet> residency)
         : m_heap(std::move(heap)), m_residency(std::move(residency), m_heap.get()) {}
 
+    // Releases the heap explicitly inside a pool, unregistering residency first; see the
+    // destructor rule in Metal4Common.h. Out of line to keep that pool out of the header.
+    ~Metal4Heap() override;
+
     uint64_t size() const override { return m_heap->size(); }
 
     MTL::Heap* handle() const { return m_heap.get(); }
 
 private:
-    // Declared before m_residency for the reason given in Metal4Buffer.
+    // Declared before m_residency for the reason given in Metal4Buffer, which the destructor
+    // likewise repeats explicitly.
     NS::SharedPtr<MTL::Heap> m_heap;
     ResidencyRegistration m_residency;
 };
@@ -119,7 +134,11 @@ public:
           m_residency(std::move(residency), m_texture.get()) {}
 
     // Drops this texture's capture-schema entry -- same identity contract as ~Metal4Buffer, with
-    // the MTL::Texture pointer Metal4Device::createTexture registered.
+    // the MTL::Texture pointer Metal4Device::createTexture registered -- then releases the cached
+    // views and the texture explicitly inside a pool (destructor rule in Metal4Common.h). Doing
+    // the views here is what keeps the transient pool's per-frame texture churn pool-covered:
+    // each destroyed texture drops its whole view cache, and every one of those is a Metal
+    // allocation whose dealloc autoreleases.
     ~Metal4Texture() override;
 
     uint32_t width() const override { return m_info.width; }
@@ -157,7 +176,7 @@ private:
         NS::SharedPtr<MTL::Texture> texture;
     };
     std::vector<View> m_views;
-    // Declared last -- see the note in Metal4Buffer.
+    // Declared last -- see the note in Metal4Buffer; the destructor repeats the order explicitly.
     ResidencyRegistration m_residency;
 };
 

@@ -199,6 +199,32 @@ Metal4Device::~Metal4Device() {
     for (Metal4FrameArena& arena : m_frameArenas) {
         arena.unregisterFromCapture();
     }
+
+    // Everything below is what implicit member destruction would do anyway -- reverse declaration
+    // order, which is reverse creation order -- performed by hand so that it happens *inside* this
+    // pool. Implicit release runs after the body returns, with no pool on the thread, and Metal's
+    // resource deallocs autorelease internally; see the destructor rule in Metal4Common.h. The
+    // declaration order in Metal4Device.h stays the contract, and this sequence must keep matching
+    // it, so that no ordering invariant depends on which of the two actually did the release.
+    m_commandList.reset();
+    // m_frameTimestamps is the one gap in the sequence, and deliberately so: Metal4FrameTimestamps
+    // declares the counter heap, so it opens its own pool around releasing it and needs nothing
+    // from here.
+    for (Metal4FrameArena& arena : m_frameArenas) {
+        arena.release();
+    }
+    for (NS::SharedPtr<MTL4::ArgumentTable>& table : m_argumentTables) {
+        table.reset();
+    }
+    m_commandBuffer.reset();
+    m_frameEvent.reset();
+    for (NS::SharedPtr<MTL4::CommandAllocator>& allocator : m_allocators) {
+        allocator.reset();
+    }
+    m_residency.reset();
+    m_compiler.reset();
+    m_queue.reset();
+    m_device.reset();
 }
 
 //======================================================================================================================

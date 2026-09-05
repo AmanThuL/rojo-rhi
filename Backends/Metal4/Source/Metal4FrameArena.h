@@ -95,6 +95,13 @@ public:
     // a later allocation reusing that pointer value while a stale entry still described it.
     void unregisterFromCapture();
 
+    // Releases the slot's pages and its reference to the device residency set, leaving an empty
+    // arena. The device owns every arena, so it -- not a destructor here -- decides when the pages
+    // go, and it calls this from inside its destructor's pool so the buffers deallocate with a
+    // pool in place (destructor rule in Metal4Common.h). Not part of the recycle path: reset()
+    // rewinds cursors and keeps the pages, which is the whole point of the arena.
+    void release();
+
     FrameDataSlotCounters counters() const;
 
     uint32_t pageCreations() const { return m_pageCreations; }

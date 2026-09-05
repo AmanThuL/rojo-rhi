@@ -159,6 +159,13 @@ void Metal4FrameArena::unregisterFromCapture() {
 }
 
 //======================================================================================================================
+void Metal4FrameArena::release() {
+    m_pages.clear();
+    m_residency.reset();
+    m_activePage = 0;
+}
+
+//======================================================================================================================
 uint64_t Metal4FrameArena::bytesUsed() const {
     uint64_t used = 0;
     for (const Page& page : m_pages) {

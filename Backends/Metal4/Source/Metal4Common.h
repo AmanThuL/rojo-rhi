@@ -58,6 +58,25 @@ inline MTL::PixelFormat toMTL(Format format) {
 // Generous: any wait longer than this means the GPU is wedged, not busy.
 inline constexpr uint64_t kGpuTimeoutMs = 10'000;
 
+// Destructor rule for every wrapper in this backend, stated once here because the mistake it
+// prevents is invisible at the call site.
+//
+// The backend owns its autorelease pools: each function that touches Metal opens one at the top,
+// and the app's frame loop drains none. A destructor that only opens a pool in its body does *not*
+// satisfy that contract -- the pool dies with the body, and the NS::SharedPtr members are released
+// afterwards, so every Metal object the wrapper owned deallocates with no pool on the thread.
+// That matters because -[IOGPUMetalResource dealloc] autoreleases internally: with no pool in
+// place the runtime just leaks the object (OBJC_DEBUG_MISSING_POOLS=YES reports it as
+// "autoreleased with no pool in place"), once per destroyed resource, every frame.
+//
+// So: a wrapper's destructor releases its Metal objects *explicitly*, inside its own pool, in the
+// order the wrapper's invariants require. Implicit member release still happens after the body and
+// outside any pool -- by then it must have nothing left to release.
+//
+// The regression check is the runtime's own:
+//   OBJC_DEBUG_MISSING_POOLS=YES LMX_MAX_FRAMES=N ./App 2>&1 | grep 'autoreleased with no pool'
+// The count of Metal-owned classes must not scale with N.
+
 // Blocks until every command buffer already committed to `queue` has completed.
 //
 // Shared by Device::waitIdle() and by ~Metal4Swapchain, which must drain before it detaches the

@@ -96,6 +96,12 @@ MTL::Size extentOf(const TextureCopyRegion& region) {
 } // namespace
 
 //======================================================================================================================
+Metal4FrameTimestamps::~Metal4FrameTimestamps() {
+    NS::SharedPtr<NS::AutoreleasePool> pool = NS::TransferPtr(NS::AutoreleasePool::alloc()->init());
+    heap.reset();
+}
+
+//======================================================================================================================
 void Metal4CommandList::beginTimedPass(std::string_view label) {
     // Timestamps are written on the command buffer rather than inside the encoder, which is what
     // makes them pass boundaries: an encoder-stage timestamp would be ordered against a shader

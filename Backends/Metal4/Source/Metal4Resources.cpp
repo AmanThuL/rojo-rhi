@@ -28,19 +28,43 @@ ResidencyRegistration::ResidencyRegistration(NS::SharedPtr<MTL::ResidencySet> re
 
 //======================================================================================================================
 ResidencyRegistration::~ResidencyRegistration() {
+    reset();
+}
+
+//======================================================================================================================
+void ResidencyRegistration::reset() {
     if (!m_residency) {
         return;
     }
     NS::SharedPtr<NS::AutoreleasePool> pool = NS::TransferPtr(NS::AutoreleasePool::alloc()->init());
     m_residency->removeAllocation(m_allocation);
     m_residency->commit();
+    // Release the set here, inside this pool, rather than leaving it to the member's own
+    // destruction after the owning wrapper's body has returned; nulling it is also what makes a
+    // second call -- the destructor's, after an owner already reset by hand -- a no-op.
+    m_residency.reset();
+    m_allocation = nullptr;
 }
 
 //======================================================================================================================
 // Resource wrappers unregister the same native pointer used as their capture identity. Transient
 // drawable wrappers were never registered, so their removal is a no-op.
+//
+// The explicit release order below is the declaration order's reverse, performed by hand so that
+// all of it happens inside this pool: residency must drop the allocation while the allocation is
+// still alive, and the Metal object must deallocate with a pool in place.
 Metal4Buffer::~Metal4Buffer() {
+    NS::SharedPtr<NS::AutoreleasePool> pool = NS::TransferPtr(NS::AutoreleasePool::alloc()->init());
     debug::CaptureSchema::instance().unregisterResource(m_buffer.get());
+    m_residency.reset();
+    m_buffer.reset();
+}
+
+//======================================================================================================================
+Metal4Heap::~Metal4Heap() {
+    NS::SharedPtr<NS::AutoreleasePool> pool = NS::TransferPtr(NS::AutoreleasePool::alloc()->init());
+    m_residency.reset();
+    m_heap.reset();
 }
 
 //======================================================================================================================
@@ -56,8 +80,14 @@ void Metal4Buffer::readback(void* out, uint64_t outSize) {
 }
 
 //======================================================================================================================
+// Same explicit order as ~Metal4Buffer, with the cached views released before the texture they
+// are views of.
 Metal4Texture::~Metal4Texture() {
+    NS::SharedPtr<NS::AutoreleasePool> pool = NS::TransferPtr(NS::AutoreleasePool::alloc()->init());
     debug::CaptureSchema::instance().unregisterResource(m_texture.get());
+    m_residency.reset();
+    m_views.clear();
+    m_texture.reset();
 }
 
 //======================================================================================================================

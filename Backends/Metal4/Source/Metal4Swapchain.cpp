@@ -33,9 +33,16 @@ Metal4Swapchain::~Metal4Swapchain() {
     if (m_layerResidency) {
         m_queue->removeResidencySet(m_layerResidency.get());
     }
-    // Release an acquired but unpresented drawable back to the layer during teardown.
+    // Everything this swapchain owns is released here, by hand and in reverse declaration order,
+    // rather than left to implicit member destruction after the body -- which would run outside
+    // this pool. See the destructor rule in Metal4Common.h.
+    //
+    // Releasing an acquired but unpresented drawable is what hands it back to the layer.
     m_texture.reset();
     m_drawable.reset();
+    m_layerResidency.reset();
+    m_queue.reset();
+    m_layer.reset();
 }
 
 //======================================================================================================================
