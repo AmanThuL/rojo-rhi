@@ -25,7 +25,7 @@ constexpr uint32_t kMaxTextureDimension2D = 16384;
 bool isColorRenderableFormat(Format format) {
     return format == Format::BGRA8Unorm || format == Format::RGBA8Unorm ||
            format == Format::RGBA8Unorm_sRGB || format == Format::RGBA16Float ||
-           format == Format::RG16Float;
+           format == Format::RG16Float || format == Format::R8Unorm;
 }
 
 //======================================================================================================================
@@ -130,6 +130,8 @@ uint32_t bytesPerPixel(Format format) {
         return 4;
     case Format::RG16Float:
         return 4;
+    case Format::R8Unorm:
+        return 1;
     case Format::RGBA16Float:
         return 8;
     // A BC1 block covers 4x4 texels, so "bytes per pixel" is not expressible; D32Float is a packed
@@ -146,7 +148,9 @@ uint32_t bytesPerPixel(Format format) {
 //======================================================================================================================
 // The read-write set Apple silicon supports, intersected with this RHI's formats: the sRGB and
 // block-compressed members are excluded because a storage access performs no decode, and the packed
-// depth and two-channel formats have no read-write support to expose.
+// depth format has none to expose. The two- and single-channel formats are left out for a different
+// reason -- every producer of one writes it as a colour attachment, so no caller needs the
+// read-write view the hardware would allow.
 bool isStorageFormat(Format format) {
     return format == Format::RGBA8Unorm || format == Format::RGBA16Float;
 }
@@ -196,7 +200,8 @@ Result<void> validate(const TextureDesc& desc) {
     if ((desc.storageRead || desc.storageWrite) && !isStorageFormat(desc.format)) {
         return invalid("TextureDesc storage usage requires a format the hardware can read and "
                        "write without conversion (RGBA8Unorm or RGBA16Float); sRGB, "
-                       "block-compressed, depth, and two-channel formats are not among them");
+                       "block-compressed, depth, two-channel, and single-channel formats are "
+                       "not among them");
     }
     if (desc.renderTarget && !isColorRenderableFormat(desc.format) && !isDepthFormat(desc.format)) {
         return invalid("TextureDesc.renderTarget requires a color-renderable or depth format");
@@ -518,8 +523,8 @@ Result<void> validate(const GraphicsPipelineDesc& desc) {
     }
     if (desc.colorFormat != Format::Unknown && !isColorRenderableFormat(desc.colorFormat)) {
         return invalid("GraphicsPipelineDesc.colorFormat must be a color-renderable format "
-                       "(an 8-bit unorm, sRGB, RGBA16Float, or RG16Float one; depth and BC1 are "
-                       "not)");
+                       "(an 8-bit unorm, sRGB, RGBA16Float, RG16Float, or R8Unorm one; depth and "
+                       "BC1 are not)");
     }
     if (desc.depthFormat != Format::Unknown && !isDepthFormat(desc.depthFormat)) {
         return invalid("GraphicsPipelineDesc.depthFormat must be a depth format (D32Float) or "

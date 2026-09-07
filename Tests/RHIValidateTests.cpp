@@ -938,6 +938,7 @@ TEST_CASE("bytesPerPixel sizes the formats readback supports and zeroes the rest
     REQUIRE(bytesPerPixel(Format::RGBA16Float) == 8);
 
     REQUIRE(bytesPerPixel(Format::RG16Float) == 4);
+    REQUIRE(bytesPerPixel(Format::R8Unorm) == 1);
 
     REQUIRE(bytesPerPixel(Format::D32Float) == 0);
     REQUIRE(bytesPerPixel(Format::BC1Unorm) == 0);
@@ -988,6 +989,39 @@ TEST_CASE("TextureDesc RG16Float renders and reads back", "[rhi]") {
     desc.label = "motion";
 
     REQUIRE(validate(desc).has_value());
+}
+
+//======================================================================================================================
+// The reactive-mask target the temporal path renders into: a single-channel attachment a fragment
+// stage writes, a later pass samples, and a readback reads one byte per texel from.
+TEST_CASE("TextureDesc R8Unorm renders, samples, and reads back", "[rhi][validate]") {
+    TextureDesc desc{};
+    desc.width = 64;
+    desc.height = 64;
+    desc.format = Format::R8Unorm;
+    desc.renderTarget = true;
+    desc.sampled = true;
+    desc.cpuReadback = true;
+    desc.label = "reactive";
+
+    REQUIRE(validate(desc).has_value());
+}
+
+//======================================================================================================================
+// Single-channel storage access is deliberately outside the RHI's storage set: the reactive mask is
+// produced as a colour attachment, so nothing needs a read-write view of it.
+TEST_CASE("TextureDesc storage usage with an R8Unorm format is rejected", "[rhi][validate]") {
+    TextureDesc desc{};
+    desc.width = 64;
+    desc.height = 64;
+    desc.format = Format::R8Unorm;
+    desc.storageWrite = true;
+    desc.label = "reactive storage";
+
+    const auto r = validate(desc);
+    REQUIRE_FALSE(r.has_value());
+    REQUIRE(r.error().code == ErrorCode::InvalidDesc);
+    REQUIRE(r.error().message.contains("storage"));
 }
 
 //======================================================================================================================

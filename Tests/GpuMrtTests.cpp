@@ -50,6 +50,22 @@ lmx::rhi::Result<std::unique_ptr<lmx::rhi::Texture>> makeMotionTarget(lmx::rhi::
                                  .label = label});
 }
 
+//======================================================================================================================
+lmx::rhi::Result<std::unique_ptr<lmx::rhi::Texture>> makeReactiveTarget(lmx::rhi::Device& device,
+                                                                        const char* label) {
+    return device.createTexture({.width = kSize,
+                                 .height = kSize,
+                                 .format = lmx::rhi::Format::R8Unorm,
+                                 .renderTarget = true,
+                                 .cpuReadback = true,
+                                 .label = label});
+}
+
+//======================================================================================================================
+uint8_t reactiveAt(const std::vector<uint8_t>& bytes, uint32_t x, uint32_t y) {
+    return bytes[size_t{y} * kSize + x];
+}
+
 } // namespace
 
 //======================================================================================================================
@@ -192,4 +208,97 @@ TEST_CASE("a depth-only pass rejects extra color attachments", "[gpu][rhi]") {
     REQUIRE_FALSE(r.has_value());
     REQUIRE(r.error().code == ErrorCode::InvalidDesc);
     REQUIRE(r.error().message.contains("colorTarget"));
+}
+
+//======================================================================================================================
+// Three attachments in one pass, the third the single-channel R8Unorm the reactive mask uses. The
+// draw is a centred triangle -- MrtSmoke's vertexMainTriple -- so the same readback shows both the
+// fragment's 0.75 (191 after the eight-bit unorm round) where it rasterised and the attachment's
+// own zero clear where it did not.
+TEST_CASE("a render pass writes three color attachments", "[gpu][rhi]") {
+    using namespace lmx::rhi;
+
+    auto device = createDevice();
+    INFO(errorOf(device));
+    REQUIRE(device.has_value());
+
+    auto color = makeProbeTarget(**device, "lmx.test.mrtTripleColor");
+    INFO(errorOf(color));
+    REQUIRE(color.has_value());
+
+    auto motion = makeMotionTarget(**device, "lmx.test.mrtTripleMotion");
+    INFO(errorOf(motion));
+    REQUIRE(motion.has_value());
+
+    auto reactive = makeReactiveTarget(**device, "lmx.test.mrtTripleReactive");
+    INFO(errorOf(reactive));
+    REQUIRE(reactive.has_value());
+
+    auto library = (*device)->loadShaderLibrary("Shaders/MrtSmoke");
+    INFO(errorOf(library));
+    REQUIRE(library.has_value());
+
+    auto pipeline = (*device)->createGraphicsPipeline(
+        {.library = library->get(),
+         .vertexEntry = "vertexMainTriple",
+         .fragmentEntry = "fragmentMainTriple",
+         .colorFormat = Format::BGRA8Unorm,
+         .extraColorFormats = {Format::RG16Float, Format::R8Unorm, Format::Unknown},
+         .extraColorCount = 2,
+         .label = "lmx.test.mrtTriplePipeline"});
+    INFO(errorOf(pipeline));
+    REQUIRE(pipeline.has_value());
+
+    CommandList& commands = (*device)->beginFrame();
+    commands.beginRenderPass(
+        {.colorTarget = color->get(),
+         .clearColor = {0.0f, 1.0f, 0.0f, 1.0f},
+         .clear = true,
+         .extraColor = {{.target = motion->get(),
+                         .clearColor = {kMotionClearX, kMotionClearY, 0.0f, 0.0f},
+                         .clear = true},
+                        {.target = reactive->get(),
+                         .clearColor = {0.0f, 0.0f, 0.0f, 0.0f},
+                         .clear = true}},
+         .extraColorCount = 2,
+         .label = "lmx.test.mrtTriple"});
+    commands.bindPipeline(**pipeline);
+    commands.draw(3);
+    commands.endRenderPass();
+    (*device)->endFrame(nullptr);
+    (*device)->waitIdle();
+
+    std::vector<uint8_t> colorPixels(size_t{kSize} * kSize * 4);
+    (*color)->readback(colorPixels.data(), colorPixels.size());
+    std::vector<uint8_t> motionPixels(size_t{kSize} * kSize * sizeof(MotionTexel));
+    (*motion)->readback(motionPixels.data(), motionPixels.size());
+    std::vector<uint8_t> reactivePixels(size_t{kSize} * kSize);
+    (*reactive)->readback(reactivePixels.data(), reactivePixels.size());
+
+    // The triangle's apex is (32,16) and its base runs from (16,48) to (48,48), so this probe sits
+    // twelve texels inside every edge.
+    constexpr uint32_t kInsideX = 32;
+    constexpr uint32_t kInsideY = 40;
+
+    const Pixel pixel = pixelAt(colorPixels, kInsideX, kInsideY);
+    INFO(describe("color", kInsideX, kInsideY, pixel));
+    REQUIRE(pixel.r == 255);
+    REQUIRE(pixel.g == 0);
+    REQUIRE(pixel.b == 0);
+
+    const MotionTexel texel = motionAt(motionPixels, kInsideX, kInsideY);
+    INFO(describeMotion(kInsideX, kInsideY, texel));
+    REQUIRE(texel.r == kWrittenMotionX);
+    REQUIRE(texel.g == kWrittenMotionY);
+
+    INFO("reactive inside: " + std::to_string(reactiveAt(reactivePixels, kInsideX, kInsideY)));
+    REQUIRE(reactiveAt(reactivePixels, kInsideX, kInsideY) == 191);
+
+    // Both corners are well outside the triangle, so they carry the attachment's own clear.
+    for (const std::pair<uint32_t, uint32_t> outside :
+         {std::pair<uint32_t, uint32_t>{2, 2}, {kSize - 3, kSize - 3}}) {
+        INFO("reactive (" + std::to_string(outside.first) + "," + std::to_string(outside.second) +
+             "): " + std::to_string(reactiveAt(reactivePixels, outside.first, outside.second)));
+        REQUIRE(reactiveAt(reactivePixels, outside.first, outside.second) == 0);
+    }
 }

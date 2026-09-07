@@ -15,6 +15,7 @@ enum class Format {
     RGBA8Unorm_sRGB, ///< Eight-bit RGBA color with sRGB transfer on sampling.
     RGBA16Float,     ///< Half-precision linear RGBA color.
     RG16Float,       ///< Half-precision two-channel linear data.
+    R8Unorm,         ///< Eight-bit normalized single channel.
     BC1Unorm,        ///< BC1-compressed normalized linear color.
     BC1Unorm_sRGB,   ///< BC1-compressed color with sRGB transfer on sampling.
     D32Float         ///< 32-bit floating-point depth.
