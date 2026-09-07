@@ -21,11 +21,11 @@ constexpr uint32_t kMaxTextureDimension2D = 16384;
 
 //======================================================================================================================
 // Reject non-renderable formats before Metal's pipeline and layer validators abort. sRGB encodes
-// on write; block compression cannot run per fragment. RG16Float is renderable on the hardware but
-// stays out until a pass actually renders into one.
+// on write; block compression cannot run per fragment.
 bool isColorRenderableFormat(Format format) {
     return format == Format::BGRA8Unorm || format == Format::RGBA8Unorm ||
-           format == Format::RGBA8Unorm_sRGB || format == Format::RGBA16Float;
+           format == Format::RGBA8Unorm_sRGB || format == Format::RGBA16Float ||
+           format == Format::RG16Float;
 }
 
 //======================================================================================================================
@@ -128,14 +128,15 @@ uint32_t bytesPerPixel(Format format) {
     case Format::RGBA8Unorm:
     case Format::RGBA8Unorm_sRGB:
         return 4;
+    case Format::RG16Float:
+        return 4;
     case Format::RGBA16Float:
         return 8;
-    // A BC1 block covers 4x4 texels, so "bytes per pixel" is not expressible; D32Float and
-    // RG16Float are packed formats with no readback caller.
+    // A BC1 block covers 4x4 texels, so "bytes per pixel" is not expressible; D32Float is a packed
+    // depth format with no readback caller.
     case Format::BC1Unorm:
     case Format::BC1Unorm_sRGB:
     case Format::D32Float:
-    case Format::RG16Float:
     case Format::Unknown:
         break;
     }
@@ -517,7 +518,7 @@ Result<void> validate(const GraphicsPipelineDesc& desc) {
     }
     if (desc.colorFormat != Format::Unknown && !isColorRenderableFormat(desc.colorFormat)) {
         return invalid("GraphicsPipelineDesc.colorFormat must be a color-renderable format "
-                       "(an 8-bit unorm, sRGB, or RGBA16Float one; depth, RG16Float and BC1 are "
+                       "(an 8-bit unorm, sRGB, RGBA16Float, or RG16Float one; depth and BC1 are "
                        "not)");
     }
     if (desc.depthFormat != Format::Unknown && !isDepthFormat(desc.depthFormat)) {
@@ -527,6 +528,29 @@ Result<void> validate(const GraphicsPipelineDesc& desc) {
     if ((desc.depthTestEnable || desc.depthWriteEnable) && desc.depthFormat == Format::Unknown) {
         return invalid("GraphicsPipelineDesc.depthFormat must be set when depth test/write is "
                        "enabled");
+    }
+    if (desc.extraColorCount > kMaxExtraColorTargets) {
+        return std::unexpected(
+            Error{ErrorCode::InvalidDesc, "GraphicsPipelineDesc.extraColorCount is " +
+                                              std::to_string(desc.extraColorCount) + ", past the " +
+                                              std::to_string(kMaxExtraColorTargets) +
+                                              " extra color attachments a pipeline can declare"});
+    }
+    // Attachment zero is the primary format's, so an extra with nothing in front of it would
+    // number its outputs from one.
+    if (desc.extraColorCount > 0 && desc.colorFormat == Format::Unknown) {
+        return invalid("GraphicsPipelineDesc.extraColorFormats require colorFormat: extras are "
+                       "attachments 1 and up, so a pipeline with no attachment zero cannot have "
+                       "them");
+    }
+    for (uint32_t i = 0; i < desc.extraColorCount; ++i) {
+        if (!isColorRenderableFormat(desc.extraColorFormats[i])) {
+            return std::unexpected(
+                Error{ErrorCode::InvalidDesc,
+                      "GraphicsPipelineDesc.extraColorFormats[" + std::to_string(i) +
+                          "] must be a color-renderable format; Format::Unknown means no "
+                          "attachment, which a counted extra cannot be"});
+        }
     }
     return {};
 }
@@ -617,6 +641,49 @@ Result<void> validateRenderPassTargets(const Texture* color, const Texture* dept
             Error{ErrorCode::InvalidDesc,
                   "RenderPassDesc: colorTarget and depthTarget must have the same extent (color " +
                       extentOf(*color) + ", depth " + extentOf(*depth) + ")"});
+    }
+    return {};
+}
+
+//======================================================================================================================
+Result<void> validateExtraColorTargets(const Texture* color, const ExtraColorTarget* extraColor,
+                                       uint32_t extraColorCount) {
+    if (extraColorCount > kMaxExtraColorTargets) {
+        return std::unexpected(
+            Error{ErrorCode::InvalidDesc, "RenderPassDesc.extraColorCount is " +
+                                              std::to_string(extraColorCount) + ", past the " +
+                                              std::to_string(kMaxExtraColorTargets) +
+                                              " extra color attachments a pass can declare"});
+    }
+    if (extraColorCount == 0) {
+        return {};
+    }
+    // Attachment zero is the primary target's, so an extra with nothing in front of it would be a
+    // pass whose attachments start at index one.
+    if (color == nullptr) {
+        return invalid("RenderPassDesc.extraColor requires colorTarget: extras are attachments 1 "
+                       "and up, so a pass with no attachment zero cannot have them");
+    }
+    for (uint32_t i = 0; i < extraColorCount; ++i) {
+        const std::string name = "RenderPassDesc.extraColor[" + std::to_string(i) + "]";
+        const Texture* target = extraColor[i].target;
+        if (target == nullptr) {
+            return std::unexpected(
+                Error{ErrorCode::InvalidDesc,
+                      name + ".target must not be null; entries past extraColorCount are the "
+                             "unused ones"});
+        }
+        if (!isColorRenderableFormat(target->format())) {
+            return std::unexpected(Error{ErrorCode::InvalidDesc,
+                                         name + ".target must have a color-renderable format"});
+        }
+        if (target->width() != color->width() || target->height() != color->height()) {
+            // Metal silently clips mismatched attachments, so include both extents in the error.
+            return std::unexpected(Error{ErrorCode::InvalidDesc,
+                                         name + ".target must have colorTarget's extent (color " +
+                                             extentOf(*color) + ", extra " + extentOf(*target) +
+                                             ")"});
+        }
     }
     return {};
 }

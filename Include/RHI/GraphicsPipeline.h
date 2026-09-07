@@ -4,7 +4,9 @@
 //----------------------------------------------------------------------------------------------------------------------
 #pragma once
 #include "RHI/Format.h"
+#include "RHI/RenderPass.h"
 
+#include <cstdint>
 #include <string_view>
 
 namespace lmx::rhi {
@@ -57,6 +59,12 @@ struct GraphicsPipelineDesc {
     /// fragment entry must then write no color (a void fragment function) -- a fragment output with
     /// no attachment to land in is a pipeline-creation failure, not a silently ignored write.
     Format colorFormat = Format::BGRA8Unorm;
+    /// Formats of colour attachments 1..extraColorCount, matching RenderPassDesc::extraColor.
+    /// Every counted entry must be a color-renderable format and requires `colorFormat` to be set,
+    /// because attachment zero is where that one lives.
+    Format extraColorFormats[kMaxExtraColorTargets] = {Format::Unknown, Format::Unknown,
+                                                       Format::Unknown};
+    uint32_t extraColorCount = 0; ///< Entries of `extraColorFormats` the pipeline writes.
     /// Unknown = no depth attachment. Metal 4 pipelines carry no depth pixel format (it is a
     /// render-pass property there) -- this field is validated CPU-side against the depth flags
     /// and kept in the desc because the future Vulkan backend bakes it into the pipeline.

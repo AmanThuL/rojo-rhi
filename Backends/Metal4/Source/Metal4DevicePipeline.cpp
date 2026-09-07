@@ -227,6 +227,11 @@ Metal4Device::createGraphicsPipeline(const GraphicsPipelineDesc& desc) {
     if (desc.colorFormat != Format::Unknown) {
         pipelineDesc->colorAttachments()->object(0)->setPixelFormat(toMTL(desc.colorFormat));
     }
+    // Extra i is attachment i + 1: the primary occupies attachment zero.
+    for (uint32_t i = 0; i < desc.extraColorCount; ++i) {
+        pipelineDesc->colorAttachments()->object(i + 1)->setPixelFormat(
+            toMTL(desc.extraColorFormats[i]));
+    }
     pipelineDesc->setRasterSampleCount(1);
     // Pipeline-state labels are inherited from the descriptor; the state has no setter.
     pipelineDesc->setLabel(labelOrFallback(desc.label, "lmx.pipeline.unnamed").get());

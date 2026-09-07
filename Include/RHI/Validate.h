@@ -9,6 +9,7 @@
 #include "RHI/Format.h"
 #include "RHI/GraphicsPipeline.h"
 #include "RHI/Heap.h"
+#include "RHI/RenderPass.h"
 #include "RHI/Result.h"
 #include "RHI/Sampler.h"
 #include "RHI/Swapchain.h"
@@ -39,6 +40,12 @@ Result<void> validatePlacement(const Heap& heap, uint64_t offset, const SizeAlig
 
 /// Validates the attachment combination for a render pass.
 Result<void> validateRenderPassTargets(const Texture* color, const Texture* depth);
+
+/// Validates a render pass's extra color attachments: the count against kMaxExtraColorTargets,
+/// their dependence on a primary `color` attachment, and each target's presence, color-renderable
+/// format, and agreement with the primary's extent.
+Result<void> validateExtraColorTargets(const Texture* color, const ExtraColorTarget* extraColor,
+                                       uint32_t extraColorCount);
 
 /// Validates a subresource range against the texture it addresses, resolving the kAllMipLevels and
 /// kAllArrayLayers sentinels against that texture's own extents.

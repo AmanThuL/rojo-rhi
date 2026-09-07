@@ -155,6 +155,9 @@ void Metal4CommandList::beginRenderPass(const RenderPassDesc& desc) {
     LMX_ASSERT(!inPass(), "beginRenderPass: a pass is already open on this command list");
     const Result<void> targets = validateRenderPassTargets(desc.colorTarget, desc.depthTarget);
     LMX_ASSERT(targets.has_value(), targets.error().message);
+    const Result<void> extras =
+        validateExtraColorTargets(desc.colorTarget, desc.extraColor, desc.extraColorCount);
+    LMX_ASSERT(extras.has_value(), extras.error().message);
     // Discarding the only attachment would make a depth-only pass produce no observable output.
     LMX_ASSERT(desc.colorTarget != nullptr || desc.storeDepth,
                "RenderPassDesc: a depth-only pass must set storeDepth -- it has no other output, "
@@ -174,6 +177,26 @@ void Metal4CommandList::beginRenderPass(const RenderPassDesc& desc) {
         if (desc.clear) {
             color->setClearColor(MTL::ClearColor(desc.clearColor[0], desc.clearColor[1],
                                                  desc.clearColor[2], desc.clearColor[3]));
+        }
+    }
+
+    // Extra i is attachment i + 1: colorTarget occupies attachment zero.
+    for (uint32_t i = 0; i < desc.extraColorCount; ++i) {
+        const ExtraColorTarget& extra = desc.extraColor[i];
+        auto* extraTarget = static_cast<Metal4Texture*>(extra.target);
+        // ResourceID hides usage from Metal validation, so reject a non-attachment texture here.
+        LMX_ASSERT((extraTarget->handle()->usage() & MTL::TextureUsageRenderTarget) != 0,
+                   "RenderPassDesc.extraColor: texture has no render-target usage -- create it "
+                   "with renderTarget = true");
+
+        MTL::RenderPassColorAttachmentDescriptor* attachment =
+            passDesc->colorAttachments()->object(i + 1);
+        attachment->setTexture(extraTarget->handle());
+        attachment->setLoadAction(extra.clear ? MTL::LoadActionClear : MTL::LoadActionLoad);
+        attachment->setStoreAction(MTL::StoreActionStore);
+        if (extra.clear) {
+            attachment->setClearColor(MTL::ClearColor(extra.clearColor[0], extra.clearColor[1],
+                                                      extra.clearColor[2], extra.clearColor[3]));
         }
     }
 

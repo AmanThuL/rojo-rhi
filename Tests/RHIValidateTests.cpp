@@ -937,7 +937,8 @@ TEST_CASE("bytesPerPixel sizes the formats readback supports and zeroes the rest
     REQUIRE(bytesPerPixel(Format::RGBA8Unorm_sRGB) == 4);
     REQUIRE(bytesPerPixel(Format::RGBA16Float) == 8);
 
-    REQUIRE(bytesPerPixel(Format::RG16Float) == 0);
+    REQUIRE(bytesPerPixel(Format::RG16Float) == 4);
+
     REQUIRE(bytesPerPixel(Format::D32Float) == 0);
     REQUIRE(bytesPerPixel(Format::BC1Unorm) == 0);
     REQUIRE(bytesPerPixel(Format::BC1Unorm_sRGB) == 0);
@@ -961,9 +962,7 @@ TEST_CASE("TextureDesc RGBA16Float renders, samples, and reads back", "[rhi]") {
 }
 
 //======================================================================================================================
-// The DFG lookup table is generated on the CPU and only ever sampled, so RG16Float stops there:
-// rendering into one and reading one back have no caller, and an untested capability is worse than
-// an absent one.
+// The DFG lookup table is generated on the CPU and only ever sampled.
 TEST_CASE("TextureDesc RG16Float sampled is accepted", "[rhi]") {
     TextureDesc desc{};
     desc.width = 64;
@@ -976,34 +975,19 @@ TEST_CASE("TextureDesc RG16Float sampled is accepted", "[rhi]") {
 }
 
 //======================================================================================================================
-TEST_CASE("TextureDesc RG16Float as a render target is rejected", "[rhi]") {
+// The motion target the temporal path renders into: an extra colour attachment written by a
+// fragment stage and read back by the tests that assert on the vectors it holds.
+TEST_CASE("TextureDesc RG16Float renders and reads back", "[rhi]") {
     TextureDesc desc{};
     desc.width = 64;
     desc.height = 64;
     desc.format = Format::RG16Float;
     desc.renderTarget = true;
-    desc.label = "two-channel target";
-
-    const auto r = validate(desc);
-    REQUIRE_FALSE(r.has_value());
-    REQUIRE(r.error().code == ErrorCode::InvalidDesc);
-    REQUIRE(r.error().message.contains("renderTarget"));
-    REQUIRE(r.error().message.contains("color-renderable"));
-}
-
-//======================================================================================================================
-TEST_CASE("TextureDesc RG16Float with cpuReadback is rejected", "[rhi]") {
-    TextureDesc desc{};
-    desc.width = 64;
-    desc.height = 64;
-    desc.format = Format::RG16Float;
+    desc.sampled = true;
     desc.cpuReadback = true;
-    desc.label = "two-channel readback";
+    desc.label = "motion";
 
-    const auto r = validate(desc);
-    REQUIRE_FALSE(r.has_value());
-    REQUIRE(r.error().code == ErrorCode::InvalidDesc);
-    REQUIRE(r.error().message.contains("cpuReadback"));
+    REQUIRE(validate(desc).has_value());
 }
 
 //======================================================================================================================
@@ -1020,19 +1004,112 @@ TEST_CASE("GraphicsPipelineDesc with an RGBA16Float color format is accepted", "
 }
 
 //======================================================================================================================
-TEST_CASE("GraphicsPipelineDesc with an RG16Float color format is rejected", "[rhi]") {
+TEST_CASE("GraphicsPipelineDesc with an RG16Float color format is accepted", "[rhi]") {
     DummyShaderLibrary library;
     GraphicsPipelineDesc desc{};
     desc.library = &library;
     desc.vertexEntry = "vertexMain";
     desc.fragmentEntry = "fragmentMain";
     desc.colorFormat = Format::RG16Float;
-    desc.label = "lut pipeline";
+    desc.label = "motion pipeline";
+
+    REQUIRE(validate(desc).has_value());
+}
+
+//======================================================================================================================
+TEST_CASE("GraphicsPipelineDesc extra color formats need a primary color format",
+          "[rhi][validate]") {
+    DummyShaderLibrary library;
+    GraphicsPipelineDesc desc{};
+    desc.library = &library;
+    desc.vertexEntry = "vertexMain";
+    desc.fragmentEntry = "fragmentMain";
+    desc.colorFormat = Format::Unknown;
+    desc.depthFormat = Format::D32Float;
+    desc.extraColorFormats[0] = Format::RG16Float;
+    desc.extraColorCount = 1;
+    desc.label = "depth-only with extras";
 
     const auto r = validate(desc);
     REQUIRE_FALSE(r.has_value());
     REQUIRE(r.error().code == ErrorCode::InvalidDesc);
+    REQUIRE(r.error().message.contains("extraColorFormats"));
     REQUIRE(r.error().message.contains("colorFormat"));
+}
+
+//======================================================================================================================
+TEST_CASE("GraphicsPipelineDesc extraColorCount past the limit is rejected", "[rhi][validate]") {
+    DummyShaderLibrary library;
+    GraphicsPipelineDesc desc{};
+    desc.library = &library;
+    desc.vertexEntry = "vertexMain";
+    desc.fragmentEntry = "fragmentMain";
+    desc.extraColorCount = kMaxExtraColorTargets + 1;
+    desc.label = "too many extras";
+
+    const auto r = validate(desc);
+    REQUIRE_FALSE(r.has_value());
+    REQUIRE(r.error().code == ErrorCode::InvalidDesc);
+    REQUIRE(r.error().message.contains("extraColorCount"));
+}
+
+//======================================================================================================================
+// Unknown is the "no attachment" spelling for the primary format, and a counted extra is by
+// definition an attachment, so the same value cannot mean both things there.
+TEST_CASE("GraphicsPipelineDesc with an Unknown extra color format is rejected",
+          "[rhi][validate]") {
+    DummyShaderLibrary library;
+    GraphicsPipelineDesc desc{};
+    desc.library = &library;
+    desc.vertexEntry = "vertexMain";
+    desc.fragmentEntry = "fragmentMain";
+    desc.extraColorFormats[0] = Format::Unknown;
+    desc.extraColorCount = 1;
+    desc.label = "unknown extra";
+
+    const auto r = validate(desc);
+    REQUIRE_FALSE(r.has_value());
+    REQUIRE(r.error().code == ErrorCode::InvalidDesc);
+    REQUIRE(r.error().message.contains("extraColorFormats[0]"));
+}
+
+//======================================================================================================================
+TEST_CASE("GraphicsPipelineDesc with a non-renderable extra color format is rejected",
+          "[rhi][validate]") {
+    DummyShaderLibrary library;
+    GraphicsPipelineDesc desc{};
+    desc.library = &library;
+    desc.vertexEntry = "vertexMain";
+    desc.fragmentEntry = "fragmentMain";
+    desc.extraColorFormats[0] = Format::RG16Float;
+    desc.extraColorFormats[1] = Format::BC1Unorm;
+    desc.extraColorCount = 2;
+    desc.label = "block-compressed extra";
+
+    const auto r = validate(desc);
+    REQUIRE_FALSE(r.has_value());
+    REQUIRE(r.error().code == ErrorCode::InvalidDesc);
+    REQUIRE(r.error().message.contains("extraColorFormats[1]"));
+    REQUIRE(r.error().message.contains("color-renderable"));
+}
+
+//======================================================================================================================
+// The pipeline the motion pass needs: scene colour at attachment zero, motion vectors after it.
+TEST_CASE("GraphicsPipelineDesc with a full set of extra color formats is accepted",
+          "[rhi][validate]") {
+    DummyShaderLibrary library;
+    GraphicsPipelineDesc desc{};
+    desc.library = &library;
+    desc.vertexEntry = "vertexMain";
+    desc.fragmentEntry = "fragmentMain";
+    desc.colorFormat = Format::RGBA16Float;
+    desc.extraColorFormats[0] = Format::RG16Float;
+    desc.extraColorFormats[1] = Format::RGBA8Unorm;
+    desc.extraColorFormats[2] = Format::BGRA8Unorm;
+    desc.extraColorCount = kMaxExtraColorTargets;
+    desc.label = "scene with motion";
+
+    REQUIRE(validate(desc).has_value());
 }
 
 //======================================================================================================================
@@ -1154,6 +1231,86 @@ TEST_CASE("color and depth attachments differing only in height are rejected", "
     const auto r = validateRenderPassTargets(&color, &depth);
     REQUIRE_FALSE(r.has_value());
     REQUIRE(r.error().message.contains("extent"));
+}
+
+//======================================================================================================================
+TEST_CASE("a render pass with no extra color attachments is accepted", "[rhi][validate]") {
+    const FakeTexture color{64, 64};
+    REQUIRE(validateExtraColorTargets(&color, nullptr, 0).has_value());
+}
+
+//======================================================================================================================
+// Attachment zero is the primary target, so an extra with nothing in front of it would be a pass
+// whose attachments start at index one.
+TEST_CASE("extra color attachments without a primary color target are rejected",
+          "[rhi][validate]") {
+    FakeTexture motion{64, 64, Format::RG16Float};
+    const ExtraColorTarget extras[1] = {{.target = &motion}};
+
+    const auto r = validateExtraColorTargets(nullptr, extras, 1);
+    REQUIRE_FALSE(r.has_value());
+    REQUIRE(r.error().code == ErrorCode::InvalidDesc);
+    REQUIRE(r.error().message.contains("extraColor"));
+    REQUIRE(r.error().message.contains("colorTarget"));
+}
+
+//======================================================================================================================
+TEST_CASE("more extra color attachments than the limit are rejected", "[rhi][validate]") {
+    const FakeTexture color{64, 64};
+
+    const auto r = validateExtraColorTargets(&color, nullptr, kMaxExtraColorTargets + 1);
+    REQUIRE_FALSE(r.has_value());
+    REQUIRE(r.error().code == ErrorCode::InvalidDesc);
+    REQUIRE(r.error().message.contains("extraColorCount"));
+}
+
+//======================================================================================================================
+TEST_CASE("a null extra color attachment is rejected", "[rhi][validate]") {
+    const FakeTexture color{64, 64};
+    FakeTexture motion{64, 64, Format::RG16Float};
+    const ExtraColorTarget extras[2] = {{.target = &motion}, {.target = nullptr}};
+
+    const auto r = validateExtraColorTargets(&color, extras, 2);
+    REQUIRE_FALSE(r.has_value());
+    REQUIRE(r.error().code == ErrorCode::InvalidDesc);
+    REQUIRE(r.error().message.contains("extraColor[1]"));
+}
+
+//======================================================================================================================
+TEST_CASE("an extra color attachment of a different extent is rejected", "[rhi][validate]") {
+    const FakeTexture color{64, 64};
+    FakeTexture motion{64, 32, Format::RG16Float};
+    const ExtraColorTarget extras[1] = {{.target = &motion}};
+
+    const auto r = validateExtraColorTargets(&color, extras, 1);
+    REQUIRE_FALSE(r.has_value());
+    REQUIRE(r.error().code == ErrorCode::InvalidDesc);
+    REQUIRE(r.error().message.contains("extent"));
+    REQUIRE(r.error().message.contains("64x64"));
+    REQUIRE(r.error().message.contains("64x32"));
+}
+
+//======================================================================================================================
+TEST_CASE("an extra color attachment with a non-renderable format is rejected", "[rhi][validate]") {
+    const FakeTexture color{64, 64};
+    FakeTexture lut{64, 64, Format::BC1Unorm};
+    const ExtraColorTarget extras[1] = {{.target = &lut}};
+
+    const auto r = validateExtraColorTargets(&color, extras, 1);
+    REQUIRE_FALSE(r.has_value());
+    REQUIRE(r.error().code == ErrorCode::InvalidDesc);
+    REQUIRE(r.error().message.contains("extraColor[0]"));
+    REQUIRE(r.error().message.contains("color-renderable"));
+}
+
+//======================================================================================================================
+TEST_CASE("extra color attachments matching the primary are accepted", "[rhi][validate]") {
+    const FakeTexture color{64, 64};
+    FakeTexture motion{64, 64, Format::RG16Float};
+    FakeTexture normal{64, 64, Format::RGBA8Unorm};
+    const ExtraColorTarget extras[2] = {{.target = &motion}, {.target = &normal}};
+
+    REQUIRE(validateExtraColorTargets(&color, extras, 2).has_value());
 }
 
 //======================================================================================================================
