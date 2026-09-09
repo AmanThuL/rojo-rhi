@@ -39,6 +39,11 @@ struct RenderPassDesc {
     /// primary lives.
     ExtraColorTarget extraColor[kMaxExtraColorTargets];
     uint32_t extraColorCount = 0; ///< Entries of `extraColor` the pass declares (<= the maximum).
+    /// Origin-anchored viewport and scissor; 0/0 means the whole attachment. Both zero or both
+    /// non-zero, neither larger than the attachments' extent. The load action still clears the
+    /// whole attachment, so texels outside the area hold the clear value.
+    uint32_t renderAreaWidth = 0;
+    uint32_t renderAreaHeight = 0; ///< Height of the origin-anchored render area; see the width.
     /// Names the pass in GPU captures and validation diagnostics. Backends provide a stable
     /// fallback for an empty label, but production passes should use a subsystem-qualified name.
     std::string_view label;

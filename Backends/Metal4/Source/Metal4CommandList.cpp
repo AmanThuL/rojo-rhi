@@ -158,6 +158,9 @@ void Metal4CommandList::beginRenderPass(const RenderPassDesc& desc) {
     const Result<void> extras =
         validateExtraColorTargets(desc.colorTarget, desc.extraColor, desc.extraColorCount);
     LMX_ASSERT(extras.has_value(), extras.error().message);
+    const Result<void> area = validateRenderArea(desc.colorTarget, desc.depthTarget,
+                                                 desc.renderAreaWidth, desc.renderAreaHeight);
+    LMX_ASSERT(area.has_value(), area.error().message);
     // Discarding the only attachment would make a depth-only pass produce no observable output.
     LMX_ASSERT(desc.colorTarget != nullptr || desc.storeDepth,
                "RenderPassDesc: a depth-only pass must set storeDepth -- it has no other output, "
@@ -238,6 +241,22 @@ void Metal4CommandList::beginRenderPass(const RenderPassDesc& desc) {
                                  0.0,
                                  1.0};
     m_encoder->setViewport(viewport);
+
+    // A render area draws into the attachment's origin-anchored corner: the viewport shrinks to it,
+    // and the scissor keeps a shader that ignores the viewport from writing the texels outside it.
+    // The full-area path sets no scissor at all, so passes that never ask for one encode exactly
+    // what they did before.
+    if (desc.renderAreaWidth != 0) {
+        const MTL::Viewport areaViewport{0.0,
+                                         0.0,
+                                         static_cast<double>(desc.renderAreaWidth),
+                                         static_cast<double>(desc.renderAreaHeight),
+                                         0.0,
+                                         1.0};
+        m_encoder->setViewport(areaViewport);
+        m_encoder->setScissorRect(
+            MTL::ScissorRect{0, 0, desc.renderAreaWidth, desc.renderAreaHeight});
+    }
 
     m_encoder->setArgumentTable(m_argumentTable, MTL::RenderStageVertex | MTL::RenderStageFragment);
 }

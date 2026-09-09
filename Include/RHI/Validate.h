@@ -47,6 +47,12 @@ Result<void> validateRenderPassTargets(const Texture* color, const Texture* dept
 Result<void> validateExtraColorTargets(const Texture* color, const ExtraColorTarget* extraColor,
                                        uint32_t extraColorCount);
 
+/// Validates a render pass's origin-anchored render area against the extent it draws into: the
+/// primary color attachment's, or a depth-only pass's depth attachment. A zero pair -- the whole
+/// attachment -- is always accepted; a half-set pair never is.
+Result<void> validateRenderArea(const Texture* color, const Texture* depth, uint32_t width,
+                                uint32_t height);
+
 /// Validates a subresource range against the texture it addresses, resolving the kAllMipLevels and
 /// kAllArrayLayers sentinels against that texture's own extents.
 Result<void> validateSubresourceRange(const Texture& texture, const TextureSubresourceRange& range);

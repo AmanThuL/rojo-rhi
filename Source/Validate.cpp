@@ -651,6 +651,38 @@ Result<void> validateRenderPassTargets(const Texture* color, const Texture* dept
 }
 
 //======================================================================================================================
+Result<void> validateRenderArea(const Texture* color, const Texture* depth, uint32_t width,
+                                uint32_t height) {
+    // Zero is the whole attachment, which is what every pass that never asked for a sub-region
+    // carries.
+    if (width == 0 && height == 0) {
+        return {};
+    }
+    // A half-set pair would reach Metal as a viewport one of whose sides is zero, rasterising
+    // nothing at all rather than the sub-rectangle the caller meant.
+    if (width == 0 || height == 0) {
+        return std::unexpected(
+            Error{ErrorCode::InvalidDesc,
+                  "RenderPassDesc: renderAreaWidth and renderAreaHeight must both be zero -- the "
+                  "whole attachment -- or both non-zero (got " +
+                      extentOf(width, height) + ")"});
+    }
+    // A depth-only pass has no colour attachment, so depth carries the extent the area sits in.
+    const Texture* extentSource = color != nullptr ? color : depth;
+    if (extentSource == nullptr) {
+        return invalid("RenderPassDesc: a render area needs an attachment to measure against -- "
+                       "set colorTarget, depthTarget, or both");
+    }
+    if (width > extentSource->width() || height > extentSource->height()) {
+        return std::unexpected(
+            Error{ErrorCode::InvalidDesc, "RenderPassDesc: render area " + extentOf(width, height) +
+                                              " does not fit the attachments' " +
+                                              extentOf(*extentSource) + " extent"});
+    }
+    return {};
+}
+
+//======================================================================================================================
 Result<void> validateExtraColorTargets(const Texture* color, const ExtraColorTarget* extraColor,
                                        uint32_t extraColorCount) {
     if (extraColorCount > kMaxExtraColorTargets) {

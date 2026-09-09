@@ -1348,6 +1348,64 @@ TEST_CASE("extra color attachments matching the primary are accepted", "[rhi][va
 }
 
 //======================================================================================================================
+// Zero is the "whole attachment" spelling, which is what a pass that never asked for a sub-region
+// carries. It stays valid whatever the attachment's extent is.
+TEST_CASE("an unset render area is accepted", "[rhi][validate]") {
+    const FakeTexture color{64, 64};
+
+    REQUIRE(validateRenderArea(&color, nullptr, 0, 0).has_value());
+}
+
+//======================================================================================================================
+// One zero is the dangerous half-set state: a width with no height would otherwise reach Metal as
+// a zero-height viewport that rasterises nothing.
+TEST_CASE("a render area with only one dimension set is rejected", "[rhi][validate]") {
+    const FakeTexture color{64, 64};
+
+    const auto r = validateRenderArea(&color, nullptr, 32, 0);
+    REQUIRE_FALSE(r.has_value());
+    REQUIRE(r.error().code == ErrorCode::InvalidDesc);
+    REQUIRE(r.error().message.contains("renderAreaWidth"));
+    REQUIRE(r.error().message.contains("renderAreaHeight"));
+}
+
+//======================================================================================================================
+// Width alone, so a helper that only ever compared heights would not pass.
+TEST_CASE("a render area wider than the color attachment is rejected", "[rhi][validate]") {
+    const FakeTexture color{64, 64};
+
+    const auto r = validateRenderArea(&color, nullptr, 65, 16);
+    REQUIRE_FALSE(r.has_value());
+    REQUIRE(r.error().code == ErrorCode::InvalidDesc);
+    // Both extents belong in the message: which one was too large is the actionable part.
+    REQUIRE(r.error().message.contains("65x16"));
+    REQUIRE(r.error().message.contains("64x64"));
+}
+
+//======================================================================================================================
+// A depth-only pass has no colour attachment, so depth is the only extent the area can be measured
+// against.
+TEST_CASE("a render area taller than a depth-only pass's attachment is rejected",
+          "[rhi][validate]") {
+    const FakeTexture depth{64, 64};
+
+    const auto r = validateRenderArea(nullptr, &depth, 16, 65);
+    REQUIRE_FALSE(r.has_value());
+    REQUIRE(r.error().code == ErrorCode::InvalidDesc);
+    REQUIRE(r.error().message.contains("16x65"));
+    REQUIRE(r.error().message.contains("64x64"));
+}
+
+//======================================================================================================================
+// The whole attachment expressed the long way: a full-extent area is a legal sub-rectangle, not an
+// off-by-one past the last texel.
+TEST_CASE("a render area matching the attachment extent is accepted", "[rhi][validate]") {
+    const FakeTexture color{64, 64};
+
+    REQUIRE(validateRenderArea(&color, nullptr, 64, 64).has_value());
+}
+
+//======================================================================================================================
 // The default range is the whole allocation, which is what a barrier with no byte detail means.
 TEST_CASE("a default buffer range covers the whole buffer", "[rhi]") {
     const FakeBuffer buffer{256};
