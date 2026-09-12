@@ -41,6 +41,9 @@ public:
     Metal4Device(const Metal4Device&) = delete;
     Metal4Device& operator=(const Metal4Device&) = delete;
 
+    const DeviceCapabilities& capabilities() const override { return m_capabilities; }
+    Result<std::unique_ptr<TemporalScaler>>
+    createTemporalScaler(const TemporalScalerDesc& desc) override;
     Result<std::unique_ptr<Swapchain>> createSwapchain(const SwapchainDesc& desc) override;
     Result<std::unique_ptr<Buffer>> createBuffer(const BufferDesc& desc,
                                                  const void* initialData) override;
@@ -121,6 +124,9 @@ private:
     // Owns the characters the deviceName() view points at -- MTL::Device::name()'s
     // utf8String() buffer is only valid while the autorelease pool that produced it lives.
     std::string m_deviceName;
+    DeviceCapabilities m_capabilities;
+    std::array<std::vector<std::shared_ptr<Metal4TemporalScalerState>>, kFramesInFlight>
+        m_temporalScalers;
 
     // Declaration order == creation order; see the ownership note above.
     NS::SharedPtr<MTL::Device> m_device;

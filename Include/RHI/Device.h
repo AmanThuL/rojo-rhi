@@ -12,6 +12,7 @@
 #include "RHI/Sampler.h"
 #include "RHI/ShaderLibrary.h"
 #include "RHI/Swapchain.h"
+#include "RHI/TemporalScaler.h"
 #include "RHI/Texture.h"
 
 #include <cstdint>
@@ -45,6 +46,12 @@ class Device {
 public:
     /// Destroys the device and its backend state.
     virtual ~Device() = default;
+    /// Returns optional capabilities fixed for this device lifetime.
+    virtual const DeviceCapabilities& capabilities() const = 0;
+    /// Creates a temporal scaler; invalid descriptors assert and unavailable creation returns an
+    /// error.
+    virtual Result<std::unique_ptr<TemporalScaler>>
+    createTemporalScaler(const TemporalScalerDesc& desc) = 0;
     /// Creates a swapchain for a native presentation surface.
     virtual Result<std::unique_ptr<Swapchain>> createSwapchain(const SwapchainDesc&) = 0;
     /// Creates a GPU buffer and optionally uploads its initial contents.

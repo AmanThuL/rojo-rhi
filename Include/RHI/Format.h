@@ -18,7 +18,8 @@ enum class Format {
     R8Unorm,         ///< Eight-bit normalized single channel.
     BC1Unorm,        ///< BC1-compressed normalized linear color.
     BC1Unorm_sRGB,   ///< BC1-compressed color with sRGB transfer on sampling.
-    D32Float         ///< 32-bit floating-point depth.
+    D32Float,        ///< 32-bit floating-point depth.
+    R16Float         ///< Half-precision single-channel linear data.
 };
 
 } // namespace lmx::rhi

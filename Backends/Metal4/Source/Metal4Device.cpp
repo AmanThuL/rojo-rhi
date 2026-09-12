@@ -4,6 +4,8 @@
 //----------------------------------------------------------------------------------------------------------------------
 #include "Metal4Device.h"
 
+#include "Metal4TemporalScaler.h"
+
 #include "Metal4DevicePrivate.h"
 #include "RHI/CaptureSchema.h"
 
@@ -177,6 +179,16 @@ Result<std::unique_ptr<Device>> Metal4Device::create(const DeviceDesc& desc) {
     }
 
     // Per-frame table and arena pointers are attached only while a frame is open.
+    if (MTLFX::TemporalScalerDescriptor::supportsMetal4FX(self->m_device.get())) {
+        // Apple reports output/input; the public capability uses content/output.
+        self->m_capabilities.temporalScaler = {
+            .available = true,
+            .minInputScale = 1.0f / MTLFX::TemporalScalerDescriptor::supportedInputContentMaxScale(
+                                        self->m_device.get()),
+            .maxInputScale = 1.0f / MTLFX::TemporalScalerDescriptor::supportedInputContentMinScale(
+                                        self->m_device.get()),
+            .name = "MetalFX Temporal"};
+    }
     self->m_commandList.emplace(self->m_commandBuffer.get());
 
     return self;
@@ -207,6 +219,9 @@ Metal4Device::~Metal4Device() {
     // declaration order in Metal4Device.h stays the contract, and this sequence must keep matching
     // it, so that no ordering invariant depends on which of the two actually did the release.
     m_commandList.reset();
+    for (auto& scalers : m_temporalScalers) {
+        scalers.clear();
+    }
     // m_frameTimestamps is the one gap in the sequence, and deliberately so: Metal4FrameTimestamps
     // declares the counter heap, so it opens its own pool around releasing it and needs nothing
     // from here.

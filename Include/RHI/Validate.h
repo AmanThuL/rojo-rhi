@@ -19,6 +19,12 @@
 
 namespace lmx::rhi {
 
+/// Validates scaler capacities, formats and content range against device support.
+Result<void> validate(const TemporalScalerDesc& desc, const TemporalScalerSupport& support);
+/// Validates a reconstruction frame against its scaler descriptor, including all texture shapes.
+Result<void> validateTemporalScale(const TemporalScalerDesc& desc,
+                                   const TemporalScaleParams& params);
+
 /// Validates a buffer descriptor before backend object creation.
 Result<void> validate(const BufferDesc& desc);
 /// Validates a texture descriptor before backend object creation.

@@ -6,6 +6,7 @@
 #include "RHI/Buffer.h"
 #include "RHI/GpuAddress.h"
 #include "RHI/RenderPass.h"
+#include "RHI/TemporalScaler.h"
 #include "RHI/Texture.h"
 
 #include <cstdint>
@@ -68,6 +69,9 @@ public:
 
     /// Destroys the command list through its owning device.
     virtual ~CommandList() = default;
+    /// Encodes one timed temporal reconstruction between passes in an open frame.
+    /// Textures must match the scaler descriptor; explicit barriers order their accesses.
+    virtual void temporalScale(TemporalScaler& scaler, const TemporalScaleParams& params) = 0;
     /// Begins a render pass using the supplied attachments and load actions.
     virtual void beginRenderPass(const RenderPassDesc& desc) = 0;
     /// Begins a compute pass. Inside it, bindComputePipeline, bindStorageBuffer,

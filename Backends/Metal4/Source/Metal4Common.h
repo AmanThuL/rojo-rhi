@@ -40,6 +40,8 @@ inline MTL::PixelFormat toMTL(Format format) {
         return MTL::PixelFormatRGBA16Float;
     case Format::RG16Float:
         return MTL::PixelFormatRG16Float;
+    case Format::R16Float:
+        return MTL::PixelFormatR16Float;
     case Format::R8Unorm:
         return MTL::PixelFormatR8Unorm;
     // Metal names the DXT1 formats BC1_RGBA rather than BC1_RGB: the one-bit-alpha and

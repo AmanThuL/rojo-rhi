@@ -11,6 +11,7 @@
 #include "RHI/Heap.h"
 #include "RHI/Sampler.h"
 #include "RHI/ShaderLibrary.h"
+#include "RHI/TemporalScaler.h"
 #include "RHI/Texture.h"
 
 #include "RHI/ComputePipeline.h"

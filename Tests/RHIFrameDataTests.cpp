@@ -39,6 +39,9 @@ struct ForwardingCommandList final : CommandList {
     using CommandList::bindFrameData;
 
     //==================================================================================================================
+    void temporalScale(TemporalScaler&, const TemporalScaleParams&) override {}
+
+    //==================================================================================================================
     void beginRenderPass(const RenderPassDesc&) override {}
 
     //==================================================================================================================

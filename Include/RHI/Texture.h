@@ -154,12 +154,14 @@ public:
 /// like the rest of this header (ADR 0004).
 /// Identifies texture use on either side of an explicit barrier.
 enum class TextureUse {
-    RenderTarget,   ///< Written as a render-pass attachment.
-    ShaderRead,     ///< Read by a shader.
-    StorageRead,    ///< Read through a storage binding.
-    StorageWrite,   ///< Written through a storage binding.
-    CopySource,     ///< Read by a copy command.
-    CopyDestination ///< Written by a copy command.
+    RenderTarget,    ///< Written as a render-pass attachment.
+    ShaderRead,      ///< Read by a shader.
+    StorageRead,     ///< Read through a storage binding.
+    StorageWrite,    ///< Written through a storage binding.
+    CopySource,      ///< Read by a copy command.
+    CopyDestination, ///< Written by a copy command.
+    ExternalRead,    ///< Read by an opaque RHI operation.
+    ExternalWrite    ///< Written by an opaque RHI operation.
 };
 
 } // namespace lmx::rhi

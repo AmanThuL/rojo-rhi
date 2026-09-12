@@ -33,6 +33,8 @@ std::string_view formatName(Format format) {
         return "RGBA16Float";
     case Format::RG16Float:
         return "RG16Float";
+    case Format::R16Float:
+        return "R16Float";
     case Format::R8Unorm:
         return "R8Unorm";
     case Format::BC1Unorm:

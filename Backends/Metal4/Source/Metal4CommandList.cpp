@@ -34,6 +34,9 @@ constexpr MTL::Stages kCopyStages = MTL::StageBlit | MTL::StageDispatch;
 // writes and shader reads happen in the fragment stage, storage access in a dispatch.
 MTL::Stages stagesOf(TextureUse use) {
     switch (use) {
+    case TextureUse::ExternalRead:
+    case TextureUse::ExternalWrite:
+        return MTL::StageAll;
     case TextureUse::RenderTarget:
         return MTL::StageFragment;
     case TextureUse::ShaderRead:
@@ -74,8 +77,8 @@ MTL::Stages stagesOf(BufferUse use) {
 
 //======================================================================================================================
 bool isWrite(TextureUse use) {
-    return use == TextureUse::RenderTarget || use == TextureUse::StorageWrite ||
-           use == TextureUse::CopyDestination;
+    return use == TextureUse::ExternalWrite || use == TextureUse::RenderTarget ||
+           use == TextureUse::StorageWrite || use == TextureUse::CopyDestination;
 }
 
 //======================================================================================================================
@@ -135,6 +138,10 @@ void Metal4CommandList::emitPendingBarrier(MTL4::CommandEncoder* encoder,
     // wide as the queue, the consuming side is exactly this pass, so a later pass of a different
     // kind is ordered by this barrier only where its stages happen to coincide, and callers owe it
     // one of its own instead of relying on that.
+    if (m_pendingTemporalFence != nullptr) {
+        encoder->waitForFence(m_pendingTemporalFence, consumerStages);
+        m_pendingTemporalFence = nullptr;
+    }
     if (m_pendingBarrierStages == MTL::Stages{}) {
         return;
     }
@@ -684,9 +691,10 @@ void Metal4CommandList::bufferBarrier(Buffer& buffer, const BufferRange& range, 
 }
 
 //======================================================================================================================
-void Metal4CommandList::resetForFrame(MTL4::ArgumentTable* argumentTable,
-                                      Metal4FrameArena* frameArena, Metal4FrameDataTally* tally,
-                                      Metal4FrameTimestamps* timestamps) {
+void Metal4CommandList::resetForFrame(
+    MTL4::ArgumentTable* argumentTable, Metal4FrameArena* frameArena, Metal4FrameDataTally* tally,
+    Metal4FrameTimestamps* timestamps,
+    std::vector<std::shared_ptr<Metal4TemporalScalerState>>* temporalScalers) {
     // Never retarget per-frame storage while an encoder can still reference the old slot.
     LMX_ASSERT(!inPass(), "resetForFrame: a pass is still open from the previous frame");
     LMX_ASSERT(argumentTable != nullptr, "resetForFrame: argument table must not be null");
@@ -700,6 +708,7 @@ void Metal4CommandList::resetForFrame(MTL4::ArgumentTable* argumentTable,
     m_frameArena = frameArena;
     m_frameDataTally = tally;
     m_timestamps = timestamps;
+    m_temporalScalers = temporalScalers;
 }
 
 //======================================================================================================================
@@ -715,6 +724,8 @@ void Metal4CommandList::endFrameReset() {
     // The slot itself outlives the frame -- the device reads its labels when the frame retires --
     // but this list must not be able to append to it outside a frame.
     m_timestamps = nullptr;
+    m_temporalScalers = nullptr;
+    m_pendingTemporalFence = nullptr;
     m_pendingBarrierStages = MTL::Stages{};
     m_pendingBarrierVisibility = MTL4::VisibilityOptions{};
 }

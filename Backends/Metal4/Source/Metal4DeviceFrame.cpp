@@ -104,6 +104,7 @@ CommandList& Metal4Device::beginFrame() {
     resolveRetiredPassTimings();
 
     MTL4::CommandAllocator* allocator = m_allocators[slot].get();
+    m_temporalScalers[slot].clear();
     allocator->reset();
     m_commandBuffer->beginCommandBuffer(allocator);
 
@@ -114,7 +115,7 @@ CommandList& Metal4Device::beginFrame() {
     timestamps.passLabels.clear();
     timestamps.frameNumber = 0;
     m_commandList->resetForFrame(m_argumentTables[slot].get(), &m_frameArenas[slot],
-                                 &m_frameDataTally, &timestamps);
+                                 &m_frameDataTally, &timestamps, &m_temporalScalers[slot]);
 
     m_frameOpen = true;
     return *m_commandList;

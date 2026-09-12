@@ -12,12 +12,14 @@
 #include "RHI/Texture.h"
 
 #include <cstdint>
+#include <memory>
 #include <string>
 #include <vector>
 
 namespace lmx::rhi::metal4 {
 
 class Metal4ComputePipeline;
+struct Metal4TemporalScalerState;
 
 // How many passes of one frame carry timestamps, counting every pass kind: a fixed per-frame
 // budget that a real frame is expected to stay under, and whose exhaustion is a hard error rather
@@ -105,6 +107,7 @@ public:
     Metal4CommandList(const Metal4CommandList&) = delete;
     Metal4CommandList& operator=(const Metal4CommandList&) = delete;
 
+    void temporalScale(TemporalScaler& scaler, const TemporalScaleParams& params) override;
     void beginRenderPass(const RenderPassDesc& desc) override;
     void beginComputePass(std::string_view label) override;
     void bindComputePipeline(ComputePipeline& pipeline) override;
@@ -152,7 +155,8 @@ public:
     // rather than per-frame, and is threaded through here so that endFrameReset drops it with
     // everything else. Must be called before any encoding in the frame; asserts no pass is open.
     void resetForFrame(MTL4::ArgumentTable* argumentTable, Metal4FrameArena* frameArena,
-                       Metal4FrameDataTally* tally, Metal4FrameTimestamps* timestamps);
+                       Metal4FrameDataTally* tally, Metal4FrameTimestamps* timestamps,
+                       std::vector<std::shared_ptr<Metal4TemporalScalerState>>* temporalScalers);
 
     // endFrame's half: forget the frame's table once its work is committed, so that
     // encoding after endFrame fails our assert rather than quietly writing a slot the GPU owns.
@@ -212,6 +216,8 @@ private:
     // table.
     bool inShaderPass() const { return inRenderPass() || inComputePass(); }
 
+    std::vector<std::shared_ptr<Metal4TemporalScalerState>>* m_temporalScalers = nullptr;
+    MTL::Fence* m_pendingTemporalFence = nullptr;
     MTL4::CommandBuffer* m_commandBuffer = nullptr;
     MTL4::ArgumentTable* m_argumentTable = nullptr;
     Metal4FrameArena* m_frameArena = nullptr;
