@@ -21,14 +21,4 @@ target("RHI")
     add_frameworks("Metal", "MetalFX", "QuartzCore", "Foundation")
     add_deps("Core")
 
--- Optional Dear ImGui renderer integration. Keeping this in a separate target lets the core RHI
--- build and link without ImGui while App opts into the editor-specific bridge explicitly.
-target("RHIMetal4ImGui")
-    set_kind("static")
-    add_files("Backends/Metal4/Source/Metal4ImGui.cpp")
-    add_files("Backends/Metal4/Source/ImGuiBackendContract.cpp")
-    add_includedirs("Backends/Metal4/ImGui/Include", {public = true})
-    add_includedirs("Backends/Metal4/Source")
-    add_includedirs("../ThirdParty/metal-cpp")
-    add_frameworks("Metal", "MetalFX", "QuartzCore", "Foundation")
-    add_deps("Core", "RHI", "ImGui")
+includes("Backends/Metal4/ImGui/xmake.lua")

@@ -4,6 +4,7 @@
 //----------------------------------------------------------------------------------------------------------------------
 #include "RHI/CaptureSchema.h"
 
+#include "Core/Json.h"
 #include "Core/Log.h"
 
 #include <cmath>
@@ -51,18 +52,7 @@ std::string_view formatName(Format format) {
 // Escape RFC 8259 control bytes while preserving existing UTF-8 label bytes.
 void appendJsonString(std::string& out, std::string_view text) {
     out += '"';
-    for (const char character : text) {
-        const auto byte = static_cast<unsigned char>(character);
-        if (byte == '"') {
-            out += "\\\"";
-        } else if (byte == '\\') {
-            out += "\\\\";
-        } else if (byte < 0x20) {
-            out += std::format("\\u{:04x}", static_cast<unsigned>(byte));
-        } else {
-            out += character;
-        }
-    }
+    appendJsonEscaped(out, text);
     out += '"';
 }
 
