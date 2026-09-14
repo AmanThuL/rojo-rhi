@@ -13,6 +13,12 @@
 
 namespace lmx::rhi::metal4 {
 
+/// Whether this process can produce GPU trace documents. Metal reads enabling state at launch.
+bool captureAvailable();
+
+/// The causal reason from the latest failed capture start; valid until the next start.
+std::string_view captureFailureReason();
+
 /// Begins a GPU capture and writes the resulting document to `outPath`.
 bool beginCapture(Device& device, std::string_view outPath);
 

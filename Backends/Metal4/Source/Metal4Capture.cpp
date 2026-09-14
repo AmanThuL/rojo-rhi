@@ -18,11 +18,26 @@ namespace {
 
 // MTLCaptureManager is process-global and supports one active capture.
 std::string g_capturePath;
+std::string g_captureFailure;
 
 } // namespace
 
 //======================================================================================================================
+bool captureAvailable() {
+    auto pool = NS::TransferPtr(NS::AutoreleasePool::alloc()->init());
+    auto* manager = MTL::CaptureManager::sharedCaptureManager();
+    return manager != nullptr &&
+           manager->supportsDestination(MTL::CaptureDestinationGPUTraceDocument);
+}
+
+//======================================================================================================================
+std::string_view captureFailureReason() {
+    return g_captureFailure;
+}
+
+//======================================================================================================================
 bool beginCapture(Device& device, std::string_view outPath) {
+    g_captureFailure.clear();
     NS::SharedPtr<NS::AutoreleasePool> pool = NS::TransferPtr(NS::AutoreleasePool::alloc()->init());
 
     MTL::CaptureManager* manager = MTL::CaptureManager::sharedCaptureManager();
@@ -30,12 +45,15 @@ bool beginCapture(Device& device, std::string_view outPath) {
 
     // Metal reads MTL_CAPTURE_ENABLED at launch; a refused capture requires process restart.
     if (!manager->supportsDestination(MTL::CaptureDestinationGPUTraceDocument)) {
+        g_captureFailure =
+            "Relaunch with MTL_CAPTURE_ENABLED=1 xmake run App to enable GPU capture.";
         LMX_LOG_WARN("GPU capture unavailable: this process cannot write a .gputrace document. "
                      "Relaunch with capture enabled in the environment, e.g. "
                      "`MTL_CAPTURE_ENABLED=1 xmake run App`");
         return false;
     }
     if (manager->isCapturing()) {
+        g_captureFailure = "A GPU capture is already in progress. Wait for it to finish.";
         LMX_LOG_WARN("GPU capture already in progress; ignoring the request");
         return false;
     }
@@ -43,11 +61,13 @@ bool beginCapture(Device& device, std::string_view outPath) {
     // Validate before remove_all: an empty path resolves to the working directory, while the
     // suffix independently restricts deletion to capture bundles.
     if (outPath.empty()) {
+        g_captureFailure = "Output path must not be empty.";
         LMX_LOG_ERROR("GPU capture: outPath must not be empty");
         return false;
     }
     constexpr std::string_view kRequiredSuffix = ".gputrace";
     if (!outPath.ends_with(kRequiredSuffix)) {
+        g_captureFailure = "Output path must end in .gputrace. Set LMX_CAPTURE_PATH and relaunch.";
         LMX_LOG_ERROR("GPU capture: outPath '{}' must end in '{}'", outPath, kRequiredSuffix);
         return false;
     }
@@ -56,6 +76,7 @@ bool beginCapture(Device& device, std::string_view outPath) {
     std::error_code pathError;
     std::filesystem::path path = std::filesystem::absolute(outPath, pathError);
     if (pathError) {
+        g_captureFailure = "Cannot resolve output path: " + pathError.message();
         LMX_LOG_ERROR("GPU capture: cannot resolve output path '{}': {}", outPath,
                       pathError.message());
         return false;
@@ -65,6 +86,7 @@ bool beginCapture(Device& device, std::string_view outPath) {
     std::error_code removeError;
     std::filesystem::remove_all(path, removeError);
     if (removeError) {
+        g_captureFailure = "Cannot replace capture document: " + removeError.message();
         LMX_LOG_ERROR("GPU capture: cannot remove the existing document at '{}': {}", path.string(),
                       removeError.message());
         return false;
@@ -83,6 +105,7 @@ bool beginCapture(Device& device, std::string_view outPath) {
     if (!manager->startCapture(desc.get(), &error)) {
         const NS::String* reason = error != nullptr ? error->localizedDescription() : nullptr;
         const char* utf8 = reason != nullptr ? reason->utf8String() : nullptr;
+        g_captureFailure = utf8 != nullptr ? utf8 : "Metal did not provide a failure reason.";
         LMX_LOG_ERROR("GPU capture failed to start: {}",
                       utf8 != nullptr ? utf8 : "no additional detail");
         return false;

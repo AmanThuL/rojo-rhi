@@ -23,8 +23,44 @@ TEST_CASE("beginCapture rejects bad paths without touching the filesystem", "[gp
     auto device = lmx::rhi::createDevice();
     REQUIRE(device.has_value());
     REQUIRE_FALSE(lmx::rhi::metal4::beginCapture(**device, ""));
-    REQUIRE_FALSE(lmx::rhi::metal4::beginCapture(**device, "frame.trace")); // not .gputrace
+    if (lmx::rhi::metal4::captureAvailable()) {
+        REQUIRE(lmx::rhi::metal4::captureFailureReason().find("empty") != std::string_view::npos);
+    } else {
+        REQUIRE(lmx::rhi::metal4::captureFailureReason().find("MTL_CAPTURE_ENABLED=1") !=
+                std::string_view::npos);
+    }
+    REQUIRE_FALSE(lmx::rhi::metal4::beginCapture(**device, "frame.trace"));
+    if (lmx::rhi::metal4::captureAvailable()) {
+        REQUIRE(lmx::rhi::metal4::captureFailureReason().find(".gputrace") !=
+                std::string_view::npos);
+    }
     REQUIRE_FALSE(std::filesystem::exists("frame.trace"));
+}
+
+//======================================================================================================================
+TEST_CASE("capture write failure retains a recoverable reason and leaves other files intact",
+          "[gpu]") {
+    auto device = lmx::rhi::createDevice();
+    REQUIRE(device.has_value());
+    if (!lmx::rhi::metal4::captureAvailable()) {
+        SKIP("write failure requires process capture capability");
+    }
+    const std::filesystem::path blocker = "lmx-capture-output-blocker.txt";
+    {
+        std::ofstream file(blocker);
+        REQUIRE(file.good());
+        file << "preserve this file";
+    }
+    REQUIRE_FALSE(lmx::rhi::metal4::beginCapture(**device, (blocker / "frame.gputrace").string()));
+    REQUIRE_FALSE(lmx::rhi::metal4::captureFailureReason().empty());
+    std::ifstream file(blocker);
+    std::stringstream contents;
+    contents << file.rdbuf();
+    REQUIRE(contents.str() == "preserve this file");
+    std::filesystem::remove(blocker);
+    REQUIRE_FALSE(lmx::rhi::metal4::beginCapture(**device, "frame.trace"));
+    REQUIRE(lmx::rhi::metal4::captureFailureReason().find("must end in .gputrace") !=
+            std::string_view::npos);
 }
 
 //======================================================================================================================
@@ -33,11 +69,18 @@ TEST_CASE("begin/endCapture writes a .gputrace document", "[gpu]") {
     REQUIRE(device.has_value());
     const std::filesystem::path path = "lmx-capture-test.gputrace";
     std::filesystem::remove_all(path);
-    if (!lmx::rhi::metal4::beginCapture(**device, path.string())) {
-        // Capture support can be absent (headless CI); the guard above is the required
-        // coverage, the happy path is best-effort. SKIP keeps that honest.
-        SKIP("programmatic capture unavailable in this environment");
+    if (!lmx::rhi::metal4::captureAvailable()) {
+        REQUIRE_FALSE(lmx::rhi::metal4::beginCapture(**device, path.string()));
+        REQUIRE(lmx::rhi::metal4::captureFailureReason().find("MTL_CAPTURE_ENABLED=1") !=
+                std::string_view::npos);
+        REQUIRE_FALSE(std::filesystem::exists(path));
+        return;
     }
+    REQUIRE(lmx::rhi::metal4::beginCapture(**device, path.string()));
+    REQUIRE(lmx::rhi::metal4::captureFailureReason().empty());
+    REQUIRE_FALSE(lmx::rhi::metal4::beginCapture(**device, path.string()));
+    REQUIRE(lmx::rhi::metal4::captureFailureReason().find("already in progress") !=
+            std::string_view::npos);
     (*device)->beginFrame();
     (*device)->endFrame(nullptr);
     (*device)->waitIdle();
@@ -53,9 +96,10 @@ TEST_CASE("endCapture writes the schema sidecar next to the bundle", "[gpu]") {
     const std::filesystem::path bundle = "lmx-sidecar-test.gputrace";
     std::filesystem::remove_all(bundle);
     std::filesystem::remove(bundle.string() + ".schema.json");
-    if (!lmx::rhi::metal4::beginCapture(**device, bundle.string())) {
+    if (!lmx::rhi::metal4::captureAvailable()) {
         SKIP("programmatic capture unavailable in this environment");
     }
+    REQUIRE(lmx::rhi::metal4::beginCapture(**device, bundle.string()));
     (*device)->beginFrame();
     (*device)->endFrame(nullptr);
     (*device)->waitIdle();
@@ -119,9 +163,10 @@ TEST_CASE("capture bundle carries a labeled texture's bytes", "[gpu][spike]") {
 
     const std::filesystem::path bundle = "lmx-spike.gputrace";
     std::filesystem::remove_all(bundle);
-    if (!lmx::rhi::metal4::beginCapture(**device, bundle.string())) {
+    if (!lmx::rhi::metal4::captureAvailable()) {
         SKIP("programmatic capture unavailable in this environment");
     }
+    REQUIRE(lmx::rhi::metal4::beginCapture(**device, bundle.string()));
     CommandList& commands = (*device)->beginFrame();
     commands.beginRenderPass({.colorTarget = target->get(),
                               .clearColor = {0.0f, 0.0f, 0.0f, 1.0f},
