@@ -75,6 +75,12 @@ Result<void> validateBufferRange(const Buffer& buffer, const BufferRange& range)
 /// against the buffer it addresses.
 Result<void> validateBufferBytes(const Buffer& buffer, uint64_t offset, uint64_t size);
 
+/// Validates a CPU upload against the allocation and its descriptor's cpuWrite permission.
+/// Rejects null data, empty ranges, and any range outside the allocation; synchronization remains
+/// the caller's responsibility under Buffer::write's contract.
+Result<void> validateBufferWrite(const Buffer& buffer, bool cpuWrite, uint64_t offset,
+                                 const void* data, uint64_t size);
+
 /// Validates a buffer-to-buffer copy: both ranges against their allocations, and the two against
 /// each other when they name the same buffer.
 Result<void> validateBufferCopy(const Buffer& source, uint64_t sourceOffset,

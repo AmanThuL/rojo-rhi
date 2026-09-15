@@ -317,6 +317,18 @@ Result<void> validateBufferBytes(const Buffer& buffer, uint64_t offset, uint64_t
 }
 
 //======================================================================================================================
+Result<void> validateBufferWrite(const Buffer& buffer, bool cpuWrite, uint64_t offset,
+                                 const void* data, uint64_t size) {
+    if (!cpuWrite) {
+        return invalid("Buffer::write: buffer was not created with BufferDesc.cpuWrite");
+    }
+    if (data == nullptr) {
+        return invalid("Buffer::write: source data must not be null");
+    }
+    return validateBufferBytes(buffer, offset, size);
+}
+
+//======================================================================================================================
 Result<void> validateBufferCopy(const Buffer& source, uint64_t sourceOffset,
                                 const Buffer& destination, uint64_t destinationOffset,
                                 uint64_t size) {

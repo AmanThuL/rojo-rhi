@@ -96,6 +96,16 @@ MTL::Size extentOf(const TextureCopyRegion& region) {
     return MTL::Size::Make(region.width, region.height, region.depth);
 }
 
+//======================================================================================================================
+void clearTextureBindings(MTL4::ArgumentTable* table) {
+    // A recycled table can still name retired transient textures in slots this pass never uses.
+    // Draws and dispatches snapshot their bindings, so clearing here preserves earlier work and
+    // keeps unused texture IDs out of captured render-encoder resource bindings.
+    for (uint32_t slot = 0; slot < CommandList::kMaxTextureBindings; ++slot) {
+        table->setTexture(MTL::ResourceID{}, slot);
+    }
+}
+
 } // namespace
 
 //======================================================================================================================
@@ -265,6 +275,7 @@ void Metal4CommandList::beginRenderPass(const RenderPassDesc& desc) {
             MTL::ScissorRect{0, 0, desc.renderAreaWidth, desc.renderAreaHeight});
     }
 
+    clearTextureBindings(m_argumentTable);
     m_encoder->setArgumentTable(m_argumentTable, MTL::RenderStageVertex | MTL::RenderStageFragment);
 }
 
@@ -441,6 +452,7 @@ void Metal4CommandList::beginComputePass(std::string_view label) {
 
     emitPendingBarrier(m_computeEncoder.get(), MTL::StageDispatch);
 
+    clearTextureBindings(m_argumentTable);
     m_computeEncoder->setArgumentTable(m_argumentTable);
 }
 

@@ -19,6 +19,7 @@ struct BufferDesc {
     bool storageRead = false;  ///< Enables shader reads through a storage binding.
     bool storageWrite = false; ///< Enables shader writes through a storage binding.
     bool cpuReadback = false;  ///< Enables blocking CPU readback of the buffer's contents.
+    bool cpuWrite = false;     ///< Enables host-visible uploads through Buffer::write.
     std::string_view label;    ///< Diagnostic object label.
 };
 /// Provides access to an immutable-size GPU buffer.
@@ -33,6 +34,13 @@ public:
     /// the range (Device::waitIdle) -- this call performs no synchronization of its own.
     /// Copies the first `outSize` bytes of the buffer into `out` after GPU work has completed.
     virtual void readback(void* out, uint64_t outSize) = 0;
+    /// Copies nonzero `size` bytes from `data` into the in-bounds range starting at `offset`.
+    /// Requires cpuWrite and non-null data; misuse asserts. The caller must ensure no submitted
+    /// GPU work still reads or writes the range, using frame-slot pacing or Device::waitIdle.
+    /// This call performs no synchronization. Paced scene tables are the first upload consumer;
+    /// the portable allocation is host-visible memory readable by the GPU, directly or via a
+    /// backend-owned copy, so discrete-memory backends need not expose device-local mapping.
+    virtual void write(uint64_t offset, const void* data, uint64_t size) = 0;
 };
 
 /// BufferRange::size: every byte from `offset` to the end of the allocation.

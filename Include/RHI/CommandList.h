@@ -55,9 +55,8 @@ inline constexpr uint64_t kFrameDataAlignment = 256;
 ///
 /// Exactly one pass is open at a time: every command below documents the scope it is valid in, and
 /// calling it outside that scope is a sequencing bug the backend asserts on rather than a failure
-/// it reports. Bindings live in the frame's argument table and therefore survive across passes of
-/// the frame; a pass that depends on a slot binds it rather than inheriting whatever an earlier
-/// pass left there.
+/// it reports. Each pass binds every slot it depends on; contents in slots it does not bind are
+/// unspecified. A pass must not inherit bindings from earlier passes or frames.
 class CommandList {
 public:
     /// Number of buffer slots in the shared argument-table buffer namespace.

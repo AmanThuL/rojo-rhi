@@ -74,8 +74,8 @@ public:
     /// cpuReadback and there is no upload span -- and it must not outlive the heap.
     virtual Result<std::unique_ptr<Texture>> createPlacedTexture(Heap&, uint64_t offset,
                                                                  const TextureDesc&) = 0;
-    /// The buffer counterpart of createPlacedTexture, on the same terms and with bufferSizeAlign as
-    /// the size and alignment source.
+    /// The buffer counterpart of createPlacedTexture; cpuWrite is also unsupported on private
+    /// heaps. Uses the same terms and bufferSizeAlign as the size and alignment source.
     virtual Result<std::unique_ptr<Buffer>> createPlacedBuffer(Heap&, uint64_t offset,
                                                                const BufferDesc&) = 0;
 

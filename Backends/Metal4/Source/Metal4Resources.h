@@ -59,7 +59,7 @@ public:
                  NS::SharedPtr<MTL::ResidencySet> residency)
         : m_buffer(std::move(buffer)), m_storageRead(desc.storageRead),
           m_storageWrite(desc.storageWrite), m_cpuReadback(desc.cpuReadback),
-          m_residency(std::move(residency), m_buffer.get()) {}
+          m_cpuWrite(desc.cpuWrite), m_residency(std::move(residency), m_buffer.get()) {}
 
     // Drops this buffer's capture-schema entry, then releases the Metal buffer explicitly inside
     // a pool per the destructor rule in Metal4Common.h. Identity contract with
@@ -70,6 +70,7 @@ public:
 
     uint64_t size() const override { return m_buffer->length(); }
     void readback(void* out, uint64_t outSize) override;
+    void write(uint64_t offset, const void* data, uint64_t size) override;
 
     MTL::Buffer* handle() const { return m_buffer.get(); }
 
@@ -86,6 +87,7 @@ private:
     bool m_storageRead = false;
     bool m_storageWrite = false;
     bool m_cpuReadback = false;
+    bool m_cpuWrite = false;
     ResidencyRegistration m_residency;
 };
 

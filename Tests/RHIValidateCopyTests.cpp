@@ -288,3 +288,25 @@ TEST_CASE("a texture copy between disjoint regions of one subresource is accepte
                                 {.x = 32, .y = 32, .width = 32, .height = 32})
                 .has_value());
 }
+
+//======================================================================================================================
+TEST_CASE("CPU buffer writes require upload permission and a real source range",
+          "[rhi][scene-tables]") {
+    const FakeBuffer buffer{256};
+    const uint32_t value = 42;
+    REQUIRE(validateBufferWrite(buffer, true, 0, &value, sizeof(value)));
+    REQUIRE(validateBufferWrite(buffer, true, 252, &value, sizeof(value)));
+
+    const auto denied = validateBufferWrite(buffer, false, 0, &value, sizeof(value));
+    REQUIRE_FALSE(denied);
+    REQUIRE(denied.error().code == ErrorCode::InvalidDesc);
+    REQUIRE(denied.error().message.contains("cpuWrite"));
+    REQUIRE_FALSE(validateBufferWrite(buffer, true, 0, nullptr, sizeof(value)));
+    REQUIRE_FALSE(validateBufferWrite(buffer, true, 0, &value, 0));
+    REQUIRE_FALSE(validateBufferWrite(buffer, true, 256, &value, sizeof(value)));
+    REQUIRE_FALSE(validateBufferWrite(buffer, true, 253, &value, sizeof(value)));
+    REQUIRE_FALSE(
+        validateBufferWrite(buffer, true, 8, &value, std::numeric_limits<uint64_t>::max()));
+    REQUIRE_FALSE(validateBufferWrite(buffer, true, std::numeric_limits<uint64_t>::max(), &value,
+                                      sizeof(value)));
+}

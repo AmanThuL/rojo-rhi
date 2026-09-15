@@ -6,7 +6,9 @@
 
 #include "Core/Assert.h"
 #include "RHI/CaptureSchema.h"
+#include "RHI/Validate.h"
 
+#include <cstddef>
 #include <cstring>
 #include <string>
 #include <utility>
@@ -65,6 +67,13 @@ Metal4Heap::~Metal4Heap() {
     NS::SharedPtr<NS::AutoreleasePool> pool = NS::TransferPtr(NS::AutoreleasePool::alloc()->init());
     m_residency.reset();
     m_heap.reset();
+}
+
+//======================================================================================================================
+void Metal4Buffer::write(uint64_t offset, const void* data, uint64_t size) {
+    const auto valid = validateBufferWrite(*this, m_cpuWrite, offset, data, size);
+    LMX_ASSERT(valid.has_value(), valid.error().message);
+    std::memcpy(static_cast<std::byte*>(m_buffer->contents()) + offset, data, size);
 }
 
 //======================================================================================================================

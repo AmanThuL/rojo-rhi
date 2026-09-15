@@ -308,6 +308,11 @@ Result<std::unique_ptr<Buffer>> Metal4Device::createPlacedBuffer(Heap& heap, uin
                     "createPlacedBuffer: a placed buffer is device-private, so BufferDesc."
                     "cpuReadback cannot be honoured");
     }
+    if (desc.cpuWrite) {
+        return fail(ErrorCode::InvalidDesc,
+                    "createPlacedBuffer: a placed buffer is device-private, so BufferDesc."
+                    "cpuWrite cannot be honoured");
+    }
     if (auto ok = validatePlacement(heap, offset, bufferSizeAlign(desc)); !ok) {
         return std::unexpected(ok.error());
     }
