@@ -60,7 +60,7 @@ inline constexpr uint64_t kFrameDataAlignment = 256;
 class CommandList {
 public:
     /// Number of buffer slots in the shared argument-table buffer namespace.
-    static constexpr uint32_t kMaxBufferBindings = 8;
+    static constexpr uint32_t kMaxBufferBindings = 16;
     /// Number of texture slots in the argument-table texture namespace.
     static constexpr uint32_t kMaxTextureBindings = 16;
     /// Number of sampler slots in the argument-table sampler namespace.

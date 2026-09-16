@@ -24,7 +24,7 @@ TEST_CASE("BufferDesc with a non-zero size is accepted", "[rhi]") {
 //======================================================================================================================
 // Binding capacities are part of the public contract because slot indices are caller supplied.
 TEST_CASE("argument table binding capacities are public", "[rhi]") {
-    STATIC_REQUIRE(CommandList::kMaxBufferBindings == 8);
+    STATIC_REQUIRE(CommandList::kMaxBufferBindings == 16);
     STATIC_REQUIRE(CommandList::kMaxTextureBindings == 16);
     STATIC_REQUIRE(CommandList::kMaxSamplerBindings == 8);
 }
