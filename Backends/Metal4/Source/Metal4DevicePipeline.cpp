@@ -175,18 +175,20 @@ Result<std::unique_ptr<ShaderLibrary>> Metal4Device::loadShaderLibrary(std::stri
         }
         auto options = NS::TransferPtr(MTL::CompileOptions::alloc()->init());
         options->setLanguageVersion(kShaderLanguageVersion);
-        if (sourcePath.filename().string().starts_with("Visibility")) {
+        const auto filename = sourcePath.filename().string();
+        const bool safeMath =
+            filename.starts_with("Visibility") ||
+            (filename.starts_with("Occlusion") && filename != "OcclusionReference.metal") ||
+            filename.starts_with("Hzb");
+        if (safeMath) {
             options->setMathMode(MTL::MathModeSafe);
             options->setMathFloatingPointFunctions(MTL::MathFloatingPointFunctionsPrecise);
         }
 
         error = nullptr;
-        NS::SharedPtr<MTL::Library> library = NS::TransferPtr(
-            m_device->newLibrary(makeString(sourcePath.filename().string().starts_with("Visibility")
-                                                ? "#pragma clang fp contract(off)\n" + *source
-                                                : *source)
-                                     .get(),
-                                 options.get(), &error));
+        NS::SharedPtr<MTL::Library> library = NS::TransferPtr(m_device->newLibrary(
+            makeString(safeMath ? "#pragma clang fp contract(off)\n" + *source : *source).get(),
+            options.get(), &error));
         if (!library) {
             return fail(ErrorCode::ShaderLoadFailed, "failed to compile shader source '" +
                                                          sourcePath.string() +

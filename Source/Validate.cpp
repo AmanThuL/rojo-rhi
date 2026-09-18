@@ -129,6 +129,7 @@ uint32_t bytesPerPixel(Format format) {
     case Format::RGBA8Unorm_sRGB:
         return 4;
     case Format::RG16Float:
+    case Format::R32Float:
         return 4;
     case Format::R16Float:
         return 2;
@@ -152,7 +153,8 @@ uint32_t bytesPerPixel(Format format) {
 // excluded.
 bool isStorageFormat(Format format) {
     return format == Format::RGBA8Unorm || format == Format::RGBA16Float ||
-           format == Format::RG16Float || format == Format::R8Unorm || format == Format::R16Float;
+           format == Format::RG16Float || format == Format::R8Unorm || format == Format::R16Float ||
+           format == Format::R32Float;
 }
 
 //======================================================================================================================
@@ -198,9 +200,10 @@ Result<void> validate(const TextureDesc& desc) {
                        "storageRead, storageWrite, or cpuReadback");
     }
     if ((desc.storageRead || desc.storageWrite) && !isStorageFormat(desc.format)) {
-        return invalid("TextureDesc storage usage requires a format the hardware can read and "
-                       "write without conversion (RGBA8Unorm, RGBA16Float, RG16Float, R8Unorm or "
-                       "R16Float); sRGB, block-compressed and depth formats are not among them");
+        return invalid(
+            "TextureDesc storage usage requires a format the hardware can read and "
+            "write without conversion (RGBA8Unorm, RGBA16Float, RG16Float, R8Unorm or "
+            "R16Float, R32Float); sRGB, block-compressed and depth formats are not among them");
     }
     if (desc.renderTarget && !isColorRenderableFormat(desc.format) && !isDepthFormat(desc.format)) {
         return invalid("TextureDesc.renderTarget requires a color-renderable or depth format");
