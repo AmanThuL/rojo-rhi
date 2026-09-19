@@ -246,7 +246,13 @@ FIXTURE = {
     "RHI/Backends/Metal4/ImGui/Include/RHI/Metal4/Metal4ImGui.h": '#include "RHI/Device.h"\n',
     "RHI/Source/Base/Assert.h":
         '#define LMX_ASSERT(c) LMX_LOG_ERROR("x")\nconst char* k = "lmx.pass.unnamed";\n',
-    "RHI/xmake/targets.lua": 'target("RHI")\ntarget("RHITests")\nadd_rules("rhi_slang2metallib")\n',
+    "RHI/xmake/targets.lua":
+        '-- keeps #include "RHI/..." working beside RHI/xmake.lua\ntarget("RHI")\n'
+        'target("RHITests")\nadd_rules("rhi_slang2metallib")\n',
+    "RHI/Tools/check_rhi_headers.py": 'H = INCLUDE.glob("RHI/**/*.h")\nI = ROOT / "RHI"\n',
+    "RHI/Tools/ImGuiBufferProbe/main.mm": "#include LMX_IMGUI_BACKEND_SOURCE\n",
+    "RHI/Tools/ImGuiBufferProbe/run.py":
+        "# RHI/Tools/ImGuiBufferProbe/run.py\nD = f'-DLMX_IMGUI_BACKEND_SOURCE={s}'\n",
     "Source/App/Shell.cpp":
         '#include "RHI/Device.h"\nnamespace lmx::app {\nvoid f(rhi::Device&, lmx::rhi::Queue&);\n'
         'int a = sprhi::x + std::rhi::y;\nconst char* l = "lmx.pass.scene";\nLMX_ASSERT(1);\n}\n',
@@ -255,8 +261,19 @@ FIXTURE = {
         '{"includeRoots": ["RHI/Include"], "asset": ["RHI/Format.h"], '
         '"shell": ["RHI/Metal4/Metal4ImGui.h"], "tests": ["RHI/Tests/RhiGpuTestSupport.h"], '
         '"targets": ["RHI", "RHIMetal4ImGui", "RHITests"], "forbidUndefined": "lmx::rhi::"}\n',
-    "Tools/tests/test_x.py": 'A = "RHI/Include/RHI/Device.h"\nB = "-IRHI/Include"\n',
-    "docs/note.md": "RHI/ and lmx::rhi and RHITests stay in prose.\n",
+    "Tools/tests/test_x.py":
+        'A = "RHI/Include/RHI/Device.h"\nB = "-IRHI/Include"\n'
+        "C = 'RHI/Metal4/Metal4ImGui.h'\n"
+        """D = '#include "RHI/Device.h"\\n#include "RHI/Source/Base/Log.h"'\n"""
+        "# `RHI/RHI.h` names a header\n",
+    "Tools/tests/test_module_deps.py":
+        'T = {"RHI": {"deps": []}}\nE = [\n'
+        '    "TextureBake: depends on RHI outside its allowed set",\n'
+        '    "TextureBake: depends on Render outside its allowed set",\n]\n'
+        'F = ["TextureBake: depends on RHI outside its allowed set"]\n',
+    "docs/note.md": "RHI/ and lmx::rhi and RHITests stay in prose.\n"
+                    "[RHI/Device.h](../../RHI/Include/RHI/Device.h) "
+                    "[probe](../RHI/Tools/README.md)\n",
 }
 EXPECTED = {
     "RojoRHI/Include/rojoRHI/Device.h": "namespace rojoRHI { struct Device; }\n",
@@ -266,7 +283,13 @@ EXPECTED = {
         '#define ROJORHI_ASSERT(c) ROJORHI_LOG_ERROR("x")\n'
         'const char* k = "rojorhi.pass.unnamed";\n',
     "RojoRHI/xmake/targets.lua":
-        'target("RojoRHI")\ntarget("RojoRHITests")\nadd_rules("rojorhi_slang2metallib")\n',
+        '-- keeps #include <rojoRHI/...> working beside RojoRHI/xmake.lua\ntarget("RojoRHI")\n'
+        'target("RojoRHITests")\nadd_rules("rojorhi_slang2metallib")\n',
+    "RojoRHI/Tools/check_rhi_headers.py":
+        'H = INCLUDE.glob("rojoRHI/**/*.h")\nI = ROOT / "RojoRHI"\n',
+    "RojoRHI/Tools/ImGuiBufferProbe/main.mm": "#include ROJORHI_IMGUI_BACKEND_SOURCE\n",
+    "RojoRHI/Tools/ImGuiBufferProbe/run.py":
+        "# RojoRHI/Tools/ImGuiBufferProbe/run.py\nD = f'-DROJORHI_IMGUI_BACKEND_SOURCE={s}'\n",
     "Source/App/Shell.cpp":
         "#include <rojoRHI/Device.h>\nnamespace lmx::app {\n"
         "void f(rojoRHI::Device&, rojoRHI::Queue&);\n"
@@ -278,8 +301,19 @@ EXPECTED = {
         '"tests": ["RojoRHI/Tests/RhiGpuTestSupport.h"], '
         '"targets": ["RojoRHI", "RojoRHIMetal4ImGui", "RojoRHITests"], '
         '"forbidUndefined": "rojoRHI::"}\n',
-    "Tools/tests/test_x.py": 'A = "RojoRHI/Include/rojoRHI/Device.h"\nB = "-IRojoRHI/Include"\n',
-    "docs/note.md": "RHI/ and lmx::rhi and RHITests stay in prose.\n",
+    "Tools/tests/test_x.py":
+        'A = "RojoRHI/Include/rojoRHI/Device.h"\nB = "-IRojoRHI/Include"\n'
+        "C = 'rojoRHI/Metal4/Metal4ImGui.h'\n"
+        """D = '#include "rojoRHI/Device.h"\\n#include "RojoRHI/Source/Base/Log.h"'\n"""
+        "# `rojoRHI/RHI.h` names a header\n",
+    "Tools/tests/test_module_deps.py":
+        'T = {"RojoRHI": {"deps": []}}\nE = [\n'
+        '    "TextureBake: depends on Render outside its allowed set",\n'
+        '    "TextureBake: depends on RojoRHI outside its allowed set",\n]\n'
+        'F = ["TextureBake: depends on RojoRHI outside its allowed set"]\n',
+    "docs/note.md": "RHI/ and lmx::rhi and RHITests stay in prose.\n"
+                    "[RHI/Device.h](../../RojoRHI/Include/rojoRHI/Device.h) "
+                    "[probe](../RojoRHI/Tools/README.md)\n",
 }
 
 
