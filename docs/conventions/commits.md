@@ -1,6 +1,6 @@
 # Commit Conventions
 
-**Status**: Proposed
+**Status**: Accepted
 
 ## Messages
 

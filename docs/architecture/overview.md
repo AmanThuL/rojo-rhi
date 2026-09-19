@@ -1,6 +1,6 @@
 # Architecture Overview
 
-**Status**: Proposed
+**Status**: Accepted
 
 This page describes RojoRHI's shape after the import from Luminex; today the repository holds
 documents only, with no source, build or shader file.

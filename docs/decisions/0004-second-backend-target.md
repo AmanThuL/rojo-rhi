@@ -1,6 +1,6 @@
 # ADR 0004: D3D12 is the design target for a second backend
 
-**Status**: Proposed
+**Status**: Accepted (2026-09-19)
 
 **Restates**: Luminex ADR 0007, "D3D12 is the intended second backend"
 
