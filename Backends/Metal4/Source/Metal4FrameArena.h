@@ -64,7 +64,7 @@ public:
     // unit. Everything past that case lives in allocateGrown(), which stays out of line.
     Metal4FrameDataBlock allocate(uint64_t size, uint64_t alignment) {
         ROJORHI_ASSERT(!m_pages.empty(),
-                   "frame arena: allocate before the slot's first page was created");
+                       "frame arena: allocate before the slot's first page was created");
         // Aligning the address rather than the offset keeps the contract the caller was given --
         // the returned GPU address is a multiple of `alignment` -- true whatever a page base is.
         Page& page = m_pages[m_activePage];

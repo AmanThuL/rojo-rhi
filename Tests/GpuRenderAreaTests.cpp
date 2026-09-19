@@ -24,8 +24,7 @@ makeRenderAreaPipeline(rojoRHI::Device& device, rojoRHI::ShaderLibrary& library)
 // blue and the fragment stage is red, so every readback below reads one or the other.
 std::vector<uint8_t> drawWithRenderArea(rojoRHI::Device& device,
                                         rojoRHI::GraphicsPipeline& pipeline,
-                                        rojoRHI::Texture& target, uint32_t width,
-                                        uint32_t height) {
+                                        rojoRHI::Texture& target, uint32_t width, uint32_t height) {
     rojoRHI::CommandList& commands = device.beginFrame();
     commands.beginRenderPass({.colorTarget = &target,
                               .clearColor = {0.0f, 0.0f, 1.0f, 1.0f},
@@ -130,10 +129,10 @@ TEST_CASE("an unset render area covers the whole attachment", "[gpu][rhi]") {
 }
 
 //======================================================================================================================
-// An area past the attachment is caller misuse, which beginRenderPass reports through ROJORHI_ASSERT
-// and so cannot be provoked from a test. The condition it asserts on is the validate function, so
-// that is what this checks -- here rather than in the CPU-only suite, because a depth-only pass's
-// attachment is a real device texture.
+// An area past the attachment is caller misuse, which beginRenderPass reports through
+// ROJORHI_ASSERT and so cannot be provoked from a test. The condition it asserts on is the validate
+// function, so that is what this checks -- here rather than in the CPU-only suite, because a
+// depth-only pass's attachment is a real device texture.
 TEST_CASE("a render area past a depth-only pass's attachment is rejected", "[gpu][rhi]") {
     using namespace rojoRHI;
 

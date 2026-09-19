@@ -16,9 +16,9 @@ double Metal4Device::passMilliseconds(uint64_t beginTicks, uint64_t endTicks) co
     // An entry the GPU never wrote still holds the value invalidateCounterRange left there.
     // Reporting a duration for one would be inventing a measurement.
     ROJORHI_ASSERT(beginTicks != MTL::CounterErrorValue && endTicks != MTL::CounterErrorValue,
-               "pass timing: the GPU left a timestamp of an encoded pass unwritten");
+                   "pass timing: the GPU left a timestamp of an encoded pass unwritten");
     ROJORHI_ASSERT(endTicks >= beginTicks,
-               "pass timing: a pass ended at an earlier GPU timestamp than it began");
+                   "pass timing: a pass ended at an earlier GPU timestamp than it began");
     return static_cast<double>(endTicks - beginTicks) * 1000.0 /
            static_cast<double>(m_timestampTicksPerSecond);
 }
@@ -54,9 +54,9 @@ void Metal4Device::resolveRetiredPassTimings() {
     const NS::UInteger entryCount = newest->passLabels.size() * 2;
     NS::Data* resolved = newest->heap->resolveCounterRange(NS::Range::Make(0, entryCount));
     ROJORHI_ASSERT(resolved != nullptr,
-               "beginFrame: the timestamp heap of a retired frame refused to resolve");
+                   "beginFrame: the timestamp heap of a retired frame refused to resolve");
     ROJORHI_ASSERT(resolved->length() == entryCount * sizeof(MTL4::TimestampHeapEntry),
-               "beginFrame: the resolved timestamp heap is not a plain array of heap entries");
+                   "beginFrame: the resolved timestamp heap is not a plain array of heap entries");
     const auto* entries = static_cast<const MTL4::TimestampHeapEntry*>(resolved->bytes());
 
     m_passTimings.reserve(newest->passLabels.size());
@@ -81,7 +81,7 @@ CommandList& Metal4Device::beginFrame() {
         const uint64_t completedFrame = m_frameNumber - kFramesInFlight;
         const bool signaled = m_frameEvent->waitUntilSignaledValue(completedFrame, kGpuTimeoutMs);
         ROJORHI_ASSERT(signaled, "beginFrame: the GPU did not finish the frame that owns this "
-                             "frame's command allocator within the timeout");
+                                 "frame's command allocator within the timeout");
     }
 
     // Allocator, argument table, and frame-data arena share the same retirement proof.
@@ -92,12 +92,13 @@ CommandList& Metal4Device::beginFrame() {
     // blocks are spread over however many pages that frame needed, so the diagnostic names its own
     // page and byte counts rather than a single ring's.
     const FrameArenaUse& lastArena = m_frameArenaUse[slot];
-    ROJORHI_ASSERT(m_frameEvent->signaledValue() >= lastArena.frameNumber,
-               std::format("beginFrame: frame {} is about to reset the frame-data arena of slot {} "
-                           "still holding {} bytes across {} page(s) of frame {}, but the GPU has "
-                           "only retired through frame {} -- frame pacing is broken",
-                           m_frameNumber, slot, lastArena.bytesUsed, lastArena.pagesUsed,
-                           lastArena.frameNumber, m_frameEvent->signaledValue()));
+    ROJORHI_ASSERT(
+        m_frameEvent->signaledValue() >= lastArena.frameNumber,
+        std::format("beginFrame: frame {} is about to reset the frame-data arena of slot {} "
+                    "still holding {} bytes across {} page(s) of frame {}, but the GPU has "
+                    "only retired through frame {} -- frame pacing is broken",
+                    m_frameNumber, slot, lastArena.bytesUsed, lastArena.pagesUsed,
+                    lastArena.frameNumber, m_frameEvent->signaledValue()));
 
     // Publish before the slot is recycled below: this is the last moment the retiring frame's
     // timestamps still exist, and the event above has already proven they are readable.
@@ -127,20 +128,20 @@ void Metal4Device::endFrame(Swapchain* presentTo) {
 
     ROJORHI_ASSERT(m_frameOpen, "endFrame: no frame is open -- call beginFrame first");
     ROJORHI_ASSERT(!m_commandList->inRenderPass(),
-               "endFrame: a render pass is still open -- call endRenderPass first");
+                   "endFrame: a render pass is still open -- call endRenderPass first");
     ROJORHI_ASSERT(!m_commandList->inComputePass(),
-               "endFrame: a compute pass is still open -- call endComputePass first");
+                   "endFrame: a compute pass is still open -- call endComputePass first");
     ROJORHI_ASSERT(!m_commandList->inCopyPass(),
-               "endFrame: a copy pass is still open -- call endCopyPass first");
+                   "endFrame: a copy pass is still open -- call endCopyPass first");
     ROJORHI_ASSERT(!m_commandList->hasPendingBarrier(),
-               "endFrame: a textureBarrier or bufferBarrier has no later consumer pass");
+                   "endFrame: a textureBarrier or bufferBarrier has no later consumer pass");
 
     m_commandBuffer->endCommandBuffer();
 
     auto* swapchain = static_cast<Metal4Swapchain*>(presentTo);
     CA::MetalDrawable* drawable = swapchain != nullptr ? swapchain->currentDrawable() : nullptr;
     ROJORHI_ASSERT(swapchain == nullptr || drawable != nullptr,
-               "endFrame: asked to present a swapchain whose texture was never acquired");
+                   "endFrame: asked to present a swapchain whose texture was never acquired");
 
     if (drawable != nullptr) {
         // Wait before drawable writes; signal only after the submitted work completes.

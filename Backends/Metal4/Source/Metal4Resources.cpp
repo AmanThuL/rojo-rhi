@@ -80,9 +80,9 @@ void Metal4Buffer::write(uint64_t offset, const void* data, uint64_t size) {
 void Metal4Buffer::readback(void* out, uint64_t outSize) {
     ROJORHI_ASSERT(out != nullptr, "Buffer::readback: destination must not be null");
     ROJORHI_ASSERT(m_cpuReadback,
-               "Buffer::readback: buffer was not created with BufferDesc.cpuReadback");
+                   "Buffer::readback: buffer was not created with BufferDesc.cpuReadback");
     ROJORHI_ASSERT(outSize <= m_buffer->length(),
-               "Buffer::readback: outSize reads past the end of the buffer");
+                   "Buffer::readback: outSize reads past the end of the buffer");
     // Shared storage makes the allocation itself CPU-visible, so the readback is the copy out --
     // there is nothing to resolve or untile first.
     std::memcpy(out, m_buffer->contents(), outSize);
@@ -103,13 +103,13 @@ Metal4Texture::~Metal4Texture() {
 void Metal4Texture::readback(void* out, uint64_t outSize) {
     ROJORHI_ASSERT(out != nullptr, "Texture::readback: destination must not be null");
     ROJORHI_ASSERT(m_info.readbackBytesPerPixel > 0,
-               "Texture::readback: texture was not created with TextureDesc.cpuReadback");
+                   "Texture::readback: texture was not created with TextureDesc.cpuReadback");
     // TextureDesc validation already refused every format without a packed texel size, so the
     // destination and the source rows share this one stride.
     const uint64_t bytesPerRow = uint64_t{m_info.width} * m_info.readbackBytesPerPixel;
     const uint64_t expected = bytesPerRow * m_info.height;
     ROJORHI_ASSERT(outSize == expected,
-               "Texture::readback: outSize must be width*height*bytesPerPixel(format)");
+                   "Texture::readback: outSize must be width*height*bytesPerPixel(format)");
 
     const MTL::Region region = MTL::Region::Make2D(0, 0, m_info.width, m_info.height);
     m_texture->getBytes(out, bytesPerRow, region, 0);

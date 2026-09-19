@@ -1,6 +1,6 @@
+#include <catch2/catch_test_macros.hpp>
 #include <rojoRHI/CaptureSchema.h>
 #include <rojoRHI/Message.h>
-#include <catch2/catch_test_macros.hpp>
 #include <string>
 #include <string_view>
 #include <utility>

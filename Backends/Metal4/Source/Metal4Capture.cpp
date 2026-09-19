@@ -48,8 +48,8 @@ bool beginCapture(Device& device, std::string_view outPath) {
         g_captureFailure =
             "Relaunch with MTL_CAPTURE_ENABLED=1 xmake run App to enable GPU capture.";
         ROJORHI_LOG_WARN("GPU capture unavailable: this process cannot write a .gputrace document. "
-                     "Relaunch with capture enabled in the environment, e.g. "
-                     "`MTL_CAPTURE_ENABLED=1 xmake run App`");
+                         "Relaunch with capture enabled in the environment, e.g. "
+                         "`MTL_CAPTURE_ENABLED=1 xmake run App`");
         return false;
     }
     if (manager->isCapturing()) {
@@ -78,7 +78,7 @@ bool beginCapture(Device& device, std::string_view outPath) {
     if (pathError) {
         g_captureFailure = "Cannot resolve output path: " + pathError.message();
         ROJORHI_LOG_ERROR("GPU capture: cannot resolve output path '{}': {}", outPath,
-                      pathError.message());
+                          pathError.message());
         return false;
     }
 
@@ -87,8 +87,8 @@ bool beginCapture(Device& device, std::string_view outPath) {
     std::filesystem::remove_all(path, removeError);
     if (removeError) {
         g_captureFailure = "Cannot replace capture document: " + removeError.message();
-        ROJORHI_LOG_ERROR("GPU capture: cannot remove the existing document at '{}': {}", path.string(),
-                      removeError.message());
+        ROJORHI_LOG_ERROR("GPU capture: cannot remove the existing document at '{}': {}",
+                          path.string(), removeError.message());
         return false;
     }
 
@@ -107,7 +107,7 @@ bool beginCapture(Device& device, std::string_view outPath) {
         const char* utf8 = reason != nullptr ? reason->utf8String() : nullptr;
         g_captureFailure = utf8 != nullptr ? utf8 : "Metal did not provide a failure reason.";
         ROJORHI_LOG_ERROR("GPU capture failed to start: {}",
-                      utf8 != nullptr ? utf8 : "no additional detail");
+                          utf8 != nullptr ? utf8 : "no additional detail");
         return false;
     }
 
@@ -138,7 +138,8 @@ void endCapture() {
     }
     schema.endFrameRecords();
 
-    ROJORHI_LOG_INFO("GPU capture written: {} (open it with `open {}`)", g_capturePath, g_capturePath);
+    ROJORHI_LOG_INFO("GPU capture written: {} (open it with `open {}`)", g_capturePath,
+                     g_capturePath);
     g_capturePath.clear();
 }
 

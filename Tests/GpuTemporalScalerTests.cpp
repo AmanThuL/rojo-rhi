@@ -89,7 +89,8 @@ TEST_CASE("vendor temporal scaler encodes, times and retires overlapping frames"
     std::array<std::unique_ptr<Buffer>, 5> readbacks;
     for (auto& readback : readbacks) {
         auto made = device.createBuffer(
-            {.size = byteCount, .cpuReadback = true, .label = "rojorhi.test.vendor.readback"}, nullptr);
+            {.size = byteCount, .cpuReadback = true, .label = "rojorhi.test.vendor.readback"},
+            nullptr);
         REQUIRE(made);
         readback = std::move(*made);
     }

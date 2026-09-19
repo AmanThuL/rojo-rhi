@@ -65,8 +65,8 @@ NS::SharedPtr<MTL::TextureDescriptor> makeTextureDescriptor(const TextureDesc& d
         usage |= MTL::TextureUsagePixelFormatView;
     }
     ROJORHI_ASSERT(usage != MTL::TextureUsageUnknown,
-               "TextureDesc: a texture with no renderTarget, sampled, storage, or cpuReadback "
-               "usage has no reachable use");
+                   "TextureDesc: a texture with no renderTarget, sampled, storage, or cpuReadback "
+                   "usage has no reachable use");
     textureDesc->setUsage(usage);
     if (placed) {
         textureDesc->setStorageMode(MTL::StorageModePrivate);
@@ -137,7 +137,7 @@ Result<std::unique_ptr<Swapchain>> Metal4Device::createSwapchain(const Swapchain
         layerResidency = NS::RetainPtr(set);
     } else {
         ROJORHI_LOG_WARN("CAMetalLayer vends no residency set; relying on Metal's default drawable "
-                     "residency handling");
+                         "residency handling");
     }
 
     return std::make_unique<Metal4Swapchain>(std::move(layer), desc.format, m_queue,
@@ -182,7 +182,7 @@ Result<std::unique_ptr<Texture>> Metal4Device::createTexture(const TextureDesc& 
 
     const uint32_t faceCount = desc.kind == TextureKind::Cube ? kCubeFaceCount : 1;
     ROJORHI_ASSERT(mips.empty() || mips.size() == size_t{desc.mipLevels} * faceCount,
-               "createTexture: mips must be empty or hold mipLevels * faceCount entries");
+                   "createTexture: mips must be empty or hold mipLevels * faceCount entries");
 
     NS::SharedPtr<MTL::TextureDescriptor> textureDesc =
         makeTextureDescriptor(desc, !mips.empty(), /*placed=*/false);
@@ -207,7 +207,7 @@ Result<std::unique_ptr<Texture>> Metal4Device::createTexture(const TextureDesc& 
             continue;
         }
         ROJORHI_ASSERT(mip.bytesPerRow > 0,
-                   "createTexture: a TextureMip with data must state its bytesPerRow");
+                       "createTexture: a TextureMip with data must state its bytesPerRow");
         const NS::UInteger face = index / desc.mipLevels;
         const uint32_t level = static_cast<uint32_t>(index % desc.mipLevels);
         // Full-level writes preserve block alignment for compressed formats.

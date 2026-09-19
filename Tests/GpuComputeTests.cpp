@@ -214,12 +214,13 @@ TEST_CASE("a storage texture written by one dispatch is read by the next", "[gpu
     INFO(errorOf(source));
     REQUIRE(source.has_value());
 
-    auto destination = (*device)->createTexture({.width = kSize,
-                                                 .height = kSize,
-                                                 .format = Format::RGBA8Unorm,
-                                                 .storageWrite = true,
-                                                 .cpuReadback = true,
-                                                 .label = "rojorhi.test.compute.hazardDestination"});
+    auto destination =
+        (*device)->createTexture({.width = kSize,
+                                  .height = kSize,
+                                  .format = Format::RGBA8Unorm,
+                                  .storageWrite = true,
+                                  .cpuReadback = true,
+                                  .label = "rojorhi.test.compute.hazardDestination"});
     INFO(errorOf(destination));
     REQUIRE(destination.has_value());
 
@@ -405,7 +406,8 @@ TEST_CASE("a storage texture view addresses a single mip level", "[gpu][checkpoi
     auto level0Destination = makeDestination(kSize, "rojorhi.test.compute.mipLevel0Destination");
     INFO(errorOf(level0Destination));
     REQUIRE(level0Destination.has_value());
-    auto level1Destination = makeDestination(kMipExtent, "rojorhi.test.compute.mipLevel1Destination");
+    auto level1Destination =
+        makeDestination(kMipExtent, "rojorhi.test.compute.mipLevel1Destination");
     INFO(errorOf(level1Destination));
     REQUIRE(level1Destination.has_value());
 
@@ -441,7 +443,8 @@ TEST_CASE("a storage texture view addresses a single mip level", "[gpu][checkpoi
         commands.dispatch(extent / kImageThreadsPerGroup, extent / kImageThreadsPerGroup, 1);
         commands.endComputePass();
     };
-    readLevel("rojorhi.test.compute.mipRead1", level1, **level1Destination, level1Params, kMipExtent);
+    readLevel("rojorhi.test.compute.mipRead1", level1, **level1Destination, level1Params,
+              kMipExtent);
     readLevel("rojorhi.test.compute.mipRead0", level0, **level0Destination, level0Params, kSize);
     (*device)->endFrame(nullptr);
     (*device)->waitIdle();

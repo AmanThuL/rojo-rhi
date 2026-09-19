@@ -8,9 +8,11 @@ TEST_CASE("compute reads the highest public buffer slot", "[gpu][rhi]") {
     const uint32_t expected = 0x71cba513;
     auto input =
         (*device)->createBuffer({.size = 4, .label = "rojorhi.test.highSlot.input"}, &expected);
-    auto output = (*device)->createBuffer(
-        {.size = 4, .storageWrite = true, .cpuReadback = true, .label = "rojorhi.test.highSlot.output"},
-        nullptr);
+    auto output = (*device)->createBuffer({.size = 4,
+                                           .storageWrite = true,
+                                           .cpuReadback = true,
+                                           .label = "rojorhi.test.highSlot.output"},
+                                          nullptr);
     REQUIRE(input);
     REQUIRE(output);
     auto library = (*device)->loadShaderLibrary("Shaders/BufferBindingLimit");

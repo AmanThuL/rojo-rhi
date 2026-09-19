@@ -78,8 +78,7 @@ void requireTriangleDrawn(const std::vector<uint8_t>& pixels) {
 //======================================================================================================================
 // The vertex-pulling triangle pipeline every draw case below records into.
 rojoRHI::Result<std::unique_ptr<rojoRHI::GraphicsPipeline>>
-makeTrianglePipeline(rojoRHI::Device& device, rojoRHI::ShaderLibrary& library,
-                     const char* label) {
+makeTrianglePipeline(rojoRHI::Device& device, rojoRHI::ShaderLibrary& library, const char* label) {
     return device.createGraphicsPipeline({.library = &library,
                                           .vertexEntry = "vertexMain",
                                           .fragmentEntry = "fragmentMain",
@@ -298,11 +297,11 @@ TEST_CASE("an indirect dispatch consumes arguments a compute pass wrote", "[gpu]
     INFO(errorOf(indirectLibrary));
     REQUIRE(indirectLibrary.has_value());
 
-    auto writeArgsPipeline =
-        (*device)->createComputePipeline({.library = indirectLibrary->get(),
-                                          .computeEntry = "computeWriteDispatchArgs",
-                                          .threadsPerThreadgroup = {1, 1, 1},
-                                          .label = "rojorhi.test.indirect.writeDispatchArgsPipeline"});
+    auto writeArgsPipeline = (*device)->createComputePipeline(
+        {.library = indirectLibrary->get(),
+         .computeEntry = "computeWriteDispatchArgs",
+         .threadsPerThreadgroup = {1, 1, 1},
+         .label = "rojorhi.test.indirect.writeDispatchArgsPipeline"});
     INFO(errorOf(writeArgsPipeline));
     REQUIRE(writeArgsPipeline.has_value());
 
@@ -319,9 +318,11 @@ TEST_CASE("an indirect dispatch consumes arguments a compute pass wrote", "[gpu]
     REQUIRE(fillPipeline.has_value());
 
     // No initial contents: everything the dispatch reads has to come from the pass that writes it.
-    auto argumentBuffer = (*device)->createBuffer(
-        {.size = kArgsBytes, .storageWrite = true, .label = "rojorhi.test.indirect.gpuDispatchArgs"},
-        nullptr);
+    auto argumentBuffer =
+        (*device)->createBuffer({.size = kArgsBytes,
+                                 .storageWrite = true,
+                                 .label = "rojorhi.test.indirect.gpuDispatchArgs"},
+                                nullptr);
     INFO(errorOf(argumentBuffer));
     REQUIRE(argumentBuffer.has_value());
 
@@ -381,11 +382,11 @@ TEST_CASE("an indirect indexed draw consumes arguments a compute pass wrote", "[
     INFO(errorOf(indirectLibrary));
     REQUIRE(indirectLibrary.has_value());
 
-    auto writeArgsPipeline =
-        (*device)->createComputePipeline({.library = indirectLibrary->get(),
-                                          .computeEntry = "computeWriteDrawIndexedArgs",
-                                          .threadsPerThreadgroup = {1, 1, 1},
-                                          .label = "rojorhi.test.indirect.writeIndexedArgsPipeline"});
+    auto writeArgsPipeline = (*device)->createComputePipeline(
+        {.library = indirectLibrary->get(),
+         .computeEntry = "computeWriteDrawIndexedArgs",
+         .threadsPerThreadgroup = {1, 1, 1},
+         .label = "rojorhi.test.indirect.writeIndexedArgsPipeline"});
     INFO(errorOf(writeArgsPipeline));
     REQUIRE(writeArgsPipeline.has_value());
 
@@ -393,8 +394,8 @@ TEST_CASE("an indirect indexed draw consumes arguments a compute pass wrote", "[
     INFO(errorOf(triangleLibrary));
     REQUIRE(triangleLibrary.has_value());
 
-    auto pipeline =
-        makeTrianglePipeline(**device, **triangleLibrary, "rojorhi.test.indirect.gpuIndexedPipeline");
+    auto pipeline = makeTrianglePipeline(**device, **triangleLibrary,
+                                         "rojorhi.test.indirect.gpuIndexedPipeline");
     INFO(errorOf(pipeline));
     REQUIRE(pipeline.has_value());
 

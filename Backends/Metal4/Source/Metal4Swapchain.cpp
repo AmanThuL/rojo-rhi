@@ -50,7 +50,7 @@ Result<Texture*> Metal4Swapchain::acquireNextTexture() {
     NS::SharedPtr<NS::AutoreleasePool> pool = NS::TransferPtr(NS::AutoreleasePool::alloc()->init());
 
     ROJORHI_ASSERT(!m_drawable, "acquireNextTexture: the previous drawable has not been presented "
-                            "yet -- call Device::endFrame(swapchain) first");
+                                "yet -- call Device::endFrame(swapchain) first");
 
     // Drawable exhaustion or timeout is recoverable; the caller can skip this frame.
     CA::MetalDrawable* drawable = m_layer->nextDrawable();

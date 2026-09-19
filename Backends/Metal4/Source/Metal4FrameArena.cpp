@@ -64,11 +64,12 @@ Result<void> Metal4FrameArena::addPage(uint64_t requestedBytes) {
     page.gpuBase = buffer->gpuAddress();
     page.capacity = capacity;
     ROJORHI_ASSERT(page.cpuBase != nullptr && page.gpuBase != 0,
-               "frame arena: a shared page came back without a mapped CPU or GPU base");
+                   "frame arena: a shared page came back without a mapped CPU or GPU base");
     // Every block is placed at least at kFrameDataAlignment, and a fresh page's cursor is zero, so
     // a page base coarser than that is what lets offset zero satisfy the first request.
-    ROJORHI_ASSERT(page.gpuBase % kFrameDataAlignment == 0,
-               "frame arena: Metal returned a page whose GPU base is not constant-buffer aligned");
+    ROJORHI_ASSERT(
+        page.gpuBase % kFrameDataAlignment == 0,
+        "frame arena: Metal returned a page whose GPU base is not constant-buffer aligned");
 
     // Device-owned pages bypass the resource wrappers, so their capture identity is registered
     // here directly.
@@ -113,21 +114,23 @@ Metal4FrameDataBlock Metal4FrameArena::allocateGrown(uint64_t size, uint64_t ali
     // worst-case leading padding so every alignment accepted by validateFrameData fits whatever
     // GPU base Metal returns.
     ROJORHI_ASSERT(size <= std::numeric_limits<uint64_t>::max() - (alignment - 1),
-               "bindFrameData: validated size and alignment overflowed page capacity");
+                   "bindFrameData: validated size and alignment overflowed page capacity");
     const Result<void> page = addPage(size + alignment - 1);
-    ROJORHI_ASSERT(page.has_value(),
-               std::format("bindFrameData: frame slot {} cannot grow to fit a {}-byte block; its "
-                           "{} page(s) already hold {} bytes of capacity -- {}",
-                           m_slot, size, grown, counters().capacityBytes, page.error().message));
+    ROJORHI_ASSERT(
+        page.has_value(),
+        std::format("bindFrameData: frame slot {} cannot grow to fit a {}-byte block; its "
+                    "{} page(s) already hold {} bytes of capacity -- {}",
+                    m_slot, size, grown, counters().capacityBytes, page.error().message));
     m_activePage = grown;
 
     Page& fresh = m_pages[grown];
     const uint64_t remainder = fresh.gpuBase & (alignment - 1);
     const uint64_t offset = (alignment - remainder) & (alignment - 1);
-    ROJORHI_ASSERT(offset <= fresh.capacity && size <= fresh.capacity - offset,
-               std::format("bindFrameData: a fresh {}-byte page of frame slot {} still cannot hold "
-                           "a {}-byte block aligned to {} bytes",
-                           fresh.capacity, m_slot, size, alignment));
+    ROJORHI_ASSERT(
+        offset <= fresh.capacity && size <= fresh.capacity - offset,
+        std::format("bindFrameData: a fresh {}-byte page of frame slot {} still cannot hold "
+                    "a {}-byte block aligned to {} bytes",
+                    fresh.capacity, m_slot, size, alignment));
     fresh.cursor = offset + size;
     return {.cpu = fresh.cpuBase + offset,
             .gpuAddress = fresh.gpuBase + offset,
@@ -145,7 +148,8 @@ void Metal4FrameArena::reset() {
 
 //======================================================================================================================
 std::string_view Metal4FrameArena::pageLabel(uint32_t pageIndex) const {
-    ROJORHI_ASSERT(pageIndex < m_pages.size(), "frame arena: page label requested for a missing page");
+    ROJORHI_ASSERT(pageIndex < m_pages.size(),
+                   "frame arena: page label requested for a missing page");
     return m_pages[pageIndex].label;
 }
 

@@ -41,7 +41,7 @@ std::string describeMotion(uint32_t x, uint32_t y, const MotionTexel& texel) {
 
 //======================================================================================================================
 rojoRHI::Result<std::unique_ptr<rojoRHI::Texture>> makeMotionTarget(rojoRHI::Device& device,
-                                                                      const char* label) {
+                                                                    const char* label) {
     return device.createTexture({.width = kSize,
                                  .height = kSize,
                                  .format = rojoRHI::Format::RG16Float,
@@ -52,7 +52,7 @@ rojoRHI::Result<std::unique_ptr<rojoRHI::Texture>> makeMotionTarget(rojoRHI::Dev
 
 //======================================================================================================================
 rojoRHI::Result<std::unique_ptr<rojoRHI::Texture>> makeReactiveTarget(rojoRHI::Device& device,
-                                                                        const char* label) {
+                                                                      const char* label) {
     return device.createTexture({.width = kSize,
                                  .height = kSize,
                                  .format = rojoRHI::Format::R8Unorm,

@@ -39,11 +39,12 @@ bool imguiInit(Device& device, Format colorFormat) {
     // The backend is non-ARC and issues autoreleased Objective-C calls.
     NS::SharedPtr<NS::AutoreleasePool> pool = NS::TransferPtr(NS::AutoreleasePool::alloc()->init());
 
-    ROJORHI_ASSERT(g_device == nullptr, "imguiInit: already initialised -- call imguiShutdown first");
+    ROJORHI_ASSERT(g_device == nullptr,
+                   "imguiInit: already initialised -- call imguiShutdown first");
     // Reject unsupported formats before Metal's texture-descriptor validator aborts.
     ROJORHI_ASSERT(colorFormat == Format::BGRA8Unorm || colorFormat == Format::RGBA8Unorm,
-               "imguiInit: colorFormat must be a color-renderable format (BGRA8Unorm or "
-               "RGBA8Unorm)");
+                   "imguiInit: colorFormat must be a color-renderable format (BGRA8Unorm or "
+                   "RGBA8Unorm)");
 
     auto& metalDevice = static_cast<Metal4Device&>(device);
 
@@ -63,7 +64,8 @@ bool imguiInit(Device& device, Format colorFormat) {
     NS::SharedPtr<MTL::Texture> carrier =
         NS::TransferPtr(metalDevice.handle()->newTexture(textureDesc.get()));
     if (!carrier) {
-        ROJORHI_LOG_ERROR("ImGui init: failed to create the 1x1 render-pass format carrier texture");
+        ROJORHI_LOG_ERROR(
+            "ImGui init: failed to create the 1x1 render-pass format carrier texture");
         return false;
     }
     carrier->setLabel(makeString("rojorhi.imgui.formatCarrier").get());
@@ -123,16 +125,19 @@ void imguiRender(CommandList& commands) {
     auto& commandList = static_cast<Metal4CommandList&>(commands);
 
     ImDrawData* drawData = ImGui::GetDrawData();
-    ROJORHI_ASSERT(drawData != nullptr,
-               "imguiRender: no draw data -- call ImGui::Render() before this, in the same frame");
+    ROJORHI_ASSERT(
+        drawData != nullptr,
+        "imguiRender: no draw data -- call ImGui::Render() before this, in the same frame");
 
     // The open frame must own the same buffer slot prepared by imguiNewFrame().
-    ROJORHI_ASSERT(g_pendingFrameSlot != kNoFrameStarted,
-               "imguiRender: no ImGui frame is open -- call imguiNewFrame() (then ImGui::NewFrame, "
-               "build the UI, ImGui::Render) once per frame before this");
-    ROJORHI_ASSERT(g_pendingFrameSlot == g_device->frameInFlightIndex(),
-               "imguiRender: this frame's imguiNewFrame() ran against a different frame in flight "
-               "-- call imguiNewFrame() and imguiRender() exactly once each per Device frame");
+    ROJORHI_ASSERT(
+        g_pendingFrameSlot != kNoFrameStarted,
+        "imguiRender: no ImGui frame is open -- call imguiNewFrame() (then ImGui::NewFrame, "
+        "build the UI, ImGui::Render) once per frame before this");
+    ROJORHI_ASSERT(
+        g_pendingFrameSlot == g_device->frameInFlightIndex(),
+        "imguiRender: this frame's imguiNewFrame() ran against a different frame in flight "
+        "-- call imguiNewFrame() and imguiRender() exactly once each per Device frame");
     g_pendingFrameSlot = kNoFrameStarted;
 
     ImGui_ImplMetal4_RenderDrawData(drawData, commandList.commandBuffer(),
@@ -159,7 +164,7 @@ void imguiForgetTexture(Texture& texture) {
     // Use the backend extension so residency bookkeeping stays encapsulated.
     MTL::Texture* handle = static_cast<Metal4Texture&>(texture).handle();
     ROJORHI_ASSERT(ImGui_ImplMetal4_RemoveTexture(handle),
-               "imguiForgetTexture: Metal backend is not initialized");
+                   "imguiForgetTexture: Metal backend is not initialized");
 }
 
 } // namespace rojoRHI::metal4

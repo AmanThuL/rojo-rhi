@@ -77,8 +77,8 @@ inline bool channelNear(uint8_t actual, int expected, int tolerance) {
     return std::abs(int{actual} - expected) <= tolerance;
 }
 
-inline rojoRHI::Result<std::unique_ptr<rojoRHI::Texture>>
-makeProbeTarget(rojoRHI::Device& device, const char* label) {
+inline rojoRHI::Result<std::unique_ptr<rojoRHI::Texture>> makeProbeTarget(rojoRHI::Device& device,
+                                                                          const char* label) {
     return device.createTexture({.width = kSize,
                                  .height = kSize,
                                  .format = rojoRHI::Format::BGRA8Unorm,

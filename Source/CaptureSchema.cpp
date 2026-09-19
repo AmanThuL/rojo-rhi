@@ -291,7 +291,7 @@ bool CaptureSchema::writeJson(const std::filesystem::path& path) const {
     std::filesystem::rename(temp, path, renameError);
     if (renameError) {
         ROJORHI_LOG_ERROR("capture schema: cannot move '{}' onto '{}': {}", temp.string(),
-                      path.string(), renameError.message());
+                          path.string(), renameError.message());
         std::filesystem::remove(temp, ignored);
         return false;
     }

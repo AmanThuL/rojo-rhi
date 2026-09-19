@@ -72,17 +72,17 @@ Metal4Device::createTemporalScaler(const TemporalScalerDesc& desc) {
     const auto outputUsage =
         MTL::TextureUsageShaderRead | MTL::TextureUsageShaderWrite | MTL::TextureUsageRenderTarget;
     ROJORHI_ASSERT((state->scaler->colorTextureUsage() & inputUsage) ==
-                       state->scaler->colorTextureUsage() &&
-                   (state->scaler->depthTextureUsage() & inputUsage) ==
-                       state->scaler->depthTextureUsage() &&
-                   (state->scaler->motionTextureUsage() & inputUsage) ==
-                       state->scaler->motionTextureUsage() &&
-                   (state->scaler->reactiveTextureUsage() & inputUsage) ==
-                       state->scaler->reactiveTextureUsage(),
-               "MetalFX requires input usage the temporal contract cannot grant");
+                           state->scaler->colorTextureUsage() &&
+                       (state->scaler->depthTextureUsage() & inputUsage) ==
+                           state->scaler->depthTextureUsage() &&
+                       (state->scaler->motionTextureUsage() & inputUsage) ==
+                           state->scaler->motionTextureUsage() &&
+                       (state->scaler->reactiveTextureUsage() & inputUsage) ==
+                           state->scaler->reactiveTextureUsage(),
+                   "MetalFX requires input usage the temporal contract cannot grant");
     ROJORHI_ASSERT((state->scaler->outputTextureUsage() & outputUsage) ==
-                   state->scaler->outputTextureUsage(),
-               "MetalFX requires output usage the temporal contract cannot grant");
+                       state->scaler->outputTextureUsage(),
+                   "MetalFX requires output usage the temporal contract cannot grant");
     // MetalFX requires private output storage. CPU-readable RHI outputs keep their contract by
     // receiving a copy from this resident private scratch inside the same external operation.
     auto output = createTexture({.width = desc.outputWidth,
@@ -104,7 +104,7 @@ Metal4Device::createTemporalScaler(const TemporalScalerDesc& desc) {
 void Metal4CommandList::temporalScale(TemporalScaler& scaler, const TemporalScaleParams& params) {
     NS::SharedPtr<NS::AutoreleasePool> pool = NS::TransferPtr(NS::AutoreleasePool::alloc()->init());
     ROJORHI_ASSERT(m_argumentTable != nullptr && m_temporalScalers != nullptr,
-               "temporalScale must be called inside a frame");
+                   "temporalScale must be called inside a frame");
     ROJORHI_ASSERT(!inPass(), "temporalScale must be called between passes");
     const auto& state = static_cast<Metal4TemporalScaler&>(scaler).state();
     const auto valid = validateTemporalScale(state->desc, params);
@@ -114,12 +114,12 @@ void Metal4CommandList::temporalScale(TemporalScaler& scaler, const TemporalScal
                                          params.exposure};
     for (Texture* input : inputs) {
         ROJORHI_ASSERT((static_cast<Metal4Texture*>(input)->handle()->usage() &
-                    MTL::TextureUsageShaderRead) != 0,
-                   "temporalScale inputs require sampled texture usage");
+                        MTL::TextureUsageShaderRead) != 0,
+                       "temporalScale inputs require sampled texture usage");
     }
     auto* output = static_cast<Metal4Texture*>(params.output)->handle();
     ROJORHI_ASSERT((output->usage() & native->outputTextureUsage()) == native->outputTextureUsage(),
-               "temporalScale output usage must include the scaler's required bits");
+                   "temporalScale output usage must include the scaler's required bits");
     const bool copyOutput = output->storageMode() != MTL::StorageModePrivate;
     auto* privateOutput = static_cast<Metal4Texture*>(state->privateOutput.get())->handle();
     native->setColorTexture(static_cast<Metal4Texture*>(params.color)->handle());

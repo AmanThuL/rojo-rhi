@@ -658,14 +658,15 @@ TEST_CASE("a depth-only pass stores depth a later pass can sample", "[gpu][check
     INFO(errorOf(triangleLibrary));
     REQUIRE(triangleLibrary.has_value());
 
-    auto depthPipeline = (*device)->createGraphicsPipeline({.library = triangleLibrary->get(),
-                                                            .vertexEntry = "vertexMain",
-                                                            .fragmentEntry = "fragmentDepthOnly",
-                                                            .colorFormat = Format::Unknown,
-                                                            .depthFormat = Format::D32Float,
-                                                            .depthTestEnable = true,
-                                                            .depthWriteEnable = true,
-                                                            .label = "rojorhi.test.depthOnlyPipeline"});
+    auto depthPipeline =
+        (*device)->createGraphicsPipeline({.library = triangleLibrary->get(),
+                                           .vertexEntry = "vertexMain",
+                                           .fragmentEntry = "fragmentDepthOnly",
+                                           .colorFormat = Format::Unknown,
+                                           .depthFormat = Format::D32Float,
+                                           .depthTestEnable = true,
+                                           .depthWriteEnable = true,
+                                           .label = "rojorhi.test.depthOnlyPipeline"});
     INFO(errorOf(depthPipeline));
     REQUIRE(depthPipeline.has_value());
 
@@ -1284,11 +1285,12 @@ TEST_CASE("a comparison sampler's function decides which depth reads as lit", "[
     INFO(errorOf(depthPipeline));
     REQUIRE(depthPipeline.has_value());
 
-    auto comparePipeline = (*device)->createGraphicsPipeline({.library = library->get(),
-                                                              .vertexEntry = "vertexMain",
-                                                              .fragmentEntry = "fragmentMain",
-                                                              .colorFormat = Format::BGRA8Unorm,
-                                                              .label = "rojorhi.test.comparePipeline"});
+    auto comparePipeline =
+        (*device)->createGraphicsPipeline({.library = library->get(),
+                                           .vertexEntry = "vertexMain",
+                                           .fragmentEntry = "fragmentMain",
+                                           .colorFormat = Format::BGRA8Unorm,
+                                           .label = "rojorhi.test.comparePipeline"});
     INFO(errorOf(comparePipeline));
     REQUIRE(comparePipeline.has_value());
 
@@ -1302,7 +1304,8 @@ TEST_CASE("a comparison sampler's function decides which depth reads as lit", "[
         makeCompareSampler(CompareFunc::GreaterEqual, "rojorhi.test.greaterEqualSampler");
     INFO(errorOf(greaterEqualSampler));
     REQUIRE(greaterEqualSampler.has_value());
-    auto lessEqualSampler = makeCompareSampler(CompareFunc::LessEqual, "rojorhi.test.lessEqualSampler");
+    auto lessEqualSampler =
+        makeCompareSampler(CompareFunc::LessEqual, "rojorhi.test.lessEqualSampler");
     INFO(errorOf(lessEqualSampler));
     REQUIRE(lessEqualSampler.has_value());
 

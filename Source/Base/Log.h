@@ -17,11 +17,11 @@ void emitMessage(MessageSeverity severity, std::string_view message);
 } // namespace rojoRHI::base
 
 /// Emits an informational RHI log message.
-#define ROJORHI_LOG_INFO(...)                                                                          \
+#define ROJORHI_LOG_INFO(...)                                                                      \
     ::rojoRHI::base::emitMessage(::rojoRHI::MessageSeverity::Info, std::format(__VA_ARGS__))
 /// Emits a warning RHI log message.
-#define ROJORHI_LOG_WARN(...)                                                                          \
+#define ROJORHI_LOG_WARN(...)                                                                      \
     ::rojoRHI::base::emitMessage(::rojoRHI::MessageSeverity::Warning, std::format(__VA_ARGS__))
 /// Emits an error RHI log message.
-#define ROJORHI_LOG_ERROR(...)                                                                         \
+#define ROJORHI_LOG_ERROR(...)                                                                     \
     ::rojoRHI::base::emitMessage(::rojoRHI::MessageSeverity::Error, std::format(__VA_ARGS__))

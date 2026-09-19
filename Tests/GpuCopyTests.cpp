@@ -66,8 +66,8 @@ TEST_CASE("a copy pass copies a byte range between two buffers", "[gpu]") {
     }
     std::vector<uint8_t> destinationBytes(kBufferBytes, 0xEE);
 
-    auto source = (*device)->createBuffer({.size = kBufferBytes, .label = "rojorhi.test.copy.source"},
-                                          sourceBytes.data());
+    auto source = (*device)->createBuffer(
+        {.size = kBufferBytes, .label = "rojorhi.test.copy.source"}, sourceBytes.data());
     INFO(errorOf(source));
     REQUIRE(source.has_value());
 
@@ -453,12 +453,13 @@ TEST_CASE("a copy moves a rectangle between two textures", "[gpu]") {
     INFO(errorOf(library));
     REQUIRE(library.has_value());
 
-    auto pipeline = (*device)->createGraphicsPipeline({.library = library->get(),
-                                                       .vertexEntry = "vertexMain",
-                                                       .fragmentEntry = "fragmentMain",
-                                                       .colorFormat = Format::BGRA8Unorm,
-                                                       .cullMode = CullMode::None,
-                                                       .label = "rojorhi.test.copy.regionPipeline"});
+    auto pipeline =
+        (*device)->createGraphicsPipeline({.library = library->get(),
+                                           .vertexEntry = "vertexMain",
+                                           .fragmentEntry = "fragmentMain",
+                                           .colorFormat = Format::BGRA8Unorm,
+                                           .cullMode = CullMode::None,
+                                           .label = "rojorhi.test.copy.regionPipeline"});
     INFO(errorOf(pipeline));
     REQUIRE(pipeline.has_value());
 

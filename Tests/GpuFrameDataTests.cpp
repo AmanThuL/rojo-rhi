@@ -50,8 +50,7 @@ uint32_t slotOf(const rojoRHI::Device& device) {
 
 //======================================================================================================================
 rojoRHI::Result<std::unique_ptr<rojoRHI::GraphicsPipeline>>
-makeTrianglePipeline(rojoRHI::Device& device, rojoRHI::ShaderLibrary& library,
-                     const char* label) {
+makeTrianglePipeline(rojoRHI::Device& device, rojoRHI::ShaderLibrary& library, const char* label) {
     return device.createGraphicsPipeline({.library = &library,
                                           .vertexEntry = "vertexMain",
                                           .fragmentEntry = "fragmentMain",
@@ -146,7 +145,8 @@ TEST_CASE("bindFrameData spans pages within one frame", "[gpu]") {
     INFO(errorOf(library));
     REQUIRE(library.has_value());
 
-    auto pipeline = makeTrianglePipeline(**device, **library, "rojorhi.test.frameData.spillPipeline");
+    auto pipeline =
+        makeTrianglePipeline(**device, **library, "rojorhi.test.frameData.spillPipeline");
     INFO(errorOf(pipeline));
     REQUIRE(pipeline.has_value());
 
@@ -318,7 +318,8 @@ TEST_CASE("the frame-data arena survives twelve frames overlapping in flight",
     INFO(errorOf(library));
     REQUIRE(library.has_value());
 
-    auto pipeline = makeTrianglePipeline(**device, **library, "rojorhi.test.frameData.overlapPipeline");
+    auto pipeline =
+        makeTrianglePipeline(**device, **library, "rojorhi.test.frameData.overlapPipeline");
     INFO(errorOf(pipeline));
     REQUIRE(pipeline.has_value());
 
