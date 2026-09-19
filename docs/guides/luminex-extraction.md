@@ -36,8 +36,10 @@ the tab character, with no quoting: a `"` anywhere in a field, such as the ancho
 
 `apply.py <root>` refuses a checkout with uncommitted changes, verifies before any move that each
 `path` row's source is tracked and its destination does not exist, then moves and rewrites.
-`--dry-run` prints the table below without writing; `--check` verifies an applied tree;
-`--selftest` applies the table to a built-in fixture that pins every row's behaviour.
+`--dry-run` prints the table below without writing; `--check` verifies an applied tree and
+reads `git ls-files`, so it runs on a tree whose moves are still staged or committed — after a
+`git reset` of an applied tree it reports every moved path as still tracked; `--selftest` applies
+the table to a built-in fixture that pins every row's behaviour.
 
 ## Identity being introduced
 
@@ -184,9 +186,11 @@ the mechanical commit.
   authors appears there, so the row is not narrowed. Labels in Luminex's own `Tests/` keep `lmx.`.
 - **Row 70 consumers.** `Tools/GpuDebug/uniformlib.py` parses frame-data page labels; row 80
   covers it and its tests. `xctracelib.py` (read by `profile.py`) keeps only encoders whose label
-  contains `lmx.`, and `spike_inventory.py` searches a capture for `lmx.` strings; neither would
-  see a `rojorhi.*` default. Luminex labels every pass it declares, so no encoder carries a default
-  today; both are listed as hand edits.
+  contains `lmx.`; it would not see a `rojorhi.*` default, but Luminex labels every pass it
+  declares, so no encoder carries a default today. `spike_inventory.py` is different: its `lmx.`
+  needle hunts the labels the component's own spike capture test authors, and row 70 renames those
+  to `rojorhi.test.spike*`. After the rename its label hits for that trace drop to zero, and the
+  tool still exits 0, so no gate catches it. Both are listed as hand edits.
 - **Row 80.** `RojoRHI/Tests/CaptureTests.cpp` spells its labels only in quoted form, which row 70
   rewrites, so row 80 keeps `Tests/Capture*.cpp` and `Tools/GpuDebug/**` and gains no
   component path.
@@ -227,6 +231,12 @@ The nonzero out-of-scope cells in the post-R2.2 table, and other forms left on p
   that say "the RHI component"; and the `lmx-*` scratch file names the capture tests and the probe
   create.
 - **Luminex `docs/` and Markdown prose** — only link targets move (rows 46 and 47).
+- **Lines past 100 columns.** The rename lengthens some lines beyond 100 columns in files
+  `xmake format` does not cover: `.github/workflows/ci.yml`, `Source/App/xmake.lua`,
+  `Tools/check_project_policy.py`, `Tools/check_checkpoint_a.py`,
+  `Tools/tests/test_module_deps.py`, `RojoRHI/Tools/ImGuiBufferProbe/run.py`,
+  `RojoRHI/xmake/shaders.lua` and `xmake.lua`. Luminex enforces no column limit on them; wrapping,
+  if wanted, belongs to the hand-edit commit.
 - **No compatibility alias.** A `namespace lmx::rhi = rojoRHI;` shim would keep stale references
   compiling; ADR 0001 fixes one spelling so that they fail loudly instead.
 
@@ -254,9 +264,14 @@ formatting commits.
 - `Benchmarks/FrameData/Runner.h` and `Benchmarks/FrameData/DeliverPerDrawData.h` — comments
   naming `RHI/Include/RHI/Metal4/Metal4FrameData.h` and the `RHI/Include` surface.
 - `RojoRHI/xmake.lua` — its comment gives the standalone command as `xmake f -P RHI`.
-- `Tools/GpuDebug/xctracelib.py`'s `LMX_LABEL_MARKER` with `profile.py`'s description of it, and
-  `Tools/GpuDebug/spike_inventory.py`'s `lmx.` needle — decide whether each also accepts
-  `rojorhi.`.
+- `RojoRHI/xmake/targets.lua` — the test target's comment says its tests "link the RHI target
+  alone"; the target is `RojoRHI`.
+- `RojoRHI/Tools/ImGuiBufferProbe/README.md` — its command runs
+  `python3 RHI/Tools/ImGuiBufferProbe/run.py`, and it names "a bare copy of the `RHI` component".
+- `Tools/GpuDebug/spike_inventory.py` — widen its `lmx.` needle to also match `rojorhi.`, so the
+  component's spike-test labels are found again.
+- `Tools/GpuDebug/xctracelib.py`'s `LMX_LABEL_MARKER` with `profile.py`'s description of it —
+  decide whether it also accepts `rojorhi.`.
 - Luminex's `AGENTS.md`, README and guides — commands and paths (`xmake -P RojoRHI`,
   `RojoRHITests`, `rojorhi-test`). Other Luminex milestone, decision and architecture prose waits
   for R2.4.
