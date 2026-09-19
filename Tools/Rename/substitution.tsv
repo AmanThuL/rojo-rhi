@@ -4,14 +4,16 @@ order	kind	include	exclude	pattern	replacement	strict	note
 20	path			RHI	RojoRHI	no	component directory, last path row
 30	regex	**	docs/** **/*.md	\blmx::rhi\b	rojoRHI	yes	also lmx::rhi::metal4, lmx::rhi::base, namespace lmx::rhi and the forbidUndefined symbol prefix
 31	regex	Source/**/*.h Source/**/*.cpp Source/**/*.mm Tests/**/*.h Tests/**/*.cpp Tests/**/*.mm Benchmarks/**/*.h Benchmarks/**/*.cpp Benchmarks/**/*.mm Tools/**/*.h Tools/**/*.cpp Tools/**/*.mm		(?<![\w:])rhi::	rojoRHI::	no	namespace-relative references written inside namespace lmx::...
-40	regex	**/*.h **/*.cpp **/*.mm		(#[ \t]*include[ \t]+)"RHI/([^"]+)"	\1<rojoRHI/\2>	yes	public includes take the angle form
-41	regex	Tools/module_contract.json Tools/tests/*.py		(["'])RHI/((?:Metal4/)?\w+\.h)\1	\g<1>rojoRHI/\2\g<1>	no	a quoted string that is exactly an include spelling
+40	regex	**/*.h **/*.cpp **/*.mm RojoRHI/xmake/*.lua		(#[ \t]*include[ \t]+)"RHI/([^"]+)"	\1<rojoRHI/\2>	yes	public includes take the angle form
+41	regex	Tools/module_contract.json Tools/tests/*.py		(["'`])RHI/((?:Metal4/)?\w+\.h)\1	\g<1>rojoRHI/\2\g<1>	no	a quoted or backticked string that is exactly an include spelling
 42	regex	RojoRHI/Tools/check_rhi_headers.py		"RHI/\*\*/\*\.h"	"rojoRHI/**/*.h"	no	include-root glob
 43	regex	Tools/*.py Tools/tests/*.py		Include/RHI/	Include/rojoRHI/	no	include root spelled as a path segment
-45	regex	xmake.lua xmake/*.lua .gitignore .github/workflows/*.yml Source/Asset/xmake.lua Tests/GpuTestSupport.h Tools/*.py Tools/tests/*.py Tools/module_contract.json Tools/GpuDebug/**/*.py		(?<![a-z])RHI/	RojoRHI/	no	component directory; runs after 40-43 so include spellings are already lower-case-prefixed
+45	regex	xmake.lua xmake/*.lua .gitignore .github/workflows/*.yml Source/Asset/xmake.lua Tests/GpuTestSupport.h Tools/*.py Tools/tests/*.py Tools/module_contract.json Tools/GpuDebug/**/*.py RojoRHI/xmake/*.lua RojoRHI/Tools/**/*.py		(?<![a-z])RHI/	RojoRHI/	no	component directory; runs after 40-43 so include spellings are already lower-case-prefixed
+46	regex	**/*.md		(\]\((?:\.\./)*)RHI/((?:Backends/Metal4/ImGui/)?Include/)RHI/	\1RojoRHI/\2rojoRHI/	no	Markdown link target into an include root; link text and prose stay
+47	regex	**/*.md		(\]\((?:\.\./)*)RHI/	\1RojoRHI/	no	Markdown link target into the component directory; link text and prose stay
 50	regex	RojoRHI/**/*.h RojoRHI/**/*.cpp RojoRHI/**/*.mm		\bLMX_ASSERT\b	ROJORHI_ASSERT	no	Core keeps LMX_ASSERT
 60	regex	RojoRHI/**/*.h RojoRHI/**/*.cpp RojoRHI/**/*.mm		\bLMX_LOG_(TRACE|DEBUG|INFO|WARN|ERROR)\b	ROJORHI_LOG_\1	no	
-61	regex	RojoRHI/Tools/ImGuiBufferProbe/*		\bLMX_IMGUI_BACKEND_SOURCE\b	ROJORHI_IMGUI_BACKEND_SOURCE	no	probe define
+61	regex	RojoRHI/Tools/ImGuiBufferProbe/*		LMX_IMGUI_BACKEND_SOURCE\b	ROJORHI_IMGUI_BACKEND_SOURCE	no	probe define; no leading \b, since run.py spells it -DLMX_... on the compiler command line
 70	regex	RojoRHI/**/*.h RojoRHI/**/*.cpp RojoRHI/**/*.mm		"lmx\.	"rojorhi.	no	default, device-owned and component-test labels
 80	regex	Tests/Capture*.cpp Tools/GpuDebug/**		lmx\.(device\.frameData|imgui\.formatCarrier)	rojorhi.\1	no	consumers of component-owned labels
 85	regex	**	docs/** **/*.md	\bRHITests\b	RojoRHITests	yes	test target and its test groups
@@ -19,3 +21,5 @@ order	kind	include	exclude	pattern	replacement	strict	note
 87	regex	**/*.lua		\brhi_(slang2metallib|thirdparty|imgui_target)\b	rojorhi_\1	yes	Lua rule and host globals
 90	regex	**	docs/** **/*.md	"RHIMetal4ImGui"	"RojoRHIMetal4ImGui"	yes	independent of row 100 in either order
 100	regex	**/xmake.lua RojoRHI/xmake/*.lua Tools/module_contract.json Tools/*.py Tools/tests/*.py RojoRHI/Tools/*.py		"RHI"	"RojoRHI"	no	target, project, contract and path-segment tokens
+101	regex	Tools/tests/test_module_deps.py		depends on RHI outside	depends on RojoRHI outside	no	target-closure messages naming the fixture target row 100 renames
+102	regex	Tools/tests/test_module_deps.py		("TextureBake: depends on RojoRHI outside its allowed set",)(\s+)("TextureBake: depends on Render outside its allowed set",)	\3\2\1	no	the test compares against sorted messages, and Render sorts before RojoRHI
