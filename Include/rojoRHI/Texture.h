@@ -26,7 +26,7 @@ public:
     virtual uint32_t arrayLayers() const = 0;
     /// Blocking readback of the full texture (requires cpuReadback). out must hold exactly
     /// width * height * bytesPerPixel(format) bytes, tightly packed, in the format's own channel
-    /// order -- see bytesPerPixel in RHI/Validate.h, which also decides which formats readback
+    /// order -- see bytesPerPixel in rojoRHI/Validate.h, which also decides which formats readback
     /// accepts at all. Caller ensures GPU work completed (Device::waitIdle).
     /// Copies the full tightly packed texture into `out` after GPU work has completed.
     virtual void readback(void* out, uint64_t outSize) = 0;

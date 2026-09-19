@@ -72,7 +72,7 @@ if imgui_target then
         add_deps("RojoRHI", imgui_target)
 end
 
--- Contract and GPU tests for the standalone RHI component. They link the RHI target alone, so
+-- Contract and GPU tests for the standalone RHI component. They link the RojoRHI target alone, so
 -- the suite stays runnable once the component leaves this repository.
 target("RojoRHITests")
     set_kind("binary")

@@ -27,8 +27,8 @@ struct Metal4FrameDataBlock {
 };
 
 // The device-lifetime tallies the frame-data path keeps for tests and captures; see
-// RHI/Metal4/Metal4FrameData.h for what a reader may conclude from them. Owned by Metal4Device and
-// written by Metal4CommandList, which is why it is a plain struct rather than arena state: the
+// rojoRHI/Metal4/Metal4FrameData.h for what a reader may conclude from them. Owned by Metal4Device
+// and written by Metal4CommandList, which is why it is a plain struct rather than arena state: the
 // numbers span every slot, while an arena knows only its own.
 struct Metal4FrameDataTally {
     uint64_t calls = 0;

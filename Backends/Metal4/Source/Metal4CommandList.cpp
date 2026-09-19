@@ -145,10 +145,10 @@ void Metal4CommandList::emitPendingBarrier(MTL4::CommandEncoder* encoder,
     // queue-scoped and so reach back across every earlier encoder (earlier frames included, since
     // the queue outlives a frame); beforeStages is this encoder's own stage class, because the pass
     // that opens is the barrier's consumer by construction and no other encoder's stages are named.
-    // That asymmetry is the model rhi::CommandList::textureBarrier states: the producing side is as
-    // wide as the queue, the consuming side is exactly this pass, so a later pass of a different
-    // kind is ordered by this barrier only where its stages happen to coincide, and callers owe it
-    // one of its own instead of relying on that.
+    // That asymmetry is the model rojoRHI::CommandList::textureBarrier states: the producing side
+    // is as wide as the queue, the consuming side is exactly this pass, so a later pass of a
+    // different kind is ordered by this barrier only where its stages happen to coincide, and
+    // callers owe it one of its own instead of relying on that.
     if (m_pendingTemporalFence != nullptr) {
         encoder->waitForFence(m_pendingTemporalFence, consumerStages);
         m_pendingTemporalFence = nullptr;

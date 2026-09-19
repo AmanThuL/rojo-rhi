@@ -91,7 +91,7 @@ private:
     ResidencyRegistration m_residency;
 };
 
-// The placement heap behind rhi::Heap. Registered in the residency set as a whole: a heap is an
+// The placement heap behind rojoRHI::Heap. Registered in the residency set as a whole: a heap is an
 // MTL::Allocation, and making it resident makes every resource placed in it resident too, so the
 // placed wrappers below carry no registration of their own and no per-frame membership churn
 // follows a frame's transients.
@@ -116,7 +116,7 @@ private:
 };
 
 // Everything a Metal4Texture reports about itself, gathered from the descriptor that created it.
-// readbackBytesPerPixel is rhi::bytesPerPixel of that format for a texture created with
+// readbackBytesPerPixel is rojoRHI::bytesPerPixel of that format for a texture created with
 // TextureDesc.cpuReadback, and 0 for every other texture -- including the swapchain's drawables,
 // which are never read back. It is what readback() sizes its destination and row stride from.
 struct Metal4TextureInfo {
@@ -158,7 +158,7 @@ public:
     // Views are cached rather than created per bind because a bind is a per-frame call and
     // newTextureView is an allocation; caching them on the texture, rather than in a device-wide
     // map, ties their lifetime to the parent's, so no entry can outlive what it is a view of.
-    // `desc` must already have passed rhi::validateTextureView against this texture.
+    // `desc` must already have passed rojoRHI::validateTextureView against this texture.
     MTL::Texture* viewFor(const TextureViewDesc& desc);
 
 private:
