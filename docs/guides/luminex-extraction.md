@@ -1,6 +1,6 @@
 # Extracting RojoRHI from Luminex
 
-**Status**: Proposed
+**Status**: Accepted
 
 R2.1 to R2.4 are the consumer's four steps towards the extraction, named here and in
 `Tools/Rename/substitution.tsv` only: R2.1 writes these founding documents, R2.2 decouples the

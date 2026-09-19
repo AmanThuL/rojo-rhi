@@ -1,6 +1,6 @@
 # Testing Conventions
 
-**Status**: Proposed
+**Status**: Accepted
 
 Tests are Catch2 cases in one test tree, built as one test target. Names and tags are owned by
 [naming.md](naming.md).

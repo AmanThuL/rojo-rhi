@@ -1,6 +1,6 @@
 # ADR 0001: RojoRHI identity and naming
 
-**Status**: Proposed
+**Status**: Accepted (2026-09-19)
 
 ## Context
 
