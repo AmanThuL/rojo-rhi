@@ -1,0 +1,15 @@
+order	kind	scope	pattern	replacement	note
+10	path	component	RHI/Include/RHI	RHI/Include/rojoRHI	public include root
+20	path	component	RHI	RojoRHI	component directory, last path row
+30	regex	all	\blmx::rhi\b	rojoRHI	also rewrites lmx::rhi::metal4 and namespace lmx::rhi
+31	regex	consumers	(?<![\w:])rhi::	rojoRHI::	namespace-relative references written inside namespace lmx::...; applies to Source, Tests and Benchmarks *.h, *.cpp and *.mm files; the lookbehind leaves an identifier ending in rhi, and any other ::-qualified rhi::, alone
+40	regex	all	(#[ \t]*include[ \t]+)"RHI/([^"]+)"	\1<rojoRHI/\2>	public includes take the angle form ADR 0001 fixes; include-group reordering is left to the separate formatting commit
+41	regex	consumers	"RHI/(Format\.h|TextureDesc\.h)"	"rojoRHI/\1"	include-root spelling (matches row 10) in Tools/module_contract.json headers-list entries; must run before row 45
+42	regex	consumers	"RHI/\*\*/\*\.h"	"rojoRHI/**/*.h"	include-root spelling (matches row 10) of the glob in Tools/check_rhi_headers.py; R2.2 may relocate this file, so R2.3 re-derives this row against the tree it finds
+45	regex	consumers	"RHI/	"RojoRHI/	component-directory spelling (matches row 20) in build/tooling files; applies to root xmake.lua, xmake/tasks.lua, Tools/check_project_policy.py, Tools/check_cpp_comments.py and Tools/module_contract.json; must run after rows 41-42 so their include-root spellings are not recaptured
+50	regex	component	\bLMX_ASSERT\b	ROJORHI_ASSERT	Core keeps LMX_ASSERT
+60	regex	component	\bLMX_LOG_(TRACE|DEBUG|INFO|WARN|ERROR)\b	ROJORHI_LOG_\1	
+70	regex	component	"lmx\.	"rojorhi.	default and device-owned labels
+80	regex	consumers	lmx\.(device\.frameData|imgui\.formatCarrier)	rojorhi.\1	applies only to Tests/CaptureTests.cpp, Tests/CaptureSchemaTests.cpp and Tools/GpuDebug/** (recursive)
+90	regex	all	"RHIMetal4ImGui"	"RojoRHIMetal4ImGui"	rows 90 and 100 are independent: "RHI" cannot match inside "RHIMetal4ImGui" in either order
+100	regex	all	"RHI"	"RojoRHI"	applies only to xmake.lua files, Tools/module_contract.json, Tools/check_cpp_layout.py, Tools/check_cpp_comments.py, Tools/check_rhi_headers.py and Tools/tests/test_module_deps.py
