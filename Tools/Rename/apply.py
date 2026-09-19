@@ -30,9 +30,18 @@ class DirtyCheckoutError(Exception):
     """The checkout has uncommitted changes, so a rewrite could not be reproduced from it."""
 
 
+class MoveError(Exception):
+    """A `path` row cannot be applied, or its `git mv` failed; the message says how to recover."""
+
+
 def read_table(path: Path) -> list[dict]:
-    """Tab-split with no quoting: a double quote is ordinary field content."""
-    lines = path.read_text(encoding="utf-8").splitlines()
+    """Tab-split with no quoting: a double quote is ordinary field content.
+
+    The bytes are decoded without newline translation and split on "\n" alone, after one
+    trailing newline is dropped, so no other line-break character a field may hold ends a row.
+    """
+    text = path.read_bytes().decode("utf-8")
+    lines = (text[:-1] if text.endswith("\n") else text).split("\n")
     if not lines or lines[0].split("\t") != COLUMNS:
         raise TableError(f"{path}: header must be {COLUMNS}")
     rows = []
@@ -57,6 +66,9 @@ def read_table(path: Path) -> list[dict]:
                 row["regex"] = re.compile(row["pattern"])
             except re.error as error:
                 raise TableError(f"{path}:{number}: bad pattern: {error}") from None
+        elif rows and rows[-1]["kind"] == "regex":
+            raise TableError(f"{path}:{number}: a path row must precede every regex row, "
+                             "because regex scopes are spelled in post-rename paths")
         rows.append(row)
     orders = [row["order"] for row in rows]
     if orders != sorted(set(orders)):
@@ -152,16 +164,43 @@ def transform(entries: list[dict], rows: list[dict]) -> list[dict]:
     return report
 
 
+def verify_moves(root: Path, rows: list[dict]) -> None:
+    """Before anything moves: each `path` row's source is tracked once the earlier rows have run,
+    and its destination exists neither on disk nor among the tracked paths by then."""
+    listing = subprocess.run(["git", "-C", str(root), "ls-files", "-z"], check=True,
+                             capture_output=True).stdout.decode("utf-8")
+    tracked = [name for name in listing.split("\0") if name]
+    for row in rows:
+        if row["kind"] != "path":
+            continue
+        source, destination = row["pattern"], row["replacement"]
+        if not any(moved(name, row) is not None for name in tracked):
+            raise MoveError(f"row {row['order']}: source {source} is not tracked in {root}")
+        taken = {"pattern": destination, "replacement": destination}
+        if (root / destination).exists() or any(moved(name, taken) for name in tracked):
+            raise MoveError(f"row {row['order']}: destination {destination} already exists in "
+                            f"{root}; git mv would move {source} inside it")
+        tracked = [moved(name, row) or name for name in tracked]
+
+
 def write(root: Path, entries: list[dict], rows: list[dict]) -> None:
     """Moves every `path` row's source with `git mv`, in order, then writes the changed texts."""
     status = subprocess.run(["git", "-C", str(root), "status", "--porcelain"], check=True,
                             capture_output=True).stdout
     if status:
         raise DirtyCheckoutError(f"{root} has uncommitted changes; refusing to rewrite it")
+    verify_moves(root, rows)
     for row in rows:
         if row["kind"] == "path":
-            subprocess.run(["git", "-C", str(root), "mv", row["pattern"], row["replacement"]],
-                           check=True)
+            command = ["git", "-C", str(root), "mv", row["pattern"], row["replacement"]]
+            try:
+                subprocess.run(command, check=True, capture_output=True, text=True)
+            except subprocess.CalledProcessError as error:
+                raise MoveError(
+                    f"row {row['order']}: {' '.join(command)} failed:\n{error.stderr.strip()}\n"
+                    f"earlier moves may have run; restore the checkout with "
+                    f"`git -C {root} reset --hard && git -C {root} clean -fd` and re-run"
+                ) from None
     for entry in entries:
         if entry["text"] != entry["original"]:
             (root / entry["path"]).write_bytes(entry["text"].encode("utf-8"))
@@ -294,6 +333,9 @@ def main(argv: list[str]) -> int:
     mode.add_argument("--selftest", action="store_true",
                       help="apply the table to a built-in fixture and compare every file")
     args = parser.parse_args(argv)
+    if args.selftest and args.root is not None:
+        print("--selftest takes no checkout root", file=sys.stderr)
+        return 2
     try:
         rows = read_table(TABLE)
     except TableError as error:
@@ -313,7 +355,7 @@ def main(argv: list[str]) -> int:
     if not args.dry_run:
         try:
             write(args.root, entries, rows)
-        except DirtyCheckoutError as error:
+        except (DirtyCheckoutError, MoveError) as error:
             print(error, file=sys.stderr)
             return 2
     print_report(report)
