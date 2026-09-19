@@ -1,0 +1,5 @@
+/.xmake/
+/build/
+/ThirdParty/
+/compile_commands.json
+__pycache__/

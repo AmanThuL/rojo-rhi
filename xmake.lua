@@ -11,4 +11,4 @@ set_policy("build.warning", true)
 
 add_requires("catch2 3.x", "glm")
 
-includes("xmake/setup.lua", "xmake/targets.lua")
+includes("xmake/setup.lua", "xmake/tasks.lua", "xmake/targets.lua")
