@@ -3,8 +3,8 @@
 /// @brief Declares one frame slot's growable arena of mapped Metal buffers for per-frame data.
 //----------------------------------------------------------------------------------------------------------------------
 #pragma once
-#include "Core/Align.h"
-#include "Core/Assert.h"
+#include "Base/Align.h"
+#include "Base/Assert.h"
 #include "Metal4Common.h"
 #include "RHI/Metal4/Metal4FrameData.h"
 #include "RHI/Result.h"

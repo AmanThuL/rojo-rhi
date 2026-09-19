@@ -4,8 +4,8 @@
 //----------------------------------------------------------------------------------------------------------------------
 #include "Metal4Swapchain.h"
 
-#include "Core/Assert.h"
-#include "Core/Log.h"
+#include "Base/Assert.h"
+#include "Base/Log.h"
 
 #include <string>
 #include <utility>

@@ -1,4 +1,4 @@
-#include "GpuTestSupport.h"
+#include "RhiGpuTestSupport.h"
 
 #include "RHI/Metal4/Metal4FrameData.h"
 

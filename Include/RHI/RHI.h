@@ -5,6 +5,7 @@
 #pragma once
 #include "RHI/Format.h"
 #include "RHI/GpuAddress.h"
+#include "RHI/Message.h"
 #include "RHI/Result.h"
 
 #include "RHI/Buffer.h"

@@ -4,7 +4,7 @@
 //----------------------------------------------------------------------------------------------------------------------
 #include "Metal4CommandList.h"
 
-#include "Core/Assert.h"
+#include "Base/Assert.h"
 #include "Metal4Resources.h"
 #include "RHI/CaptureSchema.h"
 #include "RHI/Indirect.h"

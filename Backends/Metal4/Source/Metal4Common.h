@@ -6,7 +6,7 @@
 // Shared plumbing for the Metal 4 backend: the metal-cpp umbrella includes plus the
 // handful of helpers every backend file needs. Private to the RHI target -- metal-cpp
 // types never appear in RHI.h.
-#include "Core/Assert.h"
+#include "Base/Assert.h"
 #include "RHI/Format.h"
 
 #include <Foundation/Foundation.hpp>

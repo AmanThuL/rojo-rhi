@@ -4,7 +4,7 @@
 //----------------------------------------------------------------------------------------------------------------------
 #include "Metal4Resources.h"
 
-#include "Core/Assert.h"
+#include "Base/Assert.h"
 #include "RHI/CaptureSchema.h"
 #include "RHI/Validate.h"
 

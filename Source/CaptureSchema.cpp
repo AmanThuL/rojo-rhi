@@ -4,8 +4,8 @@
 //----------------------------------------------------------------------------------------------------------------------
 #include "RHI/CaptureSchema.h"
 
-#include "Core/Json.h"
-#include "Core/Log.h"
+#include "Base/Json.h"
+#include "Base/Log.h"
 
 #include <cmath>
 #include <format>
@@ -54,7 +54,7 @@ std::string_view formatName(Format format) {
 // Escape RFC 8259 control bytes while preserving existing UTF-8 label bytes.
 void appendJsonString(std::string& out, std::string_view text) {
     out += '"';
-    appendJsonEscaped(out, text);
+    base::appendJsonEscaped(out, text);
     out += '"';
 }
 

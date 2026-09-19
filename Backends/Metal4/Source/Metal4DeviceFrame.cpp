@@ -4,7 +4,7 @@
 //----------------------------------------------------------------------------------------------------------------------
 #include "Metal4Device.h"
 
-#include "Core/Assert.h"
+#include "Base/Assert.h"
 #include "Metal4Swapchain.h"
 
 #include <format>

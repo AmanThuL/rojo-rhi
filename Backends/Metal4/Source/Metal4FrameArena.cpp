@@ -4,8 +4,8 @@
 //----------------------------------------------------------------------------------------------------------------------
 #include "Metal4FrameArena.h"
 
-#include "Core/Align.h"
-#include "Core/Assert.h"
+#include "Base/Align.h"
+#include "Base/Assert.h"
 #include "Metal4Device.h"
 #include "RHI/CaptureSchema.h"
 
@@ -45,8 +45,8 @@ Result<void> Metal4FrameArena::addPage(uint64_t requestedBytes) {
                               requestedBytes, kFrameDataPageBytes, m_slot)});
     }
     const uint64_t capacity =
-        alignUp(requestedBytes < kFrameDataPageBytes ? kFrameDataPageBytes : requestedBytes,
-                kFrameDataPageBytes);
+        base::alignUp(requestedBytes < kFrameDataPageBytes ? kFrameDataPageBytes : requestedBytes,
+                      kFrameDataPageBytes);
 
     NS::SharedPtr<MTL::Buffer> buffer =
         NS::TransferPtr(m_device->newBuffer(capacity, MTL::ResourceStorageModeShared));

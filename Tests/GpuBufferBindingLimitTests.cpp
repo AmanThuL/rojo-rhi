@@ -1,4 +1,4 @@
-#include "GpuTestSupport.h"
+#include "RhiGpuTestSupport.h"
 
 //======================================================================================================================
 TEST_CASE("compute reads the highest public buffer slot", "[gpu][rhi]") {

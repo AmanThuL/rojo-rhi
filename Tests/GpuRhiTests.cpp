@@ -1,4 +1,4 @@
-#include "GpuTestSupport.h"
+#include "RhiGpuTestSupport.h"
 
 #include <chrono>
 #include <cstring>

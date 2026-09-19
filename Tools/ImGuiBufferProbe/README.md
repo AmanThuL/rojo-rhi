@@ -3,7 +3,7 @@
 On Metal 4 Apple Silicon, after building App/ImGui:
 
 ```sh
-python3 Tools/ImGuiBufferProbe/run.py --old-policy-control
+python3 RHI/Tools/ImGuiBufferProbe/run.py --old-policy-control
 ```
 
 The standalone Objective-C++ executable includes the actual fetched/patched backend and links
@@ -25,3 +25,6 @@ the working tree is untouched. It demonstrates sensitivity to the original overw
 
 This probes buffer ownership and the platform event protocol without SDL or native windows. It
 does not validate OS window positioning, drawable acquisition, occlusion, or visual frame pacing.
+
+The probe runs only inside a host checkout that provides Dear ImGui; it cannot run from a bare
+copy of the `RHI` component.

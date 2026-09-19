@@ -1,4 +1,4 @@
-#include "GpuTestSupport.h"
+#include "RhiGpuTestSupport.h"
 
 // The existing indirect cases used base instance zero. Nonzero base plus four local instances
 // distinguishes the native full index from HLSL-style local index lowering.

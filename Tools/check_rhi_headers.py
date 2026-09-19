@@ -8,8 +8,8 @@ import sys
 from pathlib import Path
 
 
-ROOT = Path(__file__).resolve().parents[1]
-PUBLIC_INCLUDE = ROOT / "RHI" / "Include"
+COMPONENT = Path(__file__).resolve().parents[1]
+PUBLIC_INCLUDE = COMPONENT / "Include"
 HEADERS = tuple(sorted(PUBLIC_INCLUDE.glob("RHI/**/*.h")))
 
 
@@ -36,14 +36,14 @@ def main() -> int:
         include = header.relative_to(PUBLIC_INCLUDE).as_posix()
         result = subprocess.run(
             command,
-            cwd=ROOT,
+            cwd=COMPONENT,
             input=f'#include "{include}"\n',
             text=True,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
         )
         if result.returncode:
-            failures.append((header.relative_to(ROOT), result.stderr.strip()))
+            failures.append((header.relative_to(COMPONENT), result.stderr.strip()))
 
     if failures:
         for header, diagnostic in failures:

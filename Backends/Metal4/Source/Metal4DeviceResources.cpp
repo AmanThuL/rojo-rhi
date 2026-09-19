@@ -4,8 +4,8 @@
 //----------------------------------------------------------------------------------------------------------------------
 #include "Metal4Device.h"
 
-#include "Core/Assert.h"
-#include "Core/Log.h"
+#include "Base/Assert.h"
+#include "Base/Log.h"
 #include "Metal4DevicePrivate.h"
 #include "Metal4Resources.h"
 #include "Metal4Swapchain.h"

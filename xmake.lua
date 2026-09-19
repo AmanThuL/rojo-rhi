@@ -1,24 +1,14 @@
--- Backend-neutral RHI surface and the Metal 4 implementation. The public include directory
--- preserves the existing #include "RHI/..." contract; metal-cpp and backend headers remain
--- implementation details of this component.
-target("RHI")
-    set_kind("static")
-    add_files("Source/*.cpp")
-    add_files("Backends/Metal4/Source/Metal4Capture.cpp")
-    add_files("Backends/Metal4/Source/Metal4CommandList.cpp")
-    add_files("Backends/Metal4/Source/Metal4Device.cpp")
-    add_files("Backends/Metal4/Source/Metal4DeviceFrame.cpp")
-    add_files("Backends/Metal4/Source/Metal4DevicePipeline.cpp")
-    add_files("Backends/Metal4/Source/Metal4DeviceResources.cpp")
-    add_files("Backends/Metal4/Source/Metal4FrameArena.cpp")
-    add_files("Backends/Metal4/Source/Metal4Resources.cpp")
-    add_files("Backends/Metal4/Source/Metal4Swapchain.cpp")
-    add_files("Backends/Metal4/Source/Metal4TemporalScaler.cpp")
-    add_files("Backends/Metal4/Source/MetalCppImpl.cpp")
-    add_includedirs("Include", {public = true})
-    add_includedirs("Backends/Metal4/Source")
-    add_includedirs("../ThirdParty/metal-cpp")
-    add_frameworks("Metal", "MetalFX", "QuartzCore", "Foundation")
-    add_deps("Core")
+-- Project root for a standalone configure of the RHI component. It carries root settings only:
+-- every target lives in xmake/targets.lua, which a host project includes instead of this file.
+-- xmake resolves a project root to the outermost ancestor holding an xmake.lua, so a configure
+-- from inside a host checkout names this directory explicitly: `xmake f -P RHI`.
+set_project("RHI")
+set_languages("c++23")
+add_rules("mode.debug", "mode.release")
+set_defaultmode("debug")
+set_warnings("allextra")
+set_policy("build.warning", true)
 
-includes("Backends/Metal4/ImGui/xmake.lua")
+add_requires("catch2 3.x", "glm")
+
+includes("xmake/setup.lua", "xmake/targets.lua")

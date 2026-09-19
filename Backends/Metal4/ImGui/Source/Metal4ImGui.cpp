@@ -4,8 +4,8 @@
 //----------------------------------------------------------------------------------------------------------------------
 #include "RHI/Metal4/Metal4ImGui.h"
 
-#include "Core/Assert.h"
-#include "Core/Log.h"
+#include "Base/Assert.h"
+#include "Base/Log.h"
 #include "Metal4CommandList.h"
 #include "Metal4Common.h"
 #include "Metal4Device.h"
