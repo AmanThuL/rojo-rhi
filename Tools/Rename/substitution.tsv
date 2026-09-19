@@ -1,15 +1,21 @@
-order	kind	scope	pattern	replacement	note
-10	path	component	RHI/Include/RHI	RHI/Include/rojoRHI	public include root
-20	path	component	RHI	RojoRHI	component directory, last path row
-30	regex	all	\blmx::rhi\b	rojoRHI	also rewrites lmx::rhi::metal4 and namespace lmx::rhi
-31	regex	consumers	(?<![\w:])rhi::	rojoRHI::	namespace-relative references written inside namespace lmx::...; applies to Source, Tests and Benchmarks *.h, *.cpp and *.mm files; the lookbehind leaves an identifier ending in rhi, and any other ::-qualified rhi::, alone
-40	regex	all	(#[ \t]*include[ \t]+)"RHI/([^"]+)"	\1<rojoRHI/\2>	public includes take the angle form ADR 0001 fixes; include-group reordering is left to the separate formatting commit
-41	regex	consumers	"RHI/(Format\.h|TextureDesc\.h)"	"rojoRHI/\1"	include-root spelling (matches row 10) in Tools/module_contract.json headers-list entries; must run before row 45
-42	regex	consumers	"RHI/\*\*/\*\.h"	"rojoRHI/**/*.h"	include-root spelling (matches row 10) of the glob in Tools/check_rhi_headers.py; R2.2 may relocate this file, so R2.3 re-derives this row against the tree it finds
-45	regex	consumers	"RHI/	"RojoRHI/	component-directory spelling (matches row 20) in build/tooling files; applies to root xmake.lua, xmake/tasks.lua, Tools/check_project_policy.py, Tools/check_cpp_comments.py and Tools/module_contract.json; must run after rows 41-42 so their include-root spellings are not recaptured
-50	regex	component	\bLMX_ASSERT\b	ROJORHI_ASSERT	Core keeps LMX_ASSERT
-60	regex	component	\bLMX_LOG_(TRACE|DEBUG|INFO|WARN|ERROR)\b	ROJORHI_LOG_\1	
-70	regex	component	"lmx\.	"rojorhi.	default and device-owned labels
-80	regex	consumers	lmx\.(device\.frameData|imgui\.formatCarrier)	rojorhi.\1	applies only to Tests/CaptureTests.cpp, Tests/CaptureSchemaTests.cpp and Tools/GpuDebug/** (recursive)
-90	regex	all	"RHIMetal4ImGui"	"RojoRHIMetal4ImGui"	rows 90 and 100 are independent: "RHI" cannot match inside "RHIMetal4ImGui" in either order
-100	regex	all	"RHI"	"RojoRHI"	applies only to xmake.lua files, Tools/module_contract.json, Tools/check_cpp_layout.py, Tools/check_cpp_comments.py, Tools/check_rhi_headers.py and Tools/tests/test_module_deps.py
+order	kind	include	exclude	pattern	replacement	strict	note
+10	path			RHI/Include/RHI	RHI/Include/rojoRHI	no	public include root
+11	path			RHI/Backends/Metal4/ImGui/Include/RHI	RHI/Backends/Metal4/ImGui/Include/rojoRHI	no	the ImGui adapter's own public include root
+20	path			RHI	RojoRHI	no	component directory, last path row
+30	regex	**	docs/** **/*.md	\blmx::rhi\b	rojoRHI	yes	also lmx::rhi::metal4, lmx::rhi::base, namespace lmx::rhi and the forbidUndefined symbol prefix
+31	regex	Source/**/*.h Source/**/*.cpp Source/**/*.mm Tests/**/*.h Tests/**/*.cpp Tests/**/*.mm Benchmarks/**/*.h Benchmarks/**/*.cpp Benchmarks/**/*.mm Tools/**/*.h Tools/**/*.cpp Tools/**/*.mm		(?<![\w:])rhi::	rojoRHI::	no	namespace-relative references written inside namespace lmx::...
+40	regex	**/*.h **/*.cpp **/*.mm		(#[ \t]*include[ \t]+)"RHI/([^"]+)"	\1<rojoRHI/\2>	yes	public includes take the angle form
+41	regex	Tools/module_contract.json Tools/tests/*.py		(["'])RHI/((?:Metal4/)?\w+\.h)\1	\g<1>rojoRHI/\2\g<1>	no	a quoted string that is exactly an include spelling
+42	regex	RojoRHI/Tools/check_rhi_headers.py		"RHI/\*\*/\*\.h"	"rojoRHI/**/*.h"	no	include-root glob
+43	regex	Tools/*.py Tools/tests/*.py		Include/RHI/	Include/rojoRHI/	no	include root spelled as a path segment
+45	regex	xmake.lua xmake/*.lua .gitignore .github/workflows/*.yml Source/Asset/xmake.lua Tests/GpuTestSupport.h Tools/*.py Tools/tests/*.py Tools/module_contract.json Tools/GpuDebug/**/*.py		(?<![a-z])RHI/	RojoRHI/	no	component directory; runs after 40-43 so include spellings are already lower-case-prefixed
+50	regex	RojoRHI/**/*.h RojoRHI/**/*.cpp RojoRHI/**/*.mm		\bLMX_ASSERT\b	ROJORHI_ASSERT	no	Core keeps LMX_ASSERT
+60	regex	RojoRHI/**/*.h RojoRHI/**/*.cpp RojoRHI/**/*.mm		\bLMX_LOG_(TRACE|DEBUG|INFO|WARN|ERROR)\b	ROJORHI_LOG_\1	no	
+61	regex	RojoRHI/Tools/ImGuiBufferProbe/*		\bLMX_IMGUI_BACKEND_SOURCE\b	ROJORHI_IMGUI_BACKEND_SOURCE	no	probe define
+70	regex	RojoRHI/**/*.h RojoRHI/**/*.cpp RojoRHI/**/*.mm		"lmx\.	"rojorhi.	no	default, device-owned and component-test labels
+80	regex	Tests/Capture*.cpp Tools/GpuDebug/**		lmx\.(device\.frameData|imgui\.formatCarrier)	rojorhi.\1	no	consumers of component-owned labels
+85	regex	**	docs/** **/*.md	\bRHITests\b	RojoRHITests	yes	test target and its test groups
+86	regex	**	docs/** **/*.md	\brhi-test\b	rojorhi-test	yes	test target build directory
+87	regex	**/*.lua		\brhi_(slang2metallib|thirdparty|imgui_target)\b	rojorhi_\1	yes	Lua rule and host globals
+90	regex	**	docs/** **/*.md	"RHIMetal4ImGui"	"RojoRHIMetal4ImGui"	yes	independent of row 100 in either order
+100	regex	**/xmake.lua RojoRHI/xmake/*.lua Tools/module_contract.json Tools/*.py Tools/tests/*.py RojoRHI/Tools/*.py		"RHI"	"RojoRHI"	no	target, project, contract and path-segment tokens
