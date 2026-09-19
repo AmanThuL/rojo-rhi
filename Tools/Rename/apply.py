@@ -363,7 +363,9 @@ def main(argv: list[str]) -> int:
     parser.add_argument("root", nargs="?", type=Path, help="Luminex checkout to rewrite")
     mode = parser.add_mutually_exclusive_group()
     mode.add_argument("--dry-run", action="store_true", help="print per-row counts, write nothing")
-    mode.add_argument("--check", action="store_true", help="verify a tree the table was applied to")
+    mode.add_argument("--check", action="store_true",
+                      help="verify a tree the table was applied to, with its moves still staged "
+                           "or committed")
     mode.add_argument("--selftest", action="store_true",
                       help="apply the table to a built-in fixture and compare every file")
     args = parser.parse_args(argv)
