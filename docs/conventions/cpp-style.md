@@ -1,6 +1,6 @@
 # C++ Style
 
-**Status**: Proposed
+**Status**: Accepted
 
 Formatting is owned by a `.clang-format` file that arrives with the code import; this file covers
 what a formatter cannot. Names are owned by [naming.md](naming.md).

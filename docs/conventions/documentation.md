@@ -1,6 +1,6 @@
 # Documentation Conventions
 
-**Status**: Proposed
+**Status**: Accepted
 
 Documentation has one owner for each kind of fact. A newer lower-precedence document does not
 silently override an accepted higher-precedence decision.

@@ -1,6 +1,6 @@
 # ADR 0003: Thin, explicit, honest
 
-**Status**: Proposed
+**Status**: Accepted (2026-09-19)
 
 **Restates**: Luminex ADR 0004, "RHI philosophy — thin, explicit, honest"
 

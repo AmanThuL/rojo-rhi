@@ -1,6 +1,6 @@
 # ADR 0002: Metal 4 native is the first backend
 
-**Status**: Proposed
+**Status**: Accepted (2026-09-19)
 
 **Restates**: Luminex ADR 0002, "Metal 4 native as the first RHI backend"
 

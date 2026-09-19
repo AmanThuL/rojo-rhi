@@ -1,6 +1,6 @@
 # Naming Conventions
 
-**Status**: Proposed
+**Status**: Accepted
 
 [ADR 0001](../decisions/0001-identity-and-naming.md) owns RojoRHI's identity. This file applies that
 identity as day-to-day rules and adds the names the ADR does not cover. Where the two could be read

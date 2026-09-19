@@ -1,6 +1,6 @@
 # ADR 0005: Conformance checkpoint A freezes eight semantic areas behind one test tag
 
-**Status**: Proposed
+**Status**: Accepted (2026-09-19)
 
 **Restates**: Luminex ADR 0009, "Portability checkpoint A freezes eight semantic areas behind one
 test tag"
