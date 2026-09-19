@@ -77,14 +77,14 @@ void requireTriangleDrawn(const std::vector<uint8_t>& pixels) {
 
 //======================================================================================================================
 // The vertex-pulling triangle pipeline every draw case below records into.
-lmx::rhi::Result<std::unique_ptr<lmx::rhi::GraphicsPipeline>>
-makeTrianglePipeline(lmx::rhi::Device& device, lmx::rhi::ShaderLibrary& library,
+rojoRHI::Result<std::unique_ptr<rojoRHI::GraphicsPipeline>>
+makeTrianglePipeline(rojoRHI::Device& device, rojoRHI::ShaderLibrary& library,
                      const char* label) {
     return device.createGraphicsPipeline({.library = &library,
                                           .vertexEntry = "vertexMain",
                                           .fragmentEntry = "fragmentMain",
-                                          .colorFormat = lmx::rhi::Format::BGRA8Unorm,
-                                          .cullMode = lmx::rhi::CullMode::None,
+                                          .colorFormat = rojoRHI::Format::BGRA8Unorm,
+                                          .cullMode = rojoRHI::CullMode::None,
                                           .label = label});
 }
 
@@ -96,7 +96,7 @@ makeTrianglePipeline(lmx::rhi::Device& device, lmx::rhi::ShaderLibrary& library,
 // the padding pattern rather than the counts.
 TEST_CASE("an indirect dispatch reads its threadgroup counts from a buffer",
           "[gpu][checkpoint-a]") {
-    using namespace lmx::rhi;
+    using namespace rojoRHI;
 
     constexpr uint64_t kArgsOffset = 64;
     constexpr uint64_t kArgsBytes = 128;
@@ -113,7 +113,7 @@ TEST_CASE("an indirect dispatch reads its threadgroup counts from a buffer",
         (*device)->createComputePipeline({.library = library->get(),
                                           .computeEntry = "computeFillBuffer",
                                           .threadsPerThreadgroup = {kIndirectThreadsPerGroup, 1, 1},
-                                          .label = "lmx.test.indirect.dispatchPipeline"});
+                                          .label = "rojorhi.test.indirect.dispatchPipeline"});
     INFO(errorOf(pipeline));
     REQUIRE(pipeline.has_value());
 
@@ -123,7 +123,7 @@ TEST_CASE("an indirect dispatch reads its threadgroup counts from a buffer",
         .threadgroupsX = kDispatchedGroups, .threadgroupsY = 1, .threadgroupsZ = 1};
     std::memcpy(argsBytes.data() + kArgsOffset, &args, sizeof(args));
     auto argumentBuffer = (*device)->createBuffer(
-        {.size = kArgsBytes, .label = "lmx.test.indirect.dispatchArgs"}, argsBytes.data());
+        {.size = kArgsBytes, .label = "rojorhi.test.indirect.dispatchArgs"}, argsBytes.data());
     INFO(errorOf(argumentBuffer));
     REQUIRE(argumentBuffer.has_value());
 
@@ -131,7 +131,7 @@ TEST_CASE("an indirect dispatch reads its threadgroup counts from a buffer",
     auto output = (*device)->createBuffer({.size = sizeof(uint32_t) * kOutputElements,
                                            .storageWrite = true,
                                            .cpuReadback = true,
-                                           .label = "lmx.test.indirect.dispatchOutput"},
+                                           .label = "rojorhi.test.indirect.dispatchOutput"},
                                           sentinel.data());
     INFO(errorOf(output));
     REQUIRE(output.has_value());
@@ -139,7 +139,7 @@ TEST_CASE("an indirect dispatch reads its threadgroup counts from a buffer",
     const IndirectComputeParams params{.bias = kIndirectBias, .extent = 0};
 
     CommandList& commands = (*device)->beginFrame();
-    commands.beginComputePass("lmx.test.indirect.dispatch");
+    commands.beginComputePass("rojorhi.test.indirect.dispatch");
     commands.bindComputePipeline(**pipeline);
     commands.bindStorageBuffer(0, **output, StorageAccess::Write);
     commands.bindFrameData(1, params);
@@ -157,7 +157,7 @@ TEST_CASE("an indirect dispatch reads its threadgroup counts from a buffer",
 // The non-indexed draw, whose firstVertex has to reach the vertex-pulling shader for anything to
 // appear at all.
 TEST_CASE("an indirect draw reads its vertex range from a buffer", "[gpu][checkpoint-a]") {
-    using namespace lmx::rhi;
+    using namespace rojoRHI;
 
     constexpr uint64_t kArgsOffset = 32;
     constexpr uint64_t kArgsBytes = 128;
@@ -170,12 +170,12 @@ TEST_CASE("an indirect draw reads its vertex range from a buffer", "[gpu][checkp
     INFO(errorOf(library));
     REQUIRE(library.has_value());
 
-    auto pipeline = makeTrianglePipeline(**device, **library, "lmx.test.indirect.drawPipeline");
+    auto pipeline = makeTrianglePipeline(**device, **library, "rojorhi.test.indirect.drawPipeline");
     INFO(errorOf(pipeline));
     REQUIRE(pipeline.has_value());
 
     auto vertices = (*device)->createBuffer(
-        {.size = sizeof(kOffsetTriangle), .label = "lmx.test.indirect.drawVertices"},
+        {.size = sizeof(kOffsetTriangle), .label = "rojorhi.test.indirect.drawVertices"},
         kOffsetTriangle.data());
     INFO(errorOf(vertices));
     REQUIRE(vertices.has_value());
@@ -185,11 +185,11 @@ TEST_CASE("an indirect draw reads its vertex range from a buffer", "[gpu][checkp
         .vertexCount = 3, .instanceCount = 1, .firstVertex = 3, .firstInstance = 0};
     std::memcpy(argsBytes.data() + kArgsOffset, &args, sizeof(args));
     auto argumentBuffer = (*device)->createBuffer(
-        {.size = kArgsBytes, .label = "lmx.test.indirect.drawArgs"}, argsBytes.data());
+        {.size = kArgsBytes, .label = "rojorhi.test.indirect.drawArgs"}, argsBytes.data());
     INFO(errorOf(argumentBuffer));
     REQUIRE(argumentBuffer.has_value());
 
-    auto target = makeProbeTarget(**device, "lmx.test.indirect.drawTarget");
+    auto target = makeProbeTarget(**device, "rojorhi.test.indirect.drawTarget");
     INFO(errorOf(target));
     REQUIRE(target.has_value());
 
@@ -197,7 +197,7 @@ TEST_CASE("an indirect draw reads its vertex range from a buffer", "[gpu][checkp
     commands.beginRenderPass({.colorTarget = target->get(),
                               .clearColor = {0.0f, 0.0f, 0.0f, 1.0f},
                               .clear = true,
-                              .label = "lmx.test.indirect.draw"});
+                              .label = "rojorhi.test.indirect.draw"});
     commands.bindPipeline(**pipeline);
     commands.bindBuffer(kVertexBufferSlot, **vertices);
     commands.drawIndirect(**argumentBuffer, kArgsOffset);
@@ -215,7 +215,7 @@ TEST_CASE("an indirect draw reads its vertex range from a buffer", "[gpu][checkp
 // out of the struct at the documented offsets, and either being dropped leaves the target black.
 TEST_CASE("an indirect indexed draw reads its index range and base vertex from a buffer",
           "[gpu][checkpoint-a]") {
-    using namespace lmx::rhi;
+    using namespace rojoRHI;
 
     constexpr uint64_t kArgsOffset = 48;
     constexpr uint64_t kArgsBytes = 128;
@@ -229,18 +229,18 @@ TEST_CASE("an indirect indexed draw reads its index range and base vertex from a
     REQUIRE(library.has_value());
 
     auto pipeline =
-        makeTrianglePipeline(**device, **library, "lmx.test.indirect.drawIndexedPipeline");
+        makeTrianglePipeline(**device, **library, "rojorhi.test.indirect.drawIndexedPipeline");
     INFO(errorOf(pipeline));
     REQUIRE(pipeline.has_value());
 
     auto vertices = (*device)->createBuffer(
-        {.size = sizeof(kOffsetTriangle), .label = "lmx.test.indirect.indexedVertices"},
+        {.size = sizeof(kOffsetTriangle), .label = "rojorhi.test.indirect.indexedVertices"},
         kOffsetTriangle.data());
     INFO(errorOf(vertices));
     REQUIRE(vertices.has_value());
 
     auto indices = (*device)->createBuffer(
-        {.size = sizeof(kOffsetIndices), .label = "lmx.test.indirect.indexedIndices"},
+        {.size = sizeof(kOffsetIndices), .label = "rojorhi.test.indirect.indexedIndices"},
         kOffsetIndices.data());
     INFO(errorOf(indices));
     REQUIRE(indices.has_value());
@@ -253,11 +253,11 @@ TEST_CASE("an indirect indexed draw reads its index range and base vertex from a
                                        .firstInstance = 0};
     std::memcpy(argsBytes.data() + kArgsOffset, &args, sizeof(args));
     auto argumentBuffer = (*device)->createBuffer(
-        {.size = kArgsBytes, .label = "lmx.test.indirect.indexedArgs"}, argsBytes.data());
+        {.size = kArgsBytes, .label = "rojorhi.test.indirect.indexedArgs"}, argsBytes.data());
     INFO(errorOf(argumentBuffer));
     REQUIRE(argumentBuffer.has_value());
 
-    auto target = makeProbeTarget(**device, "lmx.test.indirect.indexedTarget");
+    auto target = makeProbeTarget(**device, "rojorhi.test.indirect.indexedTarget");
     INFO(errorOf(target));
     REQUIRE(target.has_value());
 
@@ -265,7 +265,7 @@ TEST_CASE("an indirect indexed draw reads its index range and base vertex from a
     commands.beginRenderPass({.colorTarget = target->get(),
                               .clearColor = {0.0f, 0.0f, 0.0f, 1.0f},
                               .clear = true,
-                              .label = "lmx.test.indirect.drawIndexed"});
+                              .label = "rojorhi.test.indirect.drawIndexed"});
     commands.bindPipeline(**pipeline);
     commands.bindBuffer(kVertexBufferSlot, **vertices);
     commands.drawIndexedIndirect(**indices, **argumentBuffer, kArgsOffset);
@@ -283,7 +283,7 @@ TEST_CASE("an indirect indexed draw reads its index range and base vertex from a
 // The writing kernel lays down raw 32-bit words at the documented indices, so this is also what
 // pins DispatchIndirectArgs' member order against what the GPU actually consumes.
 TEST_CASE("an indirect dispatch consumes arguments a compute pass wrote", "[gpu]") {
-    using namespace lmx::rhi;
+    using namespace rojoRHI;
 
     // Element index in the arguments buffer, and the byte offset it corresponds to.
     constexpr uint32_t kArgsIndex = 16;
@@ -302,7 +302,7 @@ TEST_CASE("an indirect dispatch consumes arguments a compute pass wrote", "[gpu]
         (*device)->createComputePipeline({.library = indirectLibrary->get(),
                                           .computeEntry = "computeWriteDispatchArgs",
                                           .threadsPerThreadgroup = {1, 1, 1},
-                                          .label = "lmx.test.indirect.writeDispatchArgsPipeline"});
+                                          .label = "rojorhi.test.indirect.writeDispatchArgsPipeline"});
     INFO(errorOf(writeArgsPipeline));
     REQUIRE(writeArgsPipeline.has_value());
 
@@ -314,13 +314,13 @@ TEST_CASE("an indirect dispatch consumes arguments a compute pass wrote", "[gpu]
         (*device)->createComputePipeline({.library = fillLibrary->get(),
                                           .computeEntry = "computeFillBuffer",
                                           .threadsPerThreadgroup = {kIndirectThreadsPerGroup, 1, 1},
-                                          .label = "lmx.test.indirect.gpuArgsFillPipeline"});
+                                          .label = "rojorhi.test.indirect.gpuArgsFillPipeline"});
     INFO(errorOf(fillPipeline));
     REQUIRE(fillPipeline.has_value());
 
     // No initial contents: everything the dispatch reads has to come from the pass that writes it.
     auto argumentBuffer = (*device)->createBuffer(
-        {.size = kArgsBytes, .storageWrite = true, .label = "lmx.test.indirect.gpuDispatchArgs"},
+        {.size = kArgsBytes, .storageWrite = true, .label = "rojorhi.test.indirect.gpuDispatchArgs"},
         nullptr);
     INFO(errorOf(argumentBuffer));
     REQUIRE(argumentBuffer.has_value());
@@ -329,7 +329,7 @@ TEST_CASE("an indirect dispatch consumes arguments a compute pass wrote", "[gpu]
     auto output = (*device)->createBuffer({.size = sizeof(uint32_t) * kOutputElements,
                                            .storageWrite = true,
                                            .cpuReadback = true,
-                                           .label = "lmx.test.indirect.gpuDispatchOutput"},
+                                           .label = "rojorhi.test.indirect.gpuDispatchOutput"},
                                           sentinel.data());
     INFO(errorOf(output));
     REQUIRE(output.has_value());
@@ -338,7 +338,7 @@ TEST_CASE("an indirect dispatch consumes arguments a compute pass wrote", "[gpu]
     const IndirectComputeParams fillParams{.bias = kIndirectBias, .extent = 0};
 
     CommandList& commands = (*device)->beginFrame();
-    commands.beginComputePass("lmx.test.indirect.writeDispatchArgs");
+    commands.beginComputePass("rojorhi.test.indirect.writeDispatchArgs");
     commands.bindComputePipeline(**writeArgsPipeline);
     commands.bindStorageBuffer(0, **argumentBuffer, StorageAccess::Write);
     commands.bindFrameData(1, argsParams);
@@ -347,7 +347,7 @@ TEST_CASE("an indirect dispatch consumes arguments a compute pass wrote", "[gpu]
 
     commands.bufferBarrier(**argumentBuffer, BufferUse::StorageWrite, BufferUse::IndirectArgument);
 
-    commands.beginComputePass("lmx.test.indirect.gpuDispatch");
+    commands.beginComputePass("rojorhi.test.indirect.gpuDispatch");
     commands.bindComputePipeline(**fillPipeline);
     commands.bindStorageBuffer(0, **output, StorageAccess::Write);
     commands.bindFrameData(1, fillParams);
@@ -367,7 +367,7 @@ TEST_CASE("an indirect dispatch consumes arguments a compute pass wrote", "[gpu]
 // say. All five words have to land where DrawIndexedIndirectArgs documents them, or the triangle
 // is drawn from the degenerate vertices and the target stays black.
 TEST_CASE("an indirect indexed draw consumes arguments a compute pass wrote", "[gpu]") {
-    using namespace lmx::rhi;
+    using namespace rojoRHI;
 
     constexpr uint32_t kArgsIndex = 8;
     constexpr uint64_t kArgsOffset = kArgsIndex * sizeof(uint32_t);
@@ -385,7 +385,7 @@ TEST_CASE("an indirect indexed draw consumes arguments a compute pass wrote", "[
         (*device)->createComputePipeline({.library = indirectLibrary->get(),
                                           .computeEntry = "computeWriteDrawIndexedArgs",
                                           .threadsPerThreadgroup = {1, 1, 1},
-                                          .label = "lmx.test.indirect.writeIndexedArgsPipeline"});
+                                          .label = "rojorhi.test.indirect.writeIndexedArgsPipeline"});
     INFO(errorOf(writeArgsPipeline));
     REQUIRE(writeArgsPipeline.has_value());
 
@@ -394,29 +394,29 @@ TEST_CASE("an indirect indexed draw consumes arguments a compute pass wrote", "[
     REQUIRE(triangleLibrary.has_value());
 
     auto pipeline =
-        makeTrianglePipeline(**device, **triangleLibrary, "lmx.test.indirect.gpuIndexedPipeline");
+        makeTrianglePipeline(**device, **triangleLibrary, "rojorhi.test.indirect.gpuIndexedPipeline");
     INFO(errorOf(pipeline));
     REQUIRE(pipeline.has_value());
 
     auto vertices = (*device)->createBuffer(
-        {.size = sizeof(kOffsetTriangle), .label = "lmx.test.indirect.gpuIndexedVertices"},
+        {.size = sizeof(kOffsetTriangle), .label = "rojorhi.test.indirect.gpuIndexedVertices"},
         kOffsetTriangle.data());
     INFO(errorOf(vertices));
     REQUIRE(vertices.has_value());
 
     auto indices = (*device)->createBuffer(
-        {.size = sizeof(kOffsetIndices), .label = "lmx.test.indirect.gpuIndexedIndices"},
+        {.size = sizeof(kOffsetIndices), .label = "rojorhi.test.indirect.gpuIndexedIndices"},
         kOffsetIndices.data());
     INFO(errorOf(indices));
     REQUIRE(indices.has_value());
 
     auto argumentBuffer = (*device)->createBuffer(
-        {.size = kArgsBytes, .storageWrite = true, .label = "lmx.test.indirect.gpuIndexedArgs"},
+        {.size = kArgsBytes, .storageWrite = true, .label = "rojorhi.test.indirect.gpuIndexedArgs"},
         nullptr);
     INFO(errorOf(argumentBuffer));
     REQUIRE(argumentBuffer.has_value());
 
-    auto target = makeProbeTarget(**device, "lmx.test.indirect.gpuIndexedTarget");
+    auto target = makeProbeTarget(**device, "rojorhi.test.indirect.gpuIndexedTarget");
     INFO(errorOf(target));
     REQUIRE(target.has_value());
 
@@ -426,7 +426,7 @@ TEST_CASE("an indirect indexed draw consumes arguments a compute pass wrote", "[
                                     .baseVertex = kBaseVertex};
 
     CommandList& commands = (*device)->beginFrame();
-    commands.beginComputePass("lmx.test.indirect.writeIndexedArgs");
+    commands.beginComputePass("rojorhi.test.indirect.writeIndexedArgs");
     commands.bindComputePipeline(**writeArgsPipeline);
     commands.bindStorageBuffer(0, **argumentBuffer, StorageAccess::Write);
     commands.bindFrameData(1, argsParams);
@@ -438,7 +438,7 @@ TEST_CASE("an indirect indexed draw consumes arguments a compute pass wrote", "[
     commands.beginRenderPass({.colorTarget = target->get(),
                               .clearColor = {0.0f, 0.0f, 0.0f, 1.0f},
                               .clear = true,
-                              .label = "lmx.test.indirect.gpuIndexedDraw"});
+                              .label = "rojorhi.test.indirect.gpuIndexedDraw"});
     commands.bindPipeline(**pipeline);
     commands.bindBuffer(kVertexBufferSlot, **vertices);
     commands.drawIndexedIndirect(**indices, **argumentBuffer, kArgsOffset);

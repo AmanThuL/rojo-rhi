@@ -3,12 +3,12 @@
 /// @brief Declares API-neutral texture allocation, upload, view, and copy descriptors.
 //----------------------------------------------------------------------------------------------------------------------
 #pragma once
-#include "RHI/Format.h"
+#include <rojoRHI/Format.h>
 
 #include <cstdint>
 #include <string_view>
 
-namespace lmx::rhi {
+namespace rojoRHI {
 
 /// Identifies whether a texture is two-dimensional or a six-face cubemap.
 enum class TextureKind {
@@ -127,4 +127,4 @@ struct TextureMip {
     uint64_t bytesPerRow = 0;   ///< Source row stride in bytes.
 };
 
-} // namespace lmx::rhi
+} // namespace rojoRHI

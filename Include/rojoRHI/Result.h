@@ -7,7 +7,7 @@
 #include <expected>
 #include <string>
 
-namespace lmx::rhi {
+namespace rojoRHI {
 
 /// Identifies the category of an RHI operation failure.
 enum class ErrorCode {
@@ -29,4 +29,4 @@ struct Error {
 template <typename T>
 using Result = std::expected<T, Error>;
 
-} // namespace lmx::rhi
+} // namespace rojoRHI

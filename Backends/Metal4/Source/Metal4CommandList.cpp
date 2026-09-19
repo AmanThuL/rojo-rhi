@@ -6,13 +6,13 @@
 
 #include "Base/Assert.h"
 #include "Metal4Resources.h"
-#include "RHI/CaptureSchema.h"
-#include "RHI/Indirect.h"
-#include "RHI/Validate.h"
+#include <rojoRHI/CaptureSchema.h>
+#include <rojoRHI/Indirect.h>
+#include <rojoRHI/Validate.h>
 
 #include <cstring>
 
-namespace lmx::rhi::metal4 {
+namespace rojoRHI::metal4 {
 namespace {
 
 // A render pass consumes a dependency at the earliest render stage a barrier can name, not at the
@@ -122,7 +122,7 @@ void Metal4CommandList::beginTimedPass(std::string_view label) {
     // a pass therefore straddle the encoder -- this one, and the one endTimedPass makes after
     // endEncoding.
     const size_t passIndex = m_timestamps->passLabels.size();
-    LMX_ASSERT(passIndex < kMaxTimedPassesPerFrame,
+    ROJORHI_ASSERT(passIndex < kMaxTimedPassesPerFrame,
                "beginPass: this frame has more passes than the per-frame timestamp heap holds -- "
                "grow kMaxTimedPassesPerFrame");
     m_timestamps->passLabels.emplace_back(label);
@@ -166,24 +166,24 @@ void Metal4CommandList::beginRenderPass(const RenderPassDesc& desc) {
     NS::SharedPtr<NS::AutoreleasePool> pool = NS::TransferPtr(NS::AutoreleasePool::alloc()->init());
 
     // endFrameReset clears every per-frame pointer, making them the open-frame sentinel.
-    LMX_ASSERT(m_argumentTable != nullptr && m_frameArena != nullptr && m_timestamps != nullptr,
+    ROJORHI_ASSERT(m_argumentTable != nullptr && m_frameArena != nullptr && m_timestamps != nullptr,
                "beginRenderPass: no frame is open -- this command list is only valid between "
                "Device::beginFrame and Device::endFrame");
-    LMX_ASSERT(!inPass(), "beginRenderPass: a pass is already open on this command list");
+    ROJORHI_ASSERT(!inPass(), "beginRenderPass: a pass is already open on this command list");
     const Result<void> targets = validateRenderPassTargets(desc.colorTarget, desc.depthTarget);
-    LMX_ASSERT(targets.has_value(), targets.error().message);
+    ROJORHI_ASSERT(targets.has_value(), targets.error().message);
     const Result<void> extras =
         validateExtraColorTargets(desc.colorTarget, desc.extraColor, desc.extraColorCount);
-    LMX_ASSERT(extras.has_value(), extras.error().message);
+    ROJORHI_ASSERT(extras.has_value(), extras.error().message);
     const Result<void> area = validateRenderArea(desc.colorTarget, desc.depthTarget,
                                                  desc.renderAreaWidth, desc.renderAreaHeight);
-    LMX_ASSERT(area.has_value(), area.error().message);
+    ROJORHI_ASSERT(area.has_value(), area.error().message);
     // Discarding the only attachment would make a depth-only pass produce no observable output.
-    LMX_ASSERT(desc.colorTarget != nullptr || desc.storeDepth,
+    ROJORHI_ASSERT(desc.colorTarget != nullptr || desc.storeDepth,
                "RenderPassDesc: a depth-only pass must set storeDepth -- it has no other output, "
                "so discarding depth would make the whole pass dead work");
 
-    const std::string_view label = desc.label.empty() ? "lmx.pass.unnamed" : desc.label;
+    const std::string_view label = desc.label.empty() ? "rojorhi.pass.unnamed" : desc.label;
 
     auto* colorTarget = static_cast<Metal4Texture*>(desc.colorTarget);
 
@@ -205,7 +205,7 @@ void Metal4CommandList::beginRenderPass(const RenderPassDesc& desc) {
         const ExtraColorTarget& extra = desc.extraColor[i];
         auto* extraTarget = static_cast<Metal4Texture*>(extra.target);
         // ResourceID hides usage from Metal validation, so reject a non-attachment texture here.
-        LMX_ASSERT((extraTarget->handle()->usage() & MTL::TextureUsageRenderTarget) != 0,
+        ROJORHI_ASSERT((extraTarget->handle()->usage() & MTL::TextureUsageRenderTarget) != 0,
                    "RenderPassDesc.extraColor: texture has no render-target usage -- create it "
                    "with renderTarget = true");
 
@@ -223,10 +223,10 @@ void Metal4CommandList::beginRenderPass(const RenderPassDesc& desc) {
     if (desc.depthTarget != nullptr) {
         auto* depthTarget = static_cast<Metal4Texture*>(desc.depthTarget);
         // Validate before Metal's pass validator aborts without identifying the RHI call.
-        LMX_ASSERT(depthTarget->handle()->pixelFormat() == MTL::PixelFormatDepth32Float,
+        ROJORHI_ASSERT(depthTarget->handle()->pixelFormat() == MTL::PixelFormatDepth32Float,
                    "RenderPassDesc.depthTarget must be a D32Float texture");
         // No RHI pass currently establishes ownership of depth contents for LoadActionLoad.
-        LMX_ASSERT(desc.clear,
+        ROJORHI_ASSERT(desc.clear,
                    "RenderPassDesc: a depth attachment requires clear -- no pass loads depth, so "
                    "a load would read memory this pass never wrote");
 
@@ -242,7 +242,7 @@ void Metal4CommandList::beginRenderPass(const RenderPassDesc& desc) {
     beginTimedPass(label);
 
     m_encoder = NS::RetainPtr(m_commandBuffer->renderCommandEncoder(passDesc.get()));
-    LMX_ASSERT(m_encoder, "beginRenderPass: failed to create a render command encoder");
+    ROJORHI_ASSERT(m_encoder, "beginRenderPass: failed to create a render command encoder");
     m_encoder->setLabel(makeString(label).get());
 
     emitPendingBarrier(m_encoder.get(), kRenderStages);
@@ -281,7 +281,7 @@ void Metal4CommandList::beginRenderPass(const RenderPassDesc& desc) {
 
 //======================================================================================================================
 void Metal4CommandList::bindPipeline(GraphicsPipeline& pipeline) {
-    LMX_ASSERT(m_encoder, "bindPipeline must be called between beginRenderPass and endRenderPass");
+    ROJORHI_ASSERT(m_encoder, "bindPipeline must be called between beginRenderPass and endRenderPass");
     auto& metalPipeline = static_cast<Metal4Pipeline&>(pipeline);
     m_encoder->setRenderPipelineState(metalPipeline.handle());
     // Metal keeps depth state separate; null preserves its compare-always/no-write default.
@@ -298,8 +298,8 @@ void Metal4CommandList::bindPipeline(GraphicsPipeline& pipeline) {
 
 //======================================================================================================================
 void Metal4CommandList::bindBuffer(uint32_t slot, Buffer& buffer) {
-    LMX_ASSERT(inShaderPass(), "bindBuffer must be called inside a render or compute pass");
-    LMX_ASSERT(slot < CommandList::kMaxBufferBindings,
+    ROJORHI_ASSERT(inShaderPass(), "bindBuffer must be called inside a render or compute pass");
+    ROJORHI_ASSERT(slot < CommandList::kMaxBufferBindings,
                "bindBuffer: slot exceeds the argument table's buffer binding count");
 
     // Argument tables hold raw addresses; ResidencyRegistration keeps the allocation resident.
@@ -308,14 +308,14 @@ void Metal4CommandList::bindBuffer(uint32_t slot, Buffer& buffer) {
 
 //======================================================================================================================
 void Metal4CommandList::bindTexture(uint32_t slot, Texture& texture, const TextureViewDesc& view) {
-    LMX_ASSERT(inShaderPass(), "bindTexture must be called inside a render or compute pass");
-    LMX_ASSERT(slot < CommandList::kMaxTextureBindings,
+    ROJORHI_ASSERT(inShaderPass(), "bindTexture must be called inside a render or compute pass");
+    ROJORHI_ASSERT(slot < CommandList::kMaxTextureBindings,
                "bindTexture: slot exceeds the argument table's texture binding count");
     auto& metalTexture = static_cast<Metal4Texture&>(texture);
     const Result<void> viewOk = validateTextureView(texture, view);
-    LMX_ASSERT(viewOk.has_value(), viewOk.error().message);
+    ROJORHI_ASSERT(viewOk.has_value(), viewOk.error().message);
     // ResourceID hides usage from Metal validation, so reject non-readable textures before bind.
-    LMX_ASSERT((metalTexture.handle()->usage() & MTL::TextureUsageShaderRead) != 0,
+    ROJORHI_ASSERT((metalTexture.handle()->usage() & MTL::TextureUsageShaderRead) != 0,
                "bindTexture: texture has no ShaderRead usage -- create it with sampled = true or "
                "storageRead = true or cpuReadback = true");
     // Texture, buffer, and sampler slots occupy separate arrays in the argument table.
@@ -324,8 +324,8 @@ void Metal4CommandList::bindTexture(uint32_t slot, Texture& texture, const Textu
 
 //======================================================================================================================
 void Metal4CommandList::bindSampler(uint32_t slot, Sampler& sampler) {
-    LMX_ASSERT(inShaderPass(), "bindSampler must be called inside a render or compute pass");
-    LMX_ASSERT(slot < CommandList::kMaxSamplerBindings,
+    ROJORHI_ASSERT(inShaderPass(), "bindSampler must be called inside a render or compute pass");
+    ROJORHI_ASSERT(slot < CommandList::kMaxSamplerBindings,
                "bindSampler: slot exceeds the argument table's sampler binding count");
     // Samplers use ResourceID but need no residency registration because they are not allocations.
     m_argumentTable->setSamplerState(static_cast<Metal4Sampler&>(sampler).handle()->gpuResourceID(),
@@ -339,11 +339,11 @@ void Metal4CommandList::bindSampler(uint32_t slot, Sampler& sampler) {
 // property queries once a slot has reached its high water.
 GpuAddress Metal4CommandList::bindFrameData(uint32_t slot, const void* data, uint64_t size,
                                             uint64_t alignment) {
-    LMX_ASSERT(inShaderPass(),
+    ROJORHI_ASSERT(inShaderPass(),
                "bindFrameData must be called inside a render or compute pass -- a copy pass has no "
                "argument table and therefore no slot to bind into");
     const Result<void> request = validateFrameData(slot, data, size, alignment);
-    LMX_ASSERT(request.has_value(), request.error().message);
+    ROJORHI_ASSERT(request.has_value(), request.error().message);
 
     const Metal4FrameDataBlock block = m_frameArena->allocate(size, alignment);
 
@@ -370,19 +370,19 @@ GpuAddress Metal4CommandList::bindFrameData(uint32_t slot, const void* data, uin
 
 //======================================================================================================================
 void Metal4CommandList::draw(uint32_t vertexCount, uint32_t firstVertex) {
-    LMX_ASSERT(m_encoder, "draw must be called between beginRenderPass and endRenderPass");
-    LMX_ASSERT(vertexCount > 0, "draw: vertexCount must be greater than zero");
+    ROJORHI_ASSERT(m_encoder, "draw must be called between beginRenderPass and endRenderPass");
+    ROJORHI_ASSERT(vertexCount > 0, "draw: vertexCount must be greater than zero");
     m_encoder->drawPrimitives(MTL::PrimitiveTypeTriangle, firstVertex, vertexCount);
 }
 
 //======================================================================================================================
 void Metal4CommandList::drawIndexed(Buffer& indexBuffer, uint32_t indexCount, uint32_t firstIndex) {
-    LMX_ASSERT(m_encoder, "drawIndexed must be called between beginRenderPass and endRenderPass");
-    LMX_ASSERT(indexCount > 0, "drawIndexed: indexCount must be greater than zero");
+    ROJORHI_ASSERT(m_encoder, "drawIndexed must be called between beginRenderPass and endRenderPass");
+    ROJORHI_ASSERT(indexCount > 0, "drawIndexed: indexCount must be greater than zero");
     auto& mtlBuffer = static_cast<Metal4Buffer&>(indexBuffer);
     const uint64_t offsetBytes = uint64_t{firstIndex} * sizeof(uint32_t);
     const uint64_t lengthBytes = mtlBuffer.handle()->length();
-    LMX_ASSERT(offsetBytes + uint64_t{indexCount} * sizeof(uint32_t) <= lengthBytes,
+    ROJORHI_ASSERT(offsetBytes + uint64_t{indexCount} * sizeof(uint32_t) <= lengthBytes,
                "drawIndexed: index range reads past the end of the index buffer");
     // Metal expects the byte count remaining at the offset address, not the full buffer length.
     m_encoder->drawIndexedPrimitives(MTL::PrimitiveTypeTriangle, indexCount, MTL::IndexTypeUInt32,
@@ -392,10 +392,10 @@ void Metal4CommandList::drawIndexed(Buffer& indexBuffer, uint32_t indexCount, ui
 
 //======================================================================================================================
 void Metal4CommandList::drawIndirect(Buffer& argumentBuffer, uint64_t offset) {
-    LMX_ASSERT(m_encoder, "drawIndirect must be called between beginRenderPass and endRenderPass");
+    ROJORHI_ASSERT(m_encoder, "drawIndirect must be called between beginRenderPass and endRenderPass");
     const Result<void> argsOk =
         validateIndirectArgs(argumentBuffer, offset, sizeof(DrawIndirectArgs));
-    LMX_ASSERT(argsOk.has_value(), argsOk.error().message);
+    ROJORHI_ASSERT(argsOk.has_value(), argsOk.error().message);
     // Metal 4 takes the arguments by GPU address, so the RHI's byte offset is plain pointer
     // arithmetic rather than a separate encoder parameter.
     m_encoder->drawPrimitives(MTL::PrimitiveTypeTriangle,
@@ -406,11 +406,11 @@ void Metal4CommandList::drawIndirect(Buffer& argumentBuffer, uint64_t offset) {
 //======================================================================================================================
 void Metal4CommandList::drawIndexedIndirect(Buffer& indexBuffer, Buffer& argumentBuffer,
                                             uint64_t offset) {
-    LMX_ASSERT(m_encoder,
+    ROJORHI_ASSERT(m_encoder,
                "drawIndexedIndirect must be called between beginRenderPass and endRenderPass");
     const Result<void> argsOk =
         validateIndirectArgs(argumentBuffer, offset, sizeof(DrawIndexedIndirectArgs));
-    LMX_ASSERT(argsOk.has_value(), argsOk.error().message);
+    ROJORHI_ASSERT(argsOk.has_value(), argsOk.error().message);
     auto& indices = static_cast<Metal4Buffer&>(indexBuffer);
     // The first index lives in the arguments, so the whole index buffer is what the draw is given
     // -- unlike drawIndexed, which folds its firstIndex into the address it passes.
@@ -424,7 +424,7 @@ void Metal4CommandList::drawIndexedIndirect(Buffer& indexBuffer, Buffer& argumen
 void Metal4CommandList::endRenderPass() {
     NS::SharedPtr<NS::AutoreleasePool> pool = NS::TransferPtr(NS::AutoreleasePool::alloc()->init());
 
-    LMX_ASSERT(m_encoder, "endRenderPass: no render pass is open on this command list");
+    ROJORHI_ASSERT(m_encoder, "endRenderPass: no render pass is open on this command list");
     m_encoder->endEncoding();
     m_encoder.reset();
 
@@ -437,17 +437,17 @@ void Metal4CommandList::beginComputePass(std::string_view label) {
     // encoder, so this pool is load-bearing rather than symmetric.
     NS::SharedPtr<NS::AutoreleasePool> pool = NS::TransferPtr(NS::AutoreleasePool::alloc()->init());
 
-    LMX_ASSERT(m_argumentTable != nullptr && m_frameArena != nullptr && m_timestamps != nullptr,
+    ROJORHI_ASSERT(m_argumentTable != nullptr && m_frameArena != nullptr && m_timestamps != nullptr,
                "beginComputePass: no frame is open -- this command list is only valid between "
                "Device::beginFrame and Device::endFrame");
-    LMX_ASSERT(!inPass(), "beginComputePass: a pass is already open on this command list");
+    ROJORHI_ASSERT(!inPass(), "beginComputePass: a pass is already open on this command list");
 
-    const std::string_view passLabel = label.empty() ? "lmx.pass.unnamed" : label;
+    const std::string_view passLabel = label.empty() ? "rojorhi.pass.unnamed" : label;
 
     beginTimedPass(passLabel);
 
     m_computeEncoder = NS::RetainPtr(m_commandBuffer->computeCommandEncoder());
-    LMX_ASSERT(m_computeEncoder, "beginComputePass: failed to create a compute command encoder");
+    ROJORHI_ASSERT(m_computeEncoder, "beginComputePass: failed to create a compute command encoder");
     m_computeEncoder->setLabel(makeString(passLabel).get());
 
     emitPendingBarrier(m_computeEncoder.get(), MTL::StageDispatch);
@@ -458,7 +458,7 @@ void Metal4CommandList::beginComputePass(std::string_view label) {
 
 //======================================================================================================================
 void Metal4CommandList::bindComputePipeline(ComputePipeline& pipeline) {
-    LMX_ASSERT(m_computeEncoder,
+    ROJORHI_ASSERT(m_computeEncoder,
                "bindComputePipeline must be called between beginComputePass and endComputePass");
     auto& metalPipeline = static_cast<Metal4ComputePipeline&>(pipeline);
     m_computeEncoder->setComputePipelineState(metalPipeline.handle());
@@ -469,18 +469,18 @@ void Metal4CommandList::bindComputePipeline(ComputePipeline& pipeline) {
 
 //======================================================================================================================
 void Metal4CommandList::bindStorageBuffer(uint32_t slot, Buffer& buffer, StorageAccess access) {
-    LMX_ASSERT(m_computeEncoder,
+    ROJORHI_ASSERT(m_computeEncoder,
                "bindStorageBuffer must be called between beginComputePass and endComputePass");
-    LMX_ASSERT(slot < CommandList::kMaxBufferBindings,
+    ROJORHI_ASSERT(slot < CommandList::kMaxBufferBindings,
                "bindStorageBuffer: slot exceeds the argument table's buffer binding count");
     auto& metalBuffer = static_cast<Metal4Buffer&>(buffer);
     // Metal buffers carry no usage bits, so the desc flags are the only record of what the caller
     // meant this allocation to be -- and the only place a mismatch can be caught at all.
     const bool reads = access == StorageAccess::Read || access == StorageAccess::ReadWrite;
     const bool writes = access == StorageAccess::Write || access == StorageAccess::ReadWrite;
-    LMX_ASSERT(!reads || metalBuffer.storageRead(),
+    ROJORHI_ASSERT(!reads || metalBuffer.storageRead(),
                "bindStorageBuffer: buffer was not created with BufferDesc.storageRead");
-    LMX_ASSERT(!writes || metalBuffer.storageWrite(),
+    ROJORHI_ASSERT(!writes || metalBuffer.storageWrite(),
                "bindStorageBuffer: buffer was not created with BufferDesc.storageWrite");
     // Argument tables hold raw addresses; ResidencyRegistration keeps the allocation resident.
     m_argumentTable->setAddress(metalBuffer.handle()->gpuAddress(), slot);
@@ -489,14 +489,14 @@ void Metal4CommandList::bindStorageBuffer(uint32_t slot, Buffer& buffer, Storage
 //======================================================================================================================
 void Metal4CommandList::bindStorageTexture(uint32_t slot, Texture& texture,
                                            const TextureViewDesc& view, StorageAccess access) {
-    LMX_ASSERT(m_computeEncoder,
+    ROJORHI_ASSERT(m_computeEncoder,
                "bindStorageTexture must be called between beginComputePass and endComputePass");
-    LMX_ASSERT(slot < CommandList::kMaxTextureBindings,
+    ROJORHI_ASSERT(slot < CommandList::kMaxTextureBindings,
                "bindStorageTexture: slot exceeds the argument table's texture binding count");
     auto& metalTexture = static_cast<Metal4Texture&>(texture);
     const Result<void> viewOk = validateTextureView(texture, view);
-    LMX_ASSERT(viewOk.has_value(), viewOk.error().message);
-    LMX_ASSERT(isStorageFormat(view.format == Format::Unknown ? texture.format() : view.format),
+    ROJORHI_ASSERT(viewOk.has_value(), viewOk.error().message);
+    ROJORHI_ASSERT(isStorageFormat(view.format == Format::Unknown ? texture.format() : view.format),
                "bindStorageTexture: the bound format must be one a storage binding can read and "
                "write (RGBA8Unorm or RGBA16Float)");
 
@@ -505,9 +505,9 @@ void Metal4CommandList::bindStorageTexture(uint32_t slot, Texture& texture,
     const MTL::TextureUsage usage = metalTexture.handle()->usage();
     const bool reads = access == StorageAccess::Read || access == StorageAccess::ReadWrite;
     const bool writes = access == StorageAccess::Write || access == StorageAccess::ReadWrite;
-    LMX_ASSERT(!reads || (usage & MTL::TextureUsageShaderRead) != 0,
+    ROJORHI_ASSERT(!reads || (usage & MTL::TextureUsageShaderRead) != 0,
                "bindStorageTexture: texture was not created with TextureDesc.storageRead");
-    LMX_ASSERT(!writes || (usage & MTL::TextureUsageShaderWrite) != 0,
+    ROJORHI_ASSERT(!writes || (usage & MTL::TextureUsageShaderWrite) != 0,
                "bindStorageTexture: texture was not created with TextureDesc.storageWrite");
 
     // Texture, buffer, and sampler slots occupy separate arrays in the argument table.
@@ -517,11 +517,11 @@ void Metal4CommandList::bindStorageTexture(uint32_t slot, Texture& texture,
 //======================================================================================================================
 void Metal4CommandList::dispatch(uint32_t threadgroupsX, uint32_t threadgroupsY,
                                  uint32_t threadgroupsZ) {
-    LMX_ASSERT(m_computeEncoder,
+    ROJORHI_ASSERT(m_computeEncoder,
                "dispatch must be called between beginComputePass and endComputePass");
-    LMX_ASSERT(threadgroupsX > 0 && threadgroupsY > 0 && threadgroupsZ > 0,
+    ROJORHI_ASSERT(threadgroupsX > 0 && threadgroupsY > 0 && threadgroupsZ > 0,
                "dispatch: every threadgroup count must be greater than zero");
-    LMX_ASSERT(m_computePipeline != nullptr,
+    ROJORHI_ASSERT(m_computePipeline != nullptr,
                "dispatch: no compute pipeline is bound -- call bindComputePipeline first");
     m_computeEncoder->dispatchThreadgroups(
         MTL::Size::Make(threadgroupsX, threadgroupsY, threadgroupsZ),
@@ -530,13 +530,13 @@ void Metal4CommandList::dispatch(uint32_t threadgroupsX, uint32_t threadgroupsY,
 
 //======================================================================================================================
 void Metal4CommandList::dispatchIndirect(Buffer& argumentBuffer, uint64_t offset) {
-    LMX_ASSERT(m_computeEncoder,
+    ROJORHI_ASSERT(m_computeEncoder,
                "dispatchIndirect must be called between beginComputePass and endComputePass");
-    LMX_ASSERT(m_computePipeline != nullptr,
+    ROJORHI_ASSERT(m_computePipeline != nullptr,
                "dispatchIndirect: no compute pipeline is bound -- call bindComputePipeline first");
     const Result<void> argsOk =
         validateIndirectArgs(argumentBuffer, offset, sizeof(DispatchIndirectArgs));
-    LMX_ASSERT(argsOk.has_value(), argsOk.error().message);
+    ROJORHI_ASSERT(argsOk.has_value(), argsOk.error().message);
     // Only the threadgroup counts come from the buffer; the threads within one still come from the
     // bound pipeline, exactly as they do for the direct dispatch above.
     m_computeEncoder->dispatchThreadgroups(
@@ -548,7 +548,7 @@ void Metal4CommandList::dispatchIndirect(Buffer& argumentBuffer, uint64_t offset
 void Metal4CommandList::endComputePass() {
     NS::SharedPtr<NS::AutoreleasePool> pool = NS::TransferPtr(NS::AutoreleasePool::alloc()->init());
 
-    LMX_ASSERT(m_computeEncoder, "endComputePass: no compute pass is open on this command list");
+    ROJORHI_ASSERT(m_computeEncoder, "endComputePass: no compute pass is open on this command list");
     m_computeEncoder->endEncoding();
     m_computeEncoder.reset();
     // The pipeline's threadgroup shape belongs to the pass that bound it; carrying it into the
@@ -563,19 +563,19 @@ void Metal4CommandList::beginCopyPass(std::string_view label) {
     // computeCommandEncoder() returns an autoreleased (+0) object; see beginComputePass.
     NS::SharedPtr<NS::AutoreleasePool> pool = NS::TransferPtr(NS::AutoreleasePool::alloc()->init());
 
-    LMX_ASSERT(m_argumentTable != nullptr && m_frameArena != nullptr && m_timestamps != nullptr,
+    ROJORHI_ASSERT(m_argumentTable != nullptr && m_frameArena != nullptr && m_timestamps != nullptr,
                "beginCopyPass: no frame is open -- this command list is only valid between "
                "Device::beginFrame and Device::endFrame");
-    LMX_ASSERT(!inPass(), "beginCopyPass: a pass is already open on this command list");
+    ROJORHI_ASSERT(!inPass(), "beginCopyPass: a pass is already open on this command list");
 
-    const std::string_view passLabel = label.empty() ? "lmx.pass.unnamed" : label;
+    const std::string_view passLabel = label.empty() ? "rojorhi.pass.unnamed" : label;
 
     beginTimedPass(passLabel);
 
     // Metal 4 records copies on a compute encoder. No argument table is set on it: a copy pass has
     // no bindings, so handing it the frame's table would advertise a scope it does not have.
     m_copyEncoder = NS::RetainPtr(m_commandBuffer->computeCommandEncoder());
-    LMX_ASSERT(m_copyEncoder, "beginCopyPass: failed to create a copy command encoder");
+    ROJORHI_ASSERT(m_copyEncoder, "beginCopyPass: failed to create a copy command encoder");
     m_copyEncoder->setLabel(makeString(passLabel).get());
 
     emitPendingBarrier(m_copyEncoder.get(), kCopyStages);
@@ -584,10 +584,10 @@ void Metal4CommandList::beginCopyPass(std::string_view label) {
 //======================================================================================================================
 void Metal4CommandList::copyBuffer(Buffer& source, uint64_t sourceOffset, Buffer& destination,
                                    uint64_t destinationOffset, uint64_t size) {
-    LMX_ASSERT(m_copyEncoder, "copyBuffer must be called between beginCopyPass and endCopyPass");
+    ROJORHI_ASSERT(m_copyEncoder, "copyBuffer must be called between beginCopyPass and endCopyPass");
     const Result<void> copyOk =
         validateBufferCopy(source, sourceOffset, destination, destinationOffset, size);
-    LMX_ASSERT(copyOk.has_value(), copyOk.error().message);
+    ROJORHI_ASSERT(copyOk.has_value(), copyOk.error().message);
     m_copyEncoder->copyFromBuffer(static_cast<Metal4Buffer&>(source).handle(), sourceOffset,
                                   static_cast<Metal4Buffer&>(destination).handle(),
                                   destinationOffset, size);
@@ -596,10 +596,10 @@ void Metal4CommandList::copyBuffer(Buffer& source, uint64_t sourceOffset, Buffer
 //======================================================================================================================
 void Metal4CommandList::copyBufferToTexture(Buffer& source, const BufferTextureLayout& layout,
                                             Texture& destination, const TextureCopyRegion& region) {
-    LMX_ASSERT(m_copyEncoder,
+    ROJORHI_ASSERT(m_copyEncoder,
                "copyBufferToTexture must be called between beginCopyPass and endCopyPass");
     const Result<void> copyOk = validateBufferTextureCopy(source, layout, destination, region);
-    LMX_ASSERT(copyOk.has_value(), copyOk.error().message);
+    ROJORHI_ASSERT(copyOk.has_value(), copyOk.error().message);
     m_copyEncoder->copyFromBuffer(static_cast<Metal4Buffer&>(source).handle(), layout.offset,
                                   layout.bytesPerRow, layout.bytesPerSlice, extentOf(region),
                                   static_cast<Metal4Texture&>(destination).handle(),
@@ -610,10 +610,10 @@ void Metal4CommandList::copyBufferToTexture(Buffer& source, const BufferTextureL
 void Metal4CommandList::copyTextureToBuffer(Texture& source, const TextureCopyRegion& region,
                                             Buffer& destination,
                                             const BufferTextureLayout& layout) {
-    LMX_ASSERT(m_copyEncoder,
+    ROJORHI_ASSERT(m_copyEncoder,
                "copyTextureToBuffer must be called between beginCopyPass and endCopyPass");
     const Result<void> copyOk = validateBufferTextureCopy(destination, layout, source, region);
-    LMX_ASSERT(copyOk.has_value(), copyOk.error().message);
+    ROJORHI_ASSERT(copyOk.has_value(), copyOk.error().message);
     m_copyEncoder->copyFromTexture(static_cast<Metal4Texture&>(source).handle(), region.arrayLayer,
                                    region.mipLevel, originOf(region), extentOf(region),
                                    static_cast<Metal4Buffer&>(destination).handle(), layout.offset,
@@ -624,10 +624,10 @@ void Metal4CommandList::copyTextureToBuffer(Texture& source, const TextureCopyRe
 void Metal4CommandList::copyTexture(Texture& source, const TextureCopyRegion& sourceRegion,
                                     Texture& destination,
                                     const TextureCopyRegion& destinationRegion) {
-    LMX_ASSERT(m_copyEncoder, "copyTexture must be called between beginCopyPass and endCopyPass");
+    ROJORHI_ASSERT(m_copyEncoder, "copyTexture must be called between beginCopyPass and endCopyPass");
     const Result<void> copyOk =
         validateTextureCopy(source, sourceRegion, destination, destinationRegion);
-    LMX_ASSERT(copyOk.has_value(), copyOk.error().message);
+    ROJORHI_ASSERT(copyOk.has_value(), copyOk.error().message);
     // The destination takes an origin only: validation has already established that the two regions
     // describe the same extent, so Metal is given the source's.
     m_copyEncoder->copyFromTexture(
@@ -639,9 +639,9 @@ void Metal4CommandList::copyTexture(Texture& source, const TextureCopyRegion& so
 
 //======================================================================================================================
 void Metal4CommandList::fillBuffer(Buffer& buffer, uint64_t offset, uint64_t size, uint8_t value) {
-    LMX_ASSERT(m_copyEncoder, "fillBuffer must be called between beginCopyPass and endCopyPass");
+    ROJORHI_ASSERT(m_copyEncoder, "fillBuffer must be called between beginCopyPass and endCopyPass");
     const Result<void> rangeOk = validateBufferBytes(buffer, offset, size);
-    LMX_ASSERT(rangeOk.has_value(), rangeOk.error().message);
+    ROJORHI_ASSERT(rangeOk.has_value(), rangeOk.error().message);
     m_copyEncoder->fillBuffer(static_cast<Metal4Buffer&>(buffer).handle(),
                               NS::Range::Make(offset, size), value);
 }
@@ -650,7 +650,7 @@ void Metal4CommandList::fillBuffer(Buffer& buffer, uint64_t offset, uint64_t siz
 void Metal4CommandList::endCopyPass() {
     NS::SharedPtr<NS::AutoreleasePool> pool = NS::TransferPtr(NS::AutoreleasePool::alloc()->init());
 
-    LMX_ASSERT(m_copyEncoder, "endCopyPass: no copy pass is open on this command list");
+    ROJORHI_ASSERT(m_copyEncoder, "endCopyPass: no copy pass is open on this command list");
     m_copyEncoder->endEncoding();
     m_copyEncoder.reset();
 
@@ -660,12 +660,12 @@ void Metal4CommandList::endCopyPass() {
 //======================================================================================================================
 void Metal4CommandList::textureBarrier(Texture& texture, const TextureSubresourceRange& range,
                                        TextureUse from, TextureUse to, BarrierOptions options) {
-    LMX_ASSERT(!inPass(), "textureBarrier must be called between passes, not inside one");
+    ROJORHI_ASSERT(!inPass(), "textureBarrier must be called between passes, not inside one");
     // Reject barriers outside a frame so a pending edge cannot leak into the next frame.
-    LMX_ASSERT(m_argumentTable != nullptr, "textureBarrier must be called inside a frame");
+    ROJORHI_ASSERT(m_argumentTable != nullptr, "textureBarrier must be called inside a frame");
     const Result<void> rangeOk = validateSubresourceRange(texture, range);
-    LMX_ASSERT(rangeOk.has_value(), rangeOk.error().message);
-    LMX_ASSERT(isWrite(from) || isWrite(to),
+    ROJORHI_ASSERT(rangeOk.has_value(), rangeOk.error().message);
+    ROJORHI_ASSERT(isWrite(from) || isWrite(to),
                "textureBarrier: at least one side must be a write -- two reads of the same "
                "contents have no hazard to order");
 
@@ -683,12 +683,12 @@ void Metal4CommandList::textureBarrier(Texture& texture, const TextureSubresourc
 //======================================================================================================================
 void Metal4CommandList::bufferBarrier(Buffer& buffer, const BufferRange& range, BufferUse from,
                                       BufferUse to, BarrierOptions options) {
-    LMX_ASSERT(!inPass(), "bufferBarrier must be called between passes, not inside one");
+    ROJORHI_ASSERT(!inPass(), "bufferBarrier must be called between passes, not inside one");
     // Reject barriers outside a frame so a pending edge cannot leak into the next frame.
-    LMX_ASSERT(m_argumentTable != nullptr, "bufferBarrier must be called inside a frame");
+    ROJORHI_ASSERT(m_argumentTable != nullptr, "bufferBarrier must be called inside a frame");
     const Result<void> rangeOk = validateBufferRange(buffer, range);
-    LMX_ASSERT(rangeOk.has_value(), rangeOk.error().message);
-    LMX_ASSERT(isWrite(from) || isWrite(to),
+    ROJORHI_ASSERT(rangeOk.has_value(), rangeOk.error().message);
+    ROJORHI_ASSERT(isWrite(from) || isWrite(to),
                "bufferBarrier: at least one side must be a write -- two reads of the same "
                "contents have no hazard to order");
 
@@ -708,13 +708,13 @@ void Metal4CommandList::resetForFrame(
     Metal4FrameTimestamps* timestamps,
     std::vector<std::shared_ptr<Metal4TemporalScalerState>>* temporalScalers) {
     // Never retarget per-frame storage while an encoder can still reference the old slot.
-    LMX_ASSERT(!inPass(), "resetForFrame: a pass is still open from the previous frame");
-    LMX_ASSERT(argumentTable != nullptr, "resetForFrame: argument table must not be null");
-    LMX_ASSERT(frameArena != nullptr && tally != nullptr,
+    ROJORHI_ASSERT(!inPass(), "resetForFrame: a pass is still open from the previous frame");
+    ROJORHI_ASSERT(argumentTable != nullptr, "resetForFrame: argument table must not be null");
+    ROJORHI_ASSERT(frameArena != nullptr && tally != nullptr,
                "resetForFrame: the frame's data arena and its tally must not be null");
-    LMX_ASSERT(timestamps != nullptr && timestamps->heap,
+    ROJORHI_ASSERT(timestamps != nullptr && timestamps->heap,
                "resetForFrame: the frame's timestamp slot must carry a counter heap");
-    LMX_ASSERT(timestamps->passLabels.empty(),
+    ROJORHI_ASSERT(timestamps->passLabels.empty(),
                "resetForFrame: the frame's timestamp slot still holds the previous frame's passes");
     m_argumentTable = argumentTable;
     m_frameArena = frameArena;
@@ -726,7 +726,7 @@ void Metal4CommandList::resetForFrame(
 //======================================================================================================================
 void Metal4CommandList::endFrameReset() {
     // A pending barrier at commit is an unconsumed dependency edge, not disposable state.
-    LMX_ASSERT(m_pendingBarrierStages == MTL::Stages{},
+    ROJORHI_ASSERT(m_pendingBarrierStages == MTL::Stages{},
                "a textureBarrier or bufferBarrier was recorded but no later pass consumed it");
     // Clearing per-frame pointers makes use outside a frame detectable.
     m_argumentTable = nullptr;
@@ -744,15 +744,15 @@ void Metal4CommandList::endFrameReset() {
 
 //======================================================================================================================
 MTL4::CommandBuffer* Metal4CommandList::commandBuffer() const {
-    LMX_ASSERT(m_encoder, "commandBuffer: no render pass is open -- the command buffer is only "
+    ROJORHI_ASSERT(m_encoder, "commandBuffer: no render pass is open -- the command buffer is only "
                           "open for encoding between beginRenderPass and endRenderPass");
     return m_commandBuffer;
 }
 
 //======================================================================================================================
 MTL4::RenderCommandEncoder* Metal4CommandList::currentEncoder() const {
-    LMX_ASSERT(m_encoder, "currentEncoder: no render pass is open -- call beginRenderPass first");
+    ROJORHI_ASSERT(m_encoder, "currentEncoder: no render pass is open -- call beginRenderPass first");
     return m_encoder.get();
 }
 
-} // namespace lmx::rhi::metal4
+} // namespace rojoRHI::metal4

@@ -5,7 +5,7 @@
 
 #include "Base/Json.h"
 
-namespace lmx::rhi::base {
+namespace rojoRHI::base {
 
 //======================================================================================================================
 void appendJsonEscaped(std::string& out, std::string_view text) {
@@ -34,4 +34,4 @@ std::string jsonEscape(std::string_view text) {
     return out;
 }
 
-} // namespace lmx::rhi::base
+} // namespace rojoRHI::base

@@ -7,7 +7,7 @@
 #include <cstdint>
 #include <string_view>
 
-namespace lmx::rhi {
+namespace rojoRHI {
 
 /// Classifies the urgency of an RHI diagnostic message.
 enum class MessageSeverity : uint8_t {
@@ -22,4 +22,4 @@ using MessageCallback = void (*)(MessageSeverity severity, std::string_view mess
 /// Installs the process-wide sink; nullptr restores the stderr default. Thread-safe.
 void setMessageCallback(MessageCallback callback, void* user);
 
-} // namespace lmx::rhi
+} // namespace rojoRHI

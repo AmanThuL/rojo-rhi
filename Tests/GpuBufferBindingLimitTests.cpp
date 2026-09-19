@@ -2,14 +2,14 @@
 
 //======================================================================================================================
 TEST_CASE("compute reads the highest public buffer slot", "[gpu][rhi]") {
-    using namespace lmx::rhi;
+    using namespace rojoRHI;
     auto device = createDevice();
     REQUIRE(device);
     const uint32_t expected = 0x71cba513;
     auto input =
-        (*device)->createBuffer({.size = 4, .label = "lmx.test.highSlot.input"}, &expected);
+        (*device)->createBuffer({.size = 4, .label = "rojorhi.test.highSlot.input"}, &expected);
     auto output = (*device)->createBuffer(
-        {.size = 4, .storageWrite = true, .cpuReadback = true, .label = "lmx.test.highSlot.output"},
+        {.size = 4, .storageWrite = true, .cpuReadback = true, .label = "rojorhi.test.highSlot.output"},
         nullptr);
     REQUIRE(input);
     REQUIRE(output);
@@ -18,10 +18,10 @@ TEST_CASE("compute reads the highest public buffer slot", "[gpu][rhi]") {
     auto pipeline = (*device)->createComputePipeline({.library = library->get(),
                                                       .computeEntry = "computeMain",
                                                       .threadsPerThreadgroup = {1, 1, 1},
-                                                      .label = "lmx.test.highSlot"});
+                                                      .label = "rojorhi.test.highSlot"});
     REQUIRE(pipeline);
     auto& commands = (*device)->beginFrame();
-    commands.beginComputePass("lmx.test.highSlot");
+    commands.beginComputePass("rojorhi.test.highSlot");
     commands.bindComputePipeline(**pipeline);
     commands.bindBuffer(CommandList::kMaxBufferBindings - 1, **input);
     commands.bindStorageBuffer(0, **output, StorageAccess::Write);

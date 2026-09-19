@@ -3,13 +3,13 @@
 /// @brief Declares graphics pipelines, their descriptor, and their fixed-function vocabulary.
 //----------------------------------------------------------------------------------------------------------------------
 #pragma once
-#include "RHI/Format.h"
-#include "RHI/RenderPass.h"
+#include <rojoRHI/Format.h>
+#include <rojoRHI/RenderPass.h>
 
 #include <cstdint>
 #include <string_view>
 
-namespace lmx::rhi {
+namespace rojoRHI {
 
 class ShaderLibrary;
 
@@ -86,4 +86,4 @@ public:
     virtual ~GraphicsPipeline() = default;
 };
 
-} // namespace lmx::rhi
+} // namespace rojoRHI

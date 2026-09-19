@@ -6,15 +6,15 @@
 #include "Base/Align.h"
 #include "Base/Assert.h"
 #include "Metal4Common.h"
-#include "RHI/Metal4/Metal4FrameData.h"
-#include "RHI/Result.h"
+#include <rojoRHI/Metal4/Metal4FrameData.h>
+#include <rojoRHI/Result.h>
 
 #include <cstdint>
 #include <string>
 #include <string_view>
 #include <vector>
 
-namespace lmx::rhi::metal4 {
+namespace rojoRHI::metal4 {
 
 // Where one suballocated block landed: everything bindFrameData needs to copy the bytes, publish
 // the address, and name the range in a capture, all resolved by the allocation itself so the hot
@@ -63,7 +63,7 @@ public:
     // active page still has room -- inlines into bindFrameData instead of crossing a translation
     // unit. Everything past that case lives in allocateGrown(), which stays out of line.
     Metal4FrameDataBlock allocate(uint64_t size, uint64_t alignment) {
-        LMX_ASSERT(!m_pages.empty(),
+        ROJORHI_ASSERT(!m_pages.empty(),
                    "frame arena: allocate before the slot's first page was created");
         // Aligning the address rather than the offset keeps the contract the caller was given --
         // the returned GPU address is a multiple of `alignment` -- true whatever a page base is.
@@ -140,4 +140,4 @@ private:
     uint32_t m_pageCreations = 0;
 };
 
-} // namespace lmx::rhi::metal4
+} // namespace rojoRHI::metal4

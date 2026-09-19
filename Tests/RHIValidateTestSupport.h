@@ -2,16 +2,16 @@
 
 #include <catch2/catch_test_macros.hpp>
 
-#include "RHI/CommandList.h"
-#include "RHI/Indirect.h"
-#include "RHI/ShaderLibrary.h"
-#include "RHI/Validate.h"
+#include <rojoRHI/CommandList.h>
+#include <rojoRHI/Indirect.h>
+#include <rojoRHI/ShaderLibrary.h>
+#include <rojoRHI/Validate.h>
 
 #include <limits>
 
 #include <limits>
 
-using namespace lmx::rhi;
+using namespace rojoRHI;
 
 namespace {
 // ShaderLibrary is an interface; pipeline validation only inspects the pointer,

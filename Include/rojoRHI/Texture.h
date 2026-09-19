@@ -3,11 +3,11 @@
 /// @brief Declares GPU texture interfaces and barrier uses.
 //----------------------------------------------------------------------------------------------------------------------
 #pragma once
-#include "RHI/TextureDesc.h"
+#include <rojoRHI/TextureDesc.h>
 
 #include <cstdint>
 
-namespace lmx::rhi {
+namespace rojoRHI {
 
 /// Provides dimensions and optional CPU readback for a GPU texture.
 class Texture {
@@ -46,4 +46,4 @@ enum class TextureUse {
     ExternalWrite    ///< Written by an opaque RHI operation.
 };
 
-} // namespace lmx::rhi
+} // namespace rojoRHI

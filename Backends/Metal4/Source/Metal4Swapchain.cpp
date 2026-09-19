@@ -10,7 +10,7 @@
 #include <string>
 #include <utility>
 
-namespace lmx::rhi::metal4 {
+namespace rojoRHI::metal4 {
 
 //======================================================================================================================
 Metal4Swapchain::Metal4Swapchain(NS::SharedPtr<CA::MetalLayer> layer, Format format,
@@ -49,7 +49,7 @@ Metal4Swapchain::~Metal4Swapchain() {
 Result<Texture*> Metal4Swapchain::acquireNextTexture() {
     NS::SharedPtr<NS::AutoreleasePool> pool = NS::TransferPtr(NS::AutoreleasePool::alloc()->init());
 
-    LMX_ASSERT(!m_drawable, "acquireNextTexture: the previous drawable has not been presented "
+    ROJORHI_ASSERT(!m_drawable, "acquireNextTexture: the previous drawable has not been presented "
                             "yet -- call Device::endFrame(swapchain) first");
 
     // Drawable exhaustion or timeout is recoverable; the caller can skip this frame.
@@ -82,10 +82,10 @@ Result<Texture*> Metal4Swapchain::acquireNextTexture() {
 void Metal4Swapchain::resize(uint32_t width, uint32_t height) {
     NS::SharedPtr<NS::AutoreleasePool> pool = NS::TransferPtr(NS::AutoreleasePool::alloc()->init());
 
-    LMX_ASSERT(width > 0 && height > 0, "Swapchain::resize: width and height must be positive");
+    ROJORHI_ASSERT(width > 0 && height > 0, "Swapchain::resize: width and height must be positive");
 
     m_layer->setDrawableSize(CGSize{static_cast<CGFloat>(width), static_cast<CGFloat>(height)});
-    LMX_LOG_INFO("swapchain resized to {}x{}", width, height);
+    ROJORHI_LOG_INFO("swapchain resized to {}x{}", width, height);
 }
 
 //======================================================================================================================
@@ -95,4 +95,4 @@ void Metal4Swapchain::releaseCurrentDrawable() {
     m_drawable.reset();
 }
 
-} // namespace lmx::rhi::metal4
+} // namespace rojoRHI::metal4

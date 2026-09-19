@@ -5,18 +5,18 @@
 #pragma once
 #include "Metal4Common.h"
 #include "Metal4FrameArena.h"
-#include "RHI/Buffer.h"
-#include "RHI/CommandList.h"
-#include "RHI/GpuAddress.h"
-#include "RHI/RenderPass.h"
-#include "RHI/Texture.h"
+#include <rojoRHI/Buffer.h>
+#include <rojoRHI/CommandList.h>
+#include <rojoRHI/GpuAddress.h>
+#include <rojoRHI/RenderPass.h>
+#include <rojoRHI/Texture.h>
 
 #include <cstdint>
 #include <memory>
 #include <string>
 #include <vector>
 
-namespace lmx::rhi::metal4 {
+namespace rojoRHI::metal4 {
 
 class Metal4ComputePipeline;
 struct Metal4TemporalScalerState;
@@ -238,4 +238,4 @@ private:
     MTL4::VisibilityOptions m_pendingBarrierVisibility{};
 };
 
-} // namespace lmx::rhi::metal4
+} // namespace rojoRHI::metal4

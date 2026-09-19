@@ -6,7 +6,7 @@
 #pragma once
 #include <cstdint>
 
-namespace lmx::rhi::base {
+namespace rojoRHI::base {
 
 /// Rounds `value` up to the next multiple of `alignment`.
 ///
@@ -19,4 +19,4 @@ constexpr uint64_t alignUp(uint64_t value, uint64_t alignment) {
     return (value + alignment - 1) & ~(alignment - 1);
 }
 
-} // namespace lmx::rhi::base
+} // namespace rojoRHI::base

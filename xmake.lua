@@ -2,7 +2,7 @@
 -- every target lives in xmake/targets.lua, which a host project includes instead of this file.
 -- xmake resolves a project root to the outermost ancestor holding an xmake.lua, so a configure
 -- from inside a host checkout names this directory explicitly: `xmake f -P RHI`.
-set_project("RHI")
+set_project("RojoRHI")
 set_languages("c++23")
 add_rules("mode.debug", "mode.release")
 set_defaultmode("debug")

@@ -6,7 +6,7 @@
 #include <cstdint>
 #include <type_traits>
 
-namespace lmx::rhi {
+namespace rojoRHI {
 
 /// The address a shader reads a block of GPU-visible memory through, carried as a plain value.
 ///
@@ -39,4 +39,4 @@ static_assert(std::is_trivially_copyable_v<GpuAddress>,
               "GpuAddress must be trivially copyable: bindFrameData copies blocks containing it "
               "with memcpy");
 
-} // namespace lmx::rhi
+} // namespace rojoRHI

@@ -6,7 +6,7 @@
 #include <cstdint>
 #include <string_view>
 
-namespace lmx::rhi {
+namespace rojoRHI {
 
 class Texture;
 
@@ -49,4 +49,4 @@ struct RenderPassDesc {
     std::string_view label;
 };
 
-} // namespace lmx::rhi
+} // namespace rojoRHI

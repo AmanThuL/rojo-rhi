@@ -9,13 +9,13 @@
 #include "Metal4DevicePrivate.h"
 #include "Metal4Resources.h"
 #include "Metal4Swapchain.h"
-#include "RHI/CaptureSchema.h"
-#include "RHI/Validate.h"
+#include <rojoRHI/CaptureSchema.h>
+#include <rojoRHI/Validate.h>
 
 #include <cstring>
 #include <utility>
 
-namespace lmx::rhi::metal4 {
+namespace rojoRHI::metal4 {
 namespace {
 
 using device_detail::describe;
@@ -64,7 +64,7 @@ NS::SharedPtr<MTL::TextureDescriptor> makeTextureDescriptor(const TextureDesc& d
     if (desc.sampled || desc.storageRead || desc.storageWrite || desc.cpuReadback) {
         usage |= MTL::TextureUsagePixelFormatView;
     }
-    LMX_ASSERT(usage != MTL::TextureUsageUnknown,
+    ROJORHI_ASSERT(usage != MTL::TextureUsageUnknown,
                "TextureDesc: a texture with no renderTarget, sampled, storage, or cpuReadback "
                "usage has no reachable use");
     textureDesc->setUsage(usage);
@@ -136,7 +136,7 @@ Result<std::unique_ptr<Swapchain>> Metal4Device::createSwapchain(const Swapchain
     if (MTL::ResidencySet* set = layer->residencySet(); set != nullptr) {
         layerResidency = NS::RetainPtr(set);
     } else {
-        LMX_LOG_WARN("CAMetalLayer vends no residency set; relying on Metal's default drawable "
+        ROJORHI_LOG_WARN("CAMetalLayer vends no residency set; relying on Metal's default drawable "
                      "residency handling");
     }
 
@@ -162,7 +162,7 @@ Result<std::unique_ptr<Buffer>> Metal4Device::createBuffer(const BufferDesc& des
     if (initialData != nullptr) {
         std::memcpy(buffer->contents(), initialData, desc.size);
     }
-    const std::string_view label = resolveLabel(desc.label, "lmx.buffer.unnamed");
+    const std::string_view label = resolveLabel(desc.label, "rojorhi.buffer.unnamed");
     buffer->setLabel(makeString(label).get());
 
     // Capture identity uses the same native pointer the wrapper unregisters at destruction.
@@ -181,7 +181,7 @@ Result<std::unique_ptr<Texture>> Metal4Device::createTexture(const TextureDesc& 
     NS::SharedPtr<NS::AutoreleasePool> pool = NS::TransferPtr(NS::AutoreleasePool::alloc()->init());
 
     const uint32_t faceCount = desc.kind == TextureKind::Cube ? kCubeFaceCount : 1;
-    LMX_ASSERT(mips.empty() || mips.size() == size_t{desc.mipLevels} * faceCount,
+    ROJORHI_ASSERT(mips.empty() || mips.size() == size_t{desc.mipLevels} * faceCount,
                "createTexture: mips must be empty or hold mipLevels * faceCount entries");
 
     NS::SharedPtr<MTL::TextureDescriptor> textureDesc =
@@ -193,7 +193,7 @@ Result<std::unique_ptr<Texture>> Metal4Device::createTexture(const TextureDesc& 
                     "failed to create " + std::to_string(desc.width) + "x" +
                         std::to_string(desc.height) + " texture");
     }
-    const std::string_view label = resolveLabel(desc.label, "lmx.texture.unnamed");
+    const std::string_view label = resolveLabel(desc.label, "rojorhi.texture.unnamed");
     texture->setLabel(makeString(label).get());
 
     // Capture identity follows the native pointer owned by the wrapper.
@@ -206,7 +206,7 @@ Result<std::unique_ptr<Texture>> Metal4Device::createTexture(const TextureDesc& 
         if (mip.data == nullptr) {
             continue;
         }
-        LMX_ASSERT(mip.bytesPerRow > 0,
+        ROJORHI_ASSERT(mip.bytesPerRow > 0,
                    "createTexture: a TextureMip with data must state its bytesPerRow");
         const NS::UInteger face = index / desc.mipLevels;
         const uint32_t level = static_cast<uint32_t>(index % desc.mipLevels);
@@ -248,7 +248,7 @@ Result<std::unique_ptr<Heap>> Metal4Device::createHeap(const HeapDesc& desc) {
         return fail(ErrorCode::ResourceCreationFailed,
                     "failed to create a placement heap of " + std::to_string(desc.size) + " bytes");
     }
-    heap->setLabel(labelOrFallback(desc.label, "lmx.heap.unnamed").get());
+    heap->setLabel(labelOrFallback(desc.label, "rojorhi.heap.unnamed").get());
 
     return std::make_unique<Metal4Heap>(std::move(heap), m_residency);
 }
@@ -281,7 +281,7 @@ Result<std::unique_ptr<Texture>> Metal4Device::createPlacedTexture(Heap& heap, u
                         std::to_string(desc.height) + " texture at heap offset " +
                         std::to_string(offset));
     }
-    const std::string_view label = resolveLabel(desc.label, "lmx.texture.placed.unnamed");
+    const std::string_view label = resolveLabel(desc.label, "rojorhi.texture.placed.unnamed");
     texture->setLabel(makeString(label).get());
     debug::CaptureSchema::instance().registerTexture(texture.get(), label, desc);
 
@@ -326,7 +326,7 @@ Result<std::unique_ptr<Buffer>> Metal4Device::createPlacedBuffer(Heap& heap, uin
                     "failed to place a " + std::to_string(desc.size) +
                         "-byte buffer at heap offset " + std::to_string(offset));
     }
-    const std::string_view label = resolveLabel(desc.label, "lmx.buffer.placed.unnamed");
+    const std::string_view label = resolveLabel(desc.label, "rojorhi.buffer.placed.unnamed");
     buffer->setLabel(makeString(label).get());
     debug::CaptureSchema::instance().registerBuffer(buffer.get(), label, desc.size);
 
@@ -338,7 +338,7 @@ Result<std::unique_ptr<Buffer>> Metal4Device::createPlacedBuffer(Heap& heap, uin
 //======================================================================================================================
 SizeAlign Metal4Device::textureSizeAlign(const TextureDesc& desc) const {
     const Result<void> descOk = validate(desc);
-    LMX_ASSERT(descOk.has_value(), descOk.error().message);
+    ROJORHI_ASSERT(descOk.has_value(), descOk.error().message);
     NS::SharedPtr<NS::AutoreleasePool> pool = NS::TransferPtr(NS::AutoreleasePool::alloc()->init());
     const MTL::SizeAndAlign sizeAlign = m_device->heapTextureSizeAndAlign(
         makeTextureDescriptor(desc, /*hasInitialData=*/false, /*placed=*/true).get());
@@ -348,7 +348,7 @@ SizeAlign Metal4Device::textureSizeAlign(const TextureDesc& desc) const {
 //======================================================================================================================
 SizeAlign Metal4Device::bufferSizeAlign(const BufferDesc& desc) const {
     const Result<void> descOk = validate(desc);
-    LMX_ASSERT(descOk.has_value(), descOk.error().message);
+    ROJORHI_ASSERT(descOk.has_value(), descOk.error().message);
     NS::SharedPtr<NS::AutoreleasePool> pool = NS::TransferPtr(NS::AutoreleasePool::alloc()->init());
     const MTL::SizeAndAlign sizeAlign =
         m_device->heapBufferSizeAndAlign(desc.size, kPlacedResourceOptions);
@@ -373,7 +373,7 @@ Result<std::unique_ptr<Sampler>> Metal4Device::createSampler(const SamplerDesc& 
     samplerDesc->setCompareFunction(toMTL(desc.compare));
     // gpuResourceID is valid only for samplers created with argument-buffer support.
     samplerDesc->setSupportArgumentBuffers(true);
-    samplerDesc->setLabel(labelOrFallback(desc.label, "lmx.sampler.unnamed").get());
+    samplerDesc->setLabel(labelOrFallback(desc.label, "rojorhi.sampler.unnamed").get());
 
     NS::SharedPtr<MTL::SamplerState> sampler =
         NS::TransferPtr(m_device->newSamplerState(samplerDesc.get()));
@@ -385,4 +385,4 @@ Result<std::unique_ptr<Sampler>> Metal4Device::createSampler(const SamplerDesc& 
     return std::make_unique<Metal4Sampler>(std::move(sampler));
 }
 
-} // namespace lmx::rhi::metal4
+} // namespace rojoRHI::metal4

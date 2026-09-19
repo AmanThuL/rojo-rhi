@@ -6,7 +6,7 @@
 #include <cstdint>
 #include <string_view>
 
-namespace lmx::rhi {
+namespace rojoRHI {
 
 /// What one resource costs inside a heap: the bytes it occupies and the alignment its placement
 /// offset must satisfy. Both are the backend's answer for that exact descriptor, so a caller that
@@ -45,4 +45,4 @@ public:
     virtual uint64_t size() const = 0;
 };
 
-} // namespace lmx::rhi
+} // namespace rojoRHI

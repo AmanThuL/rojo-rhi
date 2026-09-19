@@ -9,7 +9,7 @@
 #include <mutex>
 #include <string>
 
-namespace lmx::rhi {
+namespace rojoRHI {
 namespace {
 
 std::mutex gSinkMutex;
@@ -65,4 +65,4 @@ void emitMessage(MessageSeverity severity, std::string_view message) {
 }
 
 } // namespace base
-} // namespace lmx::rhi
+} // namespace rojoRHI

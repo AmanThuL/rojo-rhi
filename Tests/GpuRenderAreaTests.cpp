@@ -1,6 +1,6 @@
 #include "RhiGpuTestSupport.h"
 
-#include "RHI/Validate.h"
+#include <rojoRHI/Validate.h>
 
 namespace {
 
@@ -10,29 +10,29 @@ constexpr uint32_t kAreaWidth = 32;
 constexpr uint32_t kAreaHeight = 16;
 
 //======================================================================================================================
-lmx::rhi::Result<std::unique_ptr<lmx::rhi::GraphicsPipeline>>
-makeRenderAreaPipeline(lmx::rhi::Device& device, lmx::rhi::ShaderLibrary& library) {
+rojoRHI::Result<std::unique_ptr<rojoRHI::GraphicsPipeline>>
+makeRenderAreaPipeline(rojoRHI::Device& device, rojoRHI::ShaderLibrary& library) {
     return device.createGraphicsPipeline({.library = &library,
                                           .vertexEntry = "vertexMain",
                                           .fragmentEntry = "fragmentMain",
-                                          .colorFormat = lmx::rhi::Format::BGRA8Unorm,
-                                          .label = "lmx.test.renderAreaPipeline"});
+                                          .colorFormat = rojoRHI::Format::BGRA8Unorm,
+                                          .label = "rojorhi.test.renderAreaPipeline"});
 }
 
 //======================================================================================================================
 // One fullscreen triangle into `target`, with the render area the caller asks for. The clear is
 // blue and the fragment stage is red, so every readback below reads one or the other.
-std::vector<uint8_t> drawWithRenderArea(lmx::rhi::Device& device,
-                                        lmx::rhi::GraphicsPipeline& pipeline,
-                                        lmx::rhi::Texture& target, uint32_t width,
+std::vector<uint8_t> drawWithRenderArea(rojoRHI::Device& device,
+                                        rojoRHI::GraphicsPipeline& pipeline,
+                                        rojoRHI::Texture& target, uint32_t width,
                                         uint32_t height) {
-    lmx::rhi::CommandList& commands = device.beginFrame();
+    rojoRHI::CommandList& commands = device.beginFrame();
     commands.beginRenderPass({.colorTarget = &target,
                               .clearColor = {0.0f, 0.0f, 1.0f, 1.0f},
                               .clear = true,
                               .renderAreaWidth = width,
                               .renderAreaHeight = height,
-                              .label = "lmx.test.renderArea"});
+                              .label = "rojorhi.test.renderArea"});
     commands.bindPipeline(pipeline);
     commands.draw(3);
     commands.endRenderPass();
@@ -68,13 +68,13 @@ void requireCleared(const std::vector<uint8_t>& pixels, uint32_t x, uint32_t y) 
 // The whole point of the field: a pass draws into an origin-anchored corner of a target allocated
 // at the full extent, and the texels outside that corner keep the pass's clear.
 TEST_CASE("a render area confines a pass to an origin-anchored sub-rectangle", "[gpu][rhi]") {
-    using namespace lmx::rhi;
+    using namespace rojoRHI;
 
     auto device = createDevice();
     INFO(errorOf(device));
     REQUIRE(device.has_value());
 
-    auto target = makeProbeTarget(**device, "lmx.test.renderAreaColor");
+    auto target = makeProbeTarget(**device, "rojorhi.test.renderAreaColor");
     INFO(errorOf(target));
     REQUIRE(target.has_value());
 
@@ -104,13 +104,13 @@ TEST_CASE("a render area confines a pass to an origin-anchored sub-rectangle", "
 // The unset area is the pre-existing behaviour every other pass relies on: the same draw covers
 // the whole attachment, with no scissor left over from the case above.
 TEST_CASE("an unset render area covers the whole attachment", "[gpu][rhi]") {
-    using namespace lmx::rhi;
+    using namespace rojoRHI;
 
     auto device = createDevice();
     INFO(errorOf(device));
     REQUIRE(device.has_value());
 
-    auto target = makeProbeTarget(**device, "lmx.test.fullAreaColor");
+    auto target = makeProbeTarget(**device, "rojorhi.test.fullAreaColor");
     INFO(errorOf(target));
     REQUIRE(target.has_value());
 
@@ -130,12 +130,12 @@ TEST_CASE("an unset render area covers the whole attachment", "[gpu][rhi]") {
 }
 
 //======================================================================================================================
-// An area past the attachment is caller misuse, which beginRenderPass reports through LMX_ASSERT
+// An area past the attachment is caller misuse, which beginRenderPass reports through ROJORHI_ASSERT
 // and so cannot be provoked from a test. The condition it asserts on is the validate function, so
 // that is what this checks -- here rather than in the CPU-only suite, because a depth-only pass's
 // attachment is a real device texture.
 TEST_CASE("a render area past a depth-only pass's attachment is rejected", "[gpu][rhi]") {
-    using namespace lmx::rhi;
+    using namespace rojoRHI;
 
     auto device = createDevice();
     INFO(errorOf(device));
@@ -145,7 +145,7 @@ TEST_CASE("a render area past a depth-only pass's attachment is rejected", "[gpu
                                            .height = kSize,
                                            .format = Format::D32Float,
                                            .renderTarget = true,
-                                           .label = "lmx.test.renderAreaDepth"});
+                                           .label = "rojorhi.test.renderAreaDepth"});
     INFO(errorOf(depth));
     REQUIRE(depth.has_value());
 

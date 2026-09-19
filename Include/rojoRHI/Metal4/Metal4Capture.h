@@ -3,7 +3,7 @@
 /// @brief Declares optional Metal 4 GPU capture controls.
 //----------------------------------------------------------------------------------------------------------------------
 #pragma once
-#include "RHI/Device.h"
+#include <rojoRHI/Device.h>
 
 #include <string_view>
 
@@ -11,7 +11,7 @@
 /// document that Xcode can open. Deliberately metal-cpp-free so the App target -- which does not
 /// have the metal-cpp include directory -- can call it.
 
-namespace lmx::rhi::metal4 {
+namespace rojoRHI::metal4 {
 
 /// Whether this process can produce GPU trace documents. Metal reads enabling state at launch.
 bool captureAvailable();
@@ -27,4 +27,4 @@ bool beginCapture(Device& device, std::string_view outPath);
 /// the document (Device::waitIdle) before calling this.
 void endCapture();
 
-} // namespace lmx::rhi::metal4
+} // namespace rojoRHI::metal4

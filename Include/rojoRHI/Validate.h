@@ -3,21 +3,21 @@
 /// @brief Declares backend-neutral validation helpers for RHI descriptors.
 //----------------------------------------------------------------------------------------------------------------------
 #pragma once
-#include "RHI/Buffer.h"
-#include "RHI/CommandList.h"
-#include "RHI/ComputePipeline.h"
-#include "RHI/Format.h"
-#include "RHI/GraphicsPipeline.h"
-#include "RHI/Heap.h"
-#include "RHI/RenderPass.h"
-#include "RHI/Result.h"
-#include "RHI/Sampler.h"
-#include "RHI/Swapchain.h"
-#include "RHI/Texture.h"
+#include <rojoRHI/Buffer.h>
+#include <rojoRHI/CommandList.h>
+#include <rojoRHI/ComputePipeline.h>
+#include <rojoRHI/Format.h>
+#include <rojoRHI/GraphicsPipeline.h>
+#include <rojoRHI/Heap.h>
+#include <rojoRHI/RenderPass.h>
+#include <rojoRHI/Result.h>
+#include <rojoRHI/Sampler.h>
+#include <rojoRHI/Swapchain.h>
+#include <rojoRHI/Texture.h>
 
 #include <cstdint>
 
-namespace lmx::rhi {
+namespace rojoRHI {
 
 /// Validates scaler capacities, formats and content range against device support.
 Result<void> validate(const TemporalScalerDesc& desc, const TemporalScalerSupport& support);
@@ -123,4 +123,4 @@ bool isStorageFormat(Format format);
 /// Returns the tightly packed byte size of a readable texel, or zero for unsupported formats.
 uint32_t bytesPerPixel(Format format);
 
-} // namespace lmx::rhi
+} // namespace rojoRHI

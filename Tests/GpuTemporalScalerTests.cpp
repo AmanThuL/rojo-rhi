@@ -6,7 +6,7 @@
 //======================================================================================================================
 TEST_CASE("vendor temporal scaler encodes, times and retires overlapping frames",
           "[gpu][rhi][vendor]") {
-    using namespace lmx::rhi;
+    using namespace rojoRHI;
     auto deviceResult = createDevice();
     INFO(errorOf(deviceResult));
     REQUIRE(deviceResult);
@@ -25,7 +25,7 @@ TEST_CASE("vendor temporal scaler encodes, times and retires overlapping frames"
                             .outputHeight = height,
                             .minInputScale = 0.5f,
                             .maxInputScale = 1.0f,
-                            .label = "lmx.test.temporalScaler"};
+                            .label = "rojorhi.test.temporalScaler"};
     if (support.minInputScale > desc.minInputScale || support.maxInputScale < desc.maxInputScale) {
         SKIP("device temporal scaler does not support test scale range");
     }
@@ -37,32 +37,32 @@ TEST_CASE("vendor temporal scaler encodes, times and retires overlapping frames"
                                        .format = Format::RGBA16Float,
                                        .renderTarget = true,
                                        .sampled = true,
-                                       .label = "lmx.test.vendor.color"});
+                                       .label = "rojorhi.test.vendor.color"});
     auto depth = device.createTexture({.width = width,
                                        .height = height,
                                        .format = Format::D32Float,
                                        .renderTarget = true,
                                        .sampled = true,
-                                       .label = "lmx.test.vendor.depth"});
+                                       .label = "rojorhi.test.vendor.depth"});
     auto motion = device.createTexture({.width = width,
                                         .height = height,
                                         .format = Format::RG16Float,
                                         .renderTarget = true,
                                         .sampled = true,
-                                        .label = "lmx.test.vendor.motion"});
+                                        .label = "rojorhi.test.vendor.motion"});
     auto reactive = device.createTexture({.width = width,
                                           .height = height,
                                           .format = Format::R8Unorm,
                                           .renderTarget = true,
                                           .sampled = true,
-                                          .label = "lmx.test.vendor.reactive"});
+                                          .label = "rojorhi.test.vendor.reactive"});
     const uint16_t oneHalf = 0x3c00;
     const TextureMip exposureMip{.data = &oneHalf, .bytesPerRow = 2};
     auto exposure = device.createTexture({.width = 1,
                                           .height = 1,
                                           .format = Format::R16Float,
                                           .sampled = true,
-                                          .label = "lmx.test.vendor.exposure"},
+                                          .label = "rojorhi.test.vendor.exposure"},
                                          std::span{&exposureMip, 1});
     REQUIRE(color);
     REQUIRE(depth);
@@ -83,13 +83,13 @@ TEST_CASE("vendor temporal scaler encodes, times and retires overlapping frames"
                                         .sampled = true,
                                         .storageWrite = true,
                                         .cpuReadback = sharedOutput,
-                                        .label = "lmx.test.vendor.output"});
+                                        .label = "rojorhi.test.vendor.output"});
     REQUIRE(output);
     constexpr uint64_t byteCount = uint64_t{width} * height * 8;
     std::array<std::unique_ptr<Buffer>, 5> readbacks;
     for (auto& readback : readbacks) {
         auto made = device.createBuffer(
-            {.size = byteCount, .cpuReadback = true, .label = "lmx.test.vendor.readback"}, nullptr);
+            {.size = byteCount, .cpuReadback = true, .label = "rojorhi.test.vendor.readback"}, nullptr);
         REQUIRE(made);
         readback = std::move(*made);
     }
@@ -105,7 +105,7 @@ TEST_CASE("vendor temporal scaler encodes, times and retires overlapping frames"
                                   .depthTarget = depth->get(),
                                   .clearDepth = 0.5f,
                                   .storeDepth = true,
-                                  .label = "lmx.test.vendor.clearScene"});
+                                  .label = "rojorhi.test.vendor.clearScene"});
         commands.endRenderPass();
         if (frame > 0) {
             commands.textureBarrier(**motion, TextureUse::ExternalRead, TextureUse::RenderTarget);
@@ -113,7 +113,7 @@ TEST_CASE("vendor temporal scaler encodes, times and retires overlapping frames"
         commands.beginRenderPass({.colorTarget = motion->get(),
                                   .clearColor = {0, 0, 0, 0},
                                   .clear = true,
-                                  .label = "lmx.test.vendor.clearMotion"});
+                                  .label = "rojorhi.test.vendor.clearMotion"});
         commands.endRenderPass();
         if (frame > 0) {
             commands.textureBarrier(**reactive, TextureUse::ExternalRead, TextureUse::RenderTarget);
@@ -121,7 +121,7 @@ TEST_CASE("vendor temporal scaler encodes, times and retires overlapping frames"
         commands.beginRenderPass({.colorTarget = reactive->get(),
                                   .clearColor = {0, 0, 0, 0},
                                   .clear = true,
-                                  .label = "lmx.test.vendor.clearReactive"});
+                                  .label = "rojorhi.test.vendor.clearReactive"});
         commands.endRenderPass();
         for (Texture* input : {color->get(), depth->get(), motion->get(), reactive->get()}) {
             commands.textureBarrier(*input, TextureUse::RenderTarget, TextureUse::ExternalRead);
@@ -139,14 +139,14 @@ TEST_CASE("vendor temporal scaler encodes, times and retires overlapping frames"
                                           .inputContentWidth = width / divisor,
                                           .inputContentHeight = height / divisor,
                                           .reset = frame == 0,
-                                          .label = "lmx.test.vendor.encode"});
+                                          .label = "rojorhi.test.vendor.encode"});
         if (frame % 2 == 0) {
             // An unrelated pass still consumes the vendor fence even without a resource barrier.
-            commands.beginComputePass("lmx.test.vendor.unrelated");
+            commands.beginComputePass("rojorhi.test.vendor.unrelated");
             commands.endComputePass();
         }
         commands.textureBarrier(**output, TextureUse::ExternalWrite, TextureUse::CopySource);
-        commands.beginCopyPass("lmx.test.vendor.readback");
+        commands.beginCopyPass("rojorhi.test.vendor.readback");
         commands.copyTextureToBuffer(**output, {.width = width, .height = height},
                                      *readbacks[frame], {.bytesPerRow = width * 8});
         commands.endCopyPass();
@@ -167,7 +167,7 @@ TEST_CASE("vendor temporal scaler encodes, times and retires overlapping frames"
     }
     device.beginFrame();
     const auto timings = device.passTimings();
-    auto vendor = std::ranges::find(timings, "lmx.test.vendor.encode", &PassTiming::label);
+    auto vendor = std::ranges::find(timings, "rojorhi.test.vendor.encode", &PassTiming::label);
     REQUIRE(vendor != timings.end());
     REQUIRE(std::isfinite(vendor->gpuMilliseconds));
     REQUIRE(vendor->gpuMilliseconds >= 0.0);

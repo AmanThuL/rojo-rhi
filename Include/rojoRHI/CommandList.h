@@ -3,17 +3,17 @@
 /// @brief Declares the frame command recording interface and its barrier vocabulary.
 //----------------------------------------------------------------------------------------------------------------------
 #pragma once
-#include "RHI/Buffer.h"
-#include "RHI/GpuAddress.h"
-#include "RHI/RenderPass.h"
-#include "RHI/TemporalScaler.h"
-#include "RHI/Texture.h"
+#include <rojoRHI/Buffer.h>
+#include <rojoRHI/GpuAddress.h>
+#include <rojoRHI/RenderPass.h>
+#include <rojoRHI/TemporalScaler.h>
+#include <rojoRHI/Texture.h>
 
 #include <cstdint>
 #include <string_view>
 #include <type_traits>
 
-namespace lmx::rhi {
+namespace rojoRHI {
 
 class ComputePipeline;
 class GraphicsPipeline;
@@ -331,4 +331,4 @@ public:
     }
 };
 
-} // namespace lmx::rhi
+} // namespace rojoRHI

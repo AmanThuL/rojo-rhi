@@ -33,7 +33,7 @@ constexpr int kOverlapTolerance = 3;
 // the count starts at zero and follows beginFrame, and it names the frame being built rather than
 // the frame passTimingsFrame() reports, which is always an earlier one.
 TEST_CASE("the device numbers the frames beginFrame opens", "[gpu]") {
-    using namespace lmx::rhi;
+    using namespace rojoRHI;
 
     auto device = createDevice();
     INFO(errorOf(device));
@@ -45,7 +45,7 @@ TEST_CASE("the device numbers the frames beginFrame opens", "[gpu]") {
         CommandList& commands = (*device)->beginFrame();
         INFO("frame " + std::to_string(frame));
         REQUIRE((*device)->frameNumber() == frame);
-        commands.beginComputePass("lmx.test.frameLifetime.empty");
+        commands.beginComputePass("rojorhi.test.frameLifetime.empty");
         commands.endComputePass();
         // An open frame's number is fixed: everything recorded here belongs to that frame.
         REQUIRE((*device)->frameNumber() == frame);
@@ -68,7 +68,7 @@ TEST_CASE("the device numbers the frames beginFrame opens", "[gpu]") {
 // Each frame fills 68% of its slot with a distinct color and renders to its own target, so a stomp
 // cannot be hidden by later draws. The only waitIdle occurs after all submissions.
 TEST_CASE("uniform ring survives twelve frames overlapping in flight", "[gpu][checkpoint-a]") {
-    using namespace lmx::rhi;
+    using namespace rojoRHI;
 
     auto device = createDevice();
     INFO(errorOf(device));
@@ -82,14 +82,14 @@ TEST_CASE("uniform ring survives twelve frames overlapping in flight", "[gpu][ch
                                                        .vertexEntry = "vertexMain",
                                                        .fragmentEntry = "fragmentMain",
                                                        .colorFormat = Format::BGRA8Unorm,
-                                                       .label = "lmx.test.overlapPipeline"});
+                                                       .label = "rojorhi.test.overlapPipeline"});
     INFO(errorOf(pipeline));
     REQUIRE(pipeline.has_value());
 
     std::vector<std::unique_ptr<Texture>> targets;
     targets.reserve(kOverlapFrames);
     for (uint32_t frame = 0; frame < kOverlapFrames; ++frame) {
-        const std::string label = "lmx.test.overlapTarget." + std::to_string(frame);
+        const std::string label = "rojorhi.test.overlapTarget." + std::to_string(frame);
         auto target = (*device)->createTexture({.width = kSize,
                                                 .height = kSize,
                                                 .format = Format::BGRA8Unorm,
@@ -115,7 +115,7 @@ TEST_CASE("uniform ring survives twelve frames overlapping in flight", "[gpu][ch
         commands.beginRenderPass({.colorTarget = targets[frame].get(),
                                   .clearColor = {0.0f, 0.0f, 0.0f, 1.0f},
                                   .clear = true,
-                                  .label = "lmx.test.frameLifetime.overlap"});
+                                  .label = "rojorhi.test.frameLifetime.overlap"});
         commands.bindPipeline(**pipeline);
 
         for (uint32_t write = 0; write < kRingFillWrites; ++write) {

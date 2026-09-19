@@ -3,14 +3,14 @@
 /// @brief Declares the optional Dear ImGui bridge for the Metal 4 backend.
 //----------------------------------------------------------------------------------------------------------------------
 #pragma once
-#include "RHI/CommandList.h"
-#include "RHI/Device.h"
-#include "RHI/Format.h"
-#include "RHI/Texture.h"
+#include <rojoRHI/CommandList.h>
+#include <rojoRHI/Device.h>
+#include <rojoRHI/Format.h>
+#include <rojoRHI/Texture.h>
 
 #include <imgui.h>
 
-namespace lmx::rhi::metal4 {
+namespace rojoRHI::metal4 {
 
 /// Wires Dear ImGui's renderer backend to `device`'s Metal device and command queue, sized for this
 /// backend's three frames in flight. Call once, after ImGui::CreateContext() and before anything
@@ -85,4 +85,4 @@ ImTextureID imguiTextureID(Texture& texture);
 /// guard of its own.
 void imguiForgetTexture(Texture& texture);
 
-} // namespace lmx::rhi::metal4
+} // namespace rojoRHI::metal4

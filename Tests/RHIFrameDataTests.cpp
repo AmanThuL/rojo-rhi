@@ -1,13 +1,13 @@
 #include <catch2/catch_test_macros.hpp>
 
-#include "RHI/CommandList.h"
-#include "RHI/GpuAddress.h"
+#include <rojoRHI/CommandList.h>
+#include <rojoRHI/GpuAddress.h>
 
 #include <cstdint>
 #include <type_traits>
 #include <vector>
 
-using namespace lmx::rhi;
+using namespace rojoRHI;
 
 namespace {
 

@@ -10,7 +10,7 @@ from pathlib import Path
 
 COMPONENT = Path(__file__).resolve().parents[1]
 PUBLIC_INCLUDE = COMPONENT / "Include"
-HEADERS = tuple(sorted(PUBLIC_INCLUDE.glob("RHI/**/*.h")))
+HEADERS = tuple(sorted(PUBLIC_INCLUDE.glob("rojoRHI/**/*.h")))
 
 
 def main() -> int:

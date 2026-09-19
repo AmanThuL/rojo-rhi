@@ -10,8 +10,8 @@ includes("shaders.lua")
 -- Two values a host may set as plain globals before the include, because xmake evaluates an
 -- included description script in the same interpreter as the including one:
 --
---   rhi_thirdparty    directory holding metal-cpp; defaults to <component>/ThirdParty
---   rhi_imgui_target  name of the host's Dear ImGui target; absent means no ImGui adapter
+--   rojorhi_thirdparty    directory holding metal-cpp; defaults to <component>/ThirdParty
+--   rojorhi_imgui_target  name of the host's Dear ImGui target; absent means no ImGui adapter
 --
 -- A configure option would be the obvious home for the first, but get_config() still reads nil on
 -- the description pass that resolves options, so an option cannot feed add_includedirs without the
@@ -26,15 +26,15 @@ includes("shaders.lua")
 -- the two values it reads off the target are absolute instead.
 local component = ".."
 local component_dir = path.directory(os.scriptdir())
-local thirdparty_dir = rhi_thirdparty and path.absolute(rhi_thirdparty)
+local thirdparty_dir = rojorhi_thirdparty and path.absolute(rojorhi_thirdparty)
                        or path.join(component_dir, "ThirdParty")
 local thirdparty = path.relative(thirdparty_dir, os.scriptdir())
-local imgui_target = rhi_imgui_target
+local imgui_target = rojorhi_imgui_target
 
 -- Backend-neutral RHI surface and the Metal 4 implementation. The public include directory
--- preserves the existing #include "RHI/..." contract; metal-cpp and backend headers remain
+-- preserves the existing #include <rojoRHI/...> contract; metal-cpp and backend headers remain
 -- implementation details of this component.
-target("RHI")
+target("RojoRHI")
     set_kind("static")
     add_files(path.join(component, "Source/*.cpp"))
     add_files(path.join(component, "Source/Base/*.cpp"))
@@ -60,7 +60,7 @@ target("RHI")
 -- a host that owns an ImGui target can supply the headers this adapter compiles against, so a
 -- standalone configure of the component simply has no such target.
 if imgui_target then
-    target("RHIMetal4ImGui")
+    target("RojoRHIMetal4ImGui")
         set_kind("static")
         add_files(path.join(component, "Backends/Metal4/ImGui/Source/Metal4ImGui.cpp"))
         add_files(path.join(component, "Backends/Metal4/ImGui/Source/ImGuiBackendContract.cpp"))
@@ -69,23 +69,23 @@ if imgui_target then
         add_includedirs(path.join(component, "Source"))
         add_includedirs(path.join(thirdparty, "metal-cpp"))
         add_frameworks("Metal", "MetalFX", "QuartzCore", "Foundation")
-        add_deps("RHI", imgui_target)
+        add_deps("RojoRHI", imgui_target)
 end
 
 -- Contract and GPU tests for the standalone RHI component. They link the RHI target alone, so
 -- the suite stays runnable once the component leaves this repository.
-target("RHITests")
+target("RojoRHITests")
     set_kind("binary")
     set_default(false)
-    set_targetdir("$(builddir)/$(plat)/$(arch)/$(mode)/rhi-test")
+    set_targetdir("$(builddir)/$(plat)/$(arch)/$(mode)/rojorhi-test")
     add_files(path.join(component, "Tests/*.cpp"))
-    add_deps("RHI")
+    add_deps("RojoRHI")
     add_packages("catch2", "glm")
     -- GPU cases load shaders relative to the test binary, so this target compiles its own smoke
     -- shaders out of the component's own tree. Six of them are byte-identical copies of oracles a
     -- host's own suite may also own: duplicated deliberately, so nothing here reaches outside the
     -- component. The non-recursive pattern keeps Modules/ off the entry-point list.
-    add_rules("rhi_slang2metallib")
+    add_rules("rojorhi_slang2metallib")
     set_values("slang.moduledir", path.join(component_dir, "Shaders/Tests/Modules"))
     set_values("slang.slangc", path.join(thirdparty_dir, "slang/bin/slangc"))
     add_files(path.join(component, "Shaders/Tests/*.slang"))

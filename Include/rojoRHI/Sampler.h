@@ -6,7 +6,7 @@
 #include <cstdint>
 #include <string_view>
 
-namespace lmx::rhi {
+namespace rojoRHI {
 
 /// Selects nearest or linear texture filtering.
 enum class FilterMode {
@@ -44,4 +44,4 @@ public:
     virtual ~Sampler() = default;
 };
 
-} // namespace lmx::rhi
+} // namespace rojoRHI

@@ -7,7 +7,7 @@
 #include "Base/Log.h"
 #include "Metal4DevicePrivate.h"
 #include "Metal4Resources.h"
-#include "RHI/Validate.h"
+#include <rojoRHI/Validate.h>
 
 #include <filesystem>
 #include <fstream>
@@ -17,7 +17,7 @@
 #include <utility>
 #include <vector>
 
-namespace lmx::rhi::metal4 {
+namespace rojoRHI::metal4 {
 namespace {
 
 using device_detail::describe;
@@ -163,7 +163,7 @@ Result<std::unique_ptr<ShaderLibrary>> Metal4Device::loadShaderLibrary(std::stri
                                                          "': " + describe(error));
         }
         library->setLabel(makeString(base).get());
-        LMX_LOG_INFO("shader library '{}': loaded precompiled metallib", base);
+        ROJORHI_LOG_INFO("shader library '{}': loaded precompiled metallib", base);
         return std::make_unique<Metal4ShaderLibrary>(std::move(library));
     }
 
@@ -195,7 +195,7 @@ Result<std::unique_ptr<ShaderLibrary>> Metal4Device::loadShaderLibrary(std::stri
                                                          "': " + describe(error));
         }
         library->setLabel(makeString(base).get());
-        LMX_LOG_INFO("shader library '{}': compiled MSL source at runtime", base);
+        ROJORHI_LOG_INFO("shader library '{}': compiled MSL source at runtime", base);
         return std::make_unique<Metal4ShaderLibrary>(std::move(library));
     }
 
@@ -244,7 +244,7 @@ Metal4Device::createGraphicsPipeline(const GraphicsPipelineDesc& desc) {
     }
     pipelineDesc->setRasterSampleCount(1);
     // Pipeline-state labels are inherited from the descriptor; the state has no setter.
-    pipelineDesc->setLabel(labelOrFallback(desc.label, "lmx.pipeline.unnamed").get());
+    pipelineDesc->setLabel(labelOrFallback(desc.label, "rojorhi.pipeline.unnamed").get());
 
     NS::Error* error = nullptr;
     NS::SharedPtr<MTL::RenderPipelineState> state =
@@ -267,7 +267,7 @@ Metal4Device::createGraphicsPipeline(const GraphicsPipelineDesc& desc) {
         dsDesc->setDepthWriteEnabled(desc.depthWriteEnable);
         // Distinguish the separate depth-state object in captures.
         const std::string_view pipelineLabel =
-            desc.label.empty() ? std::string_view("lmx.pipeline.unnamed") : desc.label;
+            desc.label.empty() ? std::string_view("rojorhi.pipeline.unnamed") : desc.label;
         dsDesc->setLabel(makeString(std::string(pipelineLabel) + ".depth").get());
         depthState = NS::TransferPtr(m_device->newDepthStencilState(dsDesc.get()));
         if (!depthState) {
@@ -306,7 +306,7 @@ Metal4Device::createComputePipeline(const ComputePipelineDesc& desc) {
     auto pipelineDesc = NS::TransferPtr(MTL4::ComputePipelineDescriptor::alloc()->init());
     pipelineDesc->setComputeFunctionDescriptor(computeFunction.get());
     // Pipeline-state labels are inherited from the descriptor; the state has no setter.
-    pipelineDesc->setLabel(labelOrFallback(desc.label, "lmx.pipeline.unnamed").get());
+    pipelineDesc->setLabel(labelOrFallback(desc.label, "rojorhi.pipeline.unnamed").get());
 
     NS::Error* error = nullptr;
     NS::SharedPtr<MTL::ComputePipelineState> state =
@@ -353,4 +353,4 @@ Metal4Device::createComputePipeline(const ComputePipelineDesc& desc) {
     return std::make_unique<Metal4ComputePipeline>(std::move(state), threadsPerThreadgroup);
 }
 
-} // namespace lmx::rhi::metal4
+} // namespace rojoRHI::metal4

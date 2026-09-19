@@ -6,8 +6,8 @@
 #include "Metal4CommandList.h"
 #include "Metal4Common.h"
 #include "Metal4FrameArena.h"
-#include "RHI/Device.h"
-#include "RHI/Metal4/Metal4FrameData.h"
+#include <rojoRHI/Device.h>
+#include <rojoRHI/Metal4/Metal4FrameData.h>
 
 #include <array>
 #include <cstdint>
@@ -17,7 +17,7 @@
 #include <string>
 #include <vector>
 
-namespace lmx::rhi::metal4 {
+namespace rojoRHI::metal4 {
 
 inline constexpr uint32_t kFramesInFlight = 3;
 
@@ -179,4 +179,4 @@ private:
     bool m_frameOpen = false;
 };
 
-} // namespace lmx::rhi::metal4
+} // namespace rojoRHI::metal4

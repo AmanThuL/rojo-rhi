@@ -73,7 +73,7 @@ TEST_CASE("a frame-data alignment must be a power of two of at least 256", "[rhi
 // empty success.
 TEST_CASE("HeapDesc requires a size", "[rhi][validate]") {
     REQUIRE_FALSE(validate(HeapDesc{.size = 0}).has_value());
-    REQUIRE(validate(HeapDesc{.size = 4096, .label = "lmx.test.heap"}).has_value());
+    REQUIRE(validate(HeapDesc{.size = 4096, .label = "rojorhi.test.heap"}).has_value());
 }
 
 //======================================================================================================================

@@ -7,7 +7,7 @@
 // handful of helpers every backend file needs. Private to the RHI target -- metal-cpp
 // types never appear in RHI.h.
 #include "Base/Assert.h"
-#include "RHI/Format.h"
+#include <rojoRHI/Format.h>
 
 #include <Foundation/Foundation.hpp>
 #include <Metal/Metal.hpp>
@@ -17,7 +17,7 @@
 #include <string>
 #include <string_view>
 
-namespace lmx::rhi::metal4 {
+namespace rojoRHI::metal4 {
 
 // RHI descs carry std::string_view, which is NOT guaranteed NUL-terminated, so the
 // text is copied into a std::string before it reaches NS::String's char* initializer.
@@ -97,18 +97,18 @@ inline constexpr uint64_t kGpuTimeoutMs = 10'000;
 inline void drainQueue(MTL4::CommandQueue* queue) {
     NS::SharedPtr<NS::AutoreleasePool> pool = NS::TransferPtr(NS::AutoreleasePool::alloc()->init());
 
-    LMX_ASSERT(queue != nullptr, "drainQueue: queue must not be null");
+    ROJORHI_ASSERT(queue != nullptr, "drainQueue: queue must not be null");
     MTL::Device* device = queue->device();
-    LMX_ASSERT(device != nullptr, "drainQueue: command queue has no device");
+    ROJORHI_ASSERT(device != nullptr, "drainQueue: command queue has no device");
 
     NS::SharedPtr<MTL::SharedEvent> done = NS::TransferPtr(device->newSharedEvent());
-    LMX_ASSERT(done, "drainQueue: failed to create shared event");
-    done->setLabel(makeString("lmx.queue.drain").get());
+    ROJORHI_ASSERT(done, "drainQueue: failed to create shared event");
+    done->setLabel(makeString("rojorhi.queue.drain").get());
     done->setSignaledValue(0);
 
     queue->signalEvent(done.get(), 1);
     const bool signaled = done->waitUntilSignaledValue(1, kGpuTimeoutMs);
-    LMX_ASSERT(signaled, "drainQueue: GPU did not complete within the timeout");
+    ROJORHI_ASSERT(signaled, "drainQueue: GPU did not complete within the timeout");
 }
 
-} // namespace lmx::rhi::metal4
+} // namespace rojoRHI::metal4

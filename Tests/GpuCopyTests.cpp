@@ -49,7 +49,7 @@ uint8_t copyGradientChannel(uint32_t coordinate, uint32_t extent) {
 // asserted untouched, so a copy that ignored either offset fails on a specific byte rather than on
 // a whole-buffer comparison that could pass by accident.
 TEST_CASE("a copy pass copies a byte range between two buffers", "[gpu]") {
-    using namespace lmx::rhi;
+    using namespace rojoRHI;
 
     constexpr uint64_t kBufferBytes = 256;
     constexpr uint64_t kSourceOffset = 64;
@@ -66,19 +66,19 @@ TEST_CASE("a copy pass copies a byte range between two buffers", "[gpu]") {
     }
     std::vector<uint8_t> destinationBytes(kBufferBytes, 0xEE);
 
-    auto source = (*device)->createBuffer({.size = kBufferBytes, .label = "lmx.test.copy.source"},
+    auto source = (*device)->createBuffer({.size = kBufferBytes, .label = "rojorhi.test.copy.source"},
                                           sourceBytes.data());
     INFO(errorOf(source));
     REQUIRE(source.has_value());
 
     auto destination = (*device)->createBuffer(
-        {.size = kBufferBytes, .cpuReadback = true, .label = "lmx.test.copy.destination"},
+        {.size = kBufferBytes, .cpuReadback = true, .label = "rojorhi.test.copy.destination"},
         destinationBytes.data());
     INFO(errorOf(destination));
     REQUIRE(destination.has_value());
 
     CommandList& commands = (*device)->beginFrame();
-    commands.beginCopyPass("lmx.test.copy.buffers");
+    commands.beginCopyPass("rojorhi.test.copy.buffers");
     commands.copyBuffer(**source, kSourceOffset, **destination, kDestinationOffset, kCopyBytes);
     commands.endCopyPass();
     (*device)->endFrame(nullptr);
@@ -100,7 +100,7 @@ TEST_CASE("a copy pass copies a byte range between two buffers", "[gpu]") {
 // fillBuffer covers a middle range only, so the case pins both the value and the extent of what it
 // touches: a fill that ran over the whole allocation would pass a check of the filled bytes alone.
 TEST_CASE("a copy pass fills a buffer range with a byte value", "[gpu]") {
-    using namespace lmx::rhi;
+    using namespace rojoRHI;
 
     constexpr uint64_t kBufferBytes = 256;
     constexpr uint64_t kFillOffset = 64;
@@ -113,13 +113,13 @@ TEST_CASE("a copy pass fills a buffer range with a byte value", "[gpu]") {
 
     const std::vector<uint8_t> initial(kBufferBytes, 0xEE);
     auto buffer = (*device)->createBuffer(
-        {.size = kBufferBytes, .cpuReadback = true, .label = "lmx.test.copy.filled"},
+        {.size = kBufferBytes, .cpuReadback = true, .label = "rojorhi.test.copy.filled"},
         initial.data());
     INFO(errorOf(buffer));
     REQUIRE(buffer.has_value());
 
     CommandList& commands = (*device)->beginFrame();
-    commands.beginCopyPass("lmx.test.copy.fill");
+    commands.beginCopyPass("rojorhi.test.copy.fill");
     commands.fillBuffer(**buffer, kFillOffset, kFillBytes, kFillValue);
     commands.endCopyPass();
     (*device)->endFrame(nullptr);
@@ -141,7 +141,7 @@ TEST_CASE("a copy pass fills a buffer range with a byte value", "[gpu]") {
 // The buffer starts at a sentinel the fill overwrites, so a dispatch that ran before the fill --
 // or read stale bytes -- reports the sentinel plus the bias instead.
 TEST_CASE("a filled buffer is read by a later dispatch through a buffer barrier", "[gpu]") {
-    using namespace lmx::rhi;
+    using namespace rojoRHI;
 
     constexpr uint32_t kElements = 256;
     constexpr uint32_t kBias = 7;
@@ -161,14 +161,14 @@ TEST_CASE("a filled buffer is read by a later dispatch through a buffer barrier"
         (*device)->createComputePipeline({.library = library->get(),
                                           .computeEntry = "computeAddFromBuffer",
                                           .threadsPerThreadgroup = {kHazardThreadsPerGroup, 1, 1},
-                                          .label = "lmx.test.copy.hazardPipeline"});
+                                          .label = "rojorhi.test.copy.hazardPipeline"});
     INFO(errorOf(pipeline));
     REQUIRE(pipeline.has_value());
 
     const std::vector<uint32_t> sentinel(kElements, 0xFFFFFFFFu);
     auto accumulator = (*device)->createBuffer({.size = sizeof(uint32_t) * kElements,
                                                 .storageRead = true,
-                                                .label = "lmx.test.copy.hazardAccumulator"},
+                                                .label = "rojorhi.test.copy.hazardAccumulator"},
                                                sentinel.data());
     INFO(errorOf(accumulator));
     REQUIRE(accumulator.has_value());
@@ -176,7 +176,7 @@ TEST_CASE("a filled buffer is read by a later dispatch through a buffer barrier"
     auto resolved = (*device)->createBuffer({.size = sizeof(uint32_t) * kElements,
                                              .storageWrite = true,
                                              .cpuReadback = true,
-                                             .label = "lmx.test.copy.hazardResolved"},
+                                             .label = "rojorhi.test.copy.hazardResolved"},
                                             nullptr);
     INFO(errorOf(resolved));
     REQUIRE(resolved.has_value());
@@ -184,13 +184,13 @@ TEST_CASE("a filled buffer is read by a later dispatch through a buffer barrier"
     const HazardParams params{.bias = kBias};
 
     CommandList& commands = (*device)->beginFrame();
-    commands.beginCopyPass("lmx.test.copy.hazardClear");
+    commands.beginCopyPass("rojorhi.test.copy.hazardClear");
     commands.fillBuffer(**accumulator, 0, sizeof(uint32_t) * kElements, kFillValue);
     commands.endCopyPass();
 
     commands.bufferBarrier(**accumulator, BufferUse::CopyDestination, BufferUse::StorageRead);
 
-    commands.beginComputePass("lmx.test.copy.hazardAccumulate");
+    commands.beginComputePass("rojorhi.test.copy.hazardAccumulate");
     commands.bindComputePipeline(**pipeline);
     commands.bindStorageBuffer(kHazardOutputSlot, **resolved, StorageAccess::Write);
     commands.bindStorageBuffer(kHazardSourceSlot, **accumulator, StorageAccess::Read);
@@ -216,7 +216,7 @@ TEST_CASE("a filled buffer is read by a later dispatch through a buffer barrier"
 // rather than nothing.
 TEST_CASE("a copy captures an intermediate mip level of a GPU-written chain",
           "[gpu][checkpoint-a]") {
-    using namespace lmx::rhi;
+    using namespace rojoRHI;
 
     constexpr uint32_t kMipExtent = kSize / 2;
     constexpr uint32_t kMipBytes = kMipExtent * kMipExtent * 4;
@@ -233,7 +233,7 @@ TEST_CASE("a copy captures an intermediate mip level of a GPU-written chain",
         {.library = library->get(),
          .computeEntry = "computeWriteImage",
          .threadsPerThreadgroup = {kCopyImageThreadsPerGroup, kCopyImageThreadsPerGroup, 1},
-         .label = "lmx.test.copy.mipWritePipeline"});
+         .label = "rojorhi.test.copy.mipWritePipeline"});
     INFO(errorOf(pipeline));
     REQUIRE(pipeline.has_value());
 
@@ -242,12 +242,12 @@ TEST_CASE("a copy captures an intermediate mip level of a GPU-written chain",
                                            .format = Format::RGBA8Unorm,
                                            .mipLevels = 2,
                                            .storageWrite = true,
-                                           .label = "lmx.test.copy.mipChain"});
+                                           .label = "rojorhi.test.copy.mipChain"});
     INFO(errorOf(chain));
     REQUIRE(chain.has_value());
 
     auto staging = (*device)->createBuffer(
-        {.size = kMipBytes, .cpuReadback = true, .label = "lmx.test.copy.mipStaging"}, nullptr);
+        {.size = kMipBytes, .cpuReadback = true, .label = "rojorhi.test.copy.mipStaging"}, nullptr);
     INFO(errorOf(staging));
     REQUIRE(staging.has_value());
 
@@ -255,7 +255,7 @@ TEST_CASE("a copy captures an intermediate mip level of a GPU-written chain",
     const TextureViewDesc level1{.range = {.baseMipLevel = 1, .mipLevelCount = 1}};
 
     CommandList& commands = (*device)->beginFrame();
-    commands.beginComputePass("lmx.test.copy.mipWrite");
+    commands.beginComputePass("rojorhi.test.copy.mipWrite");
     commands.bindComputePipeline(**pipeline);
     commands.bindStorageTexture(kCopyImageSlot, **chain, level1, StorageAccess::Write);
     commands.bindFrameData(kCopyImageParamsSlot, params);
@@ -266,7 +266,7 @@ TEST_CASE("a copy captures an intermediate mip level of a GPU-written chain",
     commands.textureBarrier(**chain, {.baseMipLevel = 1, .mipLevelCount = 1},
                             TextureUse::StorageWrite, TextureUse::CopySource);
 
-    commands.beginCopyPass("lmx.test.copy.mipCapture");
+    commands.beginCopyPass("rojorhi.test.copy.mipCapture");
     commands.copyTextureToBuffer(**chain,
                                  {.mipLevel = 1, .width = kMipExtent, .height = kMipExtent},
                                  **staging, {.bytesPerRow = kMipExtent * 4});
@@ -294,7 +294,7 @@ TEST_CASE("a copy captures an intermediate mip level of a GPU-written chain",
 // Every face and level carries a distinct constant, so a copy that resolved to the wrong slice or
 // the wrong level disagrees on a channel.
 TEST_CASE("a copy captures one array layer and mip of a cubemap", "[gpu][checkpoint-a]") {
-    using namespace lmx::rhi;
+    using namespace rojoRHI;
 
     constexpr uint32_t kFaceExtent = 16;
     constexpr uint32_t kLevels = 2;
@@ -329,20 +329,20 @@ TEST_CASE("a copy captures one array layer and mip of a cubemap", "[gpu][checkpo
                                           .kind = TextureKind::Cube,
                                           .mipLevels = kLevels,
                                           .sampled = true,
-                                          .label = "lmx.test.copy.cube"},
+                                          .label = "rojorhi.test.copy.cube"},
                                          mips);
     INFO(errorOf(cube));
     REQUIRE(cube.has_value());
 
     auto staging = (*device)->createBuffer({.size = kCapturedExtent * kCapturedExtent * 4,
                                             .cpuReadback = true,
-                                            .label = "lmx.test.copy.cubeStaging"},
+                                            .label = "rojorhi.test.copy.cubeStaging"},
                                            nullptr);
     INFO(errorOf(staging));
     REQUIRE(staging.has_value());
 
     CommandList& commands = (*device)->beginFrame();
-    commands.beginCopyPass("lmx.test.copy.cubeCapture");
+    commands.beginCopyPass("rojorhi.test.copy.cubeCapture");
     commands.copyTextureToBuffer(**cube,
                                  {.mipLevel = kCapturedLevel,
                                   .arrayLayer = kCapturedFace,
@@ -368,7 +368,7 @@ TEST_CASE("a copy captures one array layer and mip of a cubemap", "[gpu][checkpo
 // texture, the copy overwrites one interior rectangle, and both the rectangle and the untouched
 // border are asserted, so an origin the copy ignored is visible as a displaced rectangle.
 TEST_CASE("a copy writes buffer bytes into a texture sub-rectangle", "[gpu][checkpoint-a]") {
-    using namespace lmx::rhi;
+    using namespace rojoRHI;
 
     constexpr uint32_t kPatchOrigin = 8;
     constexpr uint32_t kPatchExtent = 16;
@@ -379,7 +379,7 @@ TEST_CASE("a copy writes buffer bytes into a texture sub-rectangle", "[gpu][chec
     INFO(errorOf(device));
     REQUIRE(device.has_value());
 
-    auto target = makeProbeTarget(**device, "lmx.test.copy.patchTarget");
+    auto target = makeProbeTarget(**device, "rojorhi.test.copy.patchTarget");
     INFO(errorOf(target));
     REQUIRE(target.has_value());
 
@@ -391,7 +391,7 @@ TEST_CASE("a copy writes buffer bytes into a texture sub-rectangle", "[gpu][chec
         patch[texel * 4 + 3] = kPatchA;
     }
     auto staging = (*device)->createBuffer(
-        {.size = patch.size(), .label = "lmx.test.copy.patchStaging"}, patch.data());
+        {.size = patch.size(), .label = "rojorhi.test.copy.patchStaging"}, patch.data());
     INFO(errorOf(staging));
     REQUIRE(staging.has_value());
 
@@ -400,12 +400,12 @@ TEST_CASE("a copy writes buffer bytes into a texture sub-rectangle", "[gpu][chec
     commands.beginRenderPass({.colorTarget = target->get(),
                               .clearColor = {0.0f, 0.0f, 0.0f, 1.0f},
                               .clear = true,
-                              .label = "lmx.test.copy.patchClear"});
+                              .label = "rojorhi.test.copy.patchClear"});
     commands.endRenderPass();
 
     commands.textureBarrier(**target, TextureUse::RenderTarget, TextureUse::CopyDestination);
 
-    commands.beginCopyPass("lmx.test.copy.patchWrite");
+    commands.beginCopyPass("rojorhi.test.copy.patchWrite");
     commands.copyBufferToTexture(
         **staging, {.bytesPerRow = kPatchExtent * 4}, **target,
         {.x = kPatchOrigin, .y = kPatchOrigin, .width = kPatchExtent, .height = kPatchExtent});
@@ -440,7 +440,7 @@ TEST_CASE("a copy writes buffer bytes into a texture sub-rectangle", "[gpu][chec
 // against the same rectangle read back from the source, so the case asserts copy fidelity over
 // rendered content rather than over a constant that would survive a mis-addressed copy.
 TEST_CASE("a copy moves a rectangle between two textures", "[gpu]") {
-    using namespace lmx::rhi;
+    using namespace rojoRHI;
 
     constexpr uint32_t kRegionOrigin = 16;
     constexpr uint32_t kRegionExtent = 32;
@@ -458,16 +458,16 @@ TEST_CASE("a copy moves a rectangle between two textures", "[gpu]") {
                                                        .fragmentEntry = "fragmentMain",
                                                        .colorFormat = Format::BGRA8Unorm,
                                                        .cullMode = CullMode::None,
-                                                       .label = "lmx.test.copy.regionPipeline"});
+                                                       .label = "rojorhi.test.copy.regionPipeline"});
     INFO(errorOf(pipeline));
     REQUIRE(pipeline.has_value());
 
     auto vertices = (*device)->createBuffer(
-        {.size = sizeof(kTriangle), .label = "lmx.test.copy.regionVertices"}, kTriangle.data());
+        {.size = sizeof(kTriangle), .label = "rojorhi.test.copy.regionVertices"}, kTriangle.data());
     INFO(errorOf(vertices));
     REQUIRE(vertices.has_value());
 
-    auto source = makeProbeTarget(**device, "lmx.test.copy.regionSource");
+    auto source = makeProbeTarget(**device, "rojorhi.test.copy.regionSource");
     INFO(errorOf(source));
     REQUIRE(source.has_value());
 
@@ -475,7 +475,7 @@ TEST_CASE("a copy moves a rectangle between two textures", "[gpu]") {
                                                  .height = kSize,
                                                  .format = Format::BGRA8Unorm,
                                                  .cpuReadback = true,
-                                                 .label = "lmx.test.copy.regionDestination"});
+                                                 .label = "rojorhi.test.copy.regionDestination"});
     INFO(errorOf(destination));
     REQUIRE(destination.has_value());
 
@@ -483,7 +483,7 @@ TEST_CASE("a copy moves a rectangle between two textures", "[gpu]") {
     commands.beginRenderPass({.colorTarget = source->get(),
                               .clearColor = {0.0f, 0.0f, 0.0f, 1.0f},
                               .clear = true,
-                              .label = "lmx.test.copy.regionDraw"});
+                              .label = "rojorhi.test.copy.regionDraw"});
     commands.bindPipeline(**pipeline);
     commands.bindBuffer(kVertexBufferSlot, **vertices);
     commands.draw(3);
@@ -491,7 +491,7 @@ TEST_CASE("a copy moves a rectangle between two textures", "[gpu]") {
 
     commands.textureBarrier(**source, TextureUse::RenderTarget, TextureUse::CopySource);
 
-    commands.beginCopyPass("lmx.test.copy.region");
+    commands.beginCopyPass("rojorhi.test.copy.region");
     commands.copyTexture(
         **source,
         {.x = kRegionOrigin, .y = kRegionOrigin, .width = kRegionExtent, .height = kRegionExtent},
@@ -537,7 +537,7 @@ TEST_CASE("a copy moves a rectangle between two textures", "[gpu]") {
 // A copy pass is timed by the same boundary timestamps the other two pass kinds use, so a frame
 // mixing all three reports three passes in encode order.
 TEST_CASE("pass timings cover a copy pass alongside the other pass kinds", "[gpu]") {
-    using namespace lmx::rhi;
+    using namespace rojoRHI;
 
     auto device = createDevice();
     INFO(errorOf(device));
@@ -551,7 +551,7 @@ TEST_CASE("pass timings cover a copy pass alongside the other pass kinds", "[gpu
         {.library = library->get(),
          .computeEntry = "computeWriteImage",
          .threadsPerThreadgroup = {kCopyImageThreadsPerGroup, kCopyImageThreadsPerGroup, 1},
-         .label = "lmx.test.copy.timingPipeline"});
+         .label = "rojorhi.test.copy.timingPipeline"});
     INFO(errorOf(pipeline));
     REQUIRE(pipeline.has_value());
 
@@ -559,16 +559,16 @@ TEST_CASE("pass timings cover a copy pass alongside the other pass kinds", "[gpu
                                            .height = kSize,
                                            .format = Format::RGBA8Unorm,
                                            .storageWrite = true,
-                                           .label = "lmx.test.copy.timingImage"});
+                                           .label = "rojorhi.test.copy.timingImage"});
     INFO(errorOf(image));
     REQUIRE(image.has_value());
 
-    auto target = makeProbeTarget(**device, "lmx.test.copy.timingTarget");
+    auto target = makeProbeTarget(**device, "rojorhi.test.copy.timingTarget");
     INFO(errorOf(target));
     REQUIRE(target.has_value());
 
     auto staging = (*device)->createBuffer(
-        {.size = 256, .cpuReadback = true, .label = "lmx.test.copy.timingStaging"}, nullptr);
+        {.size = 256, .cpuReadback = true, .label = "rojorhi.test.copy.timingStaging"}, nullptr);
     INFO(errorOf(staging));
     REQUIRE(staging.has_value());
 
@@ -578,15 +578,15 @@ TEST_CASE("pass timings cover a copy pass alongside the other pass kinds", "[gpu
     commands.beginRenderPass({.colorTarget = target->get(),
                               .clearColor = {0.0f, 0.0f, 0.0f, 1.0f},
                               .clear = true,
-                              .label = "lmx.test.timing.render"});
+                              .label = "rojorhi.test.timing.render"});
     commands.endRenderPass();
-    commands.beginComputePass("lmx.test.timing.compute");
+    commands.beginComputePass("rojorhi.test.timing.compute");
     commands.bindComputePipeline(**pipeline);
     commands.bindStorageTexture(kCopyImageSlot, **image, {}, StorageAccess::Write);
     commands.bindFrameData(kCopyImageParamsSlot, params);
     commands.dispatch(kSize / kCopyImageThreadsPerGroup, kSize / kCopyImageThreadsPerGroup, 1);
     commands.endComputePass();
-    commands.beginCopyPass("lmx.test.timing.copy");
+    commands.beginCopyPass("rojorhi.test.timing.copy");
     commands.fillBuffer(**staging, 0, 256, 0x11);
     commands.endCopyPass();
     (*device)->endFrame(nullptr);
@@ -598,9 +598,9 @@ TEST_CASE("pass timings cover a copy pass alongside the other pass kinds", "[gpu
 
     const std::span<const PassTiming> timings = (*device)->passTimings();
     REQUIRE(timings.size() == 3);
-    REQUIRE(timings[0].label == "lmx.test.timing.render");
-    REQUIRE(timings[1].label == "lmx.test.timing.compute");
-    REQUIRE(timings[2].label == "lmx.test.timing.copy");
+    REQUIRE(timings[0].label == "rojorhi.test.timing.render");
+    REQUIRE(timings[1].label == "rojorhi.test.timing.compute");
+    REQUIRE(timings[2].label == "rojorhi.test.timing.copy");
     REQUIRE((*device)->passTimingsFrame() == 1);
 }
 
@@ -608,7 +608,7 @@ TEST_CASE("pass timings cover a copy pass alongside the other pass kinds", "[gpu
 // The shipped frame can exceed sixteen passes when bloom and auto-exposure are enabled together.
 // Empty compute encoders isolate the timestamp capacity contract from shader or resource work.
 TEST_CASE("pass timings retain more than sixteen passes", "[gpu]") {
-    using namespace lmx::rhi;
+    using namespace rojoRHI;
 
     constexpr uint32_t kPassCount = 20;
     auto device = createDevice();
@@ -617,7 +617,7 @@ TEST_CASE("pass timings retain more than sixteen passes", "[gpu]") {
 
     CommandList& commands = (*device)->beginFrame();
     for (uint32_t pass = 0; pass < kPassCount; ++pass) {
-        commands.beginComputePass("lmx.test.timing.many." + std::to_string(pass));
+        commands.beginComputePass("rojorhi.test.timing.many." + std::to_string(pass));
         commands.endComputePass();
     }
     (*device)->endFrame(nullptr);
@@ -629,6 +629,6 @@ TEST_CASE("pass timings retain more than sixteen passes", "[gpu]") {
     const std::span<const PassTiming> timings = (*device)->passTimings();
     REQUIRE(timings.size() == kPassCount);
     for (uint32_t pass = 0; pass < kPassCount; ++pass) {
-        REQUIRE(timings[pass].label == "lmx.test.timing.many." + std::to_string(pass));
+        REQUIRE(timings[pass].label == "rojorhi.test.timing.many." + std::to_string(pass));
     }
 }

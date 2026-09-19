@@ -7,7 +7,7 @@
 #include <string>
 #include <string_view>
 
-namespace lmx::rhi::base {
+namespace rojoRHI::base {
 
 /// Appends JSON string contents, escaping quotes, backslashes and controls as lowercase Unicode
 /// escapes. Preserves all other bytes, including UTF-8. Adds no quotes, object or array framing.
@@ -17,4 +17,4 @@ void appendJsonEscaped(std::string& out, std::string_view text);
 /// Returns escaped JSON string contents under appendJsonEscaped's byte contract, without quotes.
 std::string jsonEscape(std::string_view text);
 
-} // namespace lmx::rhi::base
+} // namespace rojoRHI::base

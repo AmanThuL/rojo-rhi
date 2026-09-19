@@ -1,6 +1,6 @@
 #include "RhiGpuTestSupport.h"
 
-#include "RHI/Validate.h"
+#include <rojoRHI/Validate.h>
 
 #include <cstring>
 #include <utility>
@@ -40,22 +40,22 @@ std::string describeMotion(uint32_t x, uint32_t y, const MotionTexel& texel) {
 }
 
 //======================================================================================================================
-lmx::rhi::Result<std::unique_ptr<lmx::rhi::Texture>> makeMotionTarget(lmx::rhi::Device& device,
+rojoRHI::Result<std::unique_ptr<rojoRHI::Texture>> makeMotionTarget(rojoRHI::Device& device,
                                                                       const char* label) {
     return device.createTexture({.width = kSize,
                                  .height = kSize,
-                                 .format = lmx::rhi::Format::RG16Float,
+                                 .format = rojoRHI::Format::RG16Float,
                                  .renderTarget = true,
                                  .cpuReadback = true,
                                  .label = label});
 }
 
 //======================================================================================================================
-lmx::rhi::Result<std::unique_ptr<lmx::rhi::Texture>> makeReactiveTarget(lmx::rhi::Device& device,
+rojoRHI::Result<std::unique_ptr<rojoRHI::Texture>> makeReactiveTarget(rojoRHI::Device& device,
                                                                         const char* label) {
     return device.createTexture({.width = kSize,
                                  .height = kSize,
-                                 .format = lmx::rhi::Format::R8Unorm,
+                                 .format = rojoRHI::Format::R8Unorm,
                                  .renderTarget = true,
                                  .cpuReadback = true,
                                  .label = label});
@@ -72,17 +72,17 @@ uint8_t reactiveAt(const std::vector<uint8_t>& bytes, uint32_t x, uint32_t y) {
 // One pass, two attachments: the fragment stage writes both, and each readback has to show its own
 // value rather than the other attachment's or its own clear.
 TEST_CASE("a render pass writes an extra color attachment alongside the primary", "[gpu][rhi]") {
-    using namespace lmx::rhi;
+    using namespace rojoRHI;
 
     auto device = createDevice();
     INFO(errorOf(device));
     REQUIRE(device.has_value());
 
-    auto color = makeProbeTarget(**device, "lmx.test.mrtColor");
+    auto color = makeProbeTarget(**device, "rojorhi.test.mrtColor");
     INFO(errorOf(color));
     REQUIRE(color.has_value());
 
-    auto motion = makeMotionTarget(**device, "lmx.test.mrtMotion");
+    auto motion = makeMotionTarget(**device, "rojorhi.test.mrtMotion");
     INFO(errorOf(motion));
     REQUIRE(motion.has_value());
 
@@ -97,7 +97,7 @@ TEST_CASE("a render pass writes an extra color attachment alongside the primary"
          .colorFormat = Format::BGRA8Unorm,
          .extraColorFormats = {Format::RG16Float, Format::Unknown, Format::Unknown},
          .extraColorCount = 1,
-         .label = "lmx.test.mrtPipeline"});
+         .label = "rojorhi.test.mrtPipeline"});
     INFO(errorOf(pipeline));
     REQUIRE(pipeline.has_value());
 
@@ -110,7 +110,7 @@ TEST_CASE("a render pass writes an extra color attachment alongside the primary"
                          .clearColor = {kMotionClearX, kMotionClearY, 0.0f, 0.0f},
                          .clear = true}},
          .extraColorCount = 1,
-         .label = "lmx.test.mrt"});
+         .label = "rojorhi.test.mrt"});
     commands.bindPipeline(**pipeline);
     commands.draw(3);
     commands.endRenderPass();
@@ -143,17 +143,17 @@ TEST_CASE("a render pass writes an extra color attachment alongside the primary"
 // The same pass without a draw. Its only output is the load action, so this is what proves the
 // extra attachment's own clear colour reaches it instead of the primary's.
 TEST_CASE("an extra color attachment clears to its own value", "[gpu][rhi]") {
-    using namespace lmx::rhi;
+    using namespace rojoRHI;
 
     auto device = createDevice();
     INFO(errorOf(device));
     REQUIRE(device.has_value());
 
-    auto color = makeProbeTarget(**device, "lmx.test.mrtClearColor");
+    auto color = makeProbeTarget(**device, "rojorhi.test.mrtClearColor");
     INFO(errorOf(color));
     REQUIRE(color.has_value());
 
-    auto motion = makeMotionTarget(**device, "lmx.test.mrtClearMotion");
+    auto motion = makeMotionTarget(**device, "rojorhi.test.mrtClearMotion");
     INFO(errorOf(motion));
     REQUIRE(motion.has_value());
 
@@ -166,7 +166,7 @@ TEST_CASE("an extra color attachment clears to its own value", "[gpu][rhi]") {
                          .clearColor = {kMotionClearX, kMotionClearY, 0.0f, 0.0f},
                          .clear = true}},
          .extraColorCount = 1,
-         .label = "lmx.test.mrtClear"});
+         .label = "rojorhi.test.mrtClear"});
     commands.endRenderPass();
     (*device)->endFrame(nullptr);
     (*device)->waitIdle();
@@ -192,13 +192,13 @@ TEST_CASE("an extra color attachment clears to its own value", "[gpu][rhi]") {
 // Attachment zero is the primary colour target, so a pass that has none cannot have an attachment
 // one either. Checked against real device textures rather than the unit test's stand-ins.
 TEST_CASE("a depth-only pass rejects extra color attachments", "[gpu][rhi]") {
-    using namespace lmx::rhi;
+    using namespace rojoRHI;
 
     auto device = createDevice();
     INFO(errorOf(device));
     REQUIRE(device.has_value());
 
-    auto motion = makeMotionTarget(**device, "lmx.test.mrtDepthOnlyMotion");
+    auto motion = makeMotionTarget(**device, "rojorhi.test.mrtDepthOnlyMotion");
     INFO(errorOf(motion));
     REQUIRE(motion.has_value());
 
@@ -216,21 +216,21 @@ TEST_CASE("a depth-only pass rejects extra color attachments", "[gpu][rhi]") {
 // fragment's 0.75 (191 after the eight-bit unorm round) where it rasterised and the attachment's
 // own zero clear where it did not.
 TEST_CASE("a render pass writes three color attachments", "[gpu][rhi]") {
-    using namespace lmx::rhi;
+    using namespace rojoRHI;
 
     auto device = createDevice();
     INFO(errorOf(device));
     REQUIRE(device.has_value());
 
-    auto color = makeProbeTarget(**device, "lmx.test.mrtTripleColor");
+    auto color = makeProbeTarget(**device, "rojorhi.test.mrtTripleColor");
     INFO(errorOf(color));
     REQUIRE(color.has_value());
 
-    auto motion = makeMotionTarget(**device, "lmx.test.mrtTripleMotion");
+    auto motion = makeMotionTarget(**device, "rojorhi.test.mrtTripleMotion");
     INFO(errorOf(motion));
     REQUIRE(motion.has_value());
 
-    auto reactive = makeReactiveTarget(**device, "lmx.test.mrtTripleReactive");
+    auto reactive = makeReactiveTarget(**device, "rojorhi.test.mrtTripleReactive");
     INFO(errorOf(reactive));
     REQUIRE(reactive.has_value());
 
@@ -245,7 +245,7 @@ TEST_CASE("a render pass writes three color attachments", "[gpu][rhi]") {
          .colorFormat = Format::BGRA8Unorm,
          .extraColorFormats = {Format::RG16Float, Format::R8Unorm, Format::Unknown},
          .extraColorCount = 2,
-         .label = "lmx.test.mrtTriplePipeline"});
+         .label = "rojorhi.test.mrtTriplePipeline"});
     INFO(errorOf(pipeline));
     REQUIRE(pipeline.has_value());
 
@@ -261,7 +261,7 @@ TEST_CASE("a render pass writes three color attachments", "[gpu][rhi]") {
                          .clearColor = {0.0f, 0.0f, 0.0f, 0.0f},
                          .clear = true}},
          .extraColorCount = 2,
-         .label = "lmx.test.mrtTriple"});
+         .label = "rojorhi.test.mrtTriple"});
     commands.bindPipeline(**pipeline);
     commands.draw(3);
     commands.endRenderPass();

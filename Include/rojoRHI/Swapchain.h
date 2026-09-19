@@ -3,12 +3,12 @@
 /// @brief Declares presentation swapchains bound to a native surface.
 //----------------------------------------------------------------------------------------------------------------------
 #pragma once
-#include "RHI/Format.h"
-#include "RHI/Result.h"
+#include <rojoRHI/Format.h>
+#include <rojoRHI/Result.h>
 
 #include <cstdint>
 
-namespace lmx::rhi {
+namespace rojoRHI {
 
 class Texture;
 
@@ -33,4 +33,4 @@ public:
     virtual void resize(uint32_t width, uint32_t height) = 0;
 };
 
-} // namespace lmx::rhi
+} // namespace rojoRHI

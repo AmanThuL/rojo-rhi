@@ -7,7 +7,7 @@
 #include <cstdint>
 #include <type_traits>
 
-namespace lmx::rhi {
+namespace rojoRHI {
 
 /// Byte alignment every indirect-argument buffer offset must satisfy.
 ///
@@ -77,4 +77,4 @@ static_assert(offsetof(DrawIndexedIndirectArgs, firstIndex) == 8);
 static_assert(offsetof(DrawIndexedIndirectArgs, baseVertex) == 12);
 static_assert(offsetof(DrawIndexedIndirectArgs, firstInstance) == 16);
 
-} // namespace lmx::rhi
+} // namespace rojoRHI

@@ -4,7 +4,7 @@
 //----------------------------------------------------------------------------------------------------------------------
 #pragma once
 
-namespace lmx::rhi {
+namespace rojoRHI {
 
 /// Represents a loaded backend shader library.
 class ShaderLibrary {
@@ -13,4 +13,4 @@ public:
     virtual ~ShaderLibrary() = default;
 };
 
-} // namespace lmx::rhi
+} // namespace rojoRHI

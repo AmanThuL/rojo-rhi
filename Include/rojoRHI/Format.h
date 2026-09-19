@@ -4,7 +4,7 @@
 //----------------------------------------------------------------------------------------------------------------------
 #pragma once
 
-namespace lmx::rhi {
+namespace rojoRHI {
 
 /// Identifies the storage and transfer format of an RHI texture attachment.
 /// RGBA16Float is the scene-linear color format: half precision preserves radiance above 1.0.
@@ -23,4 +23,4 @@ enum class Format {
     R32Float         ///< Full-precision sampled/storage data; not a color attachment.
 };
 
-} // namespace lmx::rhi
+} // namespace rojoRHI

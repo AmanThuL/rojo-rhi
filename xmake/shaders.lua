@@ -1,5 +1,5 @@
 -- Slang -> readable MSL -> .metallib for this component's own smoke shaders. Emits both artifacts
--- into <targetdir>/Shaders/; a target opts in with add_rules("rhi_slang2metallib") plus its own
+-- into <targetdir>/Shaders/; a target opts in with add_rules("rojorhi_slang2metallib") plus its own
 -- add_files("<dir>/**.slang"). The rule reads nothing outside the target: the Slang compiler and
 -- the module directory arrive as target values, because the project root differs between this
 -- component's own root and a host that mounts it.
@@ -9,7 +9,7 @@
 --
 -- Every check is scoped to the target's own Slang sources, so a target compiling a different
 -- shader tree is neither constrained by nor rebuilt for a tree it never reads.
-rule("rhi_slang2metallib")
+rule("rojorhi_slang2metallib")
     set_extensions(".slang")
     on_buildcmd_file(function (target, batchcmds, sourcefile, opt)
         -- Two targets emitting the same shader paths race under a parallel build. The rule
@@ -17,9 +17,9 @@ rule("rhi_slang2metallib")
         import("core.project.project")
         for _, other in pairs(project.targets()) do
             if other:name() ~= target:name()
-               and (other:rule("rhi_slang2metallib") or other:rule("slang2metallib"))
+               and (other:rule("rojorhi_slang2metallib") or other:rule("slang2metallib"))
                and path.absolute(other:targetdir()) == path.absolute(target:targetdir()) then
-                os.raise("rhi_slang2metallib: targets '%s' and '%s' share targetdir '%s'; give one "
+                os.raise("rojorhi_slang2metallib: targets '%s' and '%s' share targetdir '%s'; give one "
                          .. "its own set_targetdir", target:name(), other:name(), target:targetdir())
             end
         end
@@ -27,7 +27,7 @@ rule("rhi_slang2metallib")
         -- This target's own .slang sources, keyed by the rule name that batched them. Both the
         -- basename guard and the dependency list below work from this one list, because the
         -- shared output directory and the stale-artifact risk are per target, not repository-wide.
-        local batch = target:sourcebatches()["rhi_slang2metallib"]
+        local batch = target:sourcebatches()["rojorhi_slang2metallib"]
         local sources = table.unique(table.wrap(batch and batch.sourcefiles))
         table.sort(sources)
 
@@ -37,7 +37,7 @@ rule("rhi_slang2metallib")
         for _, shader in ipairs(sources) do
             local basename = path.basename(shader):lower()
             if names[basename] then
-                os.raise("rhi_slang2metallib: '%s' and '%s' share output basename '%s'",
+                os.raise("rojorhi_slang2metallib: '%s' and '%s' share output basename '%s'",
                          names[basename], shader, basename)
             end
             names[basename] = shader
@@ -46,9 +46,9 @@ rule("rhi_slang2metallib")
         -- Both values are absolute and supplied by the target, so neither depends on which
         -- directory is the project root.
         local moduledir = assert(target:values("slang.moduledir"),
-                                 "rhi_slang2metallib: set_values(\"slang.moduledir\", <dir>)")
+                                 "rojorhi_slang2metallib: set_values(\"slang.moduledir\", <dir>)")
         local slangc = assert(target:values("slang.slangc"),
-                              "rhi_slang2metallib: set_values(\"slang.slangc\", <slangc>)")
+                              "rojorhi_slang2metallib: set_values(\"slang.slangc\", <slangc>)")
         local outdir = path.join(target:targetdir(), "Shaders")
         local name = path.basename(sourcefile)
         local msl = path.join(outdir, name .. ".metal")

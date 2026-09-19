@@ -7,11 +7,11 @@
 #include "Metal4TemporalScaler.h"
 
 #include "Metal4DevicePrivate.h"
-#include "RHI/CaptureSchema.h"
+#include <rojoRHI/CaptureSchema.h>
 
 #include <cstdlib>
 
-namespace lmx::rhi::metal4 {
+namespace rojoRHI::metal4 {
 namespace {
 
 using device_detail::describe;
@@ -59,7 +59,7 @@ Result<std::unique_ptr<Device>> Metal4Device::create(const DeviceDesc& desc) {
 
     {
         auto queueDesc = NS::TransferPtr(MTL4::CommandQueueDescriptor::alloc()->init());
-        queueDesc->setLabel(makeString("lmx.device.queue").get());
+        queueDesc->setLabel(makeString("rojorhi.device.queue").get());
         error = nullptr;
         self->m_queue =
             NS::TransferPtr(self->m_device->newMTL4CommandQueue(queueDesc.get(), &error));
@@ -71,7 +71,7 @@ Result<std::unique_ptr<Device>> Metal4Device::create(const DeviceDesc& desc) {
 
     {
         auto compilerDesc = NS::TransferPtr(MTL4::CompilerDescriptor::alloc()->init());
-        compilerDesc->setLabel(makeString("lmx.device.compiler").get());
+        compilerDesc->setLabel(makeString("rojorhi.device.compiler").get());
         error = nullptr;
         self->m_compiler = NS::TransferPtr(self->m_device->newCompiler(compilerDesc.get(), &error));
         if (!self->m_compiler) {
@@ -82,7 +82,7 @@ Result<std::unique_ptr<Device>> Metal4Device::create(const DeviceDesc& desc) {
 
     {
         auto residencyDesc = NS::TransferPtr(MTL::ResidencySetDescriptor::alloc()->init());
-        residencyDesc->setLabel(makeString("lmx.device.residency").get());
+        residencyDesc->setLabel(makeString("rojorhi.device.residency").get());
         error = nullptr;
         self->m_residency =
             NS::TransferPtr(self->m_device->newResidencySet(residencyDesc.get(), &error));
@@ -97,7 +97,7 @@ Result<std::unique_ptr<Device>> Metal4Device::create(const DeviceDesc& desc) {
 
     for (uint32_t i = 0; i < kFramesInFlight; ++i) {
         auto allocatorDesc = NS::TransferPtr(MTL4::CommandAllocatorDescriptor::alloc()->init());
-        allocatorDesc->setLabel(makeString("lmx.device.allocator." + std::to_string(i)).get());
+        allocatorDesc->setLabel(makeString("rojorhi.device.allocator." + std::to_string(i)).get());
         error = nullptr;
         self->m_allocators[i] =
             NS::TransferPtr(self->m_device->newCommandAllocator(allocatorDesc.get(), &error));
@@ -112,7 +112,7 @@ Result<std::unique_ptr<Device>> Metal4Device::create(const DeviceDesc& desc) {
     if (!self->m_frameEvent) {
         return fail(ErrorCode::DeviceUnsupported, "failed to create frame-pacing shared event");
     }
-    self->m_frameEvent->setLabel(makeString("lmx.device.frameEvent").get());
+    self->m_frameEvent->setLabel(makeString("rojorhi.device.frameEvent").get());
     self->m_frameEvent->setSignaledValue(0);
     self->m_frameNumber = 0;
 
@@ -120,7 +120,7 @@ Result<std::unique_ptr<Device>> Metal4Device::create(const DeviceDesc& desc) {
     if (!self->m_commandBuffer) {
         return fail(ErrorCode::DeviceUnsupported, "failed to create MTL4 command buffer");
     }
-    self->m_commandBuffer->setLabel(makeString("lmx.device.commandBuffer").get());
+    self->m_commandBuffer->setLabel(makeString("rojorhi.device.commandBuffer").get());
 
     // Argument tables rotate with the frame resources that reference their bindings.
     for (uint32_t i = 0; i < kFramesInFlight; ++i) {
@@ -130,7 +130,7 @@ Result<std::unique_ptr<Device>> Metal4Device::create(const DeviceDesc& desc) {
         tableDesc->setMaxSamplerStateBindCount(kMaxSamplerStateBindCount);
         // Initialize unbound slots to null rather than stale GPU addresses.
         tableDesc->setInitializeBindings(true);
-        tableDesc->setLabel(makeString("lmx.device.argumentTable." + std::to_string(i)).get());
+        tableDesc->setLabel(makeString("rojorhi.device.argumentTable." + std::to_string(i)).get());
         error = nullptr;
         self->m_argumentTables[i] =
             NS::TransferPtr(self->m_device->newArgumentTable(tableDesc.get(), &error));
@@ -172,7 +172,7 @@ Result<std::unique_ptr<Device>> Metal4Device::create(const DeviceDesc& desc) {
                                                           describe(error));
         }
         timestamps.heap->setLabel(
-            makeString("lmx.device.timestampHeap." + std::to_string(i)).get());
+            makeString("rojorhi.device.timestampHeap." + std::to_string(i)).get());
         // A heap starts with undefined contents; the sentinel is what makes an unwritten entry
         // detectable rather than plausible.
         timestamps.heap->invalidateCounterRange(NS::Range::Make(0, kTimestampsPerFrame));
@@ -255,13 +255,13 @@ FrameDataCounters Metal4Device::frameDataCounters() const {
     return counters;
 }
 
-} // namespace lmx::rhi::metal4
+} // namespace rojoRHI::metal4
 
-namespace lmx::rhi {
+namespace rojoRHI {
 
 //======================================================================================================================
 Result<std::unique_ptr<Device>> createDevice(const DeviceDesc& desc) {
     return metal4::Metal4Device::create(desc);
 }
 
-} // namespace lmx::rhi
+} // namespace rojoRHI

@@ -2,14 +2,14 @@
 /// @file Validate.cpp
 /// @brief Implements backend-neutral validation for RHI descriptors and pass attachments.
 //----------------------------------------------------------------------------------------------------------------------
-#include "RHI/Validate.h"
+#include <rojoRHI/Validate.h>
 
-#include "RHI/Indirect.h"
+#include <rojoRHI/Indirect.h>
 
 #include <limits>
 #include <string>
 
-namespace lmx::rhi {
+namespace rojoRHI {
 namespace {
 
 //======================================================================================================================
@@ -739,4 +739,4 @@ Result<void> validateExtraColorTargets(const Texture* color, const ExtraColorTar
     return {};
 }
 
-} // namespace lmx::rhi
+} // namespace rojoRHI

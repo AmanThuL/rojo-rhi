@@ -3,12 +3,12 @@
 /// @brief Declares vendor-neutral temporal reconstruction capability and frame inputs.
 //----------------------------------------------------------------------------------------------------------------------
 #pragma once
-#include "RHI/Texture.h"
+#include <rojoRHI/Texture.h>
 
 #include <cstdint>
 #include <string_view>
 
-namespace lmx::rhi {
+namespace rojoRHI {
 
 /// Device support for a temporal reconstruction algorithm, fixed for the device lifetime.
 struct TemporalScalerSupport {
@@ -67,4 +67,4 @@ struct TemporalScaleParams {
     std::string_view label;    ///< Pass capture and GPU-timing label, copied during encoding.
 };
 
-} // namespace lmx::rhi
+} // namespace rojoRHI

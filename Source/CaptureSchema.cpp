@@ -2,7 +2,7 @@
 /// @file CaptureSchema.cpp
 /// @brief Serializes deterministic resource and uniform metadata beside GPU captures.
 //----------------------------------------------------------------------------------------------------------------------
-#include "RHI/CaptureSchema.h"
+#include <rojoRHI/CaptureSchema.h>
 
 #include "Base/Json.h"
 #include "Base/Log.h"
@@ -14,7 +14,7 @@
 #include <system_error>
 #include <utility>
 
-namespace lmx::rhi::debug {
+namespace rojoRHI::debug {
 namespace {
 
 //======================================================================================================================
@@ -62,7 +62,7 @@ void appendJsonString(std::string& out, std::string_view text) {
 // JSON has no non-finite number syntax; emit null so a degenerate value remains parseable.
 void appendFloat(std::string& out, float value) {
     if (!std::isfinite(value)) {
-        LMX_LOG_WARN("capture schema: non-finite float in the context, writing null");
+        ROJORHI_LOG_WARN("capture schema: non-finite float in the context, writing null");
         out += "null";
         return;
     }
@@ -276,13 +276,13 @@ bool CaptureSchema::writeJson(const std::filesystem::path& path) const {
 
     std::ofstream file(temp, std::ios::binary | std::ios::trunc);
     if (!file) {
-        LMX_LOG_ERROR("capture schema: cannot open '{}' for writing", temp.string());
+        ROJORHI_LOG_ERROR("capture schema: cannot open '{}' for writing", temp.string());
         return false;
     }
     file.write(text.data(), static_cast<std::streamsize>(text.size()));
     file.close();
     if (!file) {
-        LMX_LOG_ERROR("capture schema: failed while writing '{}'", temp.string());
+        ROJORHI_LOG_ERROR("capture schema: failed while writing '{}'", temp.string());
         std::filesystem::remove(temp, ignored);
         return false;
     }
@@ -290,7 +290,7 @@ bool CaptureSchema::writeJson(const std::filesystem::path& path) const {
     std::error_code renameError;
     std::filesystem::rename(temp, path, renameError);
     if (renameError) {
-        LMX_LOG_ERROR("capture schema: cannot move '{}' onto '{}': {}", temp.string(),
+        ROJORHI_LOG_ERROR("capture schema: cannot move '{}' onto '{}': {}", temp.string(),
                       path.string(), renameError.message());
         std::filesystem::remove(temp, ignored);
         return false;
@@ -307,4 +307,4 @@ void CaptureSchema::resetForTest() {
     m_recording = false;
 }
 
-} // namespace lmx::rhi::debug
+} // namespace rojoRHI::debug

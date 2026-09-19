@@ -1,12 +1,12 @@
-#include "RHI/CaptureSchema.h"
-#include "RHI/Message.h"
+#include <rojoRHI/CaptureSchema.h>
+#include <rojoRHI/Message.h>
 #include <catch2/catch_test_macros.hpp>
 #include <string>
 #include <string_view>
 #include <utility>
 #include <vector>
 
-using lmx::rhi::MessageSeverity;
+using rojoRHI::MessageSeverity;
 
 namespace {
 
@@ -30,7 +30,7 @@ void recordMessage(MessageSeverity severity, std::string_view message, void* use
 // Restores the stderr default when a case ends, so a later case never reaches a dangling sink.
 struct SinkGuard {
     //==================================================================================================================
-    ~SinkGuard() { lmx::rhi::setMessageCallback(nullptr, nullptr); }
+    ~SinkGuard() { rojoRHI::setMessageCallback(nullptr, nullptr); }
 };
 
 // The error the capture schema logs when its temporary file cannot be opened. No device is
@@ -41,7 +41,7 @@ constexpr std::string_view kExpectedText =
 
 //======================================================================================================================
 void provokeErrorMessage() {
-    REQUIRE_FALSE(lmx::rhi::debug::CaptureSchema::instance().writeJson(kUnwritablePath));
+    REQUIRE_FALSE(rojoRHI::debug::CaptureSchema::instance().writeJson(kUnwritablePath));
 }
 
 //======================================================================================================================
@@ -62,7 +62,7 @@ size_t matchingMessages() {
 TEST_CASE("the message callback receives severity and text", "[rhi][message]") {
     const SinkGuard guard;
     gRecord = SinkRecord{};
-    lmx::rhi::setMessageCallback(&recordMessage, nullptr);
+    rojoRHI::setMessageCallback(&recordMessage, nullptr);
 
     provokeErrorMessage();
 
@@ -74,7 +74,7 @@ TEST_CASE("the message callback returns its user pointer", "[rhi][message]") {
     const SinkGuard guard;
     gRecord = SinkRecord{};
     int marker = 0;
-    lmx::rhi::setMessageCallback(&recordMessage, &marker);
+    rojoRHI::setMessageCallback(&recordMessage, &marker);
 
     provokeErrorMessage();
 
@@ -85,8 +85,8 @@ TEST_CASE("the message callback returns its user pointer", "[rhi][message]") {
 //======================================================================================================================
 TEST_CASE("a null message callback restores the default", "[rhi][message]") {
     const SinkGuard guard;
-    lmx::rhi::setMessageCallback(&recordMessage, nullptr);
-    lmx::rhi::setMessageCallback(nullptr, nullptr);
+    rojoRHI::setMessageCallback(&recordMessage, nullptr);
+    rojoRHI::setMessageCallback(nullptr, nullptr);
     gRecord = SinkRecord{};
 
     provokeErrorMessage();

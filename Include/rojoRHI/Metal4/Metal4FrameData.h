@@ -3,7 +3,7 @@
 /// @brief Declares the Metal 4 per-frame data arena's page policy and its test instrumentation.
 //----------------------------------------------------------------------------------------------------------------------
 #pragma once
-#include "RHI/Device.h"
+#include <rojoRHI/Device.h>
 
 #include <array>
 #include <cstdint>
@@ -13,7 +13,7 @@
 /// on it. These counters are evidence, not a runtime performance query -- nothing in the renderer
 /// reads them, and a caller must not schedule work from them. Deliberately metal-cpp-free.
 
-namespace lmx::rhi::metal4 {
+namespace rojoRHI::metal4 {
 
 /// Bytes in one normal arena page, and the quantum an oversized page rounds its capacity up to.
 ///
@@ -45,4 +45,4 @@ struct FrameDataCounters {
 /// produced; reading it between frames reports the slot that most recently closed.
 FrameDataCounters frameDataCounters(const Device& device);
 
-} // namespace lmx::rhi::metal4
+} // namespace rojoRHI::metal4

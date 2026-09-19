@@ -4,19 +4,19 @@
 //----------------------------------------------------------------------------------------------------------------------
 #pragma once
 #include "Metal4Common.h"
-#include "RHI/Buffer.h"
-#include "RHI/ComputePipeline.h"
-#include "RHI/GraphicsPipeline.h"
-#include "RHI/Heap.h"
-#include "RHI/Sampler.h"
-#include "RHI/ShaderLibrary.h"
-#include "RHI/Texture.h"
+#include <rojoRHI/Buffer.h>
+#include <rojoRHI/ComputePipeline.h>
+#include <rojoRHI/GraphicsPipeline.h>
+#include <rojoRHI/Heap.h>
+#include <rojoRHI/Sampler.h>
+#include <rojoRHI/ShaderLibrary.h>
+#include <rojoRHI/Texture.h>
 
 #include <cstdint>
 #include <utility>
 #include <vector>
 
-namespace lmx::rhi::metal4 {
+namespace rojoRHI::metal4 {
 
 // Concrete RHI objects for the Metal 4 backend. Each is a thin owning wrapper: it holds the
 // metal-cpp object in an NS::SharedPtr (same TransferPtr ownership convention as
@@ -293,4 +293,4 @@ private:
     Metal4RasterState m_rasterState;
 };
 
-} // namespace lmx::rhi::metal4
+} // namespace rojoRHI::metal4

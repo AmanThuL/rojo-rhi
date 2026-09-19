@@ -7,8 +7,8 @@
 /// feed, flushed to "<bundle>.schema.json" when a capture closes. Single-threaded by
 /// construction, like the backend it observes.
 #pragma once
-#include "RHI/Format.h"
-#include "RHI/Texture.h"
+#include <rojoRHI/Format.h>
+#include <rojoRHI/Texture.h>
 
 #include <array>
 #include <cstdint>
@@ -18,7 +18,7 @@
 #include <utility>
 #include <vector>
 
-namespace lmx::rhi::debug {
+namespace rojoRHI::debug {
 
 /// Describes one named field in a captured uniform layout.
 struct SchemaUniformField {
@@ -126,4 +126,4 @@ private:
     bool m_recording = false;
 };
 
-} // namespace lmx::rhi::debug
+} // namespace rojoRHI::debug

@@ -1,19 +1,19 @@
 #include "RhiGpuTestSupport.h"
 
-#include "RHI/Metal4/Metal4FrameData.h"
+#include <rojoRHI/Metal4/Metal4FrameData.h>
 
 namespace {
 
-using lmx::rhi::metal4::FrameDataCounters;
-using lmx::rhi::metal4::frameDataCounters;
-using lmx::rhi::metal4::kFrameDataPageBytes;
-using lmx::rhi::metal4::kFrameDataSlotCount;
+using rojoRHI::metal4::FrameDataCounters;
+using rojoRHI::metal4::frameDataCounters;
+using rojoRHI::metal4::kFrameDataPageBytes;
+using rojoRHI::metal4::kFrameDataSlotCount;
 
 using Triangle = std::array<Vertex, 3>;
 
 // Effective stride of one default-aligned block, which is what makes the fill counts below exact
 // rather than approximate: a 60-byte triangle advances the cursor to the next 256-byte boundary.
-constexpr uint64_t kBlockStride = lmx::rhi::kFrameDataAlignment;
+constexpr uint64_t kBlockStride = rojoRHI::kFrameDataAlignment;
 static_assert(sizeof(Triangle) <= kBlockStride, "a triangle block must fit inside one stride");
 
 constexpr uint32_t kBlocksPerPage = static_cast<uint32_t>(kFrameDataPageBytes / kBlockStride);
@@ -44,18 +44,18 @@ Triangle fillTriangle() {
 }
 
 //======================================================================================================================
-uint32_t slotOf(const lmx::rhi::Device& device) {
+uint32_t slotOf(const rojoRHI::Device& device) {
     return static_cast<uint32_t>(device.frameNumber() % kFrameDataSlotCount);
 }
 
 //======================================================================================================================
-lmx::rhi::Result<std::unique_ptr<lmx::rhi::GraphicsPipeline>>
-makeTrianglePipeline(lmx::rhi::Device& device, lmx::rhi::ShaderLibrary& library,
+rojoRHI::Result<std::unique_ptr<rojoRHI::GraphicsPipeline>>
+makeTrianglePipeline(rojoRHI::Device& device, rojoRHI::ShaderLibrary& library,
                      const char* label) {
     return device.createGraphicsPipeline({.library = &library,
                                           .vertexEntry = "vertexMain",
                                           .fragmentEntry = "fragmentMain",
-                                          .colorFormat = lmx::rhi::Format::BGRA8Unorm,
+                                          .colorFormat = rojoRHI::Format::BGRA8Unorm,
                                           .label = label});
 }
 
@@ -65,7 +65,7 @@ makeTrianglePipeline(lmx::rhi::Device& device, lmx::rhi::ShaderLibrary& library,
 // The whole contract of one call, end to end: the block is copied, its address is bound to the slot
 // the draw reads, and the address handed back is a real one placed at the default alignment.
 TEST_CASE("bindFrameData binds a block the next draw reads", "[gpu]") {
-    using namespace lmx::rhi;
+    using namespace rojoRHI;
 
     auto device = createDevice();
     INFO(errorOf(device));
@@ -75,11 +75,11 @@ TEST_CASE("bindFrameData binds a block the next draw reads", "[gpu]") {
     INFO(errorOf(library));
     REQUIRE(library.has_value());
 
-    auto pipeline = makeTrianglePipeline(**device, **library, "lmx.test.frameData.pipeline");
+    auto pipeline = makeTrianglePipeline(**device, **library, "rojorhi.test.frameData.pipeline");
     INFO(errorOf(pipeline));
     REQUIRE(pipeline.has_value());
 
-    auto target = makeProbeTarget(**device, "lmx.test.frameData.target");
+    auto target = makeProbeTarget(**device, "rojorhi.test.frameData.target");
     INFO(errorOf(target));
     REQUIRE(target.has_value());
 
@@ -90,7 +90,7 @@ TEST_CASE("bindFrameData binds a block the next draw reads", "[gpu]") {
     commands.beginRenderPass({.colorTarget = target->get(),
                               .clearColor = {0.0f, 0.0f, 0.0f, 1.0f},
                               .clear = true,
-                              .label = "lmx.test.frameData.basic"});
+                              .label = "rojorhi.test.frameData.basic"});
     commands.bindPipeline(**pipeline);
 
     const GpuAddress leftAddress = commands.bindFrameData(kVertexBufferSlot, left);
@@ -136,7 +136,7 @@ TEST_CASE("bindFrameData binds a block the next draw reads", "[gpu]") {
 // blocks to exhaust that page follow; the second draw reads a block the backend had to add a page
 // for. Both probes must still be exact, which is the part a page-relative address bug breaks.
 TEST_CASE("bindFrameData spans pages within one frame", "[gpu]") {
-    using namespace lmx::rhi;
+    using namespace rojoRHI;
 
     auto device = createDevice();
     INFO(errorOf(device));
@@ -146,11 +146,11 @@ TEST_CASE("bindFrameData spans pages within one frame", "[gpu]") {
     INFO(errorOf(library));
     REQUIRE(library.has_value());
 
-    auto pipeline = makeTrianglePipeline(**device, **library, "lmx.test.frameData.spillPipeline");
+    auto pipeline = makeTrianglePipeline(**device, **library, "rojorhi.test.frameData.spillPipeline");
     INFO(errorOf(pipeline));
     REQUIRE(pipeline.has_value());
 
-    auto target = makeProbeTarget(**device, "lmx.test.frameData.spillTarget");
+    auto target = makeProbeTarget(**device, "rojorhi.test.frameData.spillTarget");
     INFO(errorOf(target));
     REQUIRE(target.has_value());
 
@@ -164,7 +164,7 @@ TEST_CASE("bindFrameData spans pages within one frame", "[gpu]") {
     commands.beginRenderPass({.colorTarget = target->get(),
                               .clearColor = {0.0f, 0.0f, 0.0f, 1.0f},
                               .clear = true,
-                              .label = "lmx.test.frameData.spill"});
+                              .label = "rojorhi.test.frameData.spill"});
     commands.bindPipeline(**pipeline);
 
     const GpuAddress leftAddress = commands.bindFrameData(kVertexBufferSlot, left);
@@ -211,7 +211,7 @@ TEST_CASE("bindFrameData spans pages within one frame", "[gpu]") {
 // A request larger than a normal page gets a page of its own, sized to the request rounded up to
 // the page quantum -- not a buffer per call and not an oversized default page for every slot.
 TEST_CASE("an oversized frame-data block gets a page rounded to the quantum", "[gpu]") {
-    using namespace lmx::rhi;
+    using namespace rojoRHI;
 
     auto device = createDevice();
     INFO(errorOf(device));
@@ -223,7 +223,7 @@ TEST_CASE("an oversized frame-data block gets a page rounded to the quantum", "[
 
     CommandList& commands = (*device)->beginFrame();
     const uint32_t slot = slotOf(**device);
-    commands.beginComputePass("lmx.test.frameData.oversized");
+    commands.beginComputePass("rojorhi.test.frameData.oversized");
     const GpuAddress address = commands.bindFrameData(1, block.data(), block.size());
     commands.endComputePass();
     (*device)->endFrame(nullptr);
@@ -245,7 +245,7 @@ TEST_CASE("an oversized frame-data block gets a page rounded to the quantum", "[
 // alignment is wider than the page quantum. The grown page reserves that worst case rather than
 // passing validation and then asserting merely because Metal chose a less-aligned GPU base.
 TEST_CASE("an oversized frame-data page reserves wide-alignment padding", "[gpu]") {
-    using namespace lmx::rhi;
+    using namespace rojoRHI;
 
     auto device = createDevice();
     INFO(errorOf(device));
@@ -256,7 +256,7 @@ TEST_CASE("an oversized frame-data page reserves wide-alignment padding", "[gpu]
 
     CommandList& commands = (*device)->beginFrame();
     const uint32_t slot = slotOf(**device);
-    commands.beginComputePass("lmx.test.frameData.wideOversized");
+    commands.beginComputePass("rojorhi.test.frameData.wideOversized");
     const GpuAddress address =
         commands.bindFrameData(1, block.data(), block.size(), kWideAlignment);
     commands.endComputePass();
@@ -274,7 +274,7 @@ TEST_CASE("an oversized frame-data page reserves wide-alignment padding", "[gpu]
 // A wider alignment than the default is honoured on the returned address, and does not disturb the
 // placement of the ordinary blocks around it.
 TEST_CASE("bindFrameData honours an alignment wider than the default", "[gpu]") {
-    using namespace lmx::rhi;
+    using namespace rojoRHI;
 
     auto device = createDevice();
     INFO(errorOf(device));
@@ -284,7 +284,7 @@ TEST_CASE("bindFrameData honours an alignment wider than the default", "[gpu]") 
     const std::array<uint32_t, 4> block{1, 2, 3, 4};
 
     CommandList& commands = (*device)->beginFrame();
-    commands.beginComputePass("lmx.test.frameData.alignment");
+    commands.beginComputePass("rojorhi.test.frameData.alignment");
     const GpuAddress first = commands.bindFrameData(0, block.data(), sizeof(block));
     const GpuAddress wide = commands.bindFrameData(1, block.data(), sizeof(block), kWide);
     const GpuAddress after = commands.bindFrameData(2, block.data(), sizeof(block));
@@ -308,7 +308,7 @@ TEST_CASE("bindFrameData honours an alignment wider than the default", "[gpu]") 
 // submission, and the arena's own recycle assert fires first if the pacing proof were skipped.
 TEST_CASE("the frame-data arena survives twelve frames overlapping in flight",
           "[gpu][checkpoint-a]") {
-    using namespace lmx::rhi;
+    using namespace rojoRHI;
 
     auto device = createDevice();
     INFO(errorOf(device));
@@ -318,7 +318,7 @@ TEST_CASE("the frame-data arena survives twelve frames overlapping in flight",
     INFO(errorOf(library));
     REQUIRE(library.has_value());
 
-    auto pipeline = makeTrianglePipeline(**device, **library, "lmx.test.frameData.overlapPipeline");
+    auto pipeline = makeTrianglePipeline(**device, **library, "rojorhi.test.frameData.overlapPipeline");
     INFO(errorOf(pipeline));
     REQUIRE(pipeline.has_value());
 
@@ -326,7 +326,7 @@ TEST_CASE("the frame-data arena survives twelve frames overlapping in flight",
     targets.reserve(kOverlapFrames);
     for (uint32_t frame = 0; frame < kOverlapFrames; ++frame) {
         auto target = makeProbeTarget(
-            **device, ("lmx.test.frameData.overlap." + std::to_string(frame)).c_str());
+            **device, ("rojorhi.test.frameData.overlap." + std::to_string(frame)).c_str());
         INFO(errorOf(target));
         REQUIRE(target.has_value());
         targets.push_back(std::move(*target));
@@ -346,7 +346,7 @@ TEST_CASE("the frame-data arena survives twelve frames overlapping in flight",
         commands.beginRenderPass({.colorTarget = targets[frame].get(),
                                   .clearColor = {0.0f, 0.0f, 0.0f, 1.0f},
                                   .clear = true,
-                                  .label = "lmx.test.frameData.overlap"});
+                                  .label = "rojorhi.test.frameData.overlap"});
         commands.bindPipeline(**pipeline);
         for (uint32_t write = 0; write < kSpillWrites; ++write) {
             commands.bindFrameData(kVertexBufferSlot, filler);

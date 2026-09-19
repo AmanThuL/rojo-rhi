@@ -1,11 +1,11 @@
-#include "RHI/Result.h"
+#include <rojoRHI/Result.h>
 
 #include <catch2/catch_test_macros.hpp>
 
 #include <expected>
 #include <type_traits>
 
-using namespace lmx::rhi;
+using namespace rojoRHI;
 
 static_assert(std::is_same_v<Result<int>, std::expected<int, Error>>);
 static_assert(std::is_same_v<Result<void>, std::expected<void, Error>>);

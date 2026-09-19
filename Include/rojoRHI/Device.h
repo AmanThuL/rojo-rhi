@@ -3,17 +3,17 @@
 /// @brief Declares the RHI device, its creation surface, and per-pass GPU timings.
 //----------------------------------------------------------------------------------------------------------------------
 #pragma once
-#include "RHI/Buffer.h"
-#include "RHI/CommandList.h"
-#include "RHI/ComputePipeline.h"
-#include "RHI/GraphicsPipeline.h"
-#include "RHI/Heap.h"
-#include "RHI/Result.h"
-#include "RHI/Sampler.h"
-#include "RHI/ShaderLibrary.h"
-#include "RHI/Swapchain.h"
-#include "RHI/TemporalScaler.h"
-#include "RHI/Texture.h"
+#include <rojoRHI/Buffer.h>
+#include <rojoRHI/CommandList.h>
+#include <rojoRHI/ComputePipeline.h>
+#include <rojoRHI/GraphicsPipeline.h>
+#include <rojoRHI/Heap.h>
+#include <rojoRHI/Result.h>
+#include <rojoRHI/Sampler.h>
+#include <rojoRHI/ShaderLibrary.h>
+#include <rojoRHI/Swapchain.h>
+#include <rojoRHI/TemporalScaler.h>
+#include <rojoRHI/Texture.h>
 
 #include <cstdint>
 #include <memory>
@@ -21,7 +21,7 @@
 #include <string>
 #include <string_view>
 
-namespace lmx::rhi {
+namespace rojoRHI {
 
 /// How long the GPU spent on one pass of any kind, measured on the device timeline by timestamps
 /// the backend writes at the pass boundaries -- callers record nothing.
@@ -158,4 +158,4 @@ public:
 /// Creates the platform RHI device.
 Result<std::unique_ptr<Device>> createDevice(const DeviceDesc& desc = {});
 
-} // namespace lmx::rhi
+} // namespace rojoRHI

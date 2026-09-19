@@ -5,14 +5,14 @@
 #pragma once
 #include "Metal4Common.h"
 #include "Metal4Resources.h"
-#include "RHI/Result.h"
-#include "RHI/Swapchain.h"
-#include "RHI/Texture.h"
+#include <rojoRHI/Result.h>
+#include <rojoRHI/Swapchain.h>
+#include <rojoRHI/Texture.h>
 
 #include <cstdint>
 #include <memory>
 
-namespace lmx::rhi::metal4 {
+namespace rojoRHI::metal4 {
 
 // Presentation surface: a thin adapter over the CAMetalLayer the windowing layer created.
 //
@@ -66,4 +66,4 @@ private:
     std::unique_ptr<Metal4Texture> m_texture;
 };
 
-} // namespace lmx::rhi::metal4
+} // namespace rojoRHI::metal4

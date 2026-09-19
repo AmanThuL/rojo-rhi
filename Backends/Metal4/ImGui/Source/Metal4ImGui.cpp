@@ -2,7 +2,7 @@
 /// @file Metal4ImGui.cpp
 /// @brief Bridges Dear ImGui rendering and texture residency to the Metal 4 backend.
 //----------------------------------------------------------------------------------------------------------------------
-#include "RHI/Metal4/Metal4ImGui.h"
+#include <rojoRHI/Metal4/Metal4ImGui.h>
 
 #include "Base/Assert.h"
 #include "Base/Log.h"
@@ -17,7 +17,7 @@
 #include <cstdint>
 #include <utility>
 
-namespace lmx::rhi::metal4 {
+namespace rojoRHI::metal4 {
 namespace {
 
 // The backend stores its state in the current ImGui context and exposes no instance handle.
@@ -39,9 +39,9 @@ bool imguiInit(Device& device, Format colorFormat) {
     // The backend is non-ARC and issues autoreleased Objective-C calls.
     NS::SharedPtr<NS::AutoreleasePool> pool = NS::TransferPtr(NS::AutoreleasePool::alloc()->init());
 
-    LMX_ASSERT(g_device == nullptr, "imguiInit: already initialised -- call imguiShutdown first");
+    ROJORHI_ASSERT(g_device == nullptr, "imguiInit: already initialised -- call imguiShutdown first");
     // Reject unsupported formats before Metal's texture-descriptor validator aborts.
-    LMX_ASSERT(colorFormat == Format::BGRA8Unorm || colorFormat == Format::RGBA8Unorm,
+    ROJORHI_ASSERT(colorFormat == Format::BGRA8Unorm || colorFormat == Format::RGBA8Unorm,
                "imguiInit: colorFormat must be a color-renderable format (BGRA8Unorm or "
                "RGBA8Unorm)");
 
@@ -63,10 +63,10 @@ bool imguiInit(Device& device, Format colorFormat) {
     NS::SharedPtr<MTL::Texture> carrier =
         NS::TransferPtr(metalDevice.handle()->newTexture(textureDesc.get()));
     if (!carrier) {
-        LMX_LOG_ERROR("ImGui init: failed to create the 1x1 render-pass format carrier texture");
+        ROJORHI_LOG_ERROR("ImGui init: failed to create the 1x1 render-pass format carrier texture");
         return false;
     }
-    carrier->setLabel(makeString("lmx.imgui.formatCarrier").get());
+    carrier->setLabel(makeString("rojorhi.imgui.formatCarrier").get());
 
     auto passDesc = NS::TransferPtr(MTL4::RenderPassDescriptor::alloc()->init());
     passDesc->colorAttachments()->object(0)->setTexture(carrier.get());
@@ -74,14 +74,14 @@ bool imguiInit(Device& device, Format colorFormat) {
     // ImGui's buffer ring must rotate with the device's allocator and argument-table ring.
     if (!ImGui_ImplMetal4_Init(metalDevice.handle(), metalDevice.queue(),
                                static_cast<int>(kFramesInFlight))) {
-        LMX_LOG_ERROR("ImGui init: the Metal 4 renderer backend refused to initialise");
+        ROJORHI_LOG_ERROR("ImGui init: the Metal 4 renderer backend refused to initialise");
         return false;
     }
 
     g_formatCarrier = std::move(carrier);
     g_passDescriptor = std::move(passDesc);
     g_device = &metalDevice;
-    LMX_LOG_INFO("ImGui renderer: imgui_impl_metal4, {} frames in flight", kFramesInFlight);
+    ROJORHI_LOG_INFO("ImGui renderer: imgui_impl_metal4, {} frames in flight", kFramesInFlight);
     return true;
 }
 
@@ -108,7 +108,7 @@ void imguiShutdown() {
 void imguiNewFrame() {
     NS::SharedPtr<NS::AutoreleasePool> pool = NS::TransferPtr(NS::AutoreleasePool::alloc()->init());
 
-    LMX_ASSERT(g_device != nullptr, "imguiNewFrame: call imguiInit first");
+    ROJORHI_ASSERT(g_device != nullptr, "imguiNewFrame: call imguiInit first");
     // Before beginFrame(), this returns the slot about to open rather than the one just submitted.
     const uint32_t slot = g_device->frameInFlightIndex();
     ImGui_ImplMetal4_NewFrame(g_passDescriptor.get(), static_cast<int>(slot));
@@ -119,18 +119,18 @@ void imguiNewFrame() {
 void imguiRender(CommandList& commands) {
     NS::SharedPtr<NS::AutoreleasePool> pool = NS::TransferPtr(NS::AutoreleasePool::alloc()->init());
 
-    LMX_ASSERT(g_device != nullptr, "imguiRender: call imguiInit first");
+    ROJORHI_ASSERT(g_device != nullptr, "imguiRender: call imguiInit first");
     auto& commandList = static_cast<Metal4CommandList&>(commands);
 
     ImDrawData* drawData = ImGui::GetDrawData();
-    LMX_ASSERT(drawData != nullptr,
+    ROJORHI_ASSERT(drawData != nullptr,
                "imguiRender: no draw data -- call ImGui::Render() before this, in the same frame");
 
     // The open frame must own the same buffer slot prepared by imguiNewFrame().
-    LMX_ASSERT(g_pendingFrameSlot != kNoFrameStarted,
+    ROJORHI_ASSERT(g_pendingFrameSlot != kNoFrameStarted,
                "imguiRender: no ImGui frame is open -- call imguiNewFrame() (then ImGui::NewFrame, "
                "build the UI, ImGui::Render) once per frame before this");
-    LMX_ASSERT(g_pendingFrameSlot == g_device->frameInFlightIndex(),
+    ROJORHI_ASSERT(g_pendingFrameSlot == g_device->frameInFlightIndex(),
                "imguiRender: this frame's imguiNewFrame() ran against a different frame in flight "
                "-- call imguiNewFrame() and imguiRender() exactly once each per Device frame");
     g_pendingFrameSlot = kNoFrameStarted;
@@ -141,7 +141,7 @@ void imguiRender(CommandList& commands) {
 
 //======================================================================================================================
 ImTextureID imguiTextureID(Texture& texture) {
-    LMX_ASSERT(g_device != nullptr, "imguiTextureID: call imguiInit first");
+    ROJORHI_ASSERT(g_device != nullptr, "imguiTextureID: call imguiInit first");
 
     // ImGui expects the Objective-C texture object pointer and derives ResourceID during drawing.
     MTL::Texture* handle = static_cast<Metal4Texture&>(texture).handle();
@@ -158,8 +158,8 @@ void imguiForgetTexture(Texture& texture) {
     }
     // Use the backend extension so residency bookkeeping stays encapsulated.
     MTL::Texture* handle = static_cast<Metal4Texture&>(texture).handle();
-    LMX_ASSERT(ImGui_ImplMetal4_RemoveTexture(handle),
+    ROJORHI_ASSERT(ImGui_ImplMetal4_RemoveTexture(handle),
                "imguiForgetTexture: Metal backend is not initialized");
 }
 
-} // namespace lmx::rhi::metal4
+} // namespace rojoRHI::metal4

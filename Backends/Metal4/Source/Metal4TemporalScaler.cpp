@@ -8,12 +8,12 @@
 #include "Metal4Device.h"
 #include "Metal4DevicePrivate.h"
 #include "Metal4Resources.h"
-#include "RHI/Validate.h"
+#include <rojoRHI/Validate.h>
 
 #include <array>
 #include <utility>
 
-namespace lmx::rhi::metal4 {
+namespace rojoRHI::metal4 {
 using namespace device_detail;
 
 //======================================================================================================================
@@ -32,7 +32,7 @@ Metal4Device::createTemporalScaler(const TemporalScalerDesc& desc) {
         return fail(ErrorCode::DeviceUnsupported, "device offers no temporal scaler");
     }
     const auto valid = validate(desc, m_capabilities.temporalScaler);
-    LMX_ASSERT(valid.has_value(), valid.error().message);
+    ROJORHI_ASSERT(valid.has_value(), valid.error().message);
     auto descriptor = NS::TransferPtr(MTLFX::TemporalScalerDescriptor::alloc()->init());
     descriptor->setInputWidth(desc.inputWidth);
     descriptor->setInputHeight(desc.inputHeight);
@@ -58,7 +58,7 @@ Metal4Device::createTemporalScaler(const TemporalScalerDesc& desc) {
                     "MetalFX declined temporal scaler creation (no vendor error detail available)");
     }
     state->desc = desc;
-    state->label = resolveLabel(desc.label, "lmx.temporal.scaler");
+    state->label = resolveLabel(desc.label, "rojorhi.temporal.scaler");
     state->desc.label = state->label;
     state->fence = NS::TransferPtr(m_device->newFence());
     if (!state->fence) {
@@ -71,7 +71,7 @@ Metal4Device::createTemporalScaler(const TemporalScalerDesc& desc) {
     const auto inputUsage = MTL::TextureUsageShaderRead;
     const auto outputUsage =
         MTL::TextureUsageShaderRead | MTL::TextureUsageShaderWrite | MTL::TextureUsageRenderTarget;
-    LMX_ASSERT((state->scaler->colorTextureUsage() & inputUsage) ==
+    ROJORHI_ASSERT((state->scaler->colorTextureUsage() & inputUsage) ==
                        state->scaler->colorTextureUsage() &&
                    (state->scaler->depthTextureUsage() & inputUsage) ==
                        state->scaler->depthTextureUsage() &&
@@ -80,7 +80,7 @@ Metal4Device::createTemporalScaler(const TemporalScalerDesc& desc) {
                    (state->scaler->reactiveTextureUsage() & inputUsage) ==
                        state->scaler->reactiveTextureUsage(),
                "MetalFX requires input usage the temporal contract cannot grant");
-    LMX_ASSERT((state->scaler->outputTextureUsage() & outputUsage) ==
+    ROJORHI_ASSERT((state->scaler->outputTextureUsage() & outputUsage) ==
                    state->scaler->outputTextureUsage(),
                "MetalFX requires output usage the temporal contract cannot grant");
     // MetalFX requires private output storage. CPU-readable RHI outputs keep their contract by
@@ -103,22 +103,22 @@ Metal4Device::createTemporalScaler(const TemporalScalerDesc& desc) {
 //======================================================================================================================
 void Metal4CommandList::temporalScale(TemporalScaler& scaler, const TemporalScaleParams& params) {
     NS::SharedPtr<NS::AutoreleasePool> pool = NS::TransferPtr(NS::AutoreleasePool::alloc()->init());
-    LMX_ASSERT(m_argumentTable != nullptr && m_temporalScalers != nullptr,
+    ROJORHI_ASSERT(m_argumentTable != nullptr && m_temporalScalers != nullptr,
                "temporalScale must be called inside a frame");
-    LMX_ASSERT(!inPass(), "temporalScale must be called between passes");
+    ROJORHI_ASSERT(!inPass(), "temporalScale must be called between passes");
     const auto& state = static_cast<Metal4TemporalScaler&>(scaler).state();
     const auto valid = validateTemporalScale(state->desc, params);
-    LMX_ASSERT(valid.has_value(), valid.error().message);
+    ROJORHI_ASSERT(valid.has_value(), valid.error().message);
     auto* native = state->scaler.get();
     const std::array<Texture*, 5> inputs{params.color, params.depth, params.motion, params.reactive,
                                          params.exposure};
     for (Texture* input : inputs) {
-        LMX_ASSERT((static_cast<Metal4Texture*>(input)->handle()->usage() &
+        ROJORHI_ASSERT((static_cast<Metal4Texture*>(input)->handle()->usage() &
                     MTL::TextureUsageShaderRead) != 0,
                    "temporalScale inputs require sampled texture usage");
     }
     auto* output = static_cast<Metal4Texture*>(params.output)->handle();
-    LMX_ASSERT((output->usage() & native->outputTextureUsage()) == native->outputTextureUsage(),
+    ROJORHI_ASSERT((output->usage() & native->outputTextureUsage()) == native->outputTextureUsage(),
                "temporalScale output usage must include the scaler's required bits");
     const bool copyOutput = output->storageMode() != MTL::StorageModePrivate;
     auto* privateOutput = static_cast<Metal4Texture*>(state->privateOutput.get())->handle();
@@ -138,12 +138,12 @@ void Metal4CommandList::temporalScale(TemporalScaler& scaler, const TemporalScal
     native->setReset(params.reset);
     native->setDepthReversed(params.reversedDepth);
     m_temporalScalers->push_back(state);
-    const auto passLabel = resolveLabel(params.label, "lmx.pass.temporal.scaler");
+    const auto passLabel = resolveLabel(params.label, "rojorhi.pass.temporal.scaler");
     beginTimedPass(passLabel);
     m_commandBuffer->pushDebugGroup(makeString(passLabel).get());
     m_commandBuffer->pushDebugGroup(makeString(state->label).get());
     auto carrier = NS::RetainPtr(m_commandBuffer->computeCommandEncoder());
-    LMX_ASSERT(carrier, "temporalScale could not create the fence carrier encoder");
+    ROJORHI_ASSERT(carrier, "temporalScale could not create the fence carrier encoder");
     carrier->setLabel(makeString(std::string(passLabel) + ".handoff").get());
     constexpr auto carrierStages = MTL::StageDispatch | MTL::StageBlit;
     if (m_pendingTemporalFence != nullptr) {
@@ -162,7 +162,7 @@ void Metal4CommandList::temporalScale(TemporalScaler& scaler, const TemporalScal
     m_pendingTemporalFence = state->fence.get();
     if (copyOutput) {
         auto copy = NS::RetainPtr(m_commandBuffer->computeCommandEncoder());
-        LMX_ASSERT(copy, "temporalScale could not create the output copy encoder");
+        ROJORHI_ASSERT(copy, "temporalScale could not create the output copy encoder");
         copy->setLabel(makeString(std::string(passLabel) + ".outputCopy").get());
         emitPendingBarrier(copy.get(), carrierStages);
         copy->barrierAfterQueueStages(MTL::StageAll, carrierStages, MTL4::VisibilityOptionDevice);
@@ -176,4 +176,4 @@ void Metal4CommandList::temporalScale(TemporalScaler& scaler, const TemporalScal
     endTimedPass();
 }
 
-} // namespace lmx::rhi::metal4
+} // namespace rojoRHI::metal4

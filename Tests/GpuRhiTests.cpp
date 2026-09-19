@@ -16,7 +16,7 @@ bool channelIs(uint8_t actual, float expected) {
 // A throwaway aligned upload puts the triangle away from offset zero, exposing lost offset
 // arithmetic.
 TEST_CASE("frame-data arena feeds a draw from a non-zero offset", "[gpu]") {
-    using namespace lmx::rhi;
+    using namespace rojoRHI;
 
     auto device = createDevice();
     INFO(errorOf(device));
@@ -27,7 +27,7 @@ TEST_CASE("frame-data arena feeds a draw from a non-zero offset", "[gpu]") {
                                             .format = Format::BGRA8Unorm,
                                             .renderTarget = true,
                                             .cpuReadback = true,
-                                            .label = "lmx.test.arenaTarget"});
+                                            .label = "rojorhi.test.arenaTarget"});
     INFO(errorOf(target));
     REQUIRE(target.has_value());
 
@@ -39,7 +39,7 @@ TEST_CASE("frame-data arena feeds a draw from a non-zero offset", "[gpu]") {
                                                        .vertexEntry = "vertexMain",
                                                        .fragmentEntry = "fragmentMain",
                                                        .colorFormat = Format::BGRA8Unorm,
-                                                       .label = "lmx.test.arenaPipeline"});
+                                                       .label = "rojorhi.test.arenaPipeline"});
     INFO(errorOf(pipeline));
     REQUIRE(pipeline.has_value());
 
@@ -49,7 +49,7 @@ TEST_CASE("frame-data arena feeds a draw from a non-zero offset", "[gpu]") {
     commands.beginRenderPass({.colorTarget = target->get(),
                               .clearColor = {0.0f, 0.0f, 0.0f, 1.0f},
                               .clear = true,
-                              .label = "lmx.test.frameDataUpload"});
+                              .label = "rojorhi.test.frameDataUpload"});
     commands.bindPipeline(**pipeline);
     commands.bindFrameData(kVertexBufferSlot, filler.data(), filler.size());
     commands.bindFrameData(kVertexBufferSlot, kTriangle.data(), sizeof(kTriangle));
@@ -91,7 +91,7 @@ TEST_CASE("frame-data arena feeds a draw from a non-zero offset", "[gpu]") {
 // Six drained frames rotate through all three ring slots twice; each image must retain its own
 // color.
 TEST_CASE("frame-data arena keeps per-frame data across slot reuse", "[gpu]") {
-    using namespace lmx::rhi;
+    using namespace rojoRHI;
 
     constexpr std::array<std::array<float, 3>, 6> kFrameColors = {{
         {1.0f, 0.0f, 0.0f}, // frame 0 -> arena slot 1
@@ -111,7 +111,7 @@ TEST_CASE("frame-data arena keeps per-frame data across slot reuse", "[gpu]") {
                                             .format = Format::BGRA8Unorm,
                                             .renderTarget = true,
                                             .cpuReadback = true,
-                                            .label = "lmx.test.rotationTarget"});
+                                            .label = "rojorhi.test.rotationTarget"});
     INFO(errorOf(target));
     REQUIRE(target.has_value());
 
@@ -123,7 +123,7 @@ TEST_CASE("frame-data arena keeps per-frame data across slot reuse", "[gpu]") {
                                                        .vertexEntry = "vertexMain",
                                                        .fragmentEntry = "fragmentMain",
                                                        .colorFormat = Format::BGRA8Unorm,
-                                                       .label = "lmx.test.rotationPipeline"});
+                                                       .label = "rojorhi.test.rotationPipeline"});
     INFO(errorOf(pipeline));
     REQUIRE(pipeline.has_value());
 
@@ -143,7 +143,7 @@ TEST_CASE("frame-data arena keeps per-frame data across slot reuse", "[gpu]") {
         commands.beginRenderPass({.colorTarget = target->get(),
                                   .clearColor = {0.0f, 0.0f, 0.0f, 1.0f},
                                   .clear = true,
-                                  .label = "lmx.test.frameRotation"});
+                                  .label = "rojorhi.test.frameRotation"});
         commands.bindPipeline(**pipeline);
         commands.bindFrameData(kVertexBufferSlot, vertices.data(), sizeof(vertices));
         commands.draw(static_cast<uint32_t>(vertices.size()));
@@ -166,7 +166,7 @@ TEST_CASE("frame-data arena keeps per-frame data across slot reuse", "[gpu]") {
 //======================================================================================================================
 // Two coplanar draws pin Less testing and depth writes: red must survive the rejected green draw.
 TEST_CASE("depth test rejects a coplanar second draw", "[gpu]") {
-    using namespace lmx::rhi;
+    using namespace rojoRHI;
 
     auto device = createDevice();
     INFO(errorOf(device));
@@ -177,7 +177,7 @@ TEST_CASE("depth test rejects a coplanar second draw", "[gpu]") {
                                             .format = Format::BGRA8Unorm,
                                             .renderTarget = true,
                                             .cpuReadback = true,
-                                            .label = "lmx.test.depthColorTarget"});
+                                            .label = "rojorhi.test.depthColorTarget"});
     INFO(errorOf(target));
     REQUIRE(target.has_value());
 
@@ -185,7 +185,7 @@ TEST_CASE("depth test rejects a coplanar second draw", "[gpu]") {
                                                  .height = kSize,
                                                  .format = Format::D32Float,
                                                  .renderTarget = true,
-                                                 .label = "lmx.test.depthTarget"});
+                                                 .label = "rojorhi.test.depthTarget"});
     INFO(errorOf(depthTarget));
     REQUIRE(depthTarget.has_value());
 
@@ -200,7 +200,7 @@ TEST_CASE("depth test rejects a coplanar second draw", "[gpu]") {
                                                        .depthFormat = Format::D32Float,
                                                        .depthTestEnable = true,
                                                        .depthWriteEnable = true,
-                                                       .label = "lmx.test.depthPipeline"});
+                                                       .label = "rojorhi.test.depthPipeline"});
     INFO(errorOf(pipeline));
     REQUIRE(pipeline.has_value());
 
@@ -222,7 +222,7 @@ TEST_CASE("depth test rejects a coplanar second draw", "[gpu]") {
                               .clear = true,
                               .depthTarget = depthTarget->get(),
                               .clearDepth = 1.0f,
-                              .label = "lmx.test.depth.first"});
+                              .label = "rojorhi.test.depth.first"});
     commands.bindPipeline(**pipeline);
     commands.bindFrameData(kVertexBufferSlot, first.data(), sizeof(first));
     commands.draw(static_cast<uint32_t>(first.size()));
@@ -254,7 +254,7 @@ TEST_CASE("depth test rejects a coplanar second draw", "[gpu]") {
                                  .clear = true,
                                  .depthTarget = depthTarget->get(),
                                  .clearDepth = 0.0f,
-                                 .label = "lmx.test.depth.second"});
+                                 .label = "rojorhi.test.depth.second"});
     secondFrame.bindPipeline(**pipeline);
     secondFrame.bindFrameData(kVertexBufferSlot, first.data(), sizeof(first));
     secondFrame.draw(static_cast<uint32_t>(first.size()));
@@ -274,7 +274,7 @@ TEST_CASE("depth test rejects a coplanar second draw", "[gpu]") {
 //======================================================================================================================
 // UVs span 0..2 so the right-side probes distinguish wrap from clamp without filtering ambiguity.
 TEST_CASE("sampler address mode decides what a past-the-edge uv reads", "[gpu]") {
-    using namespace lmx::rhi;
+    using namespace rojoRHI;
 
     constexpr uint32_t kSourceTextureSlot = 0;
     constexpr uint32_t kSamplerSlot = 0;
@@ -303,7 +303,7 @@ TEST_CASE("sampler address mode decides what a past-the-edge uv reads", "[gpu]")
                                             .format = Format::BGRA8Unorm,
                                             .renderTarget = true,
                                             .sampled = true,
-                                            .label = "lmx.test.samplerSource"});
+                                            .label = "rojorhi.test.samplerSource"});
     INFO(errorOf(source));
     REQUIRE(source.has_value());
 
@@ -315,10 +315,10 @@ TEST_CASE("sampler address mode decides what a past-the-edge uv reads", "[gpu]")
                                          .cpuReadback = true,
                                          .label = label});
     };
-    auto wrapDestination = makeDestination("lmx.test.samplerWrapDestination");
+    auto wrapDestination = makeDestination("rojorhi.test.samplerWrapDestination");
     INFO(errorOf(wrapDestination));
     REQUIRE(wrapDestination.has_value());
-    auto clampDestination = makeDestination("lmx.test.samplerClampDestination");
+    auto clampDestination = makeDestination("rojorhi.test.samplerClampDestination");
     INFO(errorOf(clampDestination));
     REQUIRE(clampDestination.has_value());
 
@@ -331,7 +331,7 @@ TEST_CASE("sampler address mode decides what a past-the-edge uv reads", "[gpu]")
                                            .vertexEntry = "vertexMain",
                                            .fragmentEntry = "fragmentMain",
                                            .colorFormat = Format::BGRA8Unorm,
-                                           .label = "lmx.test.samplerFillPipeline"});
+                                           .label = "rojorhi.test.samplerFillPipeline"});
     INFO(errorOf(fillPipeline));
     REQUIRE(fillPipeline.has_value());
 
@@ -344,22 +344,22 @@ TEST_CASE("sampler address mode decides what a past-the-edge uv reads", "[gpu]")
                                            .vertexEntry = "vertexMain",
                                            .fragmentEntry = "fragmentMain",
                                            .colorFormat = Format::BGRA8Unorm,
-                                           .label = "lmx.test.samplerSamplePipeline"});
+                                           .label = "rojorhi.test.samplerSamplePipeline"});
     INFO(errorOf(samplePipeline));
     REQUIRE(samplePipeline.has_value());
 
     auto wrapSampler = (*device)->createSampler(
-        {.addressMode = AddressMode::Wrap, .label = "lmx.test.wrapSampler"});
+        {.addressMode = AddressMode::Wrap, .label = "rojorhi.test.wrapSampler"});
     INFO(errorOf(wrapSampler));
     REQUIRE(wrapSampler.has_value());
 
     auto clampSampler = (*device)->createSampler(
-        {.addressMode = AddressMode::Clamp, .label = "lmx.test.clampSampler"});
+        {.addressMode = AddressMode::Clamp, .label = "rojorhi.test.clampSampler"});
     INFO(errorOf(clampSampler));
     REQUIRE(clampSampler.has_value());
 
     auto compareSampler = (*device)->createSampler(
-        {.compare = CompareFunc::LessEqual, .label = "lmx.test.compareSampler"});
+        {.compare = CompareFunc::LessEqual, .label = "rojorhi.test.compareSampler"});
     INFO(errorOf(compareSampler));
     REQUIRE(compareSampler.has_value());
 
@@ -368,7 +368,7 @@ TEST_CASE("sampler address mode decides what a past-the-edge uv reads", "[gpu]")
     commands.beginRenderPass({.colorTarget = source->get(),
                               .clearColor = {0.0f, 0.0f, 0.0f, 1.0f},
                               .clear = true,
-                              .label = "lmx.test.sampler.source"});
+                              .label = "rojorhi.test.sampler.source"});
     commands.bindPipeline(**fillPipeline);
     commands.bindFrameData(kVertexBufferSlot, kSplitQuads.data(), sizeof(kSplitQuads));
     commands.draw(static_cast<uint32_t>(kSplitQuads.size()));
@@ -380,7 +380,7 @@ TEST_CASE("sampler address mode decides what a past-the-edge uv reads", "[gpu]")
         commands.beginRenderPass({.colorTarget = &destination,
                                   .clearColor = {1.0f, 0.0f, 1.0f, 1.0f},
                                   .clear = true,
-                                  .label = "lmx.test.sampler.probe"});
+                                  .label = "rojorhi.test.sampler.probe"});
         commands.bindPipeline(**samplePipeline);
         commands.bindTexture(kSourceTextureSlot, **source);
         commands.bindSampler(kSamplerSlot, sampler);
@@ -420,7 +420,7 @@ namespace {} // namespace
 //======================================================================================================================
 // One uniform red BC1 block pins compressed upload stride and sampler-side block decoding.
 TEST_CASE("a BC1 block decodes to its endpoint colour when sampled", "[gpu][checkpoint-a]") {
-    using namespace lmx::rhi;
+    using namespace rojoRHI;
 
     constexpr uint32_t kSourceTextureSlot = 0;
 
@@ -435,12 +435,12 @@ TEST_CASE("a BC1 block decodes to its endpoint colour when sampled", "[gpu][chec
                                             .height = 4,
                                             .format = Format::BC1Unorm,
                                             .sampled = true,
-                                            .label = "lmx.test.bc1Source"},
+                                            .label = "rojorhi.test.bc1Source"},
                                            std::span{&mip, 1});
     INFO(errorOf(source));
     REQUIRE(source.has_value());
 
-    auto destination = makeProbeTarget(**device, "lmx.test.bc1Destination");
+    auto destination = makeProbeTarget(**device, "rojorhi.test.bc1Destination");
     INFO(errorOf(destination));
     REQUIRE(destination.has_value());
 
@@ -452,12 +452,12 @@ TEST_CASE("a BC1 block decodes to its endpoint colour when sampled", "[gpu][chec
                                                        .vertexEntry = "vertexMain",
                                                        .fragmentEntry = "fragmentMain",
                                                        .colorFormat = Format::BGRA8Unorm,
-                                                       .label = "lmx.test.bc1Pipeline"});
+                                                       .label = "rojorhi.test.bc1Pipeline"});
     INFO(errorOf(pipeline));
     REQUIRE(pipeline.has_value());
 
     auto sampler = (*device)->createSampler(
-        {.addressMode = AddressMode::Clamp, .label = "lmx.test.bc1Sampler"});
+        {.addressMode = AddressMode::Clamp, .label = "rojorhi.test.bc1Sampler"});
     INFO(errorOf(sampler));
     REQUIRE(sampler.has_value());
 
@@ -477,7 +477,7 @@ TEST_CASE("a BC1 block decodes to its endpoint colour when sampled", "[gpu][chec
 // target.
 TEST_CASE("an sRGB texture is linearised by the sampler, a linear one is not",
           "[gpu][checkpoint-a]") {
-    using namespace lmx::rhi;
+    using namespace rojoRHI;
 
     constexpr uint32_t kSourceTextureSlot = 0;
     constexpr uint8_t kEncoded = 188;
@@ -498,20 +498,20 @@ TEST_CASE("an sRGB texture is linearised by the sampler, a linear one is not",
             {.width = 2, .height = 2, .format = format, .sampled = true, .label = label},
             std::span{&mip, 1});
     };
-    auto linearSource = makeSource(Format::RGBA8Unorm, "lmx.test.linearSource");
+    auto linearSource = makeSource(Format::RGBA8Unorm, "rojorhi.test.linearSource");
     INFO(errorOf(linearSource));
     REQUIRE(linearSource.has_value());
-    auto srgbSource = makeSource(Format::RGBA8Unorm_sRGB, "lmx.test.srgbSource");
+    auto srgbSource = makeSource(Format::RGBA8Unorm_sRGB, "rojorhi.test.srgbSource");
     INFO(errorOf(srgbSource));
     REQUIRE(srgbSource.has_value());
 
-    auto linearDestination = makeProbeTarget(**device, "lmx.test.linearDestination");
+    auto linearDestination = makeProbeTarget(**device, "rojorhi.test.linearDestination");
     INFO(errorOf(linearDestination));
     REQUIRE(linearDestination.has_value());
-    auto srgbDestination = makeProbeTarget(**device, "lmx.test.srgbDestination");
+    auto srgbDestination = makeProbeTarget(**device, "rojorhi.test.srgbDestination");
     INFO(errorOf(srgbDestination));
     REQUIRE(srgbDestination.has_value());
-    auto viewDestination = makeProbeTarget(**device, "lmx.test.srgbViewDestination");
+    auto viewDestination = makeProbeTarget(**device, "rojorhi.test.srgbViewDestination");
     INFO(errorOf(viewDestination));
     REQUIRE(viewDestination.has_value());
 
@@ -523,12 +523,12 @@ TEST_CASE("an sRGB texture is linearised by the sampler, a linear one is not",
                                                        .vertexEntry = "vertexMain",
                                                        .fragmentEntry = "fragmentMain",
                                                        .colorFormat = Format::BGRA8Unorm,
-                                                       .label = "lmx.test.srgbPipeline"});
+                                                       .label = "rojorhi.test.srgbPipeline"});
     INFO(errorOf(pipeline));
     REQUIRE(pipeline.has_value());
 
     auto sampler = (*device)->createSampler(
-        {.addressMode = AddressMode::Clamp, .label = "lmx.test.srgbSampler"});
+        {.addressMode = AddressMode::Clamp, .label = "rojorhi.test.srgbSampler"});
     INFO(errorOf(sampler));
     REQUIRE(sampler.has_value());
 
@@ -563,7 +563,7 @@ TEST_CASE("an sRGB texture is linearised by the sampler, a linear one is not",
 //======================================================================================================================
 // A uniform +X face isolates cubemap slice ordering and direction lookup.
 TEST_CASE("a cubemap samples the face its direction points at", "[gpu][checkpoint-a]") {
-    using namespace lmx::rhi;
+    using namespace rojoRHI;
 
     constexpr uint32_t kCubeTextureSlot = 2;
 
@@ -592,12 +592,12 @@ TEST_CASE("a cubemap samples the face its direction points at", "[gpu][checkpoin
                                             .format = Format::RGBA8Unorm,
                                             .kind = TextureKind::Cube,
                                             .sampled = true,
-                                            .label = "lmx.test.cubeSource"},
+                                            .label = "rojorhi.test.cubeSource"},
                                            faces);
     INFO(errorOf(source));
     REQUIRE(source.has_value());
 
-    auto destination = makeProbeTarget(**device, "lmx.test.cubeDestination");
+    auto destination = makeProbeTarget(**device, "rojorhi.test.cubeDestination");
     INFO(errorOf(destination));
     REQUIRE(destination.has_value());
 
@@ -609,12 +609,12 @@ TEST_CASE("a cubemap samples the face its direction points at", "[gpu][checkpoin
                                                        .vertexEntry = "vertexMain",
                                                        .fragmentEntry = "fragmentMain",
                                                        .colorFormat = Format::BGRA8Unorm,
-                                                       .label = "lmx.test.cubePipeline"});
+                                                       .label = "rojorhi.test.cubePipeline"});
     INFO(errorOf(pipeline));
     REQUIRE(pipeline.has_value());
 
     auto sampler = (*device)->createSampler(
-        {.addressMode = AddressMode::Clamp, .label = "lmx.test.cubeSampler"});
+        {.addressMode = AddressMode::Clamp, .label = "rojorhi.test.cubeSampler"});
     INFO(errorOf(sampler));
     REQUIRE(sampler.has_value());
 
@@ -632,7 +632,7 @@ TEST_CASE("a cubemap samples the face its direction points at", "[gpu][checkpoin
 //======================================================================================================================
 // The interior and clear exterior pin depth storage, the pass barrier, and subsequent D32 sampling.
 TEST_CASE("a depth-only pass stores depth a later pass can sample", "[gpu][checkpoint-a]") {
-    using namespace lmx::rhi;
+    using namespace rojoRHI;
 
     constexpr uint32_t kDepthTextureSlot = 0;
     constexpr uint32_t kSamplerSlot = 0;
@@ -646,11 +646,11 @@ TEST_CASE("a depth-only pass stores depth a later pass can sample", "[gpu][check
                                                  .format = Format::D32Float,
                                                  .renderTarget = true,
                                                  .sampled = true,
-                                                 .label = "lmx.test.depthOnlyTarget"});
+                                                 .label = "rojorhi.test.depthOnlyTarget"});
     INFO(errorOf(depthTarget));
     REQUIRE(depthTarget.has_value());
 
-    auto destination = makeProbeTarget(**device, "lmx.test.depthOnlyDestination");
+    auto destination = makeProbeTarget(**device, "rojorhi.test.depthOnlyDestination");
     INFO(errorOf(destination));
     REQUIRE(destination.has_value());
 
@@ -665,7 +665,7 @@ TEST_CASE("a depth-only pass stores depth a later pass can sample", "[gpu][check
                                                             .depthFormat = Format::D32Float,
                                                             .depthTestEnable = true,
                                                             .depthWriteEnable = true,
-                                                            .label = "lmx.test.depthOnlyPipeline"});
+                                                            .label = "rojorhi.test.depthOnlyPipeline"});
     INFO(errorOf(depthPipeline));
     REQUIRE(depthPipeline.has_value());
 
@@ -678,12 +678,12 @@ TEST_CASE("a depth-only pass stores depth a later pass can sample", "[gpu][check
                                            .vertexEntry = "vertexMain",
                                            .fragmentEntry = "fragmentIdentityUv",
                                            .colorFormat = Format::BGRA8Unorm,
-                                           .label = "lmx.test.depthSamplePipeline"});
+                                           .label = "rojorhi.test.depthSamplePipeline"});
     INFO(errorOf(samplePipeline));
     REQUIRE(samplePipeline.has_value());
 
     auto sampler = (*device)->createSampler(
-        {.addressMode = AddressMode::Clamp, .label = "lmx.test.depthSampler"});
+        {.addressMode = AddressMode::Clamp, .label = "rojorhi.test.depthSampler"});
     INFO(errorOf(sampler));
     REQUIRE(sampler.has_value());
 
@@ -692,7 +692,7 @@ TEST_CASE("a depth-only pass stores depth a later pass can sample", "[gpu][check
     commands.beginRenderPass({.depthTarget = depthTarget->get(),
                               .clearDepth = 1.0f,
                               .storeDepth = true,
-                              .label = "lmx.test.depthOnly.write"});
+                              .label = "rojorhi.test.depthOnly.write"});
     commands.bindPipeline(**depthPipeline);
     commands.bindFrameData(kVertexBufferSlot, kTriangle.data(), sizeof(kTriangle));
     commands.draw(static_cast<uint32_t>(kTriangle.size()));
@@ -703,7 +703,7 @@ TEST_CASE("a depth-only pass stores depth a later pass can sample", "[gpu][check
     commands.beginRenderPass({.colorTarget = destination->get(),
                               .clearColor = {1.0f, 0.0f, 1.0f, 1.0f},
                               .clear = true,
-                              .label = "lmx.test.depthOnly.probe"});
+                              .label = "rojorhi.test.depthOnly.probe"});
     commands.bindPipeline(**samplePipeline);
     commands.bindTexture(kDepthTextureSlot, **depthTarget);
     commands.bindSampler(kSamplerSlot, **sampler);
@@ -758,7 +758,7 @@ size_t coveredPixels(const std::vector<uint8_t>& bgra) {
 // Coverage counts distinguish back-face culling, no culling, and wireframe fill without edge
 // probes.
 TEST_CASE("pipeline raster state culls back faces and draws wireframes", "[gpu]") {
-    using namespace lmx::rhi;
+    using namespace rojoRHI;
 
     auto device = createDevice();
     INFO(errorOf(device));
@@ -777,14 +777,14 @@ TEST_CASE("pipeline raster state culls back faces and draws wireframes", "[gpu]"
                                                   .cullMode = cull,
                                                   .label = label});
     };
-    auto cullBack = makePipeline(CullMode::Back, FillMode::Solid, "lmx.test.cullBackPipeline");
+    auto cullBack = makePipeline(CullMode::Back, FillMode::Solid, "rojorhi.test.cullBackPipeline");
     INFO(errorOf(cullBack));
     REQUIRE(cullBack.has_value());
-    auto cullNone = makePipeline(CullMode::None, FillMode::Solid, "lmx.test.cullNonePipeline");
+    auto cullNone = makePipeline(CullMode::None, FillMode::Solid, "rojorhi.test.cullNonePipeline");
     INFO(errorOf(cullNone));
     REQUIRE(cullNone.has_value());
     auto wireframe =
-        makePipeline(CullMode::None, FillMode::Wireframe, "lmx.test.wireframePipeline");
+        makePipeline(CullMode::None, FillMode::Wireframe, "rojorhi.test.wireframePipeline");
     INFO(errorOf(wireframe));
     REQUIRE(wireframe.has_value());
 
@@ -796,13 +796,13 @@ TEST_CASE("pipeline raster state culls back faces and draws wireframes", "[gpu]"
                                          .cpuReadback = true,
                                          .label = label});
     };
-    auto culled = makeDestination("lmx.test.culledDestination");
+    auto culled = makeDestination("rojorhi.test.culledDestination");
     INFO(errorOf(culled));
     REQUIRE(culled.has_value());
-    auto kept = makeDestination("lmx.test.keptDestination");
+    auto kept = makeDestination("rojorhi.test.keptDestination");
     INFO(errorOf(kept));
     REQUIRE(kept.has_value());
-    auto outlined = makeDestination("lmx.test.wireframeDestination");
+    auto outlined = makeDestination("rojorhi.test.wireframeDestination");
     INFO(errorOf(outlined));
     REQUIRE(outlined.has_value());
 
@@ -812,7 +812,7 @@ TEST_CASE("pipeline raster state culls back faces and draws wireframes", "[gpu]"
         commands.beginRenderPass({.colorTarget = &destination,
                                   .clearColor = {0.0f, 0.0f, 0.0f, 1.0f},
                                   .clear = true,
-                                  .label = "lmx.test.rasterState"});
+                                  .label = "rojorhi.test.rasterState"});
         commands.bindPipeline(pipeline);
         commands.bindFrameData(kVertexBufferSlot, vertices.data(), sizeof(vertices));
         commands.draw(static_cast<uint32_t>(vertices.size()));
@@ -854,7 +854,7 @@ TEST_CASE("pipeline raster state culls back faces and draws wireframes", "[gpu]"
 // until a beginFrame observes that retirement -- not at device creation, and not even after the
 // measured frame's own waitIdle.
 TEST_CASE("pass timings stay empty until a frame retirement is observed", "[gpu]") {
-    using namespace lmx::rhi;
+    using namespace rojoRHI;
 
     auto device = createDevice();
     INFO(errorOf(device));
@@ -862,7 +862,7 @@ TEST_CASE("pass timings stay empty until a frame retirement is observed", "[gpu]
 
     REQUIRE((*device)->passTimings().empty());
 
-    auto target = makeProbeTarget(**device, "lmx.test.timingIdleTarget");
+    auto target = makeProbeTarget(**device, "rojorhi.test.timingIdleTarget");
     INFO(errorOf(target));
     REQUIRE(target.has_value());
 
@@ -870,7 +870,7 @@ TEST_CASE("pass timings stay empty until a frame retirement is observed", "[gpu]
     commands.beginRenderPass({.colorTarget = target->get(),
                               .clearColor = {0.0f, 0.0f, 0.0f, 1.0f},
                               .clear = true,
-                              .label = "lmx.test.timing.idle"});
+                              .label = "rojorhi.test.timing.idle"});
     commands.endRenderPass();
     REQUIRE((*device)->passTimings().empty());
     (*device)->endFrame(nullptr);
@@ -881,7 +881,7 @@ TEST_CASE("pass timings stay empty until a frame retirement is observed", "[gpu]
 
 //======================================================================================================================
 TEST_CASE("pass timings report every pass of the retired frame", "[gpu]") {
-    using namespace lmx::rhi;
+    using namespace rojoRHI;
 
     auto device = createDevice();
     INFO(errorOf(device));
@@ -895,14 +895,14 @@ TEST_CASE("pass timings report every pass of the retired frame", "[gpu]") {
                                                        .vertexEntry = "vertexMain",
                                                        .fragmentEntry = "fragmentMain",
                                                        .colorFormat = Format::BGRA8Unorm,
-                                                       .label = "lmx.test.timingPipeline"});
+                                                       .label = "rojorhi.test.timingPipeline"});
     INFO(errorOf(pipeline));
     REQUIRE(pipeline.has_value());
 
-    auto first = makeProbeTarget(**device, "lmx.test.timingFirstTarget");
+    auto first = makeProbeTarget(**device, "rojorhi.test.timingFirstTarget");
     INFO(errorOf(first));
     REQUIRE(first.has_value());
-    auto second = makeProbeTarget(**device, "lmx.test.timingSecondTarget");
+    auto second = makeProbeTarget(**device, "rojorhi.test.timingSecondTarget");
     INFO(errorOf(second));
     REQUIRE(second.has_value());
 
@@ -918,8 +918,8 @@ TEST_CASE("pass timings report every pass of the retired frame", "[gpu]") {
         commands.draw(static_cast<uint32_t>(kTriangle.size()));
         commands.endRenderPass();
     };
-    pass(**first, "lmx.test.timing.first");
-    pass(**second, "lmx.test.timing.second");
+    pass(**first, "rojorhi.test.timing.first");
+    pass(**second, "rojorhi.test.timing.second");
     (*device)->endFrame(nullptr);
     (*device)->waitIdle();
     // Every tick these passes are credited with was spent inside this window: the work was not
@@ -935,8 +935,8 @@ TEST_CASE("pass timings report every pass of the retired frame", "[gpu]") {
 
     const std::span<const PassTiming> timings = (*device)->passTimings();
     REQUIRE(timings.size() == 2);
-    REQUIRE(timings[0].label == "lmx.test.timing.first");
-    REQUIRE(timings[1].label == "lmx.test.timing.second");
+    REQUIRE(timings[0].label == "rojorhi.test.timing.first");
+    REQUIRE(timings[1].label == "rojorhi.test.timing.second");
     double reported = 0.0;
     for (const PassTiming& timing : timings) {
         INFO(timing.label + ": " + std::to_string(timing.gpuMilliseconds) + " ms of " +
@@ -991,7 +991,7 @@ std::string describeHalf(const char* what, uint32_t x, uint32_t y, const HalfPix
 // exactly representable in binary16 -- 1.5, 2.0, 4.0, 8.0, 0.5, -0.25 -- so the assertions are
 // equalities rather than tolerances.
 TEST_CASE("an RGBA16Float target keeps values above 1.0 through readback", "[gpu]") {
-    using namespace lmx::rhi;
+    using namespace rojoRHI;
 
     auto device = createDevice();
     INFO(errorOf(device));
@@ -1002,7 +1002,7 @@ TEST_CASE("an RGBA16Float target keeps values above 1.0 through readback", "[gpu
                                             .format = Format::RGBA16Float,
                                             .renderTarget = true,
                                             .cpuReadback = true,
-                                            .label = "lmx.test.hdrTarget"});
+                                            .label = "rojorhi.test.hdrTarget"});
     INFO(errorOf(target));
     REQUIRE(target.has_value());
 
@@ -1014,7 +1014,7 @@ TEST_CASE("an RGBA16Float target keeps values above 1.0 through readback", "[gpu
                                                        .vertexEntry = "vertexMain",
                                                        .fragmentEntry = "fragmentMain",
                                                        .colorFormat = Format::RGBA16Float,
-                                                       .label = "lmx.test.hdrPipeline"});
+                                                       .label = "rojorhi.test.hdrPipeline"});
     INFO(errorOf(pipeline));
     REQUIRE(pipeline.has_value());
 
@@ -1031,7 +1031,7 @@ TEST_CASE("an RGBA16Float target keeps values above 1.0 through readback", "[gpu
     commands.beginRenderPass({.colorTarget = target->get(),
                               .clearColor = {0.5f, -0.25f, 8.0f, 0.25f},
                               .clear = true,
-                              .label = "lmx.test.hdr.write"});
+                              .label = "rojorhi.test.hdr.write"});
     commands.bindPipeline(**pipeline);
     commands.bindFrameData(kVertexBufferSlot, triangle.data(), sizeof(triangle));
     commands.draw(static_cast<uint32_t>(triangle.size()));
@@ -1104,7 +1104,7 @@ std::array<DepthVertex, 6> depthQuad(float z, float halfExtent = 0.5f) {
 // is nearer, and 0.5 is then rejected because it is not. Under the Less semantics this replaces,
 // every draw would fail against the 0.0 clear and the probe would read the clear back instead.
 TEST_CASE("a Greater depth test keeps the nearer fragment in reversed-Z", "[gpu][checkpoint-a]") {
-    using namespace lmx::rhi;
+    using namespace rojoRHI;
 
     constexpr uint32_t kDepthTextureSlot = 0;
     constexpr uint32_t kSamplerSlot = 0;
@@ -1118,11 +1118,11 @@ TEST_CASE("a Greater depth test keeps the nearer fragment in reversed-Z", "[gpu]
                                                  .format = Format::D32Float,
                                                  .renderTarget = true,
                                                  .sampled = true,
-                                                 .label = "lmx.test.reversedDepthTarget"});
+                                                 .label = "rojorhi.test.reversedDepthTarget"});
     INFO(errorOf(depthTarget));
     REQUIRE(depthTarget.has_value());
 
-    auto destination = makeProbeTarget(**device, "lmx.test.reversedDepthDestination");
+    auto destination = makeProbeTarget(**device, "rojorhi.test.reversedDepthDestination");
     INFO(errorOf(destination));
     REQUIRE(destination.has_value());
 
@@ -1139,7 +1139,7 @@ TEST_CASE("a Greater depth test keeps the nearer fragment in reversed-Z", "[gpu]
                                            .depthTestEnable = true,
                                            .depthWriteEnable = true,
                                            .depthCompare = DepthCompare::Greater,
-                                           .label = "lmx.test.reversedDepthPipeline"});
+                                           .label = "rojorhi.test.reversedDepthPipeline"});
     INFO(errorOf(depthPipeline));
     REQUIRE(depthPipeline.has_value());
 
@@ -1152,12 +1152,12 @@ TEST_CASE("a Greater depth test keeps the nearer fragment in reversed-Z", "[gpu]
                                            .vertexEntry = "vertexMain",
                                            .fragmentEntry = "fragmentIdentityUv",
                                            .colorFormat = Format::BGRA8Unorm,
-                                           .label = "lmx.test.reversedDepthSamplePipeline"});
+                                           .label = "rojorhi.test.reversedDepthSamplePipeline"});
     INFO(errorOf(samplePipeline));
     REQUIRE(samplePipeline.has_value());
 
     auto sampler = (*device)->createSampler(
-        {.addressMode = AddressMode::Clamp, .label = "lmx.test.reversedDepthSampler"});
+        {.addressMode = AddressMode::Clamp, .label = "rojorhi.test.reversedDepthSampler"});
     INFO(errorOf(sampler));
     REQUIRE(sampler.has_value());
 
@@ -1171,7 +1171,7 @@ TEST_CASE("a Greater depth test keeps the nearer fragment in reversed-Z", "[gpu]
     commands.beginRenderPass({.depthTarget = depthTarget->get(),
                               .clearDepth = 0.0f,
                               .storeDepth = true,
-                              .label = "lmx.test.reversedDepth.write"});
+                              .label = "rojorhi.test.reversedDepth.write"});
     commands.bindPipeline(**depthPipeline);
     commands.bindFrameData(kDepthPassSlot, uniforms);
     const auto drawQuad = [&](const std::array<DepthVertex, 6>& quad) {
@@ -1188,7 +1188,7 @@ TEST_CASE("a Greater depth test keeps the nearer fragment in reversed-Z", "[gpu]
     commands.beginRenderPass({.colorTarget = destination->get(),
                               .clearColor = {1.0f, 0.0f, 1.0f, 1.0f},
                               .clear = true,
-                              .label = "lmx.test.reversedDepth.probe"});
+                              .label = "rojorhi.test.reversedDepth.probe"});
     commands.bindPipeline(**samplePipeline);
     commands.bindTexture(kDepthTextureSlot, **depthTarget);
     commands.bindSampler(kSamplerSlot, **sampler);
@@ -1245,7 +1245,7 @@ glm::mat4 ndcToTexcoord() {
 // two are each other's complement here, which is what makes a swapped CompareFunc impossible to
 // mistake for a filtering or addressing problem.
 TEST_CASE("a comparison sampler's function decides which depth reads as lit", "[gpu]") {
-    using namespace lmx::rhi;
+    using namespace rojoRHI;
 
     auto device = createDevice();
     INFO(errorOf(device));
@@ -1256,14 +1256,14 @@ TEST_CASE("a comparison sampler's function decides which depth reads as lit", "[
                                                  .format = Format::D32Float,
                                                  .renderTarget = true,
                                                  .sampled = true,
-                                                 .label = "lmx.test.compareDepthTarget"});
+                                                 .label = "rojorhi.test.compareDepthTarget"});
     INFO(errorOf(depthTarget));
     REQUIRE(depthTarget.has_value());
 
-    auto greaterEqualImage = makeProbeTarget(**device, "lmx.test.compareGreaterEqualImage");
+    auto greaterEqualImage = makeProbeTarget(**device, "rojorhi.test.compareGreaterEqualImage");
     INFO(errorOf(greaterEqualImage));
     REQUIRE(greaterEqualImage.has_value());
-    auto lessEqualImage = makeProbeTarget(**device, "lmx.test.compareLessEqualImage");
+    auto lessEqualImage = makeProbeTarget(**device, "rojorhi.test.compareLessEqualImage");
     INFO(errorOf(lessEqualImage));
     REQUIRE(lessEqualImage.has_value());
 
@@ -1280,7 +1280,7 @@ TEST_CASE("a comparison sampler's function decides which depth reads as lit", "[
                                            .depthTestEnable = true,
                                            .depthWriteEnable = true,
                                            .depthCompare = DepthCompare::Greater,
-                                           .label = "lmx.test.compareDepthPipeline"});
+                                           .label = "rojorhi.test.compareDepthPipeline"});
     INFO(errorOf(depthPipeline));
     REQUIRE(depthPipeline.has_value());
 
@@ -1288,7 +1288,7 @@ TEST_CASE("a comparison sampler's function decides which depth reads as lit", "[
                                                               .vertexEntry = "vertexMain",
                                                               .fragmentEntry = "fragmentMain",
                                                               .colorFormat = Format::BGRA8Unorm,
-                                                              .label = "lmx.test.comparePipeline"});
+                                                              .label = "rojorhi.test.comparePipeline"});
     INFO(errorOf(comparePipeline));
     REQUIRE(comparePipeline.has_value());
 
@@ -1299,10 +1299,10 @@ TEST_CASE("a comparison sampler's function decides which depth reads as lit", "[
                                          .label = label});
     };
     auto greaterEqualSampler =
-        makeCompareSampler(CompareFunc::GreaterEqual, "lmx.test.greaterEqualSampler");
+        makeCompareSampler(CompareFunc::GreaterEqual, "rojorhi.test.greaterEqualSampler");
     INFO(errorOf(greaterEqualSampler));
     REQUIRE(greaterEqualSampler.has_value());
-    auto lessEqualSampler = makeCompareSampler(CompareFunc::LessEqual, "lmx.test.lessEqualSampler");
+    auto lessEqualSampler = makeCompareSampler(CompareFunc::LessEqual, "rojorhi.test.lessEqualSampler");
     INFO(errorOf(lessEqualSampler));
     REQUIRE(lessEqualSampler.has_value());
 
@@ -1319,7 +1319,7 @@ TEST_CASE("a comparison sampler's function decides which depth reads as lit", "[
     commands.beginRenderPass({.depthTarget = depthTarget->get(),
                               .clearDepth = 0.0f,
                               .storeDepth = true,
-                              .label = "lmx.test.compare.write"});
+                              .label = "rojorhi.test.compare.write"});
     commands.bindPipeline(**depthPipeline);
     commands.bindFrameData(kDepthPassSlot, uniforms);
     commands.bindFrameData(kVertexBufferSlot, blocker.data(), sizeof(blocker));
@@ -1332,7 +1332,7 @@ TEST_CASE("a comparison sampler's function decides which depth reads as lit", "[
         commands.beginRenderPass({.colorTarget = &destination,
                                   .clearColor = {1.0f, 0.0f, 1.0f, 1.0f},
                                   .clear = true,
-                                  .label = "lmx.test.compare.probe"});
+                                  .label = "rojorhi.test.compare.probe"});
         commands.bindPipeline(**comparePipeline);
         commands.bindTexture(kCompareTextureSlot, **depthTarget);
         commands.bindSampler(kCompareSamplerSlot, sampler);

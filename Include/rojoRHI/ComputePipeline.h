@@ -6,7 +6,7 @@
 #include <cstdint>
 #include <string_view>
 
-namespace lmx::rhi {
+namespace rojoRHI {
 
 class ShaderLibrary;
 
@@ -33,4 +33,4 @@ public:
     virtual ~ComputePipeline() = default;
 };
 
-} // namespace lmx::rhi
+} // namespace rojoRHI

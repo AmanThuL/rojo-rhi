@@ -12,8 +12,8 @@ import subprocess
 import tempfile
 
 
-# RHI/Tools/ImGuiBufferProbe/run.py, so the host repository root is one level above the
-# component directory (RHI/); parents[3] counts up from this file to reach it.
+# RojoRHI/Tools/ImGuiBufferProbe/run.py, so the host repository root is one level above the
+# component directory (RojoRHI/); parents[3] counts up from this file to reach it.
 ROOT = Path(__file__).resolve().parents[3]
 
 
@@ -38,7 +38,7 @@ def main() -> int:
             command = [
                 "xcrun", "clang++", "-std=c++23", "-fno-objc-arc", "-DIMGUI_IMPL_METAL_CPP",
                 "-mmacosx-version-min=" + ".".join(platform.mac_ver()[0].split(".")[:2]),
-                f'-DLMX_IMGUI_BACKEND_SOURCE="{source}"',
+                f'-DROJORHI_IMGUI_BACKEND_SOURCE="{source}"',
                 "-I", str(ROOT / "ThirdParty/imgui"), "-I", str(ROOT / "ThirdParty/imgui/backends"),
                 "-I", str(ROOT / "ThirdParty/metal-cpp"), str(Path(__file__).with_name("main.mm")),
                 str(args.archive.resolve()), "-framework", "Metal", "-framework", "QuartzCore",

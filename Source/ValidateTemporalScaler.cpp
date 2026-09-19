@@ -2,12 +2,12 @@
 /// @file ValidateTemporalScaler.cpp
 /// @brief Validates temporal reconstruction descriptors and per-frame inputs.
 //----------------------------------------------------------------------------------------------------------------------
-#include "RHI/Validate.h"
+#include <rojoRHI/Validate.h>
 
 #include <cmath>
 #include <string>
 
-namespace lmx::rhi {
+namespace rojoRHI {
 namespace {
 
 //======================================================================================================================
@@ -86,4 +86,4 @@ Result<void> validateTemporalScale(const TemporalScalerDesc& desc,
     return {};
 }
 
-} // namespace lmx::rhi
+} // namespace rojoRHI

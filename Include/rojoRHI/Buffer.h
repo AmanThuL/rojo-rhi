@@ -6,7 +6,7 @@
 #include <cstdint>
 #include <string_view>
 
-namespace lmx::rhi {
+namespace rojoRHI {
 
 /// Describes a GPU buffer allocation and its allowed usages.
 ///
@@ -70,4 +70,4 @@ enum class BufferUse {
     IndirectArgument ///< Read by the GPU as the arguments of an indirect dispatch or draw.
 };
 
-} // namespace lmx::rhi
+} // namespace rojoRHI

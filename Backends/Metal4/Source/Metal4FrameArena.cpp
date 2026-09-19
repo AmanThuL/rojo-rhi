@@ -7,18 +7,18 @@
 #include "Base/Align.h"
 #include "Base/Assert.h"
 #include "Metal4Device.h"
-#include "RHI/CaptureSchema.h"
+#include <rojoRHI/CaptureSchema.h>
 
 #include <format>
 #include <limits>
 
-namespace lmx::rhi::metal4 {
+namespace rojoRHI::metal4 {
 
 //======================================================================================================================
 Result<void> Metal4FrameArena::create(MTL::Device* device,
                                       NS::SharedPtr<MTL::ResidencySet> residency, uint32_t slot) {
-    LMX_ASSERT(device != nullptr, "frame arena: device must not be null");
-    LMX_ASSERT(residency, "frame arena: residency set must not be null");
+    ROJORHI_ASSERT(device != nullptr, "frame arena: device must not be null");
+    ROJORHI_ASSERT(residency, "frame arena: residency set must not be null");
     m_device = device;
     m_residency = std::move(residency);
     m_slot = slot;
@@ -58,16 +58,16 @@ Result<void> Metal4FrameArena::addPage(uint64_t requestedBytes) {
     }
 
     Page page;
-    page.label = std::format("lmx.device.frameData.{}.page.{}", m_slot, m_pages.size());
+    page.label = std::format("rojorhi.device.frameData.{}.page.{}", m_slot, m_pages.size());
     buffer->setLabel(makeString(page.label).get());
     page.cpuBase = static_cast<uint8_t*>(buffer->contents());
     page.gpuBase = buffer->gpuAddress();
     page.capacity = capacity;
-    LMX_ASSERT(page.cpuBase != nullptr && page.gpuBase != 0,
+    ROJORHI_ASSERT(page.cpuBase != nullptr && page.gpuBase != 0,
                "frame arena: a shared page came back without a mapped CPU or GPU base");
     // Every block is placed at least at kFrameDataAlignment, and a fresh page's cursor is zero, so
     // a page base coarser than that is what lets offset zero satisfy the first request.
-    LMX_ASSERT(page.gpuBase % kFrameDataAlignment == 0,
+    ROJORHI_ASSERT(page.gpuBase % kFrameDataAlignment == 0,
                "frame arena: Metal returned a page whose GPU base is not constant-buffer aligned");
 
     // Device-owned pages bypass the resource wrappers, so their capture identity is registered
@@ -112,10 +112,10 @@ Metal4FrameDataBlock Metal4FrameArena::allocateGrown(uint64_t size, uint64_t ali
     // A fresh Metal allocation is guaranteed only the RHI's default alignment. Reserve the
     // worst-case leading padding so every alignment accepted by validateFrameData fits whatever
     // GPU base Metal returns.
-    LMX_ASSERT(size <= std::numeric_limits<uint64_t>::max() - (alignment - 1),
+    ROJORHI_ASSERT(size <= std::numeric_limits<uint64_t>::max() - (alignment - 1),
                "bindFrameData: validated size and alignment overflowed page capacity");
     const Result<void> page = addPage(size + alignment - 1);
-    LMX_ASSERT(page.has_value(),
+    ROJORHI_ASSERT(page.has_value(),
                std::format("bindFrameData: frame slot {} cannot grow to fit a {}-byte block; its "
                            "{} page(s) already hold {} bytes of capacity -- {}",
                            m_slot, size, grown, counters().capacityBytes, page.error().message));
@@ -124,7 +124,7 @@ Metal4FrameDataBlock Metal4FrameArena::allocateGrown(uint64_t size, uint64_t ali
     Page& fresh = m_pages[grown];
     const uint64_t remainder = fresh.gpuBase & (alignment - 1);
     const uint64_t offset = (alignment - remainder) & (alignment - 1);
-    LMX_ASSERT(offset <= fresh.capacity && size <= fresh.capacity - offset,
+    ROJORHI_ASSERT(offset <= fresh.capacity && size <= fresh.capacity - offset,
                std::format("bindFrameData: a fresh {}-byte page of frame slot {} still cannot hold "
                            "a {}-byte block aligned to {} bytes",
                            fresh.capacity, m_slot, size, alignment));
@@ -145,7 +145,7 @@ void Metal4FrameArena::reset() {
 
 //======================================================================================================================
 std::string_view Metal4FrameArena::pageLabel(uint32_t pageIndex) const {
-    LMX_ASSERT(pageIndex < m_pages.size(), "frame arena: page label requested for a missing page");
+    ROJORHI_ASSERT(pageIndex < m_pages.size(), "frame arena: page label requested for a missing page");
     return m_pages[pageIndex].label;
 }
 
@@ -199,4 +199,4 @@ FrameDataCounters frameDataCounters(const Device& device) {
     return static_cast<const Metal4Device&>(device).frameDataCounters();
 }
 
-} // namespace lmx::rhi::metal4
+} // namespace rojoRHI::metal4

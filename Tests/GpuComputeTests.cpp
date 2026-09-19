@@ -41,7 +41,7 @@ uint8_t gradientChannel(uint32_t coordinate, uint32_t extent = kSize) {
 // The element values are distinct arithmetic results rather than a constant, so a dispatch that
 // writes the wrong index, skips a threadgroup, or never runs at all fails on a specific element.
 TEST_CASE("a dispatch fills a storage buffer the CPU reads back", "[gpu]") {
-    using namespace lmx::rhi;
+    using namespace rojoRHI;
 
     constexpr uint32_t kElements = 256;
     constexpr uint32_t kBias = 11;
@@ -58,14 +58,14 @@ TEST_CASE("a dispatch fills a storage buffer the CPU reads back", "[gpu]") {
         (*device)->createComputePipeline({.library = library->get(),
                                           .computeEntry = "computeFillBuffer",
                                           .threadsPerThreadgroup = {kFillThreadsPerGroup, 1, 1},
-                                          .label = "lmx.test.compute.fillPipeline"});
+                                          .label = "rojorhi.test.compute.fillPipeline"});
     INFO(errorOf(pipeline));
     REQUIRE(pipeline.has_value());
 
     auto storage = (*device)->createBuffer({.size = sizeof(uint32_t) * kElements,
                                             .storageWrite = true,
                                             .cpuReadback = true,
-                                            .label = "lmx.test.compute.fillStorage"},
+                                            .label = "rojorhi.test.compute.fillStorage"},
                                            nullptr);
     INFO(errorOf(storage));
     REQUIRE(storage.has_value());
@@ -73,7 +73,7 @@ TEST_CASE("a dispatch fills a storage buffer the CPU reads back", "[gpu]") {
     const ComputeParams params{.bias = kBias, .extent = 0};
 
     CommandList& commands = (*device)->beginFrame();
-    commands.beginComputePass("lmx.test.compute.fill");
+    commands.beginComputePass("rojorhi.test.compute.fill");
     commands.bindComputePipeline(**pipeline);
     commands.bindStorageBuffer(0, **storage, StorageAccess::Write);
     commands.bindFrameData(1, params);
@@ -95,7 +95,7 @@ TEST_CASE("a dispatch fills a storage buffer the CPU reads back", "[gpu]") {
 // The threadgroup shape is host-supplied. Reject an impossible per-axis size during creation rather
 // than letting it reach a later dispatch, where Metal reports only an encoder validation failure.
 TEST_CASE("a compute pipeline rejects a threadgroup dimension beyond the device limit", "[gpu]") {
-    using namespace lmx::rhi;
+    using namespace rojoRHI;
 
     auto device = createDevice();
     INFO(errorOf(device));
@@ -109,7 +109,7 @@ TEST_CASE("a compute pipeline rejects a threadgroup dimension beyond the device 
         {.library = library->get(),
          .computeEntry = "computeFillBuffer",
          .threadsPerThreadgroup = {std::numeric_limits<uint32_t>::max(), 1, 1},
-         .label = "lmx.test.compute.invalidThreadgroup"});
+         .label = "rojorhi.test.compute.invalidThreadgroup"});
     REQUIRE_FALSE(pipeline.has_value());
     REQUIRE(pipeline.error().code == ErrorCode::PipelineCreationFailed);
     REQUIRE(pipeline.error().message.contains("per-axis limit"));
@@ -119,7 +119,7 @@ TEST_CASE("a compute pipeline rejects a threadgroup dimension beyond the device 
 // The gradient is written by a compute kernel and read straight back, so the case pins the storage
 // binding itself: usage, texel addressing, and channel order, with no second pass in between.
 TEST_CASE("a dispatch writes a storage texture the CPU reads back", "[gpu]") {
-    using namespace lmx::rhi;
+    using namespace rojoRHI;
 
     auto device = createDevice();
     INFO(errorOf(device));
@@ -133,7 +133,7 @@ TEST_CASE("a dispatch writes a storage texture the CPU reads back", "[gpu]") {
         {.library = library->get(),
          .computeEntry = "computeWriteImage",
          .threadsPerThreadgroup = {kImageThreadsPerGroup, kImageThreadsPerGroup, 1},
-         .label = "lmx.test.compute.writeImagePipeline"});
+         .label = "rojorhi.test.compute.writeImagePipeline"});
     INFO(errorOf(pipeline));
     REQUIRE(pipeline.has_value());
 
@@ -142,14 +142,14 @@ TEST_CASE("a dispatch writes a storage texture the CPU reads back", "[gpu]") {
                                            .format = Format::RGBA8Unorm,
                                            .storageWrite = true,
                                            .cpuReadback = true,
-                                           .label = "lmx.test.compute.image"});
+                                           .label = "rojorhi.test.compute.image"});
     INFO(errorOf(image));
     REQUIRE(image.has_value());
 
     const ImageParams params{.extent = kSize};
 
     CommandList& commands = (*device)->beginFrame();
-    commands.beginComputePass("lmx.test.compute.writeImage");
+    commands.beginComputePass("rojorhi.test.compute.writeImage");
     commands.bindComputePipeline(**pipeline);
     commands.bindStorageTexture(kImageSlot, **image, {}, StorageAccess::Write);
     commands.bindFrameData(kParamsSlot, params);
@@ -179,7 +179,7 @@ TEST_CASE("a dispatch writes a storage texture the CPU reads back", "[gpu]") {
 // the barrier the second pass may read the source before the first has written it; the complement
 // the reader writes is what makes a stale read (the original gradient) distinguishable.
 TEST_CASE("a storage texture written by one dispatch is read by the next", "[gpu][checkpoint-a]") {
-    using namespace lmx::rhi;
+    using namespace rojoRHI;
 
     auto device = createDevice();
     INFO(errorOf(device));
@@ -193,7 +193,7 @@ TEST_CASE("a storage texture written by one dispatch is read by the next", "[gpu
         {.library = library->get(),
          .computeEntry = "computeWriteImage",
          .threadsPerThreadgroup = {kImageThreadsPerGroup, kImageThreadsPerGroup, 1},
-         .label = "lmx.test.compute.hazardWritePipeline"});
+         .label = "rojorhi.test.compute.hazardWritePipeline"});
     INFO(errorOf(writePipeline));
     REQUIRE(writePipeline.has_value());
 
@@ -201,7 +201,7 @@ TEST_CASE("a storage texture written by one dispatch is read by the next", "[gpu
         {.library = library->get(),
          .computeEntry = "computeInvertImage",
          .threadsPerThreadgroup = {kImageThreadsPerGroup, kImageThreadsPerGroup, 1},
-         .label = "lmx.test.compute.hazardInvertPipeline"});
+         .label = "rojorhi.test.compute.hazardInvertPipeline"});
     INFO(errorOf(invertPipeline));
     REQUIRE(invertPipeline.has_value());
 
@@ -210,7 +210,7 @@ TEST_CASE("a storage texture written by one dispatch is read by the next", "[gpu
                                             .format = Format::RGBA8Unorm,
                                             .storageRead = true,
                                             .storageWrite = true,
-                                            .label = "lmx.test.compute.hazardSource"});
+                                            .label = "rojorhi.test.compute.hazardSource"});
     INFO(errorOf(source));
     REQUIRE(source.has_value());
 
@@ -219,7 +219,7 @@ TEST_CASE("a storage texture written by one dispatch is read by the next", "[gpu
                                                  .format = Format::RGBA8Unorm,
                                                  .storageWrite = true,
                                                  .cpuReadback = true,
-                                                 .label = "lmx.test.compute.hazardDestination"});
+                                                 .label = "rojorhi.test.compute.hazardDestination"});
     INFO(errorOf(destination));
     REQUIRE(destination.has_value());
 
@@ -227,7 +227,7 @@ TEST_CASE("a storage texture written by one dispatch is read by the next", "[gpu
     const uint32_t groups = kSize / kImageThreadsPerGroup;
 
     CommandList& commands = (*device)->beginFrame();
-    commands.beginComputePass("lmx.test.compute.hazardWrite");
+    commands.beginComputePass("rojorhi.test.compute.hazardWrite");
     commands.bindComputePipeline(**writePipeline);
     commands.bindStorageTexture(kImageSlot, **source, {}, StorageAccess::Write);
     commands.bindFrameData(kParamsSlot, params);
@@ -236,7 +236,7 @@ TEST_CASE("a storage texture written by one dispatch is read by the next", "[gpu
 
     commands.textureBarrier(**source, TextureUse::StorageWrite, TextureUse::StorageRead);
 
-    commands.beginComputePass("lmx.test.compute.hazardRead");
+    commands.beginComputePass("rojorhi.test.compute.hazardRead");
     commands.bindComputePipeline(**invertPipeline);
     commands.bindStorageTexture(kImageSlot, **destination, {}, StorageAccess::Write);
     commands.bindStorageTexture(kStorageSourceSlot, **source, {}, StorageAccess::Read);
@@ -267,7 +267,7 @@ TEST_CASE("a storage texture written by one dispatch is read by the next", "[gpu
 // making the write visible to the read.
 TEST_CASE("a storage texture written by a dispatch is sampled by a later draw",
           "[gpu][checkpoint-a]") {
-    using namespace lmx::rhi;
+    using namespace rojoRHI;
 
     auto device = createDevice();
     INFO(errorOf(device));
@@ -281,7 +281,7 @@ TEST_CASE("a storage texture written by a dispatch is sampled by a later draw",
         {.library = computeLibrary->get(),
          .computeEntry = "computeWriteImage",
          .threadsPerThreadgroup = {kImageThreadsPerGroup, kImageThreadsPerGroup, 1},
-         .label = "lmx.test.compute.samplePipeline"});
+         .label = "rojorhi.test.compute.samplePipeline"});
     INFO(errorOf(pipeline));
     REQUIRE(pipeline.has_value());
 
@@ -294,7 +294,7 @@ TEST_CASE("a storage texture written by a dispatch is sampled by a later draw",
                                            .vertexEntry = "vertexMain",
                                            .fragmentEntry = "fragmentMain",
                                            .colorFormat = Format::BGRA8Unorm,
-                                           .label = "lmx.test.compute.sampleDrawPipeline"});
+                                           .label = "rojorhi.test.compute.sampleDrawPipeline"});
     INFO(errorOf(samplePipeline));
     REQUIRE(samplePipeline.has_value());
 
@@ -303,11 +303,11 @@ TEST_CASE("a storage texture written by a dispatch is sampled by a later draw",
                                            .format = Format::RGBA8Unorm,
                                            .sampled = true,
                                            .storageWrite = true,
-                                           .label = "lmx.test.compute.sampledImage"});
+                                           .label = "rojorhi.test.compute.sampledImage"});
     INFO(errorOf(image));
     REQUIRE(image.has_value());
 
-    auto target = makeProbeTarget(**device, "lmx.test.compute.sampleTarget");
+    auto target = makeProbeTarget(**device, "rojorhi.test.compute.sampleTarget");
     INFO(errorOf(target));
     REQUIRE(target.has_value());
 
@@ -315,7 +315,7 @@ TEST_CASE("a storage texture written by a dispatch is sampled by a later draw",
     const uint32_t groups = kSize / kImageThreadsPerGroup;
 
     CommandList& commands = (*device)->beginFrame();
-    commands.beginComputePass("lmx.test.compute.sampleWrite");
+    commands.beginComputePass("rojorhi.test.compute.sampleWrite");
     commands.bindComputePipeline(**pipeline);
     commands.bindStorageTexture(kImageSlot, **image, {}, StorageAccess::Write);
     commands.bindFrameData(kParamsSlot, params);
@@ -327,7 +327,7 @@ TEST_CASE("a storage texture written by a dispatch is sampled by a later draw",
     commands.beginRenderPass({.colorTarget = target->get(),
                               .clearColor = {1.0f, 0.0f, 1.0f, 1.0f},
                               .clear = true,
-                              .label = "lmx.test.compute.sampleDraw"});
+                              .label = "rojorhi.test.compute.sampleDraw"});
     commands.bindPipeline(**samplePipeline);
     commands.bindTexture(0, **image);
     commands.draw(3);
@@ -356,7 +356,7 @@ TEST_CASE("a storage texture written by a dispatch is sampled by a later draw",
 // where it was aimed: a view that silently resolved to level 0 would have overwritten level 0's
 // top-left quadrant with the level-1 gradient, whose values differ at every interior texel.
 TEST_CASE("a storage texture view addresses a single mip level", "[gpu][checkpoint-a]") {
-    using namespace lmx::rhi;
+    using namespace rojoRHI;
 
     constexpr uint32_t kMipExtent = kSize / 2;
 
@@ -372,7 +372,7 @@ TEST_CASE("a storage texture view addresses a single mip level", "[gpu][checkpoi
         {.library = library->get(),
          .computeEntry = "computeWriteImage",
          .threadsPerThreadgroup = {kImageThreadsPerGroup, kImageThreadsPerGroup, 1},
-         .label = "lmx.test.compute.mipWritePipeline"});
+         .label = "rojorhi.test.compute.mipWritePipeline"});
     INFO(errorOf(writePipeline));
     REQUIRE(writePipeline.has_value());
 
@@ -380,7 +380,7 @@ TEST_CASE("a storage texture view addresses a single mip level", "[gpu][checkpoi
         {.library = library->get(),
          .computeEntry = "computeInvertImage",
          .threadsPerThreadgroup = {kImageThreadsPerGroup, kImageThreadsPerGroup, 1},
-         .label = "lmx.test.compute.mipInvertPipeline"});
+         .label = "rojorhi.test.compute.mipInvertPipeline"});
     INFO(errorOf(invertPipeline));
     REQUIRE(invertPipeline.has_value());
 
@@ -390,7 +390,7 @@ TEST_CASE("a storage texture view addresses a single mip level", "[gpu][checkpoi
                                            .mipLevels = 2,
                                            .storageRead = true,
                                            .storageWrite = true,
-                                           .label = "lmx.test.compute.mipChain"});
+                                           .label = "rojorhi.test.compute.mipChain"});
     INFO(errorOf(chain));
     REQUIRE(chain.has_value());
 
@@ -402,10 +402,10 @@ TEST_CASE("a storage texture view addresses a single mip level", "[gpu][checkpoi
                                          .cpuReadback = true,
                                          .label = label});
     };
-    auto level0Destination = makeDestination(kSize, "lmx.test.compute.mipLevel0Destination");
+    auto level0Destination = makeDestination(kSize, "rojorhi.test.compute.mipLevel0Destination");
     INFO(errorOf(level0Destination));
     REQUIRE(level0Destination.has_value());
-    auto level1Destination = makeDestination(kMipExtent, "lmx.test.compute.mipLevel1Destination");
+    auto level1Destination = makeDestination(kMipExtent, "rojorhi.test.compute.mipLevel1Destination");
     INFO(errorOf(level1Destination));
     REQUIRE(level1Destination.has_value());
 
@@ -426,8 +426,8 @@ TEST_CASE("a storage texture view addresses a single mip level", "[gpu][checkpoi
     };
     // The two writes touch disjoint levels, so they need no barrier between them -- only the reads
     // below depend on either.
-    writeLevel("lmx.test.compute.mipWrite0", level0, level0Params, kSize);
-    writeLevel("lmx.test.compute.mipWrite1", level1, level1Params, kMipExtent);
+    writeLevel("rojorhi.test.compute.mipWrite0", level0, level0Params, kSize);
+    writeLevel("rojorhi.test.compute.mipWrite1", level1, level1Params, kMipExtent);
 
     commands.textureBarrier(**chain, TextureUse::StorageWrite, TextureUse::StorageRead);
 
@@ -441,8 +441,8 @@ TEST_CASE("a storage texture view addresses a single mip level", "[gpu][checkpoi
         commands.dispatch(extent / kImageThreadsPerGroup, extent / kImageThreadsPerGroup, 1);
         commands.endComputePass();
     };
-    readLevel("lmx.test.compute.mipRead1", level1, **level1Destination, level1Params, kMipExtent);
-    readLevel("lmx.test.compute.mipRead0", level0, **level0Destination, level0Params, kSize);
+    readLevel("rojorhi.test.compute.mipRead1", level1, **level1Destination, level1Params, kMipExtent);
+    readLevel("rojorhi.test.compute.mipRead0", level0, **level0Destination, level0Params, kSize);
     (*device)->endFrame(nullptr);
     (*device)->waitIdle();
 
@@ -469,7 +469,7 @@ TEST_CASE("a storage texture view addresses a single mip level", "[gpu][checkpoi
 // A frame with one pass of each kind: both are timed, in encode order, and the publication names
 // the frame it measured rather than leaving the caller to guess how far the readout trails.
 TEST_CASE("pass timings cover a compute pass and name the frame they measured", "[gpu]") {
-    using namespace lmx::rhi;
+    using namespace rojoRHI;
 
     constexpr uint32_t kElements = 64;
 
@@ -486,18 +486,18 @@ TEST_CASE("pass timings cover a compute pass and name the frame they measured", 
         (*device)->createComputePipeline({.library = library->get(),
                                           .computeEntry = "computeFillBuffer",
                                           .threadsPerThreadgroup = {kFillThreadsPerGroup, 1, 1},
-                                          .label = "lmx.test.compute.timingPipeline"});
+                                          .label = "rojorhi.test.compute.timingPipeline"});
     INFO(errorOf(pipeline));
     REQUIRE(pipeline.has_value());
 
     auto storage = (*device)->createBuffer({.size = sizeof(uint32_t) * kElements,
                                             .storageWrite = true,
-                                            .label = "lmx.test.compute.timingStorage"},
+                                            .label = "rojorhi.test.compute.timingStorage"},
                                            nullptr);
     INFO(errorOf(storage));
     REQUIRE(storage.has_value());
 
-    auto target = makeProbeTarget(**device, "lmx.test.compute.timingTarget");
+    auto target = makeProbeTarget(**device, "rojorhi.test.compute.timingTarget");
     INFO(errorOf(target));
     REQUIRE(target.has_value());
 
@@ -507,9 +507,9 @@ TEST_CASE("pass timings cover a compute pass and name the frame they measured", 
     commands.beginRenderPass({.colorTarget = target->get(),
                               .clearColor = {0.0f, 0.0f, 0.0f, 1.0f},
                               .clear = true,
-                              .label = "lmx.test.timing.render"});
+                              .label = "rojorhi.test.timing.render"});
     commands.endRenderPass();
-    commands.beginComputePass("lmx.test.timing.compute");
+    commands.beginComputePass("rojorhi.test.timing.compute");
     commands.bindComputePipeline(**pipeline);
     commands.bindStorageBuffer(0, **storage, StorageAccess::Write);
     commands.bindFrameData(1, params);
@@ -524,8 +524,8 @@ TEST_CASE("pass timings cover a compute pass and name the frame they measured", 
 
     const std::span<const PassTiming> timings = (*device)->passTimings();
     REQUIRE(timings.size() == 2);
-    REQUIRE(timings[0].label == "lmx.test.timing.render");
-    REQUIRE(timings[1].label == "lmx.test.timing.compute");
+    REQUIRE(timings[0].label == "rojorhi.test.timing.render");
+    REQUIRE(timings[1].label == "rojorhi.test.timing.compute");
     REQUIRE(timings[1].gpuMilliseconds > 0.0);
     // The measured frame is the first one this device opened, whatever the readout lag.
     REQUIRE((*device)->passTimingsFrame() == 1);

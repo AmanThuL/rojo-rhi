@@ -13,7 +13,7 @@
 #include <string>
 #include <vector>
 
-#include "RHI/RHI.h"
+#include <rojoRHI/RHI.h>
 
 #include <glm/glm.hpp>
 #include <glm/gtc/constants.hpp>
@@ -67,7 +67,7 @@ struct Pixel {
 template <typename T>
 
 //======================================================================================================================
-std::string errorOf(const lmx::rhi::Result<T>& result) {
+std::string errorOf(const rojoRHI::Result<T>& result) {
     return result ? std::string{} : result.error().message;
 }
 
@@ -77,25 +77,25 @@ inline bool channelNear(uint8_t actual, int expected, int tolerance) {
     return std::abs(int{actual} - expected) <= tolerance;
 }
 
-inline lmx::rhi::Result<std::unique_ptr<lmx::rhi::Texture>>
-makeProbeTarget(lmx::rhi::Device& device, const char* label) {
+inline rojoRHI::Result<std::unique_ptr<rojoRHI::Texture>>
+makeProbeTarget(rojoRHI::Device& device, const char* label) {
     return device.createTexture({.width = kSize,
                                  .height = kSize,
-                                 .format = lmx::rhi::Format::BGRA8Unorm,
+                                 .format = rojoRHI::Format::BGRA8Unorm,
                                  .renderTarget = true,
                                  .cpuReadback = true,
                                  .label = label});
 }
 
 inline std::vector<uint8_t>
-renderSampledImage(lmx::rhi::Device& device, lmx::rhi::GraphicsPipeline& pipeline,
-                   uint32_t textureSlot, lmx::rhi::Texture& source, lmx::rhi::Sampler& sampler,
-                   lmx::rhi::Texture& destination, const lmx::rhi::TextureViewDesc& view = {}) {
-    lmx::rhi::CommandList& commands = device.beginFrame();
+renderSampledImage(rojoRHI::Device& device, rojoRHI::GraphicsPipeline& pipeline,
+                   uint32_t textureSlot, rojoRHI::Texture& source, rojoRHI::Sampler& sampler,
+                   rojoRHI::Texture& destination, const rojoRHI::TextureViewDesc& view = {}) {
+    rojoRHI::CommandList& commands = device.beginFrame();
     commands.beginRenderPass({.colorTarget = &destination,
                               .clearColor = {1.0f, 0.0f, 1.0f, 1.0f},
                               .clear = true,
-                              .label = "lmx.test.textureUpload.probe"});
+                              .label = "rojorhi.test.textureUpload.probe"});
     commands.bindPipeline(pipeline);
     commands.bindTexture(textureSlot, source, view);
     commands.bindSampler(0, sampler);

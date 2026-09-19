@@ -5,13 +5,13 @@
 #pragma once
 
 #include "Metal4Common.h"
-#include "RHI/Result.h"
+#include <rojoRHI/Result.h>
 
 #include <string>
 #include <string_view>
 #include <utility>
 
-namespace lmx::rhi::metal4::device_detail {
+namespace rojoRHI::metal4::device_detail {
 
 // NS::String::utf8String() may return null; converting it directly to std::string is undefined.
 inline std::string toStdString(const NS::String* text, std::string fallback = {}) {
@@ -42,4 +42,4 @@ inline NS::SharedPtr<NS::String> labelOrFallback(std::string_view label,
     return makeString(resolveLabel(label, fallback));
 }
 
-} // namespace lmx::rhi::metal4::device_detail
+} // namespace rojoRHI::metal4::device_detail

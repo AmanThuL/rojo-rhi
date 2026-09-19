@@ -4,14 +4,14 @@
 //----------------------------------------------------------------------------------------------------------------------
 #pragma once
 #include "Metal4Common.h"
-#include "RHI/TemporalScaler.h"
+#include <rojoRHI/TemporalScaler.h>
 
 #include <MetalFX/MetalFX.hpp>
 
 #include <memory>
 #include <string>
 
-namespace lmx::rhi::metal4 {
+namespace rojoRHI::metal4 {
 
 // Every encoded frame retains this whole state until its slot retires. The wrapper may be
 // destroyed or replaced while those frames still reference the scaler, fence and scratch output.
@@ -34,4 +34,4 @@ private:
     std::shared_ptr<Metal4TemporalScalerState> m_state;
 };
 
-} // namespace lmx::rhi::metal4
+} // namespace rojoRHI::metal4

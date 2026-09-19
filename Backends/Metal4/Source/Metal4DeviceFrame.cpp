@@ -9,15 +9,15 @@
 
 #include <format>
 
-namespace lmx::rhi::metal4 {
+namespace rojoRHI::metal4 {
 
 //======================================================================================================================
 double Metal4Device::passMilliseconds(uint64_t beginTicks, uint64_t endTicks) const {
     // An entry the GPU never wrote still holds the value invalidateCounterRange left there.
     // Reporting a duration for one would be inventing a measurement.
-    LMX_ASSERT(beginTicks != MTL::CounterErrorValue && endTicks != MTL::CounterErrorValue,
+    ROJORHI_ASSERT(beginTicks != MTL::CounterErrorValue && endTicks != MTL::CounterErrorValue,
                "pass timing: the GPU left a timestamp of an encoded pass unwritten");
-    LMX_ASSERT(endTicks >= beginTicks,
+    ROJORHI_ASSERT(endTicks >= beginTicks,
                "pass timing: a pass ended at an earlier GPU timestamp than it began");
     return static_cast<double>(endTicks - beginTicks) * 1000.0 /
            static_cast<double>(m_timestampTicksPerSecond);
@@ -53,9 +53,9 @@ void Metal4Device::resolveRetiredPassTimings() {
 
     const NS::UInteger entryCount = newest->passLabels.size() * 2;
     NS::Data* resolved = newest->heap->resolveCounterRange(NS::Range::Make(0, entryCount));
-    LMX_ASSERT(resolved != nullptr,
+    ROJORHI_ASSERT(resolved != nullptr,
                "beginFrame: the timestamp heap of a retired frame refused to resolve");
-    LMX_ASSERT(resolved->length() == entryCount * sizeof(MTL4::TimestampHeapEntry),
+    ROJORHI_ASSERT(resolved->length() == entryCount * sizeof(MTL4::TimestampHeapEntry),
                "beginFrame: the resolved timestamp heap is not a plain array of heap entries");
     const auto* entries = static_cast<const MTL4::TimestampHeapEntry*>(resolved->bytes());
 
@@ -72,7 +72,7 @@ void Metal4Device::resolveRetiredPassTimings() {
 CommandList& Metal4Device::beginFrame() {
     NS::SharedPtr<NS::AutoreleasePool> pool = NS::TransferPtr(NS::AutoreleasePool::alloc()->init());
 
-    LMX_ASSERT(!m_frameOpen, "beginFrame: the previous frame is still open -- call endFrame");
+    ROJORHI_ASSERT(!m_frameOpen, "beginFrame: the previous frame is still open -- call endFrame");
 
     ++m_frameNumber;
 
@@ -80,7 +80,7 @@ CommandList& Metal4Device::beginFrame() {
     if (m_frameNumber > kFramesInFlight) {
         const uint64_t completedFrame = m_frameNumber - kFramesInFlight;
         const bool signaled = m_frameEvent->waitUntilSignaledValue(completedFrame, kGpuTimeoutMs);
-        LMX_ASSERT(signaled, "beginFrame: the GPU did not finish the frame that owns this "
+        ROJORHI_ASSERT(signaled, "beginFrame: the GPU did not finish the frame that owns this "
                              "frame's command allocator within the timeout");
     }
 
@@ -92,7 +92,7 @@ CommandList& Metal4Device::beginFrame() {
     // blocks are spread over however many pages that frame needed, so the diagnostic names its own
     // page and byte counts rather than a single ring's.
     const FrameArenaUse& lastArena = m_frameArenaUse[slot];
-    LMX_ASSERT(m_frameEvent->signaledValue() >= lastArena.frameNumber,
+    ROJORHI_ASSERT(m_frameEvent->signaledValue() >= lastArena.frameNumber,
                std::format("beginFrame: frame {} is about to reset the frame-data arena of slot {} "
                            "still holding {} bytes across {} page(s) of frame {}, but the GPU has "
                            "only retired through frame {} -- frame pacing is broken",
@@ -125,21 +125,21 @@ CommandList& Metal4Device::beginFrame() {
 void Metal4Device::endFrame(Swapchain* presentTo) {
     NS::SharedPtr<NS::AutoreleasePool> pool = NS::TransferPtr(NS::AutoreleasePool::alloc()->init());
 
-    LMX_ASSERT(m_frameOpen, "endFrame: no frame is open -- call beginFrame first");
-    LMX_ASSERT(!m_commandList->inRenderPass(),
+    ROJORHI_ASSERT(m_frameOpen, "endFrame: no frame is open -- call beginFrame first");
+    ROJORHI_ASSERT(!m_commandList->inRenderPass(),
                "endFrame: a render pass is still open -- call endRenderPass first");
-    LMX_ASSERT(!m_commandList->inComputePass(),
+    ROJORHI_ASSERT(!m_commandList->inComputePass(),
                "endFrame: a compute pass is still open -- call endComputePass first");
-    LMX_ASSERT(!m_commandList->inCopyPass(),
+    ROJORHI_ASSERT(!m_commandList->inCopyPass(),
                "endFrame: a copy pass is still open -- call endCopyPass first");
-    LMX_ASSERT(!m_commandList->hasPendingBarrier(),
+    ROJORHI_ASSERT(!m_commandList->hasPendingBarrier(),
                "endFrame: a textureBarrier or bufferBarrier has no later consumer pass");
 
     m_commandBuffer->endCommandBuffer();
 
     auto* swapchain = static_cast<Metal4Swapchain*>(presentTo);
     CA::MetalDrawable* drawable = swapchain != nullptr ? swapchain->currentDrawable() : nullptr;
-    LMX_ASSERT(swapchain == nullptr || drawable != nullptr,
+    ROJORHI_ASSERT(swapchain == nullptr || drawable != nullptr,
                "endFrame: asked to present a swapchain whose texture was never acquired");
 
     if (drawable != nullptr) {
@@ -178,4 +178,4 @@ void Metal4Device::waitIdle() {
     drainQueue(m_queue.get());
 }
 
-} // namespace lmx::rhi::metal4
+} // namespace rojoRHI::metal4

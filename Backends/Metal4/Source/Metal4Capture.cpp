@@ -2,18 +2,18 @@
 /// @file Metal4Capture.cpp
 /// @brief Implements Xcode GPU capture lifecycle controls for the Metal 4 backend.
 //----------------------------------------------------------------------------------------------------------------------
-#include "RHI/Metal4/Metal4Capture.h"
+#include <rojoRHI/Metal4/Metal4Capture.h>
 
 #include "Base/Log.h"
 #include "Metal4Common.h"
 #include "Metal4Device.h"
-#include "RHI/CaptureSchema.h"
+#include <rojoRHI/CaptureSchema.h>
 
 #include <filesystem>
 #include <string>
 #include <system_error>
 
-namespace lmx::rhi::metal4 {
+namespace rojoRHI::metal4 {
 namespace {
 
 // MTLCaptureManager is process-global and supports one active capture.
@@ -41,20 +41,20 @@ bool beginCapture(Device& device, std::string_view outPath) {
     NS::SharedPtr<NS::AutoreleasePool> pool = NS::TransferPtr(NS::AutoreleasePool::alloc()->init());
 
     MTL::CaptureManager* manager = MTL::CaptureManager::sharedCaptureManager();
-    LMX_ASSERT(manager != nullptr, "beginCapture: no shared capture manager");
+    ROJORHI_ASSERT(manager != nullptr, "beginCapture: no shared capture manager");
 
     // Metal reads MTL_CAPTURE_ENABLED at launch; a refused capture requires process restart.
     if (!manager->supportsDestination(MTL::CaptureDestinationGPUTraceDocument)) {
         g_captureFailure =
             "Relaunch with MTL_CAPTURE_ENABLED=1 xmake run App to enable GPU capture.";
-        LMX_LOG_WARN("GPU capture unavailable: this process cannot write a .gputrace document. "
+        ROJORHI_LOG_WARN("GPU capture unavailable: this process cannot write a .gputrace document. "
                      "Relaunch with capture enabled in the environment, e.g. "
                      "`MTL_CAPTURE_ENABLED=1 xmake run App`");
         return false;
     }
     if (manager->isCapturing()) {
         g_captureFailure = "A GPU capture is already in progress. Wait for it to finish.";
-        LMX_LOG_WARN("GPU capture already in progress; ignoring the request");
+        ROJORHI_LOG_WARN("GPU capture already in progress; ignoring the request");
         return false;
     }
 
@@ -62,13 +62,13 @@ bool beginCapture(Device& device, std::string_view outPath) {
     // suffix independently restricts deletion to capture bundles.
     if (outPath.empty()) {
         g_captureFailure = "Output path must not be empty.";
-        LMX_LOG_ERROR("GPU capture: outPath must not be empty");
+        ROJORHI_LOG_ERROR("GPU capture: outPath must not be empty");
         return false;
     }
     constexpr std::string_view kRequiredSuffix = ".gputrace";
     if (!outPath.ends_with(kRequiredSuffix)) {
         g_captureFailure = "Output path must end in .gputrace. Set LMX_CAPTURE_PATH and relaunch.";
-        LMX_LOG_ERROR("GPU capture: outPath '{}' must end in '{}'", outPath, kRequiredSuffix);
+        ROJORHI_LOG_ERROR("GPU capture: outPath '{}' must end in '{}'", outPath, kRequiredSuffix);
         return false;
     }
 
@@ -77,7 +77,7 @@ bool beginCapture(Device& device, std::string_view outPath) {
     std::filesystem::path path = std::filesystem::absolute(outPath, pathError);
     if (pathError) {
         g_captureFailure = "Cannot resolve output path: " + pathError.message();
-        LMX_LOG_ERROR("GPU capture: cannot resolve output path '{}': {}", outPath,
+        ROJORHI_LOG_ERROR("GPU capture: cannot resolve output path '{}': {}", outPath,
                       pathError.message());
         return false;
     }
@@ -87,7 +87,7 @@ bool beginCapture(Device& device, std::string_view outPath) {
     std::filesystem::remove_all(path, removeError);
     if (removeError) {
         g_captureFailure = "Cannot replace capture document: " + removeError.message();
-        LMX_LOG_ERROR("GPU capture: cannot remove the existing document at '{}': {}", path.string(),
+        ROJORHI_LOG_ERROR("GPU capture: cannot remove the existing document at '{}': {}", path.string(),
                       removeError.message());
         return false;
     }
@@ -106,7 +106,7 @@ bool beginCapture(Device& device, std::string_view outPath) {
         const NS::String* reason = error != nullptr ? error->localizedDescription() : nullptr;
         const char* utf8 = reason != nullptr ? reason->utf8String() : nullptr;
         g_captureFailure = utf8 != nullptr ? utf8 : "Metal did not provide a failure reason.";
-        LMX_LOG_ERROR("GPU capture failed to start: {}",
+        ROJORHI_LOG_ERROR("GPU capture failed to start: {}",
                       utf8 != nullptr ? utf8 : "no additional detail");
         return false;
     }
@@ -114,7 +114,7 @@ bool beginCapture(Device& device, std::string_view outPath) {
     g_capturePath = path.string();
     // Record sidecar data only while Metal's capture window is active.
     debug::CaptureSchema::instance().beginFrameRecords();
-    LMX_LOG_INFO("GPU capture started -> {}", g_capturePath);
+    ROJORHI_LOG_INFO("GPU capture started -> {}", g_capturePath);
     return true;
 }
 
@@ -123,7 +123,7 @@ void endCapture() {
     NS::SharedPtr<NS::AutoreleasePool> pool = NS::TransferPtr(NS::AutoreleasePool::alloc()->init());
 
     MTL::CaptureManager* manager = MTL::CaptureManager::sharedCaptureManager();
-    LMX_ASSERT(manager != nullptr, "endCapture: no shared capture manager");
+    ROJORHI_ASSERT(manager != nullptr, "endCapture: no shared capture manager");
     if (!manager->isCapturing()) {
         return;
     }
@@ -138,8 +138,8 @@ void endCapture() {
     }
     schema.endFrameRecords();
 
-    LMX_LOG_INFO("GPU capture written: {} (open it with `open {}`)", g_capturePath, g_capturePath);
+    ROJORHI_LOG_INFO("GPU capture written: {} (open it with `open {}`)", g_capturePath, g_capturePath);
     g_capturePath.clear();
 }
 
-} // namespace lmx::rhi::metal4
+} // namespace rojoRHI::metal4
