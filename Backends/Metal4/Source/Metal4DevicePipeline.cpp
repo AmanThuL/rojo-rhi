@@ -179,7 +179,7 @@ Result<std::unique_ptr<ShaderLibrary>> Metal4Device::loadShaderLibrary(std::stri
         const bool safeMath =
             filename.starts_with("Visibility") ||
             (filename.starts_with("Occlusion") && filename != "OcclusionReference.metal") ||
-            filename.starts_with("Hzb");
+            filename.starts_with("Hzb") || filename.starts_with("LightCluster");
         if (safeMath) {
             options->setMathMode(MTL::MathModeSafe);
             options->setMathFloatingPointFunctions(MTL::MathFloatingPointFunctionsPrecise);
