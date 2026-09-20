@@ -1,0 +1,40 @@
+name: CI
+on:
+  push: {branches: [main]}
+  pull_request:
+jobs:
+  policy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with: {fetch-depth: 0}
+      - name: Project policy
+        env:
+          RANGE: ${{ github.event_name == 'pull_request' && format('{0}..{1}', github.event.pull_request.base.sha, github.event.pull_request.head.sha) || '' }}
+        run: |
+          if [[ -n "$RANGE" ]]; then python3 Tools/check_project_policy.py --commits "$RANGE"
+          else python3 Tools/check_project_policy.py; fi
+      - run: python3 Tools/check_shader_imports.py
+      - run: python3 -m unittest discover -s Tools/tests -v
+      - run: python3 Tools/Rename/apply.py --selftest && python3 -m unittest discover -s Tools/Extract -p 'test_*.py'
+  build-test:
+    runs-on: macos-26
+    steps:
+      - uses: actions/checkout@v5
+      - run: brew install xmake clang-format
+      - uses: actions/cache@v5
+        with:
+          path: ThirdParty
+          key: ${{ runner.os }}-thirdparty-${{ hashFiles('xmake/setup.lua') }}
+      - run: xmake setup
+      - run: xmake f -m release -y --ccache=n && xmake project -k compile_commands
+      - run: python3 Tools/check_rhi_headers.py && python3 Tools/check_cpp_layout.py
+      - run: python3 Tools/check_cpp_comments.py --public-api-docs error
+      - run: xmake -y && xmake test RojoRHITests/unit
+      # Hosted macOS has no Metal 4: compile and count the GPU cases; run them on hardware.
+      - run: |
+          xmake build RojoRHITests
+          n=$(./build/macosx/arm64/release/rojorhi-test/RojoRHITests --list-tests "[gpu]" | \
+            sed -n 's/^\([0-9][0-9]*\) matching test cases$/\1/p')
+          test -n "$n" && test "$n" -gt 0
+      - run: xmake format --check
