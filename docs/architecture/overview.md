@@ -2,19 +2,19 @@
 
 **Status**: Accepted
 
-This page describes RojoRHI's shape after the import from Luminex; today the repository holds
-documents only, with no source, build or shader file.
+This page describes RojoRHI's shape after the import from Luminex.
 
 ```
 rojo-rhi/
-  AGENTS.md  CLAUDE.md  README.md  xmake.lua  root project settings only
+  LICENSE  AGENTS.md  CLAUDE.md  README.md  xmake.lua  root project settings only
+  .github/workflows/                          CI: policy on Linux, build/test on Metal 4 macOS
   xmake/targets.lua  setup.lua  shaders.lua   targets are includable by a host project
   Include/rojoRHI/                            public, dependency-free
   Source/  Source/Base/                       shared implementation; private base
   Backends/Metal4/Source/  Backends/Metal4/ImGui/
   Tests/  Shaders/Tests/                      contract, validation and GPU conformance
   Tools/                                      public-header check, Patches/, ImGuiBufferProbe/
-  Tools/Rename/                               the Luminex substitution table, here today
+  Tools/Rename/  Tools/Extract/               the Luminex rename table and the extraction scripts
   docs/conventions/  docs/decisions/  docs/architecture/  docs/guides/
 ```
 
@@ -36,18 +36,18 @@ Core dependency the component had inside Luminex.
 is the optional ImGui adapter, with its maintained patch and buffer probe under `Tools/`.
 
 `Tests/` and `Shaders/Tests/` hold the contract, validation and GPU conformance suite, including
-the checkpoint A cases ADR 0005 freezes by name; the planned test split brings these in from
-Luminex's flat test tree without changing their assertions.
+the checkpoint A cases ADR 0005 freezes by name, carried in from Luminex's flat test tree without
+changing their assertions.
 
 `Tools/` holds the public-header check that rejects an include root not spelled exactly
-`rojoRHI/`, the maintained `Patches/`, and `ImGuiBufferProbe/`. `Tools/Rename/` exists already: it
-holds the substitution table that renames the component inside Luminex before the extraction, and
-it stays afterwards as the record of what that rename did.
+`rojoRHI/`, the maintained `Patches/`, and `ImGuiBufferProbe/`. `Tools/Rename/` holds the
+substitution table that renamed the component inside Luminex before the extraction and stays as the
+record of what that rename did; `Tools/Extract/` holds the scripts that ran the extraction itself
+and the verifier that checked its result, both kept for a future re-run.
 
 `docs/conventions/`, `docs/decisions/`, `docs/architecture/` and `docs/guides/` hold this
 repository's own conventions, ADRs, architecture pages and procedures, standing alone from
-Luminex's. These and `Tools/Rename/` are what the repository holds today; everything above them
-arrives with the import.
+Luminex's.
 
 ## Host inclusion
 

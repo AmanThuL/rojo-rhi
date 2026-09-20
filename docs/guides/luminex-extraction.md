@@ -222,41 +222,17 @@ The nonzero out-of-scope cells in the post-R2.2 table, and other forms left on p
 - **No compatibility alias.** A `namespace lmx::rhi = rojoRHI;` shim would keep stale references
   compiling; ADR 0001 fixes one spelling so that they fail loudly instead.
 
-## Hand edits deferred past R2.3
+## Hand edits from R2.3
 
-Known before the rename runs, but not expressed as rows, because each needs judgement a
-substitution should not attempt. They land in a separate commit after the mechanical and
-formatting commits.
+The component-side items known before the rename ran were resolved before this tree was extracted:
+no `rhi::`-qualified comment, backticked `RHI/...` header reference, or `xmake f -P RHI` remnant
+survives here. `Backends/Metal4/Source/Metal4Capture.cpp`'s capture-failure message still names
+`LMX_CAPTURE_PATH`, because the message's owner has not been decided since the extraction; naming a
+`ROJORHI_CAPTURE_PATH` replacement is left open.
 
-- `RojoRHI/Backends/Metal4/Source/Metal4Capture.cpp` — the capture-failure message names
-  `LMX_CAPTURE_PATH`. The wording stays until the message's owner is known after extraction.
-- `RojoRHI/Backends/Metal4/Source/Metal4Resources.h` (three comments) and
-  `RojoRHI/Backends/Metal4/Source/Metal4CommandList.cpp` (one) name `rhi::Heap`,
-  `rhi::bytesPerPixel`, `rhi::validateTextureView` and `rhi::CommandList::textureBarrier`; row 31
-  does not reach the component, and they read as `rojoRHI::` once edited.
-- Nine Luminex test files (`Tests/EngineAssetTests.cpp`, `Tests/EngineSceneTestSupport.h`,
-  `Tests/GpuLightClusterTests.cpp`, `Tests/GpuLightDebugViewTests.cpp`,
-  `Tests/GpuSceneTableTests.cpp`, `Tests/GpuVisibilityContributionTests.cpp`,
-  `Tests/GpuVisibilityRailTests.cpp`, `Tests/GpuVisibilityTests.cpp`,
-  `Tests/GpuVisibilityWorkTests.cpp`) keep `namespace rhi = rojoRHI;`, which nothing uses after row
-  31. The line is valid and silent; deleting a line is not a substitution.
-- `Tools/GpuDebug/xctracelib.py`'s module docstring names `rhi::RenderPassDesc`.
-- `RojoRHI/Include/rojoRHI/Texture.h` and `RojoRHI/Backends/Metal4/Source/Metal4FrameArena.h` —
-  comments naming `RHI/Validate.h` and `RHI/Metal4/Metal4FrameData.h`.
-- `Benchmarks/FrameData/Runner.h` and `Benchmarks/FrameData/DeliverPerDrawData.h` — comments
-  naming `RHI/Include/RHI/Metal4/Metal4FrameData.h` and the `RHI/Include` surface.
-- `RojoRHI/xmake.lua` — its comment gives the standalone command as `xmake f -P RHI`.
-- `RojoRHI/xmake/targets.lua` — the test target's comment says its tests "link the RHI target
-  alone"; the target is `RojoRHI`.
-- `RojoRHI/Tools/ImGuiBufferProbe/README.md` — its command runs
-  `python3 RHI/Tools/ImGuiBufferProbe/run.py`, and it names "a bare copy of the `RHI` component".
-- `Tools/GpuDebug/spike_inventory.py` — widen its `lmx.` needle to also match `rojorhi.`, so the
-  component's spike-test labels are found again.
-- `Tools/GpuDebug/xctracelib.py`'s `LMX_LABEL_MARKER` with `profile.py`'s description of it —
-  decide whether it also accepts `rojorhi.`.
-- Luminex's `AGENTS.md`, README and guides — commands and paths (`xmake -P RojoRHI`,
-  `RojoRHITests`, `rojorhi-test`). Other Luminex milestone, decision and architecture prose waits
-  for R2.4.
+Left for Luminex, because they never crossed into this repository: nine test files that keep
+`namespace rhi = rojoRHI;`, unused after the rename; and `Tools/GpuDebug/xctracelib.py` and
+`spike_inventory.py`'s `lmx.` label needles, which still miss this component's `rojorhi.*` defaults.
 
 `Tools/tests/test_module_deps.py` is no longer a hand edit: rows 41, 43, 45, 100, 101 and 102
 rewrite its fixtures consistently, and the Python tool suite passes on the renamed tree.
@@ -293,8 +269,29 @@ history. That deviates from the layout this repository fixed, so it is reported,
 
 ## After R2.3: rebase and force-replace `main`
 
-This guide and its substitution table are authored on the orphan `foundations` branch, which holds
-none of the placeholder history this repository started with. R2.4 rebases `foundations` onto the
-history imported from Luminex, then force-replaces `main` with the result once the owner confirms
-the replacement and the archive tag over the prior `main` has been verified. That destructive step
-happens exactly once.
+This guide and its substitution table were authored on the orphan `foundations` branch, which held
+none of the placeholder history this repository started with. R2.4 rebased `foundations` onto the
+history imported from Luminex, then force-replaced `main` with the result once the owner confirmed
+the replacement and the archive tag over the prior `main` had been verified. That destructive step
+happened exactly once.
+
+## What ran
+
+`extract.sh` cloned Luminex at the tag `r2.4-pre-extraction-evidence` and ran `git filter-repo`
+over `paths.txt`, producing 28 commits touching 114 files. `verify_import.py` confirmed all five
+rules: the imported tree matched `<tag>:RojoRHI` (tree `3d5706f`), authorship and dates survived,
+and no rewritten message held `(#`; the root-level layout stood, so the `--path-rename RHI/:`
+fallback was never needed. A bare build of the import, with only `ThirdParty` seeded, passed setup,
+build, the full test suite under `MTL_DEBUG_LAYER=1`, `xmake format --check` and `xmake policy`.
+
+`foundations` was then rebased onto that imported history (`git rebase --onto import-main --root
+foundations`); only `.gitignore` conflicted, resolved as the union of both sides' lines, and one
+commit became empty and was dropped (39 of 40 kept). `git diff import-main foundations --stat --
+Include Source Backends Tests Shaders xmake` was empty: the rebase touched no imported file. The
+pre-rebase `foundations` tip is preserved at the annotated tag `archive/pre-r2.4-foundations`.
+
+After owner confirmation, the rebased branch replaced `main` with the lease held (`4cd7ab0` to
+`c0cd9c2`), and the import is tagged `import/luminex-r2.4`. The bare gate on the replaced `main` was
+clean except the pre-existing "unimplemented backend in public copy" README finding, left for the
+repository's own documents to resolve once the repository stood on its own as a public, buildable
+project.
