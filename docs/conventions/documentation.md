@@ -29,8 +29,11 @@ number and title, in a `**Restates**:` line, and never by a link into another re
   comment describes RojoRHI as having one.
 - A tool, check or command that does not exist yet is written as arriving with the work that adds
   it, never in the present tense.
-- The licence is private, all rights reserved. Nothing describes a public release, a package
-  registry entry or a published package.
+- The repository is public and licensed under the Apache License, Version 2.0; see `LICENSE`.
+  Nothing here describes a package registry entry or a published release, since neither exists.
+- `README.md` is the public-facing surface: it names no unimplemented backend as a current
+  capability and no internal milestone or `M<number>` language, a rule
+  `Tools/check_project_policy.py` enforces mechanically.
 
 ## Status lifecycle
 
@@ -67,9 +70,10 @@ page or guide, then remove the plan from the published baseline.
 - **Provenance instead of links.** Luminex's documents link each other freely. A RojoRHI document
   cannot link into a consumer's tree, because a reader may not have one, so a restated decision
   names its origin by number and title instead.
-- **No public-facing surface rules.** Luminex governs what its README, release text and gallery
-  captions may claim about the renderer. RojoRHI is private and ships no public surface; the
-  restrictions above replace that section.
+- **A narrower public surface.** Luminex governs what its README, release text and gallery captions
+  may claim about the renderer. RojoRHI has one public document, `README.md`, held to the same
+  no-unimplemented-backend and no-milestone-language rule; every other document here is engineering
+  record, not release copy.
 - **A stated wrap width.** Luminex wraps documentation prose at 100 columns in practice but states
   no rule for it. RojoRHI states the rule, with tables and code blocks exempt, so the practice is
   checkable rather than inferred from the files that happen to follow it.

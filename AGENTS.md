@@ -1,13 +1,15 @@
 # RojoRHI
 
-RojoRHI is a private, dependency-free Metal 4 rendering hardware interface (RHI) library, thin,
-explicit and honest over the shared conceptual core of Metal 4, D3D12 and Vulkan (ADR
-0003). Metal 4 through metal-cpp is its only backend (ADR 0002); D3D12 is a design target, not a
-capability (ADR 0004). ADR 0001 owns the identity spelling every document here applies. Luminex is
-its required consumer: it will mount the library as a submodule at `RojoRHI/` and drive every
-change through a RojoRHI branch and pull request first ([commits](docs/conventions/commits.md)
-owns that workflow). This repository holds documents only until the import; no source, build or
-shader file exists yet.
+RojoRHI is a dependency-free Metal 4 rendering hardware interface (RHI) library, thin, explicit and
+honest over the shared conceptual core of Metal 4, D3D12 and Vulkan (ADR 0003). Metal 4 through
+metal-cpp is its only backend (ADR 0002); D3D12 is a design target, not a capability (ADR 0004).
+ADR 0001 owns the identity spelling every document here applies. Luminex is its required consumer:
+it will mount the library as a submodule at `RojoRHI/` and drive every change through a RojoRHI
+branch and pull request first ([commits](docs/conventions/commits.md) owns that workflow). The
+repository is public and licensed under the Apache License, Version 2.0 ([`LICENSE`](LICENSE)); it
+holds the library itself — public headers, shared implementation, the Metal 4 backend, the optional
+ImGui adapter, tests and shaders — alongside its founding documents (see
+[architecture](docs/architecture/overview.md) for directory responsibilities).
 
 ## Golden sources
 
@@ -23,9 +25,9 @@ shader file exists yet.
 - Guide: [extracting RojoRHI from Luminex](docs/guides/luminex-extraction.md)
 - Architecture: [overview](docs/architecture/overview.md)
 
-## Commands — planned, no build exists until the import
+## Commands
 
-Standalone, once the import has run:
+Standalone:
 
 ```
 xmake setup   # fetches pinned metal-cpp and Slang toolchain references

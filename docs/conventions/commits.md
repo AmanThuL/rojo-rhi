@@ -24,16 +24,16 @@
 
 ## Branches and integration
 
-- `main` is protected, and buildable from the import onwards — until then it holds documents and
-  placeholder history, with nothing to build. Merge commits and direct pushes are disabled.
+- `main` is protected and buildable. Merge commits and direct pushes are disabled.
 - Use one short-lived outcome branch: `feat/<outcome>`, `fix/<outcome>`, `docs/<outcome>` or
   `spike/<question>`. Do not keep `develop`, milestone-wide or release branches.
 - Rebase before review. Rebase-merge 2–5 independently useful green commits; squash a single
   logical change or local trial and error. A spike records its result, and a clean implementation
   branch then carries the accepted production work.
 - `main` is force-replaced exactly once, when the library's history is imported from the consumer
-  it was developed in. That step needs explicit owner confirmation at execution time and a verified
-  archive tag over the prior `main` beforehand. After the import, `main` is never rewritten again.
+  it was developed in; that needed explicit owner confirmation at execution time and a verified
+  archive tag over the prior `main` beforehand. That import has run. `main` is never rewritten
+  again.
 
 ## Validation before a commit
 
