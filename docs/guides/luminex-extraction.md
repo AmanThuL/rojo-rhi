@@ -8,10 +8,10 @@ component in place, R2.3 runs the mechanical rename below, and R2.4 extracts the
 this repository and mounts it back as a submodule.
 
 This guide explains the mechanical substitution that R2.3 applies to move Luminex's `RHI/`
-component to the RojoRHI identity. The ordered rows live in `Tools/Rename/substitution.tsv`;
-`Tools/Rename/apply.py` applies them to a Luminex checkout. This guide records why each row
-exists, what the dry runs against Luminex found, what the rows deliberately do not touch, and what
-still needs a hand edit.
+component to the RojoRHI identity, and then the extraction R2.4 runs. The ordered rows live in
+`Tools/Rename/substitution.tsv`; `Tools/Rename/apply.py` applies them to a Luminex checkout. This
+guide records why each row exists, what the dry runs against Luminex found, what the rows
+deliberately do not touch, and what still needs a hand edit.
 
 ## Column vocabulary
 
@@ -52,25 +52,7 @@ and `ROJORHI_LOG_*`; default GPU label prefix `rojorhi.`; build targets `RojoRHI
 exception to the project's lowercase namespace and include-root convention, kept because RHI is
 already written as an initialism and the mixed case preserves the word boundary.
 
-## Dry-run counts (Luminex, at R2.1, 2026-09-19)
-
-Measured against Luminex `main` at the commit R2.1 started from, with the six-column table of that
-time, whose `scope` column read `component`, `consumers` or `all`. Kept for provenance.
-
-| row | pattern (regex rows) | inside component: matches / files | outside component: matches / files |
-|---|---|---|---|
-| 30 | `\blmx::rhi\b` | 90 / 44 | 382 / 67 (`Source Tests Tools Benchmarks xmake.lua`) |
-| 31 | `(?<![\w:])rhi::` | 4 / 2 (prose comments only; the row is consumers-scoped and leaves them) | 1,916 / 161 (`Source Tests Benchmarks`, `*.h` `*.cpp` `*.mm`) |
-| 40 | `(#[ \t]*include[ \t]+)"RHI/([^"]+)"` | 99 / 34 | 68 / 57 (`Source Tests Tools Benchmarks`) |
-| 41 | `"RHI/(Format\.h\|TextureDesc\.h)"` | n/a (consumers-only row) | 4 / 1 (`Tools/module_contract.json`) |
-| 42 | `"RHI/\*\*/\*\.h"` | n/a (consumers-only row) | 1 / 1 (`Tools/check_rhi_headers.py`) |
-| 45 | `"RHI/` | n/a (consumers-only row) | 13 / 5, counted after row 41 has already run (`xmake.lua`, `xmake/tasks.lua`, `Tools/check_project_policy.py`, `Tools/check_cpp_comments.py`, `Tools/module_contract.json`) |
-| 50 | `\bLMX_ASSERT\b` | 146 / 11 | n/a (component-only row) |
-| 60 | `\bLMX_LOG_(TRACE\|DEBUG\|INFO\|WARN\|ERROR)\b` | 20 / 6 | n/a (component-only row) |
-| 70 | `"lmx\.` | 26 / 9 | n/a (component-only row) |
-| 80 | `lmx\.(device\.frameData\|imgui\.formatCarrier)` | n/a (consumers-only row) | 60 / 8 (`Tests/CaptureTests.cpp`, `Tests/CaptureSchemaTests.cpp`, `Tools/GpuDebug/**`) |
-| 90 | `"RHIMetal4ImGui"` | 1 / 1 (`RHI/Backends/Metal4/ImGui/xmake.lua`) | 4 / 2 (`Source/App/xmake.lua`, `Tools/module_contract.json`) |
-| 100 | `"RHI"` | 2 / 2 (`RHI/xmake.lua`, `RHI/Backends/Metal4/ImGui/xmake.lua`) | 40 / 11 (six remaining `xmake.lua` files and `Tools/module_contract.json`, 18/7, plus `Tools/check_cpp_layout.py` 1/1, `Tools/check_cpp_comments.py` 2/1, `Tools/check_rhi_headers.py` 1/1 and `Tools/tests/test_module_deps.py` 18/1) |
+The first dry run, at R2.1, is kept for provenance in [its own record](rename-dry-run-r2.1.md).
 
 ## Dry-run counts (Luminex, after R2.2, 2026-09-19)
 
@@ -278,6 +260,36 @@ formatting commits.
 
 `Tools/tests/test_module_deps.py` is no longer a hand edit: rows 41, 43, 45, 100, 101 and 102
 rewrite its fixtures consistently, and the Python tool suite passes on the renamed tree.
+
+## R2.4: the extraction
+
+`Tools/Extract/extract.sh <luminex-url-or-path> <out-dir>` clones Luminex's `main` with
+`--no-local`, resets it to the tag `r2.4-pre-extraction-evidence`, drops the tag, and runs
+`git filter-repo` over `Tools/Extract/paths.txt`, which strips the `RojoRHI/` and `RHI/` roots and
+rewrites each `(#123)`, a Luminex number, to `(AmanThuL/Luminex#123)`. Luminex is never touched.
+
+`Tools/Extract/verify_import.py --source <luminex> --tag r2.4-pre-extraction-evidence --import
+<out-dir>` exits 0 only when the imported `main` tree is `<tag>:RojoRHI`; each mapped commit holds
+exactly its original's listed files with a leading `RojoRHI/` or `RHI/` stripped, which catches a
+file a collapsed move lost; no dropped commit changed a listed path; authorship survives; and no
+rewritten message holds `(#`.
+
+`paths.txt` names the three roots the component has lived under — `Source/RHI/` until M4.1, `RHI/`
+after R2.2, `RojoRHI/` after R2.3 — and the files that were its own before those moves: twenty-one
+test units under `Tests/`, twelve shaders under `Shaders/` and five files under `Tools/`. Each has
+a non-empty `git log` at the tag, `git log --format= --name-only <tag> -- Source/RHI RHI RojoRHI`
+prints nothing outside those roots; only `RojoRHI/` survives there, so the tip is `<tag>:RojoRHI`.
+
+Left behind on purpose, each still Luminex's at the tag and each answered by a copy the component
+owns: `Tests/GpuTestSupport.h`, against `RojoRHI/Tests/RhiGpuTestSupport.h`; the `Shaders/Tests/`
+spelling of the six oracles both trees need — `BufferHazardSmoke`, `ComputeImageSmoke`,
+`FullscreenSample`, `MrtSmoke`, `SamplerSmoke` and `ShadowSmoke`; `Shaders/Shadow.slang` with
+`Shaders/Modules/Shadow.slang`, against `RojoRHI/Shaders/Tests/Modules/Shadow.slang`;
+`Source/Core/*`, against `RojoRHI/Source/Base`; and `xmake/shaders.lua`, against its own copy.
+
+If rule 2 fails at the R2.2 commit because a move such as `Tests/X` to `RHI/Tests/X` collapses both
+spellings onto one path, drop `--path-rename RHI/:`, so the old root keeps its `RHI/` spelling in
+history. That deviates from the layout this repository fixed, so it is reported, never applied.
 
 ## After R2.3: rebase and force-replace `main`
 
