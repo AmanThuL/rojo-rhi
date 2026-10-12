@@ -1,6 +1,6 @@
 # 05. Shader ABI (continued)
 
-**Status**: Proposed (until spikes 1 and 2 of ADR 0014 report)
+**Status**: Proposed (until spike 1 of ADR 0014 reports)
 **API version**: 0.1.0
 
 This part defines the `RojoRHI.slang` functions that dereference `Addr`, fetch textures and samplers
@@ -111,10 +111,11 @@ uniform across the wave or marked with `rojoRHI::nonUniform`.
 ## Heap indices
 
 On Metal 4 a heap index reads an 8-byte resource ID from a hidden table the backend binds at a
-reserved slot: one extra load. Metal 4 also hands out consecutive IDs from a texture view pool, so
-`base + i` names the right texture on current hardware, but that arithmetic is undocumented. Spike
-2 of [ADR 0014](../decisions/0014-overhead-measurement.md), still pending, decides between it and
-the documented ID table; the table is the default, and the interface is the same either way.
+reserved slot: one extra load. Spike 2 of [ADR 0014](../decisions/0014-overhead-measurement.md)
+kept this documented table over the consecutive `base + i` IDs of a texture view pool, which skip
+the load but rest on undocumented ID arithmetic and a handle pun MSL does not define
+([spike 2](../research/2026-10-12-spike-2-texture-indexing.md)). The interface would be the same
+either way.
 
 ### `rojoRHI::texture`
 
@@ -157,7 +158,7 @@ or marked with `rojoRHI::nonUniform`.
 | | Metal 4 | D3D12 | Vulkan |
 |---|---|---|---|
 | Lowering | 8-byte resource ID read from the hidden view table | `ResourceDescriptorHeap[view]`; unverified | resource descriptor heap |
-| Cost | cheap: one extra 8-byte load; spike 2 pending | native | native |
+| Cost | cheap: one extra 8-byte load, measured at about 3% for `read` and 7.5% for `sample` in a fetch-only kernel | native | native |
 
 ### `rojoRHI::sampler`
 
@@ -185,7 +186,7 @@ comparisons; and `index` is dynamically uniform across the wave or marked with
 | | Metal 4 | D3D12 | Vulkan |
 |---|---|---|---|
 | Lowering | sampler ID read from the hidden sampler table | `SamplerDescriptorHeap[index]`; unverified | sampler descriptor heap |
-| Cost | cheap: one extra 8-byte load; spike 2 pending | native | native |
+| Cost | cheap: one extra 8-byte load, measured under 0.4% against a `constexpr` sampler in a fetch-only kernel | native | native |
 
 ## Built-ins
 

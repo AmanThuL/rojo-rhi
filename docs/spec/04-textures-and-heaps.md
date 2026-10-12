@@ -1,6 +1,6 @@
 # 04. Textures and heaps
 
-**Status**: Proposed (until spike 2 of ADR 0014 reports)
+**Status**: Accepted
 **API version**: 0.1.0
 
 This chapter specifies textures, texture views and the global view heap. Samplers, caller-owned
@@ -21,11 +21,12 @@ resource descriptors and 2,048 samplers. A texture created without initial data 
 graphics and compute queues both accept
 ([cross-queue handoff](09-synchronization-part2.md#cross-queue-handoff)).
 
-The Metal 4 texture-index mechanism is pending spike 2: a CPU-written table of 8-byte
-`MTL::ResourceID`s bound by the backend at a reserved argument-table slot (documented), against the
-contiguous `base + i` resource IDs a `MTL::TextureViewPool` hands out (observed, undocumented).
-Mapping cells name the ID table and mark the alternative. This chapter stays `Proposed` until the
-spike reports.
+On Metal 4 a view index reads a CPU-written table of 8-byte `MTL::ResourceID`s that the backend
+binds at a reserved argument-table slot. Spike 2 of
+[ADR 0014](../decisions/0014-overhead-measurement.md) measured it against the contiguous
+`base + i` resource IDs of a `MTL::TextureViewPool`, which is faster on the GPU but rests on
+undocumented ID arithmetic, and kept the documented table
+([spike 2](../research/2026-10-12-spike-2-texture-indexing.md)).
 
 ### `TextureType`
 ```cpp
@@ -233,7 +234,7 @@ read it. A full view heap is an error result.
 #### Mapping
 | | Metal 4 | D3D12 | Vulkan |
 |---|---|---|---|
-| Call | `MTL::Texture::newTextureView(format, type, levels, slices)` or the texture itself, its `MTL::Texture::gpuResourceID()` written into the ID table; `MTL::TextureViewPool::setTextureView` pending spike 2 | `ID3D12Device::CreateShaderResourceView` or `CreateUnorderedAccessView` at the slot's handle in the shader-visible `CBV_SRV_UAV` heap | `vkCreateImageView`, `vkWriteResourceDescriptorsEXT` into the resource heap |
+| Call | `MTL::Texture::newTextureView(format, type, levels, slices)` or the texture itself, its `MTL::Texture::gpuResourceID()` written into the ID table | `ID3D12Device::CreateShaderResourceView` or `CreateUnorderedAccessView` at the slot's handle in the shader-visible `CBV_SRV_UAV` heap | `vkCreateImageView`, `vkWriteResourceDescriptorsEXT` into the resource heap |
 | Cost | cheap: one view object and one 8-byte table write | native | native |
 
 ### `ViewIndex`
@@ -250,5 +251,5 @@ with [`rojoRHI::texture`](05-shader-abi-part2.md#rojorhitexture), and no tier di
 #### Mapping
 | | Metal 4 | D3D12 | Vulkan |
 |---|---|---|---|
-| Fetch | 8-byte `MTL::ResourceID` loaded from the hidden ID table; view-pool `base + i` pending spike 2 | `ResourceDescriptorHeap[index]` | resource descriptor heap index |
-| Cost | cheap: one extra 8-byte load; mechanism pending spike 2 | native | native |
+| Fetch | 8-byte `MTL::ResourceID` loaded from the hidden ID table | `ResourceDescriptorHeap[index]` | resource descriptor heap index |
+| Cost | cheap: one extra 8-byte load, measured at about 3% for `read` and 7.5% for `sample` in a fetch-only kernel | native | native |
