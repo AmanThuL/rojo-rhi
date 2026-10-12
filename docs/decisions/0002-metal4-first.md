@@ -1,6 +1,6 @@
 # ADR 0002: Metal 4 native is the first backend
 
-**Status**: Accepted (2026-09-19)
+**Status**: Superseded by [ADR 0008](0008-backends-and-vulkan-oracle.md)
 
 **Restates**: Luminex ADR 0002, "Metal 4 native as the first RHI backend"
 
