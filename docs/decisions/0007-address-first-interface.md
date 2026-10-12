@@ -134,8 +134,10 @@ are not rediscovered. Dereferencing `Addr` on D3D12 costs one descriptor fetch p
 it is recommended on hot paths waits on a pre-registered spike
 ([ADR 0014](0014-overhead-measurement.md)); until it reports, the reference recommends root fields
 and heap indices for hot per-draw data. Metal 4 textures cost one extra 8-byte load through a
-hidden ID table, and a counted multi-draw indirect costs an extra dispatch on Metal 4; both costs
-are pending spikes 2 and 3 ([ADR 0014](0014-overhead-measurement.md)).
+hidden ID table, and a counted multi-draw indirect costs an extra dispatch on Metal 4; spikes 2
+and 3 of [ADR 0014](0014-overhead-measurement.md) measured both and kept them
+([spike 2](../research/2026-10-12-spike-2-texture-indexing.md),
+[spike 3](../research/2026-10-12-spike-3-multi-draw-indirect.md)).
 
 Callers keep two rules the type system cannot enforce. An address is a number, so caching one past
 its frame compiles and reads recycled memory; the rule is stated where the operation is declared.

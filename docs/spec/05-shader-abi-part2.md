@@ -270,5 +270,5 @@ Requirements: the call is made from a vertex, task or mesh entry point.
 
 | | Metal 4 | D3D12 | Vulkan |
 |---|---|---|---|
-| Lowering | the backend binds the indirect record's address for the draw and the shader loads offset 0; a direct draw binds a zero identifier | root constant read from record offset 0 by the `ExecuteIndirect` command signature, or written as 0 for a direct draw; unverified | the backend binds the records' base address and stride, and the shader loads offset 0 of record `DrawIndex`; a direct draw binds a zero record, and `DrawIndex` is 0 |
-| Cost | cheap: one load; unverified | native: unverified | cheap: one load |
+| Lowering | vertex stage: `[[base_instance]]`, which the backend sets to the record's `drawId` for an indirect draw and to 0 for a direct draw; task and mesh stages: the backend binds the record's address for the draw and the shader loads offset 0, or binds a zero record for a direct draw | root constant read from record offset 0 by the `ExecuteIndirect` command signature, or written as 0 for a direct draw; unverified | the backend binds the records' base address and stride, and the shader loads offset 0 of record `DrawIndex`; a direct draw binds a zero record, and `DrawIndex` is 0 |
+| Cost | native in the vertex stage; cheap in task and mesh stages: one load | native: unverified | cheap: one load |

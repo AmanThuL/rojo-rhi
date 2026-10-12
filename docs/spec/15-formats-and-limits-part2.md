@@ -1,6 +1,6 @@
 # 15. Formats and limits, part 2
 
-**Status**: Proposed (until spike 3 of ADR 0014 reports)
+**Status**: Accepted
 **API version**: 0.1.0
 
 This part defines the numeric limits every other chapter checks against; formats and format
@@ -61,7 +61,7 @@ identifier; this entry only defines the values.
 | `maxColorAttachments` | 8 | 8 | 8 | `maxColorAttachments` |
 | `maxColorBytesPerSample` | 64 | 64, counted with Metal's per-format render-target sizes (*unverified*) | none below 8 targets of 16 bytes | none |
 | `maxSamplerAnisotropy` | 16 | 16 | 16 | `maxSamplerAnisotropy` |
-| `maxDrawIndirectCount` | 65,535 (*provisional*) | set by the encoding path spike 3 selects (*unverified*) | `UINT` `MaxCommandCount` of `ExecuteIndirect` | `maxDrawIndirectCount`, at least 65,535 with `multiDrawIndirect` |
+| `maxDrawIndirectCount` | 65,535 | 65,536, the largest count verified for the kernel-encoded indirect command buffer | `UINT` `MaxCommandCount` of `ExecuteIndirect` | `maxDrawIndirectCount`, at least 65,535 with `multiDrawIndirect` |
 | `maxDispatchGroups` | 65,535 | bounded by 32-bit grid counts (*unverified*) | 65,535, `D3D12_CS_DISPATCH_MAX_THREAD_GROUPS_PER_DIMENSION` | `maxComputeWorkGroupCount` |
 | `maxThreadsPerGroup` | 1,024 | `maxThreadsPerThreadgroup`, 1,024 | 1,024 | `maxComputeWorkGroupInvocations` |
 | `maxGroupSize` | 1,024 x 1,024 x 64 | 1,024 per axis from `maxThreadsPerThreadgroup` | 1,024 x 1,024 x 64 | `maxComputeWorkGroupSize` |
@@ -93,8 +93,9 @@ Notes on the floor:
   [`RenderPassDesc`](07-command-recording.md#renderpassdesc)).
 - `maxGroupSize` takes its z floor of 64 from D3D12; Metal 4 allows 1,024 on every axis. A
   threadgroup also stays within `maxThreadsPerGroup` in total.
-- `maxDrawIndirectCount` is provisional until spike 3 decides how Metal 4 encodes counted
-  multi-draw; the floor mirrors the Vulkan oracle's minimum.
+- `maxDrawIndirectCount`'s floor mirrors the Vulkan oracle's minimum. Metal 4 reports the 65,536
+  records [spike 3](../research/2026-10-12-spike-3-multi-draw-indirect.md) verified for its
+  kernel-encoded indirect command buffer.
 
 #### Valid usage
 - None.

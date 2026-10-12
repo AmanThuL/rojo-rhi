@@ -18,11 +18,12 @@ for one interface over three APIs, by emulating, tracking or giving an entry up 
 other cell is the native call or a fixed, small amount of backend work. In this API version no
 entry is `impossible` on any backend.
 
-Spikes 1 and 3 of [ADR 0014](../decisions/0014-overhead-measurement.md) are pending and may change
-rows in chapters 03, 05, 08 and 15 (part 2), which stay `Proposed` until they report: spike 1
-measures `Addr` dereference on D3D12 and spike 3 counted multi-draw on Metal 4. Spike 2 kept the
-Metal 4 ID table for texture and sampler indexing, leaving its rows `cheap`. A change to an
-entry's `Cost` row updates its row here in the same change.
+Spike 1 of [ADR 0014](../decisions/0014-overhead-measurement.md) is pending and may change rows in
+chapters 03 and 05, which stay `Proposed` until it reports: it measures `Addr` dereference on
+D3D12. Spike 2 kept the Metal 4 ID table for texture and sampler indexing, leaving its rows
+`cheap`. Spike 3 kept the kernel-encoded indirect command buffer for counted multi-draw on Metal 4,
+leaving its rows `costly`, and moved `drawId` into the base instance, making two record rows
+`native`. A change to an entry's `Cost` row updates its row here in the same change.
 
 | Entry | Chapter | Metal 4 | D3D12 | Vulkan |
 |---|---|---|---|---|
@@ -135,8 +136,8 @@ entry's `Cost` row updates its row here in the same change.
 | [`CommandList::fillBuffer`](07-command-recording-part3.md#commandlistfillbuffer) | 07 | cheap | costly | native |
 | [`ClearValue`](07-command-recording-part3.md#clearvalue) | 07 | native | native | native |
 | [`CommandList::clearTexture`](07-command-recording-part3.md#commandlistcleartexture) | 07 | costly | costly | native |
-| [`DrawIndirectArgs`](08-gpu-driven.md#drawindirectargs) | 08 | cheap | native | cheap |
-| [`DrawIndexedIndirectArgs`](08-gpu-driven.md#drawindexedindirectargs) | 08 | cheap | native | cheap |
+| [`DrawIndirectArgs`](08-gpu-driven.md#drawindirectargs) | 08 | native | native | cheap |
+| [`DrawIndexedIndirectArgs`](08-gpu-driven.md#drawindexedindirectargs) | 08 | native | native | cheap |
 | [`DrawMeshTasksIndirectArgs`](08-gpu-driven.md#drawmeshtasksindirectargs) | 08 | cheap | native | cheap |
 | [`DispatchIndirectArgs`](08-gpu-driven.md#dispatchindirectargs) | 08 | native | native | native |
 | [`CommandList::drawIndirect`](08-gpu-driven.md#commandlistdrawindirect) | 08 | costly | cheap | native |
