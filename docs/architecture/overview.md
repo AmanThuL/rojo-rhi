@@ -2,7 +2,9 @@
 
 **Status**: Accepted
 
-This page describes RojoRHI's shape after the import from Luminex.
+This page describes RojoRHI's shape as the code stands today: the v1 interface imported from
+Luminex, implemented by the Metal 4 backend. The v2 interface is specified in the ADRs and the API
+reference under `docs/spec/` and is not implemented yet.
 
 ```
 rojo-rhi/
@@ -16,6 +18,7 @@ rojo-rhi/
   Tools/                                      public-header check, Patches/, ImGuiBufferProbe/
   Tools/Rename/  Tools/Extract/               the Luminex rename table and the extraction scripts
   docs/conventions/  docs/decisions/  docs/architecture/  docs/guides/
+  docs/spec/  docs/research/                  the v2 API reference; the evidence behind it
 ```
 
 ## Directory responsibilities
@@ -36,8 +39,9 @@ Core dependency the component had inside Luminex.
 is the optional ImGui adapter, with its maintained patch and buffer probe under `Tools/`.
 
 `Tests/` and `Shaders/Tests/` hold the contract, validation and GPU conformance suite, including
-the checkpoint A cases ADR 0005 freezes by name, carried in from Luminex's flat test tree without
-changing their assertions.
+the checkpoint A cases ADR 0005 (superseded by ADR 0009) freezes by name, carried in from Luminex's
+flat test tree without changing their assertions. They remain today's GPU conformance set until the
+v2 tiers of ADR 0009 exist.
 
 `Tools/` holds the public-header check that rejects an include root not spelled exactly
 `rojoRHI/`, the maintained `Patches/`, and `ImGuiBufferProbe/`. `Tools/Rename/` holds the
@@ -47,7 +51,19 @@ and the verifier that checked its result, both kept for a future re-run.
 
 `docs/conventions/`, `docs/decisions/`, `docs/architecture/` and `docs/guides/` hold this
 repository's own conventions, ADRs, architecture pages and procedures, standing alone from
-Luminex's.
+Luminex's. ADRs 0002 to 0006 are the decisions the v1 code was built under: ADRs 0003 and 0006 are
+superseded by ADR 0007, ADRs 0002 and 0004 by ADR 0008, and ADR 0005 by ADR 0009. They stay as
+provenance.
+
+`docs/spec/` is the API reference for the v2 interface: a conventions chapter and one chapter per
+area, each entry giving semantics, valid usage and a mapping to Metal 4, D3D12 and Vulkan. It
+specifies the interface and does not describe code that exists. Metal 4 is the only backend
+implemented today; the D3D12 and Vulkan columns are designed mappings, since D3D12 is planned and
+Vulkan is a design oracle with no code (ADR 0008).
+
+`docs/research/` holds the dated evidence notes the decisions cite, such as
+`docs/research/2026-10-11-rhi-redesign/`. Notes record what was found and are not binding;
+the ADRs and the reference carry the decisions.
 
 ## Host inclusion
 
