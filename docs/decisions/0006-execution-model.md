@@ -1,6 +1,6 @@
 # ADR 0006: Per-frame data is address-first; the object model stays
 
-**Status**: Accepted (2026-09-19)
+**Status**: Superseded by [ADR 0007](0007-address-first-interface.md)
 
 **Restates**: Luminex ADR 0010, "The RHI adopts an address-first per-frame data path; the object
 model stays"

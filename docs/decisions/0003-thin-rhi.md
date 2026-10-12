@@ -1,6 +1,6 @@
 # ADR 0003: Thin, explicit, honest
 
-**Status**: Accepted (2026-09-19)
+**Status**: Superseded by [ADR 0007](0007-address-first-interface.md)
 
 **Restates**: Luminex ADR 0004, "RHI philosophy — thin, explicit, honest"
 

@@ -1,6 +1,6 @@
 # ADR 0004: D3D12 is the design target for a second backend
 
-**Status**: Accepted (2026-09-19)
+**Status**: Superseded by [ADR 0008](0008-backends-and-vulkan-oracle.md)
 
 **Restates**: Luminex ADR 0007, "D3D12 is the intended second backend"
 
