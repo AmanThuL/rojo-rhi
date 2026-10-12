@@ -59,7 +59,7 @@ vertices; there is no vertex-input state.
 
 | | Metal 4 | D3D12 | Vulkan |
 |---|---|---|---|
-| Call | `MTL4::RenderCommandEncoder::drawPrimitives` | `DrawInstanced` | `vkCmdDraw` |
+| Call | `MTL4::RenderCommandEncoder::drawPrimitives` with a base instance of 0, which `rojoRHI::drawId` reads; `firstInstance` is invisible to shaders | `DrawInstanced` | `vkCmdDraw` |
 | Cost | native | native | native |
 
 ### `IndexType`
@@ -106,7 +106,7 @@ diagnoses that, and the result of such an index is undefined.
 
 | | Metal 4 | D3D12 | Vulkan |
 |---|---|---|---|
-| Call | `MTL4::RenderCommandEncoder::drawIndexedPrimitives`, index buffer by GPU address | `IASetIndexBuffer` by GPU virtual address, `DrawIndexedInstanced` | `vkCmdBindIndexBuffer2`, `vkCmdDrawIndexed` |
+| Call | `MTL4::RenderCommandEncoder::drawIndexedPrimitives`, index buffer by GPU address, with a base instance of 0 as for `draw` | `IASetIndexBuffer` by GPU virtual address, `DrawIndexedInstanced` | `vkCmdBindIndexBuffer2`, `vkCmdDrawIndexed` |
 | Cost | native | native | native |
 
 ### `CommandList::drawMeshTasks`
