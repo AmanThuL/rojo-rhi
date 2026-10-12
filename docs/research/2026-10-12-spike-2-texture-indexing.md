@@ -1,6 +1,6 @@
 # Spike 2: how Metal 4 indexes textures
 
-**Status**: Proposed (until spike 2 of ADR 0014 reports)
+**Status**: Accepted (2026-10-12)
 
 Spike 2 of [ADR 0014](../decisions/0014-overhead-measurement.md) decides the Metal 4 lowering of a
 `ViewIndex` ([ADR 0011](../decisions/0011-shader-abi.md),
@@ -98,4 +98,75 @@ All arms share one host, one set of textures and one kernel body; only the textu
 
 ## Results
 
-Not yet measured.
+Measured on 2026-10-12 on an Apple M3 Max (Apple9) under macOS 27.0.1 (26A434), Xcode 26.6,
+`metal` 32023.883 and the pinned `metal-cpp`, on AC power. All 120 timing processes started and
+ended at the nominal thermal state; none was discarded. The harness is kept as measured under the
+tag `spike-2-texture-indexing-2026-10-12`; raw timings, logs and a SHA-256 manifest are kept
+outside the published tree.
+
+**Gates.** All three arms and the sampler-table variant pass the correctness gate at every count,
+pattern and access under API and shader validation, and the pool's IDs equalled `base + i` at
+every count. A control run with the pool base shifted by one fails every element of arm P, while
+shader validation reports nothing for the out-of-pool ID it reads. P fails the documented-behaviour
+gate: besides the undocumented arithmetic, MSL forms its handle only by punning the integer
+through a pointer, since `as_type` to a texture is rejected and `MTLResourceID` has no integer
+constructor. The validation layer bounds an argument table at 128 textures, so F ran at N of 1, 16
+and 128.
+
+**GPU kernel time**, median of process medians in microseconds, and T over P with its 95%
+interval. Material rows are marked.
+
+| N | Pattern | Access | F | T | P | T over P |
+|---|---|---|---|---|---|---|
+| 1 | uniform | read | 190.9 | 198.8 | 192.3 | +3.3% [+3.3, +3.4] |
+| 1 | uniform | sample | 193.6 | 205.5 | 191.0 | +7.6% [+7.5, +7.7], material |
+| 1 | divergent | read | 191.4 | 198.9 | 192.6 | +3.3% [+3.2, +3.3] |
+| 1 | divergent | sample | 193.8 | 205.6 | 191.0 | +7.7% [+7.6, +7.7], material |
+| 16 | uniform | read | 190.6 | 198.8 | 190.7 | +3.4% [+3.3, +3.8] |
+| 16 | uniform | sample | 193.7 | 205.4 | 190.9 | +7.6% [+7.5, +7.7], material |
+| 16 | divergent | read | 278.3 | 275.4 | 275.3 | +0.0% [+0.0, +0.1] |
+| 16 | divergent | sample | 274.7 | 276.0 | 278.1 | −0.7% [−0.8, −0.7] |
+| 128 | uniform | read | 190.6 | 198.6 | 192.6 | +2.8% [+2.7, +3.6] |
+| 128 | uniform | sample | 193.6 | 205.4 | 191.1 | +7.5% [+7.4, +7.6], material |
+| 128 | divergent | read | 1,529 | 1,546 | 1,534 | +0.8% [+0.7, +0.9] |
+| 128 | divergent | sample | 1,546 | 1,546 | 1,540 | +0.4% [+0.3, +0.4] |
+| 1,024 | uniform | read |  | 198.8 | 192.9 | +3.1% [+2.8, +3.3] |
+| 1,024 | uniform | sample |  | 205.8 | 192.0 | +7.2% [+6.4, +7.3], material |
+| 1,024 | divergent | read |  | 1,759 | 1,759 | −0.0% [−0.0, +0.0] |
+| 1,024 | divergent | sample |  | 1,755 | 1,756 | −0.0% [−0.0, −0.0] |
+| 16,384 | uniform | read |  | 200.1 | 193.7 | +3.3% [+3.3, +3.4] |
+| 16,384 | uniform | sample |  | 206.7 | 192.0 | +7.6% [+7.6, +7.7], material |
+| 16,384 | divergent | read |  | 1,940 | 1,837 | +5.5% [+5.4, +5.8], material |
+| 16,384 | divergent | sample |  | 1,990 | 1,865 | +6.6% [+6.6, +6.7], material |
+| 100,000 | uniform | read |  | 201.5 | 194.7 | +3.5% [+3.4, +3.6] |
+| 100,000 | uniform | sample |  | 207.9 | 193.1 | +7.7% [+7.6, +7.8], material |
+| 100,000 | divergent | read |  | 3,911 | 3,835 | +2.3% [+2.0, +2.4] |
+| 100,000 | divergent | sample |  | 4,047 | 3,951 | +1.9% [+1.9, +2.1] |
+
+P runs at the speed of fixed slots, and T's tax is present at N of 1, so it is the dependent
+8-byte handle load in front of each fetch rather than a cache effect. Fetching the sampler from a
+table instead of a `constexpr` sampler costs under 0.4%. Of the 288,000 timed dispatches, 0.40%
+fell below 0.8 times their process median and 0.75% above 1.2 times; medians absorb them.
+
+**CPU publish cost**, nanoseconds per texture, median of process medians:
+
+| N | F | T | P | T over P |
+|---|---|---|---|---|
+| 1 | 1145.5 | 604.0 | 542.0 | +15% [−38, +77] |
+| 16 | 99.0 | 52.1 | 67.7 | −42% [−67, +29] |
+| 128 | 32.6 | 12.7 | 38.9 | −66% [−78, −53] |
+| 1,024 | 36.8 | 11.3 | 30.3 | −65% [−70, −60] |
+| 16,384 | 77.8 | 25.3 | 62.3 | −57% [−71, −37] |
+| 100,000 | 113.9 | 33.1 | 81.0 | −60% [−61, −54] |
+
+At N of 1 and 16 a publish is too short to time reliably and the intervals include zero; at 128
+and above the table is materially cheaper. F binds at most 128 slots, so its larger counts time
+the first 128.
+
+**Decision.** Under the rule above P wins materially in five hot configurations, which hands the
+choice to the owner because P rests on undocumented behaviour. The owner keeps the ID table. The
+table is documented, its CPU publish is materially cheaper, and the measured tax comes from a
+kernel that does nothing but fetch; the composed frame of ADR 0014 judges whether it matters
+against the 1% GPU budget, and a miss attributable to it reopens this decision. Running both
+mechanisms behind a runtime switch is excluded, because it would add the hidden pipeline variants
+ADR 0014 budgets at zero.

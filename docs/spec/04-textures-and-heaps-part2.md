@@ -1,13 +1,13 @@
 # 04. Textures and heaps (part 2)
 
-**Status**: Proposed (until spike 2 of ADR 0014 reports)
+**Status**: Accepted
 **API version**: 0.1.0
 
 This part specifies samplers and caller-owned index ranges; textures, views and the view heap are
-in [part 1](04-textures-and-heaps.md). The Metal 4 index mechanism is pending spike 2 as stated
-there, and this part stays `Proposed` with it. Every `Device` function here is free-threaded and
-may lock internally. Writes to distinct slots, of one range or of different ranges, may run
-concurrently; two writes to the same slot, or a write racing the release of its range, may not.
+in [part 1](04-textures-and-heaps.md). On Metal 4 a slot is an entry of the backend's ID table, as
+stated there. Every `Device` function here is free-threaded and may lock internally. Writes to
+distinct slots, of one range or of different ranges, may run concurrently; two writes to the same
+slot, or a write racing the release of its range, may not.
 
 ## Heap index management
 
@@ -107,7 +107,7 @@ index or sampler index a shader fetches, so a range is indexable by offset in sh
 #### Mapping
 | | Metal 4 | D3D12 | Vulkan |
 |---|---|---|---|
-| Storage | contiguous entries of the hidden ID table; view-pool slots pending spike 2 | contiguous descriptors of the shader-visible heap | contiguous slots of the resource or sampler heap |
+| Storage | contiguous entries of the hidden ID table | contiguous descriptors of the shader-visible heap | contiguous slots of the resource or sampler heap |
 | Cost | cheap: backend-maintained ID table | native | native |
 
 ### `Device::reserveViews`
@@ -145,7 +145,7 @@ invisible to the CPU, and RojoRHI takes no per-slot lock.
 #### Mapping
 | | Metal 4 | D3D12 | Vulkan |
 |---|---|---|---|
-| Call | `MTL::Texture::newTextureView` or the texture itself, `MTL::Texture::gpuResourceID()` written into the ID table; `MTL::TextureViewPool::setTextureView` pending spike 2 | `CreateShaderResourceView` or `CreateUnorderedAccessView` at the slot's handle | `vkCreateImageView`, `vkWriteResourceDescriptorsEXT` |
+| Call | `MTL::Texture::newTextureView` or the texture itself, `MTL::Texture::gpuResourceID()` written into the ID table | `CreateShaderResourceView` or `CreateUnorderedAccessView` at the slot's handle | `vkCreateImageView`, `vkWriteResourceDescriptorsEXT` |
 | Cost | cheap: one view object and one 8-byte table write | native | native |
 
 ### `Device::reserveSamplers`

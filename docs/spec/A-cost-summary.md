@@ -18,11 +18,11 @@ for one interface over three APIs, by emulating, tracking or giving an entry up 
 other cell is the native call or a fixed, small amount of backend work. In this API version no
 entry is `impossible` on any backend.
 
-Spikes 1 to 3 of [ADR 0014](../decisions/0014-overhead-measurement.md) are pending and may change
-rows in chapters 03, 04, 05, 08 and 15 (part 2), which stay `Proposed` until they report: spike 1
-measures `Addr` dereference on D3D12, spike 2 texture and sampler indexing on Metal 4, and spike 3
-counted multi-draw on Metal 4. A change to an entry's `Cost` row updates its row here in the same
-change.
+Spikes 1 and 3 of [ADR 0014](../decisions/0014-overhead-measurement.md) are pending and may change
+rows in chapters 03, 05, 08 and 15 (part 2), which stay `Proposed` until they report: spike 1
+measures `Addr` dereference on D3D12 and spike 3 counted multi-draw on Metal 4. Spike 2 kept the
+Metal 4 ID table for texture and sampler indexing, leaving its rows `cheap`. A change to an
+entry's `Cost` row updates its row here in the same change.
 
 | Entry | Chapter | Metal 4 | D3D12 | Vulkan |
 |---|---|---|---|---|
