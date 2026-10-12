@@ -19,8 +19,8 @@ ROOT = Path(__file__).resolve().parents[1]
 SKIP_PARTS = {".git", "build", "ThirdParty"}
 SKIP_PREFIXES = (("Assets", "Fetched"),)
 STATUS_DIRS = {
-    "architecture", "conventions", "decisions", "guides", "milestones", "plans",
-    "postmortems", "research", "roadmap", "specs",
+    "architecture", "conventions", "decisions", "design", "guides", "milestones", "plans",
+    "postmortems", "research", "roadmap", "spec", "specs",
 }
 LINE_BUDGETS = {"AGENTS.md": 250, "README.md": 250, "docs/": 300}
 HOME_PATH = re.compile(

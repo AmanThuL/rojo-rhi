@@ -25,6 +25,13 @@ class ProjectPolicyTests(unittest.TestCase):
             with mock.patch.object(policy, "ROOT", root):
                 self.assertIsNone(policy.read_text(Path("capture.bin")))
 
+    def test_spec_and_design_documents_need_a_status(self) -> None:
+        for path in (Path("docs/spec/03-buffers.md"), Path("docs/design/x/README.md")):
+            errors: list[str] = []
+            with mock.patch.object(policy, "read_text", return_value="# Title\n"):
+                policy.check_markdown([path], errors)
+            self.assertIn("missing status field", errors[0])
+
     def test_identity_check_covers_repository_relative_paths(self) -> None:
         errors: list[str] = []
         path = Path("Tools/privatehandle-notes.md")

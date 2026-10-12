@@ -20,6 +20,7 @@ task("policy")
     set_menu {usage = "xmake policy", description = "check repository and C++ layout policy"}
     on_run(function ()
         os.execv("python3", {"Tools/check_project_policy.py"})
+        os.execv("python3", {"Tools/check_spec.py"})
         os.execv("python3", {"Tools/check_shader_imports.py"})
         os.execv("xmake", {"project", "-k", "compile_commands"})
         os.execv("python3", {"Tools/check_cpp_comments.py", "--public-api-docs", "error"})

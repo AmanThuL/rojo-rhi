@@ -15,6 +15,7 @@ jobs:
           if [[ -n "$RANGE" ]]; then python3 Tools/check_project_policy.py --commits "$RANGE"
           else python3 Tools/check_project_policy.py; fi
       - run: python3 Tools/check_shader_imports.py
+      - run: python3 Tools/check_spec.py
       - run: python3 -m unittest discover -s Tools/tests -v
       - run: python3 Tools/Rename/apply.py --selftest && python3 -m unittest discover -s Tools/Extract -p 'test_*.py'
   build-test:
