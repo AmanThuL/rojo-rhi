@@ -4,9 +4,9 @@
 **API version**: 0.1.0
 
 This part defines the `RojoRHI.slang` functions that dereference `Addr`, fetch textures and samplers
-by heap index, mark divergent indices, and give built-ins one definition on every target. The
-model, the layout rules and the root block are in [part 1](05-shader-abi.md). Every function lives
-in namespace `rojoRHI`. As [part 1](05-shader-abi.md#model) explains, each entry states its
+by heap index and mark divergent indices. The model, the layout rules and the root block are in
+[part 1](05-shader-abi.md); the built-ins are in [part 3](05-shader-abi-part3.md). Every function
+lives in namespace `rojoRHI`. As [part 1](05-shader-abi.md#model) explains, each entry states its
 requirements as normative prose, because no tier can diagnose a shader's use of them.
 
 The D3D12 lowerings below are designed mappings; DXIL compiled from this ABI has not yet been
@@ -40,7 +40,7 @@ memory or a shader output first.
 
 | | Metal 4 | D3D12 | Vulkan |
 |---|---|---|---|
-| Lowering | none: returns the argument | `NonUniformResourceIndex` on the heap index; unverified | `NonUniform` decoration on the index |
+| Lowering | none: returns the argument | `NonUniformResourceIndex` on the heap index; whether DXC carries it into each fetch kind (`load`, `store`, texture, sampler) is unverified | none for an `Addr`, a pointer rather than a descriptor index; for a `uint`, `NonUniformResourceIndex`, which Slang decorates only where the index reaches a descriptor |
 | Cost | native | native: divergent fetches may serialize in hardware, as in native code | native |
 
 ## Addresses
@@ -49,9 +49,15 @@ memory or a shader output first.
 pointers: an `Addr` there carries a raw shader-resource heap index and a byte offset, and each
 distinct base costs a descriptor fetch. A `ShaderWrite` buffer's raw unordered-access descriptor
 sits in the heap slot immediately after its raw shader-resource descriptor, so `rojoRHI::store` uses
-the index plus one. Whether the fetch is cheap enough for hot paths is spike 1 of
-[ADR 0014](../decisions/0014-overhead-measurement.md), still pending. Until it reports, per-draw hot
-data belongs in root fields and heap indices, and an `Addr` hop is for bulk and cold data.
+the index plus one. The D3D12 `Addr` is the heap index in `lo` and the 32-bit byte offset in `hi`
+([memory and buffers](03-memory-and-buffers.md)). In the emitted HLSL the only
+`NonUniformResourceIndex` sits in the return of the helper behind `nonUniform`; every heap indexing
+site (`load`, `store`, texture and sampler fetches) is a plain heap index. Whether DXC keeps the
+non-uniform qualifier through that function return, the `uint2` pack and unpack and the `+ 1` is
+verified with the D3D12 backend, which inspects the DXIL handle flags for each fetch kind. Whether
+the fetch is cheap enough for hot paths is spike 1 of [ADR
+0014](../decisions/0014-overhead-measurement.md), still pending. Until it reports, per-draw hot data
+belongs in root fields and heap indices, and an `Addr` hop is for bulk and cold data.
 
 ### `rojoRHI::load`
 
@@ -157,8 +163,8 @@ or marked with `rojoRHI::nonUniform`.
 
 | | Metal 4 | D3D12 | Vulkan |
 |---|---|---|---|
-| Lowering | 8-byte resource ID read from the hidden view table | `ResourceDescriptorHeap[view]`; unverified | resource descriptor heap |
-| Cost | cheap: one extra 8-byte load, measured at about 3% for `read` and 7.5% for `sample` in a fetch-only kernel | native | native |
+| Lowering | 8-byte resource ID read from the ID table at `buffer(1)`, through a Slang `__intrinsic_asm` over an argument-buffer table; `texture2DMS` and `texture2DMSArray` compile, but reading them miscompiles under the pinned Slang, which emits invalid MSL for `Load` and `GetDimensions`, and stays unverified until compile-and-run | `ResourceDescriptorHeap[view]`; unverified | resource descriptor heap, Slang's `__slang_resource_heap` runtime arrays, each fetch marked `NonUniform` |
+| Cost | cheap: one extra 8-byte load, measured at about 3% for `read` and 7.5% for `sample` in a fetch-only kernel | native | cheap: every fetch is marked `NonUniform`, since the `uint` marker cannot reach the handle; correct for a uniform index too |
 
 ### `rojoRHI::sampler`
 
@@ -185,90 +191,5 @@ comparisons; and `index` is dynamically uniform across the wave or marked with
 
 | | Metal 4 | D3D12 | Vulkan |
 |---|---|---|---|
-| Lowering | sampler ID read from the hidden sampler table | `SamplerDescriptorHeap[index]`; unverified | sampler descriptor heap |
-| Cost | cheap: one extra 8-byte load, measured under 0.4% against a `constexpr` sampler in a fetch-only kernel | native | native |
-
-## Built-ins
-
-Built-ins are wrapped because their meaning differs: D3D12's `SV_InstanceID` excludes the base
-instance, and the Metal lowering of the instance index changed meaning across Slang releases. Each
-wrapper has one definition on every target: `rojoRHI::vertexIndex` includes the first vertex or
-base vertex, provisionally and unverified on D3D12, and `rojoRHI::instanceIndex` is zero-based. No
-base value travels through a root constant, which `ExecuteIndirect` could not supply per draw.
-Per-draw data in an indirect draw comes through `rojoRHI::drawId`.
-
-### `rojoRHI::vertexIndex`
-
-```slang
-uint vertexIndex(uint vertexId);
-```
-
-Returns the index of the current vertex including the base: `firstVertex + i` for a non-indexed
-draw, and the index-buffer value plus `baseVertex` for an indexed one, direct or indirect.
-
-This definition is provisional. It rests on D3D12's `SV_VertexID` including the base vertex in
-direct and `ExecuteIndirect` draws, which is unverified. The fallback, should the D3D12
-compile-and-run check of the planned backend find otherwise, is one definition that excludes the
-base everywhere: `vertexIndex` returns `i` or the index-buffer value alone, and a shader that needs
-the base adds `firstVertex` or `baseVertex` from the per-draw record it finds through
-`rojoRHI::drawId`. That check chooses between the two before this chapter is accepted.
-
-Requirements: `vertexId` is the unmodified `SV_VertexID` input of a vertex entry point.
-
-#### Valid usage
-
-- None.
-
-#### Mapping
-
-| | Metal 4 | D3D12 | Vulkan |
-|---|---|---|---|
-| Lowering | `[[vertex_id]]`, which includes the base vertex | `SV_VertexID`, taken to include the base vertex; unverified | `VertexIndex` |
-| Cost | native | native: unverified | native |
-
-### `rojoRHI::instanceIndex`
-
-```slang
-uint instanceIndex(uint instanceId);
-```
-
-Returns the zero-based index of the current instance within its draw, excluding `firstInstance`,
-for every draw, direct or indirect. A shader that needs the absolute instance adds a value it
-carries in its own data.
-
-Requirements: `instanceId` is the unmodified `SV_InstanceID` input of a vertex entry point.
-
-#### Valid usage
-
-- None.
-
-#### Mapping
-
-| | Metal 4 | D3D12 | Vulkan |
-|---|---|---|---|
-| Lowering | `[[instance_id]]` minus `[[base_instance]]`, the Slang lowering pinned by a conformance shader | `SV_InstanceID`, taken to exclude the base instance; unverified | `InstanceIndex` minus `BaseInstance` |
-| Cost | cheap: one subtract | native | cheap: one subtract |
-
-### `rojoRHI::drawId`
-
-```slang
-uint drawId();
-```
-
-Returns the draw identifier: the leading `uint32` of the current record of an indirect draw (see
-[GPU-driven rendering](08-gpu-driven.md)), and 0 for a direct draw. One root serves a whole
-indirect batch, so a shader uses the identifier to find its own per-draw data. A fragment shader
-that needs it receives it as a flat interpolant from the stage before.
-
-Requirements: the call is made from a vertex, task or mesh entry point.
-
-#### Valid usage
-
-- None.
-
-#### Mapping
-
-| | Metal 4 | D3D12 | Vulkan |
-|---|---|---|---|
-| Lowering | vertex stage: `[[base_instance]]`, which the backend sets to the record's `drawId` for an indirect draw and to 0 for a direct draw; task and mesh stages: the backend binds the record's address for the draw and the shader loads offset 0, or binds a zero record for a direct draw | root constant read from record offset 0 by the `ExecuteIndirect` command signature, or written as 0 for a direct draw; unverified | the backend binds the records' base address and stride, and the shader loads offset 0 of record `DrawIndex`; a direct draw binds a zero record, and `DrawIndex` is 0 |
-| Cost | native in the vertex stage; cheap in task and mesh stages: one load | native: unverified | cheap: one load |
+| Lowering | sampler ID read from the ID table at `buffer(2)`, as for textures | `SamplerDescriptorHeap[index]`; unverified | sampler descriptor heap, `NonUniform` on every fetch as for textures |
+| Cost | cheap: one extra 8-byte load, measured under 0.4% against a `constexpr` sampler in a fetch-only kernel | native | cheap: `NonUniform` on every fetch |

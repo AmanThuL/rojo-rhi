@@ -30,7 +30,9 @@ directory responsibilities).
   [0015 versioning](docs/decisions/0015-versioning.md),
   [0016 C++ format follows the No Graphics API style](docs/decisions/0016-cpp-format.md),
   [0017 v1 is frozen under Legacy/ until the consumer port](
-  docs/decisions/0017-v1-frozen-under-legacy.md)
+  docs/decisions/0017-v1-frozen-under-legacy.md),
+  [0018 the root block reaches D3D12 as a root SRV, and the module owns the bindings](
+  docs/decisions/0018-root-srv-and-reserved-bindings.md)
 - API reference: [docs/spec/](docs/spec/00-conventions.md), entered through its conventions
   chapter
 - Research: [docs/research/](docs/research/2026-10-11-rhi-redesign/01-nographicsapi.md), the
@@ -43,10 +45,11 @@ directory responsibilities).
 Standalone:
 
 ```
-xmake setup   # fetches pinned metal-cpp and Slang on macOS only; nothing elsewhere yet
+xmake setup   # fetches pinned metal-cpp and Slang on macOS, Slang alone on Windows
 xmake         # builds the frozen v1 library, RojoRHILegacy
 xmake test RojoRHILegacyTests/unit   # runs the v1 CPU contract cases
 xmake test RojoRHITests/contract     # runs the v2 CPU contract cases
+xmake test RojoRHITests/abi          # compiles the ABI conformance shaders, checks shared layouts
 xmake f --rojorhi_backend=null       # selects the v2 backend; null is the only value yet
 ```
 
@@ -73,6 +76,12 @@ GPU conformance today is checkpoint A, the cases tagged `[checkpoint-a]`
 device on Metal 4 Apple Silicon, and there is no CPU-only substitute for it. ADR 0009 defines the
 conformance tiers that replace it for the v2 interface.
 
+The shader ABI module `Shaders/RojoRHI/RojoRHI.slang` and its hosted checks exist: the conformance
+shaders under `Shaders/Tests/` compile to MSL, SPIR-V and HLSL on every host, and the build checks
+the layout of the shared structs against Slang reflection. That is the hosted half of the T3 tier
+(ADR 0009). DXIL compiles wherever a DXC loads, as on hosted Windows CI. Compile-and-run, the ABI
+version stamp and `Device::loadShaderLibrary` are not implemented; they arrive with the v2 backends.
+
 ## Hard rules
 
 - Creation returns `Result<T>`; misuse of the interface is a fatal `ROJORHI_ASSERT`, unconditional
@@ -90,6 +99,9 @@ conformance tiers that replace it for the v2 interface.
   unchanged, and a change there is a defect fix only, in a commit that touches nothing outside
   `Legacy/` except `xmake/targets.lua` and carries a `V1-fix:` trailer. The commit that deletes
   `Legacy/` is exempt. The project policy check enforces it.
+- The module owns every shader binding and each shader compile defines exactly one
+  `ROJORHI_TARGET_*` macro; a consumer shader declares no binding (ADR 0018). Changing a reserved
+  binding bumps `ROJORHI_SHADER_ABI_VERSION`.
 - Public headers are dependency-free: no consumer header, no consumer namespace, and no backend,
   ImGui, windowing or third-party type (ADR 0007, ADR 0012).
 - A public include is rooted exactly `rojoRHI/`, in that spelling, and is written in angle form

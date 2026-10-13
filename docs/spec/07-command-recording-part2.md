@@ -9,7 +9,7 @@ the root block bound by `CommandList::setRoot` or `CommandList::pushRoot`
 ([shader ABI](05-shader-abi.md)); indirect forms are in [GPU-driven rendering](08-gpu-driven.md).
 `rojoRHI::vertexIndex` includes the first vertex or base vertex, natively on Metal 4 and Vulkan and
 provisionally on D3D12, where it is unverified, and `rojoRHI::instanceIndex` is zero-based
-([built-ins](05-shader-abi-part2.md#built-ins)), so no base value travels through a root constant.
+([built-ins](05-shader-abi-part3.md#built-ins)), so no base value travels through a root constant.
 A draw or dispatch with a zero count records nothing.
 
 ### `CommandList::setPipeline`

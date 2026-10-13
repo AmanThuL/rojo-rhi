@@ -85,11 +85,12 @@ leaving its rows `costly`, and moved `drawId` into the base instance, making two
 | [`rojoRHI::nonUniform`](05-shader-abi-part2.md#rojorhinonuniform) | 05 | native | native | native |
 | [`rojoRHI::load`](05-shader-abi-part2.md#rojorhiload) | 05 | native | costly | native |
 | [`rojoRHI::store`](05-shader-abi-part2.md#rojorhistore) | 05 | native | costly | native |
-| [`rojoRHI::texture`](05-shader-abi-part2.md#rojorhitexture) | 05 | cheap | native | native |
-| [`rojoRHI::sampler`](05-shader-abi-part2.md#rojorhisampler) | 05 | cheap | native | native |
-| [`rojoRHI::vertexIndex`](05-shader-abi-part2.md#rojorhivertexindex) | 05 | native | native | native |
-| [`rojoRHI::instanceIndex`](05-shader-abi-part2.md#rojorhiinstanceindex) | 05 | cheap | native | cheap |
-| [`rojoRHI::drawId`](05-shader-abi-part2.md#rojorhidrawid) | 05 | cheap | native | cheap |
+| [`rojoRHI::texture`](05-shader-abi-part2.md#rojorhitexture) | 05 | cheap | native | cheap |
+| [`rojoRHI::sampler`](05-shader-abi-part2.md#rojorhisampler) | 05 | cheap | native | cheap |
+| [`rojoRHI::VertexIds`](05-shader-abi-part3.md#rojorhivertexids) | 05 | native | native | native |
+| [`rojoRHI::vertexIndex`](05-shader-abi-part3.md#rojorhivertexindex) | 05 | native | native | native |
+| [`rojoRHI::instanceIndex`](05-shader-abi-part3.md#rojorhiinstanceindex) | 05 | cheap | native | cheap |
+| [`rojoRHI::drawId`](05-shader-abi-part3.md#rojorhidrawid) | 05 | cheap | native | cheap |
 | [`ShaderEntry`](06-pipelines.md#shaderentry) | 06 | native | native | native |
 | [`Device::loadShaderLibrary`](06-pipelines.md#deviceloadshaderlibrary) | 06 | native | cheap | native |
 | [`BlendState`](06-pipelines.md#blendstate) | 06 | native | native | native |
