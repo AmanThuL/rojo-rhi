@@ -86,9 +86,11 @@ jobs:
       - run: xmake f -m debug -y --rojorhi_backend=null
       - run: xmake build RojoRHITests
       - run: xmake test RojoRHITests/contract
+      - run: xmake test RojoRHITests/death
       - run: xmake test RojoRHITests/abi
       - run: xmake f -m release -y --rojorhi_backend=null
       - run: xmake build RojoRHITests
+      - run: xmake test RojoRHITests/contract
   format:
     runs-on: macos-26
     steps:
