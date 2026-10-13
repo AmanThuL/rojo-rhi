@@ -3,18 +3,21 @@
 **Status**: Accepted
 
 This page describes RojoRHI's shape as the code stands today: the v1 interface imported from
-Luminex, implemented by the Metal 4 backend. The v2 interface is specified in the ADRs and the API
-reference under `docs/spec/` and is not implemented yet.
+Luminex, implemented by the Metal 4 backend and frozen under `Legacy/` (ADR 0017). The top-level
+`Include/`, `Source/`, `Backends/`, `Tests/` and `Shaders/` are the permanent names, reserved for
+the v2 interface, which is specified in the ADRs and the API reference under `docs/spec/` and is
+not implemented yet.
 
 ```
 rojo-rhi/
   LICENSE  AGENTS.md  CLAUDE.md  README.md  xmake.lua  root project settings only
   .github/workflows/                          CI: policy on Linux, build/test on Metal 4 macOS
   xmake/targets.lua  setup.lua  shaders.lua   targets are includable by a host project
-  Include/rojoRHI/                            public, dependency-free
-  Source/  Source/Base/                       shared implementation; private base
-  Backends/Metal4/Source/  Backends/Metal4/ImGui/
-  Tests/  Shaders/Tests/                      contract, validation and GPU conformance
+  Include/ Source/ Backends/ Tests/ Shaders/  the v2 interface (permanent names, no code yet)
+  Legacy/Include/rojoRHI/                     v1 public headers, dependency-free
+  Legacy/Source/  Legacy/Source/Base/         v1 shared implementation; private base
+  Legacy/Backends/Metal4/Source/  Legacy/Backends/Metal4/ImGui/
+  Legacy/Tests/  Legacy/Shaders/Tests/        v1 contract, validation and GPU conformance
   Tools/                                      public-header check, Patches/, ImGuiBufferProbe/
   Tools/Rename/  Tools/Extract/               the Luminex rename table and the extraction scripts
   docs/conventions/  docs/decisions/  docs/architecture/  docs/guides/
@@ -25,23 +28,29 @@ rojo-rhi/
 
 `xmake.lua` at the root declares project settings, requires and the language level once; it is
 never included directly by a host project. `xmake/` holds `targets.lua` (the includable target
-declarations), a minimal `setup.lua` (metal-cpp and Slang pins), and a test-only copy of the
-shader-to-metallib rule, so RojoRHI configures, builds and tests standalone.
+declarations; the v1 targets are macOS only), a minimal `setup.lua` (metal-cpp and Slang pins), and
+a test-only copy of the shader-to-metallib rule, so RojoRHI configures, builds and tests
+standalone.
 
-`Include/rojoRHI/` is the public surface: dependency-free headers naming no backend, windowing,
-ImGui or third-party type, rooted at the `rojoRHI/` include spelling ADR 0001 fixes.
+`Include/`, `Source/`, `Backends/`, `Tests/` and `Shaders/` are the permanent tree of the v2
+interface. They hold no v2 code yet. v1 lives frozen beside them under `Legacy/` and is deleted
+with the consumer port; ADR 0017 owns the layout, the freeze and the consumer's dependency rename.
 
-`Source/` holds the shared implementation behind those headers, including `Source/Base/`, the
-private base (assertion, alignment, JSON escaping and `std::format` logging) that replaces the
-Core dependency the component had inside Luminex.
+`Legacy/Include/rojoRHI/` is the v1 public surface: dependency-free headers naming no backend,
+windowing, ImGui or third-party type, rooted at the `rojoRHI/` include spelling ADR 0001 fixes.
 
-`Backends/Metal4/Source/` is the Metal 4 backend, built through metal-cpp; `Backends/Metal4/ImGui/`
-is the optional ImGui adapter, with its maintained patch and buffer probe under `Tools/`.
+`Legacy/Source/` holds the shared implementation behind those headers, including
+`Legacy/Source/Base/`, the private base (assertion, alignment, JSON escaping and `std::format`
+logging) that replaces the Core dependency the component had inside Luminex.
 
-`Tests/` and `Shaders/Tests/` hold the contract, validation and GPU conformance suite, including
-the checkpoint A cases ADR 0005 (superseded by ADR 0009) freezes by name, carried in from Luminex's
-flat test tree without changing their assertions. They remain today's GPU conformance set until the
-v2 tiers of ADR 0009 exist.
+`Legacy/Backends/Metal4/Source/` is the Metal 4 backend, built through metal-cpp;
+`Legacy/Backends/Metal4/ImGui/` is the optional ImGui adapter, with its maintained patch and buffer
+probe under `Tools/`.
+
+`Legacy/Tests/` and `Legacy/Shaders/Tests/` hold the contract, validation and GPU conformance
+suite, including the checkpoint A cases ADR 0005 (superseded by ADR 0009) freezes by name, carried
+in from Luminex's flat test tree without changing their assertions. They remain today's GPU
+conformance set until the v2 tiers of ADR 0009 exist.
 
 `Tools/` holds the public-header check that rejects an include root not spelled exactly
 `rojoRHI/`, the maintained `Patches/`, and `ImGuiBufferProbe/`. `Tools/Rename/` holds the

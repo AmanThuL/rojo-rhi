@@ -123,17 +123,17 @@ class CppLayoutTests(unittest.TestCase):
     def test_adapter_is_skipped_with_a_notice_when_the_database_lacks_it(self) -> None:
         root = Path("/component")
         validate = root / "Source/Validate.cpp"
-        adapter = root / "Backends/Metal4/ImGui/Source/Metal4ImGui.cpp"
+        adapter = root / layout.ADAPTER_DIR / "Source/Metal4ImGui.cpp"
         files, notices = layout.select_checked_files([validate, adapter], {validate}, root)
         self.assertEqual(files, [validate])
         self.assertEqual(len(notices), 1)
-        self.assertIn("Backends/Metal4/ImGui", notices[0])
+        self.assertIn(layout.ADAPTER_DIR, notices[0])
 
     def test_adapter_is_checked_when_the_database_has_it(self) -> None:
         root = Path("/component")
         validate = root / "Source/Validate.cpp"
-        adapter = root / "Backends/Metal4/ImGui/Source/Metal4ImGui.cpp"
-        contract = root / "Backends/Metal4/ImGui/Source/ImGuiBackendContract.cpp"
+        adapter = root / layout.ADAPTER_DIR / "Source/Metal4ImGui.cpp"
+        contract = root / layout.ADAPTER_DIR / "Source/ImGuiBackendContract.cpp"
         files, notices = layout.select_checked_files(
             [validate, adapter, contract], {validate, adapter}, root
         )

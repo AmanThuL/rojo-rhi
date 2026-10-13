@@ -32,7 +32,7 @@ namespace contents. This file covers what a formatter cannot. Names are owned by
 
 ## The private base
 
-`Source/Base/` is the only home of assertions, alignment helpers, JSON escaping and logging. It is
+`Source/Base/` (v1's, frozen, is `Legacy/Source/Base/`) is the only home of assertions, alignment helpers, JSON escaping and logging. It is
 private: no public header includes it, and no consumer can reach it.
 
 - Logging is three macros — `ROJORHI_LOG_INFO`, `ROJORHI_LOG_WARN` and `ROJORHI_LOG_ERROR` — that

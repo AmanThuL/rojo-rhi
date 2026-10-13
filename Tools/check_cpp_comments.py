@@ -14,14 +14,14 @@ from typing import Any
 
 
 ROOT = Path(__file__).resolve().parents[1]
-SOURCE_ROOTS = ("Include", "Source", "Backends")
+SOURCE_ROOTS = ("Include", "Source", "Backends", "Legacy/Include", "Legacy/Source", "Legacy/Backends")
 # Test sources carry no file envelope; the Tests root already lies outside SOURCE_ROOTS.
 EXCLUDED_ROOTS = ()
 SOURCE_SUFFIXES = {".h", ".cpp"}
 FILE_RULER = "//" + "-" * 118
 # The ImGui adapter compiles only against a host's ImGui target, so a standalone compilation
 # database never holds it. Its public headers are compiled whenever the database covers it.
-ADAPTER_DIR = "Backends/Metal4/ImGui"
+ADAPTER_DIR = "Legacy/Backends/Metal4/ImGui"
 
 
 def project_cpp_files(root: Path) -> list[Path]:
@@ -48,7 +48,7 @@ def public_header_files(root: Path) -> list[Path]:
     backend and shared implementation headers are excluded.
     """
     public: list[Path] = []
-    for name in ("Include", "Backends/Metal4/ImGui/Include"):
+    for name in ("Include", "Legacy/Include", f"{ADAPTER_DIR}/Include"):
         include_root = root / name
         if include_root.is_dir():
             public.extend(include_root.rglob("*.h"))
@@ -251,10 +251,13 @@ def api_headers(root: Path, entries: list[dict[str, Any]]) -> tuple[list[Path], 
 
 
 def _entry_for_header(header: Path, entries: list[dict[str, Any]], root: Path) -> dict[str, Any]:
-    # The component is one module, so every compilation entry is a candidate.
-    candidates = entries
+    # The component holds two trees with different include roots, the frozen v1 tree under Legacy and
+    # the new tree; a header compiles only with flags from its own tree.
+    legacy = (root / "Legacy").resolve()
+    in_legacy = header.resolve().is_relative_to(legacy)
+    candidates = [entry for entry in entries if _entry_path(entry).is_relative_to(legacy) == in_legacy]
     if not candidates:
-        raise RuntimeError("compilation database is empty")
+        raise RuntimeError(f"compilation database has no entry in the tree of {header.name}")
     stem_matches = [entry for entry in candidates if Path(entry["file"]).stem == header.stem]
     return (stem_matches or candidates)[0]
 

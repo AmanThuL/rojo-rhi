@@ -17,7 +17,8 @@ differently, ADR 0001 wins; nothing here may contradict its table.
 | Umbrella header | `<rojoRHI/RHI.h>` | keeps the name `RHI.h`; only its root is renamed |
 | Macro prefix | `ROJORHI_` | `ROJORHI_ASSERT`, `ROJORHI_LOG_INFO` |
 | Default GPU label prefix | `rojorhi.` | `rojorhi.buffer.unnamed` |
-| Build targets | `RojoRHI`, `RojoRHIMetal4ImGui` | the core library and the ImGui adapter |
+| Build targets | `RojoRHI`, `RojoRHITests` | the v2 library and its tests |
+| Frozen v1 targets | `RojoRHILegacy`, `RojoRHILegacyMetal4ImGui`, `RojoRHILegacyTests` | the v1 library, its ImGui adapter and its tests |
 | Repository | `rojo-rhi` | the directory this file lives in |
 | Prose name | RojoRHI | "RojoRHI exposes no backend type" |
 | Mount path in a consumer | `RojoRHI/` | `RojoRHI/Include/rojoRHI/Device.h` |
@@ -45,7 +46,8 @@ with the code import.
 
 - One primary type per header, in `PascalCase.h` and `PascalCase.cpp` named after it.
 - Directory names are `PascalCase`: `Include`, `Source`, `Backends/Metal4`, `Tests`, `Shaders`,
-  `Tools`. Public headers live under `Include/rojoRHI/`; the private base lives in `Source/Base/`.
+  `Tools`, and `Legacy` for the frozen v1 tree, which repeats the same layout beneath it (ADR
+  0017). Public headers live under `Include/rojoRHI/`; the private base lives in `Source/Base/`.
 - Backend files carry the backend as a prefix (`Metal4Device.cpp`), so a file name alone says which
   backend owns it.
 - Shader basenames are globally unique including case, per test target; a collision is rejected
