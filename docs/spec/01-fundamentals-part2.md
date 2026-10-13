@@ -47,7 +47,8 @@ Every diagnostic RojoRHI emits leaves through one process-wide callback: backend
 validation-tracker reports, the text of a violated rule before the process terminates, and the
 native API's own messages where the backend can route them. `message` is valid only for the
 duration of the call; `user` is the pointer given to `setMessageCallback`. A message reporting a
-valid-usage violation begins with its identifier.
+valid-usage violation begins with its identifier. A message emitted from inside the callback,
+including the report of `VU-rojo-core-0008` itself, goes to the default sink instead.
 
 A callback must return normally: an exception or a `longjmp` leaving it unwinds through RojoRHI
 frames and is undefined behaviour. It may run on any thread, so it must be thread-safe.
