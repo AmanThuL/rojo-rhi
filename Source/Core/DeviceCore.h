@@ -18,11 +18,15 @@
 
 #include <atomic>
 #include <cstdint>
+#include <mutex>
 #include <string>
 #include <string_view>
 #include <tuple>
+#include <vector>
 
 namespace rojoRHI::core {
+    struct SwapchainCore;
+
     /// Checks a `DeviceDesc` before a backend opens anything: `ErrorCategory::Unsupported` when validation is requested in a
     /// Release build, and VU-rojo-device-0001 for a frame-slot count other than 2 or 3. A backend calls it first in
     /// `createDevice`.
@@ -53,6 +57,21 @@ namespace rojoRHI::core {
 
         /// Returns the hooks registered for retiring records, so a test can wrap them.
         const RetireHooks& retireHooks() const;
+
+        /// Registers the predicate that tells a surface of the compiled backend's type from any other pointer
+        /// (VU-rojo-present-0002); a backend whose surface has a recognizable type calls it once at creation. Without one every
+        /// surface is accepted.
+        void setSurfaceCheck(bool (*check)(const void* surface));
+
+        /// Returns the registered surface predicate, or null when the backend registered none.
+        bool (*surfaceCheck() const)(const void* surface);
+
+        /// Adds `swapchain`, whose record is at its final address, to the live set, after checking that no live swapchain of the
+        /// device holds its surface (VU-rojo-present-0006). Free-threaded.
+        void addSwapchain(SwapchainCore& swapchain);
+
+        /// Removes `swapchain` from the live set; its surface may take a new swapchain at once. Free-threaded.
+        void removeSwapchain(SwapchainCore& swapchain);
 
         /// Returns the capabilities the device reports; a backend fills them in place at creation, and its views must point at
         /// storage that outlives the device.
@@ -155,6 +174,9 @@ namespace rojoRHI::core {
         Capabilities m_capabilities;
         FormatTable m_formats;
         std::atomic<uint64_t> m_unsubmittedLists = 0;
+        std::mutex m_swapchainMutex;
+        std::vector<SwapchainCore*> m_swapchains;
+        bool (*m_surfaceCheck)(const void* surface) = nullptr;
         uint32_t m_framesInFlight;
         bool m_validation;
         std::string m_label;

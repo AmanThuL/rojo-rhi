@@ -8,7 +8,9 @@
 #include "Base/Assert.h"
 #include "Base/Log.h"
 #include "Core/Label.h"
+#include "Core/Swapchains.h"
 
+#include <algorithm>
 #include <type_traits>
 #include <utility>
 
@@ -102,6 +104,17 @@ namespace rojoRHI::core {
                 m_pools
             );
         }
+        {
+            std::lock_guard lock(m_swapchainMutex);
+            if (m_validation)
+            {
+                for (const SwapchainCore* swapchain : m_swapchains)
+                {
+                    ROJORHI_LOG_WARN("object \"{}\" is still live at device destruction", swapchain->label);
+                }
+            }
+            m_swapchains.clear();
+        }
         drain();
     }
 
@@ -145,6 +158,38 @@ namespace rojoRHI::core {
     const RetireHooks& DeviceCore::retireHooks() const
     {
         return m_hooks;
+    }
+
+    //==================================================================================================================
+    void DeviceCore::setSurfaceCheck(bool (*check)(const void* surface))
+    {
+        m_surfaceCheck = check;
+    }
+
+    //==================================================================================================================
+    bool (*DeviceCore::surfaceCheck() const)(const void* surface)
+    {
+        return m_surfaceCheck;
+    }
+
+    //==================================================================================================================
+    void DeviceCore::addSwapchain(SwapchainCore& swapchain)
+    {
+        std::lock_guard lock(m_swapchainMutex);
+        ROJORHI_VU(
+            std::none_of(m_swapchains.begin(), m_swapchains.end(), [&](const SwapchainCore* live) { return live->surface == swapchain.surface; }),
+            "VU-rojo-present-0006",
+            "the surface of the swapchain \"{}\" is the surface of another swapchain of the device that was not destroyed",
+            swapchain.label
+        );
+        m_swapchains.push_back(&swapchain);
+    }
+
+    //==================================================================================================================
+    void DeviceCore::removeSwapchain(SwapchainCore& swapchain)
+    {
+        std::lock_guard lock(m_swapchainMutex);
+        std::erase(m_swapchains, &swapchain);
     }
 
     //==================================================================================================================

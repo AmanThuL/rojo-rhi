@@ -10,6 +10,7 @@
 #include "Core/CommandLists.h"
 #include "Core/DeviceCore.h"
 #include "Core/Fences.h"
+#include "Core/Swapchains.h"
 
 namespace rojoRHI {
     //==================================================================================================================
@@ -36,5 +37,12 @@ namespace rojoRHI {
         core::checkSubmit(core, wait, signal);
         // The Null queue executes nothing, so every signal is reached before the call returns.
         core::recordSignals(core, signal, core::SignalCompletion::Immediate);
+    }
+
+    //==================================================================================================================
+    void Queue::present(Swapchain swapchain)
+    {
+        const QueueImpl& queue = QueueImpl::of(*this);
+        core::presentImage(queue.device->core, queue.type, SwapchainImpl::of(swapchain).core);
     }
 } // namespace rojoRHI

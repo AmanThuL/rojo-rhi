@@ -25,8 +25,9 @@ capabilities, `destroy` of every handle type), the process-wide message callback
 of chapters 03, 04 and 10: buffers and addresses, heaps and placement, textures and views,
 samplers, reserved slot ranges, queues and fences, plus the recording chapters (shader libraries,
 pipelines, command lists, passes, draws, copies and barriers), which
-[command recording](null-backend-recording.md) describes. Swapchains and the rest of the reference
-are not implemented; each arrives with the work that adds it.
+[command recording](null-backend-recording.md) describes, and swapchains and presentation
+(chapter 11). The rest of the reference is not implemented; each part arrives with the work that
+adds it.
 
 ## Two layers
 
@@ -76,9 +77,10 @@ another type's tag. Releasing a slot advances its generation at once, so the old
 rejected immediately. The slot returns to the free list only after the frame that released it
 retires, and a record handed to the retire callback is cleared afterwards. A slot whose generation
 would pass 2^24 - 1 is retired for good and never reused; its record still reaches the callback.
-The `Device::destroy` overload for `Swapchain` only checks the device, since swapchains do not exist
-yet, and a default-constructed `Swapchain` is rejected (`VU-rojo-core-0004`). `ViewIndex` and
-`SamplerIndex` are not pooled handles; they release slots of the heaps described below.
+A `Swapchain` is a pointer wrapper, not a pooled handle: the backend's `SwapchainImpl` embeds a core
+`SwapchainCore`, `Device::destroy(Swapchain)` releases the image it holds and frees it when its
+frame slot is reused, and a default-constructed one is rejected (`VU-rojo-core-0004`). `ViewIndex`
+and `SamplerIndex` are not pooled handles; they release slots of the heaps described below.
 
 `Handles.h` holds the seven small handle structs and `Geometry.h` the four geometry structs
 (`Extent2D`, `Extent3D`, `Offset3D`, `Rect2D`); each is a single-entry header for several types
@@ -258,8 +260,8 @@ lacks is on the [command recording](null-backend-recording.md) page.
 - Native payloads for views and samplers: their slots carry no backend payload, retire hook, drain
   or label yet. They arrive with a native backend, which must release native views and samplers at
   retirement and at `destroyDevice`.
-- Edges: swapchains, upscalers, sparse mapping, diagnostics and counters; the 55 identifiers
-  listed as `edges` include `VU-rojo-sync-0005` and `VU-rojo-device-0009`.
+- Edges: upscalers, sparse mapping, diagnostics and counters; the identifiers listed as `edges`
+  include `VU-rojo-device-0009`.
 - The validation tracker: the 29 identifiers only it checks, such as `VU-rojo-buffer-0019`, and
   the tracker hooks that `DeviceDesc::validation` selects.
 - A Metal 4 v2 backend and T1 GPU conformance

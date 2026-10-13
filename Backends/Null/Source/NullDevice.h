@@ -8,9 +8,11 @@
 #include <rojoRHI/Device.h>
 #include <rojoRHI/Queue.h>
 #include <rojoRHI/QueueType.h>
+#include <rojoRHI/Swapchain.h>
 
 #include "Core/CommandLists.h"
 #include "Core/DeviceCore.h"
+#include "Core/Swapchains.h"
 
 #include <array>
 #include <atomic>
@@ -22,6 +24,10 @@
 namespace rojoRHI {
     /// The Null device's `Limits::maxAddrOffset`: the 32-bit byte offset an address carries in its `hi` word, 2^32 - 1.
     constexpr uint64_t kNullMaxAddrOffset = 4'294'967'295;
+
+    /// The extent a Null swapchain's images have until `Swapchain::resize`: the Null backend reads no surface, so it gives every
+    /// swapchain the same one, a common window size.
+    constexpr Extent2D kNullSurfaceExtent = { 1280, 720 };
 
     struct DeviceImpl;
 
@@ -51,6 +57,19 @@ namespace rojoRHI {
         static CommandList wrap(CommandListImpl* impl);
     };
 
+    /// The Null backend's swapchain: the core's record of the images and their state. It ignores the surface it was given and
+    /// displays nothing.
+    struct SwapchainImpl
+    {
+        core::SwapchainCore core; ///< The description, extent and image state the presentation rules read.
+
+        /// Returns the state `swapchain` wraps; checks VU-rojo-core-0004.
+        static SwapchainImpl& of(Swapchain swapchain);
+
+        /// Returns the swapchain handle that wraps `impl`.
+        static Swapchain wrap(SwapchainImpl* impl);
+    };
+
     /// The command lists of one frame slot: those taken since the slot was reused come first and the rest wait to be reused.
     struct ListPool
     {
@@ -75,6 +94,12 @@ namespace rojoRHI {
         core::DeviceCore core;                ///< Frame bookkeeping, pools, labels, capabilities and the format table.
         std::array<QueueImpl, 3> queues = {}; ///< One queue per `QueueType`, indexed by its value.
         std::array<ListPool, 3> listPools;    ///< One list pool per frame slot; a device uses its first `framesInFlight`.
+        /// Guards `swapchains` and `retiredSwapchains`, because swapchain creation and destruction are free-threaded.
+        std::mutex swapchainMutex;
+        /// The swapchains created and not yet destroyed.
+        std::vector<std::unique_ptr<SwapchainImpl>> swapchains;
+        /// The swapchains destroyed in a frame of each slot, freed when that slot is reused, as a deferred resource is.
+        std::array<std::vector<std::unique_ptr<SwapchainImpl>>, 3> retiredSwapchains;
         /// Pipelines the cache blob covers: those carried in by `DeviceDesc::pipelineCache` and those created since.
         std::atomic<uint64_t> cachedPipelines = 0;
 

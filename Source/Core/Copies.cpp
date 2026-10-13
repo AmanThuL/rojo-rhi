@@ -263,6 +263,7 @@ namespace rojoRHI::core {
         // The records feed the Debug-tier checks only; reading them takes the pools' locks (ADR 0019).
         const BufferRecord* from = list.device->pool<Buffer>().checked(src, false);
         const TextureRecord* to = list.device->pool<Texture>().checked(dst, false);
+        checkNotSwapchainImage(*to, "copyBufferToTexture");
         checkCopySource(*from);
         ROJORHI_VU(to->samples == 1, "VU-rojo-cmd-0066", "copyBufferToTexture: the destination texture \"{}\" has {} samples", to->label, to->samples);
         checkTextureRegion(*to, region);
@@ -295,6 +296,7 @@ namespace rojoRHI::core {
         // The records feed the Debug-tier checks only; reading them takes the pools' locks (ADR 0019).
         const TextureRecord* from = list.device->pool<Texture>().checked(src, false);
         const BufferRecord* to = list.device->pool<Buffer>().checked(dst, false);
+        checkNotSwapchainImage(*from, "copyTextureToBuffer");
         checkCopyDestination(*to);
         ROJORHI_VU(from->samples == 1, "VU-rojo-cmd-0068", "copyTextureToBuffer: the source texture \"{}\" has {} samples", from->label, from->samples);
         checkTextureRegion(*from, region);
@@ -327,6 +329,8 @@ namespace rojoRHI::core {
         // The records feed the Debug-tier checks only; reading them takes the pools' locks (ADR 0019).
         const TextureRecord* from = list.device->pool<Texture>().checked(src, false);
         const TextureRecord* to = list.device->pool<Texture>().checked(dst, false);
+        checkNotSwapchainImage(*from, "copyTexture");
+        checkNotSwapchainImage(*to, "copyTexture");
         checkTextureRegion(*from, srcRegion);
         checkTextureRegion(*to, dstRegion);
         const FormatLayout fromBlock = formatLayout(from->format);
@@ -377,6 +381,7 @@ namespace rojoRHI::core {
 #ifndef NDEBUG
         // The records feed the Debug-tier checks only; reading them takes the pools' locks (ADR 0019).
         const TextureRecord* target = list.device->pool<Texture>().checked(texture, false);
+        checkNotSwapchainImage(*target, "clearTexture");
         ROJORHI_VU(value.depth >= 0.0f && value.depth <= 1.0f, "VU-rojo-cmd-0059", "clearTexture: the clear depth {} is outside [0, 1]", value.depth);
         checkSubresourceRange(*target, range);
         const bool attachment = hasUsage(target->usage, TextureUsage::RenderTarget | TextureUsage::DepthStencil);

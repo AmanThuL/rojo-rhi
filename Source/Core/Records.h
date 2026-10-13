@@ -49,6 +49,7 @@ namespace rojoRHI::core {
         Heap heap = {};                          ///< The heap the texture is placed in; null for a dedicated allocation.
         uint64_t initialBytes = 0;               ///< Bytes of initial data the texture was created with.
         uint64_t views = 0;                      ///< View slots holding a view of this texture (VU-rojo-texture-0028).
+        bool swapchainImage = false;             ///< True for an image `Swapchain::acquire` returned (VU-rojo-present-0012, 0013, VU-rojo-sync-0005).
         void* native = nullptr;                  ///< The backend's payload for the object; the core never reads it.
     };
 
