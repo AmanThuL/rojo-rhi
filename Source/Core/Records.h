@@ -5,8 +5,12 @@
 #pragma once
 
 #include <rojoRHI/BufferUsage.h>
+#include <rojoRHI/Format.h>
+#include <rojoRHI/Geometry.h>
 #include <rojoRHI/Handles.h>
 #include <rojoRHI/Memory.h>
+#include <rojoRHI/TextureType.h>
+#include <rojoRHI/TextureUsage.h>
 
 #include <cstdint>
 #include <string>
@@ -25,11 +29,22 @@ namespace rojoRHI::core {
         void* native = nullptr;                ///< The backend's payload for the object; the core never reads it.
     };
 
-    /// What the core keeps about one live Texture; later parts add its description and state.
+    /// What the core keeps about one live Texture: its description and how many view slots hold a view of it; later parts add
+    /// its state.
     struct TextureRecord
     {
-        std::string label;      ///< The label the object was created with.
-        void* native = nullptr; ///< The backend's payload for the object; the core never reads it.
+        std::string label;                       ///< The label the object was created with.
+        TextureType type = TextureType::Tex2D;   ///< The dimensionality.
+        Format format = Format::Undefined;       ///< The storage format.
+        Extent3D extent = {};                    ///< Texels of mip 0.
+        uint32_t mips = 1;                       ///< Mip levels.
+        uint32_t layers = 1;                     ///< Array layers; faces for cube types.
+        uint32_t samples = 1;                    ///< Samples per texel.
+        TextureUsage usage = TextureUsage::None; ///< The usage flags.
+        Heap heap = {};                          ///< The heap the texture is placed in; null for a dedicated allocation.
+        uint64_t initialBytes = 0;               ///< Bytes of initial data the texture was created with.
+        uint64_t views = 0;                      ///< View slots holding a view of this texture (VU-rojo-texture-0028).
+        void* native = nullptr;                  ///< The backend's payload for the object; the core never reads it.
     };
 
     /// What the core keeps about one live Pipeline; later parts add its description and state.

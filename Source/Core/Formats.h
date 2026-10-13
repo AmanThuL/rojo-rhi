@@ -24,6 +24,27 @@ namespace rojoRHI::core {
     /// Returns `formatCeiling` for every format: the table the Null backend reports.
     FormatTable formatCeilings();
 
+    /// How a format packs texels: a block of `blockWidth` by `blockHeight` texels occupies `blockBytes` bytes. An uncompressed
+    /// format has a 1 by 1 block; `Format::Undefined` and `D32FloatS8` have no block bytes (0).
+    struct FormatLayout
+    {
+        uint32_t blockWidth = 1;  ///< Texels of one block along x.
+        uint32_t blockHeight = 1; ///< Texels of one block along y.
+        uint32_t blockBytes = 0;  ///< Bytes of one block; `D32FloatS8` has none, because the reference gives it no packed size.
+    };
+
+    /// Returns how `format` packs texels.
+    FormatLayout formatLayout(Format format);
+
+    /// Returns true for a block-compressed format.
+    bool isBlockCompressed(Format format);
+
+    /// Returns true for a format with a depth plane, with or without stencil.
+    bool isDepthFormat(Format format);
+
+    /// Returns the format that differs from `format` only in sRGB transfer, or `Format::Undefined` when it has no such partner.
+    Format srgbCounterpart(Format format);
+
     /// Issues VU-rojo-format-0001 when `format` is not an enumerator and VU-rojo-format-0005 when it is `Format::Undefined`.
     void checkQueryFormat(Format format);
 } // namespace rojoRHI::core

@@ -12,11 +12,16 @@
 #include <rojoRHI/FormatCapabilities.h>
 #include <rojoRHI/Handles.h>
 #include <rojoRHI/HeapDesc.h>
+#include <rojoRHI/IndexRange.h>
 #include <rojoRHI/Placement.h>
 #include <rojoRHI/PlacementRequirements.h>
 #include <rojoRHI/Result.h>
+#include <rojoRHI/SamplerDesc.h>
 #include <rojoRHI/SamplerIndex.h>
 #include <rojoRHI/Swapchain.h>
+#include <rojoRHI/TextureData.h>
+#include <rojoRHI/TextureDesc.h>
+#include <rojoRHI/TextureViewDesc.h>
 #include <rojoRHI/ViewIndex.h>
 
 #include <cstddef>
@@ -59,6 +64,54 @@ namespace rojoRHI {
         /// The descriptor obeys its own rules and is not `Sparse` (VU-rojo-heap-0002). Allocates nothing and returns the same
         /// value for equal descriptors on one device. Free-threaded.
         PlacementRequirements placementRequirements(const BufferDesc& desc);
+
+        /// Returns the bytes a texture described by `desc` occupies inside a heap and the alignment its offset must satisfy.
+        /// The descriptor obeys the texture rules and is not `Sparse` (VU-rojo-heap-0002). Allocates nothing and returns the
+        /// same value for equal descriptors on one device. Free-threaded.
+        PlacementRequirements placementRequirements(const TextureDesc& desc);
+
+        /// Creates a texture and labels it. `initial` is empty or holds one entry per subresource, index `mip + layer * mips`
+        /// (VU-rojo-texture-0018), and is empty for a `Sparse`, non-`Sampled` or multisampled texture
+        /// (VU-rojo-texture-0019 to 0021); each entry obeys VU-rojo-texture-0013 to 0015. The descriptor obeys
+        /// VU-rojo-texture-0001 to 0012. A non-null `placement.heap` creates the texture inside that heap under
+        /// VU-rojo-heap-0003 to 0006. Out of memory is an error result. Free-threaded.
+        Result<Texture> createTexture(const TextureDesc& desc, std::span<const TextureData> initial = {}, Placement placement = {});
+
+        /// Allocates a slot in the view heap, writes a view of `texture` into it and returns the slot's index. The descriptor
+        /// obeys VU-rojo-texture-0016, 0017 and 0022 to 0027, and the texture is destroyed only after every slot holding a
+        /// view of it has been destroyed (VU-rojo-texture-0028). A full view heap is an error result. Free-threaded.
+        Result<ViewIndex> createView(Texture texture, const TextureViewDesc& desc);
+
+        /// Allocates a slot in the sampler heap, writes a sampler into it and returns the slot's index. The descriptor obeys
+        /// VU-rojo-texture-0029 and 0030. A full sampler heap is an error result. Free-threaded.
+        Result<SamplerIndex> createSampler(const SamplerDesc& desc);
+
+        /// Reserves `count` contiguous slots in the view heap (VU-rojo-texture-0032), returned with `Kind::Views`. The slots
+        /// hold no view until `writeView` writes one. No contiguous run of `count` free slots is an error result.
+        /// Free-threaded.
+        Result<IndexRange> reserveViews(uint32_t count);
+
+        /// Writes a view of `texture` into slot `range.base + index` of a view range, replacing any view there; the range
+        /// is a Views range and `index` is inside it (VU-rojo-texture-0033), and `desc` and `texture` obey
+        /// VU-rojo-texture-0034, which also reports a format the device does not support for `desc.usage` (`createView` reports
+        /// that as VU-rojo-format-0003), and `range` is a reserved, unreleased range as returned (VU-rojo-texture-0031). The write takes effect for work
+        /// submitted after it. Free-threaded; writes to distinct slots may run concurrently.
+        void writeView(IndexRange range, uint32_t index, Texture texture, const TextureViewDesc& desc);
+
+        /// Reserves `count` contiguous slots in the sampler heap (VU-rojo-texture-0035), returned with `Kind::Samplers`. The
+        /// slots hold no sampler until `writeSampler` writes one. No contiguous run of `count` free slots is an error
+        /// result. Free-threaded.
+        Result<IndexRange> reserveSamplers(uint32_t count);
+
+        /// Writes a sampler into slot `range.base + index` of a sampler range, replacing any sampler there; the range is a
+        /// Samplers range and `index` is inside it (VU-rojo-texture-0036), `desc` obeys VU-rojo-texture-0037 and `range` obeys
+        /// VU-rojo-texture-0031. The
+        /// write takes effect for work submitted after it. Free-threaded; writes to distinct slots may run concurrently.
+        void writeSampler(IndexRange range, uint32_t index, const SamplerDesc& desc);
+
+        /// Releases a caller-owned range, deferred like `destroy`: its slots and what they hold return to the heap once the
+        /// last frame that could have read them has retired. The range obeys VU-rojo-texture-0038. Free-threaded.
+        void release(IndexRange range);
 
         /// Returns the shader-visible address of byte `offset` of `buffer`: `offset` is less than the buffer's size
         /// (VU-rojo-buffer-0012), the buffer is not `Readback` (VU-rojo-buffer-0013), and the address lies less than

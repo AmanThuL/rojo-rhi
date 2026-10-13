@@ -4,7 +4,6 @@
 //----------------------------------------------------------------------------------------------------------------------
 #include <rojoRHI/RHI.h>
 
-#include "Core/DeviceCore.h"
 #include "Support/Death.h"
 
 #include <catch2/catch_test_macros.hpp>
@@ -133,7 +132,7 @@ TEST_CASE("VU-rojo-core-0003 a Texture's bits are looked up as a Buffer", "[cont
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-core-0003", [] {
         Device device = *createDevice();
-        const Texture texture = core::coreOf(device).pool<Texture>().allocate({ "test.texture" });
+        const Texture texture = *device.createTexture({ .format = Format::RGBA8Unorm, .extent = { 4, 4, 1 }, .usage = TextureUsage::Sampled });
         (void)device.address(Buffer{ texture.bits });
     });
 }

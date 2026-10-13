@@ -75,8 +75,8 @@ TEST_CASE("VU-rojo-buffer-0011 Addr arithmetic reaches maxAddrOffset", "[contrac
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-buffer-0011", [] {
         Device device = *createDevice();
-        const Buffer buffer = *device.createBuffer({ .size = 1ull << 32 });
-        (void)(device.address(buffer) + 0xFFFF'FFFFull);
+        const Buffer buffer = *device.createBuffer({ .size = 64 });
+        (void)(device.address(buffer) + device.capabilities().limits.maxAddrOffset);
     });
 }
 

@@ -105,6 +105,8 @@ faces.
 - `VU-rojo-texture-0011` `type` is not `Tex3D` when `usage` contains `DepthStencil`.
 - `VU-rojo-texture-0012` `usage` contains `Sparse` only when `Device::capabilities` reports sparse
   resources.
+- `VU-rojo-texture-0039` `layers` is at most `Limits::maxTextureLayers`; for cube types each face
+  counts as a layer.
 #### Mapping
 | | Metal 4 | D3D12 | Vulkan |
 |---|---|---|---|
@@ -121,7 +123,12 @@ struct TextureData {
 ```
 One `TextureData` describes one subresource of the initial contents. Rows of a block-compressed
 format are rows of blocks, counted with rounding up. The caller states the strides because only the
-caller knows whether its rows are padded.
+caller knows whether its rows are padded. The stride rules apply when `bytes` is not empty. The
+size `bytes` must hold is `bytesPerImage * (depth - 1)` for a `Tex3D` mip (none otherwise), plus
+`bytesPerRow * (rows - 1)`, plus one packed row, where `depth` and `rows` are those of the
+subresource's mip; the last row is not padded to the stride. In a `Tex3D` mip, a
+`bytesPerRow * rows` product that overflows 64 bits violates `VU-rojo-texture-0014`; any other
+overflow in the implied size violates `VU-rojo-texture-0015`.
 #### Valid usage
 - `VU-rojo-texture-0013` `bytesPerRow` is at least the packed row size of the subresource and a
   multiple of the format's texel or block size.
@@ -150,6 +157,8 @@ default covers the whole texture; layers of cube types are faces.
 - `VU-rojo-texture-0016` `mipCount` and `layerCount` are not 0.
 - `VU-rojo-texture-0017` `baseMip` plus `mipCount`, unless `kAllMips`, is at most the texture's
   `mips`; `baseLayer` plus `layerCount`, unless `kAllLayers`, is at most its `layers`.
+- `VU-rojo-texture-0041` `baseMip` is less than the texture's `mips`, and `baseLayer` is less than
+  its `layers`.
 #### Mapping
 | | Metal 4 | D3D12 | Vulkan |
 |---|---|---|---|
@@ -174,6 +183,8 @@ visible before any work submitted after the call returns, and the texture starts
 - `VU-rojo-texture-0019` `initial` is empty when `desc.usage` contains `Sparse`.
 - `VU-rojo-texture-0020` `initial` is empty unless `desc.usage` contains `Sampled`.
 - `VU-rojo-texture-0021` `initial` is empty when `desc.samples` is greater than 1.
+- `VU-rojo-texture-0040` `initial` is empty when `desc.format` is `Format::D32FloatS8`, which has
+  no packed texel size.
 #### Mapping
 | | Metal 4 | D3D12 | Vulkan |
 |---|---|---|---|

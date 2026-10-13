@@ -80,6 +80,54 @@ namespace rojoRHI::core {
     }
 
     //==================================================================================================================
+    FormatLayout formatLayout(Format format)
+    {
+        switch (format)
+        {
+        case Format::Undefined: return {};
+        case Format::R8Unorm: return { 1, 1, 1 };
+        case Format::R16Float: return { 1, 1, 2 };
+        case Format::RGBA16Float: return { 1, 1, 8 };
+        case Format::D32FloatS8: return {}; // No packed texel size: a copy layout never assumes one (chapter 15).
+        case Format::BC1Unorm:
+        case Format::BC1Unorm_sRGB: return { 4, 4, 8 };
+        case Format::BGRA8Unorm:
+        case Format::RGBA8Unorm:
+        case Format::RGBA8Unorm_sRGB:
+        case Format::RG16Float:
+        case Format::D32Float:
+        case Format::R32Float:
+        case Format::RGB10A2Unorm: return { 1, 1, 4 };
+        }
+        return {};
+    }
+
+    //==================================================================================================================
+    bool isBlockCompressed(Format format)
+    {
+        return classOf(format) == FormatClass::BlockCompressed;
+    }
+
+    //==================================================================================================================
+    bool isDepthFormat(Format format)
+    {
+        return classOf(format) == FormatClass::Depth;
+    }
+
+    //==================================================================================================================
+    Format srgbCounterpart(Format format)
+    {
+        switch (format)
+        {
+        case Format::RGBA8Unorm: return Format::RGBA8Unorm_sRGB;
+        case Format::RGBA8Unorm_sRGB: return Format::RGBA8Unorm;
+        case Format::BC1Unorm: return Format::BC1Unorm_sRGB;
+        case Format::BC1Unorm_sRGB: return Format::BC1Unorm;
+        default: return Format::Undefined;
+        }
+    }
+
+    //==================================================================================================================
     void checkQueryFormat([[maybe_unused]] Format format)
     {
         ROJORHI_VU(static_cast<uint32_t>(format) < kFormatCount, "VU-rojo-format-0001", "{} is not a Format enumerator", static_cast<uint32_t>(format));
