@@ -8,6 +8,8 @@ local metalcpp_pin = "release/metal-cpp_macOS26.4_iOS26.4"
 local metalcpp_commit = "c595afef4a5dc388f4047cd0c69f9e7f9468d9ed"
 local slang_pin    = "v2026.14.1"
 local slang_sha256 = "a1c5ecae0d2425b13fe7f616686f2df7cc7028d3f6a85fb717497cf98bee3d0a"
+-- The Windows archive's compiler, checked by the hash of bin/slangc.exe.
+local slang_windows_sha256 = "b9f786a651569aa4f968e4014d04b6e2f4f1a6c9584f47ea9f4ccc841fdeeeeb"
 
 task("setup")
     -- An explicit (even empty) options table is required for -P to work with this task: a
@@ -15,6 +17,30 @@ task("setup")
     set_menu {usage = "xmake setup", description = "fetch the pinned third-party dependencies",
               options = {}}
     on_run(function ()
+        if is_host("windows") then
+            -- Only Slang is fetched on Windows: the compile-only shader checks need it and no
+            -- Metal toolchain. xmake's own downloader, archive extractor and hash replace curl,
+            -- unzip and shasum, which a Windows runner may lack.
+            import("net.http")
+            import("utils.archive")
+            local slang = path.join(os.projectdir(), "ThirdParty", "slang")
+            local slangc = path.join(slang, "bin", "slangc.exe")
+            if not os.isfile(slangc) then
+                local zip = format("slang-%s-windows-x86_64.zip", slang_pin:sub(2))
+                local url = format("https://github.com/shader-slang/slang/releases/download/%s/%s",
+                                   slang_pin, zip)
+                local download = path.join(os.projectdir(), "ThirdParty", zip)
+                os.mkdir(slang)
+                http.download(url, download)
+                archive.extract(download, slang)
+                os.rm(download)
+            end
+            local slang_hash = hash.sha256(slangc)
+            assert(slang_hash == slang_windows_sha256,
+                   format("%s checksum mismatch; expected %s, got %s", slangc, slang_windows_sha256, slang_hash))
+            print("setup done: slang %s", slang_pin)
+            return
+        end
         if not is_host("macosx") then
             print("setup done: nothing to fetch on %s", os.host())
             return

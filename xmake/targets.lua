@@ -3,9 +3,9 @@
 -- it and nothing else, so project settings, language level and package requires stay declared once
 -- per root rather than once per include.
 --
--- The shader rule the test target opts into is part of that interface, so this file includes it
--- rather than leaving a host to remember a second include.
-includes("shaders.lua")
+-- The shader rules the test targets opt into are part of that interface, so this file includes them
+-- rather than leaving a host to remember more includes.
+includes("shaders.lua", "slang.lua")
 
 -- Two values a host may set as plain globals before the include, because xmake evaluates an
 -- included description script in the same interpreter as the including one:
@@ -126,3 +126,11 @@ target("RojoRHITests")
     add_deps("RojoRHI")
     add_packages("catch2")
     add_tests("contract", {runargs = {"[contract]"}})
+    -- Conformance shaders compile for every target on any host; the rule needs only the Slang
+    -- compiler, which setup fetches. Windows names it slangc.exe.
+    add_rules("rojorhi.slang")
+    set_values("slang.moduledir", path.join(component_dir, "Shaders/RojoRHI"))
+    set_values("slang.slangc", path.join(thirdparty_dir, is_host("windows") and "slang/bin/slangc.exe"
+                                                         or "slang/bin/slangc"))
+    add_files(path.join(component, "Shaders/Tests/*.slang"))
+    add_tests("abi", {runargs = {"[abi]"}})
