@@ -217,6 +217,6 @@ textures and pipelines.
 
 - Recording rules that need hazards, aliasing or lifetime across commands: the rest of the
   validation tracker (`tracker` entries of `Tools/vu_pending.txt`, among them `VU-rojo-sync-0009`,
-  `VU-rojo-sync-0021`, `VU-rojo-indirect-0005` and `0011`).
+  `VU-rojo-indirect-0005` and `0011`).
 - A native backend: slot payloads for views and samplers, and the use of the retire and
   `frameSlot` hooks for native command lists and arena pages.

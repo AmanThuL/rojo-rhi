@@ -223,8 +223,8 @@ namespace rojoRHI {
         /// Records one batch of barriers: all source scopes complete, then all layout transitions, then all destination scopes
         /// may begin. An empty batch records nothing. Recorded outside a render pass (VU-rojo-sync-0019); no two entries of
         /// `textures` cover the same subresource (VU-rojo-sync-0020). Each barrier obeys the rules of its descriptor. The
-        /// ordering and layout rules are checked by the validation tracker (VU-rojo-sync-0021 to 0023). Thread class command
-        /// list.
+        /// ordering and layout rules are checked by the validation tracker (VU-rojo-sync-0021, VU-rojo-sync-0024). Thread
+        /// class command list.
         void barrier(std::span<const GlobalBarrier> globals, std::span<const BufferBarrier> buffers = {}, std::span<const TextureBarrier> textures = {});
 
         /// Records one reconstruction by `upscaler`: it reads the inputs and its history and writes `params.output`, as compute

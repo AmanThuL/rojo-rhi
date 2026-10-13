@@ -72,4 +72,13 @@ namespace rojoRHI::test {
 
     /// Returns a pass description of the color attachments `colors` that renders to the whole `PassKit::kSize` square.
     RenderPassDesc fullPass(std::span<const ColorAttachment> colors);
+
+    /// Returns every access a subresource in `layout` permits: chapter 09's table, read by layout.
+    Access accessesOf(Layout layout);
+
+    /// Records the barrier that moves the subresources `range` of `texture` from `oldLayout` to `newLayout`, with every stage
+    /// on both sides, the write accesses `oldLayout` permits as its source and every access `newLayout` permits as its
+    /// destination, as a caller ordering any use before it and any use after it would. A discard from `Undefined` names no
+    /// source access, as VU-rojo-sync-0016 requires.
+    void transition(CommandList list, Texture texture, Layout oldLayout, Layout newLayout, const SubresourceRange& range = {});
 } // namespace rojoRHI::test

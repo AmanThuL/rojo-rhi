@@ -30,8 +30,14 @@ namespace rojoRHI::core {
         DeviceCore& core, const BufferDesc& desc, std::span<const std::byte> initial, const Placement& placement, const PlacementRequirements& requirements
     );
 
-    /// Stores `record`, which `prepareBuffer` returned, in the buffer pool, counts it against its heap and returns its handle.
+    /// Stores `record`, which `prepareBuffer` returned, in the buffer pool, counts it against its heap, starts the validation
+    /// tracker following it and returns its handle.
     Buffer addBuffer(DeviceCore& core, BufferRecord record);
+
+    /// Stores `record`, a frame-arena page that `prepareBuffer` returned with no placement, in the buffer pool and returns its
+    /// handle. The validation tracker does not follow a page: the CPU writes frame data and the GPU only reads it within its
+    /// frame.
+    Buffer addFrameArenaPage(DeviceCore& core, BufferRecord record);
 
     /// Destroys `buffer`, deferred as `DeviceCore::destroy` does, and releases its claim on its heap.
     void destroyBuffer(DeviceCore& core, Buffer buffer);
