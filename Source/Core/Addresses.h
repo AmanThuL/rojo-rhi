@@ -38,7 +38,7 @@ namespace rojoRHI::core {
     /// VU-rojo-buffer-0009 (the address names a live buffer and its position lies inside it) and of VU-rojo-buffer-0020
     /// (frame data is used on a list of the frame that produced it). The null address resolves to a null buffer with no rule
     /// issued; the caller decides whether null is allowed. Every command that takes an `Addr` calls it in Debug builds only:
-    /// it takes the buffer pool's lock, which Release recording never does (ADR 0019).
+    /// it takes the buffer pool's lock, which Release recording never does (ADR 0020).
     ///
     /// VU-rojo-buffer-0020 compares the list's frame with the frame stamped on the page's record when a list claims it, so
     /// it does not see a stale address into a page a list of the later frame has claimed again, an address reached through

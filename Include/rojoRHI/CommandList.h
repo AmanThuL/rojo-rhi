@@ -32,8 +32,8 @@ namespace rojoRHI {
     /// default-constructed one refers to none (VU-rojo-core-0004). It comes from a per-frame pool and returns to it when its
     /// frame retires; using it after that is undefined behaviour no tier detects. It is used only with the device that
     /// acquired it (VU-rojo-core-0005). One thread records one list at a time. In Release builds recording takes no locks,
-    /// except when a list claims a new frame-arena page for `uploadFrameData`; a Debug-tier check may take the lock of the
-    /// pool it reads (ADR 0019).
+    /// except when a list claims a new frame-arena page for `uploadFrameData` or for the label of a debug scope; a Debug-tier
+    /// check may take the lock of the pool it reads (ADR 0020).
     ///
     /// Every command other than `end` is recorded on a list that is recording (VU-rojo-cmd-0063).
     class CommandList

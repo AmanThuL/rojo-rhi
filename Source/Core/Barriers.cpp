@@ -246,7 +246,7 @@ namespace rojoRHI::core {
         }
         ROJORHI_VU(!list.passOpen, "VU-rojo-sync-0019", "a barrier was recorded on the list \"{}\" inside a render pass", list.label);
 #ifndef NDEBUG
-        // The loops only feed Debug-tier checks, and reading a record takes its pool's lock (ADR 0019).
+        // The loops only feed Debug-tier checks, and reading a record takes its pool's lock (ADR 0020).
         for (const GlobalBarrier& global : globals)
         {
             checkSide(list, global.srcStage, global.srcAccess, "source");

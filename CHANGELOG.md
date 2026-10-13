@@ -67,3 +67,22 @@
   (layouts, validation tracker); `VU-rojo-cmd-0062` is retired and re-issued as `VU-rojo-cmd-0070`,
   its layout half; `VU-rojo-sync-0012` is retired in favour of `VU-rojo-texture-0016`, `0017` and
   `0041`; chapter 07 counts color bytes per sample as the sum of each format's bytes per texel.
+- Swapchains and presentation on the Null backend: `Device::createSwapchain`, `Swapchain::acquire`
+  and `resize`, and `Queue::present`, with a fresh image record for each acquire
+  ([edges](docs/architecture/null-backend-edges.md)).
+- Upscalers: `Device::createUpscaler` for every kind the device reports and `CommandList::upscale`.
+- Sparse resources: `Device::tileShape` over the D3D12 standard tile shapes and `Queue::mapTiles`,
+  with the mapping kept per resource and checked by `VU-rojo-device-0009` at heap destruction.
+- Diagnostics: `CommandList::declareAccess`, `Device::scopeTimings` (labels of scopes, render
+  passes and upscales, with zero durations on Null), `beginCapture` and `endCapture` (Null has no
+  capture tool and reports `Unsupported`) and `Device::counters`.
+- Scope labels are copied into the frame arena while recording, so a list may claim a frame-arena
+  page for a label as well as for `uploadFrameData`
+  ([ADR 0020](docs/decisions/0020-recording-locks-scope-labels.md), which supersedes ADR 0019);
+  chapters 01 and 07 state both causes.
+- API reference changes in chapters 11 to 14 and 02: `VU-rojo-sparse-0011` is retired, since each
+  element of a `mapTiles` call reports its own rule; `VU-rojo-sparse-0004` states a nonzero extent
+  and a layer range inside the texture, and `VU-rojo-sparse-0005` a non-empty layer range inside
+  the texture; `VU-rojo-present-0012` counts the resolve target of a color attachment as an
+  allowed use; destroying a sparse texture or buffer unmaps all its tiles, which chapters 13 and
+  02 state.

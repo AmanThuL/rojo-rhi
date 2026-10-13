@@ -122,7 +122,7 @@ namespace rojoRHI::core {
         ROJORHI_VU(list.type == QueueType::Graphics, "VU-rojo-upscale-0006", "upscale was recorded on the non-Graphics list \"{}\"", list.label);
         ROJORHI_VU(!list.passOpen, "VU-rojo-upscale-0007", "upscale was recorded on the list \"{}\" with a render pass open", list.label);
 #ifndef NDEBUG
-        // The records feed the Debug-tier checks only; reading them takes the pools' locks (ADR 0019).
+        // The records feed the Debug-tier checks only; reading them takes the pools' locks (ADR 0020).
         UpscalerRecord* scaler = list.device->pool<Upscaler>().checked(upscaler, false);
         auto& textures = list.device->pool<Texture>();
         const TextureRecord* color = textures.checked(params.color, true);

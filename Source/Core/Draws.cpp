@@ -107,7 +107,7 @@ namespace rojoRHI::core {
         noteNativeCall(list);
         ROJORHI_VU((root.lo != 0 || root.hi != 0), "VU-rojo-abi-0001", "setRoot was given the null address");
 #ifndef NDEBUG
-        // Resolving reads the buffer pool under its lock, so only the Debug tier does it (ADR 0019).
+        // Resolving reads the buffer pool under its lock, so only the Debug tier does it (ADR 0020).
         const ResolvedAddr at = resolveAddr(*list.device, list, root);
         ROJORHI_VU(at.offset % kRootAlignment == 0, "VU-rojo-abi-0002", "the root's byte offset {} is not a multiple of {}", at.offset, kRootAlignment);
 #endif
@@ -137,7 +137,7 @@ namespace rojoRHI::core {
         noteNativeCall(list);
         ROJORHI_VU(drawProblem(list, ShaderStage::Vertex, true).empty(), "VU-rojo-cmd-0025", "drawIndexed: {}", drawProblem(list, ShaderStage::Vertex, true));
 #ifndef NDEBUG
-        // The record feeds the Debug-tier check only; reading it takes the buffer pool's lock (ADR 0019).
+        // The record feeds the Debug-tier check only; reading it takes the buffer pool's lock (ADR 0020).
         const BufferRecord* buffer = list.device->pool<Buffer>().checked(indices, false);
         ROJORHI_VU(
             hasUsage(buffer->usage, BufferUsage::Index) && (uint64_t{ firstIndex } + count) * indexBytes(type) <= buffer->size,
@@ -206,7 +206,7 @@ namespace rojoRHI::core {
             list.pass.viewportSet && list.pass.scissorSet, "VU-rojo-indirect-0021", "drawIndirect: no viewport and scissor were set since the pass began"
         );
 #ifndef NDEBUG
-        // Resolving the addresses reads the buffer pool under its lock, so only the Debug tier does it (ADR 0019).
+        // Resolving the addresses reads the buffer pool under its lock, so only the Debug tier does it (ADR 0020).
         const ResolvedAddr first = resolveAddr(*list.device, list, args);
         const ResolvedAddr counted = resolveAddr(*list.device, list, count);
         const uint64_t bytes = uint64_t{ maxCount } * sizeof(DrawIndirectArgs);
@@ -245,7 +245,7 @@ namespace rojoRHI::core {
             list.pass.viewportSet && list.pass.scissorSet, "VU-rojo-indirect-0022", "drawIndexedIndirect: no viewport and scissor were set since the pass began"
         );
 #ifndef NDEBUG
-        // The records feed the Debug-tier checks only; reading them takes the buffer pool's lock (ADR 0019).
+        // The records feed the Debug-tier checks only; reading them takes the buffer pool's lock (ADR 0020).
         const BufferRecord* buffer = list.device->pool<Buffer>().checked(indices, false);
         ROJORHI_VU(
             hasUsage(buffer->usage, BufferUsage::Index),
@@ -294,7 +294,7 @@ namespace rojoRHI::core {
             list.device->capabilities().meshTasksIndirect, "VU-rojo-indirect-0013", "drawMeshTasksIndirect was recorded on a device without meshTasksIndirect"
         );
 #ifndef NDEBUG
-        // Resolving the addresses reads the buffer pool under its lock, so only the Debug tier does it (ADR 0019).
+        // Resolving the addresses reads the buffer pool under its lock, so only the Debug tier does it (ADR 0020).
         const ResolvedAddr first = resolveAddr(*list.device, list, args);
         const ResolvedAddr counted = resolveAddr(*list.device, list, count);
         const uint64_t bytes = uint64_t{ maxCount } * sizeof(DrawMeshTasksIndirectArgs);
@@ -328,7 +328,7 @@ namespace rojoRHI::core {
             dispatchProblem(list)
         );
 #ifndef NDEBUG
-        // Resolving the addresses reads the buffer pool under its lock, so only the Debug tier does it (ADR 0019).
+        // Resolving the addresses reads the buffer pool under its lock, so only the Debug tier does it (ADR 0020).
         const ResolvedAddr first = resolveAddr(*list.device, list, args);
         ROJORHI_VU(
             indirectProblem(first, sizeof(DispatchIndirectArgs)).empty(),

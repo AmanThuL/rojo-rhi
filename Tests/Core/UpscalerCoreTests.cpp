@@ -104,7 +104,7 @@ TEST_CASE("Auto on a device that lists no kind is an error", "[core]")
 TEST_CASE("an upscale stores the frame it was recorded in", "[core]")
 {
 #ifdef NDEBUG
-    SKIP("the frame stamp is a Debug-tier check (ADR 0019)");
+    SKIP("the frame stamp is a Debug-tier check (ADR 0020)");
 #endif
     UpscaleKit kit;
     kit.upscale();
