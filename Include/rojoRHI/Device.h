@@ -9,6 +9,7 @@
 #include <rojoRHI/Capabilities.h>
 #include <rojoRHI/CommandList.h>
 #include <rojoRHI/ComputePipelineDesc.h>
+#include <rojoRHI/Counters.h>
 #include <rojoRHI/DeviceDesc.h>
 #include <rojoRHI/FenceValue.h>
 #include <rojoRHI/Format.h>
@@ -203,6 +204,13 @@ namespace rojoRHI {
         /// parent before its children. The span is empty until a frame has retired, and for a frame with no scopes; the device
         /// owns it, labels included, and the next `beginFrame` invalidates it.
         std::span<const ScopeTiming> scopeTimings();
+
+        /// Returns a snapshot of the counters by value. Recording counters accumulate in each command list and fold into the
+        /// device when the list is submitted, so recording stays lock-free; creation counters increment on the creating thread.
+        /// Counts recorded on a command list reach the device only when the list is submitted, so a list that was acquired and
+        /// never submitted contributes none. A snapshot taken while other threads create objects or submit may miss their
+        /// latest increments. Free-threaded.
+        Counters counters() const;
 
         /// Starts a GPU capture of everything the device's queues execute until `endCapture`, written to the file `path`, whose
         /// extension the caller supplies for the platform. No capture started by this device is in progress

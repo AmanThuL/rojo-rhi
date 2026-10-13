@@ -114,6 +114,7 @@ namespace rojoRHI::core {
     //==================================================================================================================
     PipelineRecord prepareGraphicsPipeline(DeviceCore& core, const GraphicsPipelineDesc& desc)
     {
+        const ScopedNanoseconds timer(core.counts().pipelineCompileNanoseconds);
         PipelineRecord record;
         record.label = resolveLabel(desc.label, "rojorhi.pipeline.unnamed");
         record.kind = PipelineKind::Graphics;
@@ -149,6 +150,7 @@ namespace rojoRHI::core {
     //==================================================================================================================
     PipelineRecord prepareComputePipeline(DeviceCore& core, const ComputePipelineDesc& desc)
     {
+        const ScopedNanoseconds timer(core.counts().pipelineCompileNanoseconds);
         PipelineRecord record;
         record.label = resolveLabel(desc.label, "rojorhi.pipeline.unnamed");
         record.kind = PipelineKind::Compute;

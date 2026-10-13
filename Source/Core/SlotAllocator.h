@@ -61,7 +61,7 @@ namespace rojoRHI::core {
                 m_slots[base + i].state = SlotState::Released;
                 owners.push_back(m_slots[base + i].owner);
             }
-            m_pending.push_back(Pending{ frameOf(), base, count });
+            m_pending.push_back(Pending{ frameOf(), base, count, true });
             return owners;
         }
 
@@ -78,12 +78,13 @@ namespace rojoRHI::core {
             }
             Slot& slot = m_slots[index];
             slot.state = SlotState::Released;
-            m_pending.push_back(Pending{ frameOf(), index, 1 });
+            m_pending.push_back(Pending{ frameOf(), index, 1, false });
             return slot.owner;
         }
 
-        /// Makes every slot released at a frame up to and including `upToFrame` available for reuse.
-        void retire(uint64_t upToFrame);
+        /// Makes every slot released at a frame up to and including `upToFrame` available for reuse. Returns how many single
+        /// slots (released by `release`, not as part of a range) that made available.
+        uint64_t retire(uint64_t upToFrame);
 
         /// Returns the state of slot `index`; a slot never handed out is Free.
         SlotState state(uint32_t index);
@@ -105,6 +106,7 @@ namespace rojoRHI::core {
             uint64_t frame;
             uint32_t index;
             uint32_t count;
+            bool range; ///< True for a range, whose slots own no native object.
         };
 
         std::mutex m_mutex;

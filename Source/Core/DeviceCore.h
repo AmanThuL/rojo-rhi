@@ -5,12 +5,14 @@
 #pragma once
 
 #include <rojoRHI/Capabilities.h>
+#include <rojoRHI/Counters.h>
 #include <rojoRHI/Device.h>
 #include <rojoRHI/DeviceDesc.h>
 #include <rojoRHI/Handles.h>
 #include <rojoRHI/Result.h>
 #include <rojoRHI/ScopeTiming.h>
 
+#include "Core/Counters.h"
 #include "Core/Formats.h"
 #include "Core/FrameArena.h"
 #include "Core/HandlePool.h"
@@ -103,6 +105,13 @@ namespace rojoRHI::core {
 
         /// Returns the scopes of the frame the latest `beginFrame` waited for; the next `beginFrame` invalidates the span.
         std::span<const ScopeTiming> scopeTimings() const;
+
+        /// Returns a snapshot of the device's counters, built from relaxed loads and the pools' and arena's own tallies.
+        /// Free-threaded.
+        Counters counters() const;
+
+        /// Returns the atomic counts the core's entries and a backend increment; read them through `counters`.
+        DeviceCounts& counts() const;
 
         /// Returns the capabilities the device reports; a backend fills them in place at creation, and its views must point at
         /// storage that outlives the device.
@@ -224,6 +233,8 @@ namespace rojoRHI::core {
         std::string m_label;
         ScopeLog m_scopes;
         FrameArena m_arena;
+        /// Mutable because reading a retired frame's timings, a const call, counts a native read.
+        mutable DeviceCounts m_counts;
         /// Frame number shifted left by one, with bit zero set while that frame is open; one word so the free-threaded
         /// destroy reads a consistent pair while the frame class writes it.
         std::atomic<uint64_t> m_state = 0;

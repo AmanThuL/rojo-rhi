@@ -16,6 +16,23 @@
 #include <utility>
 
 namespace rojoRHI::core {
+    namespace {
+        //==============================================================================================================
+        /// Returns whether releasing `record` releases a native object. A swapchain image's record stands for a drawable the
+        /// backend never created, so its retirement is a deferred destruction but no native release.
+        template<typename Record> bool releasesNative(const Record&)
+        {
+            return true;
+        }
+
+        //==============================================================================================================
+        /// Returns whether releasing the texture `record` releases a native object.
+        bool releasesNative(const TextureRecord& record)
+        {
+            return !record.swapchainImage;
+        }
+    } // namespace
+
     //==================================================================================================================
     Result<void> validateDeviceDesc([[maybe_unused]] const DeviceDesc& desc)
     {
@@ -40,6 +57,13 @@ namespace rojoRHI::core {
         : m_framesInFlight(desc.framesInFlight), m_validation(desc.validation), m_label(resolveLabel(desc.label, "rojorhi.device.unnamed")),
           m_scopes(desc.framesInFlight), m_arena(desc.framesInFlight)
     {
+        std::get<HandlePool<Buffer, BufferRecord>>(m_pools).countInto(&m_counts.nativeCreateCalls, &m_counts.gpuAllocations);
+        std::get<HandlePool<Texture, TextureRecord>>(m_pools).countInto(&m_counts.nativeCreateCalls, &m_counts.gpuAllocations);
+        std::get<HandlePool<Heap, HeapRecord>>(m_pools).countInto(&m_counts.nativeCreateCalls, &m_counts.gpuAllocations);
+        std::get<HandlePool<Pipeline, PipelineRecord>>(m_pools).countInto(&m_counts.nativeCreateCalls, &m_counts.pipelinesCreated);
+        std::get<HandlePool<ShaderLibrary, ShaderLibraryRecord>>(m_pools).countInto(&m_counts.nativeCreateCalls);
+        std::get<HandlePool<Fence, FenceRecord>>(m_pools).countInto(&m_counts.nativeCreateCalls);
+        std::get<HandlePool<Upscaler, UpscalerRecord>>(m_pools).countInto(&m_counts.nativeCreateCalls);
     }
 
     //==================================================================================================================
@@ -60,10 +84,17 @@ namespace rojoRHI::core {
                     {
                         hook(m_hooks.context, record);
                     }
+                    DeviceCounts::add(m_counts.deferredRetired);
+                    if (releasesNative(record))
+                    {
+                        DeviceCounts::add(m_counts.nativeCreateCalls);
+                    }
                 });
             });
-            m_views.retire(retired);
-            m_samplers.retire(retired);
+            // A destroyed view or sampler is a native object released now; a released range owns none.
+            const uint64_t heapReleases = m_views.retire(retired) + m_samplers.retire(retired);
+            DeviceCounts::add(m_counts.deferredRetired, heapReleases);
+            DeviceCounts::add(m_counts.nativeCreateCalls, heapReleases);
             const uint32_t slot = static_cast<uint32_t>(frame % m_framesInFlight);
             // The slot's scopes leave the arena pages their labels live in before the rewind makes the pages claimable.
             m_scopes.retire(slot, retired);
@@ -103,7 +134,18 @@ namespace rojoRHI::core {
         {
             std::apply(
                 [](auto&... pools) {
-                    (pools.forEachLive([](const auto& record) { ROJORHI_LOG_WARN("object \"{}\" is still live at device destruction", record.label); }), ...);
+                    (pools.forEachLive([](const auto& record) {
+                        // An acquired swapchain image is the swapchain's: the caller cannot destroy it, and the swapchain warns.
+                        if constexpr (requires { record.swapchainImage; })
+                        {
+                            if (record.swapchainImage)
+                            {
+                                return;
+                            }
+                        }
+                        ROJORHI_LOG_WARN("object \"{}\" is still live at device destruction", record.label);
+                    }),
+                     ...);
                 },
                 m_pools
             );
@@ -222,7 +264,49 @@ namespace rojoRHI::core {
     //==================================================================================================================
     std::span<const ScopeTiming> DeviceCore::scopeTimings() const
     {
-        return m_scopes.report();
+        const std::span<const ScopeTiming> report = m_scopes.report();
+        if (!report.empty())
+        {
+            // The backend reads the timestamps of the retired frame's scopes from its counter heap.
+            DeviceCounts::add(m_counts.nativeHostCalls);
+        }
+        return report;
+    }
+
+    //==================================================================================================================
+    DeviceCounts& DeviceCore::counts() const
+    {
+        return m_counts;
+    }
+
+    //==================================================================================================================
+    Counters DeviceCore::counters() const
+    {
+        Counters counters;
+        // Every creation count is its own atomic, so a snapshot is plain relaxed loads: no lock and no difference of two reads.
+        counters.nativeCreateCalls = DeviceCounts::read(m_counts.nativeCreateCalls);
+        counters.nativeRecordCalls = DeviceCounts::read(m_counts.nativeRecordCalls);
+        counters.nativeSubmitCalls = DeviceCounts::read(m_counts.nativeSubmitCalls);
+        counters.nativeHostCalls = DeviceCounts::read(m_counts.nativeHostCalls);
+        counters.cpuAllocations = DeviceCounts::read(m_counts.cpuAllocations);
+        // Frame-arena pages are buffers of the pool, so they are counted with the buffers.
+        counters.gpuAllocations = DeviceCounts::read(m_counts.gpuAllocations);
+        counters.frameDataUploads = DeviceCounts::read(m_counts.frameDataUploads);
+        counters.frameArenaBytes = DeviceCounts::read(m_counts.frameArenaBytes);
+        counters.frameArenaGrowths = m_arena.growths();
+        counters.descriptorWrites = DeviceCounts::read(m_counts.descriptorWrites);
+        counters.globalBarriers = DeviceCounts::read(m_counts.globalBarriers);
+        counters.bufferBarriers = DeviceCounts::read(m_counts.bufferBarriers);
+        counters.textureBarriers = DeviceCounts::read(m_counts.textureBarriers);
+        counters.nativeBarriers = DeviceCounts::read(m_counts.nativeBarriers);
+        counters.pipelinesCreated = DeviceCounts::read(m_counts.pipelinesCreated);
+        // No backend has a pipeline cache of its own yet, so every creation is a miss.
+        counters.pipelineCacheHits = 0;
+        counters.pipelineCacheMisses = counters.pipelinesCreated;
+        counters.pipelineCompileNanoseconds = DeviceCounts::read(m_counts.pipelineCompileNanoseconds);
+        counters.encodersOpened = DeviceCounts::read(m_counts.encodersOpened);
+        counters.deferredDestructionsRetired = DeviceCounts::read(m_counts.deferredRetired);
+        return counters;
     }
 
     //==================================================================================================================

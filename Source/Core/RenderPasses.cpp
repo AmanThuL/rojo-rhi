@@ -191,6 +191,7 @@ namespace rojoRHI::core {
     void beginPass(CommandListCore& list, const RenderPassDesc& desc)
     {
         checkRecording(list);
+        noteNativeCall(list);
         ROJORHI_VU(list.type == QueueType::Graphics, "VU-rojo-cmd-0016", "beginRenderPass was recorded on the non-Graphics list \"{}\"", list.label);
         ROJORHI_VU(!list.passOpen, "VU-rojo-cmd-0016", "beginRenderPass was recorded on the list \"{}\" with a render pass already open", list.label);
         DeviceCore& core = *list.device;
@@ -246,6 +247,7 @@ namespace rojoRHI::core {
         pass.area = desc.area;
         list.pass = std::move(pass);
         list.pipeline = {};
+        ++list.counts.encodersOpened;
         recordScope(list, desc.label, "rojorhi.pass.unnamed", static_cast<uint32_t>(list.scopes.size()));
         list.passScopeBase = list.scopes.size();
         list.passOpen = true;
@@ -255,6 +257,7 @@ namespace rojoRHI::core {
     void endPass(CommandListCore& list)
     {
         checkRecording(list);
+        noteNativeCall(list);
         ROJORHI_VU(list.passOpen, "VU-rojo-cmd-0018", "endRenderPass was recorded on the list \"{}\" with no render pass open", list.label);
         ROJORHI_VU(
             list.scopes.size() == list.passScopeBase,
@@ -271,6 +274,7 @@ namespace rojoRHI::core {
     void beginScope(CommandListCore& list, std::string_view label)
     {
         checkRecording(list);
+        noteNativeCall(list);
         // A scope inside a pass is a child of the pass's own scope.
         recordScope(list, label, "rojorhi.scope.unnamed", static_cast<uint32_t>(list.scopes.size() + (list.passOpen ? 1 : 0)));
         list.scopes.push_back(list.passOpen);
@@ -280,6 +284,7 @@ namespace rojoRHI::core {
     void endScope(CommandListCore& list)
     {
         checkRecording(list);
+        noteNativeCall(list);
         ROJORHI_VU(!list.scopes.empty(), "VU-rojo-cmd-0032", "endScope was recorded on the list \"{}\" with no scope open", list.label);
         ROJORHI_VU(
             list.scopes.back() == list.passOpen,
@@ -295,6 +300,7 @@ namespace rojoRHI::core {
     void bindPipeline(CommandListCore& list, [[maybe_unused]] Pipeline pipeline)
     {
         checkRecording(list);
+        noteNativeCall(list);
 #ifndef NDEBUG
         // The record feeds the Debug-tier checks and the bound state they compare against; reading it takes the pipeline
         // pool's lock, which Release recording never does (ADR 0019).
@@ -329,6 +335,7 @@ namespace rojoRHI::core {
     void setViewport(CommandListCore& list, [[maybe_unused]] const Viewport& viewport)
     {
         checkRecording(list);
+        noteNativeCall(list);
         ROJORHI_VU(list.passOpen, "VU-rojo-pipeline-0015", "setViewport was recorded outside a render pass");
         ROJORHI_VU(viewport.width > 0.0f && viewport.height > 0.0f, "VU-rojo-pipeline-0016", "the viewport is {} by {}", viewport.width, viewport.height);
         ROJORHI_VU(
@@ -345,6 +352,7 @@ namespace rojoRHI::core {
     void setScissor(CommandListCore& list, [[maybe_unused]] const Rect2D& rect)
     {
         checkRecording(list);
+        noteNativeCall(list);
         ROJORHI_VU(list.passOpen, "VU-rojo-pipeline-0018", "setScissor was recorded outside a render pass");
         [[maybe_unused]] const Rect2D& area = list.pass.area;
         ROJORHI_VU(
@@ -368,6 +376,7 @@ namespace rojoRHI::core {
     void setStencilReference(CommandListCore& list)
     {
         checkRecording(list);
+        noteNativeCall(list);
         ROJORHI_VU(list.passOpen, "VU-rojo-pipeline-0020", "setStencilReference was recorded outside a render pass");
     }
 
@@ -375,6 +384,7 @@ namespace rojoRHI::core {
     void setBlendConstants(CommandListCore& list)
     {
         checkRecording(list);
+        noteNativeCall(list);
         ROJORHI_VU(list.passOpen, "VU-rojo-pipeline-0021", "setBlendConstants was recorded outside a render pass");
     }
 
@@ -399,6 +409,7 @@ namespace rojoRHI::core {
     void setDepthBias(CommandListCore& list)
     {
         checkRecording(list);
+        noteNativeCall(list);
         ROJORHI_VU(list.passOpen, "VU-rojo-pipeline-0024", "setDepthBias was recorded outside a render pass");
         ROJORHI_VU(
             list.pipeline.bound && list.pipeline.kind == PipelineKind::Graphics && list.pipeline.depthBias,

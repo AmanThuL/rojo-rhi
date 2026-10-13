@@ -49,6 +49,8 @@ namespace rojoRHI::core {
     //==================================================================================================================
     void checkSubmit(DeviceCore& core, std::span<const FenceValue> wait, std::span<const FenceValue> signal)
     {
+        // One native submission and one native call for each wait and signal it carries.
+        DeviceCounts::add(core.counts().nativeSubmitCalls, 1 + wait.size() + signal.size());
         for (const FenceValue& entry : wait)
         {
             [[maybe_unused]] const FenceRecord record = snapshot(core, entry.fence);
@@ -117,6 +119,7 @@ namespace rojoRHI::core {
     //==================================================================================================================
     uint64_t completedValue(DeviceCore& core, Fence fence)
     {
+        DeviceCounts::add(core.counts().nativeHostCalls);
         return snapshot(core, fence).completed;
     }
 

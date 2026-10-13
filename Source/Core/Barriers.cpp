@@ -231,13 +231,19 @@ namespace rojoRHI::core {
 
     //==================================================================================================================
     void barrier(
-        CommandListCore& list,
-        [[maybe_unused]] std::span<const GlobalBarrier> globals,
-        [[maybe_unused]] std::span<const BufferBarrier> buffers,
-        [[maybe_unused]] std::span<const TextureBarrier> textures
+        CommandListCore& list, std::span<const GlobalBarrier> globals, std::span<const BufferBarrier> buffers, std::span<const TextureBarrier> textures
     )
     {
         checkRecording(list);
+        if (!globals.empty() || !buffers.empty() || !textures.empty())
+        {
+            // The records of one call batch into one native barrier command.
+            list.counts.globalBarriers += globals.size();
+            list.counts.bufferBarriers += buffers.size();
+            list.counts.textureBarriers += textures.size();
+            ++list.counts.nativeBarriers;
+            noteNativeCall(list);
+        }
         ROJORHI_VU(!list.passOpen, "VU-rojo-sync-0019", "a barrier was recorded on the list \"{}\" inside a render pass", list.label);
 #ifndef NDEBUG
         // The loops only feed Debug-tier checks, and reading a record takes its pool's lock (ADR 0019).

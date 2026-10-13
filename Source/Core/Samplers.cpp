@@ -51,6 +51,8 @@ namespace rojoRHI::core {
         {
             return std::unexpected(Error{ ErrorCategory::OutOfMemory, std::format("the sampler heap of {} slots is full", core.capabilities().maxSamplers) });
         }
+        DeviceCounts::add(core.counts().descriptorWrites);
+        DeviceCounts::add(core.counts().nativeCreateCalls);
         return static_cast<SamplerIndex>(*slot);
     }
 
@@ -67,7 +69,7 @@ namespace rojoRHI::core {
     }
 
     //==================================================================================================================
-    void checkSamplerWrite([[maybe_unused]] DeviceCore& core, [[maybe_unused]] IndexRange range, [[maybe_unused]] uint32_t index, const SamplerDesc& desc)
+    void checkSamplerWrite(DeviceCore& core, [[maybe_unused]] IndexRange range, [[maybe_unused]] uint32_t index, const SamplerDesc& desc)
     {
         ROJORHI_VU(
             range.kind == IndexRange::Kind::Samplers && index < range.count,
@@ -92,5 +94,6 @@ namespace rojoRHI::core {
             range.base
         );
         (void)resolveLabel(desc.label, "rojorhi.sampler.unnamed");
+        DeviceCounts::add(core.counts().descriptorWrites);
     }
 } // namespace rojoRHI::core
