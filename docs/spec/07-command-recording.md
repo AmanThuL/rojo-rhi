@@ -66,8 +66,9 @@ CommandList Device::acquireCommandList(QueueType type, std::string_view label); 
 ```
 
 Returns a command list in the recording state from the open frame's pool. The list belongs to that
-frame: it returns to the pool when the frame retires, and its handle is invalid afterwards. The
-call is free-threaded. The label defaults to the `rojorhi.` prefix
+frame: it returns to the pool when the frame retires, and its handle is valid until then. A use of
+the handle afterwards is undefined behaviour that no tier detects, since the pool may hand the same
+list out again. The call is free-threaded. The label defaults to the `rojorhi.` prefix
 ([fundamentals](01-fundamentals.md)). Every list acquired in a frame is ended and submitted before
 that frame's `Device::endFrame`, as `VU-rojo-device-0005` of
 [`Device::endFrame`](02-device.md#deviceendframe) requires.
@@ -98,6 +99,8 @@ list records nothing further and is ready for `Queue::submit`.
 - `VU-rojo-cmd-0002` The list is recording: `end` has not been called on it.
 - `VU-rojo-cmd-0003` No render pass is open; a render pass begins and ends in one list.
 - `VU-rojo-cmd-0004` Every scope begun on the list has ended.
+- `VU-rojo-cmd-0063` Every command other than `end` is recorded on a list that is recording: `end`
+  has not been called on it.
 
 #### Mapping
 
@@ -166,10 +169,13 @@ mip 0 and layer 0. 3D textures are not attachments in 0.1.0.
 
 - `VU-rojo-cmd-0005` `texture` was created with `TextureUsage::RenderTarget`, is not a 3D texture,
   and `mip` and `layer` lie within it.
-- `VU-rojo-cmd-0006` A non-null `resolve` requires `texture` to have more than one sample, and is
-  a single-sample `RenderTarget` texture of the same format and of the extent of `texture` at
-  `mip`, whose format capabilities report `resolve`
-  ([formats and limits](15-formats-and-limits.md)).
+- `VU-rojo-cmd-0006` Retired in 0.1.0: A non-null `resolve` requires `texture` to have more than
+  one sample, and is a single-sample `RenderTarget` texture of the same format and of the extent of
+  `texture` at `mip`, whose format capabilities report `resolve`. The capability is
+  `VU-rojo-format-0003` ([formats and limits](15-formats-and-limits.md)); the rest is
+  `VU-rojo-cmd-0071`.
+- `VU-rojo-cmd-0071` A non-null `resolve` requires `texture` to have more than one sample, and is
+  a single-sample `RenderTarget` texture of the same format and of the extent of `texture` at `mip`.
 - `VU-rojo-cmd-0007` At `beginRenderPass`, the subresource and the resolve target are in
   `Layout::ColorAttachment` ([synchronization](09-synchronization.md)). Checked by the validation
   tracker.
@@ -236,7 +242,7 @@ Metal 4 and D3D12 render passes carry no render area.
 - `VU-rojo-cmd-0014` No subresource appears twice among the attachments and resolve targets.
 - `VU-rojo-cmd-0015` The color attachments' formats together take at most
   `Limits::maxColorBytesPerSample` bytes per sample, counted as
-  [limits](15-formats-and-limits-part2.md#limits) defines.
+  [limits](15-formats-and-limits-part2.md#limits) defines: the sum of each format's bytes per texel.
 
 #### Mapping
 

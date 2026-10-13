@@ -28,7 +28,10 @@ namespace rojoRHI::core {
         Memory memory = Memory::Gpu;           ///< The memory class.
         BufferUsage usage = BufferUsage::None; ///< The usage flags.
         Heap heap = {};                        ///< The heap the buffer is placed in; null for a dedicated allocation.
-        void* native = nullptr;                ///< The backend's payload for the object; the core never reads it.
+        /// For a frame-arena page, the frame of the list that claimed it last; zero for any other buffer. It changes under
+        /// the pool's lock when a list claims the page (VU-rojo-buffer-0020).
+        uint64_t arenaFrame = 0;
+        void* native = nullptr; ///< The backend's payload for the object; the core never reads it.
     };
 
     /// What the core keeps about one live Texture: its description and how many view slots hold a view of it; later parts add

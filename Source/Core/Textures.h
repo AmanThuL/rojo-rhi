@@ -21,6 +21,9 @@
 #include <span>
 
 namespace rojoRHI::core {
+    /// Returns the extent of mip `mip` of a texture whose mip 0 is `extent`, in texels and never below one.
+    Extent3D mipExtent(const Extent3D& extent, uint32_t mip);
+
     /// Checks a texture description (VU-rojo-texture-0001 to 0012, VU-rojo-format-0003, VU-rojo-format-0004) against the
     /// device's limits, capabilities and format table; the one site of those rules, shared by creation and by the placement
     /// query.

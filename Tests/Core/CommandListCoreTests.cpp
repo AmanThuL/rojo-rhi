@@ -6,10 +6,14 @@
 
 #include "Core/CommandLists.h"
 #include "Core/DeviceCore.h"
+#include "Support/PassKit.h"
 
 #include <catch2/catch_test_macros.hpp>
 
 #include <array>
+#include <cstddef>
+#include <cstdint>
+#include <vector>
 
 using namespace rojoRHI;
 
@@ -35,7 +39,7 @@ TEST_CASE("an acquired list records its type, frame and label and is recording",
     CHECK(state.label == "test.list");
     CHECK(state.state == core::ListState::Recording);
     CHECK_FALSE(state.passOpen);
-    CHECK(state.openScopes == 0);
+    CHECK(state.scopes.empty());
     submit(device, list, QueueType::Compute);
     device.endFrame();
     destroyDevice(device);
@@ -96,6 +100,44 @@ TEST_CASE("a list is reused when its frame slot is reused and not before", "[cor
 }
 
 //======================================================================================================================
+TEST_CASE("a reused list starts empty and keeps the capacity of its scope stack", "[core]")
+{
+    Device device = *createDevice(DeviceDesc{ .framesInFlight = 2 });
+    device.beginFrame();
+    CommandList first = device.acquireCommandList(QueueType::Graphics, "frame1");
+    for (int i = 0; i < 8; ++i)
+    {
+        first.beginScope("scope");
+    }
+    for (int i = 0; i < 8; ++i)
+    {
+        first.endScope();
+    }
+    const std::array<std::byte, 16> bytes = {};
+    (void)first.uploadFrameData(bytes);
+    const size_t capacity = core::coreOf(first).scopes.capacity();
+    submit(device, first);
+    device.endFrame();
+    for (uint64_t frame = 2; frame <= 3; ++frame)
+    {
+        device.beginFrame();
+        CommandList list = device.acquireCommandList(QueueType::Graphics, "next");
+        if (frame == 3)
+        {
+            const core::CommandListCore& state = core::coreOf(list);
+            CHECK(state.scopes.empty());
+            CHECK(state.scopes.capacity() == capacity);
+            CHECK(state.page.host == nullptr);
+            CHECK(state.pageUsed == 0);
+            CHECK(state.label == "next");
+        }
+        submit(device, list);
+        device.endFrame();
+    }
+    destroyDevice(device);
+}
+
+//======================================================================================================================
 TEST_CASE("a slot hands out distinct lists within one frame", "[core]")
 {
     Device device = *createDevice();
@@ -124,4 +166,60 @@ TEST_CASE("the frame arena counts its pages", "[core]")
     submit(device, list);
     device.endFrame();
     destroyDevice(device);
+}
+
+//======================================================================================================================
+TEST_CASE("a render pass records its attachments, a pipeline its fields in Debug, and both clear when the pass ends", "[core]")
+{
+    test::PassKit kit;
+    const std::array<ColorAttachment, 1> colors{ ColorAttachment{ .texture = kit.target(Format::RGBA16Float, 4) } };
+    kit.list.beginRenderPass(test::fullPass(colors));
+    const core::CommandListCore& state = core::coreOf(kit.list);
+    CHECK(state.passOpen);
+    CHECK(state.pass.area.width == test::PassKit::kSize);
+#ifndef NDEBUG
+    // The attachments' formats and samples and the pipeline's fields feed the Debug-tier checks; a Release build reads no
+    // record to fill them (ADR 0019).
+    CHECK(state.pass.colors == std::vector<Format>{ Format::RGBA16Float });
+    CHECK(state.pass.samples == 4);
+#else
+    CHECK(state.pass.colors.empty());
+#endif
+    CHECK(state.pass.depthFormat == Format::Undefined);
+    CHECK_FALSE(state.pipeline.bound);
+    kit.list.setViewport({ .width = 1.0f, .height = 1.0f });
+    CHECK(state.pass.viewportSet);
+    CHECK_FALSE(state.pass.scissorSet);
+    constexpr std::array<Format, 1> formats = { Format::RGBA16Float };
+    kit.list.setPipeline(kit.graphics(formats, Format::Undefined, 4, PrimitiveClass::Line, true));
+#ifndef NDEBUG
+    CHECK(state.pipeline.bound);
+    CHECK(state.pipeline.primitive == PrimitiveClass::Line);
+    CHECK(state.pipeline.depthBias);
+#else
+    CHECK_FALSE(state.pipeline.bound);
+#endif
+    kit.list.endRenderPass();
+    CHECK_FALSE(state.passOpen);
+    CHECK_FALSE(state.pipeline.bound);
+    kit.beginSimplePass();
+    CHECK_FALSE(state.pass.viewportSet);
+    kit.list.endRenderPass();
+    kit.finish();
+}
+
+//======================================================================================================================
+TEST_CASE("scopes record which side of a pass each began on", "[core]")
+{
+    test::PassKit kit;
+    const core::CommandListCore& state = core::coreOf(kit.list);
+    kit.list.beginScope("outside");
+    kit.beginSimplePass();
+    kit.list.beginScope("inside");
+    CHECK(state.scopes == std::vector<bool>{ false, true });
+    kit.list.endScope();
+    kit.list.endRenderPass();
+    kit.list.endScope();
+    CHECK(state.scopes.empty());
+    kit.finish();
 }

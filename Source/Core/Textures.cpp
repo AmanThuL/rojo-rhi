@@ -62,13 +62,6 @@ namespace rojoRHI::core {
         }
 
         //==============================================================================================================
-        /// The extent of mip `mip` in texels, never below one.
-        [[maybe_unused]] Extent3D mipExtent(const Extent3D& extent, uint32_t mip)
-        {
-            return Extent3D{ std::max(extent.width >> mip, 1u), std::max(extent.height >> mip, 1u), std::max(extent.depth >> mip, 1u) };
-        }
-
-        //==============================================================================================================
         /// Stores `a * b` in `product` and returns true, or returns false when it does not fit 64 bits.
         [[maybe_unused]] bool multiply(uint64_t a, uint64_t b, uint64_t& product)
         {
@@ -286,6 +279,12 @@ namespace rojoRHI::core {
             );
         }
     } // namespace
+
+    //==================================================================================================================
+    Extent3D mipExtent(const Extent3D& extent, uint32_t mip)
+    {
+        return Extent3D{ std::max(extent.width >> mip, 1u), std::max(extent.height >> mip, 1u), std::max(extent.depth >> mip, 1u) };
+    }
 
     //==================================================================================================================
     void checkTextureDesc([[maybe_unused]] const DeviceCore& core, [[maybe_unused]] const TextureDesc& desc)

@@ -4,6 +4,7 @@
 //----------------------------------------------------------------------------------------------------------------------
 #include <rojoRHI/RHI.h>
 
+#include "Core/Addresses.h"
 #include "Core/DeviceCore.h"
 
 #include <catch2/catch_test_macros.hpp>
@@ -152,4 +153,12 @@ TEST_CASE("host memory is freed when the frame that released the buffer retires"
     CHECK(spy.seen[0].second);
     device.endFrame();
     destroyDevice(device);
+}
+
+//======================================================================================================================
+TEST_CASE("the Null decode of an address is its buffer's slot index and its byte offset", "[null]")
+{
+    const core::DecodedAddr decoded = core::decodeAddr(Addr{ 7, 4096 });
+    CHECK(decoded.slot == 7);
+    CHECK(decoded.offset == 4096);
 }

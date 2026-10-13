@@ -220,3 +220,18 @@ TEST_CASE("VU-rojo-buffer-0017 frame data is uploaded after the frame ended", "[
         (void)list.uploadFrameData(kBytes);
     });
 }
+
+//======================================================================================================================
+TEST_CASE("VU-rojo-cmd-0063 a submitted list records in the next frame", "[contract][death]")
+{
+    ROJORHI_EXPECT_DEATH("VU-rojo-cmd-0063", [] {
+        Device device = *createDevice();
+        device.beginFrame();
+        CommandList list = device.acquireCommandList(QueueType::Graphics, "test.list");
+        list.end();
+        submit(device, list);
+        device.endFrame();
+        device.beginFrame();
+        (void)list.uploadFrameData(kBytes);
+    });
+}

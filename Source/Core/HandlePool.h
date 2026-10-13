@@ -13,6 +13,7 @@
 #include <cstdint>
 #include <deque>
 #include <mutex>
+#include <optional>
 #include <utility>
 #include <vector>
 
@@ -70,6 +71,13 @@ namespace rojoRHI::core {
     {
         LookupStatus status = LookupStatus::Null; ///< Which rule failed, or Ok.
         Record* record = nullptr;                 ///< The slot's record when the status is Ok, otherwise null.
+    };
+
+    /// The live slot a slot index names: the handle that names it now and its record.
+    template<typename Handle, typename Record> struct LiveSlot
+    {
+        Handle handle;  ///< The handle that names the slot at its current generation.
+        Record* record; ///< The slot's record.
     };
 
     /// One pool of slots for one handle type. A handle packs a 32-bit slot index, a 24-bit generation and an 8-bit type
@@ -200,6 +208,18 @@ namespace rojoRHI::core {
         {
             std::lock_guard lock(mutex_);
             return find(handle);
+        }
+
+        /// Finds the live slot at `index`, whatever generation it holds, for a backend whose values carry a slot index and no
+        /// generation; empty for slot zero, an index past the pool and a slot that is not live.
+        std::optional<LiveSlot<Handle, Record>> liveAt(uint32_t index)
+        {
+            std::lock_guard lock(mutex_);
+            if (index == 0 || index >= slots_.size() || !slots_[index].live)
+            {
+                return std::nullopt;
+            }
+            return LiveSlot<Handle, Record>{ Handle{ pack(index, slots_[index].generation) }, &slots_[index].record };
         }
 
         /// Looks `handle` up and issues VU-rojo-core-0001, 0002 or 0003 when it breaks a rule; a null handle passes when
