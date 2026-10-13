@@ -105,6 +105,15 @@ namespace rojoRHI {
             std::free(record.native);
             record.native = nullptr;
         }
+
+        //==============================================================================================================
+        /// Returns the command lists of a reused frame slot to its pool.
+        void returnSlotLists(void* context, uint32_t slot)
+        {
+            ListPool& pool = static_cast<DeviceImpl*>(context)->listPools[slot];
+            std::lock_guard lock(pool.mutex);
+            pool.used = 0;
+        }
     } // namespace
 
     //==================================================================================================================
@@ -153,6 +162,7 @@ namespace rojoRHI {
         core::RetireHooks hooks;
         hooks.context = impl.get();
         hooks.buffer = retireBuffer;
+        hooks.frameSlot = returnSlotLists;
         impl->core.setRetireHooks(hooks);
         return DeviceImpl::wrap(impl.release());
     }

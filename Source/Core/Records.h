@@ -145,6 +145,9 @@ namespace rojoRHI::core {
         RetireFn<HeapRecord> heap = nullptr;                   ///< Releases a retiring Heap.
         RetireFn<FenceRecord> fence = nullptr;                 ///< Releases a retiring Fence.
         RetireFn<UpscalerRecord> upscaler = nullptr;           ///< Releases a retiring Upscaler.
+        /// Called when `beginFrame` reuses frame slot `slot`, after the slot's pools retired: the backend returns what it
+        /// pooled for that slot, such as its command lists. Null when the backend pools nothing per slot.
+        void (*frameSlot)(void* context, uint32_t slot) = nullptr;
 
         /// Returns the hook for `Handle`, which may be null.
         template<typename Handle> RetireFn<RecordFor<Handle>> forType() const

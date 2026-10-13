@@ -4,14 +4,19 @@
 //----------------------------------------------------------------------------------------------------------------------
 #pragma once
 
+#include <rojoRHI/CommandList.h>
 #include <rojoRHI/Device.h>
 #include <rojoRHI/Queue.h>
 #include <rojoRHI/QueueType.h>
 
+#include "Core/CommandLists.h"
 #include "Core/DeviceCore.h"
 
 #include <array>
 #include <cstdint>
+#include <memory>
+#include <mutex>
+#include <vector>
 
 namespace rojoRHI {
     /// The Null device's `Limits::maxAddrOffset`: the 32-bit byte offset an address carries in its `hi` word, 2^32 - 1.
@@ -33,6 +38,26 @@ namespace rojoRHI {
         static Queue wrap(QueueImpl* impl);
     };
 
+    /// The Null backend's command list: the core's recording state and the device that owns it. Commands are not stored.
+    struct CommandListImpl
+    {
+        core::CommandListCore core; ///< The state machine the recording rules read, and the device that acquired the list.
+
+        /// Returns the state `list` wraps; checks VU-rojo-core-0004.
+        static CommandListImpl& of(CommandList list);
+
+        /// Returns the list handle that wraps `impl`.
+        static CommandList wrap(CommandListImpl* impl);
+    };
+
+    /// The command lists of one frame slot: those taken since the slot was reused come first and the rest wait to be reused.
+    struct ListPool
+    {
+        std::mutex mutex;                                    ///< Guards the pool, because acquisition is free-threaded.
+        std::vector<std::unique_ptr<CommandListImpl>> lists; ///< Every list the slot ever needed.
+        size_t used = 0;                                     ///< How many of `lists` the open frame has taken.
+    };
+
     /// The Null backend's device: the shared core, which also keeps the capabilities it reports. It renders nothing.
     struct DeviceImpl
     {
@@ -48,6 +73,7 @@ namespace rojoRHI {
 
         core::DeviceCore core;                ///< Frame bookkeeping, pools, labels, capabilities and the format table.
         std::array<QueueImpl, 3> queues = {}; ///< One queue per `QueueType`, indexed by its value.
+        std::array<ListPool, 3> listPools;    ///< One list pool per frame slot; a device uses its first `framesInFlight`.
 
         /// Returns the state `device` wraps; checks VU-rojo-core-0004.
         static DeviceImpl& of(Device device);

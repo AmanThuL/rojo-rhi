@@ -19,7 +19,7 @@ namespace rojoRHI::core {
         /// free-threaded reader never sees a record a submission is changing.
         FenceRecord snapshot(DeviceCore& core, Fence fence)
         {
-            FenceRecord* found = core.pool<Fence>().checked(fence, false);
+            [[maybe_unused]] FenceRecord* found = core.pool<Fence>().checked(fence, false);
             ROJORHI_INTERNAL_ASSERT(found != nullptr, "a checked lookup that does not allow null returned null");
             FenceRecord copy;
             core.pool<Fence>().update(fence, [&](FenceRecord& record) { copy = record; });
@@ -47,9 +47,7 @@ namespace rojoRHI::core {
     }
 
     //==================================================================================================================
-    void checkSubmit(
-        DeviceCore& core, [[maybe_unused]] std::span<const CommandList> lists, std::span<const FenceValue> wait, std::span<const FenceValue> signal
-    )
+    void checkSubmit(DeviceCore& core, std::span<const FenceValue> wait, std::span<const FenceValue> signal)
     {
         for (const FenceValue& entry : wait)
         {

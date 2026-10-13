@@ -4,7 +4,6 @@
 //----------------------------------------------------------------------------------------------------------------------
 #pragma once
 
-#include <rojoRHI/CommandList.h>
 #include <rojoRHI/FenceValue.h>
 #include <rojoRHI/Handles.h>
 
@@ -20,9 +19,9 @@ namespace rojoRHI::core {
     /// no native payload. A backend calls it first in `createFence`.
     FenceRecord prepareFence(uint64_t initial, std::string_view label);
 
-    /// Checks a submission before a backend runs it (VU-rojo-queue-0003, VU-rojo-queue-0007, VU-rojo-core-0001 to 0003 for each
-    /// fence) and changes nothing. A backend calls it first in `Queue::submit`.
-    void checkSubmit(DeviceCore& core, std::span<const CommandList> lists, std::span<const FenceValue> wait, std::span<const FenceValue> signal);
+    /// Checks the fences of a submission before a backend runs it (VU-rojo-queue-0003, VU-rojo-queue-0007, VU-rojo-core-0001 to
+    /// 0003 for each fence) and changes nothing. A backend calls it in `Queue::submit` after `submitLists`.
+    void checkSubmit(DeviceCore& core, std::span<const FenceValue> wait, std::span<const FenceValue> signal);
 
     /// Whether a backend's work completes within the submission call or later, through `completeFence`.
     enum class SignalCompletion
