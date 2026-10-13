@@ -330,7 +330,8 @@ namespace rojoRHI::core {
                 record.label
             );
         }
-        list.pipeline = BoundPipeline{ true, record.kind, record.stages, record.primitive, record.depthBias };
+        list.pipeline =
+            BoundPipeline{ true, record.kind, record.stages, record.primitive, record.depthBias, record.blendMask, record.depthWrite, record.stencilWrite };
 #endif
     }
 

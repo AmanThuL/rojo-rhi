@@ -319,3 +319,47 @@ TEST_CASE("copies and clears name subresources by mip and layer, each in its own
     kit.finish();
 #endif
 }
+
+//======================================================================================================================
+TEST_CASE("a pass with color, depth and resolve attachments in the layouts they need is accepted", "[contract]")
+{
+#ifdef NDEBUG
+    SKIP("validation exists only in a Debug build");
+#else
+    PassKit kit(QueueType::Graphics, true);
+    const Texture multisampled = kit.target(Format::RGBA8Unorm, 4);
+    const Texture resolve = kit.target();
+    const Texture depth = kit.depthTarget(Format::D32Float, 4);
+    move(kit.list, multisampled, Layout::Undefined, Layout::ColorAttachment);
+    move(kit.list, resolve, Layout::Undefined, Layout::ColorAttachment);
+    move(kit.list, depth, Layout::Undefined, Layout::DepthStencilWrite);
+    const std::array<ColorAttachment, 1> colors{ ColorAttachment{ .texture = multisampled, .resolve = resolve } };
+    RenderPassDesc desc = test::fullPass(colors);
+    desc.depth = DepthAttachment{ .texture = depth };
+    kit.list.beginRenderPass(desc);
+    kit.list.endRenderPass();
+    kit.finish();
+#endif
+}
+
+//======================================================================================================================
+TEST_CASE("a pass on mip 1 and layer 1 needs only that subresource in ColorAttachment", "[contract]")
+{
+#ifdef NDEBUG
+    SKIP("validation exists only in a Debug build");
+#else
+    PassKit kit(QueueType::Graphics, true);
+    const Texture texture = kit.target(Format::RGBA8Unorm, 1, 2, 2);
+    const std::array<TextureBarrier, 1> barriers{ TextureBarrier{ .texture = texture,
+                                                                  .range = { .baseMip = 1, .mipCount = 1, .baseLayer = 1, .layerCount = 1 },
+                                                                  .srcStage = Stage::All,
+                                                                  .dstStage = Stage::All,
+                                                                  .oldLayout = Layout::Undefined,
+                                                                  .newLayout = Layout::ColorAttachment } };
+    kit.list.barrier({}, {}, barriers);
+    const std::array<ColorAttachment, 1> colors{ ColorAttachment{ .texture = texture, .mip = 1, .layer = 1 } };
+    kit.list.beginRenderPass(RenderPassDesc{ .colors = colors, .area = { 0, 0, 32, 32 }, .label = "test.pass" });
+    kit.list.endRenderPass();
+    kit.finish();
+#endif
+}

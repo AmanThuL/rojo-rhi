@@ -233,3 +233,49 @@ TEST_CASE("VU-rojo-cmd-0054 only mip 1 of layer 1 of the destination is in the w
         kit.finish();
     });
 }
+
+//======================================================================================================================
+TEST_CASE("VU-rojo-cmd-0007 a color attachment is not in ColorAttachment", "[contract][death]")
+{
+    ROJORHI_EXPECT_DEATH("VU-rojo-cmd-0007", [] {
+        PassKit kit(QueueType::Graphics, true);
+        // The target stays in Undefined.
+        const std::array<ColorAttachment, 1> colors{ ColorAttachment{ .texture = kit.target() } };
+        kit.list.beginRenderPass(test::fullPass(colors));
+        kit.list.endRenderPass();
+        kit.finish();
+    });
+}
+
+//======================================================================================================================
+TEST_CASE("VU-rojo-cmd-0007 a resolve target is not in ColorAttachment", "[contract][death]")
+{
+    ROJORHI_EXPECT_DEATH("VU-rojo-cmd-0007", [] {
+        PassKit kit(QueueType::Graphics, true);
+        const Texture multisampled = kit.target(Format::RGBA8Unorm, 4);
+        const Texture resolve = kit.target();
+        move(kit.list, multisampled, Layout::Undefined, Layout::ColorAttachment);
+        // The resolve target stays in Undefined.
+        const std::array<ColorAttachment, 1> colors{ ColorAttachment{ .texture = multisampled, .resolve = resolve } };
+        kit.list.beginRenderPass(test::fullPass(colors));
+        kit.list.endRenderPass();
+        kit.finish();
+    });
+}
+
+//======================================================================================================================
+TEST_CASE("VU-rojo-cmd-0010 a depth attachment is not in DepthStencilWrite", "[contract][death]")
+{
+    ROJORHI_EXPECT_DEATH("VU-rojo-cmd-0010", [] {
+        PassKit kit(QueueType::Graphics, true);
+        const Texture color = kit.target();
+        move(kit.list, color, Layout::Undefined, Layout::ColorAttachment);
+        // The depth texture stays in Undefined.
+        const std::array<ColorAttachment, 1> colors{ ColorAttachment{ .texture = color } };
+        RenderPassDesc desc = test::fullPass(colors);
+        desc.depth = DepthAttachment{ .texture = kit.depthTarget() };
+        kit.list.beginRenderPass(desc);
+        kit.list.endRenderPass();
+        kit.finish();
+    });
+}

@@ -125,6 +125,9 @@ namespace rojoRHI::core {
         Format depthFormat = Format::Undefined;              ///< The depth attachment format; `Undefined` for none.
         uint32_t samples = 1;                                ///< Samples per texel of every attachment.
         bool depthBias = false;                              ///< `RasterState::depthBias` of the descriptor.
+        uint32_t blendMask = 0;                              ///< Bit `i` is set when color target `i` blends.
+        bool depthWrite = false;                             ///< `DepthStencilState::depthWrite` of the descriptor.
+        bool stencilWrite = false;                           ///< A stencil face operation of the descriptor is not `Keep`.
         void* native = nullptr;                              ///< The backend's payload for the object; the core never reads it.
     };
 

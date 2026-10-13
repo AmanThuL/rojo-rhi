@@ -52,6 +52,9 @@ namespace rojoRHI::core {
         uint32_t stages = 0;                                 ///< Bit `1 << ShaderStage` for each stage the pipeline has.
         PrimitiveClass primitive = PrimitiveClass::Triangle; ///< The topology class of a vertex pipeline.
         bool depthBias = false;                              ///< The pipeline was created with `RasterState::depthBias`.
+        uint32_t blendMask = 0;                              ///< Bit `i` is set when color target `i` blends.
+        bool depthWrite = false;                             ///< The pipeline writes depth.
+        bool stencilWrite = false;                           ///< The pipeline has a stencil operation other than `Keep`.
     };
 
     /// What the core keeps about one command list: the state machine the recording rules read. A backend's `CommandListImpl`

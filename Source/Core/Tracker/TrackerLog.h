@@ -75,6 +75,19 @@ namespace rojoRHI::core {
 #endif
     }
 
+    /// Does the work of `logDraw` in a Debug build.
+    void logDrawChecked(CommandListCore& list);
+
+    /// Completes the attachment uses of the open pass with what a draw of the bound pipeline adds: the read of each color target
+    /// it blends, the depth write and the stencil write. It reads the pipeline `bindPipeline` cached on the list, so it takes no
+    /// lock. Inline, as `logUse` is.
+    inline void logDraw([[maybe_unused]] CommandListCore& list)
+    {
+#ifndef NDEBUG
+        logDrawChecked(list);
+#endif
+    }
+
     /// Forgets the attachment uses of the pass that `list` ends: later draws belong to no pass. Inline, as `logUse` is.
     inline void endPassLog([[maybe_unused]] CommandListCore& list)
     {

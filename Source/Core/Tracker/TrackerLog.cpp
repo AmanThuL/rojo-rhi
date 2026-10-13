@@ -9,6 +9,8 @@
 #include "Core/DeviceCore.h"
 #include "Core/Formats.h"
 
+#include <variant>
+
 namespace rojoRHI::core {
     namespace {
         //==============================================================================================================
@@ -46,9 +48,7 @@ namespace rojoRHI::core {
         {
             return;
         }
-        UseEvent event = use;
-        event.copyQueue = list.type == QueueType::Copy;
-        list.trackerLog.events.emplace_back(event);
+        list.trackerLog.events.emplace_back(use);
 #endif
     }
 
@@ -106,6 +106,35 @@ namespace rojoRHI::core {
                     UseRule::Cmd0010
                 )
             );
+        }
+#endif
+    }
+
+    //==================================================================================================================
+    void logDrawChecked([[maybe_unused]] CommandListCore& list)
+    {
+#ifndef NDEBUG
+        if (!list.device->validation() || !list.pipeline.bound)
+        {
+            return;
+        }
+        uint32_t color = 0;
+        for (const uint32_t position : list.trackerLog.passUses)
+        {
+            UseEvent& use = std::get<UseEvent>(list.trackerLog.events[position]);
+            if (use.stage == Stage::ColorAttachment)
+            {
+                // The pipeline's color target `color` matches the attachment `color` (chapter 06); a resolve target is no attachment.
+                if ((list.pipeline.blendMask >> color & 1) != 0)
+                {
+                    use.access = use.access | Access::ColorAttachmentRead;
+                }
+                ++color;
+            }
+            else if (use.stage == Stage::DepthStencil && (list.pipeline.depthWrite || list.pipeline.stencilWrite))
+            {
+                use.access = use.access | Access::DepthStencilWrite;
+            }
         }
 #endif
     }
