@@ -133,4 +133,10 @@ target("RojoRHITests")
     set_values("slang.slangc", path.join(thirdparty_dir, is_host("windows") and "slang/bin/slangc.exe"
                                                          or "slang/bin/slangc"))
     add_files(path.join(component, "Shaders/Tests/*.slang"))
+    -- The probe is among those files, and the layout rule keeps it out of the conformance list: it
+    -- compares the shared structs with what each target reflects.
+    add_rules("rojorhi.shader_layout")
+    set_values("slang.layout_probe", path.join(component_dir, "Shaders/Tests/LayoutProbe.slang"))
+    set_values("slang.layout_map", "DrawRoot=rojoRHI::test::DrawRoot")
+    set_values("slang.layout_include", "rojoRHI/Addr.h", "rojoRHI/IndirectArgs.h")
     add_tests("abi", {runargs = {"[abi]"}})
