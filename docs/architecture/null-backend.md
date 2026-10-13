@@ -14,18 +14,19 @@ the code realises it.
 
 | Area | Where | Content |
 |---|---|---|
-| Public headers | `Include/rojoRHI/` | `Result.h`, `Handles.h`, `Geometry.h`, `Message.h`, `Device.h`, `DeviceDesc.h`, `Capabilities.h`, `Limits.h`, `UpscalerKind.h`, `Format.h`, `FormatCapabilities.h`, the buffer, heap, texture, view, sampler and fence descriptors and indices (`BufferDesc.h`, `HeapDesc.h`, `TextureDesc.h`, `SamplerIndex.h`, `IndexRange.h`, `FenceValue.h` and the like), `Queue.h`, `Swapchain.h`, `Addr.h`, `IndirectArgs.h`, `Version.h`, and the umbrella `RHI.h` |
+| Public headers | `Include/rojoRHI/` | `Result.h`, `Handles.h`, `Geometry.h`, `Message.h`, `Device.h`, `DeviceDesc.h`, `Capabilities.h`, `Limits.h`, `UpscalerKind.h`, `Format.h`, `FormatCapabilities.h`, the buffer, heap, texture, view, sampler and fence descriptors and indices (`BufferDesc.h`, `HeapDesc.h`, `TextureDesc.h`, `SamplerIndex.h`, `IndexRange.h`, `FenceValue.h` and the like), `Queue.h`, `Swapchain.h`, `Addr.h`, `IndirectArgs.h`, `Version.h`, the recording headers described in [command recording](null-backend-recording.md), and the umbrella `RHI.h` |
 | Private base | `Source/Base/` | `ROJORHI_VU`, `ROJORHI_INTERNAL_ASSERT`, the message sink |
-| Shared core | `Source/Core/` | `HandlePool`, `DeviceCore`, `Records.h`, `SlotAllocator`, the format rules, label checks and the checks of buffers, heaps, textures, samplers, ranges and fences |
-| Null backend | `Backends/Null/Source/` | `NullDevice`, `NullQueue`, `NullAddr`: the public entries, translating to the core |
+| Shared core | `Source/Core/` | `HandlePool`, `DeviceCore`, `Records.h`, `SlotAllocator`, the format rules, label checks and the checks of buffers, heaps, textures, samplers, ranges, fences, command lists, pipelines, passes, draws, copies and barriers |
+| Null backend | `Backends/Null/Source/` | `NullDevice`, `NullQueue`, `NullAddr`, `NullCommandList`, `NullShaderLibrary`: the public entries, translating to the core |
 | Tests | `Tests/Contract/`, `Tests/Core/`, `Tests/Null/`, `Tests/Support/` | see [testing](../conventions/testing.md) |
 
 The implemented entries are the device (creation, destruction, frames, capabilities, format
 capabilities, `destroy` of every handle type), the process-wide message callback and the resources
 of chapters 03, 04 and 10: buffers and addresses, heaps and placement, textures and views,
-samplers, reserved slot ranges, queues and fences. Shader libraries, pipelines, command recording,
-swapchains and the rest of the reference are not implemented; each arrives with the work that adds
-it.
+samplers, reserved slot ranges, queues and fences, plus the recording chapters (shader libraries,
+pipelines, command lists, passes, draws, copies and barriers), which
+[command recording](null-backend-recording.md) describes. Swapchains and the rest of the reference
+are not implemented; each arrives with the work that adds it.
 
 ## Two layers
 
@@ -91,14 +92,18 @@ checks against and the counters its rules need: a `BufferRecord` its size, memor
 heap; a `TextureRecord` its description and the number of view slots that hold a view of it
 (`VU-rojo-texture-0028`); a `HeapRecord` its size, memory class and the number of resources placed
 in it (`VU-rojo-device-0008`); a `FenceRecord` its initial, submitted and completed values.
-Pipeline, shader library and upscaler records hold only a label until their parts arrive.
+A `ShaderLibraryRecord` holds its entry points and a `PipelineRecord` its kind, stage set,
+topology class, attachment formats, sample count and depth-bias flag. An upscaler record holds only
+a label until its part arrives.
 
 Every record ends in `void* native`, the backend's payload, which the core never reads. The
 backend fills it between `prepareBuffer` (which checks and returns a record with no payload) and
 `addBuffer` (which stores it), and likewise for textures.
 
 A backend frees its payload through `RetireHooks`: one function pointer per handle type plus a
-`context`, set once with `DeviceCore::setRetireHooks`. The table is on the cold path. A null entry
+`context`, set once with `DeviceCore::setRetireHooks`, and a `frameSlot` function the core calls
+when `beginFrame` reuses a slot, after the pools retired (the Null backend returns that slot's
+command lists to their pool there). The table is on the cold path. A null entry
 means the backend holds nothing for that type. The core calls a hook with the record when the
 record's frame retires and, for every live and pending record, once in `beginDestroy`. A hook runs
 under its pool's lock and must not call a pool. The `DeviceCore` destructor calls no hook, because
@@ -144,7 +149,9 @@ The Null device is deterministic and does no work.
 - `DeviceDesc::validation` is `ErrorCategory::Unsupported` in a Release build. In Debug it creates
   a device that warns of leaks at destruction; the tracker proper arrives with the validation
   tracker work.
-- A pipeline cache blob in `DeviceDesc` is accepted and ignored.
+- A pipeline cache blob in `DeviceDesc` is read as described in
+  [command recording](null-backend-recording.md): a blob this backend wrote is carried forward,
+  any other is discarded with a warning.
 - `Device::queue` returns one queue per `QueueType`, owned by the device.
 
 The Null backend reports the shape a Metal 4 or D3D12 device may report, but it reports a superset
@@ -205,8 +212,8 @@ using a released range beyond it is undefined behaviour.
 
 ## Queues and fences
 
-`QueueImpl` knows its type and its device; the check that a queue is used only with its device
-(`VU-rojo-core-0005`) arrives with recording. A `FenceRecord` holds the initial, greatest
+`QueueImpl` knows its type and its device, so a queue used with another device is rejected
+(`VU-rojo-core-0005`). A `FenceRecord` holds the initial, greatest
 submitted and completed values. `checkSubmit` compares each wait value with the greatest value
 submitted (`VU-rojo-queue-0007`) and each signal value with the initial and submitted values
 (`VU-rojo-queue-0003`), and changes nothing. The Null queue executes nothing, so `recordSignals`
@@ -215,7 +222,7 @@ signal; a concurrent reader never sees a value submitted but not completed. A la
 passes `Later` and reports each value through `completeFence` as its work finishes. A completed
 value is always readable, and `Device::wait` never blocks on Null: `checkWait` returns whether the
 value is reached and rejects an unlimited wait on an unreachable value (`VU-rojo-queue-0008`).
-`Queue::submit` takes no recorded command lists yet; the rules that need them stay pending.
+`Queue::submit` checks its lists first, as [command recording](null-backend-recording.md) says.
 
 ## Coverage
 
@@ -226,12 +233,17 @@ reference does not define or has retired ([testing](../conventions/testing.md)).
 
 ## Threading
 
-[ADR 0013](../decisions/0013-threading.md) applies unchanged: RojoRHI creates no threads. The
-free-threaded `destroy` locks the one pool it touches, with one mutex per pool, and reads the frame
-word atomically under that lock. Locks are taken one at a time and never nested: the entries that
-reach two (destroying a placed buffer or texture, which updates its heap after its own pool;
-`createView`, `writeView` and `destroyView`, which pair the view slot allocator with the texture
-pool) release the first before taking the second. Pool hooks and callbacks never call a pool.
+[ADR 0013](../decisions/0013-threading.md) applies: RojoRHI creates no threads. Its clause on
+recording is superseded by [ADR 0019](../decisions/0019-recording-locks.md): Release recording takes
+a lock only to claim a frame-arena page, and Debug recording also takes the pool locks of its
+checks' lookups. The free-threaded `destroy` locks the one pool it touches, with one mutex per
+pool, and reads the frame word atomically under that lock. The entries that reach two locks
+(destroying a placed buffer or texture, which updates its heap after its own pool; `createView`,
+`writeView` and `destroyView`, which pair the view slot allocator with the texture pool) release
+the first before taking the second. One pair nests: `FrameArena::claim` holds the arena's mutex
+while the backend creates a new page in the buffer pool, so the order is always the arena's mutex,
+then the buffer pool's, and nothing takes them the other way round. Pool hooks and callbacks never
+call a pool.
 Capability queries read data fixed at creation and touch no pool. Each slot allocator has its own
 mutex, and a fence read copies the record under its pool's lock. The frame class (`beginFrame`,
 `endFrame`) is externally synchronised by the caller, as chapter 01 requires, and takes no lock of
@@ -240,17 +252,14 @@ flag is thread-local.
 
 ## What remains
 
-These arrive with the work that adds them; this page then describes them.
+These arrive with the work that adds them; this page then describes them. What recording still
+lacks is on the [command recording](null-backend-recording.md) page.
 
-- Recording: shader libraries, pipelines, command lists, passes, draws, copies, barriers and
-  roots. `Queue::submit` then takes real lists, and `uploadFrameData` and the check that a queue
-  belongs to its device arrive with them.
 - Native payloads for views and samplers: their slots carry no backend payload, retire hook, drain
   or label yet. They arrive with a native backend, which must release native views and samplers at
   retirement and at `destroyDevice`.
-- Recording checks: a default-constructed `CommandList` passed to `Queue::submit` is not yet
-  rejected (`VU-rojo-core-0004`); the check arrives with the recording part.
-- Edges: swapchains, upscalers, sparse mapping, access declarations, counters, timings and capture.
+- Edges: swapchains, upscalers, sparse mapping, diagnostics and counters; the 55 identifiers
+  listed as `edges` include `VU-rojo-sync-0005` and `VU-rojo-device-0009`.
 - The validation tracker: the 29 identifiers only it checks, such as `VU-rojo-buffer-0019`, and
   the tracker hooks that `DeviceDesc::validation` selects.
 - A Metal 4 v2 backend and T1 GPU conformance
