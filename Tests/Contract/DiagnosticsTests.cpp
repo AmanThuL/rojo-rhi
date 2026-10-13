@@ -86,6 +86,10 @@ TEST_CASE("declareAccess calls accumulate and the next draw consumes them", "[co
     PassKit kit(QueueType::Graphics, true);
     const Buffer buffer = kit.buffer(BufferUsage::ShaderWrite);
     const Texture texture = kit.texture(Format::RGBA8Unorm, TextureUsage::Sampled | TextureUsage::Storage);
+    // The declared write is judged at submission against the texture's layout.
+    const std::array<TextureBarrier, 1> barriers{ TextureBarrier{
+        .texture = texture, .srcStage = Stage::All, .dstStage = Stage::All, .oldLayout = Layout::Undefined, .newLayout = Layout::ShaderWrite } };
+    kit.list.barrier({}, {}, barriers);
     kit.readyToDraw();
     const std::array<ResourceAccess, 1> first{ fragmentRead(buffer) };
     const std::array<ResourceAccess, 1> second{ ResourceAccess{

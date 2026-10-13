@@ -177,9 +177,10 @@ struct UpscaleParams {
 void CommandList::upscale(Upscaler upscaler, const UpscaleParams& params);
 ```
 Records one reconstruction. The implementation reads the inputs and its history and writes
-`output`, as compute work. Before the call, the caller's barriers make the inputs readable in
-`Layout::ShaderRead` and the output writable in `Layout::ShaderWrite`; after it, a barrier from
-shader write orders later uses of the output. The output needs `TextureUsage::RenderTarget` as
+`output`, as compute work; it reads and writes mip level 0 of array layer 0 of each texture.
+Before the call, the caller's barriers make the inputs readable in `Layout::ShaderRead` and the
+output writable in `Layout::ShaderWrite`; after it, a barrier from shader write orders later uses
+of the output. The output needs `TextureUsage::RenderTarget` as
 well as `TextureUsage::Storage` because MetalFX can require render-target usage of its output. The
 operation forms its own debug group named `params.label`, defaulted to `rojorhi.upscale.unnamed`.
 

@@ -5,6 +5,7 @@
 #include <rojoRHI/RHI.h>
 
 #include "Support/PassKit.h"
+#include "Support/UpscaleKit.h"
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -15,6 +16,7 @@
 
 using namespace rojoRHI;
 using test::PassKit;
+using test::UpscaleKit;
 
 namespace {
     /// A stand-in for a native surface: the Null backend never dereferences it.
@@ -194,5 +196,126 @@ TEST_CASE("two queues submitting from two threads share the tracker without a ra
     compute.join();
     device.endFrame();
     destroyDevice(device);
+#endif
+}
+
+//======================================================================================================================
+TEST_CASE("correct layouts pass the checks of every copy, clear and upscale entry", "[contract]")
+{
+#ifndef NDEBUG
+    PassKit kit(QueueType::Graphics, true);
+    const Texture source = kit.texture();
+    const Texture destination = kit.texture();
+    const Buffer buffer = kit.buffer(BufferUsage::None, 4096);
+    const TextureRegion region{ .extent = { 4, 4, 1 } };
+    const BufferTextureLayout layout{ .rowPitch = 256 };
+    move(kit.list, source, Layout::Undefined, Layout::CopySrc);
+    move(kit.list, destination, Layout::Undefined, Layout::CopyDst);
+    kit.list.copyTexture(source, region, destination, region);
+    kit.list.copyBufferToTexture(buffer, layout, destination, region);
+    kit.list.copyTextureToBuffer(source, region, buffer, layout);
+    const Texture target = kit.target();
+    move(kit.list, target, Layout::Undefined, Layout::General);
+    kit.list.clearTexture(target, {}, {});
+    kit.finish();
+#endif
+}
+
+//======================================================================================================================
+TEST_CASE("General permits a copy, a clear and a copy on a Copy list", "[contract]")
+{
+#ifndef NDEBUG
+    PassKit kit(QueueType::Copy, true);
+    const Texture texture = kit.texture();
+    const Buffer buffer = kit.buffer(BufferUsage::None, 4096);
+    move(kit.list, texture, Layout::Undefined, Layout::General);
+    kit.list.copyBufferToTexture(buffer, { .rowPitch = 256 }, texture, TextureRegion{ .extent = { 4, 4, 1 } });
+    kit.list.copyTextureToBuffer(texture, TextureRegion{ .extent = { 4, 4, 1 } }, buffer, { .rowPitch = 256 });
+    kit.finish();
+#endif
+}
+
+//======================================================================================================================
+TEST_CASE("an upscale of inputs in ShaderRead and an output in ShaderWrite passes", "[contract]")
+{
+#ifndef NDEBUG
+    UpscaleKit kit(QueueType::Graphics, UpscaleKit::defaultDesc(), true);
+    move(kit.kit.list, kit.params.color, Layout::Undefined, Layout::ShaderRead);
+    move(kit.kit.list, kit.params.depth, Layout::Undefined, Layout::ShaderRead);
+    move(kit.kit.list, kit.params.motion, Layout::Undefined, Layout::ShaderRead);
+    move(kit.kit.list, kit.params.output, Layout::Undefined, Layout::ShaderWrite);
+    kit.upscale();
+    kit.kit.finish();
+#endif
+}
+
+//======================================================================================================================
+TEST_CASE("a declared read passes in each layout a read through any view permits", "[contract]")
+{
+#ifndef NDEBUG
+    PassKit kit(QueueType::Graphics, true);
+    const Texture texture = kit.texture(Format::RGBA8Unorm, TextureUsage::Sampled | TextureUsage::Storage);
+    const std::array<ResourceAccess, 1> reads{ ResourceAccess{ .texture = texture, .stage = Stage::ComputeShader, .access = Access::ShaderRead } };
+    kit.list.setPipeline(kit.compute());
+    for (const Layout layout : { Layout::ShaderRead, Layout::General, Layout::ShaderWrite })
+    {
+        move(kit.list, texture, Layout::Undefined, layout);
+        kit.list.declareAccess(reads);
+        kit.list.dispatch(1, 1, 1);
+    }
+    kit.finish();
+#endif
+}
+
+//======================================================================================================================
+TEST_CASE("an image acquired, drawn to in ColorAttachment and moved to Present is presented", "[contract]")
+{
+#ifndef NDEBUG
+    Device device = *createDevice(DeviceDesc{ .validation = true });
+    Swapchain swapchain = *device.createSwapchain(SwapchainDesc{ .nativeSurface = &g_surface, .label = "test.swapchain" });
+    device.beginFrame();
+    const Texture image = swapchain.acquire();
+    CommandList list = device.acquireCommandList(QueueType::Graphics, "test.list");
+    move(list, image, Layout::Undefined, Layout::ColorAttachment);
+    move(list, image, Layout::ColorAttachment, Layout::Present);
+    submit(device, list);
+    device.queue(QueueType::Graphics).present(swapchain);
+    device.endFrame();
+    destroyDevice(device);
+#endif
+}
+
+//======================================================================================================================
+TEST_CASE("copies and clears name subresources by mip and layer, each in its own layout", "[contract]")
+{
+#ifndef NDEBUG
+    PassKit kit(QueueType::Graphics, true);
+    const Texture texture = kit.target(Format::RGBA8Unorm, 1, 2, 2);
+    const Texture other = kit.texture(Format::RGBA8Unorm, TextureUsage::Sampled, 2, 2);
+    const auto moveRange = [&](Texture target, uint32_t mip, uint32_t layer, Layout layout) {
+        const std::array<TextureBarrier, 1> barriers{ TextureBarrier{ .texture = target,
+                                                                      .range = { .baseMip = mip, .mipCount = 1, .baseLayer = layer, .layerCount = 1 },
+                                                                      .srcStage = Stage::All,
+                                                                      .dstStage = Stage::All,
+                                                                      .oldLayout = Layout::Undefined,
+                                                                      .newLayout = layout } };
+        kit.list.barrier({}, {}, barriers);
+    };
+    // Mip 0 is a source in both layers; mip 1 is a destination in both layers; the other texture is a destination throughout.
+    moveRange(texture, 0, 0, Layout::CopySrc);
+    moveRange(texture, 0, 1, Layout::CopySrc);
+    moveRange(texture, 1, 0, Layout::CopyDst);
+    moveRange(texture, 1, 1, Layout::CopyDst);
+    moveRange(other, 0, 1, Layout::CopySrc);
+    moveRange(other, 1, 0, Layout::CopyDst);
+    moveRange(other, 1, 1, Layout::CopyDst);
+    moveRange(other, 0, 0, Layout::CopyDst);
+    const TextureRegion small{ .extent = { 4, 4, 1 } };
+    kit.list.copyTexture(texture, TextureRegion{ .layer = 1, .extent = { 4, 4, 1 } }, texture, TextureRegion{ .mip = 1, .layer = 1, .extent = { 4, 4, 1 } });
+    kit.list.copyTexture(texture, small, texture, TextureRegion{ .mip = 1, .extent = { 4, 4, 1 } });
+    kit.list.copyTexture(other, TextureRegion{ .layer = 1, .extent = { 4, 4, 1 } }, other, small);
+    kit.list.clearTexture(texture, SubresourceRange{ .baseMip = 1, .mipCount = 1, .baseLayer = 1, .layerCount = 1 }, {});
+    kit.list.clearTexture(texture, SubresourceRange{ .baseMip = 1, .mipCount = 1, .baseLayer = 0, .layerCount = 1 }, {});
+    kit.finish();
 #endif
 }

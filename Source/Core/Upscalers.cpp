@@ -206,21 +206,16 @@ namespace rojoRHI::core {
         // reads the same frame back.
         const uint64_t previous = scaler->lastFrame.frame.exchange(list.frame, std::memory_order_relaxed);
         ROJORHI_VU(previous != list.frame, "VU-rojo-upscale-0008", "the upscaler \"{}\" was already used by an upscale in frame {}", scaler->label, list.frame);
-        // The upscaler reads every input and writes the output whole, at the compute stage (chapter 12).
+        // The upscaler reads mip 0 of layer 0 of every input and writes the same of the output, at the compute stage (chapter 12).
+        constexpr SubresourceRange kBase{ .baseMip = 0, .mipCount = 1, .baseLayer = 0, .layerCount = 1 };
         for (const Texture input : { params.color, params.depth, params.motion, params.exposure, params.reactive })
         {
             if (input.bits != 0)
             {
-                logUse(
-                    list,
-                    textureUse(input, SubresourceRange{}, Stage::ComputeShader, Access::ShaderRead, layoutSet({ Layout::ShaderRead }), UseRule::Upscale0016)
-                );
+                logUse(list, textureUse(input, kBase, Stage::ComputeShader, Access::ShaderRead, layoutSet({ Layout::ShaderRead }), UseRule::Upscale0016));
             }
         }
-        logUse(
-            list,
-            textureUse(params.output, SubresourceRange{}, Stage::ComputeShader, Access::ShaderWrite, layoutSet({ Layout::ShaderWrite }), UseRule::Upscale0016)
-        );
+        logUse(list, textureUse(params.output, kBase, Stage::ComputeShader, Access::ShaderWrite, layoutSet({ Layout::ShaderWrite }), UseRule::Upscale0016));
 #endif
         // The operation forms its own debug group, a scope of the timings report, named `params.label`.
         recordScope(list, params.label, "rojorhi.upscale.unnamed", static_cast<uint32_t>(list.scopes.size()));

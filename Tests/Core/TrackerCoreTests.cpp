@@ -9,6 +9,7 @@
 #include "Core/Tracker/Events.h"
 #include "Core/Tracker/Tracker.h"
 #include "Support/PassKit.h"
+#include "Support/UpscaleKit.h"
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -18,6 +19,7 @@
 
 using namespace rojoRHI;
 using test::PassKit;
+using test::UpscaleKit;
 
 namespace {
     /// A stand-in for a native surface: the Null backend never dereferences it.
@@ -67,9 +69,12 @@ TEST_CASE("a copy on a validating device logs each endpoint with its stage, acce
     PassKit kit(QueueType::Graphics, true);
     const Texture source = kit.texture(Format::RGBA8Unorm, TextureUsage::Sampled, 1, 2);
     const Texture destination = kit.texture(Format::RGBA8Unorm, TextureUsage::Sampled, 1, 2);
+    move(kit.list, source, Layout::Undefined, Layout::CopySrc);
+    move(kit.list, destination, Layout::Undefined, Layout::CopyDst);
+    const size_t before = core::coreOf(kit.list).trackerLog.events.size();
     kit.list.copyTexture(source, TextureRegion{ .layer = 1, .extent = { 4, 4, 1 } }, destination, TextureRegion{ .extent = { 4, 4, 1 } });
-    REQUIRE(core::coreOf(kit.list).trackerLog.events.size() == 2);
-    const core::UseEvent read = useAt(kit.list, 0);
+    REQUIRE(core::coreOf(kit.list).trackerLog.events.size() == before + 2);
+    const core::UseEvent read = useAt(kit.list, before);
     CHECK(read.texture == source);
     CHECK(read.range.baseMip == 0);
     CHECK(read.range.mipCount == 1);
@@ -80,7 +85,7 @@ TEST_CASE("a copy on a validating device logs each endpoint with its stage, acce
     CHECK(read.layouts == core::layoutSet({ Layout::CopySrc, Layout::General }));
     CHECK(read.rule == core::UseRule::Cmd0054);
     CHECK_FALSE(read.copyQueue);
-    const core::UseEvent write = useAt(kit.list, 1);
+    const core::UseEvent write = useAt(kit.list, before + 1);
     CHECK(write.texture == destination);
     CHECK(write.access == Access::CopyWrite);
     CHECK(write.layouts == core::layoutSet({ Layout::CopyDst, Layout::General }));
@@ -216,5 +221,141 @@ TEST_CASE("the tracker follows a swapchain image from acquire to present", "[cor
     device.endFrame();
     device.destroy(swapchain);
     destroyDevice(device);
+#endif
+}
+
+//======================================================================================================================
+TEST_CASE("indexed draws log their index reads", "[core]")
+{
+#ifndef NDEBUG
+    PassKit kit(QueueType::Graphics, true);
+    const Buffer indices = kit.buffer(BufferUsage::Index, 256);
+    kit.readyToDraw();
+    const size_t before = core::coreOf(kit.list).trackerLog.events.size();
+    kit.list.drawIndexed(indices, IndexType::UInt32, 8, 1, 2);
+    kit.list.drawIndexedIndirect(indices, IndexType::UInt16, kit.device.address(kit.buffer(BufferUsage::IndirectArgs, 1024)), 1);
+    const core::UseEvent direct = useAt(kit.list, before);
+    CHECK(direct.buffer == indices);
+    CHECK(direct.offset == 8);
+    CHECK(direct.size == 32);
+    CHECK(direct.stage == Stage::IndexInput);
+    CHECK(direct.access == Access::IndexRead);
+    CHECK(direct.layouts == 0);
+    const core::UseEvent whole = useAt(kit.list, before + 1);
+    CHECK(whole.buffer == indices);
+    CHECK(whole.offset == 0);
+    CHECK(whole.size == kWholeSize);
+    CHECK(whole.access == Access::IndexRead);
+    kit.list.endRenderPass();
+    kit.finish();
+#endif
+}
+
+//======================================================================================================================
+TEST_CASE("indirect commands log their arguments and count", "[core]")
+{
+#ifndef NDEBUG
+    PassKit kit(QueueType::Graphics, true);
+    const Buffer args = kit.buffer(BufferUsage::IndirectArgs, 1024);
+    const Addr records = kit.device.address(args, 16);
+    const Addr count = kit.device.address(args, 1020);
+    kit.readyToDraw();
+    const size_t before = core::coreOf(kit.list).trackerLog.events.size();
+    kit.list.drawIndirect(records, 4, count);
+    REQUIRE(core::coreOf(kit.list).trackerLog.events.size() == before + 2);
+    const core::UseEvent arguments = useAt(kit.list, before);
+    CHECK(arguments.buffer == args);
+    CHECK(arguments.offset == 16);
+    CHECK(arguments.size == 4 * sizeof(DrawIndirectArgs));
+    CHECK(arguments.stage == Stage::IndirectArgs);
+    CHECK(arguments.access == Access::IndirectArgs);
+    const core::UseEvent counted = useAt(kit.list, before + 1);
+    CHECK(counted.buffer == args);
+    CHECK(counted.offset == 1020);
+    CHECK(counted.size == sizeof(uint32_t));
+    kit.list.endRenderPass();
+    kit.list.setPipeline(kit.compute());
+    kit.list.dispatchIndirect(records);
+    const core::UseEvent group = useAt(kit.list, before + 2);
+    CHECK(group.offset == 16);
+    CHECK(group.size == sizeof(DispatchIndirectArgs));
+    kit.finish();
+#endif
+}
+
+//======================================================================================================================
+TEST_CASE("a declared access becomes a use at the draw or dispatch that consumes it", "[core]")
+{
+#ifndef NDEBUG
+    PassKit kit(QueueType::Graphics, true);
+    const Texture written = kit.texture(Format::RGBA8Unorm, TextureUsage::Storage, 2, 2);
+    const Texture read = kit.texture();
+    const Buffer buffer = kit.buffer(BufferUsage::ShaderWrite, 256);
+    move(kit.list, written, Layout::Undefined, Layout::ShaderWrite);
+    move(kit.list, read, Layout::Undefined, Layout::ShaderRead);
+    const size_t before = core::coreOf(kit.list).trackerLog.events.size();
+    const std::array<ResourceAccess, 3> accesses{
+        ResourceAccess{ .texture = written,
+                        .range = { .baseMip = 1, .mipCount = 1, .baseLayer = 0, .layerCount = 1 },
+                        .stage = Stage::ComputeShader,
+                        .access = Access::ShaderWrite },
+        ResourceAccess{ .texture = read, .stage = Stage::ComputeShader, .access = Access::ShaderRead },
+        ResourceAccess{ .buffer = buffer, .offset = 64, .size = 32, .stage = Stage::ComputeShader, .access = Access::ShaderWrite }
+    };
+    kit.list.setPipeline(kit.compute());
+    kit.list.declareAccess(accesses);
+    CHECK(core::coreOf(kit.list).trackerLog.events.size() == before);
+    kit.list.dispatch(1, 1, 1);
+    REQUIRE(core::coreOf(kit.list).trackerLog.events.size() == before + 3);
+    const core::UseEvent write = useAt(kit.list, before);
+    CHECK(write.texture == written);
+    CHECK(write.range.baseMip == 1);
+    CHECK(write.range.mipCount == 1);
+    CHECK(write.stage == Stage::ComputeShader);
+    CHECK(write.access == Access::ShaderWrite);
+    CHECK(write.layouts == core::layoutSet({ Layout::ShaderWrite }));
+    CHECK(write.rule == core::UseRule::Sync0004);
+    const core::UseEvent sampled = useAt(kit.list, before + 1);
+    CHECK(sampled.texture == read);
+    CHECK(sampled.access == Access::ShaderRead);
+    CHECK(sampled.layouts == core::layoutSet({ Layout::ShaderRead, Layout::DepthStencilRead, Layout::General, Layout::ShaderWrite }));
+    CHECK(sampled.rule == core::UseRule::Sync0004);
+    const core::UseEvent bytes = useAt(kit.list, before + 2);
+    CHECK(bytes.buffer == buffer);
+    CHECK(bytes.offset == 64);
+    CHECK(bytes.size == 32);
+    CHECK(bytes.layouts == 0);
+    kit.finish();
+#endif
+}
+
+//======================================================================================================================
+TEST_CASE("an upscale logs mip 0 of layer 0 of each texture it reads and writes", "[core]")
+{
+#ifndef NDEBUG
+    UpscaleKit kit(QueueType::Graphics, UpscaleKit::defaultDesc(), true);
+    for (const Texture input : { kit.params.color, kit.params.depth, kit.params.motion })
+    {
+        move(kit.kit.list, input, Layout::Undefined, Layout::ShaderRead);
+    }
+    move(kit.kit.list, kit.params.output, Layout::Undefined, Layout::ShaderWrite);
+    const size_t before = core::coreOf(kit.kit.list).trackerLog.events.size();
+    kit.upscale();
+    // The kit's params hold no exposure and no reactive mask: color, depth, motion and the output.
+    REQUIRE(core::coreOf(kit.kit.list).trackerLog.events.size() == before + 4);
+    const std::array<Texture, 4> textures{ kit.params.color, kit.params.depth, kit.params.motion, kit.params.output };
+    for (size_t index = 0; index < textures.size(); ++index)
+    {
+        const core::UseEvent use = useAt(kit.kit.list, before + index);
+        CHECK(use.texture == textures[index]);
+        CHECK(use.range.baseMip == 0);
+        CHECK(use.range.mipCount == 1);
+        CHECK(use.range.baseLayer == 0);
+        CHECK(use.range.layerCount == 1);
+        CHECK(use.stage == Stage::ComputeShader);
+        CHECK(use.rule == core::UseRule::Upscale0016);
+        CHECK(use.access == (index == 3 ? Access::ShaderWrite : Access::ShaderRead));
+    }
+    kit.kit.finish();
 #endif
 }

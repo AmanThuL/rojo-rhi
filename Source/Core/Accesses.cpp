@@ -48,15 +48,15 @@ namespace rojoRHI::core {
 
         //==============================================================================================================
         /// Returns the use a declared access makes at the draw or dispatch that consumes it: a write needs `ShaderWrite`, and a
-        /// read, which a declaration makes through a `Sampled` view, any layout chapter 09 permits a sampled read in.
+        /// read, which a declaration cannot say is through a `Sampled` or a `Storage` view, any layout chapter 09 permits either in.
         [[maybe_unused]] UseEvent declaredUse(const ResourceAccess& access)
         {
             if (access.buffer.bits != 0)
             {
                 return bufferUse(access.buffer, access.offset, access.size, access.stage, access.access);
             }
-            const LayoutSet layouts =
-                writes(access.access) ? layoutSet({ Layout::ShaderWrite }) : layoutSet({ Layout::ShaderRead, Layout::DepthStencilRead, Layout::General });
+            const LayoutSet layouts = writes(access.access) ? layoutSet({ Layout::ShaderWrite })
+                                                            : layoutSet({ Layout::ShaderRead, Layout::DepthStencilRead, Layout::General, Layout::ShaderWrite });
             return textureUse(access.texture, access.range, access.stage, access.access, layouts, UseRule::Sync0004);
         }
 
