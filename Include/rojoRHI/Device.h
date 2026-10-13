@@ -24,6 +24,7 @@
 #include <rojoRHI/Result.h>
 #include <rojoRHI/SamplerDesc.h>
 #include <rojoRHI/SamplerIndex.h>
+#include <rojoRHI/ScopeTiming.h>
 #include <rojoRHI/Swapchain.h>
 #include <rojoRHI/SwapchainDesc.h>
 #include <rojoRHI/TextureData.h>
@@ -196,6 +197,23 @@ namespace rojoRHI {
         /// Returns the tile shape of a sparse buffer, fixed at creation. The buffer was created with `BufferUsage::Sparse`
         /// (VU-rojo-sparse-0001). Records no GPU work. Free-threaded.
         TileShape tileShape(Buffer buffer);
+
+        /// Returns the scopes of the frame the most recent `beginFrame` waited for, the frame `framesInFlight` frames before the
+        /// one it opened: records are in submission order per queue, and within a command list in the order the scopes began, a
+        /// parent before its children. The span is empty until a frame has retired, and for a frame with no scopes; the device
+        /// owns it, labels included, and the next `beginFrame` invalidates it.
+        std::span<const ScopeTiming> scopeTimings();
+
+        /// Starts a GPU capture of everything the device's queues execute until `endCapture`, written to the file `path`, whose
+        /// extension the caller supplies for the platform. No capture started by this device is in progress
+        /// (VU-rojo-diag-0008) and `path` is not empty (VU-rojo-diag-0009). Capture tooling that is unavailable to the process,
+        /// as on the Null backend, or a destination that cannot be written is an error result, and no capture is then in
+        /// progress.
+        Result<void> beginCapture(std::string_view path);
+
+        /// Ends the capture `beginCapture` started and finishes writing its file; work submitted before the call is in the
+        /// capture. A capture started by this device is in progress (VU-rojo-diag-0010).
+        void endCapture();
 
         /// Destroys a buffer, deferred: the handle is invalid at once and the slot is reused once the frame slot open at the
         /// call, or the next one opened if none is, retires. A sparse buffer's tiles are unmapped at the call. Free-threaded.

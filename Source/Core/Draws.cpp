@@ -8,6 +8,7 @@
 #include <rojoRHI/IndirectArgs.h>
 
 #include "Base/Assert.h"
+#include "Core/Accesses.h"
 #include "Core/Addresses.h"
 #include "Core/Pipelines.h"
 
@@ -118,6 +119,7 @@ namespace rojoRHI::core {
         checkRecording(list);
         ROJORHI_VU(drawProblem(list, ShaderStage::Vertex, false).empty(), "VU-rojo-cmd-0023", "draw: {}", drawProblem(list, ShaderStage::Vertex, false));
         ROJORHI_VU(list.pass.viewportSet && list.pass.scissorSet, "VU-rojo-cmd-0024", "draw: no viewport and scissor were set since the pass began");
+        consumeAccesses(list, false);
     }
 
     //==================================================================================================================
@@ -145,6 +147,7 @@ namespace rojoRHI::core {
             hasUsage(buffer->usage, BufferUsage::Index) ? "" : "not "
         );
 #endif
+        consumeAccesses(list, false);
     }
 
     //==================================================================================================================
@@ -164,6 +167,7 @@ namespace rojoRHI::core {
             limits.maxMeshTaskGroups,
             limits.maxMeshTaskGroupsTotal
         );
+        consumeAccesses(list, false);
     }
 
     //==================================================================================================================
@@ -182,6 +186,7 @@ namespace rojoRHI::core {
             z,
             maxGroups
         );
+        consumeAccesses(list, true);
     }
 
     //==================================================================================================================
@@ -214,6 +219,7 @@ namespace rojoRHI::core {
             indirectProblem(counted, sizeof(uint32_t))
         );
 #endif
+        consumeAccesses(list, false);
     }
 
     //==================================================================================================================
@@ -258,6 +264,7 @@ namespace rojoRHI::core {
             indirectProblem(counted, sizeof(uint32_t))
         );
 #endif
+        consumeAccesses(list, false);
     }
 
     //==================================================================================================================
@@ -298,6 +305,7 @@ namespace rojoRHI::core {
             indirectProblem(counted, sizeof(uint32_t))
         );
 #endif
+        consumeAccesses(list, false);
     }
 
     //==================================================================================================================
@@ -320,5 +328,6 @@ namespace rojoRHI::core {
             indirectProblem(first, sizeof(DispatchIndirectArgs))
         );
 #endif
+        consumeAccesses(list, true);
     }
 } // namespace rojoRHI::core

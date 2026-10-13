@@ -9,6 +9,7 @@
 #include <rojoRHI/Device.h>
 
 #include "Base/Log.h"
+#include "Core/Accesses.h"
 #include "Core/Barriers.h"
 #include "Core/Buffers.h"
 #include "Core/CommandLists.h"
@@ -25,24 +26,20 @@
 #include <utility>
 
 namespace rojoRHI {
-    namespace {
-        //==============================================================================================================
-        /// Creates one arena page as a zeroed host buffer of the pool, so an address into it resolves like any buffer's. The
-        /// page has the `IndirectArgs` usage because the reference lets frame data serve as indirect arguments.
-        Result<core::ArenaPage> createArenaPage(void* context, uint64_t size)
+    //==================================================================================================================
+    Result<core::ArenaPage> createArenaPage(void* context, uint64_t size)
+    {
+        core::DeviceCore& core = *static_cast<core::DeviceCore*>(context);
+        const BufferDesc desc{ .size = size, .memory = Memory::Upload, .usage = BufferUsage::IndirectArgs, .label = "rojorhi.frameArena.page" };
+        core::BufferRecord record = core::prepareBuffer(core, desc, {}, {}, {});
+        auto* host = static_cast<std::byte*>(std::calloc(size, 1));
+        if (host == nullptr)
         {
-            core::DeviceCore& core = *static_cast<core::DeviceCore*>(context);
-            const BufferDesc desc{ .size = size, .memory = Memory::Upload, .usage = BufferUsage::IndirectArgs, .label = "rojorhi.frameArena.page" };
-            core::BufferRecord record = core::prepareBuffer(core, desc, {}, {}, {});
-            auto* host = static_cast<std::byte*>(std::calloc(size, 1));
-            if (host == nullptr)
-            {
-                return std::unexpected(Error{ ErrorCategory::OutOfMemory, std::format("no host memory for {} bytes of a frame arena page", size) });
-            }
-            record.native = host;
-            return core::ArenaPage{ core::addBuffer(core, std::move(record)), host, size };
+            return std::unexpected(Error{ ErrorCategory::OutOfMemory, std::format("no host memory for {} bytes of a frame arena page", size) });
         }
-    } // namespace
+        record.native = host;
+        return core::ArenaPage{ core::addBuffer(core, std::move(record)), host, size };
+    }
 
     //==================================================================================================================
     CommandListImpl& CommandListImpl::of(CommandList list)
@@ -115,9 +112,9 @@ namespace rojoRHI {
     }
 
     //==================================================================================================================
-    void CommandList::beginScope([[maybe_unused]] std::string_view label)
+    void CommandList::beginScope(std::string_view label)
     {
-        core::beginScope(CommandListImpl::of(*this).core);
+        core::beginScope(CommandListImpl::of(*this).core, label);
     }
 
     //==================================================================================================================
@@ -272,6 +269,12 @@ namespace rojoRHI {
     void CommandList::upscale(Upscaler upscaler, const UpscaleParams& params)
     {
         core::upscale(CommandListImpl::of(*this).core, upscaler, params);
+    }
+
+    //==================================================================================================================
+    void CommandList::declareAccessChecked(std::span<const ResourceAccess> accesses)
+    {
+        core::declareAccess(CommandListImpl::of(*this).core, accesses);
     }
 
     //==================================================================================================================

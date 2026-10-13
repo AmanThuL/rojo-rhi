@@ -9,9 +9,11 @@
 #include <rojoRHI/Geometry.h>
 #include <rojoRHI/PrimitiveClass.h>
 #include <rojoRHI/QueueType.h>
+#include <rojoRHI/ResourceAccess.h>
 
 #include "Core/DeviceCore.h"
 #include "Core/FrameArena.h"
+#include "Core/ScopeLog.h"
 
 #include <cstddef>
 #include <cstdint>
@@ -58,15 +60,17 @@ namespace rojoRHI::core {
         QueueType type = QueueType::Graphics; ///< The queue type the list was acquired for.
         uint64_t frame = 0;                   ///< The frame the list was acquired in.
         ListState state = ListState::Recording;
-        bool passOpen = false;    ///< A render pass is open on the list.
-        PassState pass;           ///< The open pass; meaningful while `passOpen`.
-        BoundPipeline pipeline;   ///< The bound pipeline; cleared by `beginRenderPass` and `endRenderPass`.
-        Addr root = {};           ///< The root `setRoot` bound; null until one is.
-        std::vector<bool> scopes; ///< One entry per open scope, innermost last: true when it began inside a render pass.
-        size_t passScopeBase = 0; ///< The number of open scopes when the open pass began.
-        std::string label;        ///< The label the list was acquired with.
-        ArenaPage page;           ///< The arena page the list uploads into; null until its first upload.
-        uint64_t pageUsed = 0;    ///< Bytes of `page` the list has used: its bump cursor, which takes no lock.
+        bool passOpen = false;                       ///< A render pass is open on the list.
+        PassState pass;                              ///< The open pass; meaningful while `passOpen`.
+        BoundPipeline pipeline;                      ///< The bound pipeline; cleared by `beginRenderPass` and `endRenderPass`.
+        Addr root = {};                              ///< The root `setRoot` bound; null until one is.
+        std::vector<bool> scopes;                    ///< One entry per open scope, innermost last: true when it began inside a render pass.
+        size_t passScopeBase = 0;                    ///< The number of open scopes when the open pass began.
+        std::string label;                           ///< The label the list was acquired with.
+        ArenaPage page;                              ///< The arena page the list uploads into; null until its first upload.
+        uint64_t pageUsed = 0;                       ///< Bytes of `page` the list has used: its bump cursor, which takes no lock.
+        std::vector<ScopeRecord> scopeLog;           ///< The scopes recorded on the list in the order they began, for `Device::scopeTimings`.
+        std::vector<ResourceAccess> pendingAccesses; ///< Declared accesses no draw or dispatch has consumed; kept only on a validating device.
     };
 
     /// Returns the core of the command list `list` wraps (VU-rojo-core-0004). Each backend defines it, as it does for a
@@ -99,6 +103,11 @@ namespace rojoRHI::core {
         uint64_t offset;   ///< Bytes from the start of the page, a multiple of the requested alignment.
         std::byte* memory; ///< The host address of that offset.
     };
+
+    /// Reserves `size` bytes at `alignment` in `list`'s own page, claiming a page when it has none or the bytes do not fit,
+    /// through `source`. Only claiming takes a lock. It checks nothing: `allocateFrameData` and the scope recorder call it
+    /// after their own checks.
+    ArenaAllocation bumpArenaPage(DeviceCore& core, CommandListCore& list, uint64_t size, uint32_t alignment, ArenaPageSource source, void* context);
 
     /// Checks an upload of `bytes` at `alignment` (VU-rojo-buffer-0015 to 0017, then VU-rojo-cmd-0063) and bumps the cursor of
     /// `list`'s own page; only a list with no page, or whose page is full, claims a page from the arena, which takes a lock

@@ -12,18 +12,21 @@
 
 #include "Core/CommandLists.h"
 
+#include <string_view>
+
 namespace rojoRHI::core {
     /// Checks that `list` can begin the pass `desc` describes (VU-rojo-cmd-0063, VU-rojo-cmd-0005, 0008, 0009, 0011 to
     /// 0016, 0071, VU-rojo-format-0003 for a resolve target, VU-rojo-core-0001 to 0003 for the textures) and opens it: dynamic state starts unset and no
-    /// pipeline is bound.
+    /// pipeline is bound. The pass forms a scope labeled `desc.label`, or `rojorhi.pass.unnamed` when empty.
     void beginPass(CommandListCore& list, const RenderPassDesc& desc);
 
     /// Checks that a pass is open and every scope begun in it has ended (VU-rojo-cmd-0063, 0018, 0019), then closes it and
     /// unbinds the pipeline.
     void endPass(CommandListCore& list);
 
-    /// Opens a scope on `list` (VU-rojo-cmd-0063), inside or outside a pass.
-    void beginScope(CommandListCore& list);
+    /// Opens a scope on `list` (VU-rojo-cmd-0063), inside or outside a pass, and records it with `label`, or
+    /// `rojorhi.scope.unnamed` when empty.
+    void beginScope(CommandListCore& list, std::string_view label);
 
     /// Checks that a scope is open and began on the same side of the pass boundary (VU-rojo-cmd-0063, 0032, 0033), then
     /// closes it.

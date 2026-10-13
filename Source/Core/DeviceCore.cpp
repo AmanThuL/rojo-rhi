@@ -7,6 +7,7 @@
 
 #include "Base/Assert.h"
 #include "Base/Log.h"
+#include "Core/CommandLists.h"
 #include "Core/Label.h"
 #include "Core/Swapchains.h"
 
@@ -37,7 +38,7 @@ namespace rojoRHI::core {
     //==================================================================================================================
     DeviceCore::DeviceCore(const DeviceDesc& desc)
         : m_framesInFlight(desc.framesInFlight), m_validation(desc.validation), m_label(resolveLabel(desc.label, "rojorhi.device.unnamed")),
-          m_arena(desc.framesInFlight)
+          m_scopes(desc.framesInFlight), m_arena(desc.framesInFlight)
     {
     }
 
@@ -48,6 +49,7 @@ namespace rojoRHI::core {
         ROJORHI_VU((state & 1) == 0, "VU-rojo-device-0003", "beginFrame was called while frame {} is still open", state >> 1);
         const uint64_t frame = (state >> 1) + 1;
         m_state.store((frame << 1) | 1);
+        m_scopes.clearReport();
         if (frame > m_framesInFlight)
         {
             const uint64_t retired = frame - m_framesInFlight;
@@ -63,6 +65,8 @@ namespace rojoRHI::core {
             m_views.retire(retired);
             m_samplers.retire(retired);
             const uint32_t slot = static_cast<uint32_t>(frame % m_framesInFlight);
+            // The slot's scopes leave the arena pages their labels live in before the rewind makes the pages claimable.
+            m_scopes.retire(slot, retired);
             m_arena.rewind(slot);
             if (m_hooks.frameSlot != nullptr)
             {
@@ -170,6 +174,55 @@ namespace rojoRHI::core {
     bool (*DeviceCore::surfaceCheck() const)(const void* surface)
     {
         return m_surfaceCheck;
+    }
+
+    //==================================================================================================================
+    void DeviceCore::setArenaSource(ArenaPageSource source)
+    {
+        m_arenaSource = source;
+    }
+
+    //==================================================================================================================
+    ArenaPageSource DeviceCore::arenaSource() const
+    {
+        ROJORHI_INTERNAL_ASSERT(m_arenaSource != nullptr, "the backend registered no frame-arena page source");
+        return m_arenaSource;
+    }
+
+    //==================================================================================================================
+    void DeviceCore::setCaptureAvailable(Result<void> (*available)(std::string_view path))
+    {
+        m_captureAvailable = available;
+    }
+
+    //==================================================================================================================
+    Result<void> (*DeviceCore::captureAvailable() const)(std::string_view path)
+    {
+        return m_captureAvailable;
+    }
+
+    //==================================================================================================================
+    bool DeviceCore::capturing() const
+    {
+        return m_capturing.load();
+    }
+
+    //==================================================================================================================
+    bool DeviceCore::exchangeCapturing(bool capturing)
+    {
+        return m_capturing.exchange(capturing);
+    }
+
+    //==================================================================================================================
+    void DeviceCore::submitScopes(const CommandListCore& list)
+    {
+        m_scopes.submit(static_cast<uint32_t>(list.frame % m_framesInFlight), list.type, list.scopeLog);
+    }
+
+    //==================================================================================================================
+    std::span<const ScopeTiming> DeviceCore::scopeTimings() const
+    {
+        return m_scopes.report();
     }
 
     //==================================================================================================================

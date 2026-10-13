@@ -18,8 +18,9 @@ namespace rojoRHI::test {
         /// The edge of the textures `target` and `depthTarget` create, in texels.
         static constexpr uint32_t kSize = 64;
 
-        /// Creates the device, opens a frame and acquires a list of `type`.
-        explicit PassKit(QueueType type = QueueType::Graphics);
+        /// Creates the device, opens a frame and acquires a list of `type`. `validation` selects `DeviceDesc::validation`, which a
+        /// Release build refuses, so only Debug-only tests pass true.
+        explicit PassKit(QueueType type = QueueType::Graphics, bool validation = false);
 
         /// Creates a `kSize` square `RenderTarget` texture.
         Texture target(Format format = Format::RGBA8Unorm, uint32_t samples = 1, uint32_t mips = 1, uint32_t layers = 1);

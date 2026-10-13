@@ -12,9 +12,9 @@
 
 namespace rojoRHI::test {
     //==================================================================================================================
-    PassKit::PassKit(QueueType listType) : type(listType)
+    PassKit::PassKit(QueueType listType, bool validation) : type(listType)
     {
-        device = *createDevice();
+        device = *createDevice(DeviceDesc{ .validation = validation });
         const std::vector<std::byte> blob = standardLibrary();
         library = *device.loadShaderLibrary(blob, "kit.library");
         device.beginFrame();

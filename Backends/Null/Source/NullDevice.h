@@ -31,6 +31,11 @@ namespace rojoRHI {
 
     struct DeviceImpl;
 
+    /// Creates one frame-arena page as a zeroed host buffer of the pool, so an address into it resolves like any buffer's; the
+    /// context is the device's `core::DeviceCore`. The page has the `IndirectArgs` usage because the reference lets frame data
+    /// serve as indirect arguments.
+    Result<core::ArenaPage> createArenaPage(void* context, uint64_t size);
+
     /// The Null backend's queue: it knows its type and the device that owns it, which is how a queue used with another device
     /// is told apart. It executes nothing; a submission completes during the call.
     struct QueueImpl

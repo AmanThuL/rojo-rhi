@@ -8,6 +8,7 @@
 #include "Base/Assert.h"
 #include "Core/Formats.h"
 #include "Core/Pipelines.h"
+#include "Core/Scopes.h"
 #include "Core/Textures.h"
 
 #include <algorithm>
@@ -245,6 +246,7 @@ namespace rojoRHI::core {
         pass.area = desc.area;
         list.pass = std::move(pass);
         list.pipeline = {};
+        recordScope(list, desc.label, "rojorhi.pass.unnamed", static_cast<uint32_t>(list.scopes.size()));
         list.passScopeBase = list.scopes.size();
         list.passOpen = true;
     }
@@ -266,9 +268,11 @@ namespace rojoRHI::core {
     }
 
     //==================================================================================================================
-    void beginScope(CommandListCore& list)
+    void beginScope(CommandListCore& list, std::string_view label)
     {
         checkRecording(list);
+        // A scope inside a pass is a child of the pass's own scope.
+        recordScope(list, label, "rojorhi.scope.unnamed", static_cast<uint32_t>(list.scopes.size() + (list.passOpen ? 1 : 0)));
         list.scopes.push_back(list.passOpen);
     }
 

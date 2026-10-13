@@ -10,6 +10,7 @@
 #include "Base/Assert.h"
 #include "Base/Log.h"
 #include "Core/Buffers.h"
+#include "Core/Captures.h"
 #include "Core/DeviceCore.h"
 #include "Core/Fences.h"
 #include "Core/Formats.h"
@@ -205,6 +206,7 @@ namespace rojoRHI {
         capabilities.upscalers = kUpscalers;
         impl->core.setFormatTable(core::formatCeilings());
         impl->core.setTileExtents(core::standardTileExtent);
+        impl->core.setArenaSource(createArenaPage);
         core::RetireHooks hooks;
         hooks.context = impl.get();
         hooks.buffer = retireBuffer;
@@ -249,6 +251,24 @@ namespace rojoRHI {
     void Device::beginFrame()
     {
         DeviceImpl::of(*this).core.beginFrame();
+    }
+
+    //==================================================================================================================
+    std::span<const ScopeTiming> Device::scopeTimings()
+    {
+        return DeviceImpl::of(*this).core.scopeTimings();
+    }
+
+    //==================================================================================================================
+    Result<void> Device::beginCapture(std::string_view path)
+    {
+        return core::beginCapture(DeviceImpl::of(*this).core, path);
+    }
+
+    //==================================================================================================================
+    void Device::endCapture()
+    {
+        core::endCapture(DeviceImpl::of(*this).core);
     }
 
     //==================================================================================================================
