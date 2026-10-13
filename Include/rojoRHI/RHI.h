@@ -15,6 +15,7 @@
 #include <rojoRHI/ClearColor.h>
 #include <rojoRHI/ClearValue.h>
 #include <rojoRHI/ColorAttachment.h>
+#include <rojoRHI/ColorSpace.h>
 #include <rojoRHI/ColorTarget.h>
 #include <rojoRHI/CommandList.h>
 #include <rojoRHI/CompareOp.h>
@@ -42,6 +43,7 @@
 #include <rojoRHI/PipelineCache.h>
 #include <rojoRHI/Placement.h>
 #include <rojoRHI/PlacementRequirements.h>
+#include <rojoRHI/PresentMode.h>
 #include <rojoRHI/PrimitiveClass.h>
 #include <rojoRHI/PrimitiveTopology.h>
 #include <rojoRHI/Queue.h>
@@ -58,6 +60,7 @@
 #include <rojoRHI/StoreOp.h>
 #include <rojoRHI/SubresourceRange.h>
 #include <rojoRHI/Swapchain.h>
+#include <rojoRHI/SwapchainDesc.h>
 #include <rojoRHI/TextureAspect.h>
 #include <rojoRHI/TextureBarrier.h>
 #include <rojoRHI/TextureData.h>

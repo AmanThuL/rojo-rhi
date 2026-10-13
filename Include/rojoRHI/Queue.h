@@ -6,6 +6,7 @@
 
 #include <rojoRHI/CommandList.h>
 #include <rojoRHI/FenceValue.h>
+#include <rojoRHI/Swapchain.h>
 
 #include <span>
 
@@ -23,6 +24,13 @@ namespace rojoRHI {
         /// value submitted for signal on it and above its initial value (VU-rojo-queue-0003); each `wait` value is at most the
         /// fence's initial value or the greatest value already submitted for signal (VU-rojo-queue-0007). Thread class queue.
         void submit(std::span<const CommandList> lists, std::span<const FenceValue> wait = {}, std::span<const FenceValue> signal = {});
+
+        /// Hands the swapchain's acquired image to the display once all work submitted earlier to this queue completes. It is
+        /// the graphics queue (VU-rojo-present-0015); the swapchain holds an image acquired in this frame and not yet presented
+        /// (VU-rojo-present-0016), and the call comes before the `Device::endFrame` that closes that frame
+        /// (VU-rojo-present-0017). The image was last moved to `Layout::Present` (VU-rojo-present-0018) and no list submitted
+        /// afterwards references it (VU-rojo-present-0019). Does not wait. Thread class queue.
+        void present(Swapchain swapchain);
 
       private:
         friend struct QueueImpl;

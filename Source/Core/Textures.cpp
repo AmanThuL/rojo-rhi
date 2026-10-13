@@ -447,11 +447,14 @@ namespace rojoRHI::core {
         Heap heap = {};
         [[maybe_unused]] uint64_t views = 0;
         [[maybe_unused]] std::string label;
+        [[maybe_unused]] bool swapchainImage = false;
         [[maybe_unused]] const LookupStatus status = core.pool<Texture>().update(texture, [&](TextureRecord& record) {
             heap = record.heap;
             views = record.views;
             label = record.label;
+            swapchainImage = record.swapchainImage;
         });
+        ROJORHI_VU(!swapchainImage, "VU-rojo-present-0013", "the swapchain image \"{}\" is destroyed; its swapchain owns it", label);
         ROJORHI_VU(
             status != LookupStatus::Ok || views == 0,
             "VU-rojo-texture-0028",
@@ -464,6 +467,18 @@ namespace rojoRHI::core {
         {
             removePlacedResource(core, heap);
         }
+    }
+
+    //==================================================================================================================
+    void checkNotSwapchainImage([[maybe_unused]] const TextureRecord& texture, [[maybe_unused]] std::string_view use)
+    {
+        ROJORHI_VU(
+            !texture.swapchainImage,
+            "VU-rojo-present-0012",
+            "the swapchain image \"{}\" is used by {}; it is used only as a color attachment and in texture barriers",
+            texture.label,
+            use
+        );
     }
 
     //==================================================================================================================
@@ -500,6 +515,7 @@ namespace rojoRHI::core {
         TextureRecord* record = core.pool<Texture>().checked(texture, false);
         ROJORHI_INTERNAL_ASSERT(record != nullptr, "a checked lookup that does not allow null returned null");
         // The record's address is stable while the texture lives, and its description never changes.
+        checkNotSwapchainImage(*record, "createView");
         checkViewDesc(core, *record, desc);
         const std::optional<uint32_t> slot = core.views().allocate(core.capabilities().maxViews, texture.bits);
         if (!slot)
@@ -523,6 +539,7 @@ namespace rojoRHI::core {
         );
         [[maybe_unused]] TextureRecord* record = core.pool<Texture>().checked(texture, false);
         ROJORHI_INTERNAL_ASSERT(record != nullptr, "a checked lookup that does not allow null returned null");
+        checkNotSwapchainImage(*record, "writeView");
         ROJORHI_VU(
             viewDescFits(core, *record, desc),
             "VU-rojo-texture-0034",

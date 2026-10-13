@@ -181,8 +181,8 @@ to that queue is ordered after the display releases it.
 - `VU-rojo-present-0010` A frame is open: the call comes between `Device::beginFrame` and
   `Device::endFrame`.
 - `VU-rojo-present-0011` No image of this swapchain is acquired and not yet presented.
-- `VU-rojo-present-0012` The returned texture is used only as a color attachment and in texture
-  barriers.
+- `VU-rojo-present-0012` The returned texture is used only as a color attachment, including as the
+  resolve target of a color attachment, and in texture barriers.
 - `VU-rojo-present-0013` The returned texture is never passed to `Device::destroy`.
 - `VU-rojo-present-0014` The first texture barrier on the returned texture after the call has
   `oldLayout` `Layout::Undefined`. Checked by the validation tracker.

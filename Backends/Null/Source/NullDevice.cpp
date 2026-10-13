@@ -17,6 +17,7 @@
 #include "Core/Pipelines.h"
 #include "Core/Ranges.h"
 #include "Core/Samplers.h"
+#include "Core/Swapchains.h"
 #include "Core/Textures.h"
 #include "NullShaderLibrary.h"
 
@@ -118,6 +119,23 @@ namespace rojoRHI {
             std::lock_guard lock(pool.mutex);
             pool.used = 0;
         }
+
+        //==============================================================================================================
+        /// Frees the swapchains destroyed in the frames the reused slot held.
+        void freeSlotSwapchains(void* context, uint32_t slot)
+        {
+            DeviceImpl& device = *static_cast<DeviceImpl*>(context);
+            std::lock_guard lock(device.swapchainMutex);
+            device.retiredSwapchains[slot].clear();
+        }
+
+        //==============================================================================================================
+        /// Returns the command lists of a reused frame slot to its pool and frees its destroyed swapchains.
+        void reuseSlot(void* context, uint32_t slot)
+        {
+            returnSlotLists(context, slot);
+            freeSlotSwapchains(context, slot);
+        }
     } // namespace
 
     //==================================================================================================================
@@ -135,11 +153,32 @@ namespace rojoRHI {
         return device;
     }
 
+    //==================================================================================================================
+    SwapchainImpl& SwapchainImpl::of(Swapchain swapchain)
+    {
+        core::checkObject(swapchain.m_impl, "Swapchain");
+        return *swapchain.m_impl;
+    }
+
+    //==================================================================================================================
+    Swapchain SwapchainImpl::wrap(SwapchainImpl* impl)
+    {
+        Swapchain swapchain;
+        swapchain.m_impl = impl;
+        return swapchain;
+    }
+
     namespace core {
         //==============================================================================================================
         DeviceCore& coreOf(Device device)
         {
             return DeviceImpl::of(device).core;
+        }
+
+        //==============================================================================================================
+        SwapchainCore& coreOf(Swapchain swapchain)
+        {
+            return SwapchainImpl::of(swapchain).core;
         }
     } // namespace core
 
@@ -166,7 +205,7 @@ namespace rojoRHI {
         core::RetireHooks hooks;
         hooks.context = impl.get();
         hooks.buffer = retireBuffer;
-        hooks.frameSlot = returnSlotLists;
+        hooks.frameSlot = reuseSlot;
         impl->core.setRetireHooks(hooks);
         if (!desc.pipelineCache.empty())
         {
@@ -456,12 +495,44 @@ namespace rojoRHI {
         core::destroySampler(DeviceImpl::of(*this).core, sampler);
     }
 
-    // Swapchains do not exist yet, so releasing one has nothing to defer.
+    //==================================================================================================================
+    Result<Swapchain> Device::createSwapchain(const SwapchainDesc& desc)
+    {
+        DeviceImpl& impl = DeviceImpl::of(*this);
+        // A Null swapchain reads nothing from its surface: the core only compares it with the surfaces of live swapchains.
+        auto swapchain = std::make_unique<SwapchainImpl>();
+        swapchain->core = core::prepareSwapchain(impl.core, desc, kNullSurfaceExtent);
+        impl.core.addSwapchain(swapchain->core);
+        SwapchainImpl* raw = swapchain.get();
+        std::lock_guard lock(impl.swapchainMutex);
+        impl.swapchains.push_back(std::move(swapchain));
+        return SwapchainImpl::wrap(raw);
+    }
+
+    //==================================================================================================================
+    void Swapchain::resize(Extent2D extent)
+    {
+        core::resizeSwapchain(SwapchainImpl::of(*this).core, extent);
+    }
+
+    //==================================================================================================================
+    Texture Swapchain::acquire()
+    {
+        return core::acquireImage(SwapchainImpl::of(*this).core);
+    }
 
     //==================================================================================================================
     void Device::destroy(Swapchain swapchain)
     {
-        DeviceImpl::of(*this);
-        core::checkObject(swapchain.m_impl, "Swapchain");
+        DeviceImpl& impl = DeviceImpl::of(*this);
+        SwapchainImpl& target = SwapchainImpl::of(swapchain);
+        core::destroySwapchain(impl.core, target.core);
+        // The swapchain's memory outlives the call until its frame slot is reused, as the native objects of a deferred
+        // resource do. The frame is read under the lock so a slot reuse cannot slip between reading it and filing the entry.
+        std::lock_guard lock(impl.swapchainMutex);
+        const auto found = std::find_if(impl.swapchains.begin(), impl.swapchains.end(), [&](const auto& live) { return live.get() == &target; });
+        ROJORHI_INTERNAL_ASSERT(found != impl.swapchains.end(), "a swapchain that passed the device check is not in the device's list");
+        impl.retiredSwapchains[impl.core.releaseFrame() % impl.core.framesInFlight()].push_back(std::move(*found));
+        impl.swapchains.erase(found);
     }
 } // namespace rojoRHI

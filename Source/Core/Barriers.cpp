@@ -279,6 +279,14 @@ namespace rojoRHI::core {
             checkSubresourceRange(*record, entry.range);
             checkSide(list, entry.srcStage, entry.srcAccess, "source");
             checkSide(list, entry.dstStage, entry.dstAccess, "destination");
+            ROJORHI_VU(
+                record->swapchainImage || (entry.oldLayout != Layout::Present && entry.newLayout != Layout::Present),
+                "VU-rojo-sync-0005",
+                "a barrier moves the texture \"{}\", which no swapchain acquired, from layout {} to {}; only a swapchain image uses Present",
+                record->label,
+                static_cast<int>(entry.oldLayout),
+                static_cast<int>(entry.newLayout)
+            );
             ROJORHI_VU(entry.newLayout != Layout::Undefined, "VU-rojo-sync-0014", "a barrier of the texture \"{}\" moves it to Undefined", record->label);
             ROJORHI_VU(
                 usageAllowsLayout(record->usage, entry.newLayout),

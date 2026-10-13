@@ -19,6 +19,7 @@
 #include "Core/Records.h"
 
 #include <span>
+#include <string_view>
 
 namespace rojoRHI::core {
     /// Returns the extent of mip `mip` of a texture whose mip 0 is `extent`, in texels and never below one.
@@ -45,9 +46,14 @@ namespace rojoRHI::core {
     /// handle.
     Texture addTexture(DeviceCore& core, TextureRecord record);
 
-    /// Destroys `texture`, deferred as `DeviceCore::destroy` does, after checking that no view slot still holds a view of it
-    /// (VU-rojo-texture-0028), and releases its claim on its heap.
+    /// Destroys `texture`, deferred as `DeviceCore::destroy` does, after checking that it is not a swapchain image
+    /// (VU-rojo-present-0013) and that no view slot still holds a view of it (VU-rojo-texture-0028), and releases its claim on
+    /// its heap.
     void destroyTexture(DeviceCore& core, Texture texture);
+
+    /// Issues VU-rojo-present-0012 when `texture` is a swapchain image; `use` names the entry that would use it. Every entry
+    /// that takes a texture other than as a color attachment, a resolve target or in a barrier asks it.
+    void checkNotSwapchainImage(const TextureRecord& texture, std::string_view use);
 
     /// Checks that `range` names at least one mip and layer of `texture` and lies inside it (VU-rojo-texture-0016, 0017); the
     /// one site of the rules, shared by views and barriers.

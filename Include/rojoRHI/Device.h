@@ -25,6 +25,7 @@
 #include <rojoRHI/SamplerDesc.h>
 #include <rojoRHI/SamplerIndex.h>
 #include <rojoRHI/Swapchain.h>
+#include <rojoRHI/SwapchainDesc.h>
 #include <rojoRHI/TextureData.h>
 #include <rojoRHI/TextureDesc.h>
 #include <rojoRHI/TextureViewDesc.h>
@@ -156,6 +157,12 @@ namespace rojoRHI {
         /// Free-threaded.
         Result<Fence> createFence(uint64_t initial, std::string_view label);
 
+        /// Creates a swapchain bound to `desc.nativeSurface` for the graphics queue, at the surface's current extent. The
+        /// description obeys VU-rojo-present-0001 to 0005, and the surface is not that of another live swapchain of this device
+        /// (VU-rojo-present-0006). A color space or present mode the surface or display cannot provide is an error result.
+        /// Presentation setup: it may wait. Free-threaded.
+        Result<Swapchain> createSwapchain(const SwapchainDesc& desc);
+
         /// Returns the greatest value `fence` has reached. Never blocks. Free-threaded.
         uint64_t completedValue(Fence fence);
 
@@ -194,7 +201,8 @@ namespace rojoRHI {
         void destroy(ViewIndex view);
         /// Releases a sampler slot into the deferred path; the index came from `createSampler` (VU-rojo-device-0010).
         void destroy(SamplerIndex sampler);
-        /// Destroys a swapchain; using it afterwards is undefined behaviour.
+        /// Destroys a swapchain, deferred as `destroy(Buffer)` is; an image it holds acquired is released with it, and using the
+        /// swapchain afterwards is undefined behaviour.
         void destroy(Swapchain swapchain);
 
       private:
