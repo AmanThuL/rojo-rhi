@@ -49,6 +49,9 @@ namespace rojoRHI::core {
         /// at creation, before it allocates anything.
         void setRetireHooks(const RetireHooks& hooks);
 
+        /// Returns the hooks registered for retiring records, so a test can wrap them.
+        const RetireHooks& retireHooks() const;
+
         /// Returns the capabilities the device reports; a backend fills them in place at creation, and its views must point at
         /// storage that outlives the device.
         Capabilities& capabilities();

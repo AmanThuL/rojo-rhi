@@ -92,7 +92,7 @@ TEST_CASE("VU-rojo-core-0002 a Buffer is destroyed twice", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-core-0002", [] {
         Device device = *createDevice();
-        const Buffer buffer = core::coreOf(device).pool<Buffer>().allocate({ "test.buffer" });
+        const Buffer buffer = *device.createBuffer({ .size = 64 });
         device.destroy(buffer);
         device.destroy(buffer);
     });
@@ -103,7 +103,7 @@ TEST_CASE("VU-rojo-core-0003 a Buffer's bits are destroyed as a Texture", "[cont
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-core-0003", [] {
         Device device = *createDevice();
-        const Buffer buffer = core::coreOf(device).pool<Buffer>().allocate({ "test.buffer" });
+        const Buffer buffer = *device.createBuffer({ .size = 64 });
         device.destroy(Texture{ buffer.bits });
     });
 }
@@ -113,7 +113,7 @@ TEST_CASE("VU-rojo-core-0001 a null Buffer is looked up", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-core-0001", [] {
         Device device = *createDevice();
-        (void)core::coreOf(device).pool<Buffer>().checked(Buffer{}, false);
+        (void)device.address(Buffer{});
     });
 }
 
@@ -122,9 +122,9 @@ TEST_CASE("VU-rojo-core-0002 a destroyed Buffer is looked up", "[contract][death
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-core-0002", [] {
         Device device = *createDevice();
-        const Buffer buffer = core::coreOf(device).pool<Buffer>().allocate({ "test.buffer" });
+        const Buffer buffer = *device.createBuffer({ .size = 64 });
         device.destroy(buffer);
-        (void)core::coreOf(device).pool<Buffer>().checked(buffer, false);
+        (void)device.address(buffer);
     });
 }
 
@@ -134,6 +134,6 @@ TEST_CASE("VU-rojo-core-0003 a Texture's bits are looked up as a Buffer", "[cont
     ROJORHI_EXPECT_DEATH("VU-rojo-core-0003", [] {
         Device device = *createDevice();
         const Texture texture = core::coreOf(device).pool<Texture>().allocate({ "test.texture" });
-        (void)core::coreOf(device).pool<Buffer>().checked(Buffer{ texture.bits }, false);
+        (void)device.address(Buffer{ texture.bits });
     });
 }

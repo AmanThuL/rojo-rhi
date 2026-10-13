@@ -8,7 +8,12 @@
 
 #include "Core/DeviceCore.h"
 
+#include <cstdint>
+
 namespace rojoRHI {
+    /// The Null device's `Limits::maxAddrOffset`: the 32-bit byte offset an address carries in its `hi` word, 2^32 - 1.
+    constexpr uint64_t kNullMaxAddrOffset = 4'294'967'295;
+
     /// The Null backend's device: the shared core, which also keeps the capabilities it reports. It renders nothing.
     struct DeviceImpl
     {
