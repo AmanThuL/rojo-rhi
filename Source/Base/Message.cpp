@@ -51,12 +51,12 @@ namespace rojoRHI {
                 user = gUser;
             }
 
-            if (callback != nullptr)
+            // A message emitted from inside the callback goes to the default sink: routing it back would re-enter the callback.
+            if (callback != nullptr && !gInsideCallback)
             {
-                const bool outer = gInsideCallback;
                 gInsideCallback = true;
                 callback(severity, message, user);
-                gInsideCallback = outer;
+                gInsideCallback = false;
                 return;
             }
 
