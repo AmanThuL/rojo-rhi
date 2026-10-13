@@ -7,6 +7,7 @@
 
 #include <rojoRHI/Queue.h>
 
+#include "Core/CommandLists.h"
 #include "Core/DeviceCore.h"
 #include "Core/Fences.h"
 
@@ -29,8 +30,10 @@ namespace rojoRHI {
     //==================================================================================================================
     void Queue::submit(std::span<const CommandList> lists, std::span<const FenceValue> wait, std::span<const FenceValue> signal)
     {
-        core::DeviceCore& core = QueueImpl::of(*this).device->core;
-        core::checkSubmit(core, lists, wait, signal);
+        const QueueImpl& queue = QueueImpl::of(*this);
+        core::DeviceCore& core = queue.device->core;
+        core::submitLists(core, queue.type, lists);
+        core::checkSubmit(core, wait, signal);
         // The Null queue executes nothing, so every signal is reached before the call returns.
         core::recordSignals(core, signal, core::SignalCompletion::Immediate);
     }

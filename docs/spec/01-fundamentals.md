@@ -64,7 +64,7 @@ entry point; the classes below state what is safe. An entry's semantics name its
 | Class | Rule | Entry points |
 |---|---|---|
 | Free-threaded | Any thread, concurrently with any other call except those the other classes exclude; may lock internally. | `createDevice`; every `Device::create*`, `Device::loadShaderLibrary`, `Device::pipelineCacheData`, `Device::destroy`; view and sampler slot calls (`reserveViews`, `writeView`, `reserveSamplers`, `writeSampler`, `release`); `Device::queue`, `Device::acquireCommandList`; queries (`capabilities`, `formatCapabilities`, `tileShape`, `address`, `cpuPointer`, `completedValue`, `counters`); `Device::wait`; `Device::beginCapture`, `Device::endCapture`; `setMessageCallback` |
-| Per command list | One thread at a time per `CommandList`; different lists record in parallel. Takes no locks. | every `CommandList::` member, including `uploadFrameData` |
+| Per command list | One thread at a time per `CommandList`; different lists record in parallel. In Release builds takes no locks, except when a list claims a new frame-arena page for `uploadFrameData`; a Debug-tier check may take the lock of the pool it reads ([ADR 0019](../decisions/0019-recording-locks.md)). | every `CommandList::` member, including `uploadFrameData` |
 | Per queue | One thread at a time per `Queue`; submissions to one queue are serialized by the caller. | `Queue::submit`, `Queue::present`, `Queue::mapTiles` |
 | Per swapchain | One thread at a time per `Swapchain`, ordered with the `Queue::present` that consumes it. | `Swapchain::acquire`, `Swapchain::resize` |
 | Frame | One thread at a time, never concurrent with a call that uses the open frame. | `Device::beginFrame`, `Device::endFrame`, `Device::scopeTimings` |

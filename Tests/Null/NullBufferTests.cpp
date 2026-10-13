@@ -43,6 +43,13 @@ namespace {
         spy.inner.buffer(spy.inner.context, record);
         spy.seen.emplace_back(spy.core->frameNumber(), record.native == nullptr);
     }
+
+    //==================================================================================================================
+    void spyOnSlot(void* context, uint32_t slot)
+    {
+        Spy& spy = *static_cast<Spy*>(context);
+        spy.inner.frameSlot(spy.inner.context, slot);
+    }
 } // namespace
 
 //======================================================================================================================
@@ -129,6 +136,7 @@ TEST_CASE("host memory is freed when the frame that released the buffer retires"
     core::RetireHooks hooks = spy.inner;
     hooks.context = &spy;
     hooks.buffer = spyOnBuffer;
+    hooks.frameSlot = spyOnSlot;
     core.setRetireHooks(hooks);
 
     device.beginFrame();

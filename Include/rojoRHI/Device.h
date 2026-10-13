@@ -7,6 +7,7 @@
 #include <rojoRHI/Addr.h>
 #include <rojoRHI/BufferDesc.h>
 #include <rojoRHI/Capabilities.h>
+#include <rojoRHI/CommandList.h>
 #include <rojoRHI/DeviceDesc.h>
 #include <rojoRHI/FenceValue.h>
 #include <rojoRHI/Format.h>
@@ -50,7 +51,8 @@ namespace rojoRHI {
         /// destructions are released. No frame may be open (VU-rojo-device-0003). Thread class frame.
         void beginFrame();
 
-        /// Closes the open frame (VU-rojo-device-0004). Thread class frame.
+        /// Closes the open frame (VU-rojo-device-0004); every command list acquired in it has been submitted
+        /// (VU-rojo-device-0005). Thread class frame.
         void endFrame();
 
         /// Creates a buffer of `desc.size` bytes in `desc.memory` and labels it. `Upload` and `Readback` buffers are persistently
@@ -120,6 +122,12 @@ namespace rojoRHI {
         /// Returns the device's queue of `type`; the same queue on every call. The device owns it and it is never destroyed
         /// separately. Free-threaded.
         Queue queue(QueueType type);
+
+        /// Returns a command list for `type` in the recording state from the open frame's pool, labelled `label` (empty selects
+        /// a `rojorhi.`-prefixed default). A frame is open (VU-rojo-cmd-0001). The list belongs to that frame: it returns to the
+        /// pool when the frame retires, and every list acquired in a frame is submitted before its `endFrame`
+        /// (VU-rojo-device-0005). Free-threaded.
+        CommandList acquireCommandList(QueueType type, std::string_view label);
 
         /// Creates a timeline fence whose completed value starts at `initial` and labels it. Out of memory is an error result.
         /// Free-threaded.

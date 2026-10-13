@@ -34,7 +34,8 @@ namespace rojoRHI::core {
 
     //==================================================================================================================
     DeviceCore::DeviceCore(const DeviceDesc& desc)
-        : m_framesInFlight(desc.framesInFlight), m_validation(desc.validation), m_label(resolveLabel(desc.label, "rojorhi.device.unnamed"))
+        : m_framesInFlight(desc.framesInFlight), m_validation(desc.validation), m_label(resolveLabel(desc.label, "rojorhi.device.unnamed")),
+          m_arena(desc.framesInFlight)
     {
     }
 
@@ -59,6 +60,12 @@ namespace rojoRHI::core {
             });
             m_views.retire(retired);
             m_samplers.retire(retired);
+            const uint32_t slot = static_cast<uint32_t>(frame % m_framesInFlight);
+            m_arena.rewind(slot);
+            if (m_hooks.frameSlot != nullptr)
+            {
+                m_hooks.frameSlot(m_hooks.context, slot);
+            }
         }
     }
 
@@ -67,6 +74,13 @@ namespace rojoRHI::core {
     {
         const uint64_t state = m_state.load();
         ROJORHI_VU((state & 1) != 0, "VU-rojo-device-0004", "endFrame was called with no frame open");
+        ROJORHI_VU(
+            m_unsubmittedLists.load() == 0,
+            "VU-rojo-device-0005",
+            "endFrame was called with {} command lists of frame {} not submitted",
+            m_unsubmittedLists.load(),
+            state >> 1
+        );
         m_state.store(state & ~uint64_t{ 1 });
     }
 
@@ -74,6 +88,11 @@ namespace rojoRHI::core {
     void DeviceCore::beginDestroy()
     {
         ROJORHI_VU(!frameOpen(), "VU-rojo-device-0002", "destroyDevice was called while frame {} is open", frameNumber());
+        // The arena's pages are the library's own buffers, not leaks of the caller.
+        for (const Buffer page : m_arena.takePages())
+        {
+            destroy(page);
+        }
         if (m_validation)
         {
             std::apply(
@@ -189,6 +208,24 @@ namespace rojoRHI::core {
     SlotAllocator& DeviceCore::samplers()
     {
         return m_samplers;
+    }
+
+    //==================================================================================================================
+    FrameArena& DeviceCore::arena()
+    {
+        return m_arena;
+    }
+
+    //==================================================================================================================
+    void DeviceCore::noteListAcquired()
+    {
+        ++m_unsubmittedLists;
+    }
+
+    //==================================================================================================================
+    void DeviceCore::noteListSubmitted()
+    {
+        --m_unsubmittedLists;
     }
 
     //==================================================================================================================

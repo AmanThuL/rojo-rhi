@@ -11,6 +11,7 @@
 #include <rojoRHI/Result.h>
 
 #include "Core/Formats.h"
+#include "Core/FrameArena.h"
 #include "Core/HandlePool.h"
 #include "Core/Records.h"
 #include "Core/SlotAllocator.h"
@@ -72,7 +73,7 @@ namespace rojoRHI::core {
         /// Opens the next frame and passes what the slot it reuses held to the retire hooks (VU-rojo-device-0003). Frame class.
         void beginFrame();
 
-        /// Closes the open frame (VU-rojo-device-0004). Frame class.
+        /// Closes the open frame (VU-rojo-device-0004, VU-rojo-device-0005). Frame class.
         void endFrame();
 
         /// Starts teardown: VU-rojo-device-0002, then, when validation was selected, a warning for each live object, then every
@@ -109,6 +110,17 @@ namespace rojoRHI::core {
         /// releases them, and `beginFrame` retires them with the frame that released them.
         SlotAllocator& samplers();
 
+        /// Returns the arena `CommandList::uploadFrameData` suballocates from; `beginFrame` rewinds a slot's pages when it
+        /// reuses the slot, and `beginDestroy` destroys them.
+        FrameArena& arena();
+
+        /// Counts a command list acquired in the open frame, which `endFrame` requires to be submitted
+        /// (VU-rojo-device-0005). Free-threaded.
+        void noteListAcquired();
+
+        /// Counts a command list of the open frame as submitted. Free-threaded.
+        void noteListSubmitted();
+
         /// Returns the number of frame slots.
         uint32_t framesInFlight() const;
 
@@ -142,9 +154,11 @@ namespace rojoRHI::core {
         RetireHooks m_hooks;
         Capabilities m_capabilities;
         FormatTable m_formats;
+        std::atomic<uint64_t> m_unsubmittedLists = 0;
         uint32_t m_framesInFlight;
         bool m_validation;
         std::string m_label;
+        FrameArena m_arena;
         /// Frame number shifted left by one, with bit zero set while that frame is open; one word so the free-threaded
         /// destroy reads a consistent pair while the frame class writes it.
         std::atomic<uint64_t> m_state = 0;
