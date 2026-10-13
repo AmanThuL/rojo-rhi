@@ -77,6 +77,9 @@ class VuCoverageTests(unittest.TestCase):
         self.assertIn("out of order", self.errors(spec, "", "VU-rojo-core-0002 edges\nVU-rojo-core-0001 edges\n")[0])
         self.assertIn("twice", self.errors(RULE, "", "VU-rojo-core-0001 edges\nVU-rojo-core-0001 edges\n")[0])
 
+    def test_foundation_is_no_longer_a_part(self):
+        self.assertIn("unknown part", self.errors(RULE, "", "VU-rojo-core-0001 foundation\n")[0])
+
     def test_line_comment_does_not_cover(self):
         self.assertEqual(1, len(self.errors(RULE, "// " + DEATH, "")))
 

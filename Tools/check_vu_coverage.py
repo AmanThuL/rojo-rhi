@@ -11,7 +11,7 @@ ROOT = Path(__file__).resolve().parents[1]
 SPEC = Path("docs/spec")
 TESTS = Path("Tests")
 PENDING = Path("Tools/vu_pending.txt")
-PARTS = ("foundation", "resources", "recording", "edges", "tracker")
+PARTS = ("resources", "recording", "edges", "tracker")
 
 DEFINITION = re.compile(r"^- `(VU-rojo-[a-z]+-\d{4})`\s*(.*)$")
 TEST_CASE = re.compile(r'TEST_CASE\(\s*"((?:[^"\\]|\\.)*)"\s*,\s*"((?:[^"\\]|\\.)*)"')
