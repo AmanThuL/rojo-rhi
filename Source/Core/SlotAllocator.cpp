@@ -83,9 +83,10 @@ namespace rojoRHI::core {
     }
 
     //==================================================================================================================
-    void SlotAllocator::retire(uint64_t upToFrame)
+    uint64_t SlotAllocator::retire(uint64_t upToFrame)
     {
         std::lock_guard lock(m_mutex);
+        uint64_t singles = 0;
         std::erase_if(m_pending, [&](const Pending& entry) {
             if (entry.frame > upToFrame)
             {
@@ -96,8 +97,10 @@ namespace rojoRHI::core {
                 m_slots[entry.index + i] = Slot{};
                 m_free.push_back(entry.index + i);
             }
+            singles += entry.range ? 0 : 1;
             return true;
         });
+        return singles;
     }
 
     //==================================================================================================================

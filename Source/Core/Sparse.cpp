@@ -376,6 +376,7 @@ namespace rojoRHI::core {
     void mapTiles(DeviceCore& core, std::span<const TileMapping> mappings)
     {
         checkMappings(core, mappings);
+        DeviceCounts::add(core.counts().nativeSubmitCalls);
         std::map<uint64_t, int64_t> deltas;
         for (const TileMapping& mapping : mappings)
         {

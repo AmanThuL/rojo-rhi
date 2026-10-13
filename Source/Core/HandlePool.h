@@ -9,6 +9,8 @@
 #include "Base/Assert.h"
 
 #include <algorithm>
+#include <array>
+#include <atomic>
 #include <cstddef>
 #include <cstdint>
 #include <deque>
@@ -106,8 +108,9 @@ namespace rojoRHI::core {
             return indexOf(handle.bits);
         }
 
-        /// Stores `record` in a free slot, or a new one, and returns the handle naming it.
-        Handle allocate(Record record)
+        /// Stores `record` in a free slot, or a new one, and returns the handle naming it. `counted` false leaves the counters
+        /// of `countInto` alone, for a record that stands for no native creation.
+        Handle allocate(Record record, bool counted = true)
         {
             std::lock_guard lock(mutex_);
             uint32_t index = 0;
@@ -124,7 +127,22 @@ namespace rojoRHI::core {
             Slot& slot = slots_[index];
             slot.record = std::move(record);
             slot.live = true;
+            for (std::atomic<uint64_t>* counter : counted_)
+            {
+                if (counted && counter != nullptr)
+                {
+                    counter->fetch_add(1, std::memory_order_relaxed);
+                }
+            }
             return Handle{ pack(index, slot.generation) };
+        }
+
+        /// Makes every later `allocate` that counts add one to each of `counters`, relaxed; a null entry is skipped. The counters
+        /// must outlive the pool. The device core wires them once, before the pool is used.
+        void countInto(std::atomic<uint64_t>* first, std::atomic<uint64_t>* second = nullptr)
+        {
+            std::lock_guard lock(mutex_);
+            counted_ = { first, second };
         }
 
         /// Destroys the slot `handle` names: its generation advances now, and the slot becomes reusable once
@@ -344,6 +362,7 @@ namespace rojoRHI::core {
         }
 
         std::mutex mutex_;
+        std::array<std::atomic<uint64_t>*, 2> counted_ = {};
         uint32_t maxGeneration_;
         std::deque<Slot> slots_;
         std::vector<uint32_t> free_;

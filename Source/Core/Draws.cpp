@@ -104,6 +104,7 @@ namespace rojoRHI::core {
     void setRoot(CommandListCore& list, Addr root)
     {
         checkRecording(list);
+        noteNativeCall(list);
         ROJORHI_VU((root.lo != 0 || root.hi != 0), "VU-rojo-abi-0001", "setRoot was given the null address");
 #ifndef NDEBUG
         // Resolving reads the buffer pool under its lock, so only the Debug tier does it (ADR 0019).
@@ -117,6 +118,7 @@ namespace rojoRHI::core {
     void draw(CommandListCore& list)
     {
         checkRecording(list);
+        noteNativeCall(list);
         ROJORHI_VU(drawProblem(list, ShaderStage::Vertex, false).empty(), "VU-rojo-cmd-0023", "draw: {}", drawProblem(list, ShaderStage::Vertex, false));
         ROJORHI_VU(list.pass.viewportSet && list.pass.scissorSet, "VU-rojo-cmd-0024", "draw: no viewport and scissor were set since the pass began");
         consumeAccesses(list, false);
@@ -132,6 +134,7 @@ namespace rojoRHI::core {
     )
     {
         checkRecording(list);
+        noteNativeCall(list);
         ROJORHI_VU(drawProblem(list, ShaderStage::Vertex, true).empty(), "VU-rojo-cmd-0025", "drawIndexed: {}", drawProblem(list, ShaderStage::Vertex, true));
 #ifndef NDEBUG
         // The record feeds the Debug-tier check only; reading it takes the buffer pool's lock (ADR 0019).
@@ -154,6 +157,7 @@ namespace rojoRHI::core {
     void drawMeshTasks(CommandListCore& list, [[maybe_unused]] uint32_t x, [[maybe_unused]] uint32_t y, [[maybe_unused]] uint32_t z)
     {
         checkRecording(list);
+        noteNativeCall(list);
         ROJORHI_VU(drawProblem(list, ShaderStage::Mesh, true).empty(), "VU-rojo-cmd-0027", "drawMeshTasks: {}", drawProblem(list, ShaderStage::Mesh, true));
         [[maybe_unused]] const Limits& limits = list.device->capabilities().limits;
         ROJORHI_VU(
@@ -174,6 +178,7 @@ namespace rojoRHI::core {
     void dispatch(CommandListCore& list, [[maybe_unused]] uint32_t x, [[maybe_unused]] uint32_t y, [[maybe_unused]] uint32_t z)
     {
         checkRecording(list);
+        noteNativeCall(list);
         ROJORHI_VU(!list.passOpen && list.type != QueueType::Copy, "VU-rojo-cmd-0029", "dispatch: {}", dispatchProblem(list));
         ROJORHI_VU(list.pipeline.bound && list.pipeline.kind == PipelineKind::Compute, "VU-rojo-cmd-0030", "dispatch: no compute pipeline is bound");
         [[maybe_unused]] const uint32_t maxGroups = list.device->capabilities().limits.maxDispatchGroups;
@@ -193,6 +198,7 @@ namespace rojoRHI::core {
     void drawIndirect(CommandListCore& list, [[maybe_unused]] Addr args, [[maybe_unused]] uint32_t maxCount, [[maybe_unused]] Addr count)
     {
         checkRecording(list);
+        noteNativeCall(list);
         ROJORHI_VU(
             drawProblem(list, ShaderStage::Vertex, false).empty(), "VU-rojo-indirect-0001", "drawIndirect: {}", drawProblem(list, ShaderStage::Vertex, false)
         );
@@ -228,6 +234,7 @@ namespace rojoRHI::core {
     )
     {
         checkRecording(list);
+        noteNativeCall(list);
         ROJORHI_VU(
             drawProblem(list, ShaderStage::Vertex, false).empty(),
             "VU-rojo-indirect-0006",
@@ -271,6 +278,7 @@ namespace rojoRHI::core {
     void drawMeshTasksIndirect(CommandListCore& list, [[maybe_unused]] Addr args, [[maybe_unused]] uint32_t maxCount, [[maybe_unused]] Addr count)
     {
         checkRecording(list);
+        noteNativeCall(list);
         ROJORHI_VU(
             drawProblem(list, ShaderStage::Mesh, false).empty(),
             "VU-rojo-indirect-0012",
@@ -312,6 +320,7 @@ namespace rojoRHI::core {
     void dispatchIndirect(CommandListCore& list, [[maybe_unused]] Addr args)
     {
         checkRecording(list);
+        noteNativeCall(list);
         ROJORHI_VU(
             !list.passOpen && list.pipeline.bound && list.pipeline.kind == PipelineKind::Compute,
             "VU-rojo-indirect-0018",

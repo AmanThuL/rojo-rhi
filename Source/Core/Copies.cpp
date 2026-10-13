@@ -223,6 +223,7 @@ namespace rojoRHI::core {
     )
     {
         checkRecording(list);
+        noteNativeCall(list);
         ROJORHI_VU(!list.passOpen, "VU-rojo-cmd-0042", "copyBuffer was recorded with a render pass open");
 #ifndef NDEBUG
         // The records feed the Debug-tier checks only; reading them takes the pools' locks (ADR 0019).
@@ -258,6 +259,7 @@ namespace rojoRHI::core {
     )
     {
         checkRecording(list);
+        noteNativeCall(list);
         ROJORHI_VU(!list.passOpen, "VU-rojo-cmd-0046", "copyBufferToTexture was recorded with a render pass open");
 #ifndef NDEBUG
         // The records feed the Debug-tier checks only; reading them takes the pools' locks (ADR 0019).
@@ -291,6 +293,7 @@ namespace rojoRHI::core {
     )
     {
         checkRecording(list);
+        noteNativeCall(list);
         ROJORHI_VU(!list.passOpen, "VU-rojo-cmd-0049", "copyTextureToBuffer was recorded with a render pass open");
 #ifndef NDEBUG
         // The records feed the Debug-tier checks only; reading them takes the pools' locks (ADR 0019).
@@ -324,6 +327,7 @@ namespace rojoRHI::core {
     )
     {
         checkRecording(list);
+        noteNativeCall(list);
         ROJORHI_VU(!list.passOpen, "VU-rojo-cmd-0052", "copyTexture was recorded with a render pass open");
 #ifndef NDEBUG
         // The records feed the Debug-tier checks only; reading them takes the pools' locks (ADR 0019).
@@ -360,6 +364,7 @@ namespace rojoRHI::core {
     void fillBuffer(CommandListCore& list, [[maybe_unused]] Buffer dst, [[maybe_unused]] uint64_t offset, [[maybe_unused]] uint64_t size)
     {
         checkRecording(list);
+        noteNativeCall(list);
         ROJORHI_VU(computeCopyProblem(list).empty(), "VU-rojo-cmd-0056", "fillBuffer: {}", computeCopyProblem(list));
 #ifndef NDEBUG
         // The records feed the Debug-tier checks only; reading them takes the pools' locks (ADR 0019).
@@ -377,6 +382,7 @@ namespace rojoRHI::core {
     )
     {
         checkRecording(list);
+        noteNativeCall(list);
         ROJORHI_VU(computeCopyProblem(list).empty(), "VU-rojo-cmd-0060", "clearTexture: {}", computeCopyProblem(list));
 #ifndef NDEBUG
         // The records feed the Debug-tier checks only; reading them takes the pools' locks (ADR 0019).

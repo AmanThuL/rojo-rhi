@@ -8,6 +8,9 @@
 
 #include <array>
 #include <cstdint>
+#include <string>
+#include <string_view>
+#include <vector>
 
 using namespace rojoRHI;
 
@@ -19,6 +22,17 @@ namespace {
     void* surface(size_t index)
     {
         return &g_surfaces[index];
+    }
+
+    std::vector<std::string> g_warnings;
+
+    //==================================================================================================================
+    [[maybe_unused]] void collectWarning(MessageSeverity severity, std::string_view message, void*)
+    {
+        if (severity == MessageSeverity::Warning)
+        {
+            g_warnings.emplace_back(message);
+        }
     }
 
     //==================================================================================================================
@@ -209,4 +223,23 @@ TEST_CASE("a swapchain still live, with an image acquired, is drained by destroy
     CHECK(swapchain.acquire().bits != 0);
     device.endFrame();
     destroyDevice(device);
+}
+
+//======================================================================================================================
+TEST_CASE("destroyDevice warns of a live swapchain once, not again for its acquired image", "[contract]")
+{
+#ifdef NDEBUG
+    SKIP("validation exists only in a Debug build");
+#else
+    g_warnings.clear();
+    setMessageCallback(collectWarning, nullptr);
+    Device device = *createDevice(DeviceDesc{ .validation = true });
+    Swapchain swapchain = makeSwapchain(device);
+    device.beginFrame();
+    CHECK(swapchain.acquire().bits != 0);
+    device.endFrame();
+    destroyDevice(device);
+    setMessageCallback(nullptr, nullptr);
+    CHECK(g_warnings.size() == 1);
+#endif
 }

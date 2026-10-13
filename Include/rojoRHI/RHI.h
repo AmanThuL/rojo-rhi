@@ -20,6 +20,7 @@
 #include <rojoRHI/CommandList.h>
 #include <rojoRHI/CompareOp.h>
 #include <rojoRHI/ComputePipelineDesc.h>
+#include <rojoRHI/Counters.h>
 #include <rojoRHI/DepthAttachment.h>
 #include <rojoRHI/DepthStencilState.h>
 #include <rojoRHI/Device.h>

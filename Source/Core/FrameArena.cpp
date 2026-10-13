@@ -50,7 +50,7 @@ namespace rojoRHI::core {
             base::emitMessage(MessageSeverity::Error, std::format("the frame arena could not grow by {} bytes: {}", pageSize, created.error().message));
             std::abort();
         }
-        ++m_growths;
+        m_growths.fetch_add(1, std::memory_order_relaxed);
         entries.push_back(Entry{ *created, true });
         return *created;
     }
@@ -100,7 +100,6 @@ namespace rojoRHI::core {
     //==================================================================================================================
     uint64_t FrameArena::growths() const
     {
-        std::lock_guard lock(m_mutex);
-        return m_growths;
+        return m_growths.load(std::memory_order_relaxed);
     }
 } // namespace rojoRHI::core

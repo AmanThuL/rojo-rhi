@@ -91,6 +91,7 @@ namespace rojoRHI::core {
             ROJORHI_VU(list.state != ListState::Submitted, "VU-rojo-queue-0001", "the list \"{}\" was submitted before", list.label);
             list.state = ListState::Submitted;
             core.submitScopes(list);
+            core.counts().fold(list.counts);
             core.noteListSubmitted();
         }
     }
@@ -103,6 +104,8 @@ namespace rojoRHI::core {
         ROJORHI_VU(std::has_single_bit(alignment), "VU-rojo-buffer-0016", "the alignment {} is not a power of two", alignment);
         ROJORHI_VU(core.frameOpen(), "VU-rojo-buffer-0017", "uploadFrameData was called with no frame open");
         checkRecording(list);
+        ++list.counts.frameDataUploads;
+        list.counts.frameArenaBytes += bytes.size();
         return bumpArenaPage(core, list, bytes.size(), alignment, source, context);
     }
 

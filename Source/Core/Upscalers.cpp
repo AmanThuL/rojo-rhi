@@ -118,6 +118,7 @@ namespace rojoRHI::core {
     void upscale(CommandListCore& list, [[maybe_unused]] Upscaler upscaler, const UpscaleParams& params)
     {
         checkRecording(list);
+        noteNativeCall(list);
         ROJORHI_VU(list.type == QueueType::Graphics, "VU-rojo-upscale-0006", "upscale was recorded on the non-Graphics list \"{}\"", list.label);
         ROJORHI_VU(!list.passOpen, "VU-rojo-upscale-0007", "upscale was recorded on the list \"{}\" with a render pass open", list.label);
 #ifndef NDEBUG

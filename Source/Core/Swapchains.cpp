@@ -69,6 +69,7 @@ namespace rojoRHI::core {
         swapchain.maxLatency = desc.maxLatency;
         swapchain.extent = extent;
         swapchain.images.resize(desc.imageCount);
+        DeviceCounts::add(core.counts().nativeCreateCalls);
         return swapchain;
     }
 
@@ -105,7 +106,9 @@ namespace rojoRHI::core {
         record.extent = { swapchain.extent.width, swapchain.extent.height, 1 };
         record.usage = TextureUsage::RenderTarget;
         record.swapchainImage = true;
-        image.texture = core.pool<Texture>().allocate(std::move(record));
+        // The image is a native memory object for the counters but no native creation, so the pool does not count it itself.
+        image.texture = core.pool<Texture>().allocate(std::move(record), false);
+        DeviceCounts::add(core.counts().gpuAllocations);
         image.state = ImageState::Acquired;
         swapchain.acquired = index;
         swapchain.acquiredFrame = core.frameNumber();
@@ -136,6 +139,7 @@ namespace rojoRHI::core {
         // With VU-rojo-present-0016 compiled out, presenting with no acquired image is undefined in Release, as misuse is elsewhere in the core.
         // The Null backend displays nothing, so the present completes during the call and the image is free again.
         releaseAcquired(core, swapchain);
+        DeviceCounts::add(core.counts().nativeSubmitCalls);
     }
 
     //==================================================================================================================

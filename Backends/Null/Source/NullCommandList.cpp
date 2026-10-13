@@ -38,6 +38,7 @@ namespace rojoRHI {
             return std::unexpected(Error{ ErrorCategory::OutOfMemory, std::format("no host memory for {} bytes of a frame arena page", size) });
         }
         record.native = host;
+        core::DeviceCounts::add(core.counts().cpuAllocations);
         return core::ArenaPage{ core::addBuffer(core, std::move(record)), host, size };
     }
 
@@ -76,6 +77,7 @@ namespace rojoRHI {
             if (pool.used == pool.lists.size())
             {
                 pool.lists.push_back(std::make_unique<CommandListImpl>());
+                core::DeviceCounts::add(impl.core.counts().cpuAllocations);
             }
             list = pool.lists[pool.used++].get();
         }

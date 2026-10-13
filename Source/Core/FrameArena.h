@@ -7,6 +7,7 @@
 #include <rojoRHI/Handles.h>
 #include <rojoRHI/Result.h>
 
+#include <atomic>
 #include <cstddef>
 #include <cstdint>
 #include <mutex>
@@ -52,7 +53,7 @@ namespace rojoRHI::core {
         /// Returns the buffers of every page, in creation order per slot.
         std::vector<Buffer> pageBuffers() const;
 
-        /// Returns the number of pages created so far, across every slot.
+        /// Returns the number of pages created so far, across every slot; takes no lock.
         uint64_t growths() const;
 
       private:
@@ -64,6 +65,6 @@ namespace rojoRHI::core {
 
         mutable std::mutex m_mutex;
         std::vector<std::vector<Entry>> m_slots;
-        uint64_t m_growths = 0;
+        std::atomic<uint64_t> m_growths = 0;
     };
 } // namespace rojoRHI::core

@@ -129,6 +129,10 @@ namespace rojoRHI {
         {
             DeviceImpl& device = *static_cast<DeviceImpl*>(context);
             std::lock_guard lock(device.swapchainMutex);
+            // A swapchain is no pool record, so the core's retire loop cannot see it: this is the one place that does.
+            const uint64_t freed = device.retiredSwapchains[slot].size();
+            core::DeviceCounts::add(device.core.counts().deferredRetired, freed);
+            core::DeviceCounts::add(device.core.counts().nativeCreateCalls, freed);
             device.retiredSwapchains[slot].clear();
         }
 
@@ -254,6 +258,12 @@ namespace rojoRHI {
     }
 
     //==================================================================================================================
+    Counters Device::counters() const
+    {
+        return DeviceImpl::of(*this).core.counters();
+    }
+
+    //==================================================================================================================
     std::span<const ScopeTiming> Device::scopeTimings()
     {
         return DeviceImpl::of(*this).core.scopeTimings();
@@ -298,6 +308,7 @@ namespace rojoRHI {
                 std::memcpy(host, initial.data(), initial.size());
             }
             record.native = host;
+            core::DeviceCounts::add(impl.core.counts().cpuAllocations);
         }
         return core::addBuffer(impl.core, std::move(record));
     }
@@ -542,6 +553,7 @@ namespace rojoRHI {
         DeviceImpl& impl = DeviceImpl::of(*this);
         // A Null swapchain reads nothing from its surface: the core only compares it with the surfaces of live swapchains.
         auto swapchain = std::make_unique<SwapchainImpl>();
+        core::DeviceCounts::add(impl.core.counts().cpuAllocations);
         swapchain->core = core::prepareSwapchain(impl.core, desc, kNullSurfaceExtent);
         impl.core.addSwapchain(swapchain->core);
         SwapchainImpl* raw = swapchain.get();

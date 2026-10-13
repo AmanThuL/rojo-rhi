@@ -528,6 +528,8 @@ namespace rojoRHI::core {
             return std::unexpected(Error{ ErrorCategory::OutOfMemory, std::format("the view heap of {} slots is full", core.capabilities().maxViews) });
         }
         core.pool<Texture>().update(texture, [](TextureRecord& held) { ++held.views; });
+        DeviceCounts::add(core.counts().descriptorWrites);
+        DeviceCounts::add(core.counts().nativeCreateCalls);
         return static_cast<ViewIndex>(*slot);
     }
 
@@ -567,6 +569,7 @@ namespace rojoRHI::core {
             core.pool<Texture>().update(texture, [](TextureRecord& held) { --held.views; });
             return;
         }
+        DeviceCounts::add(core.counts().descriptorWrites);
         if (*previous != 0)
         {
             core.pool<Texture>().update(Texture{ *previous }, [](TextureRecord& held) {

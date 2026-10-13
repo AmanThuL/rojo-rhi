@@ -11,6 +11,7 @@
 #include <rojoRHI/QueueType.h>
 #include <rojoRHI/ResourceAccess.h>
 
+#include "Core/Counters.h"
 #include "Core/DeviceCore.h"
 #include "Core/FrameArena.h"
 #include "Core/ScopeLog.h"
@@ -71,7 +72,15 @@ namespace rojoRHI::core {
         uint64_t pageUsed = 0;                       ///< Bytes of `page` the list has used: its bump cursor, which takes no lock.
         std::vector<ScopeRecord> scopeLog;           ///< The scopes recorded on the list in the order they began, for `Device::scopeTimings`.
         std::vector<ResourceAccess> pendingAccesses; ///< Declared accesses no draw or dispatch has consumed; kept only on a validating device.
+        RecordCounts counts;                         ///< What the list recorded for `Device::counters`; folded into the device at submission.
     };
+
+    /// Counts one recording entry whose Metal 4 mapping row names a native call, on the list's own plain counter: no lock and
+    /// no atomic operation. Every such entry calls it right after `checkRecording`.
+    inline void noteNativeCall(CommandListCore& list)
+    {
+        ++list.counts.nativeRecordCalls;
+    }
 
     /// Returns the core of the command list `list` wraps (VU-rojo-core-0004). Each backend defines it, as it does for a
     /// device.
