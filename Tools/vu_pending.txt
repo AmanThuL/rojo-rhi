@@ -14,7 +14,6 @@ VU-rojo-indirect-0005 tracker
 VU-rojo-indirect-0011 tracker
 VU-rojo-indirect-0017 tracker
 VU-rojo-indirect-0020 tracker
-VU-rojo-present-0014 tracker
 VU-rojo-present-0018 tracker
 VU-rojo-present-0019 tracker
 VU-rojo-queue-0005 tracker
@@ -22,7 +21,6 @@ VU-rojo-sparse-0013 tracker
 VU-rojo-sync-0004 tracker
 VU-rojo-sync-0006 tracker
 VU-rojo-sync-0009 tracker
-VU-rojo-sync-0013 tracker
 VU-rojo-sync-0017 tracker
 VU-rojo-sync-0018 tracker
 VU-rojo-sync-0021 tracker

@@ -11,6 +11,7 @@
 #include "Core/Accesses.h"
 #include "Core/Addresses.h"
 #include "Core/Pipelines.h"
+#include "Core/Tracker/TrackerLog.h"
 
 #include <format>
 #include <string>
@@ -98,6 +99,17 @@ namespace rojoRHI::core {
         {
             return type == IndexType::UInt16 ? 2 : 4;
         }
+
+        //==============================================================================================================
+        /// Logs the argument reads of an indirect command: `bytes` bytes at `args`, and the count at `count` unless it is null.
+        [[maybe_unused]] void logIndirect(CommandListCore& list, const ResolvedAddr& args, uint64_t bytes, const ResolvedAddr& count)
+        {
+            logUse(list, bufferUse(args.buffer, args.offset, bytes, Stage::IndirectArgs, Access::IndirectArgs));
+            if (count.record != nullptr)
+            {
+                logUse(list, bufferUse(count.buffer, count.offset, sizeof(uint32_t), Stage::IndirectArgs, Access::IndirectArgs));
+            }
+        }
     } // namespace
 
     //==================================================================================================================
@@ -149,6 +161,7 @@ namespace rojoRHI::core {
             buffer->size,
             hasUsage(buffer->usage, BufferUsage::Index) ? "" : "not "
         );
+        logUse(list, bufferUse(indices, uint64_t{ firstIndex } * indexBytes(type), uint64_t{ count } * indexBytes(type), Stage::IndexInput, Access::IndexRead));
 #endif
         consumeAccesses(list, false);
     }
@@ -224,6 +237,7 @@ namespace rojoRHI::core {
             "drawIndirect count: {}",
             indirectProblem(counted, sizeof(uint32_t))
         );
+        logIndirect(list, first, bytes, counted);
 #endif
         consumeAccesses(list, false);
     }
@@ -270,6 +284,9 @@ namespace rojoRHI::core {
             "drawIndexedIndirect count: {}",
             indirectProblem(counted, sizeof(uint32_t))
         );
+        // The records choose the indices they read, so the use is the whole index buffer.
+        logUse(list, bufferUse(indices, 0, kWholeSize, Stage::IndexInput, Access::IndexRead));
+        logIndirect(list, first, bytes, counted);
 #endif
         consumeAccesses(list, false);
     }
@@ -312,6 +329,7 @@ namespace rojoRHI::core {
             "drawMeshTasksIndirect count: {}",
             indirectProblem(counted, sizeof(uint32_t))
         );
+        logIndirect(list, first, bytes, counted);
 #endif
         consumeAccesses(list, false);
     }
@@ -336,6 +354,7 @@ namespace rojoRHI::core {
             "dispatchIndirect args: {}",
             indirectProblem(first, sizeof(DispatchIndirectArgs))
         );
+        logIndirect(list, first, sizeof(DispatchIndirectArgs), ResolvedAddr{});
 #endif
         consumeAccesses(list, true);
     }

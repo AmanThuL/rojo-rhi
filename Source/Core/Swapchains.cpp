@@ -10,6 +10,7 @@
 #include "Core/DeviceCore.h"
 #include "Core/Label.h"
 #include "Core/Records.h"
+#include "Core/Tracker/Tracker.h"
 
 #include <utility>
 
@@ -34,6 +35,7 @@ namespace rojoRHI::core {
         {
             SwapchainImage& image = swapchain.images[swapchain.acquired];
             core.pool<Texture>().release(image.texture, core.releaseFrame());
+            forgetTexture(core, image.texture);
             image = SwapchainImage{};
             swapchain.acquired = SwapchainCore::kNoImage;
         }
@@ -108,6 +110,8 @@ namespace rojoRHI::core {
         record.swapchainImage = true;
         // The image is a native memory object for the counters but no native creation, so the pool does not count it itself.
         image.texture = core.pool<Texture>().allocate(std::move(record), false);
+        // Every acquire hands out an image with undefined contents, whose first barrier starts from Undefined (chapter 11).
+        trackTexture(core, image.texture, swapchain.label, 1, 1, Layout::Undefined, true);
         DeviceCounts::add(core.counts().gpuAllocations);
         image.state = ImageState::Acquired;
         swapchain.acquired = index;

@@ -10,6 +10,7 @@
 #include "Core/Label.h"
 #include "Core/Scopes.h"
 #include "Core/Textures.h"
+#include "Core/Tracker/TrackerLog.h"
 
 #include <algorithm>
 #include <format>
@@ -205,6 +206,21 @@ namespace rojoRHI::core {
         // reads the same frame back.
         const uint64_t previous = scaler->lastFrame.frame.exchange(list.frame, std::memory_order_relaxed);
         ROJORHI_VU(previous != list.frame, "VU-rojo-upscale-0008", "the upscaler \"{}\" was already used by an upscale in frame {}", scaler->label, list.frame);
+        // The upscaler reads every input and writes the output whole, at the compute stage (chapter 12).
+        for (const Texture input : { params.color, params.depth, params.motion, params.exposure, params.reactive })
+        {
+            if (input.bits != 0)
+            {
+                logUse(
+                    list,
+                    textureUse(input, SubresourceRange{}, Stage::ComputeShader, Access::ShaderRead, layoutSet({ Layout::ShaderRead }), UseRule::Upscale0016)
+                );
+            }
+        }
+        logUse(
+            list,
+            textureUse(params.output, SubresourceRange{}, Stage::ComputeShader, Access::ShaderWrite, layoutSet({ Layout::ShaderWrite }), UseRule::Upscale0016)
+        );
 #endif
         // The operation forms its own debug group, a scope of the timings report, named `params.label`.
         recordScope(list, params.label, "rojorhi.upscale.unnamed", static_cast<uint32_t>(list.scopes.size()));

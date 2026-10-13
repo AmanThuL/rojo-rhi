@@ -10,10 +10,12 @@
 #include "Core/Heaps.h"
 #include "Core/Label.h"
 #include "Core/Sparse.h"
+#include "Core/Tracker/Tracker.h"
 
 #include <algorithm>
 #include <bit>
 #include <format>
+#include <string>
 #include <utility>
 
 namespace rojoRHI::core {
@@ -416,6 +418,7 @@ namespace rojoRHI::core {
         record.layers = desc.layers;
         record.samples = desc.samples;
         record.usage = desc.usage;
+        record.initialData = !initial.empty();
         for (size_t index = 0; index < initial.size(); ++index)
         {
             checkTextureData(record, initial[index], static_cast<uint32_t>(index % std::max(desc.mips, 1u)));
@@ -437,7 +440,18 @@ namespace rojoRHI::core {
         {
             addPlacedResource(core, record.heap);
         }
+#ifndef NDEBUG
+        // The tracker copies what it follows before the record moves into the pool.
+        const std::string label = record.label;
+        const uint32_t mips = record.mips;
+        const uint32_t layers = record.layers;
+        const Layout initial = record.initialData ? Layout::ShaderRead : Layout::Undefined;
+        const Texture texture = core.pool<Texture>().allocate(std::move(record));
+        trackTexture(core, texture, label, mips, layers, initial, false);
+        return texture;
+#else
         return core.pool<Texture>().allocate(std::move(record));
+#endif
     }
 
     //==================================================================================================================
@@ -466,6 +480,7 @@ namespace rojoRHI::core {
             views
         );
         core.destroy(texture);
+        forgetTexture(core, texture);
         // Destroying a sparse texture unmaps its tiles at the call, so its heaps may be destroyed before the slot retires.
         releaseTiles(core, tiles);
         if (heap.bits != 0)
