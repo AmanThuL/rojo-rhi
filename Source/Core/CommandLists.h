@@ -15,6 +15,7 @@
 #include "Core/DeviceCore.h"
 #include "Core/FrameArena.h"
 #include "Core/ScopeLog.h"
+#include "Core/Tracker/TrackerLog.h"
 
 #include <cstddef>
 #include <cstdint>
@@ -72,6 +73,7 @@ namespace rojoRHI::core {
         uint64_t pageUsed = 0;                       ///< Bytes of `page` the list has used: its bump cursor, which takes no lock.
         std::vector<ScopeRecord> scopeLog;           ///< The scopes recorded on the list in the order they began, for `Device::scopeTimings`.
         std::vector<ResourceAccess> pendingAccesses; ///< Declared accesses no draw or dispatch has consumed; kept only on a validating device.
+        TrackerLog trackerLog;                       ///< The uses and barriers the list recorded; kept only on a validating device, in Debug.
         RecordCounts counts;                         ///< What the list recorded for `Device::counters`; folded into the device at submission.
     };
 

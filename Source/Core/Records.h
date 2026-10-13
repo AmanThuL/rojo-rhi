@@ -75,6 +75,7 @@ namespace rojoRHI::core {
         TextureUsage usage = TextureUsage::None; ///< The usage flags.
         Heap heap = {};                          ///< The heap the texture is placed in; null for a dedicated allocation.
         uint64_t initialBytes = 0;               ///< Bytes of initial data the texture was created with.
+        bool initialData = false;                ///< Created with initial data, so it starts in `Layout::ShaderRead`.
         uint64_t views = 0;                      ///< View slots holding a view of this texture (VU-rojo-texture-0028).
         bool swapchainImage = false;             ///< True for an image `Swapchain::acquire` returned (VU-rojo-present-0012, 0013, VU-rojo-sync-0005).
         TileMap mapped = {};                     ///< The mapped tiles of a Sparse texture; empty for any other texture.

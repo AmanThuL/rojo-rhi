@@ -9,6 +9,7 @@
 #include "Core/Buffers.h"
 #include "Core/Formats.h"
 #include "Core/Textures.h"
+#include "Core/Tracker/TrackerLog.h"
 
 #include <cstdint>
 #include <format>
@@ -18,6 +19,19 @@
 
 namespace rojoRHI::core {
     namespace {
+        /// The layouts that permit a copy source: chapter 09's table.
+        [[maybe_unused]] constexpr LayoutSet kCopySource = layoutSet({ Layout::CopySrc, Layout::General });
+
+        /// The layouts that permit a copy, fill or clear destination: chapter 09's table.
+        [[maybe_unused]] constexpr LayoutSet kCopyDestination = layoutSet({ Layout::CopyDst, Layout::General });
+
+        //==============================================================================================================
+        /// Returns the subresources a copy region names: one mip and its run of layers.
+        [[maybe_unused]] SubresourceRange regionRange(const TextureRegion& region)
+        {
+            return SubresourceRange{ .baseMip = region.mip, .mipCount = 1, .baseLayer = region.layer, .layerCount = region.layers };
+        }
+
         //==============================================================================================================
         [[maybe_unused]] bool hasUsage(BufferUsage usage, BufferUsage flag)
         {
@@ -246,6 +260,8 @@ namespace rojoRHI::core {
             srcOffset,
             dstOffset
         );
+        logUse(list, bufferUse(src, srcOffset, size, Stage::Copy, Access::CopyRead));
+        logUse(list, bufferUse(dst, dstOffset, size, Stage::Copy, Access::CopyWrite));
 #endif
     }
 
@@ -280,6 +296,8 @@ namespace rojoRHI::core {
             from->label,
             from->size
         );
+        logUse(list, bufferUse(src, layout.offset, *end - layout.offset, Stage::Copy, Access::CopyRead));
+        logUse(list, textureUse(dst, regionRange(region), Stage::Copy, Access::CopyWrite, kCopyDestination, UseRule::Cmd0067));
 #endif
     }
 
@@ -314,6 +332,8 @@ namespace rojoRHI::core {
             to->label,
             to->size
         );
+        logUse(list, textureUse(src, regionRange(region), Stage::Copy, Access::CopyRead, kCopySource, UseRule::Cmd0069));
+        logUse(list, bufferUse(dst, layout.offset, *end - layout.offset, Stage::Copy, Access::CopyWrite));
 #endif
     }
 
@@ -357,6 +377,8 @@ namespace rojoRHI::core {
             "copyTexture within the texture \"{}\" names regions that share a subresource",
             from->label
         );
+        logUse(list, textureUse(src, regionRange(srcRegion), Stage::Copy, Access::CopyRead, kCopySource, UseRule::Cmd0054));
+        logUse(list, textureUse(dst, regionRange(dstRegion), Stage::Copy, Access::CopyWrite, kCopyDestination, UseRule::Cmd0054));
 #endif
     }
 
@@ -373,6 +395,7 @@ namespace rojoRHI::core {
         ROJORHI_VU(
             hasUsage(to->usage, BufferUsage::ShaderWrite), "VU-rojo-cmd-0058", "fillBuffer: the buffer \"{}\" was not created with ShaderWrite", to->label
         );
+        logUse(list, bufferUse(dst, offset, size, Stage::Copy, Access::CopyWrite));
 #endif
     }
 
@@ -399,6 +422,7 @@ namespace rojoRHI::core {
             target->label,
             list.type == QueueType::Compute ? "Compute" : "Graphics"
         );
+        logUse(list, textureUse(texture, range, Stage::Copy, Access::CopyWrite, kCopyDestination, UseRule::Cmd0070));
 #endif
     }
 } // namespace rojoRHI::core

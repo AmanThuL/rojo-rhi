@@ -7,6 +7,7 @@
 
 #include "Base/Assert.h"
 #include "Core/Textures.h"
+#include "Core/Tracker/TrackerLog.h"
 
 #include <cstdint>
 
@@ -341,5 +342,6 @@ namespace rojoRHI::core {
             }
         }
 #endif
+        logBarriers(list, globals, buffers, textures);
     }
 } // namespace rojoRHI::core

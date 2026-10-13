@@ -28,10 +28,13 @@ namespace rojoRHI::core {
         list.scopes.clear();
         list.scopeLog.clear();
         list.pendingAccesses.clear();
+        list.trackerLog.events.clear();
+        list.trackerLog.passUses.clear();
         list = CommandListCore{ .pass = PassState{ .colors = std::move(list.pass.colors) },
                                 .scopes = std::move(list.scopes),
                                 .scopeLog = std::move(list.scopeLog),
-                                .pendingAccesses = std::move(list.pendingAccesses) };
+                                .pendingAccesses = std::move(list.pendingAccesses),
+                                .trackerLog = std::move(list.trackerLog) };
         list.label = resolveLabel(label, "rojorhi.commandlist.unnamed");
         list.device = &core;
         list.type = type;

@@ -10,6 +10,7 @@
 #include "Core/Pipelines.h"
 #include "Core/Scopes.h"
 #include "Core/Textures.h"
+#include "Core/Tracker/TrackerLog.h"
 
 #include <algorithm>
 #include <cstddef>
@@ -246,6 +247,7 @@ namespace rojoRHI::core {
 #endif
         pass.area = desc.area;
         list.pass = std::move(pass);
+        logPass(list, desc);
         list.pipeline = {};
         ++list.counts.encodersOpened;
         recordScope(list, desc.label, "rojorhi.pass.unnamed", static_cast<uint32_t>(list.scopes.size()));
@@ -268,6 +270,7 @@ namespace rojoRHI::core {
         list.passOpen = false;
         list.pass = {};
         list.pipeline = {};
+        endPassLog(list);
     }
 
     //==================================================================================================================
