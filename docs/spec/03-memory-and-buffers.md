@@ -162,13 +162,15 @@ shader-side access.
 #### Valid usage
 - `VU-rojo-buffer-0009` The byte position named by `base + offset` lies inside the buffer `base`
   names.
-- `VU-rojo-buffer-0010` Work recorded with an address passed to a recorded command is submitted
-  before the buffer the address names is destroyed. Checked by the validation tracker.
+- `VU-rojo-buffer-0010` Retired in 0.1.0: Work that dereferences an address is submitted before
+  the buffer it names is destroyed.
 - `VU-rojo-buffer-0011` Every address `operator+` produces, and every byte reached through an
   address, lies less than
   [`Limits::maxAddrOffset`](15-formats-and-limits-part2.md#limits) bytes from the start of the
   buffer it names; the portable value is 2^32 − 1, *unverified* until the D3D12 raw-view element
   limit is settled ([limits](15-formats-and-limits-part2.md#limits)).
+- `VU-rojo-buffer-0019` Work recorded with an address passed to a recorded command is submitted
+  before the buffer the address names is destroyed. Checked by the validation tracker.
 #### Mapping
 | | Metal 4 | D3D12 | Vulkan |
 |---|---|---|---|

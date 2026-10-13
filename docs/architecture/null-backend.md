@@ -14,16 +14,18 @@ the code realises it.
 
 | Area | Where | Content |
 |---|---|---|
-| Public headers | `Include/rojoRHI/` | `Result.h`, `Handles.h`, `Geometry.h`, `Message.h`, `Device.h`, `DeviceDesc.h`, `Capabilities.h`, `Limits.h`, `UpscalerKind.h`, `Format.h`, `FormatCapabilities.h`, `SamplerIndex.h`, `SamplerDesc.h`, `SamplerFilter.h`, `SamplerAddress.h`, `CompareOp.h`, `IndexRange.h`, `ViewIndex.h`, `Swapchain.h`, `Addr.h`, `IndirectArgs.h`, `Version.h`, and the umbrella `RHI.h` |
+| Public headers | `Include/rojoRHI/` | `Result.h`, `Handles.h`, `Geometry.h`, `Message.h`, `Device.h`, `DeviceDesc.h`, `Capabilities.h`, `Limits.h`, `UpscalerKind.h`, `Format.h`, `FormatCapabilities.h`, the buffer, heap, texture, view, sampler and fence descriptors and indices (`BufferDesc.h`, `HeapDesc.h`, `TextureDesc.h`, `SamplerIndex.h`, `IndexRange.h`, `FenceValue.h` and the like), `Queue.h`, `Swapchain.h`, `Addr.h`, `IndirectArgs.h`, `Version.h`, and the umbrella `RHI.h` |
 | Private base | `Source/Base/` | `ROJORHI_VU`, `ROJORHI_INTERNAL_ASSERT`, the message sink |
-| Shared core | `Source/Core/` | `HandlePool`, `DeviceCore`, the format capability rules, label checks |
-| Null backend | `Backends/Null/Source/` | `NullDevice`: the public `Device` entries, translating to the core |
+| Shared core | `Source/Core/` | `HandlePool`, `DeviceCore`, `Records.h`, `SlotAllocator`, the format rules, label checks and the checks of buffers, heaps, textures, samplers, ranges and fences |
+| Null backend | `Backends/Null/Source/` | `NullDevice`, `NullQueue`, `NullAddr`: the public entries, translating to the core |
 | Tests | `Tests/Contract/`, `Tests/Core/`, `Tests/Null/`, `Tests/Support/` | see [testing](../conventions/testing.md) |
 
 The implemented entries are the device (creation, destruction, frames, capabilities, format
-capabilities, `destroy` of every handle type) and the process-wide message callback. Resources,
-queues, shader libraries, pipelines, command recording, swapchains and the rest of the reference
-are not implemented; each arrives with the work that adds it.
+capabilities, `destroy` of every handle type), the process-wide message callback and the resources
+of chapters 03, 04 and 10: buffers and addresses, heaps and placement, textures and views,
+samplers, reserved slot ranges, queues and fences. Shader libraries, pipelines, command recording,
+swapchains and the rest of the reference are not implemented; each arrives with the work that adds
+it.
 
 ## Two layers
 
@@ -74,13 +76,34 @@ rejected immediately. The slot returns to the free list only after the frame tha
 retires, and a record handed to the retire callback is cleared afterwards. A slot whose generation
 would pass 2^24 - 1 is retired for good and never reused; its record still reaches the callback.
 The `Device::destroy` overload for `Swapchain` only checks the device, since swapchains do not exist
-yet; `ViewIndex` and `SamplerIndex` release a slot of the view or sampler heap, each a `SlotAllocator`
-with deferred reuse that also reserves contiguous caller-owned ranges. A default-constructed `Swapchain` is rejected
-(`VU-rojo-core-0004`).
+yet, and a default-constructed `Swapchain` is rejected (`VU-rojo-core-0004`). `ViewIndex` and
+`SamplerIndex` are not pooled handles; they release slots of the heaps described below.
 
 `Handles.h` holds the seven small handle structs and `Geometry.h` the four geometry structs
 (`Extent2D`, `Extent3D`, `Offset3D`, `Rect2D`); each is a single-entry header for several types
 that have no behaviour beyond their fields ([naming](../conventions/naming.md)).
+
+## Records and the backend payload
+
+`HandlePool<Handle, Record>` stores one record per live object, and `Records.h` names the record of
+each type through `RecordOf<Handle>`. A record holds the label, the descriptor fields the core
+checks against and the counters its rules need: a `BufferRecord` its size, memory class, usage and
+heap; a `TextureRecord` its description and the number of view slots that hold a view of it
+(`VU-rojo-texture-0028`); a `HeapRecord` its size, memory class and the number of resources placed
+in it (`VU-rojo-device-0008`); a `FenceRecord` its initial, submitted and completed values.
+Pipeline, shader library and upscaler records hold only a label until their parts arrive.
+
+Every record ends in `void* native`, the backend's payload, which the core never reads. The
+backend fills it between `prepareBuffer` (which checks and returns a record with no payload) and
+`addBuffer` (which stores it), and likewise for textures.
+
+A backend frees its payload through `RetireHooks`: one function pointer per handle type plus a
+`context`, set once with `DeviceCore::setRetireHooks`. The table is on the cold path. A null entry
+means the backend holds nothing for that type. The core calls a hook with the record when the
+record's frame retires and, for every live and pending record, once in `beginDestroy`. A hook runs
+under its pool's lock and must not call a pool. The `DeviceCore` destructor calls no hook, because
+the backend's state is gone by then; it asserts that every pool is drained. The Null backend
+registers one hook, which frees the host memory of a buffer.
 
 ## Frames and deferred destruction
 
@@ -90,11 +113,12 @@ so the free-threaded `destroy` reads a consistent pair while the frame class wri
 destroyed while a frame is open is released with that frame's slot; one destroyed with no frame
 open is released with the next frame opened. `beginFrame` retires the slot it reuses: every pool
 releases the records destroyed at frames up to N minus `framesInFlight`, passing each to the
-retire hook its backend registered (`RetireHooks`, one function pointer per handle type).
+retire hook its backend registered.
 Frame misuse is `VU-rojo-device-0002` to `0004`. `destroyDevice` with validation selected warns
 once per live object, by label, then passes every live and pending record through the same hooks
 exactly once. The core also keeps the `Capabilities` and the format table, which the backend fills
-at creation, so every capability and format query is one core path.
+at creation, so every capability and format query is one core path. Chapter 02 requires that
+drain, and the retire hooks above are how a backend takes part in it.
 
 Labels are checked as UTF-8 without NUL (`VU-rojo-core-0006`, `0007`) and an empty device label
 becomes `rojorhi.device.unnamed`; any other label is kept verbatim.
@@ -121,33 +145,114 @@ The Null device is deterministic and does no work.
   a device that warns of leaks at destruction; the tracker proper arrives with the validation
   tracker work.
 - A pipeline cache blob in `DeviceDesc` is accepted and ignored.
+- `Device::queue` returns one queue per `QueueType`, owned by the device.
 
 The Null backend reports the shape a Metal 4 or D3D12 device may report, but it reports a superset
 of features that no real device reports together: every optional feature supported and every
 format capability the class ceiling allows. It claims no capability the reference does not define.
 
+## Buffers and addresses
+
+`prepareBuffer` checks the descriptor, the initial data and any placement; the Null backend then
+adds host storage and `addBuffer` issues the handle. Only `Upload` and `Readback` buffers get host
+memory (zeroed, then the initial data copied in), which is what `Device::cpuPointer` returns; a
+`Gpu` buffer keeps its record and records only the length of its initial data, and `cpuPointer` on
+one is `VU-rojo-buffer-0014`. The hook frees the memory when the record retires.
+
+The Null `Addr` is not a virtual address. `Device::address` returns `lo` as the buffer's handle
+slot index and `hi` as the byte offset, the way D3D12 pairs a resource with an offset, so a caller
+cannot come to depend on arithmetic beyond `operator+`. The backend defines `operator+`
+(`NullAddr.cpp`) and the core owns the bound: `checkAddrOffset` rejects an offset, and the sum,
+above `maxAddrOffset`, which is 2^32 - 1 here (`VU-rojo-buffer-0011`). The offset is checked alone
+first so the sum cannot wrap.
+
+## Heaps and placement
+
+A Null heap owns no memory beyond its record. `prepareHeap` checks the description. A resource
+created with a `Placement` goes through `checkPlacement`, the one site of `VU-rojo-heap-0003` to
+`0006` for buffers and textures alike: inside the heap, offset aligned, memory class equal to the
+heap's, and not Sparse. `placementRequirements` is computed by the backend, because size and
+alignment are backend facts: the Null device rounds the byte size of a buffer, or of a texture's
+mips, layers and samples, up to a fixed alignment and uses that alignment. A placed resource
+counts itself in its heap's `placedResources`, and `destroyHeap` refuses a heap that still has any
+(`VU-rojo-device-0008`).
+
+## Textures and views
+
+A texture is a record and nothing else: it stores no texels, so initial data is checked
+(`checkTextureDesc`, the stride and size rules, `VU-rojo-texture-0040` for `D32FloatS8`) and
+dropped. A view is only a slot. `createView` checks the descriptor against the texture's record,
+takes a slot of the view heap and counts the view in the texture's `views`; `destroyTexture`
+refuses a texture whose count is not zero. The format arms of `VU-rojo-format-0003` and `0004` for
+textures and views are checked in the same functions, against the core's format table.
+
+## View and sampler slots
+
+`DeviceCore::views()` and `samplers()` are two `SlotAllocator`s, one per global heap, bounded by
+`maxViews` and `maxSamplers`. A slot is Free, Assigned or Released. A release records the frame
+that is open (or the next one), and `beginFrame` calls `retire`, which returns a slot to the free
+list only when its frame has retired, so a slot is never handed out again while unretired work may
+read it. Each slot keeps an `owner` word; for views it is the texture the slot describes, so
+releasing a view slot or range lowers that texture's count.
+
+`reserveViews` and `reserveSamplers` take a contiguous run of free slots, retired or never used,
+as one range that belongs to the caller until `releaseRange`. `writeView` and `writeSampler` write
+one slot of a reserved range. A full heap, or no run long enough, is an error result, not a
+violation. A range is checked by value: `holdsRange` finds that a range with this base and count is
+reserved and unreleased, but a stale `IndexRange` equal to a later reservation of the same slots
+cannot be told apart. That is the limit `VU-rojo-texture-0031` states for this Debug-tier rule;
+using a released range beyond it is undefined behaviour.
+
+## Queues and fences
+
+`QueueImpl` knows its type and its device; the check that a queue is used only with its device
+(`VU-rojo-core-0005`) arrives with recording. A `FenceRecord` holds the initial, greatest
+submitted and completed values. `checkSubmit` compares each wait value with the greatest value
+submitted (`VU-rojo-queue-0007`) and each signal value with the initial and submitted values
+(`VU-rojo-queue-0003`), and changes nothing. The Null queue executes nothing, so `recordSignals`
+with `Immediate` completion raises the submitted and completed values in one locked update per
+signal; a concurrent reader never sees a value submitted but not completed. A later backend
+passes `Later` and reports each value through `completeFence` as its work finishes. A completed
+value is always readable, and `Device::wait` never blocks on Null: `checkWait` returns whether the
+value is reached and rejects an unlimited wait on an unreachable value (`VU-rojo-queue-0008`).
+`Queue::submit` takes no recorded command lists yet; the rules that need them stay pending.
+
+## Coverage
+
+`Tools/check_vu_coverage.py` counts the `ROJORHI_VU` call sites of each identifier in `Source/`
+and requires at least as many `[death]` cases as sites, one case per site. It fails on any
+`ROJORHI_VU` under `Backends/`, and on an identifier that a check or a death test names but the
+reference does not define or has retired ([testing](../conventions/testing.md)).
+
 ## Threading
 
 [ADR 0013](../decisions/0013-threading.md) applies unchanged: RojoRHI creates no threads. The
-free-threaded `destroy` locks only the one pool it touches, with one mutex per pool, and reads the
-frame word atomically under that lock; capability queries read data fixed at creation and touch no
-pool. The frame class (`beginFrame`, `endFrame`) is
-externally synchronised by the caller, as chapter 01 requires, and takes no lock of its own beyond
-the pools it retires. The message sink has its own mutex, and the inside-callback flag is
-thread-local.
+free-threaded `destroy` locks the one pool it touches, with one mutex per pool, and reads the frame
+word atomically under that lock. Locks are taken one at a time and never nested: the entries that
+reach two (destroying a placed buffer or texture, which updates its heap after its own pool;
+`createView`, `writeView` and `destroyView`, which pair the view slot allocator with the texture
+pool) release the first before taking the second. Pool hooks and callbacks never call a pool.
+Capability queries read data fixed at creation and touch no pool. Each slot allocator has its own
+mutex, and a fence read copies the record under its pool's lock. The frame class (`beginFrame`,
+`endFrame`) is externally synchronised by the caller, as chapter 01 requires, and takes no lock of
+its own beyond the pools it retires. The message sink has its own mutex, and the inside-callback
+flag is thread-local.
 
 ## What remains
 
 These arrive with the work that adds them; this page then describes them.
 
-- Resources: buffers, heaps, textures, views, samplers, slot ranges, queues, fences and submission.
-  Null submission will complete work inside `Queue::submit`, so fences signal there and waiting
-  never blocks. Each handle type has its own record (`BufferRecord` and so on), which will grow
-  the descriptor and state its resource needs.
-- Recording: shader libraries, pipelines, command lists, passes, draws, copies, barriers and roots.
+- Recording: shader libraries, pipelines, command lists, passes, draws, copies, barriers and
+  roots. `Queue::submit` then takes real lists, and `uploadFrameData` and the check that a queue
+  belongs to its device arrive with them.
+- Native payloads for views and samplers: their slots carry no backend payload, retire hook, drain
+  or label yet. They arrive with a native backend, which must release native views and samplers at
+  retirement and at `destroyDevice`.
+- Recording checks: a default-constructed `CommandList` passed to `Queue::submit` is not yet
+  rejected (`VU-rojo-core-0004`); the check arrives with the recording part.
 - Edges: swapchains, upscalers, sparse mapping, access declarations, counters, timings and capture.
-- The validation tracker: the 28 identifiers only it checks, and the tracker hooks that
-  `DeviceDesc::validation` selects.
+- The validation tracker: the 29 identifiers only it checks, such as `VU-rojo-buffer-0019`, and
+  the tracker hooks that `DeviceDesc::validation` selects.
 - A Metal 4 v2 backend and T1 GPU conformance
   ([ADR 0009](../decisions/0009-conformance-and-valid-usage.md)).
 
