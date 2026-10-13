@@ -210,3 +210,53 @@ TEST_CASE("checkedRelease reads the frame from its supplier under the lock", "[c
     pool.retire(4, [&](Rec& record) { seen.push_back(record.value); });
     CHECK(seen.size() == 1);
 }
+
+//======================================================================================================================
+TEST_CASE("drain hands over each live and pending record once and empties the pool", "[core]")
+{
+    BufferPool pool;
+    const Buffer pending = pool.allocate({ 1 });
+    const Buffer retired = pool.allocate({ 2 });
+    const Buffer live = pool.allocate({ 3 });
+    pool.release(retired, 1);
+    pool.retire(1);
+    pool.release(pending, 2);
+    CHECK_FALSE(pool.empty());
+    std::multiset<int> seen;
+    pool.drain([&](Rec& record) { seen.insert(record.value); });
+    CHECK(seen == std::multiset<int>{ 1, 3 });
+    CHECK(pool.empty());
+    CHECK(pool.lookup(live).status == LookupStatus::StaleGeneration);
+    CHECK(pool.lookup(pending).status == LookupStatus::StaleGeneration);
+    int again = 0;
+    pool.drain([&](Rec&) { ++again; });
+    CHECK(again == 0);
+}
+
+//======================================================================================================================
+TEST_CASE("drain does not hand over a slot already retired for good", "[core]")
+{
+    HandlePool<Buffer, Rec> pool(1);
+    Buffer buffer = pool.allocate({ 1 });
+    pool.release(buffer, 1);
+    pool.retire(1);
+    buffer = pool.allocate({ 2 });
+    pool.release(buffer, 2);
+    pool.retire(2);
+    const Buffer live = pool.allocate({ 3 });
+    int seen = 0;
+    pool.drain([&](Rec& record) { seen += record.value; });
+    CHECK(seen == 3);
+    CHECK(pool.lookup(live).status == LookupStatus::StaleGeneration);
+}
+
+//======================================================================================================================
+TEST_CASE("no slot is reused after drain", "[core]")
+{
+    BufferPool pool;
+    const Buffer buffer = pool.allocate({ 1 });
+    pool.release(buffer, 1);
+    pool.retire(1); // The slot is now free for reuse.
+    pool.drain([](Rec&) {});
+    CHECK(static_cast<uint32_t>(pool.allocate({ 2 }).bits) != static_cast<uint32_t>(buffer.bits));
+}

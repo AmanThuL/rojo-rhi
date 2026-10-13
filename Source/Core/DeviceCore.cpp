@@ -9,6 +9,7 @@
 #include "Base/Log.h"
 #include "Core/Label.h"
 
+#include <type_traits>
 #include <utility>
 
 namespace rojoRHI::core {
@@ -47,7 +48,15 @@ namespace rojoRHI::core {
         if (frame > m_framesInFlight)
         {
             const uint64_t retired = frame - m_framesInFlight;
-            std::apply([retired](auto&... pools) { (pools.retire(retired), ...); }, m_pools);
+            forEachPool([&](auto& pool) {
+                const auto hook = m_hooks.forType<typename std::remove_reference_t<decltype(pool)>::HandleType>();
+                pool.retire(retired, [&](auto& record) {
+                    if (hook != nullptr)
+                    {
+                        hook(m_hooks.context, record);
+                    }
+                });
+            });
         }
     }
 
@@ -63,17 +72,84 @@ namespace rojoRHI::core {
     void DeviceCore::beginDestroy()
     {
         ROJORHI_VU(!frameOpen(), "VU-rojo-device-0002", "destroyDevice was called while frame {} is open", frameNumber());
-        if (!m_validation)
+        if (m_validation)
         {
-            return;
+            std::apply(
+                [](auto&... pools) {
+                    (pools.forEachLive([](const auto& record) { ROJORHI_LOG_WARN("object \"{}\" is still live at device destruction", record.label); }), ...);
+                },
+                m_pools
+            );
         }
-        std::apply(
-            [](auto&... pools) {
-                (pools.forEachLive([](const ResourceRecord& record) { ROJORHI_LOG_WARN("object \"{}\" is still live at device destruction", record.label); }),
-                 ...);
-            },
-            m_pools
-        );
+        drain();
+    }
+
+    //==================================================================================================================
+    void DeviceCore::drain()
+    {
+        forEachPool([&](auto& pool) {
+            const auto hook = m_hooks.forType<typename std::remove_reference_t<decltype(pool)>::HandleType>();
+            pool.drain([&](auto& record) {
+                if (hook != nullptr)
+                {
+                    hook(m_hooks.context, record);
+                }
+            });
+        });
+    }
+
+    //==================================================================================================================
+    bool DeviceCore::drained()
+    {
+        bool empty = true;
+        forEachPool([&](auto& pool) { empty = pool.empty() && empty; });
+        return empty;
+    }
+
+    //==================================================================================================================
+    DeviceCore::~DeviceCore()
+    {
+        ROJORHI_INTERNAL_ASSERT(drained(), "a device core was destroyed with live or pending records; its backend must call beginDestroy first");
+        // Release builds only clear: a hook would run on backend state that is already gone.
+        forEachPool([](auto& pool) { pool.drain([](auto&) {}); });
+    }
+
+    //==================================================================================================================
+    void DeviceCore::setRetireHooks(const RetireHooks& hooks)
+    {
+        m_hooks = hooks;
+    }
+
+    //==================================================================================================================
+    Capabilities& DeviceCore::capabilities()
+    {
+        return m_capabilities;
+    }
+
+    //==================================================================================================================
+    const Capabilities& DeviceCore::capabilities() const
+    {
+        return m_capabilities;
+    }
+
+    //==================================================================================================================
+    void DeviceCore::setFormatCapabilities(Format format, const FormatCapabilities& capabilities)
+    {
+        ROJORHI_INTERNAL_ASSERT(static_cast<uint32_t>(format) < kFormatCount, "a backend set capabilities for a value that is not a Format");
+        m_formats[static_cast<uint32_t>(format)] = capabilities;
+    }
+
+    //==================================================================================================================
+    void DeviceCore::setFormatTable(const FormatTable& table)
+    {
+        m_formats = table;
+    }
+
+    //==================================================================================================================
+    FormatCapabilities DeviceCore::formatCapabilities(Format format) const
+    {
+        checkQueryFormat(format);
+        return m_formats[static_cast<uint32_t>(format)];
     }
 
     //==================================================================================================================

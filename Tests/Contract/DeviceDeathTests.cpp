@@ -107,3 +107,33 @@ TEST_CASE("VU-rojo-core-0003 a Buffer's bits are destroyed as a Texture", "[cont
         device.destroy(Texture{ buffer.bits });
     });
 }
+
+//======================================================================================================================
+TEST_CASE("VU-rojo-core-0001 a null Buffer is looked up", "[contract][death]")
+{
+    ROJORHI_EXPECT_DEATH("VU-rojo-core-0001", [] {
+        Device device = *createDevice();
+        (void)core::coreOf(device).pool<Buffer>().checked(Buffer{}, false);
+    });
+}
+
+//======================================================================================================================
+TEST_CASE("VU-rojo-core-0002 a destroyed Buffer is looked up", "[contract][death]")
+{
+    ROJORHI_EXPECT_DEATH("VU-rojo-core-0002", [] {
+        Device device = *createDevice();
+        const Buffer buffer = core::coreOf(device).pool<Buffer>().allocate({ "test.buffer" });
+        device.destroy(buffer);
+        (void)core::coreOf(device).pool<Buffer>().checked(buffer, false);
+    });
+}
+
+//======================================================================================================================
+TEST_CASE("VU-rojo-core-0003 a Texture's bits are looked up as a Buffer", "[contract][death]")
+{
+    ROJORHI_EXPECT_DEATH("VU-rojo-core-0003", [] {
+        Device device = *createDevice();
+        const Texture texture = core::coreOf(device).pool<Texture>().allocate({ "test.texture" });
+        (void)core::coreOf(device).pool<Buffer>().checked(Buffer{ texture.bits }, false);
+    });
+}

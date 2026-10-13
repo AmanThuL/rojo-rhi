@@ -4,12 +4,15 @@
 //----------------------------------------------------------------------------------------------------------------------
 #pragma once
 
+#include <rojoRHI/Capabilities.h>
 #include <rojoRHI/Device.h>
 #include <rojoRHI/DeviceDesc.h>
 #include <rojoRHI/Handles.h>
 #include <rojoRHI/Result.h>
 
+#include "Core/Formats.h"
 #include "Core/HandlePool.h"
+#include "Core/Records.h"
 
 #include <atomic>
 #include <cstdint>
@@ -18,12 +21,6 @@
 #include <tuple>
 
 namespace rojoRHI::core {
-    /// What the core keeps about one live resource of any type; later parts extend it with the resource's description.
-    struct ResourceRecord
-    {
-        std::string label; ///< The label the object was created with.
-    };
-
     /// Checks a `DeviceDesc` before a backend opens anything: `ErrorCategory::Unsupported` when validation is requested in a
     /// Release build, and VU-rojo-device-0001 for a frame-slot count other than 2 or 3. A backend calls it first in
     /// `createDevice`.
@@ -42,13 +39,40 @@ namespace rojoRHI::core {
         /// VU-rojo-core-0007), records `validation` and opens no frame.
         explicit DeviceCore(const DeviceDesc& desc);
 
-        /// Opens the next frame and releases what the slot it reuses held (VU-rojo-device-0003). Frame class.
+        /// Requires that `beginDestroy` drained every pool, and calls no hook: the backend's state is already destroyed.
+        ~DeviceCore();
+
+        DeviceCore(const DeviceCore&) = delete;
+        DeviceCore& operator=(const DeviceCore&) = delete;
+
+        /// Registers the functions that release a backend's payload of each record leaving a pool. A backend calls it once
+        /// at creation, before it allocates anything.
+        void setRetireHooks(const RetireHooks& hooks);
+
+        /// Returns the capabilities the device reports; a backend fills them in place at creation, and its views must point at
+        /// storage that outlives the device.
+        Capabilities& capabilities();
+
+        /// Returns the capabilities the device reports.
+        const Capabilities& capabilities() const;
+
+        /// Sets what the device supports for `format`; a backend calls it at creation for each format it reports.
+        void setFormatCapabilities(Format format, const FormatCapabilities& capabilities);
+
+        /// Sets the whole format table at once; a backend calls it at creation.
+        void setFormatTable(const FormatTable& table);
+
+        /// Returns what the device supports for `format` (VU-rojo-format-0001, VU-rojo-format-0005).
+        FormatCapabilities formatCapabilities(Format format) const;
+
+        /// Opens the next frame and passes what the slot it reuses held to the retire hooks (VU-rojo-device-0003). Frame class.
         void beginFrame();
 
         /// Closes the open frame (VU-rojo-device-0004). Frame class.
         void endFrame();
 
-        /// Starts teardown: VU-rojo-device-0002, then, when validation was selected, a warning for each live object.
+        /// Starts teardown: VU-rojo-device-0002, then, when validation was selected, a warning for each live object, then every
+        /// live and pending record goes through the retire hooks once.
         void beginDestroy();
 
         /// Destroys the object `handle` names, deferred to the retirement of the open frame, or of the next one opened if none
@@ -68,9 +92,9 @@ namespace rojoRHI::core {
         uint64_t releaseFrame() const;
 
         /// Returns the pool that issues and validates handles of type `Handle`.
-        template<typename Handle> HandlePool<Handle, ResourceRecord>& pool()
+        template<typename Handle> HandlePool<Handle, RecordFor<Handle>>& pool()
         {
-            return std::get<HandlePool<Handle, ResourceRecord>>(m_pools);
+            return std::get<HandlePool<Handle, RecordFor<Handle>>>(m_pools);
         }
 
         /// Returns the number of frame slots.
@@ -83,15 +107,27 @@ namespace rojoRHI::core {
         std::string_view label() const;
 
       private:
+        /// Calls `visit` with each pool, so a handle type added to `m_pools` is never skipped.
+        template<typename Visitor> void forEachPool(Visitor&& visit);
+
+        /// Passes every live and pending record to its hook, once.
+        void drain();
+
+        /// Returns true when no pool holds a live or pending record.
+        bool drained();
+
         std::tuple<
-            HandlePool<Buffer, ResourceRecord>,
-            HandlePool<Texture, ResourceRecord>,
-            HandlePool<Pipeline, ResourceRecord>,
-            HandlePool<ShaderLibrary, ResourceRecord>,
-            HandlePool<Heap, ResourceRecord>,
-            HandlePool<Fence, ResourceRecord>,
-            HandlePool<Upscaler, ResourceRecord>>
+            HandlePool<Buffer, BufferRecord>,
+            HandlePool<Texture, TextureRecord>,
+            HandlePool<Pipeline, PipelineRecord>,
+            HandlePool<ShaderLibrary, ShaderLibraryRecord>,
+            HandlePool<Heap, HeapRecord>,
+            HandlePool<Fence, FenceRecord>,
+            HandlePool<Upscaler, UpscalerRecord>>
             m_pools;
+        RetireHooks m_hooks;
+        Capabilities m_capabilities;
+        FormatTable m_formats;
         uint32_t m_framesInFlight;
         bool m_validation;
         std::string m_label;
@@ -99,6 +135,11 @@ namespace rojoRHI::core {
         /// destroy reads a consistent pair while the frame class writes it.
         std::atomic<uint64_t> m_state = 0;
     };
+
+    template<typename Visitor> void DeviceCore::forEachPool(Visitor&& visit)
+    {
+        std::apply([&](auto&... pools) { (visit(pools), ...); }, m_pools);
+    }
 
     /// Returns the core of the device `device` wraps (VU-rojo-core-0004). Each backend defines it; the contract tests and
     /// the shared checks reach a device's state only through it.

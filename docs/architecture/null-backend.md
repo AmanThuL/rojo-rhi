@@ -88,9 +88,12 @@ Frames are numbered from one; frame N uses slot N modulo `framesInFlight`, which
 so the free-threaded `destroy` reads a consistent pair while the frame class writes it. An object
 destroyed while a frame is open is released with that frame's slot; one destroyed with no frame
 open is released with the next frame opened. `beginFrame` retires the slot it reuses: every pool
-releases the records destroyed at frames up to N minus `framesInFlight`. Frame misuse is
-`VU-rojo-device-0002` to `0004`. `destroyDevice` with validation selected warns once per live
-object, by label.
+releases the records destroyed at frames up to N minus `framesInFlight`, passing each to the
+retire hook its backend registered (`RetireHooks`, one function pointer per handle type).
+Frame misuse is `VU-rojo-device-0002` to `0004`. `destroyDevice` with validation selected warns
+once per live object, by label, then passes every live and pending record through the same hooks
+exactly once. The core also keeps the `Capabilities` and the format table, which the backend fills
+at creation, so every capability and format query is one core path.
 
 Labels are checked as UTF-8 without NUL (`VU-rojo-core-0006`, `0007`) and an empty device label
 becomes `rojorhi.device.unnamed`; any other label is kept verbatim.
@@ -138,7 +141,8 @@ These arrive with the work that adds them; this page then describes them.
 
 - Resources: buffers, heaps, textures, views, samplers, slot ranges, queues, fences and submission.
   Null submission will complete work inside `Queue::submit`, so fences signal there and waiting
-  never blocks. `ResourceRecord` will grow the descriptor and state each resource needs.
+  never blocks. Each handle type has its own record (`BufferRecord` and so on), which will grow
+  the descriptor and state its resource needs.
 - Recording: shader libraries, pipelines, command lists, passes, draws, copies, barriers and roots.
 - Edges: swapchains, upscalers, sparse mapping, access declarations, counters, timings and capture.
 - The validation tracker: the 28 identifiers only it checks, and the tracker hooks that
