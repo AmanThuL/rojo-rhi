@@ -9,6 +9,7 @@
 #include "Core/CommandLists.h"
 #include "Core/DeviceCore.h"
 
+#include <algorithm>
 #include <format>
 #include <string>
 #include <type_traits>
@@ -93,6 +94,135 @@ namespace rojoRHI::core {
                 earlierUse(hazard)
             );
         }
+
+        //==============================================================================================================
+        /// Returns the scope of `use`.
+        Scope scopeOf(const UseEvent& use)
+        {
+            return Scope{ .stage = use.stage, .access = use.access };
+        }
+
+        //==============================================================================================================
+        /// Returns the first mark of `marks` that a texture whose latest heap use has `ownStamp` must still follow, a mark newer
+        /// than that use, whose stage and access `source`, a discard's, does not cover; with no source, the first such mark.
+        /// Returns null when there is none. An older mark is one the texture is ordered against across queues.
+        const AliasMark* uncovered(const AliasMarks& marks, uint64_t ownStamp, std::optional<Scope> source)
+        {
+            for (const AliasMarks::Range& range : marks.ranges())
+            {
+                const std::optional<AliasMark>& mark = range.state;
+                if (mark.has_value() && mark->stamp > ownStamp && !(source.has_value() && sourceCovers(*source, mark->scope, true)))
+                {
+                    return &*mark;
+                }
+            }
+            return nullptr;
+        }
+
+        //==============================================================================================================
+        /// Returns the stage and access of `scope` for reports.
+        [[maybe_unused]] std::string scopeText(Scope scope)
+        {
+            return std::format("stage {:#x} access {:#x}", static_cast<uint32_t>(scope.stage), static_cast<uint32_t>(scope.access));
+        }
+
+        //==============================================================================================================
+        /// Reports an indirect read, made under `rule` by the list `list` on `queue` of `memory`, a description of the bytes
+        /// that names their buffer, when `missing`: no barrier since the last write of those bytes on the queue has a
+        /// destination stage and access that include `IndirectArgs`. Each entry's identifier, and each of its arms, has its
+        /// own site.
+        void reportIndirect(
+            UseRule rule,
+            [[maybe_unused]] bool missing,
+            [[maybe_unused]] std::string_view memory,
+            [[maybe_unused]] QueueType queue,
+            [[maybe_unused]] std::string_view list
+        )
+        {
+            [[maybe_unused]] constexpr std::string_view kWhy =
+                "no barrier since the last write of those bytes has a destination stage and access that include IndirectArgs";
+            switch (rule)
+            {
+            case UseRule::Indirect0005Records:
+                ROJORHI_VU(
+                    !missing,
+                    "VU-rojo-indirect-0005",
+                    "drawIndirect in the list \"{}\" on the {} queue reads its records from {}, and {}",
+                    list,
+                    queueName(queue),
+                    memory,
+                    kWhy
+                );
+                break;
+            case UseRule::Indirect0005Count:
+                ROJORHI_VU(
+                    !missing,
+                    "VU-rojo-indirect-0005",
+                    "drawIndirect in the list \"{}\" on the {} queue reads its count from {}, and {}",
+                    list,
+                    queueName(queue),
+                    memory,
+                    kWhy
+                );
+                break;
+            case UseRule::Indirect0011Records:
+                ROJORHI_VU(
+                    !missing,
+                    "VU-rojo-indirect-0011",
+                    "drawIndexedIndirect in the list \"{}\" on the {} queue reads its records from {}, and {}",
+                    list,
+                    queueName(queue),
+                    memory,
+                    kWhy
+                );
+                break;
+            case UseRule::Indirect0011Count:
+                ROJORHI_VU(
+                    !missing,
+                    "VU-rojo-indirect-0011",
+                    "drawIndexedIndirect in the list \"{}\" on the {} queue reads its count from {}, and {}",
+                    list,
+                    queueName(queue),
+                    memory,
+                    kWhy
+                );
+                break;
+            case UseRule::Indirect0017Records:
+                ROJORHI_VU(
+                    !missing,
+                    "VU-rojo-indirect-0017",
+                    "drawMeshTasksIndirect in the list \"{}\" on the {} queue reads its records from {}, and {}",
+                    list,
+                    queueName(queue),
+                    memory,
+                    kWhy
+                );
+                break;
+            case UseRule::Indirect0017Count:
+                ROJORHI_VU(
+                    !missing,
+                    "VU-rojo-indirect-0017",
+                    "drawMeshTasksIndirect in the list \"{}\" on the {} queue reads its count from {}, and {}",
+                    list,
+                    queueName(queue),
+                    memory,
+                    kWhy
+                );
+                break;
+            case UseRule::Indirect0020Records:
+                ROJORHI_VU(
+                    !missing,
+                    "VU-rojo-indirect-0020",
+                    "dispatchIndirect in the list \"{}\" on the {} queue reads its record from {}, and {}",
+                    list,
+                    queueName(queue),
+                    memory,
+                    kWhy
+                );
+                break;
+            default: break;
+            }
+        }
     } // namespace
 
     //==================================================================================================================
@@ -102,15 +232,50 @@ namespace rojoRHI::core {
     }
 
     //==================================================================================================================
-    void Tracker::addTexture(Texture texture, std::string_view label, uint32_t mips, uint32_t layers, Layout initial, bool acquired)
+    void Tracker::addTexture(
+        Texture texture,
+        std::string_view label,
+        uint32_t mips,
+        uint32_t layers,
+        Layout initial,
+        bool acquired,
+        Heap heap,
+        uint64_t heapOffset,
+        uint64_t heapSize
+    )
     {
+        const size_t subresources = static_cast<size_t>(mips) * layers;
         TextureState state{ .label = std::string(label),
                             .mips = mips,
                             .layers = layers,
-                            .layouts = std::vector<Layout>(static_cast<size_t>(mips) * layers, initial),
-                            .hazards = std::vector<UnitHazards>(static_cast<size_t>(mips) * layers),
-                            .acquired = acquired };
+                            .layouts = std::vector<Layout>(subresources, initial),
+                            .hazards = std::vector<UnitHazards>(subresources),
+                            .acquired = acquired,
+                            .heap = heap,
+                            .heapOffset = heapOffset,
+                            .heapSize = heapSize };
         const std::lock_guard held(m_mutex);
+        if (heap.bits != 0)
+        {
+            ROJORHI_INTERNAL_ASSERT(heapSize != 0, "a placed texture occupies no bytes of its heap");
+            // The texture's first event on each queue follows the uses other resources already made of its bytes there.
+            HeapState& placed = m_heaps[heap.bits];
+            std::array<AliasMarks, 3> marks;
+            for (const HeapSegments::Range& segment : placed.segments.isolate(heapOffset, heapOffset + heapSize))
+            {
+                for (size_t queue = 0; queue < marks.size(); ++queue)
+                {
+                    const std::optional<HeapUse>& last = segment.state[queue];
+                    if (last.has_value())
+                    {
+                        markAlias(marks[queue], segment.begin, segment.end, last->owner, last->use.position, last->stamp, last->use.scope);
+                    }
+                }
+            }
+            placed.segments.merge(heapOffset, heapOffset + heapSize);
+            placed.textures.push_back(texture.bits);
+            state.aliases.assign(subresources, marks);
+        }
         m_textures.insert_or_assign(texture.bits, std::move(state));
     }
 
@@ -118,7 +283,17 @@ namespace rojoRHI::core {
     void Tracker::removeTexture(Texture texture)
     {
         const std::lock_guard held(m_mutex);
-        m_textures.erase(texture.bits);
+        const auto found = m_textures.find(texture.bits);
+        if (found == m_textures.end())
+        {
+            return;
+        }
+        const auto heap = m_heaps.find(found->second.heap.bits);
+        if (heap != m_heaps.end())
+        {
+            std::erase(heap->second.textures, texture.bits);
+        }
+        m_textures.erase(found);
     }
 
     //==================================================================================================================
@@ -138,6 +313,10 @@ namespace rojoRHI::core {
     {
         BufferState state{ .label = std::string(label), .size = size, .heap = heap, .heapOffset = heapOffset, .segments = ByteSegments(size) };
         const std::lock_guard held(m_mutex);
+        if (heap.bits != 0)
+        {
+            m_heaps.try_emplace(heap.bits);
+        }
         m_buffers.insert_or_assign(buffer.bits, std::move(state));
     }
 
@@ -146,6 +325,13 @@ namespace rojoRHI::core {
     {
         const std::lock_guard held(m_mutex);
         m_buffers.erase(buffer.bits);
+    }
+
+    //==================================================================================================================
+    void Tracker::removeHeap(Heap heap)
+    {
+        const std::lock_guard held(m_mutex);
+        m_heaps.erase(heap.bits);
     }
 
     //==================================================================================================================
@@ -158,6 +344,38 @@ namespace rojoRHI::core {
             return std::nullopt;
         }
         return found->second.segments.segments().size();
+    }
+
+    //==================================================================================================================
+    std::optional<size_t> Tracker::aliasMarkCount(Texture texture)
+    {
+        const std::lock_guard held(m_mutex);
+        const auto found = m_textures.find(texture.bits);
+        if (found == m_textures.end())
+        {
+            return std::nullopt;
+        }
+        size_t count = 0;
+        for (const std::array<AliasMarks, 3>& queues : found->second.aliases)
+        {
+            for (const AliasMarks& marks : queues)
+            {
+                count += static_cast<size_t>(std::ranges::count_if(marks.ranges(), [](const AliasMarks::Range& range) { return range.state.has_value(); }));
+            }
+        }
+        return count;
+    }
+
+    //==================================================================================================================
+    std::optional<size_t> Tracker::heapSegmentCount(Heap heap)
+    {
+        const std::lock_guard held(m_mutex);
+        const auto found = m_heaps.find(heap.bits);
+        if (found == m_heaps.end())
+        {
+            return std::nullopt;
+        }
+        return found->second.segments.ranges().size();
     }
 
     //==================================================================================================================
@@ -251,6 +469,56 @@ namespace rojoRHI::core {
     }
 
     //==================================================================================================================
+    Tracker::HeapState* Tracker::locate([[maybe_unused]] const TrackerLock& held, Heap heap)
+    {
+        ROJORHI_INTERNAL_ASSERT(held.owns_lock() && held.mutex() == &m_mutex, "a heap was looked up without the tracker's lock");
+        const auto found = m_heaps.find(heap.bits);
+        return found == m_heaps.end() ? nullptr : &found->second;
+    }
+
+    //==================================================================================================================
+    std::string Tracker::describe(const TrackerLock& held, HeapOwner owner)
+    {
+        if (owner.texture)
+        {
+            const TextureState* texture = locate(held, Texture{ owner.bits });
+            return texture == nullptr ? std::string("a destroyed texture") : std::format("the texture \"{}\"", texture->label);
+        }
+        const BufferState* buffer = locate(held, Buffer{ owner.bits });
+        return buffer == nullptr ? std::string("a destroyed buffer") : std::format("the buffer \"{}\"", buffer->label);
+    }
+
+    //==================================================================================================================
+    uint64_t Tracker::noteHeapUse(
+        const TrackerLock& held, HeapState& heap, HeapOwner owner, uint64_t begin, uint64_t end, QueueType queue, uint64_t position, Scope scope
+    )
+    {
+        const uint64_t stamp = ++m_heapStamp;
+        for (HeapSegments::Range& segment : heap.segments.isolate(begin, end))
+        {
+            core::noteHeapUse(segment.state, queue, owner, position, stamp, scope);
+        }
+        heap.segments.merge(begin, end);
+        // Every other texture over these bytes loses its contents: its next event on the queue discards (VU-rojo-sync-0017).
+        for (const uint64_t bits : heap.textures)
+        {
+            TextureState* texture = locate(held, Texture{ bits });
+            const bool other = !(owner.texture && owner.bits == bits);
+            if (other && texture != nullptr && texture->heapOffset < end && begin < texture->heapOffset + texture->heapSize)
+            {
+                // Only the texture's own bytes are marked, so a use of other bytes keeps an older use of these.
+                const uint64_t from = std::max(begin, texture->heapOffset);
+                const uint64_t to = std::min(end, texture->heapOffset + texture->heapSize);
+                for (std::array<AliasMarks, 3>& marks : texture->aliases)
+                {
+                    markAlias(marks[static_cast<size_t>(queue)], from, to, owner, position, stamp, scope);
+                }
+            }
+        }
+        return stamp;
+    }
+
+    //==================================================================================================================
     void Tracker::checkPresent(const TrackerLock& held, Texture image)
     {
         const TextureState* texture = locate(held, image);
@@ -288,6 +556,33 @@ namespace rojoRHI::core {
         }
         const uint32_t mipEnd = use.range.baseMip + resolvedCount(use.range.baseMip, use.range.mipCount, texture->mips);
         const uint32_t layerEnd = use.range.baseLayer + resolvedCount(use.range.baseLayer, use.range.layerCount, texture->layers);
+        if (texture->heap.bits != 0)
+        {
+            // Another resource used the memory since a subresource's last event on the queue, so its contents are undefined and
+            // its first event must be a discard; that rule reports before the layout rules of every subresource.
+            for (uint32_t mip = use.range.baseMip; mip < mipEnd; ++mip)
+            {
+                for (uint32_t layer = use.range.baseLayer; layer < layerEnd; ++layer)
+                {
+                    [[maybe_unused]] const AliasMark* mark = uncovered(
+                        texture->aliases[static_cast<size_t>(mip) * texture->layers + layer][static_cast<size_t>(queue)], texture->ownStamp, std::nullopt
+                    );
+                    ROJORHI_VU(
+                        mark == nullptr,
+                        "VU-rojo-sync-0017",
+                        "the list \"{}\" uses mip {} layer {} of the placed texture \"{}\" on the {} queue first since {} used its memory at {}, "
+                        "with no texture barrier from Undefined before",
+                        list,
+                        mip,
+                        layer,
+                        texture->label,
+                        queueName(queue),
+                        mark != nullptr ? describe(held, mark->owner) : std::string(),
+                        mark != nullptr ? scopeText(mark->scope) : std::string()
+                    );
+                }
+            }
+        }
         for (uint32_t mip = use.range.baseMip; mip < mipEnd; ++mip)
         {
             for (uint32_t layer = use.range.baseLayer; layer < layerEnd; ++layer)
@@ -443,6 +738,22 @@ namespace rojoRHI::core {
             }
         }
         replayTextureHazards(*texture, use, queue, list, position);
+        if (texture->heap.bits != 0)
+        {
+            // A use of any subresource is a use of the texture's whole heap range: its subresources' bytes are not known.
+            HeapState* heap = locate(held, texture->heap);
+            ROJORHI_INTERNAL_ASSERT(heap != nullptr, "a placed texture is followed without its heap");
+            texture->ownStamp = noteHeapUse(
+                held,
+                *heap,
+                HeapOwner{ .bits = use.texture.bits, .texture = true },
+                texture->heapOffset,
+                texture->heapOffset + texture->heapSize,
+                queue,
+                position,
+                scopeOf(use)
+            );
+        }
     }
 
     //==================================================================================================================
@@ -476,7 +787,16 @@ namespace rojoRHI::core {
             // rules' to judge.
             return;
         }
-        const Scope later{ .stage = use.stage, .access = use.access };
+        // The aliasing rule reports first, then the indirect entry's own rule, then the hazards.
+        if (buffer->heap.bits != 0)
+        {
+            replayBufferAlias(held, *buffer, use, queue, list, position);
+        }
+        if (use.rule != UseRule::None)
+        {
+            replayIndirect(held, *buffer, use, queue, list);
+        }
+        const Scope later = scopeOf(use);
         const uint64_t end = rangeEnd(use.offset, use.size, buffer->size);
         for (ByteSegment& segment : buffer->segments.isolate(use.offset, end))
         {
@@ -489,6 +809,85 @@ namespace rojoRHI::core {
             recordUse(state, position, later);
         }
         buffer->segments.merge(use.offset, end, mergeFloor(queue));
+    }
+
+    //==================================================================================================================
+    void Tracker::replayBufferAlias(
+        const TrackerLock& held, BufferState& buffer, const UseEvent& use, QueueType queue, [[maybe_unused]] std::string_view list, uint64_t position
+    )
+    {
+        HeapState* heap = locate(held, buffer.heap);
+        ROJORHI_INTERNAL_ASSERT(heap != nullptr, "a placed buffer is followed without its heap");
+        const HeapOwner self{ .bits = use.buffer.bits, .texture = false };
+        const Scope later = scopeOf(use);
+        const uint64_t begin = buffer.heapOffset + use.offset;
+        const uint64_t end = buffer.heapOffset + rangeEnd(use.offset, use.size, buffer.size);
+        // The buffer's own bytes that pass against another resource's use: the aliasing chain orders the buffer's own earlier
+        // uses before this one, and their contents are undefined, so their own hazard state on the queue starts afresh.
+        std::vector<std::pair<uint64_t, uint64_t>> fresh;
+        for (const HeapSegments::Range& segment : heap->segments.isolate(begin, end))
+        {
+            const std::optional<HeapUse>& other = segment.state[static_cast<size_t>(queue)];
+            // A use of the bytes by this buffer, on another queue, since then is ordered against the other use by fences, the
+            // queues' rule, not this one.
+            if (!other.has_value() || other->owner == self ||
+                ownSince(buffer, segment.begin - buffer.heapOffset, segment.end - buffer.heapOffset, other->stamp))
+            {
+                continue;
+            }
+            ROJORHI_VU(
+                aliasOrdered(*other, later),
+                "VU-rojo-sync-0009",
+                "the list \"{}\" uses bytes {} to {} of the placed buffer \"{}\" at {} on the {} queue first since {} used those heap bytes at {}, "
+                "and no global barrier since covers that use at its source and this one at its destination",
+                list,
+                segment.begin - buffer.heapOffset,
+                segment.end - buffer.heapOffset,
+                buffer.label,
+                scopeText(later),
+                queueName(queue),
+                describe(held, other->owner),
+                scopeText(other->use.scope)
+            );
+            fresh.emplace_back(segment.begin - buffer.heapOffset, segment.end - buffer.heapOffset);
+        }
+        for (const auto& [from, to] : fresh)
+        {
+            for (ByteSegment& segment : buffer.segments.isolate(from, to))
+            {
+                segment.hazards.on(queue) = QueueHazards{};
+            }
+            buffer.segments.merge(from, to, mergeFloor(queue));
+        }
+        const uint64_t stamp = noteHeapUse(held, *heap, self, begin, end, queue, position, later);
+        for (OffsetRange<uint64_t>& range : buffer.stamps.isolate(use.offset, end - buffer.heapOffset))
+        {
+            range.state = stamp;
+        }
+        buffer.stamps.merge(use.offset, end - buffer.heapOffset);
+    }
+
+    //==================================================================================================================
+    bool Tracker::ownSince(const BufferState& buffer, uint64_t begin, uint64_t end, uint64_t stamp)
+    {
+        // Every byte of the range must have been used by the buffer since; one older byte is still to be ordered.
+        uint64_t oldest = UINT64_MAX;
+        for (const OffsetRange<uint64_t>& range : buffer.stamps.ranges())
+        {
+            if (range.begin < end && begin < range.end)
+            {
+                oldest = std::min(oldest, range.state);
+            }
+        }
+        return oldest > stamp;
+    }
+
+    //==================================================================================================================
+    void Tracker::replayIndirect(const TrackerLock& held, const BufferState& buffer, const UseEvent& use, QueueType queue, std::string_view list)
+    {
+        const uint64_t end = rangeEnd(use.offset, use.size, buffer.size);
+        const WriteOrder order = lastWriteOrder(held, queue, use.buffer, use.offset, use.size, scopeOf(use));
+        reportIndirect(use.rule, order == WriteOrder::Missing, std::format("bytes {} to {} of the buffer \"{}\"", use.offset, end, buffer.label), queue, list);
     }
 
     //==================================================================================================================
@@ -508,6 +907,14 @@ namespace rojoRHI::core {
             for (ByteSegment& segment : buffer.segments.segments())
             {
                 recordBarrier(segment.hazards.on(queue), position, source, destination);
+            }
+        }
+        // A global barrier alone orders a placed buffer's first use after another resource's (VU-rojo-sync-0009).
+        for (auto& [bits, heap] : m_heaps)
+        {
+            for (HeapSegments::Range& segment : heap.segments.ranges())
+            {
+                reachHeapUse(segment.state, queue, position, source, destination);
             }
         }
     }
@@ -558,11 +965,59 @@ namespace rojoRHI::core {
         }
         const uint32_t mipEnd = barrier.range.baseMip + resolvedCount(barrier.range.baseMip, barrier.range.mipCount, texture.mips);
         const uint32_t layerEnd = barrier.range.baseLayer + resolvedCount(barrier.range.baseLayer, barrier.range.layerCount, texture.layers);
+        const Scope source{ .stage = barrier.srcStage, .access = barrier.srcAccess };
+        if (texture.heap.bits != 0)
+        {
+            // The first event since another resource used the memory discards, waiting for that use; the rule reports before
+            // the layout and coverage rules of every subresource.
+            for (uint32_t mip = barrier.range.baseMip; mip < mipEnd; ++mip)
+            {
+                for (uint32_t layer = barrier.range.baseLayer; layer < layerEnd; ++layer)
+                {
+                    const size_t index = static_cast<size_t>(mip) * texture.layers + layer;
+                    std::array<AliasMarks, 3>& marks = texture.aliases[index];
+                    const bool discards = barrier.oldLayout == Layout::Undefined;
+                    // Each byte range's latest foreign use is waited for, so an older use of other bytes is not lost.
+                    const bool pending = uncovered(marks[static_cast<size_t>(queue)], texture.ownStamp, std::nullopt) != nullptr;
+                    [[maybe_unused]] const AliasMark* mark =
+                        uncovered(marks[static_cast<size_t>(queue)], texture.ownStamp, discards ? std::optional<Scope>(source) : std::nullopt);
+                    ROJORHI_VU(
+                        mark == nullptr,
+                        "VU-rojo-sync-0017",
+                        "a texture barrier in the list \"{}\" on the {} queue moves mip {} layer {} of the placed texture \"{}\" from layout {} with source {} "
+                        "first since {} used its memory at {}; it must start from Undefined with a source that covers that use",
+                        list,
+                        queueName(queue),
+                        mip,
+                        layer,
+                        texture.label,
+                        static_cast<int>(barrier.oldLayout),
+                        scopeText(source),
+                        mark != nullptr ? describe(held, mark->owner) : std::string(),
+                        mark != nullptr ? scopeText(mark->scope) : std::string()
+                    );
+                    if (pending)
+                    {
+                        // The aliasing chain orders the texture's own earlier uses before the discard, and their contents are
+                        // undefined, so its own hazard state on the queue starts afresh.
+                        texture.hazards[index].on(queue) = QueueHazards{};
+                    }
+                    if (discards)
+                    {
+                        // A covering discard leaves nothing of the earlier contents on any queue; the order between queues is
+                        // VU-rojo-queue-0005's.
+                        marks.fill(AliasMarks{});
+                    }
+                    marks[static_cast<size_t>(queue)] = AliasMarks{};
+                }
+            }
+        }
         for (uint32_t mip = barrier.range.baseMip; mip < mipEnd; ++mip)
         {
             for (uint32_t layer = barrier.range.baseLayer; layer < layerEnd; ++layer)
             {
-                Layout& current = texture.layouts[static_cast<size_t>(mip) * texture.layers + layer];
+                const size_t index = static_cast<size_t>(mip) * texture.layers + layer;
+                Layout& current = texture.layouts[index];
                 ROJORHI_VU(
                     barrier.oldLayout == Layout::Undefined || barrier.oldLayout == current,
                     "VU-rojo-sync-0013",
@@ -575,9 +1030,8 @@ namespace rojoRHI::core {
                     static_cast<int>(current)
                 );
                 current = barrier.newLayout;
-                const Scope source{ .stage = barrier.srcStage, .access = barrier.srcAccess };
                 const Scope destination{ .stage = barrier.dstStage, .access = barrier.dstAccess };
-                QueueHazards& state = texture.hazards[static_cast<size_t>(mip) * texture.layers + layer].on(queue);
+                QueueHazards& state = texture.hazards[index].on(queue);
                 if (barrier.oldLayout == barrier.newLayout)
                 {
                     recordBarrier(state, position, source, destination);
@@ -637,11 +1091,22 @@ namespace rojoRHI::core {
     }
 
     //==================================================================================================================
-    void trackTextureChecked(DeviceCore& core, Texture texture, std::string_view label, uint32_t mips, uint32_t layers, Layout initial, bool acquired)
+    void trackTextureChecked(
+        DeviceCore& core,
+        Texture texture,
+        std::string_view label,
+        uint32_t mips,
+        uint32_t layers,
+        Layout initial,
+        bool acquired,
+        Heap heap,
+        uint64_t heapOffset,
+        uint64_t heapSize
+    )
     {
         if (core.validation())
         {
-            core.tracker().addTexture(texture, label, mips, layers, initial, acquired);
+            core.tracker().addTexture(texture, label, mips, layers, initial, acquired, heap, heapOffset, heapSize);
         }
     }
 
@@ -669,6 +1134,15 @@ namespace rojoRHI::core {
         if (core.validation())
         {
             core.tracker().removeBuffer(buffer);
+        }
+    }
+
+    //==================================================================================================================
+    void forgetHeapChecked(DeviceCore& core, Heap heap)
+    {
+        if (core.validation())
+        {
+            core.tracker().removeHeap(heap);
         }
     }
 } // namespace rojoRHI::core

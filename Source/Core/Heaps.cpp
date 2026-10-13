@@ -8,6 +8,7 @@
 #include "Base/Assert.h"
 #include "Core/Buffers.h"
 #include "Core/Label.h"
+#include "Core/Tracker/Tracker.h"
 
 namespace rojoRHI::core {
     //==================================================================================================================
@@ -108,6 +109,7 @@ namespace rojoRHI::core {
         ROJORHI_VU(
             status != LookupStatus::Ok || mapped == 0, "VU-rojo-device-0009", "the heap \"{}\" is destroyed with {} tiles still mapped from it", label, mapped
         );
+        forgetHeap(core, heap);
         core.destroy(heap);
     }
 } // namespace rojoRHI::core

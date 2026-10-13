@@ -9,6 +9,7 @@
 #include <rojoRHI/Layout.h>
 #include <rojoRHI/QueueType.h>
 
+#include "Core/Tracker/Aliasing.h"
 #include "Core/Tracker/ByteSegments.h"
 #include "Core/Tracker/Hazards.h"
 #include "Core/Tracker/TrackerLog.h"
@@ -31,7 +32,8 @@ namespace rojoRHI::core {
     using TrackerLock = std::unique_lock<std::mutex>;
 
     /// The state the validation tracker of one device judges submitted work against: one layout per subresource of every live
-    /// texture, and the hazard state per queue of every texture subresource and of the byte segments of every live buffer.
+    /// texture, the hazard state per queue of every texture subresource and of the byte segments of every live buffer, and, per
+    /// heap holding placed resources, the resource that last used each byte range on each queue.
     /// Lists record events without it; `Queue::submit` replays their logs into it in queue submission order. Every member
     /// takes or requires its mutex, so queues submitting on several threads see one order.
     class Tracker
@@ -42,8 +44,19 @@ namespace rojoRHI::core {
 
         /// Starts following `texture`, labelled `label`, of `mips` mips and `layers` layers, with every subresource in
         /// `initial`. `acquired` marks a swapchain image whose first barrier must start from `Undefined` (VU-rojo-present-0014).
-        /// Takes the lock.
-        void addTexture(Texture texture, std::string_view label, uint32_t mips, uint32_t layers, Layout initial, bool acquired);
+        /// A placed texture names its `heap` and the `heapSize` bytes from `heapOffset` it occupies there; it follows the uses
+        /// other resources already made of those bytes. A dedicated one passes a null heap. Takes the lock.
+        void addTexture(
+            Texture texture,
+            std::string_view label,
+            uint32_t mips,
+            uint32_t layers,
+            Layout initial,
+            bool acquired,
+            Heap heap,
+            uint64_t heapOffset,
+            uint64_t heapSize
+        );
 
         /// Stops following `texture`, destroyed or presented; a texture the tracker does not follow is ignored. Takes the lock.
         void removeTexture(Texture texture);
@@ -59,9 +72,21 @@ namespace rojoRHI::core {
         /// Stops following `buffer`, destroyed; a buffer the tracker does not follow is ignored. Takes the lock.
         void removeBuffer(Buffer buffer);
 
+        /// Forgets the uses made of the bytes of `heap`, destroyed with no resource placed in it; a heap no placed resource was
+        /// followed in is ignored. Takes the lock.
+        void removeHeap(Heap heap);
+
         /// Returns the number of byte segments the tracker keeps for `buffer`, or nothing when it does not follow it. Takes the
         /// lock.
         std::optional<size_t> segmentCount(Buffer buffer);
+
+        /// Returns the number of alias marks `texture` holds over every subresource and queue, or nothing when the tracker does
+        /// not follow it. Takes the lock.
+        std::optional<size_t> aliasMarkCount(Texture texture);
+
+        /// Returns the number of byte segments the tracker keeps for `heap`, or nothing when no placed resource of it is
+        /// followed. Takes the lock.
+        std::optional<size_t> heapSegmentCount(Heap heap);
 
         /// Returns how the last write on `queue` to `size` bytes from `offset` of `buffer` is ordered before a use of `use`: for
         /// the bytes of several segments, the worst of them, `Missing` before `Unordered` before `Ordered` before `None`. A
@@ -87,6 +112,15 @@ namespace rojoRHI::core {
             std::vector<Layout> layouts;      ///< One layout per subresource, at `mip * layers + layer`.
             std::vector<UnitHazards> hazards; ///< The hazard state of each subresource, indexed as `layouts`.
             bool acquired = false;            ///< A swapchain image no barrier has been replayed on since its acquire.
+            Heap heap = {};                   ///< The heap the texture is placed in; null for a dedicated allocation.
+            uint64_t heapOffset = 0;          ///< The byte offset of the texture in `heap`.
+            uint64_t heapSize = 0;            ///< The bytes the texture occupies in `heap` from `heapOffset`.
+            /// For a placed texture, per subresource indexed as `layouts` and per queue type, the latest use other resources made
+            /// of each byte range of its memory since the subresource's last event on that queue; empty for a dedicated texture.
+            std::vector<std::array<AliasMarks, 3>> aliases;
+            /// The stamp of the texture's latest use of its heap bytes on any queue, so a mark older than it is one the texture
+            /// is ordered against across queues (VU-rojo-queue-0005), not by these rules.
+            uint64_t ownStamp = 0;
         };
 
         /// The tracker's view of one buffer.
@@ -97,6 +131,17 @@ namespace rojoRHI::core {
             Heap heap = {};          ///< The heap the buffer is placed in; null for a dedicated allocation.
             uint64_t heapOffset = 0; ///< The byte offset of the buffer in `heap`; its heap range runs `size` bytes from there.
             ByteSegments segments;   ///< The hazard state of its bytes.
+            /// For a placed buffer, the stamp of its latest use of each byte range on any queue, by offset in the buffer, so a
+            /// use of the bytes by another resource older than it is ordered across queues (VU-rojo-queue-0005), not by these
+            /// rules.
+            OffsetMap<uint64_t> stamps;
+        };
+
+        /// The tracker's view of one heap that holds or held a followed placed resource.
+        struct HeapState
+        {
+            HeapSegments segments;          ///< The last use of each byte range on each queue, and the resource that made it.
+            std::vector<uint64_t> textures; ///< The handle bits of the followed textures placed in the heap.
         };
 
         /// Returns the state of `texture`, or null when the tracker does not follow it. Unlike the public lookups it takes no
@@ -105,6 +150,32 @@ namespace rojoRHI::core {
 
         /// Returns the state of `buffer`, or null when the tracker does not follow it, as the texture lookup does.
         BufferState* locate(const TrackerLock& held, Buffer buffer);
+
+        /// Returns the state of `heap`, or null when no placed resource of it was followed, as the texture lookup does.
+        HeapState* locate(const TrackerLock& held, Heap heap);
+
+        /// Returns the resource `owner` names for reports: its kind and label, or a destroyed resource's kind.
+        std::string describe(const TrackerLock& held, HeapOwner owner);
+
+        /// Notes the use `scope` by `owner` of the bytes `begin` to `end` of `heap` at `position` on `queue`: they become the
+        /// owner's on that queue, and every other texture placed over them must discard before its next event there. Returns
+        /// the use's stamp, its order among the heap uses of every queue.
+        uint64_t noteHeapUse(
+            const TrackerLock& held, HeapState& heap, HeapOwner owner, uint64_t begin, uint64_t end, QueueType queue, uint64_t position, Scope scope
+        );
+
+        /// Checks `use`, a use of the placed buffer `buffer`, at `position` on `queue`, against the last use by another resource of
+        /// each heap byte range it covers (VU-rojo-sync-0009), then notes it on the heap. The buffer's own hazard state on the
+        /// queue starts afresh over the bytes that pass against another resource's use.
+        void replayBufferAlias(const TrackerLock& held, BufferState& buffer, const UseEvent& use, QueueType queue, std::string_view list, uint64_t position);
+
+        /// Returns true when `buffer` used every byte from `begin` to `end` of it after the heap use of `stamp`: on another queue,
+        /// since a use on the same queue would be the bytes' last there.
+        static bool ownSince(const BufferState& buffer, uint64_t begin, uint64_t end, uint64_t stamp);
+
+        /// Checks `use`, an indirect argument or count read of `buffer` on `queue`, against the last write of its bytes there and
+        /// reports the rule of the entry that made it (VU-rojo-indirect-0005, 0011, 0017 or 0020).
+        void replayIndirect(const TrackerLock& held, const BufferState& buffer, const UseEvent& use, QueueType queue, std::string_view list);
 
         /// Returns, per queue type, the position below which a remembered use belongs to no command still to be replayed on
         /// `queue` or later: the current position on `queue`, one past the last elsewhere. Segments merge only below it.
@@ -136,9 +207,13 @@ namespace rojoRHI::core {
         std::mutex m_mutex;
         std::unordered_map<uint64_t, TextureState> m_textures; ///< The followed textures, by handle bits.
         std::unordered_map<uint64_t, BufferState> m_buffers;   ///< The followed buffers, by handle bits.
+        std::unordered_map<uint64_t, HeapState> m_heaps;       ///< The heaps of followed placed resources, by handle bits.
         /// The position on each queue type of the last command replayed there: each command takes the next one, so a use's
         /// position orders it against the barriers of the same queue.
         std::array<uint64_t, 3> m_positions = {};
+        /// The order of the last heap use replayed on any queue: each heap use takes the next one, so a use on one queue is told
+        /// apart from a later one on another.
+        uint64_t m_heapStamp = 0;
     };
 
     /// Does the work of `lockTracker` in a Debug build.
@@ -151,7 +226,18 @@ namespace rojoRHI::core {
     void checkPresentLayoutChecked(DeviceCore& core, Texture image);
 
     /// Does the work of `trackTexture` in a Debug build.
-    void trackTextureChecked(DeviceCore& core, Texture texture, std::string_view label, uint32_t mips, uint32_t layers, Layout initial, bool acquired);
+    void trackTextureChecked(
+        DeviceCore& core,
+        Texture texture,
+        std::string_view label,
+        uint32_t mips,
+        uint32_t layers,
+        Layout initial,
+        bool acquired,
+        Heap heap,
+        uint64_t heapOffset,
+        uint64_t heapSize
+    );
 
     /// Does the work of `forgetTexture` in a Debug build.
     void forgetTextureChecked(DeviceCore& core, Texture texture);
@@ -161,6 +247,9 @@ namespace rojoRHI::core {
 
     /// Does the work of `forgetBuffer` in a Debug build.
     void forgetBufferChecked(DeviceCore& core, Buffer buffer);
+
+    /// Does the work of `forgetHeap` in a Debug build.
+    void forgetHeapChecked(DeviceCore& core, Heap heap);
 
     /// Locks the tracker of `core` when it validates; otherwise, and in a Release build, returns an empty lock. A backend takes
     /// it in `Queue::submit` before `checkSubmit` and keeps it until `recordSignals` returns.
@@ -197,11 +286,14 @@ namespace rojoRHI::core {
         [[maybe_unused]] uint32_t mips,
         [[maybe_unused]] uint32_t layers,
         [[maybe_unused]] Layout initial,
-        [[maybe_unused]] bool acquired
+        [[maybe_unused]] bool acquired,
+        [[maybe_unused]] Heap heap,
+        [[maybe_unused]] uint64_t heapOffset,
+        [[maybe_unused]] uint64_t heapSize
     )
     {
 #ifndef NDEBUG
-        trackTextureChecked(core, texture, label, mips, layers, initial, acquired);
+        trackTextureChecked(core, texture, label, mips, layers, initial, acquired, heap, heapOffset, heapSize);
 #endif
     }
 
@@ -243,6 +335,14 @@ namespace rojoRHI::core {
     {
 #ifndef NDEBUG
         forgetBufferChecked(core, buffer);
+#endif
+    }
+
+    /// Forgets the uses made of the bytes of a heap destroyed on `core`. Inline, as `replayLists` is.
+    inline void forgetHeap([[maybe_unused]] DeviceCore& core, [[maybe_unused]] Heap heap)
+    {
+#ifndef NDEBUG
+        forgetHeapChecked(core, heap);
 #endif
     }
 } // namespace rojoRHI::core

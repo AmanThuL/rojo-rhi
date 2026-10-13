@@ -114,13 +114,16 @@ namespace rojoRHI::core {
         }
 
         //==============================================================================================================
-        /// Logs the argument reads of an indirect command: `bytes` bytes at `args`, and the count at `count` unless it is null.
-        [[maybe_unused]] void logIndirect(CommandListCore& list, const ResolvedAddr& args, uint64_t bytes, const ResolvedAddr& count)
+        /// Logs the argument reads of an indirect command: `bytes` bytes at `args`, reported as `recordsRule`, and the count at
+        /// `count`, reported as `countRule`, unless it is null.
+        [[maybe_unused]] void logIndirect(
+            CommandListCore& list, const ResolvedAddr& args, uint64_t bytes, UseRule recordsRule, const ResolvedAddr& count, UseRule countRule
+        )
         {
-            logUse(list, bufferUse(args.buffer, args.offset, bytes, Stage::IndirectArgs, Access::IndirectArgs));
+            logUse(list, bufferUse(args.buffer, args.offset, bytes, Stage::IndirectArgs, Access::IndirectArgs, recordsRule));
             if (count.record != nullptr)
             {
-                logUse(list, bufferUse(count.buffer, count.offset, sizeof(uint32_t), Stage::IndirectArgs, Access::IndirectArgs));
+                logUse(list, bufferUse(count.buffer, count.offset, sizeof(uint32_t), Stage::IndirectArgs, Access::IndirectArgs, countRule));
             }
         }
     } // namespace
@@ -256,7 +259,7 @@ namespace rojoRHI::core {
             "drawIndirect count: {}",
             indirectProblem(counted, sizeof(uint32_t))
         );
-        logIndirect(list, first, bytes, counted);
+        logIndirect(list, first, bytes, UseRule::Indirect0005Records, counted, UseRule::Indirect0005Count);
 #endif
         logWork(list, false, true);
     }
@@ -305,7 +308,7 @@ namespace rojoRHI::core {
         );
         // The records choose the indices they read, so the use is the whole index buffer.
         logUse(list, bufferUse(indices, 0, kWholeSize, Stage::IndexInput, Access::IndexRead));
-        logIndirect(list, first, bytes, counted);
+        logIndirect(list, first, bytes, UseRule::Indirect0011Records, counted, UseRule::Indirect0011Count);
 #endif
         logWork(list, false, true);
     }
@@ -348,7 +351,7 @@ namespace rojoRHI::core {
             "drawMeshTasksIndirect count: {}",
             indirectProblem(counted, sizeof(uint32_t))
         );
-        logIndirect(list, first, bytes, counted);
+        logIndirect(list, first, bytes, UseRule::Indirect0017Records, counted, UseRule::Indirect0017Count);
 #endif
         logWork(list, false, true);
     }
@@ -373,7 +376,7 @@ namespace rojoRHI::core {
             "dispatchIndirect args: {}",
             indirectProblem(first, sizeof(DispatchIndirectArgs))
         );
-        logIndirect(list, first, sizeof(DispatchIndirectArgs), ResolvedAddr{});
+        logIndirect(list, first, sizeof(DispatchIndirectArgs), UseRule::Indirect0020Records, ResolvedAddr{}, UseRule::None);
 #endif
         logWork(list, true, true);
     }

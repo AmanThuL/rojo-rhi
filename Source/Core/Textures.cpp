@@ -410,6 +410,8 @@ namespace rojoRHI::core {
         );
         TextureRecord record;
         record.heap = placement.heap;
+        record.heapOffset = placement.heap.bits != 0 ? placement.offset : 0;
+        record.heapSize = placement.heap.bits != 0 ? requirements.size : 0;
         record.label = resolveLabel(desc.label, placement.heap.bits != 0 ? "rojorhi.texture.placed.unnamed" : "rojorhi.texture.unnamed");
         record.type = desc.type;
         record.format = desc.format;
@@ -446,8 +448,11 @@ namespace rojoRHI::core {
         const uint32_t mips = record.mips;
         const uint32_t layers = record.layers;
         const Layout initial = record.initialData ? Layout::ShaderRead : Layout::Undefined;
+        const Heap heap = record.heap;
+        const uint64_t heapOffset = record.heapOffset;
+        const uint64_t heapSize = record.heapSize;
         const Texture texture = core.pool<Texture>().allocate(std::move(record));
-        trackTexture(core, texture, label, mips, layers, initial, false);
+        trackTexture(core, texture, label, mips, layers, initial, false, heap, heapOffset, heapSize);
         return texture;
 #else
         return core.pool<Texture>().allocate(std::move(record));

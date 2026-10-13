@@ -75,6 +75,8 @@ namespace rojoRHI::core {
         uint32_t samples = 1;                    ///< Samples per texel.
         TextureUsage usage = TextureUsage::None; ///< The usage flags.
         Heap heap = {};                          ///< The heap the texture is placed in; null for a dedicated allocation.
+        uint64_t heapOffset = 0;                 ///< The byte offset of the texture in `heap`; zero for a dedicated allocation.
+        uint64_t heapSize = 0;                   ///< The bytes the texture occupies in `heap`, its placement requirement; zero for a dedicated allocation.
         uint64_t initialBytes = 0;               ///< Bytes of initial data the texture was created with.
         bool initialData = false;                ///< Created with initial data, so it starts in `Layout::ShaderRead`.
         uint64_t views = 0;                      ///< View slots holding a view of this texture (VU-rojo-texture-0028).
