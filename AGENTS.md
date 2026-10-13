@@ -29,7 +29,8 @@ directory responsibilities).
   [0014 overhead is measured against native code](docs/decisions/0014-overhead-measurement.md),
   [0015 versioning](docs/decisions/0015-versioning.md),
   [0016 C++ format follows the No Graphics API style](docs/decisions/0016-cpp-format.md),
-  [0017 v1 is frozen under Legacy/ until the consumer port](docs/decisions/0017-v1-frozen-under-legacy.md)
+  [0017 v1 is frozen under Legacy/ until the consumer port](
+  docs/decisions/0017-v1-frozen-under-legacy.md)
 - API reference: [docs/spec/](docs/spec/00-conventions.md), entered through its conventions
   chapter
 - Research: [docs/research/](docs/research/2026-10-11-rhi-redesign/01-nographicsapi.md), the
@@ -42,9 +43,11 @@ directory responsibilities).
 Standalone:
 
 ```
-xmake setup   # fetches pinned metal-cpp and Slang toolchain references
+xmake setup   # fetches pinned metal-cpp and Slang on macOS only; nothing elsewhere yet
 xmake         # builds the frozen v1 library, RojoRHILegacy
 xmake test RojoRHILegacyTests/unit   # runs the v1 CPU contract cases
+xmake test RojoRHITests/contract     # runs the v2 CPU contract cases
+xmake f --rojorhi_backend=null       # selects the v2 backend; null is the only value yet
 ```
 
 The v1 GPU conformance suite runs from its test directory, after `xmake build RojoRHILegacyTests`:
@@ -62,6 +65,7 @@ not this one:
 xmake setup -P .
 xmake -P .
 xmake test RojoRHILegacyTests/unit -P .
+xmake test RojoRHITests/contract -P .
 ```
 
 GPU conformance today is checkpoint A, the cases tagged `[checkpoint-a]`
@@ -84,7 +88,8 @@ conformance tiers that replace it for the v2 interface.
   (ADR 0012). The v1 code still has binding slots and virtual interfaces until it is ported to v2.
 - v1 lives frozen under `Legacy/` until the consumer port deletes it (ADR 0017): its code moved
   unchanged, and a change there is a defect fix only, in a commit that touches nothing outside
-  `Legacy/` and carries a `V1-fix:` trailer. The project policy check enforces it.
+  `Legacy/` except `xmake/targets.lua` and carries a `V1-fix:` trailer. The commit that deletes
+  `Legacy/` is exempt. The project policy check enforces it.
 - Public headers are dependency-free: no consumer header, no consumer namespace, and no backend,
   ImGui, windowing or third-party type (ADR 0007, ADR 0012).
 - A public include is rooted exactly `rojoRHI/`, in that spelling, and is written in angle form

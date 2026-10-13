@@ -11,9 +11,9 @@ not implemented yet.
 ```
 rojo-rhi/
   LICENSE  AGENTS.md  CLAUDE.md  README.md  xmake.lua  root project settings only
-  .github/workflows/                          CI: policy on Linux, build/test on Metal 4 macOS
+  .github/workflows/                          CI: policy; legacy, format, interface
   xmake/targets.lua  setup.lua  shaders.lua   targets are includable by a host project
-  Include/ Source/ Backends/ Tests/ Shaders/  the v2 interface (permanent names, no code yet)
+  Include/ Source/ Backends/ Tests/ Shaders/  the v2 interface (Include/ and Tests/ so far)
   Legacy/Include/rojoRHI/                     v1 public headers, dependency-free
   Legacy/Source/  Legacy/Source/Base/         v1 shared implementation; private base
   Legacy/Backends/Metal4/Source/  Legacy/Backends/Metal4/ImGui/
@@ -28,12 +28,17 @@ rojo-rhi/
 
 `xmake.lua` at the root declares project settings, requires and the language level once; it is
 never included directly by a host project. `xmake/` holds `targets.lua` (the includable target
-declarations; the v1 targets are macOS only), a minimal `setup.lua` (metal-cpp and Slang pins), and
+declarations; the v1 targets are macOS only), a minimal `setup.lua` (metal-cpp and Slang pins,
+fetched on macOS only; it fetches nothing elsewhere yet), and
 a test-only copy of the shader-to-metallib rule, so RojoRHI configures, builds and tests
 standalone.
 
 `Include/`, `Source/`, `Backends/`, `Tests/` and `Shaders/` are the permanent tree of the v2
-interface. They hold no v2 code yet. v1 lives frozen beside them under `Legacy/` and is deleted
+interface. Today `Include/rojoRHI/Version.h` and `Tests/` hold the first v2 code, built as the
+header-only `RojoRHI` target and the `RojoRHITests` binary, whose `contract` test runs the
+`[contract]` cases; the `rojorhi_backend` configure option accepts only `null` for now, and the
+GPU-free Null backend arrives with the work that adds it, so `RojoRHI` is header-only today. The
+rest is empty. v1 lives frozen beside them under `Legacy/` and is deleted
 with the consumer port; ADR 0017 owns the layout, the freeze and the consumer's dependency rename.
 
 `Legacy/Include/rojoRHI/` is the v1 public surface: dependency-free headers naming no backend,
@@ -57,6 +62,10 @@ conformance set until the v2 tiers of ADR 0009 exist.
 substitution table that renamed the component inside Luminex before the extraction and stays as the
 record of what that rename did; `Tools/Extract/` holds the scripts that ran the extraction itself
 and the verifier that checked its result, both kept for a future re-run.
+
+`.github/workflows/` runs the project policy check on Linux; the legacy, format and interface jobs
+on hosted macOS; and the interface job also on Windows. Hosted macOS has no Metal 4 device, so the
+GPU cases run on Apple Silicon before merge ([testing](../conventions/testing.md)).
 
 `docs/conventions/`, `docs/decisions/`, `docs/architecture/` and `docs/guides/` hold this
 repository's own conventions, ADRs, architecture pages and procedures, standing alone from

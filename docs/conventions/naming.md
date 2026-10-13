@@ -17,11 +17,11 @@ differently, ADR 0001 wins; nothing here may contradict its table.
 | Umbrella header | `<rojoRHI/RHI.h>` | keeps the name `RHI.h`; only its root is renamed |
 | Macro prefix | `ROJORHI_` | `ROJORHI_ASSERT`, `ROJORHI_LOG_INFO` |
 | Default GPU label prefix | `rojorhi.` | `rojorhi.buffer.unnamed` |
-| Build targets | `RojoRHI`, `RojoRHITests` | the v2 library and its tests |
-| Frozen v1 targets | `RojoRHILegacy`, `RojoRHILegacyMetal4ImGui`, `RojoRHILegacyTests` | the v1 library, its ImGui adapter and its tests |
+| Build targets | `RojoRHI`, `RojoRHITests` | the v2 library and its tests (ADR 0017) |
+| Frozen v1 targets | `RojoRHILegacy`, `RojoRHILegacyMetal4ImGui`, `RojoRHILegacyTests` | the v1 library, its ImGui adapter and its tests (ADR 0017, which amends ADR 0001's target row) |
 | Repository | `rojo-rhi` | the directory this file lives in |
 | Prose name | RojoRHI | "RojoRHI exposes no backend type" |
-| Mount path in a consumer | `RojoRHI/` | `RojoRHI/Include/rojoRHI/Device.h` |
+| Mount path in a consumer | `RojoRHI/` | `RojoRHI/Include/rojoRHI/Version.h` |
 
 Namespaces are otherwise lowercase; `rojoRHI` and the matching include root are the one approved
 exception, because RHI is an initialism and the mixed case keeps the word boundary visible. The
@@ -47,7 +47,8 @@ with the code import.
 - One primary type per header, in `PascalCase.h` and `PascalCase.cpp` named after it.
 - Directory names are `PascalCase`: `Include`, `Source`, `Backends/Metal4`, `Tests`, `Shaders`,
   `Tools`, and `Legacy` for the frozen v1 tree, which repeats the same layout beneath it (ADR
-  0017). Public headers live under `Include/rojoRHI/`; the private base lives in `Source/Base/`.
+  0017). Public headers live under `Include/rojoRHI/`; v1's private base lives in
+  `Legacy/Source/Base/`, and the new interface's own `Source/Base/` arrives with the Null backend.
 - Backend files carry the backend as a prefix (`Metal4Device.cpp`), so a file name alone says which
   backend owns it.
 - Shader basenames are globally unique including case, per test target; a collision is rejected
@@ -63,9 +64,10 @@ caller-supplied label is used verbatim and keeps the caller's own prefix; RojoRH
 
 - A `TEST_CASE` name is a lowercase sentence stating the observable behaviour, not the function
   under test: "a Greater depth test keeps the nearer fragment in reversed-Z".
-- Tags are lowercase in brackets: `[rhi]` for CPU contract and validation cases, `[gpu]` for cases
-  needing a real device, `[checkpoint-a]` for the frozen conformance set, `[.]` for a case hidden
-  from the default run. A case carries its own tags plus any set tag it belongs to.
+- Tags are lowercase in brackets: `[contract]` for the v2 CPU contract cases in `Tests/`, `[rhi]`
+  for the v1 CPU contract and validation cases, `[gpu]` for cases needing a real device,
+  `[checkpoint-a]` for the frozen conformance set, `[.]` for a case hidden from the default run. A
+  case carries its own tags plus any set tag it belongs to.
 
 ## Process environment
 

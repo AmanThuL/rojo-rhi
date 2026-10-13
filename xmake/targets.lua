@@ -99,3 +99,30 @@ if is_plat("macosx") then
         -- Hidden diagnostics have explicit reproduction commands and are not ordinary regression gates.
         add_tests("gpu", {runargs = {"[gpu]~[.]"}})
 end
+
+-- The backend compiled into RojoRHI (ADR 0012); one backend per build.
+option("rojorhi_backend")
+    set_default("null")
+    set_values("null")
+    set_showmenu(true)
+    set_description("Backend for RojoRHI; null is the only accepted value. The GPU-free Null backend",
+                    "arrives with the work that adds it, and metal4 later becomes the macOS default")
+option_end()
+
+target("RojoRHI")
+    set_kind("headeronly")
+    add_options("rojorhi_backend")
+    add_includedirs(path.join(component, "Include"), {public = true})
+    on_config(function (target)
+        local backend = get_config("rojorhi_backend")
+        assert(backend == "null", format("rojorhi_backend=%s is not a backend; the only value is null", tostring(backend)))
+    end)
+
+target("RojoRHITests")
+    set_kind("binary")
+    set_default(false)
+    set_targetdir("$(builddir)/$(plat)/$(arch)/$(mode)/rojorhi-test")
+    add_files(path.join(component, "Tests/*.cpp"))
+    add_deps("RojoRHI")
+    add_packages("catch2")
+    add_tests("contract", {runargs = {"[contract]"}})

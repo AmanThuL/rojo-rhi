@@ -32,8 +32,11 @@ namespace contents. This file covers what a formatter cannot. Names are owned by
 
 ## The private base
 
-`Source/Base/` (v1's, frozen, is `Legacy/Source/Base/`) is the only home of assertions, alignment helpers, JSON escaping and logging. It is
-private: no public header includes it, and no consumer can reach it.
+v1's private base, `Legacy/Source/Base/`, is the only home of its assertions, alignment helpers,
+JSON escaping and logging, as described below. The new interface's own `Source/Base/` arrives with
+the Null backend; its assert reports a valid-usage identifier and runs only in non-Release builds
+([01-fundamentals](../spec/01-fundamentals.md)). Either base is private: no public header
+includes it, and no consumer can reach it.
 
 - Logging is three macros — `ROJORHI_LOG_INFO`, `ROJORHI_LOG_WARN` and `ROJORHI_LOG_ERROR` — that
   format with `std::format` and hand severity plus the formatted message to one public message
@@ -114,9 +117,9 @@ compilation database rather than a regular expression guessing at C++ definition
 ## Differences from Luminex
 
 - **No shared Core library.** Luminex's RHI includes `Core/Assert.h`, `Core/Log.h`, `Core/Align.h`
-  and `Core/Json.h` from a library shared with the renderer. RojoRHI owns a private `Source/Base/`
-  instead, so the library links nothing outside its own tree and a consumer inherits no base
-  library it did not ask for.
+  and `Core/Json.h` from a library shared with the renderer. RojoRHI owns a private base
+  (`Legacy/Source/Base/` for v1) instead, so the library links nothing outside its own tree and a
+  consumer inherits no base library it did not ask for.
 - **Logging.** Luminex logs through spdlog macros. RojoRHI formats with `std::format` and emits
   through one public message callback, defaulting to stderr, because a library must not choose its
   consumer's log sink ([ADR 0003](../decisions/0003-thin-rhi.md)).
