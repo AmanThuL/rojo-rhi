@@ -144,8 +144,9 @@ namespace rojoRHI::core {
         }
         const DepthStencilState& stencil = desc.depthStencil;
         record.depthWrite = stencil.depthWrite;
-        // Stencil operations do nothing with the stencil test off (chapter 07), so only a tested stencil can write.
-        record.stencilWrite = stencil.stencilTest &&
+        // Stencil operations do nothing with the stencil test off (chapter 07), and change no bit with a zero write mask, so
+        // only a tested stencil with a write mask can write.
+        record.stencilWrite = stencil.stencilTest && stencil.stencilWriteMask != 0 &&
                               (stencil.front.fail != StencilOp::Keep || stencil.front.depthFail != StencilOp::Keep || stencil.front.pass != StencilOp::Keep ||
                                stencil.back.fail != StencilOp::Keep || stencil.back.depthFail != StencilOp::Keep || stencil.back.pass != StencilOp::Keep);
         record.depthFormat = desc.depthFormat;

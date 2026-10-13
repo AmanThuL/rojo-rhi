@@ -26,12 +26,10 @@ namespace {
     [[maybe_unused]] int g_surface = 0;
 
     //==================================================================================================================
-    /// Records the barrier that moves every subresource of `texture` from `oldLayout` to `newLayout`.
+    /// Records the barrier that moves every subresource of `texture` from `oldLayout` to `newLayout`, ordering the uses after it.
     void move(CommandList list, Texture texture, Layout oldLayout, Layout newLayout)
     {
-        const std::array<TextureBarrier, 1> barriers{ TextureBarrier{
-            .texture = texture, .srcStage = Stage::All, .dstStage = Stage::All, .oldLayout = oldLayout, .newLayout = newLayout } };
-        list.barrier({}, {}, barriers);
+        test::transition(list, texture, oldLayout, newLayout);
     }
 
     //==================================================================================================================
@@ -322,6 +320,10 @@ TEST_CASE("a barrier batch logs each of its records", "[core]")
     CHECK(std::holds_alternative<GlobalBarrier>(log.events[0]));
     CHECK(std::get<BufferBarrier>(log.events[1]).buffer == buffer);
     CHECK(std::get<TextureBarrier>(log.events[2]).newLayout == Layout::General);
+    // The records of one call belong to one command, so the tracker never chains them with each other.
+    REQUIRE(log.commands.size() == 3);
+    CHECK(log.commands[0] == log.commands[1]);
+    CHECK(log.commands[1] == log.commands[2]);
     kit.finish();
 #endif
 }
@@ -508,6 +510,93 @@ TEST_CASE("an upscale logs mip 0 of layer 0 of each texture it reads and writes"
         CHECK(use.rule == core::UseRule::Upscale0016);
         CHECK(use.access == (index == 3 ? Access::ShaderWrite : Access::ShaderRead));
     }
+    // The four uses are one command's, distinct from the barrier before them.
+    const core::TrackerLog& log = core::coreOf(kit.kit.list).trackerLog;
+    REQUIRE(log.commands.size() == log.events.size());
+    for (size_t index = before; index < log.events.size(); ++index)
+    {
+        CHECK(log.commands[index] == log.commands[before]);
+    }
+    CHECK(log.commands[before] != log.commands[before - 1]);
     kit.kit.finish();
+#endif
+}
+
+//======================================================================================================================
+TEST_CASE("every logging entry gives its events one command ordinal, distinct from the command before", "[core]")
+{
+#ifndef NDEBUG
+    PassKit kit(QueueType::Graphics, true);
+    const core::TrackerLog& log = core::coreOf(kit.list).trackerLog;
+    std::optional<uint64_t> previous;
+    const auto command = [&](const char* name, const auto& record) {
+        INFO(name);
+        const size_t before = log.events.size();
+        record();
+        REQUIRE(log.commands.size() == log.events.size());
+        REQUIRE(log.events.size() > before);
+        const uint64_t ordinal = log.commands[before];
+        for (size_t index = before; index < log.events.size(); ++index)
+        {
+            CHECK(log.commands[index] == ordinal);
+        }
+        CHECK(previous != ordinal);
+        previous = ordinal;
+    };
+    // Each command uses resources of its own, so the list is also valid at submission.
+    const TextureRegion region{ .extent = { 4, 4, 1 } };
+    const BufferTextureLayout layout{ .rowPitch = 256 };
+    const Texture source = kit.texture();
+    const Texture destination = kit.texture();
+    const Texture copied = kit.texture();
+    const Texture cleared = kit.target();
+    const Texture color = kit.target();
+    const Buffer indices = kit.buffer(BufferUsage::Index);
+    const Buffer args = kit.buffer(BufferUsage::IndirectArgs);
+    const Buffer read = kit.buffer(BufferUsage::None);
+    const Buffer written = kit.buffer(BufferUsage::ShaderWrite);
+    command("barrier", [&] {
+        constexpr Access kCopies = Access::CopyRead | Access::CopyWrite;
+        const std::array<TextureBarrier, 5> barriers{
+            TextureBarrier{ .texture = source, .dstStage = Stage::Copy, .dstAccess = Access::CopyRead, .newLayout = Layout::CopySrc },
+            TextureBarrier{ .texture = destination, .dstStage = Stage::Copy, .dstAccess = Access::CopyWrite, .newLayout = Layout::CopyDst },
+            TextureBarrier{ .texture = copied, .dstStage = Stage::Copy, .dstAccess = Access::CopyWrite, .newLayout = Layout::CopyDst },
+            TextureBarrier{ .texture = cleared, .dstStage = Stage::Copy, .dstAccess = kCopies, .newLayout = Layout::General },
+            TextureBarrier{ .texture = color,
+                            .dstStage = Stage::ColorAttachment,
+                            .dstAccess = Access::ColorAttachmentRead | Access::ColorAttachmentWrite,
+                            .newLayout = Layout::ColorAttachment },
+        };
+        kit.list.barrier({}, {}, barriers);
+    });
+    command("copyBuffer", [&] { kit.list.copyBuffer(kit.buffer(BufferUsage::None), 0, kit.buffer(BufferUsage::None), 0, 256); });
+    command("fillBuffer", [&] { kit.list.fillBuffer(kit.buffer(BufferUsage::ShaderWrite), 0, 256, 0); });
+    command("copyBufferToTexture", [&] { kit.list.copyBufferToTexture(kit.buffer(BufferUsage::None), layout, destination, region); });
+    command("copyTextureToBuffer", [&] { kit.list.copyTextureToBuffer(source, region, kit.buffer(BufferUsage::None), layout); });
+    command("copyTexture", [&] { kit.list.copyTexture(source, region, copied, region); });
+    command("clearTexture", [&] { kit.list.clearTexture(cleared, {}, {}); });
+    const std::array<ColorAttachment, 1> colors{ ColorAttachment{ .texture = color } };
+    command("beginRenderPass", [&] { kit.list.beginRenderPass(test::fullPass(colors)); });
+    constexpr std::array<Format, 1> formats = { Format::RGBA8Unorm };
+    kit.list.setPipeline(kit.graphics(formats));
+    kit.list.setViewport({ .width = static_cast<float>(PassKit::kSize), .height = static_cast<float>(PassKit::kSize) });
+    kit.list.setScissor({ 0, 0, PassKit::kSize, PassKit::kSize });
+    const std::array<ResourceAccess, 1> fragment{ ResourceAccess{ .buffer = read, .stage = Stage::FragmentShader, .access = Access::ShaderRead } };
+    command("draw", [&] {
+        kit.list.declareAccess(fragment);
+        kit.list.draw(3);
+    });
+    command("drawIndexed", [&] { kit.list.drawIndexed(indices, IndexType::UInt32, 3); });
+    command("drawIndirect", [&] { kit.list.drawIndirect(kit.device.address(args, 0), 1); });
+    command("drawIndexedIndirect", [&] { kit.list.drawIndexedIndirect(indices, IndexType::UInt32, kit.device.address(args, 0), 1); });
+    kit.list.endRenderPass();
+    kit.list.setPipeline(kit.compute());
+    const std::array<ResourceAccess, 1> compute{ ResourceAccess{ .buffer = written, .stage = Stage::ComputeShader, .access = Access::ShaderWrite } };
+    command("dispatch", [&] {
+        kit.list.declareAccess(compute);
+        kit.list.dispatch(1, 1, 1);
+    });
+    command("dispatchIndirect", [&] { kit.list.dispatchIndirect(kit.device.address(args, 0)); });
+    kit.finish();
 #endif
 }

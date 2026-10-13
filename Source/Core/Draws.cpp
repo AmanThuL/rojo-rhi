@@ -101,6 +101,19 @@ namespace rojoRHI::core {
         }
 
         //==============================================================================================================
+        /// Consumes the declared accesses of a draw or, when `dispatch` is set, a dispatch, and completes the attachment uses
+        /// of the open pass with a draw's own. A command with `work` false, a zero count, makes neither, though it still
+        /// consumes the declarations; an indirect command's count is unknown while recording, so it always passes true.
+        void logWork(CommandListCore& list, bool dispatch, bool work)
+        {
+            consumeAccesses(list, dispatch, work);
+            if (!dispatch && work)
+            {
+                logDraw(list);
+            }
+        }
+
+        //==============================================================================================================
         /// Logs the argument reads of an indirect command: `bytes` bytes at `args`, and the count at `count` unless it is null.
         [[maybe_unused]] void logIndirect(CommandListCore& list, const ResolvedAddr& args, uint64_t bytes, const ResolvedAddr& count)
         {
@@ -127,14 +140,13 @@ namespace rojoRHI::core {
     }
 
     //==================================================================================================================
-    void draw(CommandListCore& list)
+    void draw(CommandListCore& list, [[maybe_unused]] uint32_t vertices, [[maybe_unused]] uint32_t instances)
     {
         checkRecording(list);
         noteNativeCall(list);
         ROJORHI_VU(drawProblem(list, ShaderStage::Vertex, false).empty(), "VU-rojo-cmd-0023", "draw: {}", drawProblem(list, ShaderStage::Vertex, false));
         ROJORHI_VU(list.pass.viewportSet && list.pass.scissorSet, "VU-rojo-cmd-0024", "draw: no viewport and scissor were set since the pass began");
-        consumeAccesses(list, false);
-        logDraw(list);
+        logWork(list, false, vertices != 0 && instances != 0);
     }
 
     //==================================================================================================================
@@ -143,6 +155,7 @@ namespace rojoRHI::core {
         [[maybe_unused]] Buffer indices,
         [[maybe_unused]] IndexType type,
         [[maybe_unused]] uint32_t count,
+        [[maybe_unused]] uint32_t instances,
         [[maybe_unused]] uint32_t firstIndex
     )
     {
@@ -162,10 +175,14 @@ namespace rojoRHI::core {
             buffer->size,
             hasUsage(buffer->usage, BufferUsage::Index) ? "" : "not "
         );
-        logUse(list, bufferUse(indices, uint64_t{ firstIndex } * indexBytes(type), uint64_t{ count } * indexBytes(type), Stage::IndexInput, Access::IndexRead));
+        if (count != 0 && instances != 0)
+        {
+            logUse(
+                list, bufferUse(indices, uint64_t{ firstIndex } * indexBytes(type), uint64_t{ count } * indexBytes(type), Stage::IndexInput, Access::IndexRead)
+            );
+        }
 #endif
-        consumeAccesses(list, false);
-        logDraw(list);
+        logWork(list, false, count != 0 && instances != 0);
     }
 
     //==================================================================================================================
@@ -186,8 +203,7 @@ namespace rojoRHI::core {
             limits.maxMeshTaskGroups,
             limits.maxMeshTaskGroupsTotal
         );
-        consumeAccesses(list, false);
-        logDraw(list);
+        logWork(list, false, x != 0 && y != 0 && z != 0);
     }
 
     //==================================================================================================================
@@ -207,7 +223,7 @@ namespace rojoRHI::core {
             z,
             maxGroups
         );
-        consumeAccesses(list, true);
+        logWork(list, true, x != 0 && y != 0 && z != 0);
     }
 
     //==================================================================================================================
@@ -242,8 +258,7 @@ namespace rojoRHI::core {
         );
         logIndirect(list, first, bytes, counted);
 #endif
-        consumeAccesses(list, false);
-        logDraw(list);
+        logWork(list, false, true);
     }
 
     //==================================================================================================================
@@ -292,8 +307,7 @@ namespace rojoRHI::core {
         logUse(list, bufferUse(indices, 0, kWholeSize, Stage::IndexInput, Access::IndexRead));
         logIndirect(list, first, bytes, counted);
 #endif
-        consumeAccesses(list, false);
-        logDraw(list);
+        logWork(list, false, true);
     }
 
     //==================================================================================================================
@@ -336,8 +350,7 @@ namespace rojoRHI::core {
         );
         logIndirect(list, first, bytes, counted);
 #endif
-        consumeAccesses(list, false);
-        logDraw(list);
+        logWork(list, false, true);
     }
 
     //==================================================================================================================
@@ -362,6 +375,6 @@ namespace rojoRHI::core {
         );
         logIndirect(list, first, sizeof(DispatchIndirectArgs), ResolvedAddr{});
 #endif
-        consumeAccesses(list, true);
+        logWork(list, true, true);
     }
 } // namespace rojoRHI::core

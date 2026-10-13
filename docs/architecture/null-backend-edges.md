@@ -240,12 +240,30 @@ rule (`VU-rojo-cmd-0007` for a colour or resolve attachment, `0010`, `0054`, `00
 one `ROJORHI_VU` site per arm and a death test that breaks only that rule, and a test pins each
 precedence.
 
-**What remains.** The replay handlers for global and buffer barriers are empty, and buffer uses
-are not judged; the hazards part fills them (`VU-rojo-sync-0021`, `0024`, the four indirect rules,
-aliasing in `0009` and `0017`, and the unsubmitted-reference counts of `VU-rojo-abi-0003`,
-`buffer-0019`, `device-0007` and `present-0019`), and may add a batch boundary to the barrier
-events. The queues part adds the clocks, the layout per queue and the handoff, `VU-rojo-queue-0005`,
-`sync-0018`, `device-0006`, `VU-rojo-sparse-0013` and the lock in the calls named above.
+**Hazards.** Each texture subresource, and each byte segment of a buffer, keeps per queue type its
+last write (or layout transition) and the reads since it, each with the destinations of the barriers
+replayed over it since and whether their sources cover it (`Tracker/Hazards.*`). A source covers a
+use by its stages and the use's write accesses, a destination by the use's stages and, after a
+write, all its accesses; after a layout transition a barrier orders the next use only when its
+source shares a stage with the transition's destination. A buffer's bytes are ordered disjoint
+segments that a use or buffer barrier splits at its ends and that merge with their neighbours when
+alike and older than the current command (`Tracker/ByteSegments.*`); the tracker follows a buffer
+from `createBuffer` to its destruction, with its heap range when placed, and never follows a
+frame-arena page. Each event of the log carries its command's ordinal, the list's count of native
+recording calls, so replay gives each command one position on its queue: uses of one command, the
+attachment uses of one pass and the records of one barrier call share a position and are never
+compared or chained with each other. A use reports `VU-rojo-sync-0021` when no barrier lies between
+it and an earlier use it conflicts with, and `VU-rojo-sync-0024` when barriers lie between and none
+orders the pair; a layout transition reports `VU-rojo-sync-0024` when its own source misses a use
+before it. A draw or dispatch with a zero count makes no use, and a pipeline whose stencil write
+mask is zero does not write stencil. `Tracker::lastWriteOrder` answers, for a buffer range, how its
+last write is ordered before a given use.
+
+**What remains.** The four indirect rules, aliasing in `0009` and `0017`, and the
+unsubmitted-reference counts of `VU-rojo-abi-0003`, `buffer-0019`, `device-0007` and
+`present-0019`. The queues part adds the clocks, the layout per queue and the handoff,
+`VU-rojo-queue-0005`, `sync-0018`, `device-0006`, `VU-rojo-sparse-0013` and the lock in the calls
+named above.
 
 ## What remains
 - A native backend registers its own surface predicate, capture hook and tile table, and measures

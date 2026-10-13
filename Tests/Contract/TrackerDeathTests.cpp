@@ -21,13 +21,11 @@ namespace {
     int g_surface = 0;
 
     //==================================================================================================================
-    /// Records the barrier that moves every subresource of `texture` from `oldLayout` to `newLayout`, with no access on either
-    /// side, so only the layout rules can fail.
+    /// Records the barrier that moves every subresource of `texture` from `oldLayout` to `newLayout`, covering every use on both
+    /// sides, so only the layout rules can fail.
     void move(CommandList list, Texture texture, Layout oldLayout, Layout newLayout)
     {
-        const std::array<TextureBarrier, 1> barriers{ TextureBarrier{
-            .texture = texture, .srcStage = Stage::All, .dstStage = Stage::All, .oldLayout = oldLayout, .newLayout = newLayout } };
-        list.barrier({}, {}, barriers);
+        test::transition(list, texture, oldLayout, newLayout);
     }
 } // namespace
 
@@ -68,9 +66,7 @@ namespace {
     /// Records the barrier that moves the subresources `range` of `texture` from Undefined to `newLayout`.
     void moveRange(CommandList list, Texture texture, const SubresourceRange& range, Layout newLayout)
     {
-        const std::array<TextureBarrier, 1> barriers{ TextureBarrier{
-            .texture = texture, .range = range, .srcStage = Stage::All, .dstStage = Stage::All, .oldLayout = Layout::Undefined, .newLayout = newLayout } };
-        list.barrier({}, {}, barriers);
+        test::transition(list, texture, Layout::Undefined, newLayout, range);
     }
 } // namespace
 

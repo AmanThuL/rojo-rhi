@@ -23,6 +23,10 @@ namespace rojoRHI::core {
     struct TrackerLog
     {
         std::vector<TrackerEvent> events; ///< Every use and barrier record, in recording order.
+        /// The command that logged each event of `events`, at the same index: the list's count of native recording calls when
+        /// the command logged it. Every entry that logs counts its own call first, so the uses of one command, and the records
+        /// of one barrier call, share a value and no other event does.
+        std::vector<uint64_t> commands;
         /// The positions in `events` of the attachment uses of the open render pass, whose accesses the draws of the pass
         /// complete; empty outside a pass.
         std::vector<uint32_t> passUses;

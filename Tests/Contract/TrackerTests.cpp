@@ -24,12 +24,22 @@ namespace {
 
     //==================================================================================================================
     /// Records the barrier that moves every subresource of `texture` from `oldLayout` to `newLayout`, with no access on either
-    /// side.
+    /// side: it orders the transitions of a chain, and no use.
     [[maybe_unused]] void move(CommandList list, Texture texture, Layout oldLayout, Layout newLayout)
     {
         const std::array<TextureBarrier, 1> barriers{ TextureBarrier{
             .texture = texture, .srcStage = Stage::All, .dstStage = Stage::All, .oldLayout = oldLayout, .newLayout = newLayout } };
         list.barrier({}, {}, barriers);
+    }
+
+    //==================================================================================================================
+    /// Records the global barrier that orders every copy before it before every copy after it.
+    [[maybe_unused]] void copiesDone(CommandList list)
+    {
+        constexpr Access kCopies = Access::CopyRead | Access::CopyWrite;
+        const std::array<GlobalBarrier, 1> globals{ GlobalBarrier{
+            .srcStage = Stage::Copy, .srcAccess = kCopies, .dstStage = Stage::Copy, .dstAccess = kCopies } };
+        list.barrier(globals);
     }
 
     //==================================================================================================================
@@ -153,11 +163,11 @@ TEST_CASE("each acquire of a swapchain image starts a chain from Undefined", "[c
         device.beginFrame();
         const Texture image = swapchain.acquire();
         CommandList list = device.acquireCommandList(QueueType::Graphics, "test.list");
-        move(list, image, Layout::Undefined, Layout::ColorAttachment);
+        test::transition(list, image, Layout::Undefined, Layout::ColorAttachment);
         const std::array<ColorAttachment, 1> colors{ ColorAttachment{ .texture = image } };
         list.beginRenderPass(RenderPassDesc{ .colors = colors, .area = { 0, 0, 1, 1 } });
         list.endRenderPass();
-        move(list, image, Layout::ColorAttachment, Layout::Present);
+        test::transition(list, image, Layout::ColorAttachment, Layout::Present);
         submit(device, list);
         queue.present(swapchain);
         device.endFrame();
@@ -209,13 +219,15 @@ TEST_CASE("correct layouts pass the checks of every copy, clear and upscale entr
     const Buffer buffer = kit.buffer(BufferUsage::None, 4096);
     const TextureRegion region{ .extent = { 4, 4, 1 } };
     const BufferTextureLayout layout{ .rowPitch = 256 };
-    move(kit.list, source, Layout::Undefined, Layout::CopySrc);
-    move(kit.list, destination, Layout::Undefined, Layout::CopyDst);
+    test::transition(kit.list, source, Layout::Undefined, Layout::CopySrc);
+    test::transition(kit.list, destination, Layout::Undefined, Layout::CopyDst);
     kit.list.copyTexture(source, region, destination, region);
+    copiesDone(kit.list);
     kit.list.copyBufferToTexture(buffer, layout, destination, region);
+    copiesDone(kit.list);
     kit.list.copyTextureToBuffer(source, region, buffer, layout);
     const Texture target = kit.target();
-    move(kit.list, target, Layout::Undefined, Layout::General);
+    test::transition(kit.list, target, Layout::Undefined, Layout::General);
     kit.list.clearTexture(target, {}, {});
     kit.finish();
 #endif
@@ -228,8 +240,9 @@ TEST_CASE("General permits a copy, a clear and a copy on a Copy list", "[contrac
     PassKit kit(QueueType::Copy, true);
     const Texture texture = kit.texture();
     const Buffer buffer = kit.buffer(BufferUsage::None, 4096);
-    move(kit.list, texture, Layout::Undefined, Layout::General);
+    test::transition(kit.list, texture, Layout::Undefined, Layout::General);
     kit.list.copyBufferToTexture(buffer, { .rowPitch = 256 }, texture, TextureRegion{ .extent = { 4, 4, 1 } });
+    copiesDone(kit.list);
     kit.list.copyTextureToBuffer(texture, TextureRegion{ .extent = { 4, 4, 1 } }, buffer, { .rowPitch = 256 });
     kit.finish();
 #endif
@@ -240,10 +253,10 @@ TEST_CASE("an upscale of inputs in ShaderRead and an output in ShaderWrite passe
 {
 #ifndef NDEBUG
     UpscaleKit kit(QueueType::Graphics, UpscaleKit::defaultDesc(), true);
-    move(kit.kit.list, kit.params.color, Layout::Undefined, Layout::ShaderRead);
-    move(kit.kit.list, kit.params.depth, Layout::Undefined, Layout::ShaderRead);
-    move(kit.kit.list, kit.params.motion, Layout::Undefined, Layout::ShaderRead);
-    move(kit.kit.list, kit.params.output, Layout::Undefined, Layout::ShaderWrite);
+    test::transition(kit.kit.list, kit.params.color, Layout::Undefined, Layout::ShaderRead);
+    test::transition(kit.kit.list, kit.params.depth, Layout::Undefined, Layout::ShaderRead);
+    test::transition(kit.kit.list, kit.params.motion, Layout::Undefined, Layout::ShaderRead);
+    test::transition(kit.kit.list, kit.params.output, Layout::Undefined, Layout::ShaderWrite);
     kit.upscale();
     kit.kit.finish();
 #endif
@@ -259,7 +272,7 @@ TEST_CASE("a declared read passes in each layout a read through any view permits
     kit.list.setPipeline(kit.compute());
     for (const Layout layout : { Layout::ShaderRead, Layout::General, Layout::ShaderWrite })
     {
-        move(kit.list, texture, Layout::Undefined, layout);
+        test::transition(kit.list, texture, Layout::Undefined, layout);
         kit.list.declareAccess(reads);
         kit.list.dispatch(1, 1, 1);
     }
@@ -297,6 +310,7 @@ TEST_CASE("copies and clears name subresources by mip and layer, each in its own
                                                                       .range = { .baseMip = mip, .mipCount = 1, .baseLayer = layer, .layerCount = 1 },
                                                                       .srcStage = Stage::All,
                                                                       .dstStage = Stage::All,
+                                                                      .dstAccess = test::accessesOf(layout),
                                                                       .oldLayout = Layout::Undefined,
                                                                       .newLayout = layout } };
         kit.list.barrier({}, {}, barriers);
@@ -314,6 +328,7 @@ TEST_CASE("copies and clears name subresources by mip and layer, each in its own
     kit.list.copyTexture(texture, TextureRegion{ .layer = 1, .extent = { 4, 4, 1 } }, texture, TextureRegion{ .mip = 1, .layer = 1, .extent = { 4, 4, 1 } });
     kit.list.copyTexture(texture, small, texture, TextureRegion{ .mip = 1, .extent = { 4, 4, 1 } });
     kit.list.copyTexture(other, TextureRegion{ .layer = 1, .extent = { 4, 4, 1 } }, other, small);
+    copiesDone(kit.list);
     kit.list.clearTexture(texture, SubresourceRange{ .baseMip = 1, .mipCount = 1, .baseLayer = 1, .layerCount = 1 }, {});
     kit.list.clearTexture(texture, SubresourceRange{ .baseMip = 1, .mipCount = 1, .baseLayer = 0, .layerCount = 1 }, {});
     kit.finish();
@@ -330,9 +345,9 @@ TEST_CASE("a pass with color, depth and resolve attachments in the layouts they 
     const Texture multisampled = kit.target(Format::RGBA8Unorm, 4);
     const Texture resolve = kit.target();
     const Texture depth = kit.depthTarget(Format::D32Float, 4);
-    move(kit.list, multisampled, Layout::Undefined, Layout::ColorAttachment);
-    move(kit.list, resolve, Layout::Undefined, Layout::ColorAttachment);
-    move(kit.list, depth, Layout::Undefined, Layout::DepthStencilWrite);
+    test::transition(kit.list, multisampled, Layout::Undefined, Layout::ColorAttachment);
+    test::transition(kit.list, resolve, Layout::Undefined, Layout::ColorAttachment);
+    test::transition(kit.list, depth, Layout::Undefined, Layout::DepthStencilWrite);
     const std::array<ColorAttachment, 1> colors{ ColorAttachment{ .texture = multisampled, .resolve = resolve } };
     RenderPassDesc desc = test::fullPass(colors);
     desc.depth = DepthAttachment{ .texture = depth };
@@ -354,6 +369,7 @@ TEST_CASE("a pass on mip 1 and layer 1 needs only that subresource in ColorAttac
                                                                   .range = { .baseMip = 1, .mipCount = 1, .baseLayer = 1, .layerCount = 1 },
                                                                   .srcStage = Stage::All,
                                                                   .dstStage = Stage::All,
+                                                                  .dstAccess = test::accessesOf(Layout::ColorAttachment),
                                                                   .oldLayout = Layout::Undefined,
                                                                   .newLayout = Layout::ColorAttachment } };
     kit.list.barrier({}, {}, barriers);

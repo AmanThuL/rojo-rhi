@@ -29,6 +29,7 @@ namespace rojoRHI::core {
         list.scopeLog.clear();
         list.pendingAccesses.clear();
         list.trackerLog.events.clear();
+        list.trackerLog.commands.clear();
         list.trackerLog.passUses.clear();
         list = CommandListCore{ .pass = PassState{ .colors = std::move(list.pass.colors) },
                                 .scopes = std::move(list.scopes),

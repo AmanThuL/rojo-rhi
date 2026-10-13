@@ -132,6 +132,12 @@ A memory dependency and layout transition for a range of one texture.
 | Lowering | folded into the batch's stage barrier; layouts ignored | `D3D12_TEXTURE_BARRIER` with `LayoutBefore` and `LayoutAfter`; `Undefined` adds `D3D12_TEXTURE_BARRIER_FLAG_DISCARD` | `VkImageMemoryBarrier2` with `oldLayout` and `newLayout` |
 | Cost | native | native | native |
 
+A barrier from `Undefined` names no source access (`VU-rojo-sync-0016`), yet it still orders the
+writes before it (`VU-rojo-sync-0024`). On Vulkan it lowers with `srcAccessMask` widened to the
+write accesses its source stages perform, so those writes are made available before the layout
+changes. On D3D12 it lowers with `AccessBefore` `D3D12_BARRIER_ACCESS_NO_ACCESS` paired with its
+`SyncBefore` stages, taken to wait for those writes (*unverified*).
+
 ### `CommandList::barrier`
 
 ```cpp
@@ -152,9 +158,22 @@ empty batch records nothing.
   Checked by the validation tracker.
 - `VU-rojo-sync-0022` Retired in 0.1.0: Between two uses of a texture subresource in different
   layouts, a texture barrier moves it from the first layout to the second.
-- `VU-rojo-sync-0023` Such a barrier covers both uses: its source stage and access include the
-  earlier use's, and its destination stage and access include the later use's. Checked by the
-  validation tracker.
+- `VU-rojo-sync-0023` Retired in 0.1.0: Such a barrier covers both uses: its source stage and
+  access include the earlier use's, and its destination stage and access include the later use's.
+- `VU-rojo-sync-0024` Between two uses of the same memory on one queue in which at least one writes,
+  one barrier's source covers the earlier use and its destination covers the later use. A source
+  covers a use when its stage includes the use's stages and its access includes the use's write
+  accesses; a barrier from `Undefined` needs no source access, and a source with no stage covers no
+  use. A destination covers a use when its stage includes the use's stages and, when the earlier use
+  writes, its access includes the use's accesses. For a write after a write, a read between them
+  also orders the pair when a barrier before the read covers the first write and the read, and one
+  after it covers the read and the second write. A texture barrier that changes the layout is a
+  write between the uses around it, ordered after the uses before it as a write is, with its own
+  source as one more barrier; with no use since the last layout change, its source stage shares a
+  stage with that change's destination stage or with the destination of a later barrier whose source
+  stage does. The next use is covered by the change's destination, or by the destination of a later
+  barrier whose source stage shares a stage with the change's destination stage. Two barriers of one
+  `CommandList::barrier` call never order a pair together. Checked by the validation tracker.
 
 #### Mapping
 | | Metal 4 | D3D12 | Vulkan |

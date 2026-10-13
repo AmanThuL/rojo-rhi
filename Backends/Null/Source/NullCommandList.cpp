@@ -39,7 +39,7 @@ namespace rojoRHI {
         }
         record.native = host;
         core::DeviceCounts::add(core.counts().cpuAllocations);
-        return core::ArenaPage{ core::addBuffer(core, std::move(record)), host, size };
+        return core::ArenaPage{ core::addFrameArenaPage(core, std::move(record)), host, size };
     }
 
     //==================================================================================================================
@@ -174,11 +174,9 @@ namespace rojoRHI {
     }
 
     //==================================================================================================================
-    void CommandList::draw(
-        [[maybe_unused]] uint32_t vertices, [[maybe_unused]] uint32_t instances, [[maybe_unused]] uint32_t firstVertex, [[maybe_unused]] uint32_t firstInstance
-    )
+    void CommandList::draw(uint32_t vertices, uint32_t instances, [[maybe_unused]] uint32_t firstVertex, [[maybe_unused]] uint32_t firstInstance)
     {
-        core::draw(CommandListImpl::of(*this).core);
+        core::draw(CommandListImpl::of(*this).core, vertices, instances);
     }
 
     //==================================================================================================================
@@ -186,13 +184,13 @@ namespace rojoRHI {
         Buffer indices,
         IndexType type,
         uint32_t count,
-        [[maybe_unused]] uint32_t instances,
+        uint32_t instances,
         uint32_t firstIndex,
         [[maybe_unused]] int32_t baseVertex,
         [[maybe_unused]] uint32_t firstInstance
     )
     {
-        core::drawIndexed(CommandListImpl::of(*this).core, indices, type, count, firstIndex);
+        core::drawIndexed(CommandListImpl::of(*this).core, indices, type, count, instances, firstIndex);
     }
 
     //==================================================================================================================

@@ -17,12 +17,13 @@ namespace rojoRHI::core {
     /// VU-rojo-buffer-0009 and VU-rojo-buffer-0020 through `resolveAddr`).
     void setRoot(CommandListCore& list, Addr root);
 
-    /// Checks a direct draw (VU-rojo-cmd-0063, 0023, 0024).
-    void draw(CommandListCore& list);
+    /// Checks a direct draw of `instances` instances of `vertices` vertices (VU-rojo-cmd-0063, 0023, 0024). A draw with a zero
+    /// count makes no use for the validation tracker; so it is for every direct draw and dispatch below.
+    void draw(CommandListCore& list, uint32_t vertices, uint32_t instances);
 
-    /// Checks an indexed draw of `count` indices of `type` from `firstIndex` of `indices` (VU-rojo-cmd-0063, 0025, 0026,
-    /// VU-rojo-core-0001 to 0003).
-    void drawIndexed(CommandListCore& list, Buffer indices, IndexType type, uint32_t count, uint32_t firstIndex);
+    /// Checks an indexed draw of `instances` instances of `count` indices of `type` from `firstIndex` of `indices`
+    /// (VU-rojo-cmd-0063, 0025, 0026, VU-rojo-core-0001 to 0003).
+    void drawIndexed(CommandListCore& list, Buffer indices, IndexType type, uint32_t count, uint32_t instances, uint32_t firstIndex);
 
     /// Checks a mesh-task draw of an `x` by `y` by `z` grid (VU-rojo-cmd-0063, 0027, 0028).
     void drawMeshTasks(CommandListCore& list, uint32_t x, uint32_t y, uint32_t z);

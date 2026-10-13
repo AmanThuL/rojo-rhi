@@ -17,18 +17,19 @@ namespace rojoRHI::core {
     void declareAccess(CommandListCore& list, std::span<const ResourceAccess> accesses);
 
     /// Does the work of `consumeAccesses` in a Debug build.
-    void consumeAccessesChecked(CommandListCore& list, bool dispatch);
+    void consumeAccessesChecked(CommandListCore& list, bool dispatch, bool work);
 
     /// Does the work of `checkNoPendingAccesses` in a Debug build.
     void checkNoPendingAccessesChecked(const CommandListCore& list);
 
     /// Consumes the pending set at the entry of a draw or, when `dispatch` is set, of a dispatch (VU-rojo-diag-0006): each
-    /// declared stage is one the command runs. The set is empty afterwards. Inline, so a Release build compiles the call to
-    /// nothing.
-    inline void consumeAccesses([[maybe_unused]] CommandListCore& list, [[maybe_unused]] bool dispatch)
+    /// declared stage is one the command runs. Each declaration becomes a use of the command for the validation tracker,
+    /// unless `work` is false: a command with a zero count makes no use, though it still consumes the set. The set is empty
+    /// afterwards. Inline, so a Release build compiles the call to nothing.
+    inline void consumeAccesses([[maybe_unused]] CommandListCore& list, [[maybe_unused]] bool dispatch, [[maybe_unused]] bool work)
     {
 #ifndef NDEBUG
-        consumeAccessesChecked(list, dispatch);
+        consumeAccessesChecked(list, dispatch, work);
 #endif
     }
 

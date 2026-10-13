@@ -149,7 +149,7 @@ namespace rojoRHI::core {
     }
 
     //==================================================================================================================
-    void consumeAccessesChecked([[maybe_unused]] CommandListCore& list, [[maybe_unused]] bool dispatch)
+    void consumeAccessesChecked([[maybe_unused]] CommandListCore& list, [[maybe_unused]] bool dispatch, [[maybe_unused]] bool work)
     {
 #ifndef NDEBUG
         for (const ResourceAccess& access : list.pendingAccesses)
@@ -162,7 +162,10 @@ namespace rojoRHI::core {
                 static_cast<uint32_t>(access.stage),
                 dispatch ? "dispatch" : "draw"
             );
-            logUse(list, declaredUse(access));
+            if (work)
+            {
+                logUse(list, declaredUse(access));
+            }
         }
         list.pendingAccesses.clear();
 #endif

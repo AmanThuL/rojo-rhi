@@ -9,7 +9,9 @@
 #include "Core/Heaps.h"
 #include "Core/Label.h"
 #include "Core/Sparse.h"
+#include "Core/Tracker/Tracker.h"
 
+#include <string>
 #include <utility>
 
 namespace rojoRHI::core {
@@ -69,6 +71,7 @@ namespace rojoRHI::core {
         }
         BufferRecord record;
         record.heap = placement.heap;
+        record.heapOffset = placement.heap.bits != 0 ? placement.offset : 0;
         record.label = resolveLabel(desc.label, "rojorhi.buffer.unnamed");
         record.size = desc.size;
         record.initialBytes = initial.size();
@@ -84,6 +87,23 @@ namespace rojoRHI::core {
         {
             addPlacedResource(core, record.heap);
         }
+#ifndef NDEBUG
+        // The tracker copies what it follows before the record moves into the pool.
+        const std::string label = record.label;
+        const uint64_t size = record.size;
+        const Heap heap = record.heap;
+        const uint64_t heapOffset = record.heapOffset;
+        const Buffer buffer = core.pool<Buffer>().allocate(std::move(record));
+        trackBuffer(core, buffer, label, size, heap, heapOffset);
+        return buffer;
+#else
+        return core.pool<Buffer>().allocate(std::move(record));
+#endif
+    }
+
+    //==================================================================================================================
+    Buffer addFrameArenaPage(DeviceCore& core, BufferRecord record)
+    {
         return core.pool<Buffer>().allocate(std::move(record));
     }
 
@@ -98,6 +118,7 @@ namespace rojoRHI::core {
             tiles = std::move(record.mapped);
         });
         core.destroy(buffer);
+        forgetBuffer(core, buffer);
         // Destroying a sparse buffer unmaps its tiles at the call, so its heaps may be destroyed before the slot retires.
         releaseTiles(core, tiles);
         if (heap.bits != 0)
