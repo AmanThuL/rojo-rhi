@@ -5,8 +5,8 @@
 This page continues [the Null backend](null-backend.md) and
 [command recording](null-backend-recording.md) with the last four chapters of the reference:
 swapchains and presentation (11), upscalers (12), sparse resources (13) and diagnostics (14), which
-holds access declarations, scope timings, capture and counters. It ends with the validation
-tracker as built so far. The layering is unchanged: every
+holds access declarations, scope timings, capture and counters. It ends with a summary of the
+validation tracker. The layering is unchanged: every
 check and every piece of state lives in `Source/Core`, `Backends/Null/Source` forwards and
 contains no `ROJORHI_VU`, and the API reference stays the authority on semantics. Where a decision
 below says "Null" it describes this backend only; a native backend decides the same point for
@@ -167,130 +167,11 @@ every backend; a count in a backend is that backend's own site. `Device::wait` a
 
 ## The validation tracker
 
-[ADR 0021](../decisions/0021-validation-tracker-replays-at-submission.md) decides its shape; the
-[API reference](../spec/14-diagnostics.md) is the authority for the rules. What exists is the
-layout part: the log, replay at submission, the device mutex and one layout per texture
-subresource. The tracker lives in `Source/Core/Tracker/`. Its objects are compiled into every
-build, but its paths run only in Debug, on a device created with `DeviceDesc::validation`; the
-Release hooks are empty. The Null backend adds two calls to `Queue::submit`, `lockTracker` and
-`replayLists`, and no check.
-
-**The log.** Each `CommandListCore` owns a `TrackerLog`, cleared by `beginList` with its capacity
-kept. It holds a vector of events, each a `UseEvent` or one of the public barrier records unchanged
-(global, buffer, texture). A `UseEvent` names a buffer byte range or a texture and its
-`SubresourceRange`, the stage and access of the use, the set of layouts that permit it and the
-`UseRule` that a texture use reports; replay learns the Copy queue from the list's queue type.
-`UseRule` is an enumeration, not a string, because `ROJORHI_VU` needs an identifier literal at each
-site; replay switches on it. A buffer use carries no layouts and `UseRule::None`. The log also keeps
-the positions of the open pass's attachment events, which the draws complete.
-
-**The hooks.** `logUse`, `logBarriers`, `logPass`, `logDraw` and `endPassLog` are inline, with
-bodies empty under `NDEBUG` and an out-of-line `...Checked` function that Debug calls, the pattern
-of `consumeAccesses`. They append nothing on a device without validation. Entries log after their
-own checks, where the resolved addresses and layout byte ranges exist:
-
-- copies, `fillBuffer` and `clearTexture` log their endpoints at the stage `Copy` with
-  `CopyRead` or `CopyWrite`;
-- `drawIndexed` and `drawIndexedIndirect` log the index bytes read at `IndexInput`, and the four
-  indirect commands log their arguments, and their count when it is not null, at `IndirectArgs`;
-- `consumeAccesses` turns each declared access into a use at its declared stage and access, so
-  `declareAccess` feeds the next draw or dispatch;
-- `upscale` logs each input in `ShaderRead` and the output in `ShaderWrite`, all as mip 0 of
-  layer 0 (chapter 12);
-- `beginRenderPass` logs one use per attachment: a colour attachment in `ColorAttachment` for
-  writing, plus reading when `load` is `Load`; a resolve target at `Resolve`; a depth attachment
-  for reading, plus writing when `load` or `store` discards or clears it, with the stencil
-  operations counted only for a format that has stencil. `logDraw` runs after each draw and ORs the
-  pipeline's effect into those events: `ColorAttachmentRead` for a blending target and
-  `DepthStencilWrite` for a pipeline that writes depth or has a stencil test with an operation
-  other than `Keep`. The pipeline record keeps `blendMask`, `depthWrite` and `stencilWrite` for
-  this, so `logDraw` takes no lock;
-- `barrier` logs every record of the batch, in the order globals, buffers, textures.
-
-`Queue::present` is not a list entry and logs no event. Texture creation, swapchain acquire,
-texture destruction and the release of a presented or destroyed swapchain's image call
-`trackTexture` or `forgetTexture`, which start and stop the tracker following a texture.
-
-**Replay and the mutex.** `Queue::submit` runs `submitLists`, which checks list state and folds
-counters outside the lock, then `lockTracker`, `checkSubmit` (the wait check), `replayLists` and
-`recordSignals`. The lock is held from the wait check to the publication of the signal values, and
-is empty unless the build is Debug and the device validates. `replayLists` visits the lists in span
-order and the events of each list in log order, through one `std::visit` whose `static_assert`
-covers every event kind. Texture creation, destruction, acquire and release take the same mutex
-for their single call, and `presentImage` takes it to check the image's layout, then again to
-release the image, since one hold would deadlock. A texture or barrier destroyed between recording
-and submission is skipped at replay: the lifetime rules, not these, judge it. `beginFrame`,
-`endFrame`, `Device::wait`, `completedValue`, `mapTiles` and `destroy` do not take the lock yet;
-they read no tracker state until the queues part.
-
-**The layout state.** `TextureState` holds the label, the mip and layer counts and one `Layout`
-per subresource, indexed by mip and then layer, keyed in a map by the texture handle's bits. A
-texture starts in `Undefined`, or in `ShaderRead` when created with initial data (a non-empty
-`initial` span); an acquired swapchain image starts in `Undefined` and is flagged until its first
-barrier. A texture barrier sets every subresource of its range to its `newLayout`; no other event
-changes a layout yet. State persists across submissions, frames and queues, since there is one
-layout per subresource, not per queue.
-
-**Rule precedence.** For each subresource of a use, replay reports the first rule that fails:
-`VU-rojo-sync-0006` (a use on a Copy list while the layout is not `General`), then the entry's own
-rule (`VU-rojo-cmd-0007` for a colour or resolve attachment, `0010`, `0054`, `0067`, `0069`,
-`0070`, or `VU-rojo-upscale-0016`), then `VU-rojo-sync-0004`. A texture barrier reports
-`VU-rojo-present-0014` for the first barrier on an acquired image before `VU-rojo-sync-0013`.
-`VU-rojo-present-0018` is judged at `presentImage`, before the image is released. Each rule has
-one `ROJORHI_VU` site per arm and a death test that breaks only that rule, and a test pins each
-precedence.
-
-**Hazards.** Each texture subresource, and each byte segment of a buffer, keeps per queue type its
-last write (or layout transition) and the reads since it, each with the destinations of the barriers
-replayed over it since and whether their sources cover it (`Tracker/Hazards.*`). A source covers a
-use by its stages and the use's write accesses, a destination by the use's stages and, after a
-write, all its accesses; after a layout transition a barrier orders the next use only when its
-source shares a stage with the transition's destination. A buffer's bytes are ordered disjoint
-segments that a use or buffer barrier splits at its ends and that merge with their neighbours when
-alike and older than the current command (`Tracker/ByteSegments.*`); the tracker follows a buffer
-from `createBuffer` to its destruction, with its heap range when placed, and never follows a
-frame-arena page. Each event of the log carries its command's ordinal, the list's count of native
-recording calls, so replay gives each command one position on its queue: uses of one command, the
-attachment uses of one pass and the records of one barrier call share a position and are never
-compared or chained with each other. A use reports `VU-rojo-sync-0021` when no barrier lies between
-it and an earlier use it conflicts with, and `VU-rojo-sync-0024` when barriers lie between and none
-orders the pair; a layout transition reports `VU-rojo-sync-0024` when its own source misses a use
-before it. A draw or dispatch with a zero count makes no use, and a pipeline whose stencil write
-mask is zero does not write stencil. `Tracker::lastWriteOrder` answers, for a buffer range, how its
-last write is ordered before a given use.
-
-**Indirect reads.** The four indirect commands tag their argument and count reads with their
-entry and arm. Before the hazards of such a read, replay asks `lastWriteOrder` about its bytes and
-reports the entry's identifier (`VU-rojo-indirect-0005`, `0011`, `0017` or `0020`, one site per arm)
-when no barrier since the last write on the queue has a destination stage and access that include
-`IndirectArgs`; a barrier with that destination whose source misses the write is left to
-`VU-rojo-sync-0024`. Bytes only the CPU wrote, initial data or frame data, have no write.
-
-**Aliasing.** Each heap holding a followed placed resource keeps ordered disjoint byte ranges
-(`Tracker/OffsetMap.h`) that record per queue type the placed resource that last used them, that
-use with the global barriers since, and a stamp ordering heap uses across queues
-(`Tracker/Aliasing.*`); `destroyHeap` drops it. A buffer's use maps its bytes into the heap; a
-texture's use covers its whole heap range, its placement `heapSize`. A buffer's bytes last used on
-the queue by another resource report `VU-rojo-sync-0009` unless a global barrier since covers that
-use at its source and this one at its destination, or the buffer's own stamps show it used them
-since, on another queue. Every other placed texture over the bytes, and one placed later, gains on
-each subresource and that queue a mark per heap byte range: the latest foreign use of those bytes,
-which a newer one replaces, so marks stay as few as the ranges. Its next event there must be a
-texture barrier from `Undefined` whose source covers every mark newer than the texture's own last
-use, or `VU-rojo-sync-0017` reports; a covering discard clears its marks on every queue. A passing
-check resets the resource's own hazard state on the queue, since the aliasing chain orders its old
-uses and their contents are undefined. Precedence: `sync-0017` before `sync-0006` and the layout,
-entry and coverage rules; `sync-0009` before the indirect rules. Limit: a discard is not a heap
-use, so although on D3D12 it writes compression metadata, a later aliasing resource is checked
-only against the last use. Order between queues is `queue-0005`'s.
-
-**References of unsubmitted lists.** A list counts each object it references once (root, address or
-handle) in the record's `ListReferences`; submission or recycling removes them. `destroy` reports
-`VU-rojo-abi-0003`, `buffer-0019`, then `device-0007`; replay, `present-0019` for a presented image.
-
-**What remains.** The queues part adds the clocks, the layout per queue and the
-handoff, `VU-rojo-queue-0005`, `sync-0018`, `device-0006`, `VU-rojo-sparse-0013` and the lock in
-the calls named above.
+[ADR 0021](../decisions/0021-validation-tracker-replays-at-submission.md) decides its shape. The
+tracker lives in `Source/Core/Tracker/`, runs in Debug on a validating device and is built except
+for cross-queue ordering: layouts, same-queue hazards and barrier coverage, indirect reads,
+aliasing and the references of unsubmitted lists. Its page,
+[the validation tracker](validation-tracker.md), describes it.
 
 ## What remains
 - A native backend registers its own surface predicate, capture hook and tile table, and measures
