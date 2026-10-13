@@ -106,7 +106,9 @@ A memory dependency and layout transition for a range of one texture.
 - `newLayout`: the layout every covered subresource is in after the barrier.
 
 #### Valid usage
-- `VU-rojo-sync-0012` `range` lies within the texture's mips and layers.
+- `VU-rojo-sync-0012` Retired in 0.1.0: `range` lies within the texture's mips and layers.
+  `VU-rojo-texture-0016`, `0017` and `0041` state the rules of every subresource range once, for
+  views, clears and barriers alike ([textures and heaps](04-textures-and-heaps.md)).
 - `VU-rojo-sync-0013` `oldLayout` is `Undefined` or the layout every subresource in `range` is in at
   this point in queue submission order. Checked by the validation tracker.
 - `VU-rojo-sync-0014` `newLayout` is not `Undefined`.

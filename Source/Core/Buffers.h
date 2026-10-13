@@ -46,6 +46,14 @@ namespace rojoRHI::core {
     /// Checks that `record` is persistently mapped (VU-rojo-buffer-0014).
     void checkCpuAccess(const BufferRecord& record);
 
+    /// Checks that `record` may be the source of a copy command (VU-rojo-buffer-0002); the one site of the rule, shared by every
+    /// copy.
+    void checkCopySource(const BufferRecord& record);
+
+    /// Checks that `record` may be the destination of a copy command (VU-rojo-buffer-0001); the one site of the rule, shared by
+    /// every copy.
+    void checkCopyDestination(const BufferRecord& record);
+
     /// Checks that `offset` bytes into a buffer is less than `maxAddrOffset` (VU-rojo-buffer-0011); the one site of the rule.
     void checkAddrOffset(uint64_t offset, uint64_t maxAddrOffset);
 } // namespace rojoRHI::core

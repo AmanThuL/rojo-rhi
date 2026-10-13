@@ -9,8 +9,10 @@
 #include <rojoRHI/Device.h>
 
 #include "Base/Log.h"
+#include "Core/Barriers.h"
 #include "Core/Buffers.h"
 #include "Core/CommandLists.h"
+#include "Core/Copies.h"
 #include "Core/DeviceCore.h"
 #include "Core/Draws.h"
 #include "Core/FrameArena.h"
@@ -227,5 +229,47 @@ namespace rojoRHI {
     void CommandList::dispatchIndirect(Addr args)
     {
         core::dispatchIndirect(CommandListImpl::of(*this).core, args);
+    }
+
+    //==================================================================================================================
+    void CommandList::copyBuffer(Buffer src, uint64_t srcOffset, Buffer dst, uint64_t dstOffset, uint64_t size)
+    {
+        core::copyBuffer(CommandListImpl::of(*this).core, src, srcOffset, dst, dstOffset, size);
+    }
+
+    //==================================================================================================================
+    void CommandList::copyBufferToTexture(Buffer src, const BufferTextureLayout& layout, Texture dst, const TextureRegion& region)
+    {
+        core::copyBufferToTexture(CommandListImpl::of(*this).core, src, layout, dst, region);
+    }
+
+    //==================================================================================================================
+    void CommandList::copyTextureToBuffer(Texture src, const TextureRegion& region, Buffer dst, const BufferTextureLayout& layout)
+    {
+        core::copyTextureToBuffer(CommandListImpl::of(*this).core, src, region, dst, layout);
+    }
+
+    //==================================================================================================================
+    void CommandList::copyTexture(Texture src, const TextureRegion& srcRegion, Texture dst, const TextureRegion& dstRegion)
+    {
+        core::copyTexture(CommandListImpl::of(*this).core, src, srcRegion, dst, dstRegion);
+    }
+
+    //==================================================================================================================
+    void CommandList::fillBuffer(Buffer dst, uint64_t offset, uint64_t size, [[maybe_unused]] uint32_t pattern)
+    {
+        core::fillBuffer(CommandListImpl::of(*this).core, dst, offset, size);
+    }
+
+    //==================================================================================================================
+    void CommandList::clearTexture(Texture texture, const SubresourceRange& range, const ClearValue& value)
+    {
+        core::clearTexture(CommandListImpl::of(*this).core, texture, range, value);
+    }
+
+    //==================================================================================================================
+    void CommandList::barrier(std::span<const GlobalBarrier> globals, std::span<const BufferBarrier> buffers, std::span<const TextureBarrier> textures)
+    {
+        core::barrier(CommandListImpl::of(*this).core, globals, buffers, textures);
     }
 } // namespace rojoRHI

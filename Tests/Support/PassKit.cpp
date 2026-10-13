@@ -79,9 +79,23 @@ namespace rojoRHI::test {
     }
 
     //==================================================================================================================
-    Buffer PassKit::buffer(BufferUsage usage, uint64_t size)
+    Buffer PassKit::buffer(BufferUsage usage, uint64_t size, Memory memory)
     {
-        return *device.createBuffer(BufferDesc{ .size = size, .memory = Memory::Gpu, .usage = usage, .label = "kit.buffer" });
+        return *device.createBuffer(BufferDesc{ .size = size, .memory = memory, .usage = usage, .label = "kit.buffer" });
+    }
+
+    //==================================================================================================================
+    Texture PassKit::texture(Format format, TextureUsage usage, uint32_t mips, uint32_t layers)
+    {
+        return *device.createTexture(
+            TextureDesc{ .type = layers > 1 ? TextureType::Tex2DArray : TextureType::Tex2D,
+                         .format = format,
+                         .extent = { kSize, kSize, 1 },
+                         .mips = mips,
+                         .layers = layers,
+                         .usage = usage,
+                         .label = "kit.texture" }
+        );
     }
 
     //==================================================================================================================

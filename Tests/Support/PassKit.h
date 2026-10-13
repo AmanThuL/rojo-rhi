@@ -43,8 +43,11 @@ namespace rojoRHI::test {
         /// Begins a pass over one `RGBA8Unorm` color attachment of the whole texture.
         void beginSimplePass();
 
-        /// Creates a `Gpu` buffer of `size` bytes with `usage`.
-        Buffer buffer(BufferUsage usage, uint64_t size = 4096);
+        /// Creates a buffer of `size` bytes with `usage` in `memory`.
+        Buffer buffer(BufferUsage usage, uint64_t size = 4096, Memory memory = Memory::Gpu);
+
+        /// Creates a `kSize` square 2D texture, an array texture when `layers` is above one, with `usage`.
+        Texture texture(Format format = Format::RGBA8Unorm, TextureUsage usage = TextureUsage::Sampled, uint32_t mips = 1, uint32_t layers = 1);
 
         /// Begins a simple pass, binds a vertex pipeline (a mesh pipeline when `mesh` is set) and sets a viewport and scissor.
         void readyToDraw(bool mesh = false);

@@ -4,12 +4,16 @@
 //----------------------------------------------------------------------------------------------------------------------
 #pragma once
 
+#include <rojoRHI/Access.h>
 #include <rojoRHI/Addr.h>
 #include <rojoRHI/BlendState.h>
+#include <rojoRHI/BufferBarrier.h>
 #include <rojoRHI/BufferDesc.h>
+#include <rojoRHI/BufferTextureLayout.h>
 #include <rojoRHI/BufferUsage.h>
 #include <rojoRHI/Capabilities.h>
 #include <rojoRHI/ClearColor.h>
+#include <rojoRHI/ClearValue.h>
 #include <rojoRHI/ColorAttachment.h>
 #include <rojoRHI/ColorTarget.h>
 #include <rojoRHI/CommandList.h>
@@ -23,12 +27,14 @@
 #include <rojoRHI/Format.h>
 #include <rojoRHI/FormatCapabilities.h>
 #include <rojoRHI/Geometry.h>
+#include <rojoRHI/GlobalBarrier.h>
 #include <rojoRHI/GraphicsPipelineDesc.h>
 #include <rojoRHI/Handles.h>
 #include <rojoRHI/HeapDesc.h>
 #include <rojoRHI/IndexRange.h>
 #include <rojoRHI/IndexType.h>
 #include <rojoRHI/IndirectArgs.h>
+#include <rojoRHI/Layout.h>
 #include <rojoRHI/Limits.h>
 #include <rojoRHI/LoadOp.h>
 #include <rojoRHI/Memory.h>
@@ -48,12 +54,15 @@
 #include <rojoRHI/SamplerFilter.h>
 #include <rojoRHI/SamplerIndex.h>
 #include <rojoRHI/ShaderEntry.h>
+#include <rojoRHI/Stage.h>
 #include <rojoRHI/StoreOp.h>
 #include <rojoRHI/SubresourceRange.h>
 #include <rojoRHI/Swapchain.h>
 #include <rojoRHI/TextureAspect.h>
+#include <rojoRHI/TextureBarrier.h>
 #include <rojoRHI/TextureData.h>
 #include <rojoRHI/TextureDesc.h>
+#include <rojoRHI/TextureRegion.h>
 #include <rojoRHI/TextureType.h>
 #include <rojoRHI/TextureUsage.h>
 #include <rojoRHI/TextureViewDesc.h>
