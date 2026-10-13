@@ -25,7 +25,6 @@ on a device created without it, and a violation of one is then undefined behavio
 | Check | Rules it enforces |
 |---|---|
 | Every observable access and every barrier: a missing barrier, a stage or access that does not cover the use, a wrong old layout, a layout that does not permit the use | [synchronization](09-synchronization.md) |
-| Heap-slot typing, and writes into released or unreserved ranges | [textures and heaps](04-textures-and-heaps.md) |
 | Cross-queue texture handoff, per queue | [synchronization](09-synchronization.md) |
 | Lifetime: destroying a resource that recorded but unsubmitted work references | [device](02-device.md) |
 

@@ -86,3 +86,17 @@
   the texture; `VU-rojo-present-0012` counts the resolve target of a color attachment as an
   allowed use; destroying a sparse texture or buffer unmaps all its tiles, which chapters 13 and
   02 state.
+- The validation tracker, layout part: on a device created with `DeviceDesc::validation`, Debug
+  builds log each recording entry's uses and barriers and replay them at `Queue::submit` under one
+  device mutex, with one layout per texture subresource. It checks `VU-rojo-cmd-0007`, `0010`,
+  `0054`, `0067`, `0069` and `0070`, `VU-rojo-sync-0004`, `0006` and `0013`,
+  `VU-rojo-present-0014` and `0018` and `VU-rojo-upscale-0016`, each reported under the most
+  specific identifier it breaks
+  ([ADR 0021](docs/decisions/0021-validation-tracker-replays-at-submission.md),
+  [architecture](docs/architecture/null-backend-edges.md#the-validation-tracker)); Release
+  recording is unchanged.
+- API reference changes for the tracker: `VU-rojo-sync-0022` is retired, since read literally it
+  rejected a chain of transitions that `VU-rojo-sync-0013` permits; the claim that the tracker
+  checks heap-slot typing is removed from chapters 01, 02, 04 and 14, since no rule states it and a
+  shader's reads through a heap index are invisible to the CPU; chapter 12 states that `upscale`
+  reads and writes mip level 0 of array layer 0 of each texture.

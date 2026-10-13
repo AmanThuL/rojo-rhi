@@ -150,8 +150,8 @@ empty batch records nothing.
 - `VU-rojo-sync-0021` Between two uses of the same memory on one queue in which at least one writes,
   other than the uses one render pass orders itself, a barrier lies in queue submission order.
   Checked by the validation tracker.
-- `VU-rojo-sync-0022` Between two uses of a texture subresource in different layouts, a texture
-  barrier moves it from the first layout to the second. Checked by the validation tracker.
+- `VU-rojo-sync-0022` Retired in 0.1.0: Between two uses of a texture subresource in different
+  layouts, a texture barrier moves it from the first layout to the second.
 - `VU-rojo-sync-0023` Such a barrier covers both uses: its source stage and access include the
   earlier use's, and its destination stage and access include the later use's. Checked by the
   validation tracker.

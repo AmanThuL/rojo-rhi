@@ -5,7 +5,8 @@
 This page continues [the Null backend](null-backend.md) and
 [command recording](null-backend-recording.md) with the last four chapters of the reference:
 swapchains and presentation (11), upscalers (12), sparse resources (13) and diagnostics (14), which
-holds access declarations, scope timings, capture and counters. The layering is unchanged: every
+holds access declarations, scope timings, capture and counters. It ends with the validation
+tracker as built so far. The layering is unchanged: every
 check and every piece of state lives in `Source/Core`, `Backends/Null/Source` forwards and
 contains no `ROJORHI_VU`, and the API reference stays the authority on semantics. Where a decision
 below says "Null" it describes this backend only; a native backend decides the same point for
@@ -22,6 +23,7 @@ itself.
 | Scope timings | `Scopes.*`, `ScopeLog.*` | `NullDevice.cpp` |
 | Capture | `Captures.*` | `NullDevice.cpp` |
 | Counters | `Counters.h`, `DeviceCore.*`, `HandlePool.h` | the sites named below |
+| Validation tracker | `Tracker/*` | `NullQueue.cpp` |
 
 ## Swapchains and presentation
 
@@ -163,13 +165,89 @@ release of a swapchain, whose retire loop is Null's. A count taken in the core i
 every backend; a count in a backend is that backend's own site. `Device::wait` and the drain at
 `destroyDevice` count nothing.
 
-## What remains
+## The validation tracker
 
-- The validation tracker proper. The `tracker` lines of `Tools/vu_pending.txt` for these chapters
-  are `VU-rojo-present-0014`, `0018` and `0019` (layouts and uses of a presented image),
-  `VU-rojo-sparse-0013` (queue ordering against a mapping) and `VU-rojo-upscale-0016` (input
-  layouts at execution). It also needs the pending accesses of each list, which `declareAccess`
-  already keeps, and a hook behind `DeviceDesc::validation`.
+[ADR 0021](../decisions/0021-validation-tracker-replays-at-submission.md) decides its shape; the
+[API reference](../spec/14-diagnostics.md) is the authority for the rules. What exists is the
+layout part: the log, replay at submission, the device mutex and one layout per texture
+subresource. The tracker lives in `Source/Core/Tracker/`. Its objects are compiled into every
+build, but its paths run only in Debug, on a device created with `DeviceDesc::validation`; the
+Release hooks are empty. The Null backend adds two calls to `Queue::submit`, `lockTracker` and
+`replayLists`, and no check.
+
+**The log.** Each `CommandListCore` owns a `TrackerLog`, cleared by `beginList` with its capacity
+kept. It holds a vector of events, each a `UseEvent` or one of the public barrier records unchanged
+(global, buffer, texture). A `UseEvent` names a buffer byte range or a texture and its
+`SubresourceRange`, the stage and access of the use, the set of layouts that permit it and the
+`UseRule` that a texture use reports; replay learns the Copy queue from the list's queue type.
+`UseRule` is an enumeration, not a string, because `ROJORHI_VU` needs an identifier literal at each
+site; replay switches on it. A buffer use carries no layouts and `UseRule::None`. The log also keeps
+the positions of the open pass's attachment events, which the draws complete.
+
+**The hooks.** `logUse`, `logBarriers`, `logPass`, `logDraw` and `endPassLog` are inline, with
+bodies empty under `NDEBUG` and an out-of-line `...Checked` function that Debug calls, the pattern
+of `consumeAccesses`. They append nothing on a device without validation. Entries log after their
+own checks, where the resolved addresses and layout byte ranges exist:
+
+- copies, `fillBuffer` and `clearTexture` log their endpoints at the stage `Copy` with
+  `CopyRead` or `CopyWrite`;
+- `drawIndexed` and `drawIndexedIndirect` log the index bytes read at `IndexInput`, and the four
+  indirect commands log their arguments, and their count when it is not null, at `IndirectArgs`;
+- `consumeAccesses` turns each declared access into a use at its declared stage and access, so
+  `declareAccess` feeds the next draw or dispatch;
+- `upscale` logs each input in `ShaderRead` and the output in `ShaderWrite`, all as mip 0 of
+  layer 0 (chapter 12);
+- `beginRenderPass` logs one use per attachment: a colour attachment in `ColorAttachment` for
+  writing, plus reading when `load` is `Load`; a resolve target at `Resolve`; a depth attachment
+  for reading, plus writing when `load` or `store` discards or clears it, with the stencil
+  operations counted only for a format that has stencil. `logDraw` runs after each draw and ORs the
+  pipeline's effect into those events: `ColorAttachmentRead` for a blending target and
+  `DepthStencilWrite` for a pipeline that writes depth or has a stencil test with an operation
+  other than `Keep`. The pipeline record keeps `blendMask`, `depthWrite` and `stencilWrite` for
+  this, so `logDraw` takes no lock;
+- `barrier` logs every record of the batch, in the order globals, buffers, textures.
+
+`Queue::present` is not a list entry and logs no event. Texture creation, swapchain acquire,
+texture destruction and the release of a presented or destroyed swapchain's image call
+`trackTexture` or `forgetTexture`, which start and stop the tracker following a texture.
+
+**Replay and the mutex.** `Queue::submit` runs `submitLists`, which checks list state and folds
+counters outside the lock, then `lockTracker`, `checkSubmit` (the wait check), `replayLists` and
+`recordSignals`. The lock is held from the wait check to the publication of the signal values, and
+is empty unless the build is Debug and the device validates. `replayLists` visits the lists in span
+order and the events of each list in log order, through one `std::visit` whose `static_assert`
+covers every event kind. Texture creation, destruction, acquire and release take the same mutex
+for their single call, and `presentImage` takes it to check the image's layout, then again to
+release the image, since one hold would deadlock. A texture or barrier destroyed between recording
+and submission is skipped at replay: the lifetime rules, not these, judge it. `beginFrame`,
+`endFrame`, `Device::wait`, `completedValue`, `mapTiles` and `destroy` do not take the lock yet;
+they read no tracker state until the queues part.
+
+**The layout state.** `TextureState` holds the label, the mip and layer counts and one `Layout`
+per subresource, indexed by mip and then layer, keyed in a map by the texture handle's bits. A
+texture starts in `Undefined`, or in `ShaderRead` when created with initial data (a non-empty
+`initial` span); an acquired swapchain image starts in `Undefined` and is flagged until its first
+barrier. A texture barrier sets every subresource of its range to its `newLayout`; no other event
+changes a layout yet. State persists across submissions, frames and queues, since there is one
+layout per subresource, not per queue.
+
+**Rule precedence.** For each subresource of a use, replay reports the first rule that fails:
+`VU-rojo-sync-0006` (a use on a Copy list while the layout is not `General`), then the entry's own
+rule (`VU-rojo-cmd-0007` for a colour or resolve attachment, `0010`, `0054`, `0067`, `0069`,
+`0070`, or `VU-rojo-upscale-0016`), then `VU-rojo-sync-0004`. A texture barrier reports
+`VU-rojo-present-0014` for the first barrier on an acquired image before `VU-rojo-sync-0013`.
+`VU-rojo-present-0018` is judged at `presentImage`, before the image is released. Each rule has
+one `ROJORHI_VU` site per arm and a death test that breaks only that rule, and a test pins each
+precedence.
+
+**What remains.** The replay handlers for global and buffer barriers are empty, and buffer uses
+are not judged; the hazards part fills them (`VU-rojo-sync-0021`, `0024`, the four indirect rules,
+aliasing in `0009` and `0017`, and the unsubmitted-reference counts of `VU-rojo-abi-0003`,
+`buffer-0019`, `device-0007` and `present-0019`), and may add a batch boundary to the barrier
+events. The queues part adds the clocks, the layout per queue and the handoff, `VU-rojo-queue-0005`,
+`sync-0018`, `device-0006`, `VU-rojo-sparse-0013` and the lock in the calls named above.
+
+## What remains
 - A native backend registers its own surface predicate, capture hook and tile table, and measures
   scope durations (the Null report has none). It reads native objects while recording without
   a lock ([ADR 0020](../decisions/0020-recording-locks-scope-labels.md)), counts each native call

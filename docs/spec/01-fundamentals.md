@@ -46,7 +46,7 @@ Checks run in three tiers:
 |---|---|---|---|
 | Release | build configuration | none | none: `ROJORHI_ASSERT` argument checks, the validation tracker and `CommandList::declareAccess` are compiled out |
 | Debug | build configuration | argument checks | argument ranges, handle generations, scope rules, through `ROJORHI_ASSERT` |
-| Validation | `DeviceDesc::validation` at run time, in non-Release (Debug) builds only | tracking | every observable access (attachments, copy and clear endpoints, index and indirect reads, upscaler and presented images, shader accesses declared through `CommandList::declareAccess`) and every barrier, heap-slot typing, cross-queue handoff, lifetime |
+| Validation | `DeviceDesc::validation` at run time, in non-Release (Debug) builds only | tracking | every observable access (attachments, copy and clear endpoints, index and indirect reads, upscaler and presented images, shader accesses declared through `CommandList::declareAccess`) and every barrier, cross-queue handoff, lifetime |
 
 Release builds contain neither the tracker nor `CommandList::declareAccess`, so nothing is tracked
 in release: `createDevice` with `DeviceDesc::validation` set returns `ErrorCategory::Unsupported`

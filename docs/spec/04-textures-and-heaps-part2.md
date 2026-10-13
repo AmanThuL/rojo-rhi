@@ -24,7 +24,7 @@ cannot see, because a bindless shader's reads are invisible to the CPU. The safe
 into a fresh slot, publish its index, then release the old slot. The Debug tier rejects a write into
 a range RojoRHI does not currently hold as reserved (`VU-rojo-texture-0031`); a released value that
 equals a later identical reservation cannot be told apart, so reusing a released `IndexRange` stays
-undefined behaviour beyond that. The validation tracker checks slot type against use.
+undefined behaviour beyond that.
 
 RHI-assigned slots are simple, safe by construction and hide backend differences such as D3D12's
 separate read and write descriptors and Metal's ID tables, but give no layout control, no

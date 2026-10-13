@@ -15,5 +15,4 @@ VU-rojo-sync-0009 tracker
 VU-rojo-sync-0017 tracker
 VU-rojo-sync-0018 tracker
 VU-rojo-sync-0021 tracker
-VU-rojo-sync-0022 tracker
 VU-rojo-sync-0023 tracker
