@@ -14,13 +14,17 @@ rojo-rhi/
   .github/workflows/                          CI: policy; legacy, format, interface
   xmake/targets.lua  setup.lua  shaders.lua   targets are includable by a host project
   xmake/slang.lua                             the Slang compile and layout-check rules
-  Include/ Source/ Backends/ Tests/ Shaders/  the v2 interface (Include/, Tests/, Shaders/ so far)
+  Include/rojoRHI/                            v2 public headers, dependency-free
+  Source/Base/  Source/Core/                  v2 private base; the backend-neutral core
+  Backends/Null/Source/                       the Null backend (no GPU)
+  Tests/Contract/  Tests/Core/  Tests/Null/   v2 contract cases; core internals; Null expectations
+  Tests/Support/                              the death-test harness
   Shaders/RojoRHI/  Shaders/Tests/            the shader ABI module; its conformance shaders
   Legacy/Include/rojoRHI/                     v1 public headers, dependency-free
   Legacy/Source/  Legacy/Source/Base/         v1 shared implementation; private base
   Legacy/Backends/Metal4/Source/  Legacy/Backends/Metal4/ImGui/
   Legacy/Tests/  Legacy/Shaders/Tests/        v1 contract, validation and GPU conformance
-  Tools/                                      public-header check, Patches/, ImGuiBufferProbe/
+  Tools/                                      checks, Patches/, ImGuiBufferProbe/
   Tools/shader_layout.py                      generates the layout checks from Slang reflection
   Tools/Rename/  Tools/Extract/               the Luminex rename table and the extraction scripts
   docs/conventions/  docs/decisions/  docs/architecture/  docs/guides/
@@ -36,14 +40,19 @@ fetched on macOS; Windows fetches Slang alone), and a test-only copy of the shad
 so RojoRHI configures, builds and tests standalone.
 
 `Include/`, `Source/`, `Backends/`, `Tests/` and `Shaders/` are the permanent tree of the v2
-interface. Today `Include/rojoRHI/Version.h` and `Tests/` hold the first v2 code, built as the
-header-only `RojoRHI` target and the `RojoRHITests` binary, whose `contract` test runs the
-`[contract]` cases; the `rojorhi_backend` configure option accepts only `null` for now, and the
-GPU-free Null backend arrives with the work that adds it, so `RojoRHI` is header-only today. The
-`Source/` and `Backends/` are empty. `Include/rojoRHI/` also holds `Addr.h` and `IndirectArgs.h`,
-the shared C++ types of chapters 03 and 08. v1 lives frozen beside them under `Legacy/` and is
-deleted with the consumer port; ADR 0017 owns the layout, the freeze and the consumer's dependency
-rename.
+interface. `RojoRHI` is a static library of `Source/**/*.cpp` and the selected backend's sources;
+the `rojorhi_backend` configure option accepts only `null`, the GPU-free Null backend.
+`Source/Base/` is the private base (the Debug-tier `ROJORHI_VU` check and the message sink) and
+`Source/Core/` the backend-neutral core every backend embeds; `Backends/Null/Source/` implements the
+public entries over it. [The Null backend](null-backend.md) describes both layers and what is
+implemented. `Include/rojoRHI/` holds the v2 public headers, one primary type per header;
+`Handles.h` and `Geometry.h` each hold several small types.
+
+`Tests/` builds as the `RojoRHITests` binary with three entries: `contract` runs the T0 cases of
+`Tests/Contract/`, `Tests/Core/` and `Tests/Null/` except the death tests, `death` runs the
+`[death]` cases and `abi` the shader ABI cases. `Tests/Support/` holds the death-test harness.
+v1 lives frozen beside them under `Legacy/` and is deleted with the consumer port; ADR 0017 owns
+the layout, the freeze and the consumer's dependency rename.
 
 `Shaders/RojoRHI/RojoRHI.slang` is the module every v2 shader imports: it owns every binding and
 lowers the entries of chapter 05 per target, selected by one `ROJORHI_TARGET_*` macro (ADR 0018).
@@ -70,11 +79,12 @@ suite, including the checkpoint A cases ADR 0005 (superseded by ADR 0009) freeze
 in from Luminex's flat test tree without changing their assertions. They remain today's GPU
 conformance set until the v2 tiers of ADR 0009 exist.
 
-`Tools/` holds the public-header check that rejects an include root not spelled exactly
-`rojoRHI/`, the maintained `Patches/`, and `ImGuiBufferProbe/`. `Tools/Rename/` holds the
-substitution table that renamed the component inside Luminex before the extraction and stays as the
-record of what that rename did; `Tools/Extract/` holds the scripts that ran the extraction itself
-and the verifier that checked its result, both kept for a future re-run.
+`Tools/` holds `check_vu_coverage.py`, which requires a death test or a pending entry for every
+valid-usage identifier of the reference, the public-header check that rejects an include root not
+spelled exactly `rojoRHI/`, the maintained `Patches/`, and `ImGuiBufferProbe/`. `Tools/Rename/`
+holds the substitution table that renamed the component inside Luminex before the extraction and
+stays as the record of what that rename did; `Tools/Extract/` holds the scripts that ran the
+extraction itself and the verifier that checked its result, both kept for a future re-run.
 
 `.github/workflows/` runs the project policy check on Linux; the legacy, format and interface jobs
 on hosted macOS; and the interface job also on Windows. Hosted macOS has no Metal 4 device, so the
