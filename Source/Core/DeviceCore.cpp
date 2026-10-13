@@ -10,6 +10,7 @@
 #include "Core/CommandLists.h"
 #include "Core/Label.h"
 #include "Core/Swapchains.h"
+#include "Core/Tracker/Tracker.h"
 
 #include <algorithm>
 #include <type_traits>
@@ -77,6 +78,9 @@ namespace rojoRHI::core {
         if (frame > m_framesInFlight)
         {
             const uint64_t retired = frame - m_framesInFlight;
+            // The slot's internal fence is waited on first: the work of its frame is complete for every later check. No pool
+            // lock is held here.
+            retireFrameClock(*this, retired);
             forEachPool([&](auto& pool) {
                 const auto hook = m_hooks.forType<typename std::remove_reference_t<decltype(pool)>::HandleType>();
                 pool.retire(retired, [&](auto& record) {
@@ -118,6 +122,8 @@ namespace rojoRHI::core {
             m_unsubmittedLists.load(),
             state >> 1
         );
+        // The slot's internal fence is signalled on the graphics queue after the frame's graphics submissions.
+        endFrameClock(*this, state >> 1);
         m_state.store(state & ~uint64_t{ 1 });
     }
 

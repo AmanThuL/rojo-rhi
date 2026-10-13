@@ -7,6 +7,7 @@
 
 #include "Base/Assert.h"
 #include "Core/Label.h"
+#include "Core/Tracker/Tracker.h"
 
 #include <algorithm>
 #include <cstddef>
@@ -120,7 +121,10 @@ namespace rojoRHI::core {
     uint64_t completedValue(DeviceCore& core, Fence fence)
     {
         DeviceCounts::add(core.counts().nativeHostCalls);
-        return snapshot(core, fence).completed;
+        const uint64_t completed = snapshot(core, fence).completed;
+        // The pool's lock is released: the tracker's lock is never taken under it.
+        observeFence(core, fence, completed);
+        return completed;
     }
 
     //==================================================================================================================
@@ -136,6 +140,19 @@ namespace rojoRHI::core {
             record.initial,
             record.submitted
         );
-        return record.completed >= value.value;
+        const bool reached = record.completed >= value.value;
+        if (reached)
+        {
+            // The pool's lock is released: the tracker's lock is never taken under it.
+            observeFence(core, value.fence, value.value);
+        }
+        return reached;
+    }
+
+    //==================================================================================================================
+    void destroyFence(DeviceCore& core, Fence fence)
+    {
+        core.destroy(fence);
+        forgetFence(core, fence);
     }
 } // namespace rojoRHI::core

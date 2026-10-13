@@ -39,10 +39,15 @@ namespace rojoRHI::core {
     /// signals the fence completes.
     void completeFence(DeviceCore& core, FenceValue value);
 
-    /// Returns the greatest value `fence` has reached (VU-rojo-core-0001 to 0003).
+    /// Returns the greatest value `fence` has reached (VU-rojo-core-0001 to 0003); the validation tracker then finds the work
+    /// that value orders complete.
     uint64_t completedValue(DeviceCore& core, Fence fence);
 
     /// Checks the arguments of `Device::wait` (VU-rojo-queue-0008, VU-rojo-core-0001 to 0003) and returns true when
-    /// `value.fence` has already reached `value.value`.
+    /// `value.fence` has already reached `value.value`; the validation tracker then finds the work it orders complete.
     bool checkWait(DeviceCore& core, FenceValue value, uint64_t timeoutNs);
+
+    /// Destroys `fence`, deferred like any resource, and forgets the clocks the validation tracker kept of its values. A
+    /// backend calls it from `Device::destroy(Fence)`.
+    void destroyFence(DeviceCore& core, Fence fence);
 } // namespace rojoRHI::core

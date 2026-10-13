@@ -93,15 +93,22 @@ TEST_CASE("the tracker carries layouts from one submission to the next", "[contr
     Device device = *createDevice(DeviceDesc{ .validation = true });
     const Texture texture =
         *device.createTexture(TextureDesc{ .format = Format::RGBA8Unorm, .extent = { 16, 16, 1 }, .usage = TextureUsage::Sampled, .label = "test.texture" });
+    // A fence orders the Compute transition after the Graphics one (VU-rojo-queue-0005).
+    const Fence fence = *device.createFence(0, "test.fence");
+    const std::array<FenceValue, 1> moved{ FenceValue{ fence, 1 } };
     device.beginFrame();
     CommandList first = device.acquireCommandList(QueueType::Graphics, "test.first");
     move(first, texture, Layout::Undefined, Layout::CopyDst);
-    submit(device, first);
+    first.end();
+    const std::array<CommandList, 1> firstLists{ first };
+    device.queue(QueueType::Graphics).submit(firstLists, {}, moved);
     device.endFrame();
     device.beginFrame();
     CommandList second = device.acquireCommandList(QueueType::Compute, "test.second");
     move(second, texture, Layout::CopyDst, Layout::ShaderRead);
-    submit(device, second, QueueType::Compute);
+    second.end();
+    const std::array<CommandList, 1> secondLists{ second };
+    device.queue(QueueType::Compute).submit(secondLists, moved);
     device.endFrame();
     destroyDevice(device);
 #endif

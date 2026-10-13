@@ -78,6 +78,15 @@ namespace {
         const std::array<CommandList, 1> lists{ list };
         device.queue(type).submit(lists);
     }
+
+    //==================================================================================================================
+    /// Ends `list` and submits it alone to the queue of `type` of `device`, waiting on `wait` and signalling `signal`.
+    [[maybe_unused]] void submitWith(Device device, CommandList list, QueueType type, std::span<const FenceValue> wait, std::span<const FenceValue> signal)
+    {
+        list.end();
+        const std::array<CommandList, 1> lists{ list };
+        device.queue(type).submit(lists, wait, signal);
+    }
 } // namespace
 
 //======================================================================================================================
@@ -134,7 +143,7 @@ TEST_CASE("placed resources that share no heap bytes need no barrier between the
 }
 
 //======================================================================================================================
-TEST_CASE("aliased placed resources used on different queues are not compared by the aliasing rules", "[contract]")
+TEST_CASE("aliased placed resources used on different queues are ordered by fences, not by the aliasing rules", "[contract]")
 {
 #ifdef NDEBUG
     SKIP("validation exists only in a Debug build");
@@ -144,6 +153,9 @@ TEST_CASE("aliased placed resources used on different queues are not compared by
     const Buffer graphicsBuffer = placedBuffer(kit, heap, 0);
     const Buffer computeBuffer = placedBuffer(kit, heap, 0);
     const Texture texture = placedTexture(kit, heap, 0);
+    const Fence fence = *kit.device.createFence(0, "test.fence");
+    const std::array<FenceValue, 1> first{ FenceValue{ fence, 1 } };
+    const std::array<FenceValue, 1> second{ FenceValue{ fence, 2 } };
     discardAfterCopy(kit.list, texture);
     kit.list.clearTexture(texture, {}, {});
     global(kit.list, Stage::Copy, Access::CopyWrite, Stage::Copy, Access::CopyWrite);
@@ -153,9 +165,9 @@ TEST_CASE("aliased placed resources used on different queues are not compared by
     CommandList later = kit.device.acquireCommandList(QueueType::Graphics, "test.later");
     global(later, Stage::Copy, Access::CopyWrite, Stage::Copy, Access::CopyWrite);
     later.fillBuffer(graphicsBuffer, 0, kBytes, 2);
-    submit(kit.device, kit.list, QueueType::Graphics);
-    submit(kit.device, compute, QueueType::Compute);
-    submit(kit.device, later, QueueType::Graphics);
+    submitWith(kit.device, kit.list, QueueType::Graphics, {}, first);
+    submitWith(kit.device, compute, QueueType::Compute, first, second);
+    submitWith(kit.device, later, QueueType::Graphics, second, {});
     kit.device.endFrame();
     destroyDevice(kit.device);
 #endif
@@ -201,15 +213,6 @@ namespace {
         const std::array<TextureBarrier, 1> barriers{ TextureBarrier{
             .texture = texture, .srcStage = srcStage, .dstStage = dstStage, .dstAccess = dstAccess, .oldLayout = Layout::Undefined, .newLayout = newLayout } };
         list.barrier({}, {}, barriers);
-    }
-
-    //==================================================================================================================
-    /// Ends `list` and submits it alone to the queue of `type` of `device`, waiting on `wait` and signalling `signal`.
-    [[maybe_unused]] void submitWith(Device device, CommandList list, QueueType type, std::span<const FenceValue> wait, std::span<const FenceValue> signal)
-    {
-        list.end();
-        const std::array<CommandList, 1> lists{ list };
-        device.queue(type).submit(lists, wait, signal);
     }
 } // namespace
 
@@ -321,6 +324,26 @@ TEST_CASE("a placed buffer's own uses are ordered by its own barriers and not by
         .buffer = buffer, .srcStage = Stage::Copy, .srcAccess = Access::CopyWrite, .dstStage = Stage::Copy, .dstAccess = Access::CopyWrite } };
     kit.list.barrier({}, barriers);
     kit.list.fillBuffer(buffer, 0, kBytes, 1);
+    kit.finish();
+#endif
+}
+
+//======================================================================================================================
+TEST_CASE("a placed buffer's first use follows another buffer's through a chain of global barriers", "[contract]")
+{
+#ifdef NDEBUG
+    SKIP("validation exists only in a Debug build");
+#else
+    PassKit kit(QueueType::Graphics, true);
+    const Heap heap = makeHeap(kit);
+    const Buffer first = placedBuffer(kit, heap, 0);
+    const Buffer second = placedBuffer(kit, heap, 0);
+    kit.list.fillBuffer(first, 0, kBytes, 0);
+    // Neither barrier alone covers the fill at its source and the next fill at its destination; the second extends the
+    // first's chain through the compute stage they share.
+    global(kit.list, Stage::Copy, Access::CopyWrite, Stage::ComputeShader, Access::ShaderRead);
+    global(kit.list, Stage::ComputeShader, Access::None, Stage::Copy, Access::CopyWrite);
+    kit.list.fillBuffer(second, 0, kBytes, 1);
     kit.finish();
 #endif
 }

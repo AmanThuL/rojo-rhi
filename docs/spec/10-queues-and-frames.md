@@ -135,7 +135,10 @@ same frame by a fence wait, as `VU-rojo-device-0006` of
   value already submitted for signal on that fence.
 - `VU-rojo-queue-0005` Two uses of the same memory on different queues, at least one a write, are
   ordered by a fence: the later use's submission waits, directly or through other fences, on a value
-  signalled by or after the earlier use's submission. Checked by the validation tracker.
+  signalled by or after the earlier use's submission. Ordering through an earlier submission on the
+  same queue, and completion the CPU observed through a fence, count as orderings by a fence. Uses
+  of the same heap bytes by two placed resources are uses of the same memory. Checked by the
+  validation tracker.
 
 #### Mapping
 | | Metal 4 | D3D12 | Vulkan |

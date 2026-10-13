@@ -39,10 +39,10 @@ namespace rojoRHI {
         core::submitLists(core, queue.type, lists);
         {
             // A validating device judges the submission under its tracker's lock, held until the signals are published, so a
-            // submission on another queue sees the tracker state and the fence values move together.
+            // submission on another queue sees the tracker state, the fence values and their clocks move together.
             const core::TrackerLock tracked = core::lockTracker(core);
             core::checkSubmit(core, wait, signal);
-            core::replayLists(core, queue.type, lists, tracked);
+            core::replayLists(core, queue.type, lists, wait, signal, tracked);
             // The Null queue executes nothing, so every signal is reached before the call returns.
             core::recordSignals(core, signal, core::SignalCompletion::Immediate);
         }
