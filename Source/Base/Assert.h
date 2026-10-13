@@ -25,3 +25,20 @@
 /// Release expands to nothing and evaluates neither the condition nor the message arguments.
 #define ROJORHI_VU(cond, id, ...) ((void)0)
 #endif
+
+#ifndef NDEBUG
+/// Checks an invariant of the library's own code, never a rule a caller can break: when `cond` is false, reports `msg` at
+/// error severity and aborts. Release expands to nothing and does not evaluate `cond`.
+#define ROJORHI_INTERNAL_ASSERT(cond, msg)                                                                                                                     \
+    do                                                                                                                                                         \
+    {                                                                                                                                                          \
+        if (!(cond))                                                                                                                                           \
+        {                                                                                                                                                      \
+            ::rojoRHI::base::emitMessage(::rojoRHI::MessageSeverity::Error, std::format("internal error: {} ({}:{})", msg, __FILE__, __LINE__));               \
+            std::abort();                                                                                                                                      \
+        }                                                                                                                                                      \
+    } while (0)
+#else
+/// Release expands to nothing.
+#define ROJORHI_INTERNAL_ASSERT(cond, msg) ((void)0)
+#endif

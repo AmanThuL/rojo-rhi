@@ -134,7 +134,7 @@ target("RojoRHITests")
     add_includedirs(path.join(component, "Tests"))
     add_deps("RojoRHI")
     add_packages("catch2")
-    add_tests("contract", {runargs = {"[contract]~[death]"}})
+    add_tests("contract", {runargs = {"[contract]~[death],[core]~[death],[null]~[death]"}})
     -- Each case spawns this executable again, so keep Catch2's summary in the log and bound a hang.
     add_tests("death", {runargs = {"[death]"}, realtime_output = true, run_timeout = 300000})
     -- Conformance shaders compile for every target on any host; the rule needs only the Slang
