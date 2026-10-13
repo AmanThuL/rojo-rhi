@@ -4,13 +4,7 @@ VU-rojo-abi-0003 tracker
 VU-rojo-buffer-0019 tracker
 VU-rojo-device-0006 tracker
 VU-rojo-device-0007 tracker
-VU-rojo-indirect-0005 tracker
-VU-rojo-indirect-0011 tracker
-VU-rojo-indirect-0017 tracker
-VU-rojo-indirect-0020 tracker
 VU-rojo-present-0019 tracker
 VU-rojo-queue-0005 tracker
 VU-rojo-sparse-0013 tracker
-VU-rojo-sync-0009 tracker
-VU-rojo-sync-0017 tracker
 VU-rojo-sync-0018 tracker

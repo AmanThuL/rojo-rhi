@@ -155,8 +155,8 @@ namespace rojoRHI {
         /// a viewport and a scissor were set (VU-rojo-indirect-0021); `args` is non-null and 4-byte aligned and `maxCount` records lie in one buffer created
         /// with `BufferUsage::IndirectArgs` (VU-rojo-indirect-0002); `maxCount` is above zero and at most `Limits::maxDrawIndirectCount`
         /// (VU-rojo-indirect-0003); a non-null `count` is 4-byte aligned and lies in such a buffer (VU-rojo-indirect-0004). Each address names a live buffer
-        /// and lies inside it (VU-rojo-buffer-0009). Barriers for GPU writes to the records are checked by the validation tracker (VU-rojo-indirect-0005).
-        /// Thread class command list.
+        /// and lies inside it (VU-rojo-buffer-0009). Barriers for GPU writes to the records or the count are checked by the validation tracker
+        /// (VU-rojo-indirect-0005). Thread class command list.
         void drawIndirect(Addr args, uint32_t maxCount, Addr count = {});
 
         /// Issues up to `maxCount` indexed draws whose `DrawIndexedIndirectArgs` records start at `args`, fetching indices of

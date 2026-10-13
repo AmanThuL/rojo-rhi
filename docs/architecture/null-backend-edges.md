@@ -259,11 +259,35 @@ before it. A draw or dispatch with a zero count makes no use, and a pipeline who
 mask is zero does not write stencil. `Tracker::lastWriteOrder` answers, for a buffer range, how its
 last write is ordered before a given use.
 
-**What remains.** The four indirect rules, aliasing in `0009` and `0017`, and the
-unsubmitted-reference counts of `VU-rojo-abi-0003`, `buffer-0019`, `device-0007` and
-`present-0019`. The queues part adds the clocks, the layout per queue and the handoff,
-`VU-rojo-queue-0005`, `sync-0018`, `device-0006`, `VU-rojo-sparse-0013` and the lock in the calls
-named above.
+**Indirect reads.** The four indirect commands tag their argument and count reads with their
+entry and arm. Before the hazards of such a read, replay asks `lastWriteOrder` about its bytes and
+reports the entry's identifier (`VU-rojo-indirect-0005`, `0011`, `0017` or `0020`, one site per arm)
+when no barrier since the last write on the queue has a destination stage and access that include
+`IndirectArgs`; a barrier with that destination whose source misses the write is left to
+`VU-rojo-sync-0024`. Bytes only the CPU wrote, initial data or frame data, have no write.
+
+**Aliasing.** Each heap holding a followed placed resource keeps ordered disjoint byte ranges
+(`Tracker/OffsetMap.h`) that record per queue type the placed resource that last used them, that
+use with the global barriers since, and a stamp ordering heap uses across queues
+(`Tracker/Aliasing.*`); `destroyHeap` drops it. A buffer's use maps its bytes into the heap; a
+texture's use covers its whole heap range, its placement `heapSize`. A buffer's bytes last used on
+the queue by another resource report `VU-rojo-sync-0009` unless a global barrier since covers that
+use at its source and this one at its destination, or the buffer's own stamps show it used them
+since, on another queue. Every other placed texture over the bytes, and one placed later, gains on
+each subresource and that queue a mark per heap byte range: the latest foreign use of those bytes,
+which a newer one replaces, so marks stay as few as the ranges. Its next event there must be a
+texture barrier from `Undefined` whose source covers every mark newer than the texture's own last
+use, or `VU-rojo-sync-0017` reports; a covering discard clears its marks on every queue. A passing
+check resets the resource's own hazard state on the queue, since the aliasing chain orders its old
+uses and their contents are undefined. Precedence: `sync-0017` before `sync-0006` and the layout,
+entry and coverage rules; `sync-0009` before the indirect rules. Limit: a discard is not a heap
+use, so although on D3D12 it writes compression metadata, a later aliasing resource is checked
+only against the last use. Order between queues is `queue-0005`'s.
+
+**What remains.** The unsubmitted-reference counts of `VU-rojo-abi-0003`, `buffer-0019`,
+`device-0007` and `present-0019`. The queues part adds the clocks, the layout per queue and the
+handoff, `VU-rojo-queue-0005`, `sync-0018`, `device-0006`, `VU-rojo-sparse-0013` and the lock in
+the calls named above.
 
 ## What remains
 - A native backend registers its own surface predicate, capture hook and tile table, and measures

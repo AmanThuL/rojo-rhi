@@ -225,3 +225,64 @@ TEST_CASE("a placed buffer records its heap range for the tracker", "[core]")
     kit.device.destroy(heap);
     kit.finish();
 }
+
+//======================================================================================================================
+TEST_CASE("a placed texture records its heap range for the tracker", "[core]")
+{
+    PassKit kit;
+    const TextureDesc desc{
+        .format = Format::RGBA8Unorm, .extent = { PassKit::kSize, PassKit::kSize, 1 }, .usage = TextureUsage::Sampled, .label = "test.placed"
+    };
+    const Heap heap = *kit.device.createHeap(HeapDesc{ .size = 1u << 20, .label = "test.heap" });
+    const PlacementRequirements requirements = kit.device.placementRequirements(desc);
+    const uint64_t offset = 2 * requirements.alignment;
+    const Texture texture = *kit.device.createTexture(desc, {}, Placement{ .heap = heap, .offset = offset });
+    const core::TextureRecord* record = core::coreOf(kit.device).pool<Texture>().checked(texture, false);
+    REQUIRE(record != nullptr);
+    CHECK(record->heap == heap);
+    CHECK(record->heapOffset == offset);
+    CHECK(record->heapSize == requirements.size);
+    kit.device.destroy(texture);
+    kit.device.destroy(heap);
+    kit.finish();
+}
+
+//======================================================================================================================
+TEST_CASE("alias marks and heap segments stay bounded while transient buffers churn over a texture's memory", "[core]")
+{
+#ifndef NDEBUG
+    constexpr uint64_t kSlot = 256;
+    PassKit kit(QueueType::Graphics, true);
+    core::Tracker& tracker = core::coreOf(kit.device).tracker();
+    const Heap heap = *kit.device.createHeap(HeapDesc{ .size = 1u << 20, .label = "test.heap" });
+    const TextureDesc desc{
+        .format = Format::RGBA8Unorm, .extent = { PassKit::kSize, PassKit::kSize, 1 }, .usage = TextureUsage::Sampled, .label = "test.idle"
+    };
+    const Texture idle = *kit.device.createTexture(desc, {}, Placement{ .heap = heap });
+    CommandList list = kit.list;
+    for (uint32_t frame = 0; frame < 64; ++frame)
+    {
+        if (frame != 0)
+        {
+            kit.device.beginFrame();
+            list = kit.device.acquireCommandList(QueueType::Graphics, "test.frame");
+        }
+        // A new buffer each frame over moving bytes of the idle texture, ordered after the previous buffer's fill.
+        const BufferDesc buffer{ .size = kSlot, .usage = BufferUsage::ShaderWrite, .label = "test.transient" };
+        const Buffer transient = *kit.device.createBuffer(buffer, {}, Placement{ .heap = heap, .offset = frame % 4 * kSlot });
+        const std::array<GlobalBarrier, 1> globals{ GlobalBarrier{
+            .srcStage = Stage::Copy, .srcAccess = Access::CopyWrite, .dstStage = Stage::Copy, .dstAccess = Access::CopyWrite } };
+        list.barrier(globals);
+        list.fillBuffer(transient, 0, kSlot, frame);
+        list.end();
+        const std::array<CommandList, 1> lists{ list };
+        kit.device.queue(QueueType::Graphics).submit(lists);
+        kit.device.endFrame();
+        kit.device.destroy(transient);
+    }
+    // One mark per distinct byte range the buffers used, on the one subresource and queue, whatever their number.
+    CHECK(tracker.aliasMarkCount(idle) == std::optional<size_t>(4));
+    CHECK(tracker.heapSegmentCount(heap).value_or(100) <= 6);
+    destroyDevice(kit.device);
+#endif
+}
