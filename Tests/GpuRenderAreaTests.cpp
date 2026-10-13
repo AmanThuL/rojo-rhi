@@ -4,69 +4,77 @@
 
 namespace {
 
-// The sub-rectangle the render-area cases draw into, deliberately non-square so a backend that
-// swapped width and height would paint the wrong texels.
-constexpr uint32_t kAreaWidth = 32;
-constexpr uint32_t kAreaHeight = 16;
+    // The sub-rectangle the render-area cases draw into, deliberately non-square so a backend that
+    // swapped width and height would paint the wrong texels.
+    constexpr uint32_t kAreaWidth = 32;
+    constexpr uint32_t kAreaHeight = 16;
 
-//======================================================================================================================
-rojoRHI::Result<std::unique_ptr<rojoRHI::GraphicsPipeline>>
-makeRenderAreaPipeline(rojoRHI::Device& device, rojoRHI::ShaderLibrary& library) {
-    return device.createGraphicsPipeline({.library = &library,
-                                          .vertexEntry = "vertexMain",
-                                          .fragmentEntry = "fragmentMain",
-                                          .colorFormat = rojoRHI::Format::BGRA8Unorm,
-                                          .label = "rojorhi.test.renderAreaPipeline"});
-}
+    //==================================================================================================================
+    rojoRHI::Result<std::unique_ptr<rojoRHI::GraphicsPipeline>> makeRenderAreaPipeline(rojoRHI::Device& device, rojoRHI::ShaderLibrary& library)
+    {
+        return device.createGraphicsPipeline(
+            { .library = &library,
+              .vertexEntry = "vertexMain",
+              .fragmentEntry = "fragmentMain",
+              .colorFormat = rojoRHI::Format::BGRA8Unorm,
+              .label = "rojorhi.test.renderAreaPipeline" }
+        );
+    }
 
-//======================================================================================================================
-// One fullscreen triangle into `target`, with the render area the caller asks for. The clear is
-// blue and the fragment stage is red, so every readback below reads one or the other.
-std::vector<uint8_t> drawWithRenderArea(rojoRHI::Device& device,
-                                        rojoRHI::GraphicsPipeline& pipeline,
-                                        rojoRHI::Texture& target, uint32_t width, uint32_t height) {
-    rojoRHI::CommandList& commands = device.beginFrame();
-    commands.beginRenderPass({.colorTarget = &target,
-                              .clearColor = {0.0f, 0.0f, 1.0f, 1.0f},
-                              .clear = true,
-                              .renderAreaWidth = width,
-                              .renderAreaHeight = height,
-                              .label = "rojorhi.test.renderArea"});
-    commands.bindPipeline(pipeline);
-    commands.draw(3);
-    commands.endRenderPass();
-    device.endFrame(nullptr);
-    device.waitIdle();
+    //==================================================================================================================
+    // One fullscreen triangle into `target`, with the render area the caller asks for. The clear is
+    // blue and the fragment stage is red, so every readback below reads one or the other.
+    std::vector<uint8_t> drawWithRenderArea(
+        rojoRHI::Device& device, rojoRHI::GraphicsPipeline& pipeline, rojoRHI::Texture& target, uint32_t width, uint32_t height
+    )
+    {
+        rojoRHI::CommandList& commands = device.beginFrame();
+        commands.beginRenderPass(
+            { .colorTarget = &target,
+              .clearColor = { 0.0f, 0.0f, 1.0f, 1.0f },
+              .clear = true,
+              .renderAreaWidth = width,
+              .renderAreaHeight = height,
+              .label = "rojorhi.test.renderArea" }
+        );
+        commands.bindPipeline(pipeline);
+        commands.draw(3);
+        commands.endRenderPass();
+        device.endFrame(nullptr);
+        device.waitIdle();
 
-    std::vector<uint8_t> pixels(size_t{kSize} * kSize * 4);
-    target.readback(pixels.data(), pixels.size());
-    return pixels;
-}
+        std::vector<uint8_t> pixels(size_t{ kSize } * kSize * 4);
+        target.readback(pixels.data(), pixels.size());
+        return pixels;
+    }
 
-//======================================================================================================================
-void requireRed(const std::vector<uint8_t>& pixels, uint32_t x, uint32_t y) {
-    const Pixel p = pixelAt(pixels, x, y);
-    INFO(describe("inside the render area", x, y, p));
-    REQUIRE(p.r == 255);
-    REQUIRE(p.g == 0);
-    REQUIRE(p.b == 0);
-}
+    //==================================================================================================================
+    void requireRed(const std::vector<uint8_t>& pixels, uint32_t x, uint32_t y)
+    {
+        const Pixel p = pixelAt(pixels, x, y);
+        INFO(describe("inside the render area", x, y, p));
+        REQUIRE(p.r == 255);
+        REQUIRE(p.g == 0);
+        REQUIRE(p.b == 0);
+    }
 
-//======================================================================================================================
-void requireCleared(const std::vector<uint8_t>& pixels, uint32_t x, uint32_t y) {
-    const Pixel p = pixelAt(pixels, x, y);
-    INFO(describe("outside the render area", x, y, p));
-    REQUIRE(p.r == 0);
-    REQUIRE(p.g == 0);
-    REQUIRE(p.b == 255);
-}
+    //==================================================================================================================
+    void requireCleared(const std::vector<uint8_t>& pixels, uint32_t x, uint32_t y)
+    {
+        const Pixel p = pixelAt(pixels, x, y);
+        INFO(describe("outside the render area", x, y, p));
+        REQUIRE(p.r == 0);
+        REQUIRE(p.g == 0);
+        REQUIRE(p.b == 255);
+    }
 
 } // namespace
 
 //======================================================================================================================
 // The whole point of the field: a pass draws into an origin-anchored corner of a target allocated
 // at the full extent, and the texels outside that corner keep the pass's clear.
-TEST_CASE("a render area confines a pass to an origin-anchored sub-rectangle", "[gpu][rhi]") {
+TEST_CASE("a render area confines a pass to an origin-anchored sub-rectangle", "[gpu][rhi]")
+{
     using namespace rojoRHI;
 
     auto device = createDevice();
@@ -85,8 +93,7 @@ TEST_CASE("a render area confines a pass to an origin-anchored sub-rectangle", "
     INFO(errorOf(pipeline));
     REQUIRE(pipeline.has_value());
 
-    const std::vector<uint8_t> pixels =
-        drawWithRenderArea(**device, **pipeline, **target, kAreaWidth, kAreaHeight);
+    const std::vector<uint8_t> pixels = drawWithRenderArea(**device, **pipeline, **target, kAreaWidth, kAreaHeight);
 
     // The area's corners and middle, then the three regions around it: to its right, below it, and
     // diagonally past it.
@@ -102,7 +109,8 @@ TEST_CASE("a render area confines a pass to an origin-anchored sub-rectangle", "
 //======================================================================================================================
 // The unset area is the pre-existing behaviour every other pass relies on: the same draw covers
 // the whole attachment, with no scissor left over from the case above.
-TEST_CASE("an unset render area covers the whole attachment", "[gpu][rhi]") {
+TEST_CASE("an unset render area covers the whole attachment", "[gpu][rhi]")
+{
     using namespace rojoRHI;
 
     auto device = createDevice();
@@ -133,18 +141,17 @@ TEST_CASE("an unset render area covers the whole attachment", "[gpu][rhi]") {
 // ROJORHI_ASSERT and so cannot be provoked from a test. The condition it asserts on is the validate
 // function, so that is what this checks -- here rather than in the CPU-only suite, because a
 // depth-only pass's attachment is a real device texture.
-TEST_CASE("a render area past a depth-only pass's attachment is rejected", "[gpu][rhi]") {
+TEST_CASE("a render area past a depth-only pass's attachment is rejected", "[gpu][rhi]")
+{
     using namespace rojoRHI;
 
     auto device = createDevice();
     INFO(errorOf(device));
     REQUIRE(device.has_value());
 
-    auto depth = (*device)->createTexture({.width = kSize,
-                                           .height = kSize,
-                                           .format = Format::D32Float,
-                                           .renderTarget = true,
-                                           .label = "rojorhi.test.renderAreaDepth"});
+    auto depth = (*device)->createTexture(
+        { .width = kSize, .height = kSize, .format = Format::D32Float, .renderTarget = true, .label = "rojorhi.test.renderAreaDepth" }
+    );
     INFO(errorOf(depth));
     REQUIRE(depth.has_value());
 

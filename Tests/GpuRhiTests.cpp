@@ -5,29 +5,28 @@
 
 namespace {
 
-//======================================================================================================================
-bool channelIs(uint8_t actual, float expected) {
-    return expected > 0.5f ? actual > 200 : actual < 55;
-}
+    //==================================================================================================================
+    bool channelIs(uint8_t actual, float expected)
+    {
+        return expected > 0.5f ? actual > 200 : actual < 55;
+    }
 
 } // namespace
 
 //======================================================================================================================
 // A throwaway aligned upload puts the triangle away from offset zero, exposing lost offset
 // arithmetic.
-TEST_CASE("frame-data arena feeds a draw from a non-zero offset", "[gpu]") {
+TEST_CASE("frame-data arena feeds a draw from a non-zero offset", "[gpu]")
+{
     using namespace rojoRHI;
 
     auto device = createDevice();
     INFO(errorOf(device));
     REQUIRE(device.has_value());
 
-    auto target = (*device)->createTexture({.width = kSize,
-                                            .height = kSize,
-                                            .format = Format::BGRA8Unorm,
-                                            .renderTarget = true,
-                                            .cpuReadback = true,
-                                            .label = "rojorhi.test.arenaTarget"});
+    auto target = (*device)->createTexture(
+        { .width = kSize, .height = kSize, .format = Format::BGRA8Unorm, .renderTarget = true, .cpuReadback = true, .label = "rojorhi.test.arenaTarget" }
+    );
     INFO(errorOf(target));
     REQUIRE(target.has_value());
 
@@ -35,21 +34,22 @@ TEST_CASE("frame-data arena feeds a draw from a non-zero offset", "[gpu]") {
     INFO(errorOf(library));
     REQUIRE(library.has_value());
 
-    auto pipeline = (*device)->createGraphicsPipeline({.library = library->get(),
-                                                       .vertexEntry = "vertexMain",
-                                                       .fragmentEntry = "fragmentMain",
-                                                       .colorFormat = Format::BGRA8Unorm,
-                                                       .label = "rojorhi.test.arenaPipeline"});
+    auto pipeline = (*device)->createGraphicsPipeline(
+        { .library = library->get(),
+          .vertexEntry = "vertexMain",
+          .fragmentEntry = "fragmentMain",
+          .colorFormat = Format::BGRA8Unorm,
+          .label = "rojorhi.test.arenaPipeline" }
+    );
     INFO(errorOf(pipeline));
     REQUIRE(pipeline.has_value());
 
     const std::array<uint8_t, 100> filler{};
 
     CommandList& commands = (*device)->beginFrame();
-    commands.beginRenderPass({.colorTarget = target->get(),
-                              .clearColor = {0.0f, 0.0f, 0.0f, 1.0f},
-                              .clear = true,
-                              .label = "rojorhi.test.frameDataUpload"});
+    commands.beginRenderPass(
+        { .colorTarget = target->get(), .clearColor = { 0.0f, 0.0f, 0.0f, 1.0f }, .clear = true, .label = "rojorhi.test.frameDataUpload" }
+    );
     commands.bindPipeline(**pipeline);
     commands.bindFrameData(kVertexBufferSlot, filler.data(), filler.size());
     commands.bindFrameData(kVertexBufferSlot, kTriangle.data(), sizeof(kTriangle));
@@ -58,7 +58,7 @@ TEST_CASE("frame-data arena feeds a draw from a non-zero offset", "[gpu]") {
     (*device)->endFrame(nullptr);
     (*device)->waitIdle();
 
-    std::vector<uint8_t> pixels(size_t{kSize} * kSize * 4);
+    std::vector<uint8_t> pixels(size_t{ kSize } * kSize * 4);
     (*target)->readback(pixels.data(), pixels.size());
 
     const Pixel corner = pixelAt(pixels, 2, 2);
@@ -90,28 +90,26 @@ TEST_CASE("frame-data arena feeds a draw from a non-zero offset", "[gpu]") {
 //======================================================================================================================
 // Six drained frames rotate through all three ring slots twice; each image must retain its own
 // color.
-TEST_CASE("frame-data arena keeps per-frame data across slot reuse", "[gpu]") {
+TEST_CASE("frame-data arena keeps per-frame data across slot reuse", "[gpu]")
+{
     using namespace rojoRHI;
 
-    constexpr std::array<std::array<float, 3>, 6> kFrameColors = {{
-        {1.0f, 0.0f, 0.0f}, // frame 0 -> arena slot 1
-        {0.0f, 1.0f, 0.0f}, // frame 1 -> arena slot 2
-        {0.0f, 0.0f, 1.0f}, // frame 2 -> arena slot 0
-        {1.0f, 1.0f, 0.0f}, // frame 3 -> arena slot 1 again, first frame that waits
-        {0.0f, 1.0f, 1.0f}, // frame 4 -> arena slot 2 again
-        {1.0f, 0.0f, 1.0f}, // frame 5 -> arena slot 0 again
-    }};
+    constexpr std::array<std::array<float, 3>, 6> kFrameColors = { {
+        { 1.0f, 0.0f, 0.0f }, // frame 0 -> arena slot 1
+        { 0.0f, 1.0f, 0.0f }, // frame 1 -> arena slot 2
+        { 0.0f, 0.0f, 1.0f }, // frame 2 -> arena slot 0
+        { 1.0f, 1.0f, 0.0f }, // frame 3 -> arena slot 1 again, first frame that waits
+        { 0.0f, 1.0f, 1.0f }, // frame 4 -> arena slot 2 again
+        { 1.0f, 0.0f, 1.0f }, // frame 5 -> arena slot 0 again
+    } };
 
     auto device = createDevice();
     INFO(errorOf(device));
     REQUIRE(device.has_value());
 
-    auto target = (*device)->createTexture({.width = kSize,
-                                            .height = kSize,
-                                            .format = Format::BGRA8Unorm,
-                                            .renderTarget = true,
-                                            .cpuReadback = true,
-                                            .label = "rojorhi.test.rotationTarget"});
+    auto target = (*device)->createTexture(
+        { .width = kSize, .height = kSize, .format = Format::BGRA8Unorm, .renderTarget = true, .cpuReadback = true, .label = "rojorhi.test.rotationTarget" }
+    );
     INFO(errorOf(target));
     REQUIRE(target.has_value());
 
@@ -119,31 +117,34 @@ TEST_CASE("frame-data arena keeps per-frame data across slot reuse", "[gpu]") {
     INFO(errorOf(library));
     REQUIRE(library.has_value());
 
-    auto pipeline = (*device)->createGraphicsPipeline({.library = library->get(),
-                                                       .vertexEntry = "vertexMain",
-                                                       .fragmentEntry = "fragmentMain",
-                                                       .colorFormat = Format::BGRA8Unorm,
-                                                       .label = "rojorhi.test.rotationPipeline"});
+    auto pipeline = (*device)->createGraphicsPipeline(
+        { .library = library->get(),
+          .vertexEntry = "vertexMain",
+          .fragmentEntry = "fragmentMain",
+          .colorFormat = Format::BGRA8Unorm,
+          .label = "rojorhi.test.rotationPipeline" }
+    );
     INFO(errorOf(pipeline));
     REQUIRE(pipeline.has_value());
 
-    std::vector<uint8_t> pixels(size_t{kSize} * kSize * 4);
+    std::vector<uint8_t> pixels(size_t{ kSize } * kSize * 4);
 
-    for (uint32_t frame = 0; frame < kFrameColors.size(); ++frame) {
+    for (uint32_t frame = 0; frame < kFrameColors.size(); ++frame)
+    {
         const std::array<float, 3>& color = kFrameColors[frame];
 
         std::array<Vertex, 3> vertices = kTriangle;
-        for (Vertex& vertex : vertices) {
+        for (Vertex& vertex : vertices)
+        {
             vertex.color[0] = color[0];
             vertex.color[1] = color[1];
             vertex.color[2] = color[2];
         }
 
         CommandList& commands = (*device)->beginFrame();
-        commands.beginRenderPass({.colorTarget = target->get(),
-                                  .clearColor = {0.0f, 0.0f, 0.0f, 1.0f},
-                                  .clear = true,
-                                  .label = "rojorhi.test.frameRotation"});
+        commands.beginRenderPass(
+            { .colorTarget = target->get(), .clearColor = { 0.0f, 0.0f, 0.0f, 1.0f }, .clear = true, .label = "rojorhi.test.frameRotation" }
+        );
         commands.bindPipeline(**pipeline);
         commands.bindFrameData(kVertexBufferSlot, vertices.data(), sizeof(vertices));
         commands.draw(static_cast<uint32_t>(vertices.size()));
@@ -153,8 +154,9 @@ TEST_CASE("frame-data arena keeps per-frame data across slot reuse", "[gpu]") {
         (*target)->readback(pixels.data(), pixels.size());
 
         const Pixel inside = pixelAt(pixels, 32, 40);
-        INFO("frame " + std::to_string(frame) + " expected R=" + std::to_string(color[0]) +
-             " G=" + std::to_string(color[1]) + " B=" + std::to_string(color[2]));
+        INFO(
+            "frame " + std::to_string(frame) + " expected R=" + std::to_string(color[0]) + " G=" + std::to_string(color[1]) + " B=" + std::to_string(color[2])
+        );
         INFO(describe("inside", 32, 40, inside));
         REQUIRE(channelIs(inside.r, color[0]));
         REQUIRE(channelIs(inside.g, color[1]));
@@ -165,27 +167,22 @@ TEST_CASE("frame-data arena keeps per-frame data across slot reuse", "[gpu]") {
 
 //======================================================================================================================
 // Two coplanar draws pin Less testing and depth writes: red must survive the rejected green draw.
-TEST_CASE("depth test rejects a coplanar second draw", "[gpu]") {
+TEST_CASE("depth test rejects a coplanar second draw", "[gpu]")
+{
     using namespace rojoRHI;
 
     auto device = createDevice();
     INFO(errorOf(device));
     REQUIRE(device.has_value());
 
-    auto target = (*device)->createTexture({.width = kSize,
-                                            .height = kSize,
-                                            .format = Format::BGRA8Unorm,
-                                            .renderTarget = true,
-                                            .cpuReadback = true,
-                                            .label = "rojorhi.test.depthColorTarget"});
+    auto target = (*device)->createTexture(
+        { .width = kSize, .height = kSize, .format = Format::BGRA8Unorm, .renderTarget = true, .cpuReadback = true, .label = "rojorhi.test.depthColorTarget" }
+    );
     INFO(errorOf(target));
     REQUIRE(target.has_value());
 
-    auto depthTarget = (*device)->createTexture({.width = kSize,
-                                                 .height = kSize,
-                                                 .format = Format::D32Float,
-                                                 .renderTarget = true,
-                                                 .label = "rojorhi.test.depthTarget"});
+    auto depthTarget =
+        (*device)->createTexture({ .width = kSize, .height = kSize, .format = Format::D32Float, .renderTarget = true, .label = "rojorhi.test.depthTarget" });
     INFO(errorOf(depthTarget));
     REQUIRE(depthTarget.has_value());
 
@@ -193,20 +190,23 @@ TEST_CASE("depth test rejects a coplanar second draw", "[gpu]") {
     INFO(errorOf(library));
     REQUIRE(library.has_value());
 
-    auto pipeline = (*device)->createGraphicsPipeline({.library = library->get(),
-                                                       .vertexEntry = "vertexMain",
-                                                       .fragmentEntry = "fragmentMain",
-                                                       .colorFormat = Format::BGRA8Unorm,
-                                                       .depthFormat = Format::D32Float,
-                                                       .depthTestEnable = true,
-                                                       .depthWriteEnable = true,
-                                                       .label = "rojorhi.test.depthPipeline"});
+    auto pipeline = (*device)->createGraphicsPipeline(
+        { .library = library->get(),
+          .vertexEntry = "vertexMain",
+          .fragmentEntry = "fragmentMain",
+          .colorFormat = Format::BGRA8Unorm,
+          .depthFormat = Format::D32Float,
+          .depthTestEnable = true,
+          .depthWriteEnable = true,
+          .label = "rojorhi.test.depthPipeline" }
+    );
     INFO(errorOf(pipeline));
     REQUIRE(pipeline.has_value());
 
     const auto flatTriangle = [](float r, float g, float b) {
         std::array<Vertex, 3> vertices = kTriangle;
-        for (Vertex& vertex : vertices) {
+        for (Vertex& vertex : vertices)
+        {
             vertex.color[0] = r;
             vertex.color[1] = g;
             vertex.color[2] = b;
@@ -217,12 +217,14 @@ TEST_CASE("depth test rejects a coplanar second draw", "[gpu]") {
     const std::array<Vertex, 3> second = flatTriangle(0.0f, 1.0f, 0.0f);
 
     CommandList& commands = (*device)->beginFrame();
-    commands.beginRenderPass({.colorTarget = target->get(),
-                              .clearColor = {0.0f, 0.0f, 0.0f, 1.0f},
-                              .clear = true,
-                              .depthTarget = depthTarget->get(),
-                              .clearDepth = 1.0f,
-                              .label = "rojorhi.test.depth.first"});
+    commands.beginRenderPass(
+        { .colorTarget = target->get(),
+          .clearColor = { 0.0f, 0.0f, 0.0f, 1.0f },
+          .clear = true,
+          .depthTarget = depthTarget->get(),
+          .clearDepth = 1.0f,
+          .label = "rojorhi.test.depth.first" }
+    );
     commands.bindPipeline(**pipeline);
     commands.bindFrameData(kVertexBufferSlot, first.data(), sizeof(first));
     commands.draw(static_cast<uint32_t>(first.size()));
@@ -232,7 +234,7 @@ TEST_CASE("depth test rejects a coplanar second draw", "[gpu]") {
     (*device)->endFrame(nullptr);
     (*device)->waitIdle();
 
-    std::vector<uint8_t> pixels(size_t{kSize} * kSize * 4);
+    std::vector<uint8_t> pixels(size_t{ kSize } * kSize * 4);
     (*target)->readback(pixels.data(), pixels.size());
 
     const Pixel inside = pixelAt(pixels, 32, 40);
@@ -249,12 +251,14 @@ TEST_CASE("depth test rejects a coplanar second draw", "[gpu]") {
     REQUIRE(corner.a == 255);
 
     CommandList& secondFrame = (*device)->beginFrame();
-    secondFrame.beginRenderPass({.colorTarget = target->get(),
-                                 .clearColor = {0.0f, 0.0f, 0.0f, 1.0f},
-                                 .clear = true,
-                                 .depthTarget = depthTarget->get(),
-                                 .clearDepth = 0.0f,
-                                 .label = "rojorhi.test.depth.second"});
+    secondFrame.beginRenderPass(
+        { .colorTarget = target->get(),
+          .clearColor = { 0.0f, 0.0f, 0.0f, 1.0f },
+          .clear = true,
+          .depthTarget = depthTarget->get(),
+          .clearDepth = 0.0f,
+          .label = "rojorhi.test.depth.second" }
+    );
     secondFrame.bindPipeline(**pipeline);
     secondFrame.bindFrameData(kVertexBufferSlot, first.data(), sizeof(first));
     secondFrame.draw(static_cast<uint32_t>(first.size()));
@@ -273,47 +277,42 @@ TEST_CASE("depth test rejects a coplanar second draw", "[gpu]") {
 
 //======================================================================================================================
 // UVs span 0..2 so the right-side probes distinguish wrap from clamp without filtering ambiguity.
-TEST_CASE("sampler address mode decides what a past-the-edge uv reads", "[gpu]") {
+TEST_CASE("sampler address mode decides what a past-the-edge uv reads", "[gpu]")
+{
     using namespace rojoRHI;
 
     constexpr uint32_t kSourceTextureSlot = 0;
     constexpr uint32_t kSamplerSlot = 0;
 
-    constexpr std::array<Vertex, 12> kSplitQuads = {{
-        {{-1.0f, -1.0f}, {1.0f, 0.0f, 0.0f}},
-        {{0.0f, -1.0f}, {1.0f, 0.0f, 0.0f}},
-        {{0.0f, 1.0f}, {1.0f, 0.0f, 0.0f}},
-        {{-1.0f, -1.0f}, {1.0f, 0.0f, 0.0f}},
-        {{0.0f, 1.0f}, {1.0f, 0.0f, 0.0f}},
-        {{-1.0f, 1.0f}, {1.0f, 0.0f, 0.0f}},
-        {{0.0f, -1.0f}, {0.0f, 1.0f, 0.0f}},
-        {{1.0f, -1.0f}, {0.0f, 1.0f, 0.0f}},
-        {{1.0f, 1.0f}, {0.0f, 1.0f, 0.0f}},
-        {{0.0f, -1.0f}, {0.0f, 1.0f, 0.0f}},
-        {{1.0f, 1.0f}, {0.0f, 1.0f, 0.0f}},
-        {{0.0f, 1.0f}, {0.0f, 1.0f, 0.0f}},
-    }};
+    constexpr std::array<Vertex, 12> kSplitQuads = { {
+        { { -1.0f, -1.0f }, { 1.0f, 0.0f, 0.0f } },
+        { { 0.0f, -1.0f }, { 1.0f, 0.0f, 0.0f } },
+        { { 0.0f, 1.0f }, { 1.0f, 0.0f, 0.0f } },
+        { { -1.0f, -1.0f }, { 1.0f, 0.0f, 0.0f } },
+        { { 0.0f, 1.0f }, { 1.0f, 0.0f, 0.0f } },
+        { { -1.0f, 1.0f }, { 1.0f, 0.0f, 0.0f } },
+        { { 0.0f, -1.0f }, { 0.0f, 1.0f, 0.0f } },
+        { { 1.0f, -1.0f }, { 0.0f, 1.0f, 0.0f } },
+        { { 1.0f, 1.0f }, { 0.0f, 1.0f, 0.0f } },
+        { { 0.0f, -1.0f }, { 0.0f, 1.0f, 0.0f } },
+        { { 1.0f, 1.0f }, { 0.0f, 1.0f, 0.0f } },
+        { { 0.0f, 1.0f }, { 0.0f, 1.0f, 0.0f } },
+    } };
 
     auto device = createDevice();
     INFO(errorOf(device));
     REQUIRE(device.has_value());
 
-    auto source = (*device)->createTexture({.width = 2,
-                                            .height = 2,
-                                            .format = Format::BGRA8Unorm,
-                                            .renderTarget = true,
-                                            .sampled = true,
-                                            .label = "rojorhi.test.samplerSource"});
+    auto source = (*device)->createTexture(
+        { .width = 2, .height = 2, .format = Format::BGRA8Unorm, .renderTarget = true, .sampled = true, .label = "rojorhi.test.samplerSource" }
+    );
     INFO(errorOf(source));
     REQUIRE(source.has_value());
 
     const auto makeDestination = [&](const char* label) {
-        return (*device)->createTexture({.width = kSize,
-                                         .height = kSize,
-                                         .format = Format::BGRA8Unorm,
-                                         .renderTarget = true,
-                                         .cpuReadback = true,
-                                         .label = label});
+        return (*device)->createTexture(
+            { .width = kSize, .height = kSize, .format = Format::BGRA8Unorm, .renderTarget = true, .cpuReadback = true, .label = label }
+        );
     };
     auto wrapDestination = makeDestination("rojorhi.test.samplerWrapDestination");
     INFO(errorOf(wrapDestination));
@@ -326,12 +325,13 @@ TEST_CASE("sampler address mode decides what a past-the-edge uv reads", "[gpu]")
     INFO(errorOf(fillLibrary));
     REQUIRE(fillLibrary.has_value());
 
-    auto fillPipeline =
-        (*device)->createGraphicsPipeline({.library = fillLibrary->get(),
-                                           .vertexEntry = "vertexMain",
-                                           .fragmentEntry = "fragmentMain",
-                                           .colorFormat = Format::BGRA8Unorm,
-                                           .label = "rojorhi.test.samplerFillPipeline"});
+    auto fillPipeline = (*device)->createGraphicsPipeline(
+        { .library = fillLibrary->get(),
+          .vertexEntry = "vertexMain",
+          .fragmentEntry = "fragmentMain",
+          .colorFormat = Format::BGRA8Unorm,
+          .label = "rojorhi.test.samplerFillPipeline" }
+    );
     INFO(errorOf(fillPipeline));
     REQUIRE(fillPipeline.has_value());
 
@@ -339,36 +339,31 @@ TEST_CASE("sampler address mode decides what a past-the-edge uv reads", "[gpu]")
     INFO(errorOf(sampleLibrary));
     REQUIRE(sampleLibrary.has_value());
 
-    auto samplePipeline =
-        (*device)->createGraphicsPipeline({.library = sampleLibrary->get(),
-                                           .vertexEntry = "vertexMain",
-                                           .fragmentEntry = "fragmentMain",
-                                           .colorFormat = Format::BGRA8Unorm,
-                                           .label = "rojorhi.test.samplerSamplePipeline"});
+    auto samplePipeline = (*device)->createGraphicsPipeline(
+        { .library = sampleLibrary->get(),
+          .vertexEntry = "vertexMain",
+          .fragmentEntry = "fragmentMain",
+          .colorFormat = Format::BGRA8Unorm,
+          .label = "rojorhi.test.samplerSamplePipeline" }
+    );
     INFO(errorOf(samplePipeline));
     REQUIRE(samplePipeline.has_value());
 
-    auto wrapSampler = (*device)->createSampler(
-        {.addressMode = AddressMode::Wrap, .label = "rojorhi.test.wrapSampler"});
+    auto wrapSampler = (*device)->createSampler({ .addressMode = AddressMode::Wrap, .label = "rojorhi.test.wrapSampler" });
     INFO(errorOf(wrapSampler));
     REQUIRE(wrapSampler.has_value());
 
-    auto clampSampler = (*device)->createSampler(
-        {.addressMode = AddressMode::Clamp, .label = "rojorhi.test.clampSampler"});
+    auto clampSampler = (*device)->createSampler({ .addressMode = AddressMode::Clamp, .label = "rojorhi.test.clampSampler" });
     INFO(errorOf(clampSampler));
     REQUIRE(clampSampler.has_value());
 
-    auto compareSampler = (*device)->createSampler(
-        {.compare = CompareFunc::LessEqual, .label = "rojorhi.test.compareSampler"});
+    auto compareSampler = (*device)->createSampler({ .compare = CompareFunc::LessEqual, .label = "rojorhi.test.compareSampler" });
     INFO(errorOf(compareSampler));
     REQUIRE(compareSampler.has_value());
 
     CommandList& commands = (*device)->beginFrame();
 
-    commands.beginRenderPass({.colorTarget = source->get(),
-                              .clearColor = {0.0f, 0.0f, 0.0f, 1.0f},
-                              .clear = true,
-                              .label = "rojorhi.test.sampler.source"});
+    commands.beginRenderPass({ .colorTarget = source->get(), .clearColor = { 0.0f, 0.0f, 0.0f, 1.0f }, .clear = true, .label = "rojorhi.test.sampler.source" });
     commands.bindPipeline(**fillPipeline);
     commands.bindFrameData(kVertexBufferSlot, kSplitQuads.data(), sizeof(kSplitQuads));
     commands.draw(static_cast<uint32_t>(kSplitQuads.size()));
@@ -377,10 +372,9 @@ TEST_CASE("sampler address mode decides what a past-the-edge uv reads", "[gpu]")
     commands.textureBarrier(**source, TextureUse::RenderTarget, TextureUse::ShaderRead);
 
     const auto samplePass = [&](Texture& destination, Sampler& sampler) {
-        commands.beginRenderPass({.colorTarget = &destination,
-                                  .clearColor = {1.0f, 0.0f, 1.0f, 1.0f},
-                                  .clear = true,
-                                  .label = "rojorhi.test.sampler.probe"});
+        commands.beginRenderPass(
+            { .colorTarget = &destination, .clearColor = { 1.0f, 0.0f, 1.0f, 1.0f }, .clear = true, .label = "rojorhi.test.sampler.probe" }
+        );
         commands.bindPipeline(**samplePipeline);
         commands.bindTexture(kSourceTextureSlot, **source);
         commands.bindSampler(kSamplerSlot, sampler);
@@ -393,7 +387,7 @@ TEST_CASE("sampler address mode decides what a past-the-edge uv reads", "[gpu]")
     (*device)->endFrame(nullptr);
     (*device)->waitIdle();
 
-    std::vector<uint8_t> pixels(size_t{kSize} * kSize * 4);
+    std::vector<uint8_t> pixels(size_t{ kSize } * kSize * 4);
 
     const auto requireChannels = [&](const char* what, uint32_t x, float r, float g) {
         const Pixel probe = pixelAt(pixels, x, 32);
@@ -415,28 +409,27 @@ TEST_CASE("sampler address mode decides what a past-the-edge uv reads", "[gpu]")
     requireChannels("clamp past the edge", 40, 0.0f, 1.0f);
 }
 
-namespace {} // namespace
+namespace {
+} // namespace
 
 //======================================================================================================================
 // One uniform red BC1 block pins compressed upload stride and sampler-side block decoding.
-TEST_CASE("a BC1 block decodes to its endpoint colour when sampled", "[gpu][checkpoint-a]") {
+TEST_CASE("a BC1 block decodes to its endpoint colour when sampled", "[gpu][checkpoint-a]")
+{
     using namespace rojoRHI;
 
     constexpr uint32_t kSourceTextureSlot = 0;
 
-    constexpr std::array<uint8_t, 8> kRedBlock = {0x00, 0xF8, 0x00, 0xF8, 0x00, 0x00, 0x00, 0x00};
-    const TextureMip mip{.data = kRedBlock.data(), .bytesPerRow = 8};
+    constexpr std::array<uint8_t, 8> kRedBlock = { 0x00, 0xF8, 0x00, 0xF8, 0x00, 0x00, 0x00, 0x00 };
+    const TextureMip mip{ .data = kRedBlock.data(), .bytesPerRow = 8 };
 
     auto device = createDevice();
     INFO(errorOf(device));
     REQUIRE(device.has_value());
 
-    auto source = (*device)->createTexture({.width = 4,
-                                            .height = 4,
-                                            .format = Format::BC1Unorm,
-                                            .sampled = true,
-                                            .label = "rojorhi.test.bc1Source"},
-                                           std::span{&mip, 1});
+    auto source = (*device)->createTexture(
+        { .width = 4, .height = 4, .format = Format::BC1Unorm, .sampled = true, .label = "rojorhi.test.bc1Source" }, std::span{ &mip, 1 }
+    );
     INFO(errorOf(source));
     REQUIRE(source.has_value());
 
@@ -448,21 +441,21 @@ TEST_CASE("a BC1 block decodes to its endpoint colour when sampled", "[gpu][chec
     INFO(errorOf(library));
     REQUIRE(library.has_value());
 
-    auto pipeline = (*device)->createGraphicsPipeline({.library = library->get(),
-                                                       .vertexEntry = "vertexMain",
-                                                       .fragmentEntry = "fragmentMain",
-                                                       .colorFormat = Format::BGRA8Unorm,
-                                                       .label = "rojorhi.test.bc1Pipeline"});
+    auto pipeline = (*device)->createGraphicsPipeline(
+        { .library = library->get(),
+          .vertexEntry = "vertexMain",
+          .fragmentEntry = "fragmentMain",
+          .colorFormat = Format::BGRA8Unorm,
+          .label = "rojorhi.test.bc1Pipeline" }
+    );
     INFO(errorOf(pipeline));
     REQUIRE(pipeline.has_value());
 
-    auto sampler = (*device)->createSampler(
-        {.addressMode = AddressMode::Clamp, .label = "rojorhi.test.bc1Sampler"});
+    auto sampler = (*device)->createSampler({ .addressMode = AddressMode::Clamp, .label = "rojorhi.test.bc1Sampler" });
     INFO(errorOf(sampler));
     REQUIRE(sampler.has_value());
 
-    const std::vector<uint8_t> pixels = renderSampledImage(**device, **pipeline, kSourceTextureSlot,
-                                                           **source, **sampler, **destination);
+    const std::vector<uint8_t> pixels = renderSampledImage(**device, **pipeline, kSourceTextureSlot, **source, **sampler, **destination);
 
     const Pixel probe = pixelAt(pixels, 32, 32);
     INFO(describe("bc1 centre", 32, 32, probe));
@@ -475,8 +468,8 @@ TEST_CASE("a BC1 block decodes to its endpoint colour when sampled", "[gpu][chec
 //======================================================================================================================
 // The same encoded byte in linear and sRGB textures must produce different values in a linear
 // target.
-TEST_CASE("an sRGB texture is linearised by the sampler, a linear one is not",
-          "[gpu][checkpoint-a]") {
+TEST_CASE("an sRGB texture is linearised by the sampler, a linear one is not", "[gpu][checkpoint-a]")
+{
     using namespace rojoRHI;
 
     constexpr uint32_t kSourceTextureSlot = 0;
@@ -484,19 +477,16 @@ TEST_CASE("an sRGB texture is linearised by the sampler, a linear one is not",
     constexpr int kDecoded = 128;
 
     constexpr std::array<uint8_t, 16> kGreyTexels = {
-        kEncoded, kEncoded, kEncoded, 255, kEncoded, kEncoded, kEncoded, 255,
-        kEncoded, kEncoded, kEncoded, 255, kEncoded, kEncoded, kEncoded, 255,
+        kEncoded, kEncoded, kEncoded, 255, kEncoded, kEncoded, kEncoded, 255, kEncoded, kEncoded, kEncoded, 255, kEncoded, kEncoded, kEncoded, 255,
     };
-    const TextureMip mip{.data = kGreyTexels.data(), .bytesPerRow = 2 * 4};
+    const TextureMip mip{ .data = kGreyTexels.data(), .bytesPerRow = 2 * 4 };
 
     auto device = createDevice();
     INFO(errorOf(device));
     REQUIRE(device.has_value());
 
     const auto makeSource = [&](Format format, const char* label) {
-        return (*device)->createTexture(
-            {.width = 2, .height = 2, .format = format, .sampled = true, .label = label},
-            std::span{&mip, 1});
+        return (*device)->createTexture({ .width = 2, .height = 2, .format = format, .sampled = true, .label = label }, std::span{ &mip, 1 });
     };
     auto linearSource = makeSource(Format::RGBA8Unorm, "rojorhi.test.linearSource");
     INFO(errorOf(linearSource));
@@ -519,27 +509,26 @@ TEST_CASE("an sRGB texture is linearised by the sampler, a linear one is not",
     INFO(errorOf(library));
     REQUIRE(library.has_value());
 
-    auto pipeline = (*device)->createGraphicsPipeline({.library = library->get(),
-                                                       .vertexEntry = "vertexMain",
-                                                       .fragmentEntry = "fragmentMain",
-                                                       .colorFormat = Format::BGRA8Unorm,
-                                                       .label = "rojorhi.test.srgbPipeline"});
+    auto pipeline = (*device)->createGraphicsPipeline(
+        { .library = library->get(),
+          .vertexEntry = "vertexMain",
+          .fragmentEntry = "fragmentMain",
+          .colorFormat = Format::BGRA8Unorm,
+          .label = "rojorhi.test.srgbPipeline" }
+    );
     INFO(errorOf(pipeline));
     REQUIRE(pipeline.has_value());
 
-    auto sampler = (*device)->createSampler(
-        {.addressMode = AddressMode::Clamp, .label = "rojorhi.test.srgbSampler"});
+    auto sampler = (*device)->createSampler({ .addressMode = AddressMode::Clamp, .label = "rojorhi.test.srgbSampler" });
     INFO(errorOf(sampler));
     REQUIRE(sampler.has_value());
 
-    const std::vector<uint8_t> linearPixels = renderSampledImage(
-        **device, **pipeline, kSourceTextureSlot, **linearSource, **sampler, **linearDestination);
+    const std::vector<uint8_t> linearPixels = renderSampledImage(**device, **pipeline, kSourceTextureSlot, **linearSource, **sampler, **linearDestination);
     const Pixel linearProbe = pixelAt(linearPixels, 32, 32);
     INFO(describe("linear centre", 32, 32, linearProbe));
     REQUIRE(channelNear(linearProbe.r, kEncoded, 6));
 
-    const std::vector<uint8_t> srgbPixels = renderSampledImage(
-        **device, **pipeline, kSourceTextureSlot, **srgbSource, **sampler, **srgbDestination);
+    const std::vector<uint8_t> srgbPixels = renderSampledImage(**device, **pipeline, kSourceTextureSlot, **srgbSource, **sampler, **srgbDestination);
     const Pixel srgbProbe = pixelAt(srgbPixels, 32, 32);
     INFO(describe("srgb centre", 32, 32, srgbProbe));
     REQUIRE(channelNear(srgbProbe.r, kDecoded, 6));
@@ -550,8 +539,7 @@ TEST_CASE("an sRGB texture is linearised by the sampler, a linear one is not",
     // The allocation is linear, but this sampled view asks Metal to apply its sRGB sibling's
     // transfer function. It must match the native sRGB texture above without a second allocation.
     const std::vector<uint8_t> viewPixels =
-        renderSampledImage(**device, **pipeline, kSourceTextureSlot, **linearSource, **sampler,
-                           **viewDestination, {.format = Format::RGBA8Unorm_sRGB});
+        renderSampledImage(**device, **pipeline, kSourceTextureSlot, **linearSource, **sampler, **viewDestination, { .format = Format::RGBA8Unorm_sRGB });
     const Pixel viewProbe = pixelAt(viewPixels, 32, 32);
     INFO(describe("sRGB view centre", 32, 32, viewProbe));
     REQUIRE(channelNear(viewProbe.r, kDecoded, 6));
@@ -562,38 +550,35 @@ TEST_CASE("an sRGB texture is linearised by the sampler, a linear one is not",
 
 //======================================================================================================================
 // A uniform +X face isolates cubemap slice ordering and direction lookup.
-TEST_CASE("a cubemap samples the face its direction points at", "[gpu][checkpoint-a]") {
+TEST_CASE("a cubemap samples the face its direction points at", "[gpu][checkpoint-a]")
+{
     using namespace rojoRHI;
 
     constexpr uint32_t kCubeTextureSlot = 2;
 
-    constexpr std::array<uint8_t, 4> kPlusX = {255, 0, 0, 255};      // red
-    constexpr std::array<uint8_t, 4> kMinusX = {0, 255, 0, 255};     // green
-    constexpr std::array<uint8_t, 4> kPlusY = {0, 0, 255, 255};      // blue
-    constexpr std::array<uint8_t, 4> kMinusY = {0, 0, 255, 255};     // blue
-    constexpr std::array<uint8_t, 4> kPlusZ = {255, 255, 255, 255};  // white
-    constexpr std::array<uint8_t, 4> kMinusZ = {255, 255, 255, 255}; // white
+    constexpr std::array<uint8_t, 4> kPlusX = { 255, 0, 0, 255 };      // red
+    constexpr std::array<uint8_t, 4> kMinusX = { 0, 255, 0, 255 };     // green
+    constexpr std::array<uint8_t, 4> kPlusY = { 0, 0, 255, 255 };      // blue
+    constexpr std::array<uint8_t, 4> kMinusY = { 0, 0, 255, 255 };     // blue
+    constexpr std::array<uint8_t, 4> kPlusZ = { 255, 255, 255, 255 };  // white
+    constexpr std::array<uint8_t, 4> kMinusZ = { 255, 255, 255, 255 }; // white
 
-    const std::array<TextureMip, 6> faces = {{
-        {.data = kPlusX.data(), .bytesPerRow = 4},
-        {.data = kMinusX.data(), .bytesPerRow = 4},
-        {.data = kPlusY.data(), .bytesPerRow = 4},
-        {.data = kMinusY.data(), .bytesPerRow = 4},
-        {.data = kPlusZ.data(), .bytesPerRow = 4},
-        {.data = kMinusZ.data(), .bytesPerRow = 4},
-    }};
+    const std::array<TextureMip, 6> faces = { {
+        { .data = kPlusX.data(), .bytesPerRow = 4 },
+        { .data = kMinusX.data(), .bytesPerRow = 4 },
+        { .data = kPlusY.data(), .bytesPerRow = 4 },
+        { .data = kMinusY.data(), .bytesPerRow = 4 },
+        { .data = kPlusZ.data(), .bytesPerRow = 4 },
+        { .data = kMinusZ.data(), .bytesPerRow = 4 },
+    } };
 
     auto device = createDevice();
     INFO(errorOf(device));
     REQUIRE(device.has_value());
 
-    auto source = (*device)->createTexture({.width = 1,
-                                            .height = 1,
-                                            .format = Format::RGBA8Unorm,
-                                            .kind = TextureKind::Cube,
-                                            .sampled = true,
-                                            .label = "rojorhi.test.cubeSource"},
-                                           faces);
+    auto source = (*device)->createTexture(
+        { .width = 1, .height = 1, .format = Format::RGBA8Unorm, .kind = TextureKind::Cube, .sampled = true, .label = "rojorhi.test.cubeSource" }, faces
+    );
     INFO(errorOf(source));
     REQUIRE(source.has_value());
 
@@ -605,21 +590,21 @@ TEST_CASE("a cubemap samples the face its direction points at", "[gpu][checkpoin
     INFO(errorOf(library));
     REQUIRE(library.has_value());
 
-    auto pipeline = (*device)->createGraphicsPipeline({.library = library->get(),
-                                                       .vertexEntry = "vertexMain",
-                                                       .fragmentEntry = "fragmentMain",
-                                                       .colorFormat = Format::BGRA8Unorm,
-                                                       .label = "rojorhi.test.cubePipeline"});
+    auto pipeline = (*device)->createGraphicsPipeline(
+        { .library = library->get(),
+          .vertexEntry = "vertexMain",
+          .fragmentEntry = "fragmentMain",
+          .colorFormat = Format::BGRA8Unorm,
+          .label = "rojorhi.test.cubePipeline" }
+    );
     INFO(errorOf(pipeline));
     REQUIRE(pipeline.has_value());
 
-    auto sampler = (*device)->createSampler(
-        {.addressMode = AddressMode::Clamp, .label = "rojorhi.test.cubeSampler"});
+    auto sampler = (*device)->createSampler({ .addressMode = AddressMode::Clamp, .label = "rojorhi.test.cubeSampler" });
     INFO(errorOf(sampler));
     REQUIRE(sampler.has_value());
 
-    const std::vector<uint8_t> pixels = renderSampledImage(**device, **pipeline, kCubeTextureSlot,
-                                                           **source, **sampler, **destination);
+    const std::vector<uint8_t> pixels = renderSampledImage(**device, **pipeline, kCubeTextureSlot, **source, **sampler, **destination);
 
     const Pixel probe = pixelAt(pixels, 32, 32);
     INFO(describe("cube +X", 32, 32, probe));
@@ -631,7 +616,8 @@ TEST_CASE("a cubemap samples the face its direction points at", "[gpu][checkpoin
 
 //======================================================================================================================
 // The interior and clear exterior pin depth storage, the pass barrier, and subsequent D32 sampling.
-TEST_CASE("a depth-only pass stores depth a later pass can sample", "[gpu][checkpoint-a]") {
+TEST_CASE("a depth-only pass stores depth a later pass can sample", "[gpu][checkpoint-a]")
+{
     using namespace rojoRHI;
 
     constexpr uint32_t kDepthTextureSlot = 0;
@@ -641,12 +627,9 @@ TEST_CASE("a depth-only pass stores depth a later pass can sample", "[gpu][check
     INFO(errorOf(device));
     REQUIRE(device.has_value());
 
-    auto depthTarget = (*device)->createTexture({.width = kSize,
-                                                 .height = kSize,
-                                                 .format = Format::D32Float,
-                                                 .renderTarget = true,
-                                                 .sampled = true,
-                                                 .label = "rojorhi.test.depthOnlyTarget"});
+    auto depthTarget = (*device)->createTexture(
+        { .width = kSize, .height = kSize, .format = Format::D32Float, .renderTarget = true, .sampled = true, .label = "rojorhi.test.depthOnlyTarget" }
+    );
     INFO(errorOf(depthTarget));
     REQUIRE(depthTarget.has_value());
 
@@ -658,15 +641,16 @@ TEST_CASE("a depth-only pass stores depth a later pass can sample", "[gpu][check
     INFO(errorOf(triangleLibrary));
     REQUIRE(triangleLibrary.has_value());
 
-    auto depthPipeline =
-        (*device)->createGraphicsPipeline({.library = triangleLibrary->get(),
-                                           .vertexEntry = "vertexMain",
-                                           .fragmentEntry = "fragmentDepthOnly",
-                                           .colorFormat = Format::Unknown,
-                                           .depthFormat = Format::D32Float,
-                                           .depthTestEnable = true,
-                                           .depthWriteEnable = true,
-                                           .label = "rojorhi.test.depthOnlyPipeline"});
+    auto depthPipeline = (*device)->createGraphicsPipeline(
+        { .library = triangleLibrary->get(),
+          .vertexEntry = "vertexMain",
+          .fragmentEntry = "fragmentDepthOnly",
+          .colorFormat = Format::Unknown,
+          .depthFormat = Format::D32Float,
+          .depthTestEnable = true,
+          .depthWriteEnable = true,
+          .label = "rojorhi.test.depthOnlyPipeline" }
+    );
     INFO(errorOf(depthPipeline));
     REQUIRE(depthPipeline.has_value());
 
@@ -674,26 +658,23 @@ TEST_CASE("a depth-only pass stores depth a later pass can sample", "[gpu][check
     INFO(errorOf(sampleLibrary));
     REQUIRE(sampleLibrary.has_value());
 
-    auto samplePipeline =
-        (*device)->createGraphicsPipeline({.library = sampleLibrary->get(),
-                                           .vertexEntry = "vertexMain",
-                                           .fragmentEntry = "fragmentIdentityUv",
-                                           .colorFormat = Format::BGRA8Unorm,
-                                           .label = "rojorhi.test.depthSamplePipeline"});
+    auto samplePipeline = (*device)->createGraphicsPipeline(
+        { .library = sampleLibrary->get(),
+          .vertexEntry = "vertexMain",
+          .fragmentEntry = "fragmentIdentityUv",
+          .colorFormat = Format::BGRA8Unorm,
+          .label = "rojorhi.test.depthSamplePipeline" }
+    );
     INFO(errorOf(samplePipeline));
     REQUIRE(samplePipeline.has_value());
 
-    auto sampler = (*device)->createSampler(
-        {.addressMode = AddressMode::Clamp, .label = "rojorhi.test.depthSampler"});
+    auto sampler = (*device)->createSampler({ .addressMode = AddressMode::Clamp, .label = "rojorhi.test.depthSampler" });
     INFO(errorOf(sampler));
     REQUIRE(sampler.has_value());
 
     CommandList& commands = (*device)->beginFrame();
 
-    commands.beginRenderPass({.depthTarget = depthTarget->get(),
-                              .clearDepth = 1.0f,
-                              .storeDepth = true,
-                              .label = "rojorhi.test.depthOnly.write"});
+    commands.beginRenderPass({ .depthTarget = depthTarget->get(), .clearDepth = 1.0f, .storeDepth = true, .label = "rojorhi.test.depthOnly.write" });
     commands.bindPipeline(**depthPipeline);
     commands.bindFrameData(kVertexBufferSlot, kTriangle.data(), sizeof(kTriangle));
     commands.draw(static_cast<uint32_t>(kTriangle.size()));
@@ -701,10 +682,9 @@ TEST_CASE("a depth-only pass stores depth a later pass can sample", "[gpu][check
 
     commands.textureBarrier(**depthTarget, TextureUse::RenderTarget, TextureUse::ShaderRead);
 
-    commands.beginRenderPass({.colorTarget = destination->get(),
-                              .clearColor = {1.0f, 0.0f, 1.0f, 1.0f},
-                              .clear = true,
-                              .label = "rojorhi.test.depthOnly.probe"});
+    commands.beginRenderPass(
+        { .colorTarget = destination->get(), .clearColor = { 1.0f, 0.0f, 1.0f, 1.0f }, .clear = true, .label = "rojorhi.test.depthOnly.probe" }
+    );
     commands.bindPipeline(**samplePipeline);
     commands.bindTexture(kDepthTextureSlot, **depthTarget);
     commands.bindSampler(kSamplerSlot, **sampler);
@@ -714,7 +694,7 @@ TEST_CASE("a depth-only pass stores depth a later pass can sample", "[gpu][check
     (*device)->endFrame(nullptr);
     (*device)->waitIdle();
 
-    std::vector<uint8_t> pixels(size_t{kSize} * kSize * 4);
+    std::vector<uint8_t> pixels(size_t{ kSize } * kSize * 4);
     (*destination)->readback(pixels.data(), pixels.size());
 
     const Pixel inside = pixelAt(pixels, 32, 32);
@@ -728,37 +708,42 @@ TEST_CASE("a depth-only pass stores depth a later pass can sample", "[gpu][check
 
 namespace {
 
-constexpr std::array<Vertex, 3> kWhiteTriangle = {{
-    {{0.0f, 0.5f}, {1.0f, 1.0f, 1.0f}},
-    {{-0.5f, -0.5f}, {1.0f, 1.0f, 1.0f}},
-    {{0.5f, -0.5f}, {1.0f, 1.0f, 1.0f}},
-}};
-constexpr std::array<Vertex, 3> kWhiteTriangleReversed = {{
-    kWhiteTriangle[0],
-    kWhiteTriangle[2],
-    kWhiteTriangle[1],
-}};
+    constexpr std::array<Vertex, 3> kWhiteTriangle = { {
+        { { 0.0f, 0.5f }, { 1.0f, 1.0f, 1.0f } },
+        { { -0.5f, -0.5f }, { 1.0f, 1.0f, 1.0f } },
+        { { 0.5f, -0.5f }, { 1.0f, 1.0f, 1.0f } },
+    } };
+    constexpr std::array<Vertex, 3> kWhiteTriangleReversed = { {
+        kWhiteTriangle[0],
+        kWhiteTriangle[2],
+        kWhiteTriangle[1],
+    } };
 
-//======================================================================================================================
-size_t coveredPixels(const std::vector<uint8_t>& bgra) {
-    size_t covered = 0;
-    for (uint32_t y = 0; y < kSize; ++y) {
-        for (uint32_t x = 0; x < kSize; ++x) {
-            const Pixel p = pixelAt(bgra, x, y);
-            if (p.r > 128 || p.g > 128 || p.b > 128) {
-                ++covered;
+    //==================================================================================================================
+    size_t coveredPixels(const std::vector<uint8_t>& bgra)
+    {
+        size_t covered = 0;
+        for (uint32_t y = 0; y < kSize; ++y)
+        {
+            for (uint32_t x = 0; x < kSize; ++x)
+            {
+                const Pixel p = pixelAt(bgra, x, y);
+                if (p.r > 128 || p.g > 128 || p.b > 128)
+                {
+                    ++covered;
+                }
             }
         }
+        return covered;
     }
-    return covered;
-}
 
 } // namespace
 
 //======================================================================================================================
 // Coverage counts distinguish back-face culling, no culling, and wireframe fill without edge
 // probes.
-TEST_CASE("pipeline raster state culls back faces and draws wireframes", "[gpu]") {
+TEST_CASE("pipeline raster state culls back faces and draws wireframes", "[gpu]")
+{
     using namespace rojoRHI;
 
     auto device = createDevice();
@@ -770,13 +755,15 @@ TEST_CASE("pipeline raster state culls back faces and draws wireframes", "[gpu]"
     REQUIRE(library.has_value());
 
     const auto makePipeline = [&](CullMode cull, FillMode fill, const char* label) {
-        return (*device)->createGraphicsPipeline({.library = library->get(),
-                                                  .vertexEntry = "vertexMain",
-                                                  .fragmentEntry = "fragmentMain",
-                                                  .colorFormat = Format::BGRA8Unorm,
-                                                  .fillMode = fill,
-                                                  .cullMode = cull,
-                                                  .label = label});
+        return (*device)->createGraphicsPipeline(
+            { .library = library->get(),
+              .vertexEntry = "vertexMain",
+              .fragmentEntry = "fragmentMain",
+              .colorFormat = Format::BGRA8Unorm,
+              .fillMode = fill,
+              .cullMode = cull,
+              .label = label }
+        );
     };
     auto cullBack = makePipeline(CullMode::Back, FillMode::Solid, "rojorhi.test.cullBackPipeline");
     INFO(errorOf(cullBack));
@@ -784,18 +771,14 @@ TEST_CASE("pipeline raster state culls back faces and draws wireframes", "[gpu]"
     auto cullNone = makePipeline(CullMode::None, FillMode::Solid, "rojorhi.test.cullNonePipeline");
     INFO(errorOf(cullNone));
     REQUIRE(cullNone.has_value());
-    auto wireframe =
-        makePipeline(CullMode::None, FillMode::Wireframe, "rojorhi.test.wireframePipeline");
+    auto wireframe = makePipeline(CullMode::None, FillMode::Wireframe, "rojorhi.test.wireframePipeline");
     INFO(errorOf(wireframe));
     REQUIRE(wireframe.has_value());
 
     const auto makeDestination = [&](const char* label) {
-        return (*device)->createTexture({.width = kSize,
-                                         .height = kSize,
-                                         .format = Format::BGRA8Unorm,
-                                         .renderTarget = true,
-                                         .cpuReadback = true,
-                                         .label = label});
+        return (*device)->createTexture(
+            { .width = kSize, .height = kSize, .format = Format::BGRA8Unorm, .renderTarget = true, .cpuReadback = true, .label = label }
+        );
     };
     auto culled = makeDestination("rojorhi.test.culledDestination");
     INFO(errorOf(culled));
@@ -808,12 +791,8 @@ TEST_CASE("pipeline raster state culls back faces and draws wireframes", "[gpu]"
     REQUIRE(outlined.has_value());
 
     CommandList& commands = (*device)->beginFrame();
-    const auto pass = [&](Texture& destination, GraphicsPipeline& pipeline,
-                          const std::array<Vertex, 3>& vertices) {
-        commands.beginRenderPass({.colorTarget = &destination,
-                                  .clearColor = {0.0f, 0.0f, 0.0f, 1.0f},
-                                  .clear = true,
-                                  .label = "rojorhi.test.rasterState"});
+    const auto pass = [&](Texture& destination, GraphicsPipeline& pipeline, const std::array<Vertex, 3>& vertices) {
+        commands.beginRenderPass({ .colorTarget = &destination, .clearColor = { 0.0f, 0.0f, 0.0f, 1.0f }, .clear = true, .label = "rojorhi.test.rasterState" });
         commands.bindPipeline(pipeline);
         commands.bindFrameData(kVertexBufferSlot, vertices.data(), sizeof(vertices));
         commands.draw(static_cast<uint32_t>(vertices.size()));
@@ -825,7 +804,7 @@ TEST_CASE("pipeline raster state culls back faces and draws wireframes", "[gpu]"
     (*device)->endFrame(nullptr);
     (*device)->waitIdle();
 
-    std::vector<uint8_t> pixels(size_t{kSize} * kSize * 4);
+    std::vector<uint8_t> pixels(size_t{ kSize } * kSize * 4);
 
     (*culled)->readback(pixels.data(), pixels.size());
     INFO("clockwise triangle, CullMode::Back");
@@ -854,7 +833,8 @@ TEST_CASE("pipeline raster state culls back faces and draws wireframes", "[gpu]"
 // A GPU timestamp is readable only once the frame that wrote it retired, so nothing is reportable
 // until a beginFrame observes that retirement -- not at device creation, and not even after the
 // measured frame's own waitIdle.
-TEST_CASE("pass timings stay empty until a frame retirement is observed", "[gpu]") {
+TEST_CASE("pass timings stay empty until a frame retirement is observed", "[gpu]")
+{
     using namespace rojoRHI;
 
     auto device = createDevice();
@@ -868,10 +848,7 @@ TEST_CASE("pass timings stay empty until a frame retirement is observed", "[gpu]
     REQUIRE(target.has_value());
 
     CommandList& commands = (*device)->beginFrame();
-    commands.beginRenderPass({.colorTarget = target->get(),
-                              .clearColor = {0.0f, 0.0f, 0.0f, 1.0f},
-                              .clear = true,
-                              .label = "rojorhi.test.timing.idle"});
+    commands.beginRenderPass({ .colorTarget = target->get(), .clearColor = { 0.0f, 0.0f, 0.0f, 1.0f }, .clear = true, .label = "rojorhi.test.timing.idle" });
     commands.endRenderPass();
     REQUIRE((*device)->passTimings().empty());
     (*device)->endFrame(nullptr);
@@ -881,7 +858,8 @@ TEST_CASE("pass timings stay empty until a frame retirement is observed", "[gpu]
 }
 
 //======================================================================================================================
-TEST_CASE("pass timings report every pass of the retired frame", "[gpu]") {
+TEST_CASE("pass timings report every pass of the retired frame", "[gpu]")
+{
     using namespace rojoRHI;
 
     auto device = createDevice();
@@ -892,11 +870,13 @@ TEST_CASE("pass timings report every pass of the retired frame", "[gpu]") {
     INFO(errorOf(library));
     REQUIRE(library.has_value());
 
-    auto pipeline = (*device)->createGraphicsPipeline({.library = library->get(),
-                                                       .vertexEntry = "vertexMain",
-                                                       .fragmentEntry = "fragmentMain",
-                                                       .colorFormat = Format::BGRA8Unorm,
-                                                       .label = "rojorhi.test.timingPipeline"});
+    auto pipeline = (*device)->createGraphicsPipeline(
+        { .library = library->get(),
+          .vertexEntry = "vertexMain",
+          .fragmentEntry = "fragmentMain",
+          .colorFormat = Format::BGRA8Unorm,
+          .label = "rojorhi.test.timingPipeline" }
+    );
     INFO(errorOf(pipeline));
     REQUIRE(pipeline.has_value());
 
@@ -910,10 +890,7 @@ TEST_CASE("pass timings report every pass of the retired frame", "[gpu]") {
     const auto frameStart = std::chrono::steady_clock::now();
     CommandList& commands = (*device)->beginFrame();
     const auto pass = [&](Texture& destination, const char* label) {
-        commands.beginRenderPass({.colorTarget = &destination,
-                                  .clearColor = {0.0f, 0.0f, 0.0f, 1.0f},
-                                  .clear = true,
-                                  .label = label});
+        commands.beginRenderPass({ .colorTarget = &destination, .clearColor = { 0.0f, 0.0f, 0.0f, 1.0f }, .clear = true, .label = label });
         commands.bindPipeline(**pipeline);
         commands.bindFrameData(kVertexBufferSlot, kTriangle.data(), sizeof(kTriangle));
         commands.draw(static_cast<uint32_t>(kTriangle.size()));
@@ -927,8 +904,7 @@ TEST_CASE("pass timings report every pass of the retired frame", "[gpu]") {
     // submitted before beginFrame and had finished before waitIdle returned. It is the one bound
     // available without a second clock, and it is what a wrong tick-to-millisecond scale breaks --
     // a raw tick delta is positive whatever the divisor is.
-    const std::chrono::duration<double, std::milli> wall =
-        std::chrono::steady_clock::now() - frameStart;
+    const std::chrono::duration<double, std::milli> wall = std::chrono::steady_clock::now() - frameStart;
 
     // waitIdle retires the measured frame; the next beginFrame is what publishes its counters.
     (*device)->beginFrame();
@@ -939,49 +915,51 @@ TEST_CASE("pass timings report every pass of the retired frame", "[gpu]") {
     REQUIRE(timings[0].label == "rojorhi.test.timing.first");
     REQUIRE(timings[1].label == "rojorhi.test.timing.second");
     double reported = 0.0;
-    for (const PassTiming& timing : timings) {
-        INFO(timing.label + ": " + std::to_string(timing.gpuMilliseconds) + " ms of " +
-             std::to_string(wall.count()) + " ms wall");
+    for (const PassTiming& timing : timings)
+    {
+        INFO(timing.label + ": " + std::to_string(timing.gpuMilliseconds) + " ms of " + std::to_string(wall.count()) + " ms wall");
         REQUIRE(timing.gpuMilliseconds > 0.0);
         REQUIRE(timing.gpuMilliseconds < wall.count());
         reported += timing.gpuMilliseconds;
     }
-    INFO("reported " + std::to_string(reported) + " ms across " + std::to_string(wall.count()) +
-         " ms wall");
+    INFO("reported " + std::to_string(reported) + " ms across " + std::to_string(wall.count()) + " ms wall");
     REQUIRE(reported < wall.count());
 }
 
 namespace {
 
-//======================================================================================================================
-// Bit pattern of `value` in binary16 -- the layout an RGBA16Float readback hands back. The
-// round-trip check pins every caller to a value binary16 holds exactly, which is what lets the
-// oracle below compare readback bits for equality rather than within a tolerance.
-uint16_t halfBits(float value) {
-    const _Float16 half = static_cast<_Float16>(value);
-    REQUIRE(static_cast<float>(half) == value);
-    uint16_t bits = 0;
-    std::memcpy(&bits, &half, sizeof(bits));
-    return bits;
-}
+    //==================================================================================================================
+    // Bit pattern of `value` in binary16 -- the layout an RGBA16Float readback hands back. The
+    // round-trip check pins every caller to a value binary16 holds exactly, which is what lets the
+    // oracle below compare readback bits for equality rather than within a tolerance.
+    uint16_t halfBits(float value)
+    {
+        const _Float16 half = static_cast<_Float16>(value);
+        REQUIRE(static_cast<float>(half) == value);
+        uint16_t bits = 0;
+        std::memcpy(&bits, &half, sizeof(bits));
+        return bits;
+    }
 
-// One RGBA16Float texel, in the channel order readback() produces.
-struct HalfPixel {
-    uint16_t r = 0, g = 0, b = 0, a = 0;
-};
+    // One RGBA16Float texel, in the channel order readback() produces.
+    struct HalfPixel
+    {
+        uint16_t r = 0, g = 0, b = 0, a = 0;
+    };
 
-//======================================================================================================================
-HalfPixel halfPixelAt(const std::vector<uint16_t>& rgba, uint32_t x, uint32_t y) {
-    const size_t offset = (size_t{y} * kSize + x) * 4;
-    return {rgba[offset], rgba[offset + 1], rgba[offset + 2], rgba[offset + 3]};
-}
+    //==================================================================================================================
+    HalfPixel halfPixelAt(const std::vector<uint16_t>& rgba, uint32_t x, uint32_t y)
+    {
+        const size_t offset = (size_t{ y } * kSize + x) * 4;
+        return { rgba[offset], rgba[offset + 1], rgba[offset + 2], rgba[offset + 3] };
+    }
 
-//======================================================================================================================
-std::string describeHalf(const char* what, uint32_t x, uint32_t y, const HalfPixel& p) {
-    return std::string(what) + " (" + std::to_string(x) + "," + std::to_string(y) +
-           "): R=" + std::to_string(p.r) + " G=" + std::to_string(p.g) +
-           " B=" + std::to_string(p.b) + " A=" + std::to_string(p.a) + " (binary16 bits)";
-}
+    //==================================================================================================================
+    std::string describeHalf(const char* what, uint32_t x, uint32_t y, const HalfPixel& p)
+    {
+        return std::string(what) + " (" + std::to_string(x) + "," + std::to_string(y) + "): R=" + std::to_string(p.r) + " G=" + std::to_string(p.g) +
+               " B=" + std::to_string(p.b) + " A=" + std::to_string(p.a) + " (binary16 bits)";
+    }
 
 } // namespace
 
@@ -991,19 +969,17 @@ std::string describeHalf(const char* what, uint32_t x, uint32_t y, const HalfPix
 // write are probed, since they reach the attachment by different paths, and every constant is
 // exactly representable in binary16 -- 1.5, 2.0, 4.0, 8.0, 0.5, -0.25 -- so the assertions are
 // equalities rather than tolerances.
-TEST_CASE("an RGBA16Float target keeps values above 1.0 through readback", "[gpu]") {
+TEST_CASE("an RGBA16Float target keeps values above 1.0 through readback", "[gpu]")
+{
     using namespace rojoRHI;
 
     auto device = createDevice();
     INFO(errorOf(device));
     REQUIRE(device.has_value());
 
-    auto target = (*device)->createTexture({.width = kSize,
-                                            .height = kSize,
-                                            .format = Format::RGBA16Float,
-                                            .renderTarget = true,
-                                            .cpuReadback = true,
-                                            .label = "rojorhi.test.hdrTarget"});
+    auto target = (*device)->createTexture(
+        { .width = kSize, .height = kSize, .format = Format::RGBA16Float, .renderTarget = true, .cpuReadback = true, .label = "rojorhi.test.hdrTarget" }
+    );
     INFO(errorOf(target));
     REQUIRE(target.has_value());
 
@@ -1011,28 +987,28 @@ TEST_CASE("an RGBA16Float target keeps values above 1.0 through readback", "[gpu
     INFO(errorOf(library));
     REQUIRE(library.has_value());
 
-    auto pipeline = (*device)->createGraphicsPipeline({.library = library->get(),
-                                                       .vertexEntry = "vertexMain",
-                                                       .fragmentEntry = "fragmentMain",
-                                                       .colorFormat = Format::RGBA16Float,
-                                                       .label = "rojorhi.test.hdrPipeline"});
+    auto pipeline = (*device)->createGraphicsPipeline(
+        { .library = library->get(),
+          .vertexEntry = "vertexMain",
+          .fragmentEntry = "fragmentMain",
+          .colorFormat = Format::RGBA16Float,
+          .label = "rojorhi.test.hdrPipeline" }
+    );
     INFO(errorOf(pipeline));
     REQUIRE(pipeline.has_value());
 
     // A flat colour across all three vertices: interpolating equal values is exact, so the
     // fragment writes the authored number itself and the readback can be compared bit for bit.
     std::array<Vertex, 3> triangle = kTriangle;
-    for (Vertex& vertex : triangle) {
+    for (Vertex& vertex : triangle)
+    {
         vertex.color[0] = 1.5f;
         vertex.color[1] = 2.0f;
         vertex.color[2] = 4.0f;
     }
 
     CommandList& commands = (*device)->beginFrame();
-    commands.beginRenderPass({.colorTarget = target->get(),
-                              .clearColor = {0.5f, -0.25f, 8.0f, 0.25f},
-                              .clear = true,
-                              .label = "rojorhi.test.hdr.write"});
+    commands.beginRenderPass({ .colorTarget = target->get(), .clearColor = { 0.5f, -0.25f, 8.0f, 0.25f }, .clear = true, .label = "rojorhi.test.hdr.write" });
     commands.bindPipeline(**pipeline);
     commands.bindFrameData(kVertexBufferSlot, triangle.data(), sizeof(triangle));
     commands.draw(static_cast<uint32_t>(triangle.size()));
@@ -1040,7 +1016,7 @@ TEST_CASE("an RGBA16Float target keeps values above 1.0 through readback", "[gpu
     (*device)->endFrame(nullptr);
     (*device)->waitIdle();
 
-    std::vector<uint16_t> texels(size_t{kSize} * kSize * 4);
+    std::vector<uint16_t> texels(size_t{ kSize } * kSize * 4);
     (*target)->readback(texels.data(), texels.size() * sizeof(uint16_t));
 
     const HalfPixel inside = halfPixelAt(texels, 32, 40);
@@ -1060,41 +1036,44 @@ TEST_CASE("an RGBA16Float target keeps values above 1.0 through readback", "[gpu
 
 namespace {
 
-constexpr uint32_t kDepthPassSlot = 2;
+    constexpr uint32_t kDepthPassSlot = 2;
 
-// Mirrors ShadowSmoke.slang's PassUniforms. That shader's vertex entry is the one in this suite
-// whose vertices carry a z of their own, which is what a depth-compare oracle needs; identity
-// transforms pass the z straight through to clip space at w = 1, so a vertex's z is the depth
-// Metal compares.
-struct DepthPassUniforms {
-    glm::mat4 lightViewProj{1.0f};
-    glm::mat4 shadowTransform{1.0f};
-    int32_t filter = 0;
-    int32_t pad[3] = {0, 0, 0};
-};
-static_assert(sizeof(DepthPassUniforms) == 144, "must match ShadowSmoke.slang's PassUniforms");
+    // Mirrors ShadowSmoke.slang's PassUniforms. That shader's vertex entry is the one in this suite
+    // whose vertices carry a z of their own, which is what a depth-compare oracle needs; identity
+    // transforms pass the z straight through to clip space at w = 1, so a vertex's z is the depth
+    // Metal compares.
+    struct DepthPassUniforms
+    {
+        glm::mat4 lightViewProj{ 1.0f };
+        glm::mat4 shadowTransform{ 1.0f };
+        int32_t filter = 0;
+        int32_t pad[3] = { 0, 0, 0 };
+    };
+    static_assert(sizeof(DepthPassUniforms) == 144, "must match ShadowSmoke.slang's PassUniforms");
 
-struct DepthVertex {
-    float x = 0.f, y = 0.f, z = 0.f;
-};
-static_assert(sizeof(DepthVertex) == 12, "must match Slang's packed_float3 Vertex layout");
+    struct DepthVertex
+    {
+        float x = 0.f, y = 0.f, z = 0.f;
+    };
+    static_assert(sizeof(DepthVertex) == 12, "must match Slang's packed_float3 Vertex layout");
 
-//======================================================================================================================
-// Counter-clockwise seen from the front, matching the project winding, so the default back-face
-// culling keeps it. halfExtent 1 covers the whole target, which is what a case needs when every
-// texel of the result has to hold the same answer.
-std::array<DepthVertex, 6> depthQuad(float z, float halfExtent = 0.5f) {
-    const float lo = -halfExtent;
-    const float hi = halfExtent;
-    return {{
-        {lo, lo, z},
-        {hi, lo, z},
-        {hi, hi, z},
-        {lo, lo, z},
-        {hi, hi, z},
-        {lo, hi, z},
-    }};
-}
+    //==================================================================================================================
+    // Counter-clockwise seen from the front, matching the project winding, so the default back-face
+    // culling keeps it. halfExtent 1 covers the whole target, which is what a case needs when every
+    // texel of the result has to hold the same answer.
+    std::array<DepthVertex, 6> depthQuad(float z, float halfExtent = 0.5f)
+    {
+        const float lo = -halfExtent;
+        const float hi = halfExtent;
+        return { {
+            { lo, lo, z },
+            { hi, lo, z },
+            { hi, hi, z },
+            { lo, lo, z },
+            { hi, hi, z },
+            { lo, hi, z },
+        } };
+    }
 
 } // namespace
 
@@ -1104,7 +1083,8 @@ std::array<DepthVertex, 6> depthQuad(float z, float halfExtent = 0.5f) {
 // both directions of that rule in one sequence: 0.25 beats the clear, 0.75 replaces it because it
 // is nearer, and 0.5 is then rejected because it is not. Under the Less semantics this replaces,
 // every draw would fail against the 0.0 clear and the probe would read the clear back instead.
-TEST_CASE("a Greater depth test keeps the nearer fragment in reversed-Z", "[gpu][checkpoint-a]") {
+TEST_CASE("a Greater depth test keeps the nearer fragment in reversed-Z", "[gpu][checkpoint-a]")
+{
     using namespace rojoRHI;
 
     constexpr uint32_t kDepthTextureSlot = 0;
@@ -1114,12 +1094,9 @@ TEST_CASE("a Greater depth test keeps the nearer fragment in reversed-Z", "[gpu]
     INFO(errorOf(device));
     REQUIRE(device.has_value());
 
-    auto depthTarget = (*device)->createTexture({.width = kSize,
-                                                 .height = kSize,
-                                                 .format = Format::D32Float,
-                                                 .renderTarget = true,
-                                                 .sampled = true,
-                                                 .label = "rojorhi.test.reversedDepthTarget"});
+    auto depthTarget = (*device)->createTexture(
+        { .width = kSize, .height = kSize, .format = Format::D32Float, .renderTarget = true, .sampled = true, .label = "rojorhi.test.reversedDepthTarget" }
+    );
     INFO(errorOf(depthTarget));
     REQUIRE(depthTarget.has_value());
 
@@ -1131,16 +1108,17 @@ TEST_CASE("a Greater depth test keeps the nearer fragment in reversed-Z", "[gpu]
     INFO(errorOf(depthLibrary));
     REQUIRE(depthLibrary.has_value());
 
-    auto depthPipeline =
-        (*device)->createGraphicsPipeline({.library = depthLibrary->get(),
-                                           .vertexEntry = "vertexMain",
-                                           .fragmentEntry = "fragmentDepthOnly",
-                                           .colorFormat = Format::Unknown,
-                                           .depthFormat = Format::D32Float,
-                                           .depthTestEnable = true,
-                                           .depthWriteEnable = true,
-                                           .depthCompare = DepthCompare::Greater,
-                                           .label = "rojorhi.test.reversedDepthPipeline"});
+    auto depthPipeline = (*device)->createGraphicsPipeline(
+        { .library = depthLibrary->get(),
+          .vertexEntry = "vertexMain",
+          .fragmentEntry = "fragmentDepthOnly",
+          .colorFormat = Format::Unknown,
+          .depthFormat = Format::D32Float,
+          .depthTestEnable = true,
+          .depthWriteEnable = true,
+          .depthCompare = DepthCompare::Greater,
+          .label = "rojorhi.test.reversedDepthPipeline" }
+    );
     INFO(errorOf(depthPipeline));
     REQUIRE(depthPipeline.has_value());
 
@@ -1148,17 +1126,17 @@ TEST_CASE("a Greater depth test keeps the nearer fragment in reversed-Z", "[gpu]
     INFO(errorOf(sampleLibrary));
     REQUIRE(sampleLibrary.has_value());
 
-    auto samplePipeline =
-        (*device)->createGraphicsPipeline({.library = sampleLibrary->get(),
-                                           .vertexEntry = "vertexMain",
-                                           .fragmentEntry = "fragmentIdentityUv",
-                                           .colorFormat = Format::BGRA8Unorm,
-                                           .label = "rojorhi.test.reversedDepthSamplePipeline"});
+    auto samplePipeline = (*device)->createGraphicsPipeline(
+        { .library = sampleLibrary->get(),
+          .vertexEntry = "vertexMain",
+          .fragmentEntry = "fragmentIdentityUv",
+          .colorFormat = Format::BGRA8Unorm,
+          .label = "rojorhi.test.reversedDepthSamplePipeline" }
+    );
     INFO(errorOf(samplePipeline));
     REQUIRE(samplePipeline.has_value());
 
-    auto sampler = (*device)->createSampler(
-        {.addressMode = AddressMode::Clamp, .label = "rojorhi.test.reversedDepthSampler"});
+    auto sampler = (*device)->createSampler({ .addressMode = AddressMode::Clamp, .label = "rojorhi.test.reversedDepthSampler" });
     INFO(errorOf(sampler));
     REQUIRE(sampler.has_value());
 
@@ -1169,10 +1147,7 @@ TEST_CASE("a Greater depth test keeps the nearer fragment in reversed-Z", "[gpu]
 
     CommandList& commands = (*device)->beginFrame();
 
-    commands.beginRenderPass({.depthTarget = depthTarget->get(),
-                              .clearDepth = 0.0f,
-                              .storeDepth = true,
-                              .label = "rojorhi.test.reversedDepth.write"});
+    commands.beginRenderPass({ .depthTarget = depthTarget->get(), .clearDepth = 0.0f, .storeDepth = true, .label = "rojorhi.test.reversedDepth.write" });
     commands.bindPipeline(**depthPipeline);
     commands.bindFrameData(kDepthPassSlot, uniforms);
     const auto drawQuad = [&](const std::array<DepthVertex, 6>& quad) {
@@ -1186,10 +1161,9 @@ TEST_CASE("a Greater depth test keeps the nearer fragment in reversed-Z", "[gpu]
 
     commands.textureBarrier(**depthTarget, TextureUse::RenderTarget, TextureUse::ShaderRead);
 
-    commands.beginRenderPass({.colorTarget = destination->get(),
-                              .clearColor = {1.0f, 0.0f, 1.0f, 1.0f},
-                              .clear = true,
-                              .label = "rojorhi.test.reversedDepth.probe"});
+    commands.beginRenderPass(
+        { .colorTarget = destination->get(), .clearColor = { 1.0f, 0.0f, 1.0f, 1.0f }, .clear = true, .label = "rojorhi.test.reversedDepth.probe" }
+    );
     commands.bindPipeline(**samplePipeline);
     commands.bindTexture(kDepthTextureSlot, **depthTarget);
     commands.bindSampler(kSamplerSlot, **sampler);
@@ -1199,7 +1173,7 @@ TEST_CASE("a Greater depth test keeps the nearer fragment in reversed-Z", "[gpu]
     (*device)->endFrame(nullptr);
     (*device)->waitIdle();
 
-    std::vector<uint8_t> pixels(size_t{kSize} * kSize * 4);
+    std::vector<uint8_t> pixels(size_t{ kSize } * kSize * 4);
     (*destination)->readback(pixels.data(), pixels.size());
 
     // 0.75 through an 8-bit probe is 191.25; the tolerance covers the quantization and nothing
@@ -1215,21 +1189,22 @@ TEST_CASE("a Greater depth test keeps the nearer fragment in reversed-Z", "[gpu]
 
 namespace {
 
-constexpr uint32_t kCompareTextureSlot = 3;
-constexpr uint32_t kCompareSamplerSlot = 1;
+    constexpr uint32_t kCompareTextureSlot = 3;
+    constexpr uint32_t kCompareSamplerSlot = 1;
 
-//======================================================================================================================
-// The NDC-to-texcoord map fitShadowOrtho bakes into shadowTransform: x [-1,1] -> u [0,1] and
-// y [-1,1] -> v [1,0]. Written out here rather than borrowed because this suite tests the RHI,
-// which knows nothing of Render's matrices -- what it shares with them is only the convention.
-glm::mat4 ndcToTexcoord() {
-    glm::mat4 map{1.0f};
-    map[0][0] = 0.5f;
-    map[1][1] = -0.5f;
-    map[3][0] = 0.5f;
-    map[3][1] = 0.5f;
-    return map;
-}
+    //==================================================================================================================
+    // The NDC-to-texcoord map fitShadowOrtho bakes into shadowTransform: x [-1,1] -> u [0,1] and
+    // y [-1,1] -> v [1,0]. Written out here rather than borrowed because this suite tests the RHI,
+    // which knows nothing of Render's matrices -- what it shares with them is only the convention.
+    glm::mat4 ndcToTexcoord()
+    {
+        glm::mat4 map{ 1.0f };
+        map[0][0] = 0.5f;
+        map[1][1] = -0.5f;
+        map[3][0] = 0.5f;
+        map[3][1] = 0.5f;
+        return map;
+    }
 
 } // namespace
 
@@ -1245,19 +1220,17 @@ glm::mat4 ndcToTexcoord() {
 // GreaterEqual answers 1 and the probe reads white, LessEqual answers 0 and it reads black. The
 // two are each other's complement here, which is what makes a swapped CompareFunc impossible to
 // mistake for a filtering or addressing problem.
-TEST_CASE("a comparison sampler's function decides which depth reads as lit", "[gpu]") {
+TEST_CASE("a comparison sampler's function decides which depth reads as lit", "[gpu]")
+{
     using namespace rojoRHI;
 
     auto device = createDevice();
     INFO(errorOf(device));
     REQUIRE(device.has_value());
 
-    auto depthTarget = (*device)->createTexture({.width = kSize,
-                                                 .height = kSize,
-                                                 .format = Format::D32Float,
-                                                 .renderTarget = true,
-                                                 .sampled = true,
-                                                 .label = "rojorhi.test.compareDepthTarget"});
+    auto depthTarget = (*device)->createTexture(
+        { .width = kSize, .height = kSize, .format = Format::D32Float, .renderTarget = true, .sampled = true, .label = "rojorhi.test.compareDepthTarget" }
+    );
     INFO(errorOf(depthTarget));
     REQUIRE(depthTarget.has_value());
 
@@ -1272,40 +1245,37 @@ TEST_CASE("a comparison sampler's function decides which depth reads as lit", "[
     INFO(errorOf(library));
     REQUIRE(library.has_value());
 
-    auto depthPipeline =
-        (*device)->createGraphicsPipeline({.library = library->get(),
-                                           .vertexEntry = "vertexMain",
-                                           .fragmentEntry = "fragmentDepthOnly",
-                                           .colorFormat = Format::Unknown,
-                                           .depthFormat = Format::D32Float,
-                                           .depthTestEnable = true,
-                                           .depthWriteEnable = true,
-                                           .depthCompare = DepthCompare::Greater,
-                                           .label = "rojorhi.test.compareDepthPipeline"});
+    auto depthPipeline = (*device)->createGraphicsPipeline(
+        { .library = library->get(),
+          .vertexEntry = "vertexMain",
+          .fragmentEntry = "fragmentDepthOnly",
+          .colorFormat = Format::Unknown,
+          .depthFormat = Format::D32Float,
+          .depthTestEnable = true,
+          .depthWriteEnable = true,
+          .depthCompare = DepthCompare::Greater,
+          .label = "rojorhi.test.compareDepthPipeline" }
+    );
     INFO(errorOf(depthPipeline));
     REQUIRE(depthPipeline.has_value());
 
-    auto comparePipeline =
-        (*device)->createGraphicsPipeline({.library = library->get(),
-                                           .vertexEntry = "vertexMain",
-                                           .fragmentEntry = "fragmentMain",
-                                           .colorFormat = Format::BGRA8Unorm,
-                                           .label = "rojorhi.test.comparePipeline"});
+    auto comparePipeline = (*device)->createGraphicsPipeline(
+        { .library = library->get(),
+          .vertexEntry = "vertexMain",
+          .fragmentEntry = "fragmentMain",
+          .colorFormat = Format::BGRA8Unorm,
+          .label = "rojorhi.test.comparePipeline" }
+    );
     INFO(errorOf(comparePipeline));
     REQUIRE(comparePipeline.has_value());
 
     const auto makeCompareSampler = [&](CompareFunc compare, const char* label) {
-        return (*device)->createSampler({.filter = FilterMode::Linear,
-                                         .addressMode = AddressMode::Clamp,
-                                         .compare = compare,
-                                         .label = label});
+        return (*device)->createSampler({ .filter = FilterMode::Linear, .addressMode = AddressMode::Clamp, .compare = compare, .label = label });
     };
-    auto greaterEqualSampler =
-        makeCompareSampler(CompareFunc::GreaterEqual, "rojorhi.test.greaterEqualSampler");
+    auto greaterEqualSampler = makeCompareSampler(CompareFunc::GreaterEqual, "rojorhi.test.greaterEqualSampler");
     INFO(errorOf(greaterEqualSampler));
     REQUIRE(greaterEqualSampler.has_value());
-    auto lessEqualSampler =
-        makeCompareSampler(CompareFunc::LessEqual, "rojorhi.test.lessEqualSampler");
+    auto lessEqualSampler = makeCompareSampler(CompareFunc::LessEqual, "rojorhi.test.lessEqualSampler");
     INFO(errorOf(lessEqualSampler));
     REQUIRE(lessEqualSampler.has_value());
 
@@ -1319,10 +1289,7 @@ TEST_CASE("a comparison sampler's function decides which depth reads as lit", "[
 
     CommandList& commands = (*device)->beginFrame();
 
-    commands.beginRenderPass({.depthTarget = depthTarget->get(),
-                              .clearDepth = 0.0f,
-                              .storeDepth = true,
-                              .label = "rojorhi.test.compare.write"});
+    commands.beginRenderPass({ .depthTarget = depthTarget->get(), .clearDepth = 0.0f, .storeDepth = true, .label = "rojorhi.test.compare.write" });
     commands.bindPipeline(**depthPipeline);
     commands.bindFrameData(kDepthPassSlot, uniforms);
     commands.bindFrameData(kVertexBufferSlot, blocker.data(), sizeof(blocker));
@@ -1332,10 +1299,9 @@ TEST_CASE("a comparison sampler's function decides which depth reads as lit", "[
     commands.textureBarrier(**depthTarget, TextureUse::RenderTarget, TextureUse::ShaderRead);
 
     const auto comparePass = [&](Texture& destination, Sampler& sampler) {
-        commands.beginRenderPass({.colorTarget = &destination,
-                                  .clearColor = {1.0f, 0.0f, 1.0f, 1.0f},
-                                  .clear = true,
-                                  .label = "rojorhi.test.compare.probe"});
+        commands.beginRenderPass(
+            { .colorTarget = &destination, .clearColor = { 1.0f, 0.0f, 1.0f, 1.0f }, .clear = true, .label = "rojorhi.test.compare.probe" }
+        );
         commands.bindPipeline(**comparePipeline);
         commands.bindTexture(kCompareTextureSlot, **depthTarget);
         commands.bindSampler(kCompareSamplerSlot, sampler);
@@ -1350,18 +1316,18 @@ TEST_CASE("a comparison sampler's function decides which depth reads as lit", "[
     (*device)->endFrame(nullptr);
     (*device)->waitIdle();
 
-    std::vector<uint8_t> pixels(size_t{kSize} * kSize * 4);
+    std::vector<uint8_t> pixels(size_t{ kSize } * kSize * 4);
 
     // Two probes rather than one: a lookup that answered correctly only where the kernel happened
     // to stay inside the texture would read differently at the centre and near the corner.
     const auto requireUniform = [&](const char* what, int want) {
-        for (const auto& at :
-             {std::pair<uint32_t, uint32_t>{32, 32}, std::pair<uint32_t, uint32_t>{4, 4}}) {
+        for (const auto& at : { std::pair<uint32_t, uint32_t>{ 32, 32 }, std::pair<uint32_t, uint32_t>{ 4, 4 } })
+        {
             const Pixel probe = pixelAt(pixels, at.first, at.second);
             INFO(describe(what, at.first, at.second, probe));
-            REQUIRE(int{probe.r} == want);
-            REQUIRE(int{probe.g} == want);
-            REQUIRE(int{probe.b} == want);
+            REQUIRE(int{ probe.r } == want);
+            REQUIRE(int{ probe.g } == want);
+            REQUIRE(int{ probe.b } == want);
         }
     };
 

@@ -13,18 +13,18 @@
 
 namespace rojoRHI::metal4 {
 
-/// Whether this process can produce GPU trace documents. Metal reads enabling state at launch.
-bool captureAvailable();
+    /// Whether this process can produce GPU trace documents. Metal reads enabling state at launch.
+    bool captureAvailable();
 
-/// The causal reason from the latest failed capture start; valid until the next start.
-std::string_view captureFailureReason();
+    /// The causal reason from the latest failed capture start; valid until the next start.
+    std::string_view captureFailureReason();
 
-/// Begins a GPU capture and writes the resulting document to `outPath`.
-bool beginCapture(Device& device, std::string_view outPath);
+    /// Begins a GPU capture and writes the resulting document to `outPath`.
+    bool beginCapture(Device& device, std::string_view outPath);
 
-/// Closes the capture beginCapture() opened and logs the document that was written. No-op when no
-/// capture is running. The caller is responsible for the GPU having finished the work it wants in
-/// the document (Device::waitIdle) before calling this.
-void endCapture();
+    /// Closes the capture beginCapture() opened and logs the document that was written. No-op when no
+    /// capture is running. The caller is responsible for the GPU having finished the work it wants in
+    /// the document (Device::waitIdle) before calling this.
+    void endCapture();
 
 } // namespace rojoRHI::metal4

@@ -4,66 +4,69 @@
 
 namespace {
 
-using rojoRHI::metal4::FrameDataCounters;
-using rojoRHI::metal4::frameDataCounters;
-using rojoRHI::metal4::kFrameDataPageBytes;
-using rojoRHI::metal4::kFrameDataSlotCount;
+    using rojoRHI::metal4::FrameDataCounters;
+    using rojoRHI::metal4::frameDataCounters;
+    using rojoRHI::metal4::kFrameDataPageBytes;
+    using rojoRHI::metal4::kFrameDataSlotCount;
 
-using Triangle = std::array<Vertex, 3>;
+    using Triangle = std::array<Vertex, 3>;
 
-// Effective stride of one default-aligned block, which is what makes the fill counts below exact
-// rather than approximate: a 60-byte triangle advances the cursor to the next 256-byte boundary.
-constexpr uint64_t kBlockStride = rojoRHI::kFrameDataAlignment;
-static_assert(sizeof(Triangle) <= kBlockStride, "a triangle block must fit inside one stride");
+    // Effective stride of one default-aligned block, which is what makes the fill counts below exact
+    // rather than approximate: a 60-byte triangle advances the cursor to the next 256-byte boundary.
+    constexpr uint64_t kBlockStride = rojoRHI::kFrameDataAlignment;
+    static_assert(sizeof(Triangle) <= kBlockStride, "a triangle block must fit inside one stride");
 
-constexpr uint32_t kBlocksPerPage = static_cast<uint32_t>(kFrameDataPageBytes / kBlockStride);
+    constexpr uint32_t kBlocksPerPage = static_cast<uint32_t>(kFrameDataPageBytes / kBlockStride);
 
-// Enough blocks to leave the first page behind with room to spare in the second.
-constexpr uint32_t kSpillWrites = kBlocksPerPage + 32;
+    // Enough blocks to leave the first page behind with room to spare in the second.
+    constexpr uint32_t kSpillWrites = kBlocksPerPage + 32;
 
-constexpr uint32_t kOverlapFrames = 12;
+    constexpr uint32_t kOverlapFrames = 12;
 
-//======================================================================================================================
-// Two disjoint triangles, each safely interior at its probe. The fill triangle covers the whole
-// target in a colour neither probe expects, so a draw that read a filler block instead of the block
-// bound right before it fails both probes rather than passing by luck.
-Triangle leftTriangle(float r, float g, float b) {
-    return {{{{-0.9f, -0.9f}, {r, g, b}}, {{-0.1f, -0.9f}, {r, g, b}}, {{-0.5f, 0.9f}, {r, g, b}}}};
-}
+    //==================================================================================================================
+    // Two disjoint triangles, each safely interior at its probe. The fill triangle covers the whole
+    // target in a colour neither probe expects, so a draw that read a filler block instead of the block
+    // bound right before it fails both probes rather than passing by luck.
+    Triangle leftTriangle(float r, float g, float b)
+    {
+        return { { { { -0.9f, -0.9f }, { r, g, b } }, { { -0.1f, -0.9f }, { r, g, b } }, { { -0.5f, 0.9f }, { r, g, b } } } };
+    }
 
-//======================================================================================================================
-Triangle rightTriangle(float r, float g, float b) {
-    return {{{{0.1f, -0.9f}, {r, g, b}}, {{0.9f, -0.9f}, {r, g, b}}, {{0.5f, 0.9f}, {r, g, b}}}};
-}
+    //==================================================================================================================
+    Triangle rightTriangle(float r, float g, float b)
+    {
+        return { { { { 0.1f, -0.9f }, { r, g, b } }, { { 0.9f, -0.9f }, { r, g, b } }, { { 0.5f, 0.9f }, { r, g, b } } } };
+    }
 
-//======================================================================================================================
-Triangle fillTriangle() {
-    return {{{{-3.0f, -1.0f}, {1.0f, 1.0f, 1.0f}},
-             {{3.0f, -1.0f}, {1.0f, 1.0f, 1.0f}},
-             {{0.0f, 3.0f}, {1.0f, 1.0f, 1.0f}}}};
-}
+    //==================================================================================================================
+    Triangle fillTriangle()
+    {
+        return { { { { -3.0f, -1.0f }, { 1.0f, 1.0f, 1.0f } }, { { 3.0f, -1.0f }, { 1.0f, 1.0f, 1.0f } }, { { 0.0f, 3.0f }, { 1.0f, 1.0f, 1.0f } } } };
+    }
 
-//======================================================================================================================
-uint32_t slotOf(const rojoRHI::Device& device) {
-    return static_cast<uint32_t>(device.frameNumber() % kFrameDataSlotCount);
-}
+    //==================================================================================================================
+    uint32_t slotOf(const rojoRHI::Device& device)
+    {
+        return static_cast<uint32_t>(device.frameNumber() % kFrameDataSlotCount);
+    }
 
-//======================================================================================================================
-rojoRHI::Result<std::unique_ptr<rojoRHI::GraphicsPipeline>>
-makeTrianglePipeline(rojoRHI::Device& device, rojoRHI::ShaderLibrary& library, const char* label) {
-    return device.createGraphicsPipeline({.library = &library,
-                                          .vertexEntry = "vertexMain",
-                                          .fragmentEntry = "fragmentMain",
-                                          .colorFormat = rojoRHI::Format::BGRA8Unorm,
-                                          .label = label});
-}
+    //==================================================================================================================
+    rojoRHI::Result<std::unique_ptr<rojoRHI::GraphicsPipeline>> makeTrianglePipeline(
+        rojoRHI::Device& device, rojoRHI::ShaderLibrary& library, const char* label
+    )
+    {
+        return device.createGraphicsPipeline(
+            { .library = &library, .vertexEntry = "vertexMain", .fragmentEntry = "fragmentMain", .colorFormat = rojoRHI::Format::BGRA8Unorm, .label = label }
+        );
+    }
 
 } // namespace
 
 //======================================================================================================================
 // The whole contract of one call, end to end: the block is copied, its address is bound to the slot
 // the draw reads, and the address handed back is a real one placed at the default alignment.
-TEST_CASE("bindFrameData binds a block the next draw reads", "[gpu]") {
+TEST_CASE("bindFrameData binds a block the next draw reads", "[gpu]")
+{
     using namespace rojoRHI;
 
     auto device = createDevice();
@@ -86,10 +89,9 @@ TEST_CASE("bindFrameData binds a block the next draw reads", "[gpu]") {
     const Triangle right = rightTriangle(0.0f, 0.0f, 1.0f);
 
     CommandList& commands = (*device)->beginFrame();
-    commands.beginRenderPass({.colorTarget = target->get(),
-                              .clearColor = {0.0f, 0.0f, 0.0f, 1.0f},
-                              .clear = true,
-                              .label = "rojorhi.test.frameData.basic"});
+    commands.beginRenderPass(
+        { .colorTarget = target->get(), .clearColor = { 0.0f, 0.0f, 0.0f, 1.0f }, .clear = true, .label = "rojorhi.test.frameData.basic" }
+    );
     commands.bindPipeline(**pipeline);
 
     const GpuAddress leftAddress = commands.bindFrameData(kVertexBufferSlot, left);
@@ -114,7 +116,7 @@ TEST_CASE("bindFrameData binds a block the next draw reads", "[gpu]") {
     REQUIRE(counters.bytes == 2 * sizeof(Triangle));
     REQUIRE(counters.addressBinds == 2);
 
-    std::vector<uint8_t> pixels(size_t{kSize} * kSize * 4);
+    std::vector<uint8_t> pixels(size_t{ kSize } * kSize * 4);
     (*target)->readback(pixels.data(), pixels.size());
 
     const Pixel leftProbe = pixelAt(pixels, 16, 32);
@@ -134,7 +136,8 @@ TEST_CASE("bindFrameData binds a block the next draw reads", "[gpu]") {
 // Growth inside one frame. The first draw reads a block from the slot's original page; enough fill
 // blocks to exhaust that page follow; the second draw reads a block the backend had to add a page
 // for. Both probes must still be exact, which is the part a page-relative address bug breaks.
-TEST_CASE("bindFrameData spans pages within one frame", "[gpu]") {
+TEST_CASE("bindFrameData spans pages within one frame", "[gpu]")
+{
     using namespace rojoRHI;
 
     auto device = createDevice();
@@ -145,8 +148,7 @@ TEST_CASE("bindFrameData spans pages within one frame", "[gpu]") {
     INFO(errorOf(library));
     REQUIRE(library.has_value());
 
-    auto pipeline =
-        makeTrianglePipeline(**device, **library, "rojorhi.test.frameData.spillPipeline");
+    auto pipeline = makeTrianglePipeline(**device, **library, "rojorhi.test.frameData.spillPipeline");
     INFO(errorOf(pipeline));
     REQUIRE(pipeline.has_value());
 
@@ -161,15 +163,15 @@ TEST_CASE("bindFrameData spans pages within one frame", "[gpu]") {
     CommandList& commands = (*device)->beginFrame();
     const uint32_t slot = slotOf(**device);
 
-    commands.beginRenderPass({.colorTarget = target->get(),
-                              .clearColor = {0.0f, 0.0f, 0.0f, 1.0f},
-                              .clear = true,
-                              .label = "rojorhi.test.frameData.spill"});
+    commands.beginRenderPass(
+        { .colorTarget = target->get(), .clearColor = { 0.0f, 0.0f, 0.0f, 1.0f }, .clear = true, .label = "rojorhi.test.frameData.spill" }
+    );
     commands.bindPipeline(**pipeline);
 
     const GpuAddress leftAddress = commands.bindFrameData(kVertexBufferSlot, left);
     commands.draw(3);
-    for (uint32_t write = 0; write < kSpillWrites; ++write) {
+    for (uint32_t write = 0; write < kSpillWrites; ++write)
+    {
         commands.bindFrameData(kVertexBufferSlot, filler);
     }
     const GpuAddress rightAddress = commands.bindFrameData(kVertexBufferSlot, right);
@@ -180,9 +182,10 @@ TEST_CASE("bindFrameData spans pages within one frame", "[gpu]") {
     (*device)->waitIdle();
 
     const FrameDataCounters counters = frameDataCounters(**device);
-    INFO("slot " + std::to_string(slot) + " used " +
-         std::to_string(counters.slots[slot].pagesUsed) + " page(s) of " +
-         std::to_string(counters.slots[slot].pageCount));
+    INFO(
+        "slot " + std::to_string(slot) + " used " + std::to_string(counters.slots[slot].pagesUsed) + " page(s) of " +
+        std::to_string(counters.slots[slot].pageCount)
+    );
     REQUIRE(counters.slots[slot].pageCount >= 2);
     REQUIRE(counters.slots[slot].pagesUsed >= 2);
     // Growth is by pages, so one extra page covers the spill however many blocks caused it.
@@ -191,7 +194,7 @@ TEST_CASE("bindFrameData spans pages within one frame", "[gpu]") {
     REQUIRE(leftAddress.isValid());
     REQUIRE(rightAddress.isValid());
 
-    std::vector<uint8_t> pixels(size_t{kSize} * kSize * 4);
+    std::vector<uint8_t> pixels(size_t{ kSize } * kSize * 4);
     (*target)->readback(pixels.data(), pixels.size());
 
     const Pixel leftProbe = pixelAt(pixels, 16, 32);
@@ -210,7 +213,8 @@ TEST_CASE("bindFrameData spans pages within one frame", "[gpu]") {
 //======================================================================================================================
 // A request larger than a normal page gets a page of its own, sized to the request rounded up to
 // the page quantum -- not a buffer per call and not an oversized default page for every slot.
-TEST_CASE("an oversized frame-data block gets a page rounded to the quantum", "[gpu]") {
+TEST_CASE("an oversized frame-data block gets a page rounded to the quantum", "[gpu]")
+{
     using namespace rojoRHI;
 
     auto device = createDevice();
@@ -244,7 +248,8 @@ TEST_CASE("an oversized frame-data block gets a page rounded to the quantum", "[
 // A block exactly one normal page large can still need leading padding when its requested
 // alignment is wider than the page quantum. The grown page reserves that worst case rather than
 // passing validation and then asserting merely because Metal chose a less-aligned GPU base.
-TEST_CASE("an oversized frame-data page reserves wide-alignment padding", "[gpu]") {
+TEST_CASE("an oversized frame-data page reserves wide-alignment padding", "[gpu]")
+{
     using namespace rojoRHI;
 
     auto device = createDevice();
@@ -257,8 +262,7 @@ TEST_CASE("an oversized frame-data page reserves wide-alignment padding", "[gpu]
     CommandList& commands = (*device)->beginFrame();
     const uint32_t slot = slotOf(**device);
     commands.beginComputePass("rojorhi.test.frameData.wideOversized");
-    const GpuAddress address =
-        commands.bindFrameData(1, block.data(), block.size(), kWideAlignment);
+    const GpuAddress address = commands.bindFrameData(1, block.data(), block.size(), kWideAlignment);
     commands.endComputePass();
     (*device)->endFrame(nullptr);
     (*device)->waitIdle();
@@ -273,7 +277,8 @@ TEST_CASE("an oversized frame-data page reserves wide-alignment padding", "[gpu]
 //======================================================================================================================
 // A wider alignment than the default is honoured on the returned address, and does not disturb the
 // placement of the ordinary blocks around it.
-TEST_CASE("bindFrameData honours an alignment wider than the default", "[gpu]") {
+TEST_CASE("bindFrameData honours an alignment wider than the default", "[gpu]")
+{
     using namespace rojoRHI;
 
     auto device = createDevice();
@@ -281,7 +286,7 @@ TEST_CASE("bindFrameData honours an alignment wider than the default", "[gpu]") 
     REQUIRE(device.has_value());
 
     constexpr uint64_t kWide = 4096;
-    const std::array<uint32_t, 4> block{1, 2, 3, 4};
+    const std::array<uint32_t, 4> block{ 1, 2, 3, 4 };
 
     CommandList& commands = (*device)->beginFrame();
     commands.beginComputePass("rojorhi.test.frameData.alignment");
@@ -306,8 +311,8 @@ TEST_CASE("bindFrameData honours an alignment wider than the default", "[gpu]") 
 // page and renders its own colour into its own target, so a slot reset before the GPU retired its
 // previous owner shows up as one frame reading another's blocks. The only waitIdle is after every
 // submission, and the arena's own recycle assert fires first if the pacing proof were skipped.
-TEST_CASE("the frame-data arena survives twelve frames overlapping in flight",
-          "[gpu][checkpoint-a]") {
+TEST_CASE("the frame-data arena survives twelve frames overlapping in flight", "[gpu][checkpoint-a]")
+{
     using namespace rojoRHI;
 
     auto device = createDevice();
@@ -318,16 +323,15 @@ TEST_CASE("the frame-data arena survives twelve frames overlapping in flight",
     INFO(errorOf(library));
     REQUIRE(library.has_value());
 
-    auto pipeline =
-        makeTrianglePipeline(**device, **library, "rojorhi.test.frameData.overlapPipeline");
+    auto pipeline = makeTrianglePipeline(**device, **library, "rojorhi.test.frameData.overlapPipeline");
     INFO(errorOf(pipeline));
     REQUIRE(pipeline.has_value());
 
     std::vector<std::unique_ptr<Texture>> targets;
     targets.reserve(kOverlapFrames);
-    for (uint32_t frame = 0; frame < kOverlapFrames; ++frame) {
-        auto target = makeProbeTarget(
-            **device, ("rojorhi.test.frameData.overlap." + std::to_string(frame)).c_str());
+    for (uint32_t frame = 0; frame < kOverlapFrames; ++frame)
+    {
+        auto target = makeProbeTarget(**device, ("rojorhi.test.frameData.overlap." + std::to_string(frame)).c_str());
         INFO(errorOf(target));
         REQUIRE(target.has_value());
         targets.push_back(std::move(*target));
@@ -337,19 +341,20 @@ TEST_CASE("the frame-data arena survives twelve frames overlapping in flight",
     uint32_t highWaterCreations = 0;
     std::array<uint64_t, kFrameDataSlotCount> slotBytes{};
 
-    for (uint32_t frame = 0; frame < kOverlapFrames; ++frame) {
+    for (uint32_t frame = 0; frame < kOverlapFrames; ++frame)
+    {
         const float green = static_cast<float>(20 * (frame + 1)) / 255.0f;
         const Triangle left = leftTriangle(1.0f, green, 0.0f);
 
         CommandList& commands = (*device)->beginFrame();
         const uint32_t slot = slotOf(**device);
 
-        commands.beginRenderPass({.colorTarget = targets[frame].get(),
-                                  .clearColor = {0.0f, 0.0f, 0.0f, 1.0f},
-                                  .clear = true,
-                                  .label = "rojorhi.test.frameData.overlap"});
+        commands.beginRenderPass(
+            { .colorTarget = targets[frame].get(), .clearColor = { 0.0f, 0.0f, 0.0f, 1.0f }, .clear = true, .label = "rojorhi.test.frameData.overlap" }
+        );
         commands.bindPipeline(**pipeline);
-        for (uint32_t write = 0; write < kSpillWrites; ++write) {
+        for (uint32_t write = 0; write < kSpillWrites; ++write)
+        {
             commands.bindFrameData(kVertexBufferSlot, filler);
         }
         commands.bindFrameData(kVertexBufferSlot, left);
@@ -360,16 +365,22 @@ TEST_CASE("the frame-data arena survives twelve frames overlapping in flight",
         const FrameDataCounters counters = frameDataCounters(**device);
         // Every frame does identical work, so a slot's second visit must consume exactly what its
         // first did: an inexact cursor reset shows up here as drift rather than as a wrong pixel.
-        if (frame < kFrameDataSlotCount) {
+        if (frame < kFrameDataSlotCount)
+        {
             slotBytes[slot] = counters.slots[slot].bytesUsed;
-        } else {
+        }
+        else
+        {
             INFO("frame " + std::to_string(frame) + " on slot " + std::to_string(slot));
             REQUIRE(counters.slots[slot].bytesUsed == slotBytes[slot]);
         }
         // Once all three slots have seen the workload, its pages are retained and reused.
-        if (frame + 1 == kFrameDataSlotCount) {
+        if (frame + 1 == kFrameDataSlotCount)
+        {
             highWaterCreations = counters.pageCreations;
-        } else if (frame + 1 > kFrameDataSlotCount) {
+        }
+        else if (frame + 1 > kFrameDataSlotCount)
+        {
             REQUIRE(counters.pageCreations == highWaterCreations);
         }
     }
@@ -377,19 +388,22 @@ TEST_CASE("the frame-data arena survives twelve frames overlapping in flight",
     (*device)->waitIdle();
 
     const FrameDataCounters counters = frameDataCounters(**device);
-    REQUIRE(counters.calls == uint64_t{kOverlapFrames} * (kSpillWrites + 1));
+    REQUIRE(counters.calls == uint64_t{ kOverlapFrames } * (kSpillWrites + 1));
     // Two pages per slot and nothing more: growth is bounded by retained high water per slot, not
     // by frame count.
     REQUIRE(counters.pageCreations == 2 * kFrameDataSlotCount);
 
-    std::vector<uint8_t> pixels(size_t{kSize} * kSize * 4);
-    for (uint32_t frame = 0; frame < kOverlapFrames; ++frame) {
+    std::vector<uint8_t> pixels(size_t{ kSize } * kSize * 4);
+    for (uint32_t frame = 0; frame < kOverlapFrames; ++frame)
+    {
         targets[frame]->readback(pixels.data(), pixels.size());
 
         const Pixel probe = pixelAt(pixels, 16, 32);
         const int expectedGreen = static_cast<int>(20 * (frame + 1));
-        INFO("frame " + std::to_string(frame) + " expected G=" + std::to_string(expectedGreen) +
-             " -- a wrong G names the frame whose blocks were actually read (G = 20*(N+1))");
+        INFO(
+            "frame " + std::to_string(frame) + " expected G=" + std::to_string(expectedGreen) +
+            " -- a wrong G names the frame whose blocks were actually read (G = 20*(N+1))"
+        );
         INFO(describe("left", 16, 32, probe));
         REQUIRE(probe.r == 255);
         REQUIRE(channelNear(probe.g, expectedGreen, 3));
