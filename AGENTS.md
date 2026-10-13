@@ -4,15 +4,15 @@ RojoRHI is a dependency-free C++23 rendering hardware interface (RHI) library, t
 honest over the shared conceptual core of Metal 4, D3D12 and Vulkan. Metal 4 through metal-cpp is
 the only backend implemented today; D3D12 is planned and Vulkan is a design oracle with no code
 (ADR 0008). The v1 interface is what the code implements now; v2 is specified in the decisions and
-the API reference below and is partly implemented on the test-only Null backend (chapters 01, 02
-and 15). ADR 0001 owns the identity spelling every document
-here applies. Luminex is its required consumer: it will mount the library as a submodule at
-`RojoRHI/` and drive every change through a RojoRHI branch and pull request first
-([commits](docs/conventions/commits.md) owns that workflow). The repository is public and licensed
-under the Apache License, Version 2.0 ([`LICENSE`](LICENSE)); it holds the library itself — public
-headers, shared implementation, the Metal 4 backend, the optional ImGui adapter, tests and shaders
-— alongside its founding documents (see [architecture](docs/architecture/overview.md) for
-directory responsibilities).
+the API reference below and is partly implemented on the test-only Null backend (chapters 01, 02,
+03, 04, 10 and 15: devices, buffers, heaps, textures, views, samplers, queues and fences). ADR 0001
+owns the identity spelling every document here applies. Luminex is its required consumer: it will
+mount the library as a submodule at `RojoRHI/` and drive every change through a RojoRHI branch and
+pull request first ([commits](docs/conventions/commits.md) owns that workflow). The repository is
+public and licensed under the Apache License, Version 2.0 ([`LICENSE`](LICENSE)); it holds the
+library itself — public headers, shared implementation, the Metal 4 backend, the optional ImGui
+adapter, tests and shaders — alongside its founding documents (see
+[architecture](docs/architecture/overview.md) for directory responsibilities).
 
 ## Golden sources
 
@@ -76,7 +76,9 @@ xmake test RojoRHITests/death -P .
 ```
 
 `python3 Tools/check_vu_coverage.py` fails when a valid-usage identifier of `docs/spec/` has
-neither a death test nor an entry in `Tools/vu_pending.txt`; the policy CI job runs it
+neither a death test nor an entry in `Tools/vu_pending.txt`, when an identifier has fewer death
+tests than `ROJORHI_VU` sites in `Source/`, and on any `ROJORHI_VU` under `Backends/`; the policy CI
+job runs it
 ([testing](docs/conventions/testing.md)).
 
 GPU conformance today is checkpoint A, the cases tagged `[checkpoint-a]`
@@ -101,7 +103,7 @@ version stamp and `Device::loadShaderLibrary` are not implemented; they arrive w
   supplies none.
 - Metal 4 is the only backend implemented today. D3D12 is planned and Vulkan is a design oracle
   with no code; no document claims either as a capability until it is real. The Null backend is
-  test-only and implements the device so far (ADR 0008).
+  test-only and implements the device and its resources so far (ADR 0008).
 - Rules for v2 work: the v2 interface is address-first and has no binding slots (ADR 0007); it is
   a C++23 subset with one backend per build, chosen by an xmake option, and no virtual interfaces
   (ADR 0012). The v1 code still has binding slots and virtual interfaces until it is ported to v2.

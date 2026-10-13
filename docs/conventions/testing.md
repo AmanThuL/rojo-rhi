@@ -32,7 +32,8 @@ binary on that one case with `ROJORHI_DEATH_CHILD=1` (any other value of the var
 parent's environment fails the case without spawning); the child runs the lambda, which must
 terminate the process, and the parent requires a non-zero exit and a standard-error report in which
 the first `<identifier>:` is the expected one. A rule checked at several call sites gets one death
-test per site, so each site is exercised and a deleted check fails a test. Death tests exist only in
+test per site, so each site is exercised and a deleted check fails a test; the coverage tool counts
+the sites. Death tests exist only in
 Debug builds: `ROJORHI_VU` is compiled out of Release, so the helper skips there. The harness's own
 self-tests (`[death][!shouldfail]` cases that must fail, and `quoteWindowsArgument`) are the one
 exception to the naming rule, since they test no identifier.
@@ -41,8 +42,13 @@ exception to the naming rule, since they test no identifier.
 non-retired identifier in `docs/spec/` and every identifier named by a `[death]` case in `Tests/`
 (comments and `#if 0` blocks do not count, and the case's `ROJORHI_EXPECT_DEATH` argument must be
 the identifier in its name), and fails when an identifier has no death test and is not listed in
-`Tools/vu_pending.txt`. The pending list holds `<identifier> <part>` lines sorted by identifier,
-naming the part of the work (`resources`, `recording`, `edges` or `tracker`) that will add the test.
+`Tools/vu_pending.txt`. It also counts the `ROJORHI_VU` call sites of each identifier in `Source/`
+and fails when an identifier has fewer death tests than sites, which enforces the per-site rule
+above; it fails on any `ROJORHI_VU` under `Backends/`, since every check lives in the core, and on
+an identifier that a check or a death test names but the reference does not define or has retired.
+The pending list holds `<identifier> <part>` lines sorted by identifier, naming the part of the
+work (`resources`, `recording`, `edges` or `tracker`) that will add the test; no line names
+`resources` now that the resource entries exist.
 The tool also fails when a listed identifier has a death test, so the list only shrinks, and when it
 names an unknown identifier or part. A part removes its lines in the change that adds the tests.
 
