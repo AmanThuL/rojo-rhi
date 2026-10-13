@@ -17,12 +17,15 @@ bookkeeping and any pure helper the interface exposes. They run anywhere, includ
 with no GPU, and a failure here is a contract change rather than a driver difference.
 
 **T0 contract tests** of the v2 interface run against the Null backend with no GPU, in three
-directories. `Tests/Contract/` holds the backend-neutral reference rules, one file per area,
-tagged `[contract]`: every expectation there must hold for any backend, so it states only
-what the reference states. `Tests/Null/` holds what only the Null backend promises (the values it
-reports for limits and formats), tagged `[null]`. `Tests/Core/` holds the core's internals, such as
-the handle pool, tagged `[core]`, and may include private headers. `Tests/Support/` holds shared
-helpers. The `contract` entry runs all three tags and excludes `[death]`; Release CI runs it too.
+directories. `Tests/Contract/` holds the backend-neutral reference rules, one file per area, tagged
+`[contract]`: every expectation there must hold for any backend, so it states only what the
+reference states. `Tests/Null/` holds what only the Null backend promises (the values it reports for
+limits and formats), tagged `[null]`. `Tests/Core/` holds the core's internals, such as the handle
+pool, tagged `[core]`, and may include private headers. `Tests/Support/` holds shared helpers:
+`Death.h`, `NullLibrary.h` (builds Null shader library blobs, including ones the backend must
+refuse) and `PassKit.h` (a device with an open frame, a library, a list, attachment textures and
+pipelines for recording tests). The `contract` entry runs all three tags and excludes `[death]`;
+Release CI runs it too.
 
 **Death tests** pin each Debug-tier valid-usage rule (ADR 0009). A death test is a `TEST_CASE` named
 `"<identifier> <behaviour>"`, such as `"VU-rojo-device-0003 beginFrame runs while a frame is open"`,
