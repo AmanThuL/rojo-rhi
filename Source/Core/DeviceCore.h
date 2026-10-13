@@ -9,16 +9,19 @@
 #include <rojoRHI/DeviceDesc.h>
 #include <rojoRHI/Handles.h>
 #include <rojoRHI/Result.h>
+#include <rojoRHI/ScopeTiming.h>
 
 #include "Core/Formats.h"
 #include "Core/FrameArena.h"
 #include "Core/HandlePool.h"
 #include "Core/Records.h"
+#include "Core/ScopeLog.h"
 #include "Core/SlotAllocator.h"
 
 #include <atomic>
 #include <cstdint>
 #include <mutex>
+#include <span>
 #include <string>
 #include <string_view>
 #include <tuple>
@@ -26,6 +29,7 @@
 
 namespace rojoRHI::core {
     struct SwapchainCore;
+    struct CommandListCore;
 
     /// Checks a `DeviceDesc` before a backend opens anything: `ErrorCategory::Unsupported` when validation is requested in a
     /// Release build, and VU-rojo-device-0001 for a frame-slot count other than 2 or 3. A backend calls it first in
@@ -72,6 +76,33 @@ namespace rojoRHI::core {
 
         /// Removes `swapchain` from the live set; its surface may take a new swapchain at once. Free-threaded.
         void removeSwapchain(SwapchainCore& swapchain);
+
+        /// Registers the function that creates one frame-arena page of the backend, with this core as its context. A backend
+        /// calls it once at creation; the core copies scope labels into the arena through it.
+        void setArenaSource(ArenaPageSource source);
+
+        /// Returns the registered page source; a backend that registered none is an internal error.
+        ArenaPageSource arenaSource() const;
+
+        /// Registers the optional hook that starts a capture: it returns an error when the capture tool is unavailable to the
+        /// process or the destination cannot be written. A backend with a capture tool calls it once at creation; without one
+        /// `Device::beginCapture` returns `ErrorCategory::Unsupported`.
+        void setCaptureAvailable(Result<void> (*available)(std::string_view path));
+
+        /// Returns the registered capture hook, or null when the backend registered none.
+        Result<void> (*captureAvailable() const)(std::string_view path);
+
+        /// Returns true while a capture this device started is in progress.
+        bool capturing() const;
+
+        /// Sets the capture state in one atomic step and returns the state it replaced.
+        bool exchangeCapturing(bool capturing);
+
+        /// Adds the scopes of the submitted `list` to the record of its frame slot. Free-threaded.
+        void submitScopes(const CommandListCore& list);
+
+        /// Returns the scopes of the frame the latest `beginFrame` waited for; the next `beginFrame` invalidates the span.
+        std::span<const ScopeTiming> scopeTimings() const;
 
         /// Returns the capabilities the device reports; a backend fills them in place at creation, and its views must point at
         /// storage that outlives the device.
@@ -185,9 +216,13 @@ namespace rojoRHI::core {
         std::vector<SwapchainCore*> m_swapchains;
         bool (*m_surfaceCheck)(const void* surface) = nullptr;
         TileExtent (*m_tileExtents)(Format format, TextureType type) = nullptr;
+        ArenaPageSource m_arenaSource = nullptr;
+        Result<void> (*m_captureAvailable)(std::string_view path) = nullptr;
+        std::atomic<bool> m_capturing = false;
         uint32_t m_framesInFlight;
         bool m_validation;
         std::string m_label;
+        ScopeLog m_scopes;
         FrameArena m_arena;
         /// Frame number shifted left by one, with bit zero set while that frame is open; one word so the free-threaded
         /// destroy reads a consistent pair while the frame class writes it.

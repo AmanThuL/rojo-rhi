@@ -20,6 +20,7 @@ namespace rojoRHI::core {
     Result<Upscaler> createUpscaler(DeviceCore& core, const UpscalerDesc& desc);
 
     /// Checks one upscale (VU-rojo-cmd-0063, VU-rojo-upscale-0004 to 0015, VU-rojo-present-0012, VU-rojo-core-0001 to 0003). The
-    /// operation records nothing else on the Null backend. Release builds check nothing and take no lock.
+    /// operation forms a scope named `params.label`, or `rojorhi.upscale.unnamed`, and records nothing else on the Null backend. Release builds
+    /// check nothing and take no lock.
     void upscale(CommandListCore& list, Upscaler upscaler, const UpscaleParams& params);
 } // namespace rojoRHI::core

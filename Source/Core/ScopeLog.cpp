@@ -1,0 +1,68 @@
+//----------------------------------------------------------------------------------------------------------------------
+/// @file ScopeLog.cpp
+/// @brief Implements the per-slot record of submitted scopes and the report of the frame that retired.
+//----------------------------------------------------------------------------------------------------------------------
+
+#include "Core/ScopeLog.h"
+
+#include "Base/Assert.h"
+
+#include <cstddef>
+
+namespace rojoRHI::core {
+    //==================================================================================================================
+    ScopeLog::ScopeLog(uint32_t slots) : m_slots(slots)
+    {
+    }
+
+    //==================================================================================================================
+    void ScopeLog::submit(uint32_t slot, QueueType queue, std::span<const ScopeRecord> scopes)
+    {
+        if (scopes.empty())
+        {
+            return;
+        }
+        std::lock_guard lock(m_mutex);
+        ROJORHI_INTERNAL_ASSERT(slot < m_slots.size(), "scopes were submitted for a slot the log does not have");
+        std::vector<ScopeRecord>& record = m_slots[slot][static_cast<size_t>(queue)];
+        record.insert(record.end(), scopes.begin(), scopes.end());
+    }
+
+    //==================================================================================================================
+    void ScopeLog::clearReport()
+    {
+        m_report.clear();
+        m_labels.clear();
+    }
+
+    //==================================================================================================================
+    void ScopeLog::retire(uint32_t slot, uint64_t frame)
+    {
+        std::lock_guard lock(m_mutex);
+        ROJORHI_INTERNAL_ASSERT(slot < m_slots.size(), "a slot the log does not have was retired");
+        std::array<std::vector<ScopeRecord>, 3>& record = m_slots[slot];
+        // The labels are copied first, so the views are taken once the storage no longer moves.
+        for (const std::vector<ScopeRecord>& queue : record)
+        {
+            for (const ScopeRecord& scope : queue)
+            {
+                m_labels.emplace_back(scope.label);
+            }
+        }
+        size_t next = 0;
+        for (size_t queue = 0; queue < record.size(); ++queue)
+        {
+            for (const ScopeRecord& scope : record[queue])
+            {
+                m_report.push_back(ScopeTiming{ .label = m_labels[next++], .frame = frame, .queue = static_cast<QueueType>(queue), .depth = scope.depth });
+            }
+            record[queue].clear();
+        }
+    }
+
+    //==================================================================================================================
+    std::span<const ScopeTiming> ScopeLog::report() const
+    {
+        return m_report;
+    }
+} // namespace rojoRHI::core

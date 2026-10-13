@@ -14,6 +14,7 @@
 #include <rojoRHI/IndexType.h>
 #include <rojoRHI/PrimitiveTopology.h>
 #include <rojoRHI/RenderPassDesc.h>
+#include <rojoRHI/ResourceAccess.h>
 #include <rojoRHI/SubresourceRange.h>
 #include <rojoRHI/TextureBarrier.h>
 #include <rojoRHI/TextureRegion.h>
@@ -234,7 +235,26 @@ namespace rojoRHI {
         /// the validation tracker (VU-rojo-upscale-0016). Thread class command list.
         void upscale(Upscaler upscaler, const UpscaleParams& params);
 
+        /// Declares shader accesses for the next draw, indexed draw, mesh-task draw or dispatch recorded on the list,
+        /// including their indirect forms; several calls before one command accumulate. Each entry obeys VU-rojo-diag-0001 to
+        /// 0003 and 0005; the list is recording (VU-rojo-diag-0004); each `stage` is one the next command runs
+        /// (VU-rojo-diag-0006) and a draw or dispatch follows before `end` (VU-rojo-diag-0007). The rules are checked only
+        /// on a device created with `DeviceDesc::validation`, which returns at once otherwise. In a Release build this is an
+        /// empty inline function, so the consumer and the library must be built with the same NDEBUG setting. Thread class command
+        /// list.
+        void declareAccess(std::span<const ResourceAccess> accesses)
+        {
+#ifndef NDEBUG
+            declareAccessChecked(accesses);
+#else
+            (void)accesses;
+#endif
+        }
+
       private:
+        /// The library's side of `declareAccess`; it is defined in every build, and only a non-Release caller reaches it.
+        void declareAccessChecked(std::span<const ResourceAccess> accesses);
+
         friend struct CommandListImpl;
         struct CommandListImpl* m_impl = nullptr;
     };

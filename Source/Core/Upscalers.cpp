@@ -8,6 +8,7 @@
 #include "Base/Assert.h"
 #include "Core/Formats.h"
 #include "Core/Label.h"
+#include "Core/Scopes.h"
 #include "Core/Textures.h"
 
 #include <algorithm>
@@ -114,12 +115,11 @@ namespace rojoRHI::core {
     }
 
     //==================================================================================================================
-    void upscale(CommandListCore& list, [[maybe_unused]] Upscaler upscaler, [[maybe_unused]] const UpscaleParams& params)
+    void upscale(CommandListCore& list, [[maybe_unused]] Upscaler upscaler, const UpscaleParams& params)
     {
         checkRecording(list);
         ROJORHI_VU(list.type == QueueType::Graphics, "VU-rojo-upscale-0006", "upscale was recorded on the non-Graphics list \"{}\"", list.label);
         ROJORHI_VU(!list.passOpen, "VU-rojo-upscale-0007", "upscale was recorded on the list \"{}\" with a render pass open", list.label);
-        // The operation forms a debug group named `params.label`; the Null backend keeps no group labels, as `beginScope` does not.
 #ifndef NDEBUG
         // The records feed the Debug-tier checks only; reading them takes the pools' locks (ADR 0019).
         UpscalerRecord* scaler = list.device->pool<Upscaler>().checked(upscaler, false);
@@ -205,5 +205,7 @@ namespace rojoRHI::core {
         const uint64_t previous = scaler->lastFrame.frame.exchange(list.frame, std::memory_order_relaxed);
         ROJORHI_VU(previous != list.frame, "VU-rojo-upscale-0008", "the upscaler \"{}\" was already used by an upscale in frame {}", scaler->label, list.frame);
 #endif
+        // The operation forms its own debug group, a scope of the timings report, named `params.label`.
+        recordScope(list, params.label, "rojorhi.upscale.unnamed", static_cast<uint32_t>(list.scopes.size()));
     }
 } // namespace rojoRHI::core

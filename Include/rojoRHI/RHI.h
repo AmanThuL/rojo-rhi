@@ -50,11 +50,13 @@
 #include <rojoRHI/QueueType.h>
 #include <rojoRHI/RasterState.h>
 #include <rojoRHI/RenderPassDesc.h>
+#include <rojoRHI/ResourceAccess.h>
 #include <rojoRHI/Result.h>
 #include <rojoRHI/SamplerAddress.h>
 #include <rojoRHI/SamplerDesc.h>
 #include <rojoRHI/SamplerFilter.h>
 #include <rojoRHI/SamplerIndex.h>
+#include <rojoRHI/ScopeTiming.h>
 #include <rojoRHI/ShaderEntry.h>
 #include <rojoRHI/Stage.h>
 #include <rojoRHI/StoreOp.h>

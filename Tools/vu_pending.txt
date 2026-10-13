@@ -10,16 +10,6 @@ VU-rojo-cmd-0069 tracker
 VU-rojo-cmd-0070 tracker
 VU-rojo-device-0006 tracker
 VU-rojo-device-0007 tracker
-VU-rojo-diag-0001 edges
-VU-rojo-diag-0002 edges
-VU-rojo-diag-0003 edges
-VU-rojo-diag-0004 edges
-VU-rojo-diag-0005 edges
-VU-rojo-diag-0006 edges
-VU-rojo-diag-0007 edges
-VU-rojo-diag-0008 edges
-VU-rojo-diag-0009 edges
-VU-rojo-diag-0010 edges
 VU-rojo-indirect-0005 tracker
 VU-rojo-indirect-0011 tracker
 VU-rojo-indirect-0017 tracker
