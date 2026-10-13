@@ -289,3 +289,22 @@ TEST_CASE("VU-rojo-sync-0024 a global barrier of the same call does not chain a 
         kit.finish();
     });
 }
+
+//======================================================================================================================
+TEST_CASE("VU-rojo-sync-0024 a later barrier whose source shares no stage with the earlier destination does not chain", "[contract][death]")
+{
+    ROJORHI_EXPECT_DEATH("VU-rojo-sync-0024", [] {
+        PassKit kit(QueueType::Graphics, true);
+        const Buffer buffer = kit.buffer(BufferUsage::ShaderWrite);
+        const std::array<ResourceAccess, 1> writes{ ResourceAccess{ .buffer = buffer, .stage = Stage::ComputeShader, .access = Access::ShaderWrite } };
+        kit.list.setPipeline(kit.compute());
+        kit.list.declareAccess(writes);
+        kit.list.dispatch(1, 1, 1);
+        global(kit.list, Stage::ComputeShader, Access::ShaderWrite, Stage::IndirectArgs, Access::IndirectArgs);
+        // The Copy stage waits for nothing the first barrier's IndirectArgs destination ordered, so the chain breaks.
+        global(kit.list, Stage::Copy, Access::None, Stage::ComputeShader, Access::ShaderWrite);
+        kit.list.declareAccess(writes);
+        kit.list.dispatch(1, 1, 1);
+        kit.finish();
+    });
+}

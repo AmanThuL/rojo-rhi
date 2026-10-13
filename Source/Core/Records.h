@@ -45,6 +45,15 @@ namespace rojoRHI::core {
     /// The tiles of a sparse resource that are mapped, each with the heap that supplies it.
     using TileMap = std::map<TileKey, Heap>;
 
+    /// How many command lists that were recorded and not yet submitted reference an object, each counted once, kept apart by how
+    /// the list names it. Only Debug builds on a validating device write it, under the pool's lock (VU-rojo-device-0007).
+    struct ListReferences
+    {
+        uint32_t roots = 0;  ///< Lists whose root is an address in the buffer (VU-rojo-abi-0003); zero for any other object.
+        uint32_t addrs = 0;  ///< Lists passed an address in the buffer (VU-rojo-buffer-0019); zero for any other object.
+        uint32_t others = 0; ///< Lists that name the object by its handle.
+    };
+
     /// What the core keeps about one live Buffer: its description; later parts add its state.
     struct BufferRecord
     {
@@ -58,8 +67,9 @@ namespace rojoRHI::core {
         /// For a frame-arena page, the frame of the list that claimed it last; zero for any other buffer. It changes under
         /// the pool's lock when a list claims the page (VU-rojo-buffer-0020).
         uint64_t arenaFrame = 0;
-        TileMap mapped = {};    ///< The mapped tiles of a Sparse buffer (VU-rojo-sparse-0012); empty for any other buffer.
-        void* native = nullptr; ///< The backend's payload for the object; the core never reads it.
+        ListReferences refs = {}; ///< The unsubmitted lists that reference the buffer.
+        TileMap mapped = {};      ///< The mapped tiles of a Sparse buffer (VU-rojo-sparse-0012); empty for any other buffer.
+        void* native = nullptr;   ///< The backend's payload for the object; the core never reads it.
     };
 
     /// What the core keeps about one live Texture: its description and how many view slots hold a view of it; later parts add
@@ -81,6 +91,7 @@ namespace rojoRHI::core {
         bool initialData = false;                ///< Created with initial data, so it starts in `Layout::ShaderRead`.
         uint64_t views = 0;                      ///< View slots holding a view of this texture (VU-rojo-texture-0028).
         bool swapchainImage = false;             ///< True for an image `Swapchain::acquire` returned (VU-rojo-present-0012, 0013, VU-rojo-sync-0005).
+        ListReferences refs = {};                ///< The unsubmitted lists that reference the texture.
         TileMap mapped = {};                     ///< The mapped tiles of a Sparse texture; empty for any other texture.
         void* native = nullptr;                  ///< The backend's payload for the object; the core never reads it.
     };
@@ -131,6 +142,7 @@ namespace rojoRHI::core {
         uint32_t blendMask = 0;                              ///< Bit `i` is set when color target `i` blends.
         bool depthWrite = false;                             ///< `DepthStencilState::depthWrite` of the descriptor.
         bool stencilWrite = false;                           ///< A stencil face operation of the descriptor is not `Keep`.
+        ListReferences refs = {};                            ///< The unsubmitted lists that reference the pipeline.
         void* native = nullptr;                              ///< The backend's payload for the object; the core never reads it.
     };
 
@@ -190,6 +202,7 @@ namespace rojoRHI::core {
         Format outputFormat = Format::RGBA16Float; ///< Format of the output.
         UpscalerFlags flags = UpscalerFlags::None; ///< Creation-time behaviour.
         FrameStamp lastFrame;                      ///< The frame of the latest upscale (VU-rojo-upscale-0008).
+        ListReferences refs = {};                  ///< The unsubmitted lists that reference the upscaler.
         void* native = nullptr;                    ///< The backend's payload for the object; the core never reads it.
     };
 

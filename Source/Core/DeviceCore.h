@@ -33,6 +33,11 @@
 namespace rojoRHI::core {
     struct SwapchainCore;
     struct CommandListCore;
+    class DeviceCore;
+
+    /// Reports VU-rojo-abi-0003, VU-rojo-buffer-0019 or VU-rojo-device-0007 when `handle` names an object that an unsubmitted list
+    /// references; defined in Tracker/References.cpp for every pooled handle type. `DeviceCore::destroy` calls it in a Debug build.
+    template<typename Handle> void checkUnreferencedChecked(DeviceCore& core, Handle handle);
 
     /// Checks a `DeviceDesc` before a backend opens anything: `ErrorCategory::Unsupported` when validation is requested in a
     /// Release build, and VU-rojo-device-0001 for a frame-slot count other than 2 or 3. A backend calls it first in
@@ -151,6 +156,9 @@ namespace rojoRHI::core {
         /// is (VU-rojo-core-0001 to 0003). Free-threaded.
         template<typename Handle> void destroy(Handle handle)
         {
+#ifndef NDEBUG
+            checkUnreferencedChecked(*this, handle);
+#endif
             pool<Handle>().checkedRelease(handle, [this] { return releaseFrame(); });
         }
 

@@ -13,6 +13,7 @@
 
 #include <cstdint>
 #include <span>
+#include <unordered_set>
 #include <vector>
 
 namespace rojoRHI::core {
@@ -30,6 +31,14 @@ namespace rojoRHI::core {
         /// The positions in `events` of the attachment uses of the open render pass, whose accesses the draws of the pass
         /// complete; empty outside a pass.
         std::vector<uint32_t> passUses;
+        /// The handles of the objects the list references, each once, by how the list names them; the counts they added to the
+        /// records, which submission or recycling removes.
+        std::unordered_set<uint64_t> rootRefs;  ///< Buffers the list's root is an address in.
+        std::unordered_set<uint64_t> addrRefs;  ///< Buffers the list was passed an address in.
+        std::unordered_set<uint64_t> otherRefs; ///< Objects the list names by handle.
+        /// The swapchain images in `otherRefs`, which replay checks are still the swapchain's (VU-rojo-present-0019). Releasing
+        /// the counts keeps it; `beginList` clears it with the rest of the log, so a recycled list names no earlier image.
+        std::vector<Texture> images;
     };
 
     /// Does the work of `logUse` in a Debug build.

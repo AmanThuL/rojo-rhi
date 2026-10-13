@@ -118,9 +118,10 @@ namespace rojoRHI::core {
             /// For a placed texture, per subresource indexed as `layouts` and per queue type, the latest use other resources made
             /// of each byte range of its memory since the subresource's last event on that queue; empty for a dedicated texture.
             std::vector<std::array<AliasMarks, 3>> aliases;
-            /// The stamp of the texture's latest use of its heap bytes on any queue, so a mark older than it is one the texture
-            /// is ordered against across queues (VU-rojo-queue-0005), not by these rules.
-            uint64_t ownStamp = 0;
+            /// For a placed texture, per subresource indexed as `layouts`, the stamp of the latest use of the subresource on any
+            /// queue, so a mark of that subresource older than it is one it is ordered against across queues
+            /// (VU-rojo-queue-0005), not by these rules; empty for a dedicated texture.
+            std::vector<uint64_t> ownStamps;
         };
 
         /// The tracker's view of one buffer.

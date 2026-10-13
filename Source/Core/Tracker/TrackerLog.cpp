@@ -8,6 +8,7 @@
 #include "Core/CommandLists.h"
 #include "Core/DeviceCore.h"
 #include "Core/Formats.h"
+#include "Core/Tracker/References.h"
 
 #include <variant>
 
@@ -44,7 +45,17 @@ namespace rojoRHI::core {
     void logUseChecked([[maybe_unused]] CommandListCore& list, [[maybe_unused]] const UseEvent& use)
     {
 #ifndef NDEBUG
-        if (!list.device->validation() || (use.buffer.bits != 0 && use.size == 0))
+        if (!list.device->validation())
+        {
+            return;
+        }
+        // An indirect read names its buffer by an address, which the command counted already; every other use names a handle.
+        if (use.rule < UseRule::Indirect0005Records)
+        {
+            noteReference(list, RefKind::Handle, use.buffer);
+            noteReference(list, RefKind::Handle, use.texture);
+        }
+        if (use.buffer.bits != 0 && use.size == 0)
         {
             return;
         }
@@ -65,6 +76,14 @@ namespace rojoRHI::core {
         if (!list.device->validation())
         {
             return;
+        }
+        for (const BufferBarrier& barrier : buffers)
+        {
+            noteReference(list, RefKind::Handle, barrier.buffer);
+        }
+        for (const TextureBarrier& barrier : textures)
+        {
+            noteReference(list, RefKind::Handle, barrier.texture);
         }
         std::vector<TrackerEvent>& events = list.trackerLog.events;
         events.insert(events.end(), globals.begin(), globals.end());

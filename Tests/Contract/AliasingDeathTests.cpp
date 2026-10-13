@@ -248,3 +248,58 @@ TEST_CASE("VU-rojo-sync-0017 a texture placed after uses of disjoint bytes disca
         kit.finish();
     });
 }
+
+namespace {
+    //==================================================================================================================
+    /// Records a pass over mip `mip` of `texture`, a `PassKit::kSize` square at mip 0, that loads or clears it as `load` says.
+    void renderMip(CommandList list, Texture texture, uint32_t mip, LoadOp load)
+    {
+        const uint32_t size = PassKit::kSize >> mip;
+        const std::array<ColorAttachment, 1> colors{ ColorAttachment{ .texture = texture, .mip = mip, .load = load } };
+        list.beginRenderPass(RenderPassDesc{ .colors = colors, .area = { 0, 0, size, size }, .label = "test.pass" });
+        list.endRenderPass();
+    }
+
+    //==================================================================================================================
+    /// Records the discard of the mips `range` of `texture` to `ColorAttachment`, waiting for `srcStage`.
+    void discardMips(CommandList list, Texture texture, const SubresourceRange& range, Stage srcStage)
+    {
+        const std::array<TextureBarrier, 1> barriers{ TextureBarrier{ .texture = texture,
+                                                                      .range = range,
+                                                                      .srcStage = srcStage,
+                                                                      .dstStage = Stage::ColorAttachment,
+                                                                      .dstAccess = Access::ColorAttachmentRead | Access::ColorAttachmentWrite,
+                                                                      .oldLayout = Layout::Undefined,
+                                                                      .newLayout = Layout::ColorAttachment } };
+        list.barrier({}, {}, barriers);
+    }
+} // namespace
+
+//======================================================================================================================
+TEST_CASE("VU-rojo-sync-0017 a placed texture's use of one mip does not exempt another mip from discarding", "[contract][death]")
+{
+    ROJORHI_EXPECT_DEATH("VU-rojo-sync-0017", [] {
+        PassKit kit(QueueType::Graphics, true);
+        const Heap heap = makeHeap(kit);
+        const TextureDesc desc{ .format = Format::RGBA8Unorm,
+                                .extent = { PassKit::kSize, PassKit::kSize, 1 },
+                                .mips = 2,
+                                .usage = TextureUsage::RenderTarget,
+                                .label = "test.placed.mips" };
+        const Texture texture = *kit.device.createTexture(desc, {}, Placement{ .heap = heap, .offset = 0 });
+        const Buffer buffer = placedBuffer(kit, heap, 0);
+        discardMips(kit.list, texture, {}, Stage::None);
+        renderMip(kit.list, texture, 0, LoadOp::Clear);
+        renderMip(kit.list, texture, 1, LoadOp::Clear);
+        global(kit.list, Stage::ColorAttachment, Access::ColorAttachmentWrite, Stage::Copy, Access::CopyWrite);
+        kit.list.fillBuffer(buffer, 0, kBytes, 0);
+        // Mip 0 discards after the fill; mip 1 does not, though the fill overwrote its bytes too.
+        discardMips(kit.list, texture, SubresourceRange{ .mipCount = 1 }, Stage::Copy);
+        renderMip(kit.list, texture, 0, LoadOp::Clear);
+        global(
+            kit.list, Stage::ColorAttachment, Access::ColorAttachmentWrite, Stage::ColorAttachment, Access::ColorAttachmentRead | Access::ColorAttachmentWrite
+        );
+        renderMip(kit.list, texture, 1, LoadOp::Load);
+        kit.finish();
+    });
+}
