@@ -53,7 +53,8 @@ rule("rojorhi.slang")
 
         -- Runs slangc and raises with its own output when it fails. `stdout_file` captures standard output
         -- into a file, which is how the HLSL target delivers every entry point of a file in one text.
-        -- Returns whether it succeeded plus the error text, when `soft` asks to handle the failure.
+        -- Returns whether it succeeded plus the error text, when `soft` asks to handle the failure. A successful
+        -- compile's own warnings are printed, not hidden.
         local function run_slangc(slangc, args, stdout_file, soft)
             local errfile = os.tmpfile()
             local ok = try {function ()
@@ -65,6 +66,9 @@ rule("rojorhi.slang")
             if not ok and not soft then
                 if stdout_file then os.tryrm(stdout_file) end
                 os.raise("rojorhi.slang: slangc failed for %s\n%s", table.concat(args, " "), err)
+            end
+            if ok and not soft and err:find("%S") then
+                cprint("${yellow}%s", err)
             end
             return ok and true or false, err
         end
@@ -133,8 +137,9 @@ rule("rojorhi.slang")
         -- shader fails the build.
         local probe = path.join(outdir, "DxilProbe.slang")
         io.writefile(probe, "[shader(\"compute\")]\n[numthreads(1, 1, 1)]\nvoid probeMain() {}\n")
-        local dxil_available, probe_err = run_slangc(slangc, {probe, "-target", "dxil", "-entry",
-            "probeMain", "-stage", "compute", "-o", path.join(outdir, "DxilProbe.dxil")}, nil, true)
+        local dxil_available, probe_err = run_slangc(slangc, {probe, "-D", "ROJORHI_TARGET_HLSL",
+            "-target", "dxil", "-entry", "probeMain", "-stage", "compute",
+            "-o", path.join(outdir, "DxilProbe.dxil")}, nil, true)
         os.tryrm(probe)
         os.tryrm(path.join(outdir, "DxilProbe.dxil"))
         if not dxil_available then
@@ -149,17 +154,18 @@ rule("rojorhi.slang")
 
             local msl = path.join(outdir, name .. ".metal")
             if stale(msl) then
-                run_slangc(slangc, table.join(base, {"-target", "metal", "-o", msl}))
+                run_slangc(slangc, table.join(base, {"-D", "ROJORHI_TARGET_METAL", "-target", "metal", "-o", msl}))
             end
             local spv = path.join(outdir, name .. ".spv")
             if stale(spv) then
-                run_slangc(slangc, table.join(base, {"-target", "spirv", "-o", spv}))
+                run_slangc(slangc, table.join(base, {"-D", "ROJORHI_TARGET_SPIRV", "-target", "spirv", "-o", spv}))
             end
             -- HLSL has no single-output form for several entries, so its text is the compiler's
             -- standard output, which holds every entry of the file.
             local hlsl = path.join(outdir, name .. ".hlsl")
             if stale(hlsl) then
-                run_slangc(slangc, table.join(base, {"-target", "hlsl"}), hlsl)
+                run_slangc(slangc, table.join(base, {"-D", "ROJORHI_TARGET_HLSL", "-target", "hlsl",
+                    "-profile", "sm_6_6"}), hlsl)
             end
 
             if has_metal then
@@ -174,8 +180,8 @@ rule("rojorhi.slang")
                 local dxil = path.join(outdir, #entries == 1 and (name .. ".dxil")
                                        or format("%s.%s.dxil", name, entry.name))
                 if dxil_available and stale(dxil) then
-                    run_slangc(slangc, table.join(base, {"-target", "dxil", "-entry",
-                        entry.name, "-stage", entry.stage, "-o", dxil}))
+                    run_slangc(slangc, table.join(base, {"-D", "ROJORHI_TARGET_HLSL", "-target", "dxil",
+                        "-profile", "sm_6_6", "-entry", entry.name, "-stage", entry.stage, "-o", dxil}))
                 end
             end
         end
