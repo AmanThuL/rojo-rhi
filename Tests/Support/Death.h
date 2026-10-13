@@ -76,5 +76,6 @@ namespace rojoRHI::test {
     std::string quoteWindowsArgument(std::string_view argument);
 } // namespace rojoRHI::test
 
-/// Asserts that `body` violates the valid-usage rule `id` and aborts the process.
-#define ROJORHI_EXPECT_DEATH(id, body) ::rojoRHI::test::expectDeath(id, body)
+/// Asserts that the body violates the valid-usage rule `id` and aborts the process. The body is variadic so a comma outside
+/// parentheses, in a braced initializer or a template argument list, does not split it.
+#define ROJORHI_EXPECT_DEATH(id, ...) ::rojoRHI::test::expectDeath(id, __VA_ARGS__)

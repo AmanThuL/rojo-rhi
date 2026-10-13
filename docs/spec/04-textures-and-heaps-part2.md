@@ -21,8 +21,10 @@ store one base index and an offset, let an offline tool bake indices into asset 
 streaming replace the texture behind a stable index. A write takes effect for work submitted after
 it. Replacing a slot that unretired work may still read is a data race the validation tracker
 cannot see, because a bindless shader's reads are invisible to the CPU. The safe recipe is: write
-into a fresh slot, publish its index, then release the old slot. The validation tracker checks what
-it can see: writes into released or unreserved ranges, and slot type against use.
+into a fresh slot, publish its index, then release the old slot. The Debug tier rejects a write into
+a range RojoRHI does not currently hold as reserved (`VU-rojo-texture-0031`); a released value that
+equals a later identical reservation cannot be told apart, so reusing a released `IndexRange` stays
+undefined behaviour beyond that. The validation tracker checks slot type against use.
 
 RHI-assigned slots are simple, safe by construction and hide backend differences such as D3D12's
 separate read and write descriptors and Metal's ID tables, but give no layout control, no

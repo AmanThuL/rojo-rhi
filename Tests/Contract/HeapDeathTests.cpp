@@ -29,6 +29,17 @@ TEST_CASE("VU-rojo-heap-0002 placement requirements are requested for a Sparse b
 }
 
 //======================================================================================================================
+TEST_CASE("VU-rojo-heap-0002 placement requirements are requested for a Sparse texture", "[contract][death]")
+{
+    ROJORHI_EXPECT_DEATH("VU-rojo-heap-0002", [] {
+        Device device = *createDevice();
+        (void)device.placementRequirements(
+            TextureDesc{ .format = Format::RGBA8Unorm, .extent = { 4, 4, 1 }, .usage = TextureUsage::Sampled | TextureUsage::Sparse }
+        );
+    });
+}
+
+//======================================================================================================================
 TEST_CASE("VU-rojo-heap-0003 a buffer extends past the end of its heap", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-heap-0003", [] {
@@ -59,6 +70,16 @@ TEST_CASE("VU-rojo-heap-0005 a buffer is placed in a heap of another memory clas
         Device device = *createDevice();
         const Heap heap = *device.createHeap({ .size = 4096, .memory = Memory::Upload });
         (void)device.createBuffer({ .size = 64, .memory = Memory::Gpu }, {}, { heap, 0 });
+    });
+}
+
+//======================================================================================================================
+TEST_CASE("VU-rojo-heap-0005 a texture is placed in an Upload heap", "[contract][death]")
+{
+    ROJORHI_EXPECT_DEATH("VU-rojo-heap-0005", [] {
+        Device device = *createDevice();
+        const Heap heap = *device.createHeap({ .size = 1 << 20, .memory = Memory::Upload });
+        (void)device.createTexture({ .format = Format::RGBA8Unorm, .extent = { 4, 4, 1 }, .usage = TextureUsage::Sampled }, {}, { heap, 0 });
     });
 }
 

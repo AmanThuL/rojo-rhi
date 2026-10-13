@@ -13,6 +13,7 @@
 #include "Core/Formats.h"
 #include "Core/HandlePool.h"
 #include "Core/Records.h"
+#include "Core/SlotAllocator.h"
 
 #include <atomic>
 #include <cstdint>
@@ -100,6 +101,14 @@ namespace rojoRHI::core {
             return std::get<HandlePool<Handle, RecordFor<Handle>>>(m_pools);
         }
 
+        /// Returns the allocator of the global view heap; `Device::createView` takes its slots and `destroy(ViewIndex)` releases
+        /// them, and `beginFrame` retires them with the frame that released them.
+        SlotAllocator& views();
+
+        /// Returns the allocator of the global sampler heap; `Device::createSampler` takes its slots and `destroy(SamplerIndex)`
+        /// releases them, and `beginFrame` retires them with the frame that released them.
+        SlotAllocator& samplers();
+
         /// Returns the number of frame slots.
         uint32_t framesInFlight() const;
 
@@ -128,6 +137,8 @@ namespace rojoRHI::core {
             HandlePool<Fence, FenceRecord>,
             HandlePool<Upscaler, UpscalerRecord>>
             m_pools;
+        SlotAllocator m_views;
+        SlotAllocator m_samplers;
         RetireHooks m_hooks;
         Capabilities m_capabilities;
         FormatTable m_formats;

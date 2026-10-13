@@ -14,7 +14,7 @@ the code realises it.
 
 | Area | Where | Content |
 |---|---|---|
-| Public headers | `Include/rojoRHI/` | `Result.h`, `Handles.h`, `Geometry.h`, `Message.h`, `Device.h`, `DeviceDesc.h`, `Capabilities.h`, `Limits.h`, `UpscalerKind.h`, `Format.h`, `FormatCapabilities.h`, `SamplerIndex.h`, `ViewIndex.h`, `Swapchain.h`, `Addr.h`, `IndirectArgs.h`, `Version.h`, and the umbrella `RHI.h` |
+| Public headers | `Include/rojoRHI/` | `Result.h`, `Handles.h`, `Geometry.h`, `Message.h`, `Device.h`, `DeviceDesc.h`, `Capabilities.h`, `Limits.h`, `UpscalerKind.h`, `Format.h`, `FormatCapabilities.h`, `SamplerIndex.h`, `SamplerDesc.h`, `SamplerFilter.h`, `SamplerAddress.h`, `CompareOp.h`, `IndexRange.h`, `ViewIndex.h`, `Swapchain.h`, `Addr.h`, `IndirectArgs.h`, `Version.h`, and the umbrella `RHI.h` |
 | Private base | `Source/Base/` | `ROJORHI_VU`, `ROJORHI_INTERNAL_ASSERT`, the message sink |
 | Shared core | `Source/Core/` | `HandlePool`, `DeviceCore`, the format capability rules, label checks |
 | Null backend | `Backends/Null/Source/` | `NullDevice`: the public `Device` entries, translating to the core |
@@ -73,8 +73,9 @@ another type's tag. Releasing a slot advances its generation at once, so the old
 rejected immediately. The slot returns to the free list only after the frame that released it
 retires, and a record handed to the retire callback is cleared afterwards. A slot whose generation
 would pass 2^24 - 1 is retired for good and never reused; its record still reaches the callback.
-The `Device::destroy` overloads for `ViewIndex`, `SamplerIndex` and `Swapchain` only check the
-device, since those objects do not exist yet; a default-constructed `Swapchain` is rejected
+The `Device::destroy` overload for `Swapchain` only checks the device, since swapchains do not exist
+yet; `ViewIndex` and `SamplerIndex` release a slot of the view or sampler heap, each a `SlotAllocator`
+with deferred reuse that also reserves contiguous caller-owned ranges. A default-constructed `Swapchain` is rejected
 (`VU-rojo-core-0004`).
 
 `Handles.h` holds the seven small handle structs and `Geometry.h` the four geometry structs

@@ -9,8 +9,13 @@
 
 #include "Core/Buffers.h"
 #include "Core/DeviceCore.h"
+#include "Core/Formats.h"
 #include "Core/Heaps.h"
+#include "Core/Ranges.h"
+#include "Core/Samplers.h"
+#include "Core/Textures.h"
 
+#include <algorithm>
 #include <array>
 #include <cstdlib>
 #include <cstring>
@@ -64,6 +69,31 @@ namespace rojoRHI {
         {
             constexpr uint64_t kAlignment = 256;
             return PlacementRequirements{ (desc.size + kAlignment - 1) / kAlignment * kAlignment, kAlignment };
+        }
+
+        //==============================================================================================================
+        /// The Null device's placement answer for a texture: the packed bytes of every mip, layer and sample rounded up to 1024
+        /// bytes, at an alignment of 1024 bytes. Like the buffer answer it is the Null backend's own round number, neither
+        /// Metal's nor D3D12's. Written to be safe for a descriptor the core has not checked yet.
+        PlacementRequirements nullTextureRequirements(const TextureDesc& desc)
+        {
+            constexpr uint64_t kAlignment = 1024;
+            core::FormatLayout layout = core::formatLayout(desc.format);
+            if (desc.format == Format::D32FloatS8)
+            {
+                layout.blockBytes = 8; // The Null device's own size for a format with no packed texel size.
+            }
+            uint64_t bytes = 0;
+            for (uint32_t mip = 0; mip < std::min(desc.mips, 32u); ++mip)
+            {
+                const uint64_t width = std::max(desc.extent.width >> mip, 1u);
+                const uint64_t height = std::max(desc.extent.height >> mip, 1u);
+                const uint64_t depth = std::max(desc.extent.depth >> mip, 1u);
+                bytes +=
+                    (width + layout.blockWidth - 1) / layout.blockWidth * ((height + layout.blockHeight - 1) / layout.blockHeight) * depth * layout.blockBytes;
+            }
+            bytes *= uint64_t{ desc.layers } * desc.samples;
+            return PlacementRequirements{ (std::max(bytes, uint64_t{ 1 }) + kAlignment - 1) & ~(kAlignment - 1), kAlignment };
         }
 
         //==============================================================================================================
@@ -199,6 +229,65 @@ namespace rojoRHI {
     }
 
     //==================================================================================================================
+    PlacementRequirements Device::placementRequirements(const TextureDesc& desc)
+    {
+        DeviceImpl& impl = DeviceImpl::of(*this);
+        core::checkTextureRequirementsQuery(impl.core, desc);
+        return nullTextureRequirements(desc);
+    }
+
+    //==================================================================================================================
+    Result<Texture> Device::createTexture(const TextureDesc& desc, std::span<const TextureData> initial, Placement placement)
+    {
+        DeviceImpl& impl = DeviceImpl::of(*this);
+        const PlacementRequirements requirements = placement.heap.bits != 0 ? nullTextureRequirements(desc) : PlacementRequirements{};
+        // A Null texture keeps its record and drops its texels, initial data included.
+        return core::addTexture(impl.core, core::prepareTexture(impl.core, desc, initial, placement, requirements));
+    }
+
+    //==================================================================================================================
+    Result<ViewIndex> Device::createView(Texture texture, const TextureViewDesc& desc)
+    {
+        return core::createView(DeviceImpl::of(*this).core, texture, desc);
+    }
+
+    //==================================================================================================================
+    Result<SamplerIndex> Device::createSampler(const SamplerDesc& desc)
+    {
+        return core::createSampler(DeviceImpl::of(*this).core, desc);
+    }
+
+    //==================================================================================================================
+    Result<IndexRange> Device::reserveViews(uint32_t count)
+    {
+        return core::reserveViews(DeviceImpl::of(*this).core, count);
+    }
+
+    //==================================================================================================================
+    void Device::writeView(IndexRange range, uint32_t index, Texture texture, const TextureViewDesc& desc)
+    {
+        core::writeView(DeviceImpl::of(*this).core, range, index, texture, desc);
+    }
+
+    //==================================================================================================================
+    Result<IndexRange> Device::reserveSamplers(uint32_t count)
+    {
+        return core::reserveSamplers(DeviceImpl::of(*this).core, count);
+    }
+
+    //==================================================================================================================
+    void Device::writeSampler(IndexRange range, uint32_t index, const SamplerDesc& desc)
+    {
+        core::checkSamplerWrite(DeviceImpl::of(*this).core, range, index, desc);
+    }
+
+    //==================================================================================================================
+    void Device::release(IndexRange range)
+    {
+        core::releaseRange(DeviceImpl::of(*this).core, range);
+    }
+
+    //==================================================================================================================
     Addr Device::address(Buffer buffer, uint64_t offset)
     {
         DeviceImpl& impl = DeviceImpl::of(*this);
@@ -225,7 +314,7 @@ namespace rojoRHI {
     //==================================================================================================================
     void Device::destroy(Texture texture)
     {
-        DeviceImpl::of(*this).core.destroy(texture);
+        core::destroyTexture(DeviceImpl::of(*this).core, texture);
     }
 
     //==================================================================================================================
@@ -258,19 +347,19 @@ namespace rojoRHI {
         DeviceImpl::of(*this).core.destroy(upscaler);
     }
 
-    // The view and sampler heaps and swapchains do not exist yet, so releasing one has nothing to defer.
-
     //==================================================================================================================
-    void Device::destroy(ViewIndex)
+    void Device::destroy(ViewIndex view)
     {
-        DeviceImpl::of(*this);
+        core::destroyView(DeviceImpl::of(*this).core, view);
     }
 
     //==================================================================================================================
-    void Device::destroy(SamplerIndex)
+    void Device::destroy(SamplerIndex sampler)
     {
-        DeviceImpl::of(*this);
+        core::destroySampler(DeviceImpl::of(*this).core, sampler);
     }
+
+    // Swapchains do not exist yet, so releasing one has nothing to defer.
 
     //==================================================================================================================
     void Device::destroy(Swapchain swapchain)

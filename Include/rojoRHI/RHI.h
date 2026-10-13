@@ -8,6 +8,7 @@
 #include <rojoRHI/BufferDesc.h>
 #include <rojoRHI/BufferUsage.h>
 #include <rojoRHI/Capabilities.h>
+#include <rojoRHI/CompareOp.h>
 #include <rojoRHI/Device.h>
 #include <rojoRHI/DeviceDesc.h>
 #include <rojoRHI/Format.h>
@@ -15,6 +16,7 @@
 #include <rojoRHI/Geometry.h>
 #include <rojoRHI/Handles.h>
 #include <rojoRHI/HeapDesc.h>
+#include <rojoRHI/IndexRange.h>
 #include <rojoRHI/IndirectArgs.h>
 #include <rojoRHI/Limits.h>
 #include <rojoRHI/Memory.h>
@@ -22,8 +24,18 @@
 #include <rojoRHI/Placement.h>
 #include <rojoRHI/PlacementRequirements.h>
 #include <rojoRHI/Result.h>
+#include <rojoRHI/SamplerAddress.h>
+#include <rojoRHI/SamplerDesc.h>
+#include <rojoRHI/SamplerFilter.h>
 #include <rojoRHI/SamplerIndex.h>
+#include <rojoRHI/SubresourceRange.h>
 #include <rojoRHI/Swapchain.h>
+#include <rojoRHI/TextureAspect.h>
+#include <rojoRHI/TextureData.h>
+#include <rojoRHI/TextureDesc.h>
+#include <rojoRHI/TextureType.h>
+#include <rojoRHI/TextureUsage.h>
+#include <rojoRHI/TextureViewDesc.h>
 #include <rojoRHI/UpscalerKind.h>
 #include <rojoRHI/Version.h>
 #include <rojoRHI/ViewIndex.h>

@@ -255,11 +255,15 @@ TEST_CASE("destroy accepts a live handle of every resource type", "[contract]")
 }
 
 //======================================================================================================================
-TEST_CASE("destroy accepts a view index and a sampler index on a live device", "[contract]")
+TEST_CASE("destroy accepts a view index createView returned and a sampler index on a live device", "[contract]")
 {
     Device device = makeDevice();
-    device.destroy(ViewIndex{ 5 });
-    device.destroy(SamplerIndex{ 5 });
+    const Texture texture = *device.createTexture({ .format = Format::R8Unorm, .extent = { 4, 4, 1 }, .usage = TextureUsage::Sampled });
+    device.destroy(*device.createView(texture, {}));
+    device.destroy(texture);
+    CHECK(core::coreOf(device).views().assignedCount() == 0);
+    device.destroy(*device.createSampler({}));
+    CHECK(core::coreOf(device).samplers().assignedCount() == 0);
     destroyDevice(device);
 }
 

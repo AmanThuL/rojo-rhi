@@ -57,6 +57,8 @@ namespace rojoRHI::core {
                     }
                 });
             });
+            m_views.retire(retired);
+            m_samplers.retire(retired);
         }
     }
 
@@ -175,6 +177,18 @@ namespace rojoRHI::core {
     {
         const uint64_t state = m_state.load();
         return (state & 1) != 0 ? (state >> 1) : (state >> 1) + 1;
+    }
+
+    //==================================================================================================================
+    SlotAllocator& DeviceCore::views()
+    {
+        return m_views;
+    }
+
+    //==================================================================================================================
+    SlotAllocator& DeviceCore::samplers()
+    {
+        return m_samplers;
     }
 
     //==================================================================================================================
