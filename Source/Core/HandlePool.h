@@ -8,6 +8,7 @@
 
 #include "Base/Assert.h"
 
+#include <algorithm>
 #include <cstddef>
 #include <cstdint>
 #include <deque>
@@ -79,6 +80,8 @@ namespace rojoRHI::core {
     template<typename Handle, typename Record> class HandlePool
     {
       public:
+        using HandleType = Handle; ///< The handle type this pool issues.
+
         /// The largest generation a slot can hold; a slot released at this generation is retired for good.
         static constexpr uint32_t kMaxGeneration = (1u << 24) - 1;
 
@@ -155,6 +158,31 @@ namespace rojoRHI::core {
             });
         }
 
+        /// Hands `onRecord` the record of every live slot and of every slot released but not yet retired, each exactly once, and
+        /// empties the pool: no handle it issued is valid afterwards and no slot is reused. `onRecord` runs under the pool's
+        /// lock and must not call the pool.
+        template<typename OnRecord> void drain(OnRecord&& onRecord)
+        {
+            std::lock_guard lock(mutex_);
+            for (const Pending& entry : pending_)
+            {
+                Slot& slot = slots_[entry.index];
+                onRecord(slot.record);
+                slot.record = Record{};
+            }
+            pending_.clear();
+            free_.clear();
+            for (Slot& slot : slots_)
+            {
+                if (slot.live)
+                {
+                    onRecord(slot.record);
+                    slot.record = Record{};
+                    slot.live = false;
+                }
+            }
+        }
+
         /// Retires as the two-argument overload does, with nothing to do for each record.
         void retire(uint64_t upToFrame)
         {
@@ -190,6 +218,13 @@ namespace rojoRHI::core {
                     visit(slot.record);
                 }
             }
+        }
+
+        /// Returns true when no slot is live and none is released but not yet retired.
+        bool empty()
+        {
+            std::lock_guard lock(mutex_);
+            return pending_.empty() && std::none_of(slots_.begin(), slots_.end(), [](const Slot& slot) { return slot.live; });
         }
 
         /// Returns the number of live slots.

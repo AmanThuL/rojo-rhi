@@ -83,7 +83,7 @@ namespace rojoRHI {
             return std::unexpected(std::move(valid.error()));
         }
         auto impl = std::make_unique<DeviceImpl>(desc);
-        Capabilities& capabilities = impl->capabilities;
+        Capabilities& capabilities = impl->core.capabilities();
         capabilities.adapterName = "Null";
         capabilities.floorName = "Null";
         capabilities.limits = nullLimits();
@@ -94,7 +94,7 @@ namespace rojoRHI {
         capabilities.meshTasksIndirect = true;
         capabilities.conservativeRaster = true;
         capabilities.upscalers = kUpscalers;
-        impl->formats = core::formatCeilings();
+        impl->core.setFormatTable(core::formatCeilings());
         return DeviceImpl::wrap(impl.release());
     }
 
@@ -109,15 +109,13 @@ namespace rojoRHI {
     //==================================================================================================================
     const Capabilities& Device::capabilities() const
     {
-        return DeviceImpl::of(*this).capabilities;
+        return DeviceImpl::of(*this).core.capabilities();
     }
 
     //==================================================================================================================
     FormatCapabilities Device::formatCapabilities(Format format) const
     {
-        const DeviceImpl& impl = DeviceImpl::of(*this);
-        core::checkQueryFormat(format);
-        return impl.formats[static_cast<uint32_t>(format)];
+        return DeviceImpl::of(*this).core.formatCapabilities(format);
     }
 
     //==================================================================================================================
