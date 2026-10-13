@@ -6,8 +6,8 @@ This page describes RojoRHI's shape as the code stands today: the v1 interface i
 Luminex, implemented by the Metal 4 backend and frozen under `Legacy/` (ADR 0017). The top-level
 `Include/`, `Source/`, `Backends/`, `Tests/` and `Shaders/` are the permanent names, reserved for
 the v2 interface, which is specified in the ADRs and the API reference under `docs/spec/` and is
-implemented on the test-only Null backend except for the validation tracker; the shader ABI module
-and its hosted checks exist.
+implemented on the test-only Null backend, whose validation tracker is built as far as its layout
+rules; the shader ABI module and its hosted checks exist.
 
 ```
 rojo-rhi/

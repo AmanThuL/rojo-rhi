@@ -37,12 +37,12 @@ struct DeviceDesc {
 };
 ```
 - `validation` runs the validation tracker for the device's lifetime: every observable access and
-  every barrier, heap-slot typing, cross-queue handoff and lifetime are checked, at a tracking
-  cost, and a violated tracker-checked rule is reported and terminates the process. The tracker is
-  compiled only into non-Release (Debug) builds, where it is selected per device at run time; a
-  Release build contains no tracker, and `createDevice` with `validation` set returns
-  `ErrorCategory::Unsupported` there. Timed measurements run with it off. The tracker's behaviour
-  is specified in [diagnostics](14-diagnostics.md).
+  every barrier, cross-queue handoff and lifetime are checked, at a tracking cost, and a violated
+  tracker-checked rule is reported and terminates the process. The tracker is compiled only into
+  non-Release (Debug) builds, where it is selected per device at run time; a Release build contains
+  no tracker, and `createDevice` with `validation` set returns `ErrorCategory::Unsupported` there.
+  Timed measurements run with it off. The tracker's behaviour is specified in
+  [diagnostics](14-diagnostics.md).
 - `enableCapture` prepares the process for `Device::beginCapture` ([diagnostics](14-diagnostics.md))
   where the native capture tool must be loaded before the device exists. Without it, a capture
   request on such a backend fails as specified there.

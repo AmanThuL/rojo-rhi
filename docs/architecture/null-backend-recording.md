@@ -29,7 +29,8 @@ device, queue type and frame the list was acquired in, a `ListState` (Recording,
 whether a render pass is open and its `PassState` (attachment formats, sample count, area, whether
 a viewport and scissor were set), the bound pipeline, the root address, one entry per open scope
 (true when it began inside a pass), the label and the frame-data page. Commands are not stored:
-the Null backend renders nothing, and the validation tracker will add the record it needs.
+the Null backend renders nothing, and on a validating device the list also owns the tracker log
+of [the edges](null-backend-edges.md#the-validation-tracker).
 
 Recording follows [ADR 0020](../decisions/0020-recording-locks-scope-labels.md). Every lookup of a
 handle's or an address's record, and every loop, whose only purpose is a Debug-tier check sits under
@@ -198,8 +199,10 @@ The same range rules serve views, copies, clears and barriers.
 `barrier` checks the Debug-tier rules of a batch: stage and access sets valid for the list's queue
 type, a buffer range inside its buffer and a texture's layouts and subresource range, the live
 resource lookups, and no barrier inside a pass (`VU-rojo-sync-0019`). Rules that follow a resource's
-state across commands (the previous layout and hazards) are the validation tracker's and stay
-pending. The Null backend discards the barriers.
+state across commands are the validation tracker's. On a validating device each record is logged
+and replayed at submission, which judges the layouts; the hazard rules are still pending
+([the tracker](null-backend-edges.md#the-validation-tracker)). The Null backend discards the
+barriers.
 
 ## Tests
 
@@ -212,8 +215,8 @@ textures and pipelines.
 
 ## What remains
 
-- Recording rules that need state across commands: the validation tracker (`tracker` entries of
-  `Tools/vu_pending.txt`, among them `VU-rojo-cmd-0007`, `0010`, `0054`, `0067`, `0069`, `0070`,
-  `VU-rojo-sync-0004`, `0006`, `0009` and `0013`, `VU-rojo-indirect-0005` and `0011`).
+- Recording rules that need hazards, aliasing or lifetime across commands: the rest of the
+  validation tracker (`tracker` entries of `Tools/vu_pending.txt`, among them `VU-rojo-sync-0009`,
+  `VU-rojo-sync-0021`, `VU-rojo-indirect-0005` and `0011`).
 - A native backend: slot payloads for views and samplers, and the use of the retire and
   `frameSlot` hooks for native command lists and arena pages.
