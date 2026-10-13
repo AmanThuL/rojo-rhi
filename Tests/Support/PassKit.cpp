@@ -12,7 +12,7 @@
 
 namespace rojoRHI::test {
     //==================================================================================================================
-    PassKit::PassKit(QueueType listType, bool validation) : type(listType)
+    PassKit::PassKit(QueueType listType, bool validation) : type(listType), m_validation(validation)
     {
         device = *createDevice(DeviceDesc{ .validation = validation });
         const std::vector<std::byte> blob = standardLibrary();
@@ -66,6 +66,15 @@ namespace rojoRHI::test {
     }
 
     //==================================================================================================================
+    Pipeline PassKit::graphicsWith(std::span<const ColorTarget> targets, Format depth, const DepthStencilState& depthStencil, uint32_t samples)
+    {
+        GraphicsPipelineDesc desc{
+            .vertex = { library, "vsMain" }, .depthStencil = depthStencil, .colors = targets, .depthFormat = depth, .samples = samples, .label = "kit.pipeline"
+        };
+        return *device.createPipeline(desc);
+    }
+
+    //==================================================================================================================
     Pipeline PassKit::compute()
     {
         return *device.createPipeline(ComputePipelineDesc{ .compute = { library, "csMain" }, .label = "kit.compute" });
@@ -74,7 +83,15 @@ namespace rojoRHI::test {
     //==================================================================================================================
     void PassKit::beginSimplePass()
     {
-        const std::array<ColorAttachment, 1> colors{ ColorAttachment{ .texture = target() } };
+        const Texture color = target();
+        if (m_validation)
+        {
+            // The tracker judges the attachment's layout at submission, so a validating kit moves it first.
+            const std::array<TextureBarrier, 1> barriers{ TextureBarrier{
+                .texture = color, .srcStage = Stage::All, .dstStage = Stage::All, .oldLayout = Layout::Undefined, .newLayout = Layout::ColorAttachment } };
+            list.barrier({}, {}, barriers);
+        }
+        const std::array<ColorAttachment, 1> colors{ ColorAttachment{ .texture = color } };
         list.beginRenderPass(fullPass(colors));
     }
 

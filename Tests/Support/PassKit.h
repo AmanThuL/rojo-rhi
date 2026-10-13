@@ -38,10 +38,15 @@ namespace rojoRHI::test {
             bool mesh = false
         );
 
+        /// Creates a graphics pipeline over the color `targets` (so a test can blend) and `depth`, with the depth-stencil state
+        /// `depthStencil` (so a test can write depth or stencil).
+        Pipeline graphicsWith(std::span<const ColorTarget> targets, Format depth, const DepthStencilState& depthStencil, uint32_t samples = 1);
+
         /// Creates a compute pipeline.
         Pipeline compute();
 
-        /// Begins a pass over one `RGBA8Unorm` color attachment of the whole texture.
+        /// Begins a pass over one `RGBA8Unorm` color attachment of the whole texture. A validating kit first records the barrier
+        /// that moves the texture to `ColorAttachment`.
         void beginSimplePass();
 
         /// Creates a buffer of `size` bytes with `usage` in `memory`.
@@ -60,6 +65,9 @@ namespace rojoRHI::test {
         ShaderLibrary library; ///< The standard library.
         CommandList list;      ///< The acquired list.
         QueueType type;        ///< The queue type of `list`.
+
+      private:
+        bool m_validation; ///< The device was created with validation.
     };
 
     /// Returns a pass description of the color attachments `colors` that renders to the whole `PassKit::kSize` square.

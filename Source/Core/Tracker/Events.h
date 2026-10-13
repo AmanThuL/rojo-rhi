@@ -67,7 +67,6 @@ namespace rojoRHI::core {
         Access access = Access::None; ///< The accesses the use makes.
         LayoutSet layouts = 0;        ///< The layouts that permit the use; empty for a buffer.
         UseRule rule = UseRule::None; ///< The rule a texture use reports when no layout of `layouts` holds.
-        bool copyQueue = false;       ///< The list that made the use is a `QueueType::Copy` list (VU-rojo-sync-0006).
     };
 
     /// One event of a list's log: a use, or one record of a barrier batch as the list was given it.

@@ -81,7 +81,7 @@ namespace rojoRHI::core {
         void replayBuffer(const BufferBarrier& barrier, QueueType queue, std::string_view list);
 
         /// Replays one texture barrier: its old layout (VU-rojo-present-0014, then VU-rojo-sync-0013), then its transition.
-        void replayTexture(const TextureBarrier& barrier, QueueType queue, std::string_view list);
+        void replayTexture(const TrackerLock& held, const TextureBarrier& barrier, QueueType queue, std::string_view list);
 
         std::mutex m_mutex;
         std::unordered_map<uint64_t, TextureState> m_textures; ///< The followed textures, by handle bits.

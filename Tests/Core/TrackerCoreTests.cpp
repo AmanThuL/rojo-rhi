@@ -84,7 +84,6 @@ TEST_CASE("a copy on a validating device logs each endpoint with its stage, acce
     CHECK(read.access == Access::CopyRead);
     CHECK(read.layouts == core::layoutSet({ Layout::CopySrc, Layout::General }));
     CHECK(read.rule == core::UseRule::Cmd0054);
-    CHECK_FALSE(read.copyQueue);
     const core::UseEvent write = useAt(kit.list, before + 1);
     CHECK(write.texture == destination);
     CHECK(write.access == Access::CopyWrite);
@@ -96,7 +95,7 @@ TEST_CASE("a copy on a validating device logs each endpoint with its stage, acce
 }
 
 //======================================================================================================================
-TEST_CASE("a buffer copy on a Copy list logs byte ranges and the queue type", "[core]")
+TEST_CASE("a buffer copy on a Copy list logs byte ranges", "[core]")
 {
 #ifndef NDEBUG
     PassKit kit(QueueType::Copy, true);
@@ -111,12 +110,166 @@ TEST_CASE("a buffer copy on a Copy list logs byte ranges and the queue type", "[
     CHECK(read.stage == Stage::Copy);
     CHECK(read.access == Access::CopyRead);
     CHECK(read.layouts == 0);
-    CHECK(read.copyQueue);
     const core::UseEvent write = useAt(kit.list, 1);
     CHECK(write.buffer == destination);
     CHECK(write.offset == 512);
     CHECK(write.access == Access::CopyWrite);
     kit.finish();
+#endif
+}
+
+//======================================================================================================================
+TEST_CASE("a loaded color attachment reads, and a cleared one does not unless a draw blends", "[core]")
+{
+#ifndef NDEBUG
+    PassKit kit(QueueType::Graphics, true);
+    const std::array<ColorAttachment, 2> colors{ ColorAttachment{ .texture = kit.target(), .load = LoadOp::Load },
+                                                 ColorAttachment{ .texture = kit.target(), .load = LoadOp::Clear } };
+    kit.list.beginRenderPass(test::fullPass(colors));
+    CHECK(useAt(kit.list, 0).access == (Access::ColorAttachmentRead | Access::ColorAttachmentWrite));
+    CHECK(useAt(kit.list, 1).access == Access::ColorAttachmentWrite);
+    kit.list.endRenderPass();
+#endif
+}
+
+//======================================================================================================================
+TEST_CASE("a draw whose pipeline blends a color target adds the read to that attachment only", "[core]")
+{
+#ifndef NDEBUG
+    PassKit kit(QueueType::Graphics, true);
+    const std::array<ColorAttachment, 2> colors{ ColorAttachment{ .texture = kit.target(), .load = LoadOp::Clear },
+                                                 ColorAttachment{ .texture = kit.target(), .load = LoadOp::Clear } };
+    kit.list.beginRenderPass(test::fullPass(colors));
+    const std::array<ColorTarget, 2> targets{ ColorTarget{ .format = Format::RGBA8Unorm },
+                                              ColorTarget{ .format = Format::RGBA8Unorm, .blend = { .enable = true } } };
+    kit.list.setPipeline(kit.graphicsWith(targets, Format::Undefined, {}));
+    kit.list.setViewport({ .width = static_cast<float>(PassKit::kSize), .height = static_cast<float>(PassKit::kSize) });
+    kit.list.setScissor({ 0, 0, PassKit::kSize, PassKit::kSize });
+    kit.list.draw(3);
+    CHECK(useAt(kit.list, 0).access == Access::ColorAttachmentWrite);
+    CHECK(useAt(kit.list, 1).access == (Access::ColorAttachmentRead | Access::ColorAttachmentWrite));
+    kit.list.endRenderPass();
+#endif
+}
+
+//======================================================================================================================
+TEST_CASE("a depth test pass writes depth only when a draw's pipeline writes depth or a stencil operation", "[core]")
+{
+#ifndef NDEBUG
+    const auto record = [](const DepthStencilState& state, Format format) {
+        PassKit kit(QueueType::Graphics, true);
+        const std::array<ColorAttachment, 1> colors{ ColorAttachment{ .texture = kit.target() } };
+        RenderPassDesc desc = test::fullPass(colors);
+        desc.depth = DepthAttachment{
+            .texture = kit.depthTarget(format), .load = LoadOp::Load, .store = StoreOp::Store, .stencilLoad = LoadOp::Load, .stencilStore = StoreOp::Store
+        };
+        kit.list.beginRenderPass(desc);
+        const std::array<ColorTarget, 1> targets{ ColorTarget{ .format = Format::RGBA8Unorm } };
+        kit.list.setPipeline(kit.graphicsWith(targets, format, state));
+        kit.list.setViewport({ .width = static_cast<float>(PassKit::kSize), .height = static_cast<float>(PassKit::kSize) });
+        kit.list.setScissor({ 0, 0, PassKit::kSize, PassKit::kSize });
+        kit.list.draw(3);
+        const Access access = useAt(kit.list, 1).access;
+        kit.list.endRenderPass();
+        return access;
+    };
+    CHECK(record({ .depthTest = true }, Format::D32Float) == Access::DepthStencilRead);
+    CHECK(record({ .depthTest = true, .depthWrite = true }, Format::D32Float) == (Access::DepthStencilRead | Access::DepthStencilWrite));
+    // A stencil operation other than Keep writes; a stencil test that only keeps does not.
+    const StencilFaceState replace{ .pass = StencilOp::Replace };
+    CHECK(record({ .stencilTest = true, .front = replace }, Format::D32FloatS8) == (Access::DepthStencilRead | Access::DepthStencilWrite));
+    CHECK(record({ .stencilTest = true }, Format::D32FloatS8) == Access::DepthStencilRead);
+#endif
+}
+
+//======================================================================================================================
+TEST_CASE("the load and store operations of a depth attachment decide whether the pass writes it", "[core]")
+{
+#ifndef NDEBUG
+    const auto access = [](const DepthAttachment& depth) {
+        PassKit kit(QueueType::Graphics, true);
+        const std::array<ColorAttachment, 1> colors{ ColorAttachment{ .texture = kit.target() } };
+        RenderPassDesc desc = test::fullPass(colors);
+        desc.depth = depth;
+        desc.depth.texture =
+            kit.depthTarget(depth.stencilLoad == LoadOp::DontCare && depth.stencilStore == StoreOp::DontCare ? Format::D32Float : Format::D32FloatS8);
+        kit.list.beginRenderPass(desc);
+        const Access logged = useAt(kit.list, 1).access;
+        kit.list.endRenderPass();
+        return logged;
+    };
+    constexpr Access kTested = Access::DepthStencilRead;
+    constexpr Access kWritten = Access::DepthStencilRead | Access::DepthStencilWrite;
+    const DepthAttachment keep{ .load = LoadOp::Load, .store = StoreOp::Store, .stencilLoad = LoadOp::Load, .stencilStore = StoreOp::Store };
+    CHECK(access(keep) == kTested);
+    DepthAttachment cleared = keep;
+    cleared.load = LoadOp::Clear;
+    CHECK(access(cleared) == kWritten);
+    DepthAttachment discarded = keep;
+    discarded.load = LoadOp::DontCare;
+    CHECK(access(discarded) == kWritten);
+    DepthAttachment dropped = keep;
+    dropped.store = StoreOp::DontCare;
+    CHECK(access(dropped) == kWritten);
+    DepthAttachment stencilCleared = keep;
+    stencilCleared.stencilLoad = LoadOp::Clear;
+    CHECK(access(stencilCleared) == kWritten);
+    DepthAttachment stencilDropped = keep;
+    stencilDropped.stencilStore = StoreOp::DontCare;
+    CHECK(access(stencilDropped) == kWritten);
+    // A depth-only format ignores the stencil fields, which default to DontCare.
+    const DepthAttachment depthOnly{ .load = LoadOp::Load, .store = StoreOp::Store };
+    CHECK(access(depthOnly) == kTested);
+#endif
+}
+
+//======================================================================================================================
+TEST_CASE("a stencil operation with the stencil test off adds no write", "[core]")
+{
+#ifndef NDEBUG
+    PassKit kit(QueueType::Graphics, true);
+    const std::array<ColorAttachment, 1> colors{ ColorAttachment{ .texture = kit.target() } };
+    RenderPassDesc desc = test::fullPass(colors);
+    desc.depth = DepthAttachment{ .texture = kit.depthTarget(Format::D32FloatS8),
+                                  .load = LoadOp::Load,
+                                  .store = StoreOp::Store,
+                                  .stencilLoad = LoadOp::Load,
+                                  .stencilStore = StoreOp::Store };
+    kit.list.beginRenderPass(desc);
+    const std::array<ColorTarget, 1> targets{ ColorTarget{ .format = Format::RGBA8Unorm } };
+    kit.list.setPipeline(kit.graphicsWith(targets, Format::D32FloatS8, { .front = { .pass = StencilOp::Replace } }));
+    kit.list.setViewport({ .width = static_cast<float>(PassKit::kSize), .height = static_cast<float>(PassKit::kSize) });
+    kit.list.setScissor({ 0, 0, PassKit::kSize, PassKit::kSize });
+    kit.list.draw(3);
+    CHECK(useAt(kit.list, 1).access == Access::DepthStencilRead);
+    kit.list.endRenderPass();
+#endif
+}
+
+//======================================================================================================================
+TEST_CASE("a resolve target between two blended color attachments does not shift the color index", "[core]")
+{
+#ifndef NDEBUG
+    PassKit kit(QueueType::Graphics, true);
+    const std::array<ColorAttachment, 3> colors{ ColorAttachment{
+                                                     .texture = kit.target(Format::RGBA8Unorm, 4), .load = LoadOp::Clear, .resolve = kit.target() },
+                                                 ColorAttachment{ .texture = kit.target(Format::RGBA8Unorm, 4), .load = LoadOp::Clear },
+                                                 ColorAttachment{ .texture = kit.target(Format::RGBA8Unorm, 4), .load = LoadOp::Clear } };
+    RenderPassDesc desc = test::fullPass(colors);
+    kit.list.beginRenderPass(desc);
+    // The events are color 0, its resolve, color 1 and color 2; only colors 1 and 2 blend.
+    const ColorTarget plain{ .format = Format::RGBA8Unorm };
+    const ColorTarget blended{ .format = Format::RGBA8Unorm, .blend = { .enable = true } };
+    const std::array<ColorTarget, 3> targets{ plain, blended, blended };
+    kit.list.setPipeline(kit.graphicsWith(targets, Format::Undefined, {}, 4));
+    kit.list.setViewport({ .width = static_cast<float>(PassKit::kSize), .height = static_cast<float>(PassKit::kSize) });
+    kit.list.setScissor({ 0, 0, PassKit::kSize, PassKit::kSize });
+    kit.list.draw(3);
+    CHECK(useAt(kit.list, 0).access == Access::ColorAttachmentWrite);
+    CHECK(useAt(kit.list, 1).access == Access::Resolve);
+    CHECK(useAt(kit.list, 2).access == (Access::ColorAttachmentRead | Access::ColorAttachmentWrite));
+    CHECK(useAt(kit.list, 3).access == (Access::ColorAttachmentRead | Access::ColorAttachmentWrite));
+    kit.list.endRenderPass();
 #endif
 }
 
@@ -149,7 +302,6 @@ TEST_CASE("a render pass logs one use per attachment, which the draws of the pas
     CHECK(tested.rule == core::UseRule::Cmd0010);
     kit.list.endRenderPass();
     CHECK(log.passUses.empty());
-    kit.finish();
 #endif
 }
 

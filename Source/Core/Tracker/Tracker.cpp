@@ -85,7 +85,7 @@ namespace rojoRHI::core {
                     else
                     {
                         static_assert(std::is_same_v<Record, TextureBarrier>, "every kind of tracker event has a replay");
-                        replayTexture(record, queue, list);
+                        replayTexture(held, record, queue, list);
                     }
                 },
                 event
@@ -125,8 +125,8 @@ namespace rojoRHI::core {
     //==================================================================================================================
     void Tracker::replayUse(const TrackerLock& held, const UseEvent& use, [[maybe_unused]] QueueType queue, [[maybe_unused]] std::string_view list)
     {
-        // A buffer has no layout, and the attachment rules belong to the pass checks.
-        if (use.texture.bits == 0 || use.rule == UseRule::None || use.rule == UseRule::Cmd0007 || use.rule == UseRule::Cmd0010)
+        // A buffer has no layout.
+        if (use.texture.bits == 0 || use.rule == UseRule::None)
         {
             return;
         }
@@ -143,9 +143,9 @@ namespace rojoRHI::core {
             for (uint32_t layer = use.range.baseLayer; layer < layerEnd; ++layer)
             {
                 const Layout current = texture->layouts[static_cast<size_t>(mip) * texture->layers + layer];
-                // The Copy queue's rule reports first, then the entry's own rule, then the general one (the design's rule map).
+                // The Copy queue's rule reports first, then the entry's own rule, then the general one.
                 ROJORHI_VU(
-                    !use.copyQueue || current == Layout::General,
+                    queue != QueueType::Copy || current == Layout::General,
                     "VU-rojo-sync-0006",
                     "the list \"{}\" runs on the Copy queue and uses mip {} layer {} of the texture \"{}\" in layout {}, not General",
                     list,
@@ -164,7 +164,7 @@ namespace rojoRHI::core {
                     if (use.access == Access::CopyRead)
                     {
                         ROJORHI_VU(
-                            false,
+                            holds(use.layouts, current),
                             "VU-rojo-cmd-0054",
                             "the list \"{}\" copies from mip {} layer {} of the texture \"{}\" in layout {}, not CopySrc or General",
                             list,
@@ -177,7 +177,7 @@ namespace rojoRHI::core {
                     else
                     {
                         ROJORHI_VU(
-                            false,
+                            holds(use.layouts, current),
                             "VU-rojo-cmd-0054",
                             "the list \"{}\" copies to mip {} layer {} of the texture \"{}\" in layout {}, not CopyDst or General",
                             list,
@@ -190,7 +190,7 @@ namespace rojoRHI::core {
                     break;
                 case UseRule::Cmd0067:
                     ROJORHI_VU(
-                        false,
+                        holds(use.layouts, current),
                         "VU-rojo-cmd-0067",
                         "the list \"{}\" copies a buffer to mip {} layer {} of the texture \"{}\" in layout {}, not CopyDst or General",
                         list,
@@ -202,7 +202,7 @@ namespace rojoRHI::core {
                     break;
                 case UseRule::Cmd0069:
                     ROJORHI_VU(
-                        false,
+                        holds(use.layouts, current),
                         "VU-rojo-cmd-0069",
                         "the list \"{}\" copies mip {} layer {} of the texture \"{}\" in layout {} to a buffer, not CopySrc or General",
                         list,
@@ -214,7 +214,7 @@ namespace rojoRHI::core {
                     break;
                 case UseRule::Cmd0070:
                     ROJORHI_VU(
-                        false,
+                        holds(use.layouts, current),
                         "VU-rojo-cmd-0070",
                         "the list \"{}\" clears mip {} layer {} of the texture \"{}\" in layout {}, not CopyDst or General",
                         list,
@@ -224,9 +224,49 @@ namespace rojoRHI::core {
                         static_cast<int>(current)
                     );
                     break;
+                case UseRule::Cmd0007:
+                    if (use.stage == Stage::Resolve)
+                    {
+                        ROJORHI_VU(
+                            holds(use.layouts, current),
+                            "VU-rojo-cmd-0007",
+                            "the list \"{}\" resolves to mip {} layer {} of the texture \"{}\" in layout {}, not ColorAttachment",
+                            list,
+                            mip,
+                            layer,
+                            texture->label,
+                            static_cast<int>(current)
+                        );
+                    }
+                    else
+                    {
+                        ROJORHI_VU(
+                            holds(use.layouts, current),
+                            "VU-rojo-cmd-0007",
+                            "the list \"{}\" renders to mip {} layer {} of the texture \"{}\" in layout {}, not ColorAttachment",
+                            list,
+                            mip,
+                            layer,
+                            texture->label,
+                            static_cast<int>(current)
+                        );
+                    }
+                    break;
+                case UseRule::Cmd0010:
+                    ROJORHI_VU(
+                        holds(use.layouts, current),
+                        "VU-rojo-cmd-0010",
+                        "the list \"{}\" uses mip {} layer {} of the texture \"{}\" in layout {} as its depth attachment, not DepthStencilWrite",
+                        list,
+                        mip,
+                        layer,
+                        texture->label,
+                        static_cast<int>(current)
+                    );
+                    break;
                 case UseRule::Upscale0016:
                     ROJORHI_VU(
-                        false,
+                        holds(use.layouts, current),
                         "VU-rojo-upscale-0016",
                         "the list \"{}\" upscales with {} mip {} layer {} of the texture \"{}\" in layout {}, which the upscale does not permit",
                         list,
@@ -239,7 +279,7 @@ namespace rojoRHI::core {
                     break;
                 default:
                     ROJORHI_VU(
-                        false,
+                        holds(use.layouts, current),
                         "VU-rojo-sync-0004",
                         "the list \"{}\" uses mip {} layer {} of the texture \"{}\" in layout {}, which does not permit the use",
                         list,
@@ -267,15 +307,17 @@ namespace rojoRHI::core {
     }
 
     //==================================================================================================================
-    void Tracker::replayTexture(const TextureBarrier& barrier, [[maybe_unused]] QueueType queue, [[maybe_unused]] std::string_view list)
+    void Tracker::replayTexture(
+        const TrackerLock& held, const TextureBarrier& barrier, [[maybe_unused]] QueueType queue, [[maybe_unused]] std::string_view list
+    )
     {
-        const auto found = m_textures.find(barrier.texture.bits);
-        if (found == m_textures.end())
+        TextureState* found = locate(held, barrier.texture);
+        if (found == nullptr)
         {
             // The texture was destroyed after the list recorded the barrier; the lifetime rules, not the layouts, judge that.
             return;
         }
-        TextureState& texture = found->second;
+        TextureState& texture = *found;
         if (texture.acquired)
         {
             // The first barrier on an acquired image reports its own rule before VU-rojo-sync-0013, which it also breaks.

@@ -134,6 +134,7 @@ namespace rojoRHI::core {
         ROJORHI_VU(drawProblem(list, ShaderStage::Vertex, false).empty(), "VU-rojo-cmd-0023", "draw: {}", drawProblem(list, ShaderStage::Vertex, false));
         ROJORHI_VU(list.pass.viewportSet && list.pass.scissorSet, "VU-rojo-cmd-0024", "draw: no viewport and scissor were set since the pass began");
         consumeAccesses(list, false);
+        logDraw(list);
     }
 
     //==================================================================================================================
@@ -164,6 +165,7 @@ namespace rojoRHI::core {
         logUse(list, bufferUse(indices, uint64_t{ firstIndex } * indexBytes(type), uint64_t{ count } * indexBytes(type), Stage::IndexInput, Access::IndexRead));
 #endif
         consumeAccesses(list, false);
+        logDraw(list);
     }
 
     //==================================================================================================================
@@ -185,6 +187,7 @@ namespace rojoRHI::core {
             limits.maxMeshTaskGroupsTotal
         );
         consumeAccesses(list, false);
+        logDraw(list);
     }
 
     //==================================================================================================================
@@ -240,6 +243,7 @@ namespace rojoRHI::core {
         logIndirect(list, first, bytes, counted);
 #endif
         consumeAccesses(list, false);
+        logDraw(list);
     }
 
     //==================================================================================================================
@@ -289,6 +293,7 @@ namespace rojoRHI::core {
         logIndirect(list, first, bytes, counted);
 #endif
         consumeAccesses(list, false);
+        logDraw(list);
     }
 
     //==================================================================================================================
@@ -332,6 +337,7 @@ namespace rojoRHI::core {
         logIndirect(list, first, bytes, counted);
 #endif
         consumeAccesses(list, false);
+        logDraw(list);
     }
 
     //==================================================================================================================

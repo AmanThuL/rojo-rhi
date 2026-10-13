@@ -139,8 +139,15 @@ namespace rojoRHI::core {
         record.colors.reserve(desc.colors.size());
         for (const ColorTarget& target : desc.colors)
         {
+            record.blendMask |= target.blend.enable ? uint32_t{ 1 } << record.colors.size() : 0;
             record.colors.push_back(target.format);
         }
+        const DepthStencilState& stencil = desc.depthStencil;
+        record.depthWrite = stencil.depthWrite;
+        // Stencil operations do nothing with the stencil test off (chapter 07), so only a tested stencil can write.
+        record.stencilWrite = stencil.stencilTest &&
+                              (stencil.front.fail != StencilOp::Keep || stencil.front.depthFail != StencilOp::Keep || stencil.front.pass != StencilOp::Keep ||
+                               stencil.back.fail != StencilOp::Keep || stencil.back.depthFail != StencilOp::Keep || stencil.back.pass != StencilOp::Keep);
         record.depthFormat = desc.depthFormat;
         record.samples = desc.samples;
         record.depthBias = desc.raster.depthBias;
