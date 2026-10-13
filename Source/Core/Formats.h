@@ -6,6 +6,7 @@
 
 #include <rojoRHI/Format.h>
 #include <rojoRHI/FormatCapabilities.h>
+#include <rojoRHI/TextureType.h>
 
 #include <array>
 #include <cstdint>
@@ -50,6 +51,20 @@ namespace rojoRHI::core {
 
     /// Returns the format that differs from `format` only in sRGB transfer, or `Format::Undefined` when it has no such partner.
     Format srgbCounterpart(Format format);
+
+    /// The texels one tile of a sparse texture covers along each axis.
+    struct TileExtent
+    {
+        uint32_t width = 0;  ///< Texels along x.
+        uint32_t height = 0; ///< Texels along y.
+        uint32_t depth = 0;  ///< Texels along z; 1 for every type but `Tex3D`.
+    };
+
+    /// Returns the tile extent of a single-sample texture of `type` and `format`; a backend without tile shapes of its own
+    /// registers it with `DeviceCore::setTileExtents`. It is the D3D12 standard tile shapes of
+    /// `D3D12_TILED_RESOURCES_TIER` standard swizzle: 64 KiB per tile, and the extent follows the bits per texel, or per block
+    /// of a block-compressed format, counted in texels. A one-dimensional type tiles as a row of 64 KiB.
+    TileExtent standardTileExtent(Format format, TextureType type);
 
     /// Issues VU-rojo-format-0001 when `format` is not an enumerator and VU-rojo-format-0005 when it is `Format::Undefined`.
     void checkQueryFormat(Format format);

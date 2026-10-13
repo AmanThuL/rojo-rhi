@@ -6,6 +6,7 @@
 #include "Core/Formats.h"
 
 #include "Base/Assert.h"
+#include <algorithm>
 #include <bit>
 
 namespace rojoRHI::core {
@@ -139,6 +140,29 @@ namespace rojoRHI::core {
         case Format::BC1Unorm_sRGB: return Format::BC1Unorm;
         default: return Format::Undefined;
         }
+    }
+
+    //==================================================================================================================
+    TileExtent standardTileExtent(Format format, TextureType type)
+    {
+        // D3D12 standard tile shapes, D3D12_TILED_RESOURCES_TIER standard swizzle, indexed by bits per texel (per block for a
+        // block-compressed format): 8, 16, 32, 64, 128. Sparse textures are single-sample (VU-rojo-texture-0008), so the
+        // multisampled shapes of the D3D12 table are not needed.
+        constexpr TileExtent shapes2D[] = { { 256, 256, 1 }, { 256, 128, 1 }, { 128, 128, 1 }, { 128, 64, 1 }, { 64, 64, 1 } };
+        constexpr TileExtent shapes3D[] = { { 64, 32, 32 }, { 32, 32, 32 }, { 32, 32, 16 }, { 32, 16, 16 }, { 16, 16, 16 } };
+        const FormatLayout layout = formatLayout(format);
+        // D32FloatS8 has no packed size; its two planes tile as a 64-bit texel, as D3D12 tiles D32_FLOAT_S8X24_UINT.
+        const uint32_t blockBytes = layout.blockBytes != 0 ? layout.blockBytes : 8;
+        ROJORHI_INTERNAL_ASSERT(blockBytes >= 1 && blockBytes <= 16 && std::has_single_bit(blockBytes), "a format has a block of an unsupported size");
+        if (type == TextureType::Tex1D || type == TextureType::Tex1DArray)
+        {
+            return TileExtent{ 65536 / blockBytes * layout.blockWidth, 1, 1 };
+        }
+        const uint32_t index = static_cast<uint32_t>(std::min(std::countr_zero(blockBytes), 4));
+        TileExtent extent = type == TextureType::Tex3D ? shapes3D[index] : shapes2D[index];
+        extent.width *= layout.blockWidth;
+        extent.height *= layout.blockHeight;
+        return extent;
     }
 
     //==================================================================================================================

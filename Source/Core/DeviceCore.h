@@ -89,6 +89,13 @@ namespace rojoRHI::core {
         /// Returns what the device supports for `format` (VU-rojo-format-0001, VU-rojo-format-0005).
         FormatCapabilities formatCapabilities(Format format) const;
 
+        /// Registers the function that gives the tile extent of a sparse texture's type and format; a backend calls it once at
+        /// creation. `Device::tileShape` for a texture needs it.
+        void setTileExtents(TileExtent (*extents)(Format format, TextureType type));
+
+        /// Returns the tile extent of a single-sample texture of `type` and `format` through the registered function.
+        TileExtent tileExtent(Format format, TextureType type) const;
+
         /// Opens the next frame and passes what the slot it reuses held to the retire hooks (VU-rojo-device-0003). Frame class.
         void beginFrame();
 
@@ -177,6 +184,7 @@ namespace rojoRHI::core {
         std::mutex m_swapchainMutex;
         std::vector<SwapchainCore*> m_swapchains;
         bool (*m_surfaceCheck)(const void* surface) = nullptr;
+        TileExtent (*m_tileExtents)(Format format, TextureType type) = nullptr;
         uint32_t m_framesInFlight;
         bool m_validation;
         std::string m_label;

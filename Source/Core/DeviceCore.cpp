@@ -218,6 +218,19 @@ namespace rojoRHI::core {
     }
 
     //==================================================================================================================
+    void DeviceCore::setTileExtents(TileExtent (*extents)(Format format, TextureType type))
+    {
+        m_tileExtents = extents;
+    }
+
+    //==================================================================================================================
+    TileExtent DeviceCore::tileExtent(Format format, TextureType type) const
+    {
+        ROJORHI_INTERNAL_ASSERT(m_tileExtents != nullptr, "the backend registered no tile extents");
+        return m_tileExtents(format, type);
+    }
+
+    //==================================================================================================================
     FormatCapabilities DeviceCore::formatCapabilities(Format format) const
     {
         checkQueryFormat(format);

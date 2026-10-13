@@ -100,11 +100,11 @@ buffer range maps onto consecutive heap bytes from `heapOffset`.
 - `VU-rojo-sparse-0002` Exactly one of `texture` and `buffer` is not null.
 - `VU-rojo-sparse-0003` The texture or buffer was created with `TextureUsage::Sparse` or
   `BufferUsage::Sparse`.
-- `VU-rojo-sparse-0004` Without `mipTail`, `region` lies in one mip level below `mipTailFirst`, its
-  origin is a multiple of the tile shape, and its extent is a multiple of the tile shape or reaches
-  the edge of the level.
-- `VU-rojo-sparse-0005` With `mipTail`, the texture has a mip tail and `region`'s layer range
-  lies inside the texture.
+- `VU-rojo-sparse-0004` Without `mipTail`, `region` lies in one mip level below `mipTailFirst`, has
+  a nonzero extent and a layer range inside the texture, its origin is a multiple of the tile
+  shape, and its extent is a multiple of the tile shape or reaches the edge of the level.
+- `VU-rojo-sparse-0005` With `mipTail`, the texture has a mip tail and `region`'s layer range is
+  not empty and lies inside the texture.
 - `VU-rojo-sparse-0006` `mipTail` is false when `buffer` is set.
 - `VU-rojo-sparse-0007` For a buffer, `bufferOffset` is a multiple of `bytes`, `bufferSize` is
   greater than zero and a multiple of `bytes` or reaches the end of the buffer, and the range lies
@@ -132,10 +132,13 @@ and before any work submitted to it later. Work on other queues is ordered again
 fences, by submitting a batch that waits on or signals a `FenceValue`
 ([queues and frames](10-queues-and-frames.md)) around the call. The call does not wait, and is
 serialized with submission on the queue. Any queue type may map tiles. A heap stays alive while
-any tile remains mapped from it (`VU-rojo-device-0009`, [device](02-device.md)).
+any tile remains mapped from it (`VU-rojo-device-0009`, [device](02-device.md)). Destroying a
+sparse texture or buffer unmaps all its tiles at the call, as if each had been unmapped, so a heap
+that only it kept alive may then be destroyed.
 
 #### Valid usage
-- `VU-rojo-sparse-0011` Every element of `mappings` satisfies the `TileMapping` rules.
+- `VU-rojo-sparse-0011` Retired in 0.1.0: Every element of `mappings` satisfies the `TileMapping`
+  rules.
 - `VU-rojo-sparse-0012` No two elements of `mappings` name the same tile.
 - `VU-rojo-sparse-0013` Work on another queue that accesses a tile whose mapping changes is
   complete, or ordered against the mapping by fences, before the mapping executes. Checked by the

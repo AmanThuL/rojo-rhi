@@ -10,6 +10,7 @@
 #include "Core/CommandLists.h"
 #include "Core/DeviceCore.h"
 #include "Core/Fences.h"
+#include "Core/Sparse.h"
 #include "Core/Swapchains.h"
 
 namespace rojoRHI {
@@ -44,5 +45,11 @@ namespace rojoRHI {
     {
         const QueueImpl& queue = QueueImpl::of(*this);
         core::presentImage(queue.device->core, queue.type, SwapchainImpl::of(swapchain).core);
+    }
+
+    //==================================================================================================================
+    void Queue::mapTiles(std::span<const TileMapping> mappings)
+    {
+        core::mapTiles(QueueImpl::of(*this).device->core, mappings);
     }
 } // namespace rojoRHI

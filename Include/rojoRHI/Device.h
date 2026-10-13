@@ -29,6 +29,8 @@
 #include <rojoRHI/TextureData.h>
 #include <rojoRHI/TextureDesc.h>
 #include <rojoRHI/TextureViewDesc.h>
+#include <rojoRHI/TileShape.h>
+#include <rojoRHI/UpscalerDesc.h>
 #include <rojoRHI/ViewIndex.h>
 
 #include <cstddef>
@@ -163,6 +165,12 @@ namespace rojoRHI {
         /// Presentation setup: it may wait. Free-threaded.
         Result<Swapchain> createSwapchain(const SwapchainDesc& desc);
 
+        /// Creates the upscaler implementation `desc.kind` selects, with its private history; `Auto` selects the first kind of
+        /// `capabilities().upscalers`. The description obeys VU-rojo-upscale-0001 to 0003. A kind the device does not list, an
+        /// extent ratio or format the implementation rejects, or a platform refusal is an error result, never a substitution.
+        /// Free-threaded and synchronous.
+        Result<Upscaler> createUpscaler(const UpscalerDesc& desc);
+
         /// Returns the greatest value `fence` has reached. Never blocks. Free-threaded.
         uint64_t completedValue(Fence fence);
 
@@ -181,10 +189,18 @@ namespace rojoRHI {
         /// `Upload` or `Readback` (VU-rojo-buffer-0014). Free-threaded.
         std::byte* cpuPointer(Buffer buffer);
 
+        /// Returns the tile shape of a sparse texture, fixed at creation. The texture was created with `TextureUsage::Sparse`
+        /// (VU-rojo-sparse-0001) and is not a swapchain image (VU-rojo-present-0012). Records no GPU work. Free-threaded.
+        TileShape tileShape(Texture texture);
+
+        /// Returns the tile shape of a sparse buffer, fixed at creation. The buffer was created with `BufferUsage::Sparse`
+        /// (VU-rojo-sparse-0001). Records no GPU work. Free-threaded.
+        TileShape tileShape(Buffer buffer);
+
         /// Destroys a buffer, deferred: the handle is invalid at once and the slot is reused once the frame slot open at the
-        /// call, or the next one opened if none is, retires. Free-threaded.
+        /// call, or the next one opened if none is, retires. A sparse buffer's tiles are unmapped at the call. Free-threaded.
         void destroy(Buffer buffer);
-        /// Destroys a texture, deferred as `destroy(Buffer)` is.
+        /// Destroys a texture, deferred as `destroy(Buffer)` is; a sparse texture's tiles are unmapped at the call.
         void destroy(Texture texture);
         /// Destroys a pipeline, deferred as `destroy(Buffer)` is.
         void destroy(Pipeline pipeline);

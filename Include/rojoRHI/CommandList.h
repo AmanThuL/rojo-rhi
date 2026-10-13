@@ -17,6 +17,7 @@
 #include <rojoRHI/SubresourceRange.h>
 #include <rojoRHI/TextureBarrier.h>
 #include <rojoRHI/TextureRegion.h>
+#include <rojoRHI/UpscaleParams.h>
 #include <rojoRHI/Viewport.h>
 
 #include <cstddef>
@@ -224,6 +225,14 @@ namespace rojoRHI {
         /// ordering and layout rules are checked by the validation tracker (VU-rojo-sync-0021 to 0023). Thread class command
         /// list.
         void barrier(std::span<const GlobalBarrier> globals, std::span<const BufferBarrier> buffers = {}, std::span<const TextureBarrier> textures = {});
+
+        /// Records one reconstruction by `upscaler`: it reads the inputs and its history and writes `params.output`, as compute
+        /// work, and forms its own debug group named `params.label`, defaulted to `rojorhi.upscale.unnamed`. Recorded on a
+        /// `Graphics` list (VU-rojo-upscale-0006) outside a render pass (VU-rojo-upscale-0007), at most once per upscaler per
+        /// frame (VU-rojo-upscale-0008). The textures obey VU-rojo-upscale-0009 to 0014 and `params` obeys
+        /// VU-rojo-upscale-0004, 0005 and 0015; none is a swapchain image (VU-rojo-present-0012). The layouts are checked by
+        /// the validation tracker (VU-rojo-upscale-0016). Thread class command list.
+        void upscale(Upscaler upscaler, const UpscaleParams& params);
 
       private:
         friend struct CommandListImpl;

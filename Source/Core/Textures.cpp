@@ -9,6 +9,7 @@
 #include "Core/Formats.h"
 #include "Core/Heaps.h"
 #include "Core/Label.h"
+#include "Core/Sparse.h"
 
 #include <algorithm>
 #include <bit>
@@ -448,11 +449,13 @@ namespace rojoRHI::core {
         [[maybe_unused]] uint64_t views = 0;
         [[maybe_unused]] std::string label;
         [[maybe_unused]] bool swapchainImage = false;
+        TileMap tiles;
         [[maybe_unused]] const LookupStatus status = core.pool<Texture>().update(texture, [&](TextureRecord& record) {
             heap = record.heap;
             views = record.views;
             label = record.label;
             swapchainImage = record.swapchainImage;
+            tiles = std::move(record.mapped);
         });
         ROJORHI_VU(!swapchainImage, "VU-rojo-present-0013", "the swapchain image \"{}\" is destroyed; its swapchain owns it", label);
         ROJORHI_VU(
@@ -463,6 +466,8 @@ namespace rojoRHI::core {
             views
         );
         core.destroy(texture);
+        // Destroying a sparse texture unmaps its tiles at the call, so its heaps may be destroyed before the slot retires.
+        releaseTiles(core, tiles);
         if (heap.bits != 0)
         {
             removePlacedResource(core, heap);
