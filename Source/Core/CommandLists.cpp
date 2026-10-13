@@ -116,7 +116,7 @@ namespace rojoRHI::core {
         if (list.page.host == nullptr || offset + size > list.page.size)
         {
             // The list's page is full or missing: a new page's offset zero satisfies every alignment. Claiming is the one place
-            // Release recording takes a lock (ADR 0019); the page's record is stamped with the frame for VU-rojo-buffer-0020.
+            // Release recording takes a lock (ADR 0020); the page's record is stamped with the frame for VU-rojo-buffer-0020.
             const uint32_t slot = static_cast<uint32_t>(list.frame % core.framesInFlight());
             list.page = core.arena().claim(slot, size, core.capabilities().limits.maxBufferSize, source, context);
             core.pool<Buffer>().update(list.page.buffer, [&](BufferRecord& record) { record.arenaFrame = list.frame; });

@@ -4,18 +4,16 @@ RojoRHI is a dependency-free C++23 rendering hardware interface (RHI) library, t
 honest over the shared conceptual core of Metal 4, D3D12 and Vulkan. Metal 4 through metal-cpp is
 the only backend implemented today; D3D12 is planned and Vulkan is a design oracle with no code
 (ADR 0008). The v1 interface is what the code implements now; v2 is specified in the decisions and
-the API reference below and is partly implemented on the test-only Null backend (chapters 01 to 04
-and 06 to 10, the C++ entries of 05 and chapter 15: devices, buffers, heaps, textures, views,
-samplers, shader libraries, pipelines, command lists, passes, draws, dispatches, indirect
-commands, copies, clears, barriers, queues and fences; the validation tracker is not built, and
-chapters 11 to 14 (presentation, upscaling, sparse, diagnostics) are not implemented). ADR 0001
-owns the identity spelling every document here applies. Luminex is its required consumer: it will
-mount the library as a submodule at `RojoRHI/` and drive every change through a RojoRHI branch and
-pull request first ([commits](docs/conventions/commits.md) owns that workflow). The repository is
-public and licensed under the Apache License, Version 2.0 ([`LICENSE`](LICENSE)); it holds the
-library itself — public headers, shared implementation, the Metal 4 backend, the optional ImGui
-adapter, tests and shaders — alongside its founding documents (see
-[architecture](docs/architecture/overview.md) for directory responsibilities).
+the API reference below and is implemented on the test-only Null backend: chapters 01 to 15, the C++
+entries of 05 included, except the validation tracker, which is not built (devices, resources,
+pipelines, command recording, queues and fences, swapchains, upscalers, sparse tiles, diagnostics
+and counters). ADR 0001 owns the identity spelling every document here applies. Luminex is its
+required consumer: it will mount the library as a submodule at `RojoRHI/` and drive every change
+through a RojoRHI branch and pull request first ([commits](docs/conventions/commits.md) owns that
+workflow). The repository is public and licensed under the Apache License, Version 2.0
+([`LICENSE`](LICENSE)); it holds the library itself — public headers, shared implementation, the
+Metal 4 backend, the optional ImGui adapter, tests and shaders — alongside its founding documents
+(see [architecture](docs/architecture/overview.md) for directory responsibilities).
 
 ## Golden sources
 
@@ -37,8 +35,8 @@ adapter, tests and shaders — alongside its founding documents (see
   docs/decisions/0017-v1-frozen-under-legacy.md),
   [0018 the root block reaches D3D12 as a root SRV, and the module owns the bindings](
   docs/decisions/0018-root-srv-and-reserved-bindings.md),
-  [0019 recording takes no locks in Release, except to claim a frame-arena page](
-  docs/decisions/0019-recording-locks.md)
+  [0020 recording takes no locks in Release, except to claim a frame-arena page](
+  docs/decisions/0020-recording-locks-scope-labels.md)
 - API reference: [docs/spec/](docs/spec/00-conventions.md), entered through its conventions
   chapter
 - Research: [docs/research/](docs/research/2026-10-11-rhi-redesign/01-nographicsapi.md), the
@@ -46,7 +44,9 @@ adapter, tests and shaders — alongside its founding documents (see
 - Guide: [extracting RojoRHI from Luminex](docs/guides/luminex-extraction.md)
 - Architecture: [overview](docs/architecture/overview.md),
   [the Null backend](docs/architecture/null-backend.md),
-  [command recording on it](docs/architecture/null-backend-recording.md)
+  [command recording on it](docs/architecture/null-backend-recording.md),
+  [its edges: presentation, upscaling, sparse, diagnostics](
+  docs/architecture/null-backend-edges.md)
 
 ## Commands
 
@@ -121,8 +121,9 @@ version stamp are not implemented; `Device::loadShaderLibrary` exists on the Nul
 - The module owns every shader binding and each shader compile defines exactly one
   `ROJORHI_TARGET_*` macro; a consumer shader declares no binding (ADR 0018). Changing a reserved
   binding bumps `ROJORHI_SHADER_ABI_VERSION`.
-- Release recording takes no locks except when a list claims a new frame-arena page; a lookup that
-  only feeds a Debug-tier check is compiled out of Release builds (ADR 0019).
+- Release recording takes no locks except when a list claims a new frame-arena page, for
+  `uploadFrameData` or for a debug scope's label; a lookup that only feeds a Debug-tier check is
+  compiled out of Release builds (ADR 0020).
 - Public headers are dependency-free: no consumer header, no consumer namespace, and no backend,
   ImGui, windowing or third-party type (ADR 0007, ADR 0012).
 - A public include is rooted exactly `rojoRHI/`, in that spelling, and is written in angle form

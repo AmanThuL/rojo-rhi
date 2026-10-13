@@ -25,9 +25,10 @@ capabilities, `destroy` of every handle type), the process-wide message callback
 of chapters 03, 04 and 10: buffers and addresses, heaps and placement, textures and views,
 samplers, reserved slot ranges, queues and fences, plus the recording chapters (shader libraries,
 pipelines, command lists, passes, draws, copies and barriers), which
-[command recording](null-backend-recording.md) describes, and swapchains and presentation
-(chapter 11), upscalers (chapter 12) and sparse resources (chapter 13). The rest of the reference is not implemented; each part arrives with the work that
-adds it.
+[command recording](null-backend-recording.md) describes, and the swapchains, upscalers, sparse
+resources, access declarations, scope timings, capture and counters of chapters 11 to 14, which
+[the edges](null-backend-edges.md) describe. Every chapter is implemented except the validation
+tracker.
 
 ## Two layers
 
@@ -99,10 +100,11 @@ topology class, attachment formats, sample count and depth-bias flag.
 An `UpscalerRecord` holds its label, its description with the kind resolved (never `Auto`) and
 the frame it last upscaled in.
 
-Tile shapes are a backend value: `Formats.cpp` holds the D3D12 standard tile extents, the Null backend
-registers them with `DeviceCore::setTileExtents`, and `Sparse.cpp` derives the rest of a `TileShape`
-(a fixed 64 KiB tile, the mip tail) from them. `Queue::mapTiles` takes the pool locks, which ADR 0019
-allows because it is not recording, and keeps its mapping state in Release as in Debug.
+Tile shapes are a backend value: `Formats.cpp` holds the D3D12 standard tile extents, the Null
+backend registers them with `DeviceCore::setTileExtents`, and `Sparse.cpp` derives the rest of a
+`TileShape` (a fixed 64 KiB tile, the mip tail) from them. `Queue::mapTiles` takes the pool locks,
+which ADR 0020 allows because it is not recording, and keeps its mapping state in Release as in
+Debug.
 
 Every record ends in `void* native`, the backend's payload, which the core never reads. The
 backend fills it between `prepareBuffer` (which checks and returns a record with no payload) and
@@ -242,10 +244,11 @@ reference does not define or has retired ([testing](../conventions/testing.md)).
 ## Threading
 
 [ADR 0013](../decisions/0013-threading.md) applies: RojoRHI creates no threads. Its clause on
-recording is superseded by [ADR 0019](../decisions/0019-recording-locks.md): Release recording takes
-a lock only to claim a frame-arena page, and Debug recording also takes the pool locks of its
-checks' lookups. The free-threaded `destroy` locks the one pool it touches, with one mutex per
-pool, and reads the frame word atomically under that lock. The entries that reach two locks
+recording is superseded by [ADR 0020](../decisions/0020-recording-locks-scope-labels.md): Release
+recording takes a lock only to claim a frame-arena page, for frame data or a scope label, and Debug
+recording also takes the pool locks of its checks' lookups. The free-threaded `destroy` locks the
+one pool it touches, with one mutex per pool, and reads the frame word atomically under that lock.
+The entries that reach two locks
 (destroying a placed buffer or texture, which updates its heap after its own pool; `createView`,
 `writeView` and `destroyView`, which pair the view slot allocator with the texture pool) release
 the first before taking the second. One pair nests: `FrameArena::claim` holds the arena's mutex
@@ -266,9 +269,9 @@ lacks is on the [command recording](null-backend-recording.md) page.
 - Native payloads for views and samplers: their slots carry no backend payload, retire hook, drain
   or label yet. They arrive with a native backend, which must release native views and samplers at
   retirement and at `destroyDevice`.
-- Edges: diagnostics and counters; the identifiers listed as `edges` are theirs.
 - The validation tracker: the 29 identifiers only it checks, such as `VU-rojo-buffer-0019`, and
-  the tracker hooks that `DeviceDesc::validation` selects.
+  the tracker hooks that `DeviceDesc::validation` selects; [the edges](null-backend-edges.md) list
+  what it adds for chapters 11 to 14.
 - A Metal 4 v2 backend and T1 GPU conformance
   ([ADR 0009](../decisions/0009-conformance-and-valid-usage.md)).
 

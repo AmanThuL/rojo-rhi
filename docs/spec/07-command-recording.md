@@ -6,8 +6,9 @@
 A command list comes from a per-frame pool and returns to it when its frame retires. One thread
 records one list at a time; many lists record in parallel and are submitted in order
 ([queues and frames](10-queues-and-frames.md)). In Release builds recording takes no locks, except
-when a list claims a new frame-arena page for `uploadFrameData`; a Debug-tier check may take the
-lock of the pool whose record it reads ([ADR 0019](../decisions/0019-recording-locks.md)). Metal 4
+when a list claims a new frame-arena page, for `uploadFrameData` or for the label of a debug scope
+(including those of render passes and upscales); a Debug-tier check may take the lock of the pool
+whose record it reads ([ADR 0020](../decisions/0020-recording-locks-scope-labels.md)). Metal 4
 columns describe the implemented backend; D3D12 columns describe the planned backend; Vulkan
 columns are the design oracle. This chapter continues in
 [draws, dispatches and scopes](07-command-recording-part2.md) and

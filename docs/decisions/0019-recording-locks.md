@@ -1,6 +1,6 @@
 # ADR 0019: Recording takes no locks in Release, except to claim a frame-arena page
 
-**Status**: Accepted (2026-10-13)
+**Status**: Superseded by [ADR 0020](0020-recording-locks-scope-labels.md)
 
 **Supersedes**: the clause "Recording takes no locks" of [ADR 0013](0013-threading.md); the rest of
 ADR 0013 stands.

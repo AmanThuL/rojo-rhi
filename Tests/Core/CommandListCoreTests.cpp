@@ -179,7 +179,7 @@ TEST_CASE("a render pass records its attachments, a pipeline its fields in Debug
     CHECK(state.pass.area.width == test::PassKit::kSize);
 #ifndef NDEBUG
     // The attachments' formats and samples and the pipeline's fields feed the Debug-tier checks; a Release build reads no
-    // record to fill them (ADR 0019).
+    // record to fill them (ADR 0020).
     CHECK(state.pass.colors == std::vector<Format>{ Format::RGBA16Float });
     CHECK(state.pass.samples == 4);
 #else

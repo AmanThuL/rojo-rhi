@@ -31,8 +31,8 @@ a viewport and scissor were set), the bound pipeline, the root address, one entr
 (true when it began inside a pass), the label and the frame-data page. Commands are not stored:
 the Null backend renders nothing, and the validation tracker will add the record it needs.
 
-Recording follows [ADR 0019](../decisions/0019-recording-locks.md). Every lookup of a handle's or
-an address's record, and every loop, whose only purpose is a Debug-tier check sits under
+Recording follows [ADR 0020](../decisions/0020-recording-locks-scope-labels.md). Every lookup of a
+handle's or an address's record, and every loop, whose only purpose is a Debug-tier check sits under
 `#ifndef NDEBUG` inside its entry, so a Release build reads no pool while recording and takes no
 lock except to claim a frame-arena page. In Release, `PassState` therefore holds no attachment
 formats or sample count and the bound pipeline is not recorded; nothing but the checks reads them.
@@ -74,9 +74,10 @@ a growth event. A new page has max(1 MiB, request) bytes, falling back to exactl
 when that maximum exceeds `Limits::maxBufferSize`. A request above `maxBufferSize`, or a page the
 backend cannot create, is fatal in every build, as the reference says. `rewind(slot)`, called from
 `beginFrame` when the slot is reused, makes every page claimable again; pages keep their memory.
-Claiming is the one place Release recording takes locks (ADR 0019): the arena's mutex, the buffer
+Claiming is the one place Release recording takes locks (ADR 0020): the arena's mutex, the buffer
 pool's inside it when a page is created, and the buffer pool's again afterwards to stamp the page's
-`BufferRecord::arenaFrame` with the claiming list's frame.
+`BufferRecord::arenaFrame` with the claiming list's frame. A scope label claims through the same
+path as an upload ([the edges](null-backend-edges.md) describe it).
 
 `VU-rojo-buffer-0020` (an address of frame data is passed only to a list of the frame that produced
 it) is checked in `resolveAddr`, which compares the list's frame with the page's `arenaFrame`; no
@@ -214,7 +215,5 @@ textures and pipelines.
 - Recording rules that need state across commands: the validation tracker (`tracker` entries of
   `Tools/vu_pending.txt`, among them `VU-rojo-cmd-0007`, `0010`, `0054`, `0067`, `0069`, `0070`,
   `VU-rojo-sync-0004`, `0006`, `0009` and `0013`, `VU-rojo-indirect-0005` and `0011`).
-- Entries not yet implemented: swapchains and presentation, upscalers, sparse mapping,
-  diagnostics and counters, and the rules `VU-rojo-sync-0005` and `VU-rojo-device-0009`.
 - A native backend: slot payloads for views and samplers, and the use of the retire and
   `frameSlot` hooks for native command lists and arena pages.
