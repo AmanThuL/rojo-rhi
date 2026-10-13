@@ -129,8 +129,10 @@ same frame by a fence wait, as `VU-rojo-device-0006` of
 - `VU-rojo-queue-0002` Every list in `lists` was acquired for this queue's `QueueType`.
 - `VU-rojo-queue-0003` Each fence appears at most once in `signal`, and each signalled value is
   greater than every value already submitted for signal on that fence and than its initial value.
-- `VU-rojo-queue-0004` Every value in `wait` is at most the fence's initial value or a value
-  already submitted for signal on that fence.
+- `VU-rojo-queue-0004` Retired in 0.1.0: Every value in `wait` is at most the fence's initial value
+  or a value already submitted for signal on that fence.
+- `VU-rojo-queue-0007` Every value in `wait` is at most the fence's initial value or the greatest
+  value already submitted for signal on that fence.
 - `VU-rojo-queue-0005` Two uses of the same memory on different queues, at least one a write, are
   ordered by a fence: the later use's submission waits, directly or through other fences, on a value
   signalled by or after the earlier use's submission. Checked by the validation tracker.
@@ -171,8 +173,10 @@ pass. Returns `true` when the value was reached and `false` on timeout. A `timeo
 `UINT64_MAX` waits without limit.
 
 #### Valid usage
-- `VU-rojo-queue-0006` When `timeoutNs` is `UINT64_MAX`, `value.value` is at most the fence's
-  initial value or a value already submitted for signal on that fence.
+- `VU-rojo-queue-0006` Retired in 0.1.0: When `timeoutNs` is `UINT64_MAX`, `value.value` is at most
+  the fence's initial value or a value already submitted for signal on that fence.
+- `VU-rojo-queue-0008` When `timeoutNs` is `UINT64_MAX`, `value.value` is at most the fence's
+  initial value or the greatest value already submitted for signal on that fence.
 
 #### Mapping
 | | Metal 4 | D3D12 | Vulkan |

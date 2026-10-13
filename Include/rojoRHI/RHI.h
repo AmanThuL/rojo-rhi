@@ -8,9 +8,11 @@
 #include <rojoRHI/BufferDesc.h>
 #include <rojoRHI/BufferUsage.h>
 #include <rojoRHI/Capabilities.h>
+#include <rojoRHI/CommandList.h>
 #include <rojoRHI/CompareOp.h>
 #include <rojoRHI/Device.h>
 #include <rojoRHI/DeviceDesc.h>
+#include <rojoRHI/FenceValue.h>
 #include <rojoRHI/Format.h>
 #include <rojoRHI/FormatCapabilities.h>
 #include <rojoRHI/Geometry.h>
@@ -23,6 +25,8 @@
 #include <rojoRHI/Message.h>
 #include <rojoRHI/Placement.h>
 #include <rojoRHI/PlacementRequirements.h>
+#include <rojoRHI/Queue.h>
+#include <rojoRHI/QueueType.h>
 #include <rojoRHI/Result.h>
 #include <rojoRHI/SamplerAddress.h>
 #include <rojoRHI/SamplerDesc.h>

@@ -71,10 +71,13 @@ namespace rojoRHI::core {
         void* native = nullptr;       ///< The backend's payload for the object; the core never reads it.
     };
 
-    /// What the core keeps about one live Fence; later parts add its description and state.
+    /// What the core keeps about one live Fence: the timeline values its submission rules compare against.
     struct FenceRecord
     {
         std::string label;      ///< The label the object was created with.
+        uint64_t initial = 0;   ///< The value the fence was created with.
+        uint64_t submitted = 0; ///< The greatest value submitted for signal, or `initial` when none was (VU-rojo-queue-0003).
+        uint64_t completed = 0; ///< The greatest value the fence has reached; a backend raises it as work completes.
         void* native = nullptr; ///< The backend's payload for the object; the core never reads it.
     };
 

@@ -73,7 +73,7 @@ VU-rojo-cmd-0059 recording
 VU-rojo-cmd-0060 recording
 VU-rojo-cmd-0061 recording
 VU-rojo-cmd-0062 tracker
-VU-rojo-core-0005 resources
+VU-rojo-core-0005 recording
 VU-rojo-device-0005 recording
 VU-rojo-device-0006 tracker
 VU-rojo-device-0007 tracker
@@ -153,12 +153,9 @@ VU-rojo-present-0016 edges
 VU-rojo-present-0017 edges
 VU-rojo-present-0018 tracker
 VU-rojo-present-0019 tracker
-VU-rojo-queue-0001 resources
-VU-rojo-queue-0002 resources
-VU-rojo-queue-0003 resources
-VU-rojo-queue-0004 resources
+VU-rojo-queue-0001 recording
+VU-rojo-queue-0002 recording
 VU-rojo-queue-0005 tracker
-VU-rojo-queue-0006 resources
 VU-rojo-sparse-0001 edges
 VU-rojo-sparse-0002 edges
 VU-rojo-sparse-0003 edges
