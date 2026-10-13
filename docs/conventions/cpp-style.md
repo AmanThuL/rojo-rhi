@@ -17,8 +17,10 @@ namespace contents. This file covers what a formatter cannot. Names are owned by
   library is included by the path its owner uses.
 - **Errors.** Creation and loading boundaries return `Result<T>`, the library's single
   `std::expected` alias, carrying either the value or an `Error` with a stable `ErrorCode` and a
-  diagnostic message. Misuse of the interface is not an error code: it is a fatal `ROJORHI_ASSERT`,
-  because a caller violating a precondition has a bug rather than a condition to recover from.
+  diagnostic message. Misuse of the interface is not an error code: it is a fatal check where one
+  exists, because a caller violating a precondition has a bug rather than a condition to recover
+  from. In the v2 interface the check is `ROJORHI_VU`, present in non-Release builds only, so
+  Release leaves misuse unchecked; v1 keeps its unconditional `ROJORHI_ASSERT` under `Legacy/`.
   Never swallow a failure silently.
 - **Labels.** Every GPU object is created with a debug label, defaulted when the caller gives none,
   so a capture names what it shows.
@@ -33,18 +35,29 @@ namespace contents. This file covers what a formatter cannot. Names are owned by
 ## The private base
 
 v1's private base, `Legacy/Source/Base/`, is the only home of its assertions, alignment helpers,
-JSON escaping and logging, as described below. The new interface's own `Source/Base/` arrives with
-the Null backend; its assert reports a valid-usage identifier and runs only in non-Release builds
+JSON escaping and logging, as described below. The new interface has its own `Source/Base/`; its
+checks report a valid-usage identifier and run only in non-Release builds
 ([01-fundamentals](../spec/01-fundamentals.md)). Either base is private: no public header
 includes it, and no consumer can reach it.
+
+The v2 base provides two checks, both compiled out of Release builds, where they evaluate neither
+the condition nor the message arguments:
+
+- `ROJORHI_VU(cond, "VU-rojo-...", format, args...)` checks a valid-usage rule of the reference. A
+  failure sends `<identifier>: <text>` to the message callback at error severity, then aborts. Every
+  call site names one identifier of `docs/spec/` and has a death test or a pending entry
+  ([testing](testing.md)); the check lives in the shared core, never in a backend.
+- `ROJORHI_INTERNAL_ASSERT(cond, msg)` guards an invariant of the library's own code that no
+  caller can break, and reports `internal error: <msg>` with file and line. It carries no
+  identifier and needs no death test.
 
 - Logging is three macros — `ROJORHI_LOG_INFO`, `ROJORHI_LOG_WARN` and `ROJORHI_LOG_ERROR` — that
   format with `std::format` and hand severity plus the formatted message to one public message
   callback. When no callback is installed, messages go to stderr. RojoRHI takes no logging
   dependency and knows nothing about a consumer's log sinks.
-- `ROJORHI_ASSERT(cond, msg)` logs the failed condition, file, line and message at error severity,
-  then aborts. It is unconditional: a release build asserts too, because a violated precondition
-  has no correct continuation.
+- v1's `ROJORHI_ASSERT(cond, msg)` logs the failed condition, file, line and message at error
+  severity, then aborts. It is unconditional: a release build asserts too, because a violated
+  precondition has no correct continuation.
 - Nothing else joins the base. A helper with one caller stays with that caller.
 
 ## File headers

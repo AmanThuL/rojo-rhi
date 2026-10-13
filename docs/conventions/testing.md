@@ -5,9 +5,9 @@
 Tests are Catch2 cases in one test tree per interface, built as one test target. Names and tags are
 owned by [naming.md](naming.md). Today the v1 suite, including the `[checkpoint-a]` cases, lives
 under `Legacy/Tests/` and builds as `RojoRHILegacyTests`. The top-level `Tests/` holds the v2
-interface's cases and builds as `RojoRHITests`; its T0 (CPU contract) cases carry `[contract]` and
-run as `xmake test RojoRHITests/contract` (ADR 0017). Its shader ABI cases carry `[abi]` and run
-as `xmake test RojoRHITests/abi`.
+interface's cases and builds as `RojoRHITests`; its T0 (CPU contract) cases run as
+`xmake test RojoRHITests/contract` (ADR 0017), its death tests as `xmake test RojoRHITests/death`
+and its shader ABI cases, tagged `[abi]`, as `xmake test RojoRHITests/abi`.
 
 ## Tiers
 
@@ -16,12 +16,43 @@ domain and `Result<T>`, descriptor defaults, size and alignment arithmetic, per-
 bookkeeping and any pure helper the interface exposes. They run anywhere, including a hosted runner
 with no GPU, and a failure here is a contract change rather than a driver difference.
 
-**Validation tests** pin what the interface rejects. The predicates behind each `ROJORHI_ASSERT`
-precondition are testable functions, so a case asserts that an invalid range, an out-of-bounds
-subresource, a mismatched attachment or an impossible pipeline descriptor is reported as invalid,
-and that the neighbouring valid case is accepted. They need no device: an interface is a pure
-virtual class, so a fake implementation reporting a chosen shape is enough. These cases carry the
-same CPU tag as the contract tier and run in the same places.
+**T0 contract tests** of the v2 interface run against the Null backend with no GPU, in three
+directories. `Tests/Contract/` holds the backend-neutral reference rules, one file per area,
+tagged `[contract]`: every expectation there must hold for any backend, so it states only
+what the reference states. `Tests/Null/` holds what only the Null backend promises (the values it
+reports for limits and formats), tagged `[null]`. `Tests/Core/` holds the core's internals, such as
+the handle pool, tagged `[core]`, and may include private headers. `Tests/Support/` holds shared
+helpers. The `contract` entry runs all three tags and excludes `[death]`; Release CI runs it too.
+
+**Death tests** pin each Debug-tier valid-usage rule (ADR 0009). A death test is a `TEST_CASE` named
+`"<identifier> <behaviour>"`, such as `"VU-rojo-device-0003 beginFrame runs while a frame is open"`,
+tagged `[contract][death]` and stored in a file named `*DeathTests.cpp`. It holds one identifier and
+its body is `ROJORHI_EXPECT_DEATH("<identifier>", [&] { ... })`. The helper re-executes the test
+binary on that one case with `ROJORHI_DEATH_CHILD=1` (any other value of the variable in the
+parent's environment fails the case without spawning); the child runs the lambda, which must
+terminate the process, and the parent requires a non-zero exit and a standard-error report in which
+the first `<identifier>:` is the expected one. A rule checked at several call sites gets one death
+test per site, so each site is exercised and a deleted check fails a test. Death tests exist only in
+Debug builds: `ROJORHI_VU` is compiled out of Release, so the helper skips there. The harness's own
+self-tests (`[death][!shouldfail]` cases that must fail, and `quoteWindowsArgument`) are the one
+exception to the naming rule, since they test no identifier.
+
+**The coverage tool** `Tools/check_vu_coverage.py` runs in the policy CI job. It collects every
+non-retired identifier in `docs/spec/` and every identifier named by a `[death]` case in `Tests/`
+(comments and `#if 0` blocks do not count, and the case's `ROJORHI_EXPECT_DEATH` argument must be
+the identifier in its name), and fails when an identifier has no death test and is not listed in
+`Tools/vu_pending.txt`. The pending list holds `<identifier> <part>` lines sorted by identifier,
+naming the part of the work (`resources`, `recording`, `edges` or `tracker`) that will add the test.
+The tool also fails when a listed identifier has a death test, so the list only shrinks, and when it
+names an unknown identifier or part. A part removes its lines in the change that adds the tests.
+
+**Validation tests (v1)** pin what the interface rejects. The predicates behind each
+`ROJORHI_ASSERT` precondition are testable functions, so a case asserts that an invalid range, an
+out-of-bounds subresource, a mismatched attachment or an impossible pipeline descriptor is reported
+as invalid, and that the neighbouring valid case is accepted. They need no device: an interface is a
+pure virtual class, so a fake implementation reporting a chosen shape is enough. These cases carry
+the same CPU tag as the contract tier and run in the same places. They describe the v1 suite; the v2
+equivalent is the death test.
 
 **Shader ABI tests** are the hosted half of the T3 tier (ADR 0009). They need no GPU: every
 conformance shader must compile to MSL, SPIR-V and HLSL, and the layout of each shared struct must
@@ -71,6 +102,7 @@ GPU case is RojoRHI's, while a fixture that builds a consumer's scene is not.
 
 - Never disable, skip or delete a failing test to make a run green. Fix the behaviour, or fix the
   test when the contract genuinely changed and say so in the commit.
+- Branch on `NDEBUG` inside a test body, never around a definition.
 - A behaviour change and a test move are separate commits. A move preserves every case name, so the
   before and after inventories match by name.
 - A new capability lands with the case that proves it. A bug fix lands with the case that fails

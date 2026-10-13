@@ -4,7 +4,8 @@ RojoRHI is a dependency-free C++23 rendering hardware interface (RHI) library, t
 honest over the shared conceptual core of Metal 4, D3D12 and Vulkan. Metal 4 through metal-cpp is
 the only backend implemented today; D3D12 is planned and Vulkan is a design oracle with no code
 (ADR 0008). The v1 interface is what the code implements now; v2 is specified in the decisions and
-the API reference below, not yet implemented. ADR 0001 owns the identity spelling every document
+the API reference below and is partly implemented on the test-only Null backend (chapters 01, 02
+and 15). ADR 0001 owns the identity spelling every document
 here applies. Luminex is its required consumer: it will mount the library as a submodule at
 `RojoRHI/` and drive every change through a RojoRHI branch and pull request first
 ([commits](docs/conventions/commits.md) owns that workflow). The repository is public and licensed
@@ -38,7 +39,8 @@ directory responsibilities).
 - Research: [docs/research/](docs/research/2026-10-11-rhi-redesign/01-nographicsapi.md), the
   evidence notes behind the decisions
 - Guide: [extracting RojoRHI from Luminex](docs/guides/luminex-extraction.md)
-- Architecture: [overview](docs/architecture/overview.md)
+- Architecture: [overview](docs/architecture/overview.md),
+  [the Null backend](docs/architecture/null-backend.md)
 
 ## Commands
 
@@ -48,7 +50,8 @@ Standalone:
 xmake setup   # fetches pinned metal-cpp and Slang on macOS, Slang alone on Windows
 xmake         # builds the frozen v1 library, RojoRHILegacy
 xmake test RojoRHILegacyTests/unit   # runs the v1 CPU contract cases
-xmake test RojoRHITests/contract     # runs the v2 CPU contract cases
+xmake test RojoRHITests/contract     # runs the v2 contract cases on the Null backend, no GPU
+xmake test RojoRHITests/death        # runs the v2 death tests (Debug only)
 xmake test RojoRHITests/abi          # compiles the ABI conformance shaders, checks shared layouts
 xmake f --rojorhi_backend=null       # selects the v2 backend; null is the only value yet
 ```
@@ -69,7 +72,12 @@ xmake setup -P .
 xmake -P .
 xmake test RojoRHILegacyTests/unit -P .
 xmake test RojoRHITests/contract -P .
+xmake test RojoRHITests/death -P .
 ```
+
+`python3 Tools/check_vu_coverage.py` fails when a valid-usage identifier of `docs/spec/` has
+neither a death test nor an entry in `Tools/vu_pending.txt`; the policy CI job runs it
+([testing](docs/conventions/testing.md)).
 
 GPU conformance today is checkpoint A, the cases tagged `[checkpoint-a]`
 ([ADR 0005](docs/decisions/0005-conformance-checkpoint.md)); it needs `MTL_DEBUG_LAYER=1` and a real
@@ -84,14 +92,16 @@ version stamp and `Device::loadShaderLibrary` are not implemented; they arrive w
 
 ## Hard rules
 
-- Creation returns `Result<T>`; misuse of the interface is a fatal `ROJORHI_ASSERT`, unconditional
-  in every build ([C++ style](docs/conventions/cpp-style.md)). That stays the current rule until
-  the Null-backend stage brings the v2 Debug and Validation tiers (ADR 0009).
+- Creation returns `Result<T>`; misuse of the interface is fatal where it is checked. In the v2
+  interface the check is `ROJORHI_VU`, with a valid-usage identifier, present in Debug builds only
+  (Release leaves misuse unchecked) and tested by a death test or listed as pending; library
+  invariants use `ROJORHI_INTERNAL_ASSERT`. v1 under `Legacy/` keeps its unconditional
+  `ROJORHI_ASSERT` ([C++ style](docs/conventions/cpp-style.md), ADR 0009).
 - Every GPU object is created with a label, defaulted to the `rojorhi.` prefix when the caller
   supplies none.
 - Metal 4 is the only backend implemented today. D3D12 is planned and Vulkan is a design oracle
   with no code; no document claims either as a capability until it is real. The Null backend is
-  test-only and arrives with its stage (ADR 0008).
+  test-only and implements the device so far (ADR 0008).
 - Rules for v2 work: the v2 interface is address-first and has no binding slots (ADR 0007); it is
   a C++23 subset with one backend per build, chosen by an xmake option, and no virtual interfaces
   (ADR 0012). The v1 code still has binding slots and virtual interfaces until it is ported to v2.
