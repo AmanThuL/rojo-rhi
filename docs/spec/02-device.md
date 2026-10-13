@@ -251,6 +251,8 @@ pointer wrapper, and using it after the call is undefined behaviour. The native 
 descriptor slot is released when the frame slot that was open at the call, or the next one opened
 if none is, retires; the caller never waits and never tracks GPU progress for destruction.
 Destroying a `Buffer` invalidates every `Addr` derived from it ([memory](03-memory-and-buffers.md)).
+Destroying a sparse `Texture` or `Buffer` unmaps all its tiles at the call
+([sparse resources](13-sparse.md)).
 Caller-reserved index ranges are released through `Device::release` instead
 ([textures and heaps](04-textures-and-heaps.md)). Free-threaded.
 

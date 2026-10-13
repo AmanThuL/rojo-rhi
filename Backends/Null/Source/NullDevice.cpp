@@ -17,8 +17,10 @@
 #include "Core/Pipelines.h"
 #include "Core/Ranges.h"
 #include "Core/Samplers.h"
+#include "Core/Sparse.h"
 #include "Core/Swapchains.h"
 #include "Core/Textures.h"
+#include "Core/Upscalers.h"
 #include "NullShaderLibrary.h"
 
 #include <algorithm>
@@ -202,6 +204,7 @@ namespace rojoRHI {
         capabilities.conservativeRaster = true;
         capabilities.upscalers = kUpscalers;
         impl->core.setFormatTable(core::formatCeilings());
+        impl->core.setTileExtents(core::standardTileExtent);
         core::RetireHooks hooks;
         hooks.context = impl.get();
         hooks.buffer = retireBuffer;
@@ -373,6 +376,18 @@ namespace rojoRHI {
     }
 
     //==================================================================================================================
+    TileShape Device::tileShape(Texture texture)
+    {
+        return core::tileShape(DeviceImpl::of(*this).core, texture);
+    }
+
+    //==================================================================================================================
+    TileShape Device::tileShape(Buffer buffer)
+    {
+        return core::tileShape(DeviceImpl::of(*this).core, buffer);
+    }
+
+    //==================================================================================================================
     void Device::destroy(Buffer buffer)
     {
         core::destroyBuffer(DeviceImpl::of(*this).core, buffer);
@@ -456,6 +471,12 @@ namespace rojoRHI {
         DeviceImpl& impl = DeviceImpl::of(*this);
         // A Null fence owns no native object beyond its record.
         return impl.core.pool<Fence>().allocate(core::prepareFence(initial, label));
+    }
+
+    //==================================================================================================================
+    Result<Upscaler> Device::createUpscaler(const UpscalerDesc& desc)
+    {
+        return core::createUpscaler(DeviceImpl::of(*this).core, desc);
     }
 
     //==================================================================================================================

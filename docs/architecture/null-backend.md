@@ -26,7 +26,7 @@ of chapters 03, 04 and 10: buffers and addresses, heaps and placement, textures 
 samplers, reserved slot ranges, queues and fences, plus the recording chapters (shader libraries,
 pipelines, command lists, passes, draws, copies and barriers), which
 [command recording](null-backend-recording.md) describes, and swapchains and presentation
-(chapter 11). The rest of the reference is not implemented; each part arrives with the work that
+(chapter 11), upscalers (chapter 12) and sparse resources (chapter 13). The rest of the reference is not implemented; each part arrives with the work that
 adds it.
 
 ## Two layers
@@ -95,8 +95,14 @@ heap; a `TextureRecord` its description and the number of view slots that hold a
 (`VU-rojo-texture-0028`); a `HeapRecord` its size, memory class and the number of resources placed
 in it (`VU-rojo-device-0008`); a `FenceRecord` its initial, submitted and completed values.
 A `ShaderLibraryRecord` holds its entry points and a `PipelineRecord` its kind, stage set,
-topology class, attachment formats, sample count and depth-bias flag. An upscaler record holds only
-a label until its part arrives.
+topology class, attachment formats, sample count and depth-bias flag.
+An `UpscalerRecord` holds its label, its description with the kind resolved (never `Auto`) and
+the frame it last upscaled in.
+
+Tile shapes are a backend value: `Formats.cpp` holds the D3D12 standard tile extents, the Null backend
+registers them with `DeviceCore::setTileExtents`, and `Sparse.cpp` derives the rest of a `TileShape`
+(a fixed 64 KiB tile, the mip tail) from them. `Queue::mapTiles` takes the pool locks, which ADR 0019
+allows because it is not recording, and keeps its mapping state in Release as in Debug.
 
 Every record ends in `void* native`, the backend's payload, which the core never reads. The
 backend fills it between `prepareBuffer` (which checks and returns a record with no payload) and
@@ -260,8 +266,7 @@ lacks is on the [command recording](null-backend-recording.md) page.
 - Native payloads for views and samplers: their slots carry no backend payload, retire hook, drain
   or label yet. They arrive with a native backend, which must release native views and samplers at
   retirement and at `destroyDevice`.
-- Edges: upscalers, sparse mapping, diagnostics and counters; the identifiers listed as `edges`
-  include `VU-rojo-device-0009`.
+- Edges: diagnostics and counters; the identifiers listed as `edges` are theirs.
 - The validation tracker: the 29 identifiers only it checks, such as `VU-rojo-buffer-0019`, and
   the tracker hooks that `DeviceDesc::validation` selects.
 - A Metal 4 v2 backend and T1 GPU conformance

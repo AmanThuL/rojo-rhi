@@ -8,6 +8,7 @@
 #include "Base/Assert.h"
 #include "Core/Heaps.h"
 #include "Core/Label.h"
+#include "Core/Sparse.h"
 
 #include <utility>
 
@@ -90,9 +91,15 @@ namespace rojoRHI::core {
     void destroyBuffer(DeviceCore& core, Buffer buffer)
     {
         // A bad handle is left to the destroy below, which reports VU-rojo-core-0001 to 0003 and releases nothing.
-        const LookupResult<BufferRecord> found = core.pool<Buffer>().lookup(buffer);
-        const Heap heap = found.status == LookupStatus::Ok ? found.record->heap : Heap{};
+        Heap heap = {};
+        TileMap tiles;
+        core.pool<Buffer>().update(buffer, [&](BufferRecord& record) {
+            heap = record.heap;
+            tiles = std::move(record.mapped);
+        });
         core.destroy(buffer);
+        // Destroying a sparse buffer unmaps its tiles at the call, so its heaps may be destroyed before the slot retires.
+        releaseTiles(core, tiles);
         if (heap.bits != 0)
         {
             removePlacedResource(core, heap);

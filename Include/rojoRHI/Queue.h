@@ -7,6 +7,7 @@
 #include <rojoRHI/CommandList.h>
 #include <rojoRHI/FenceValue.h>
 #include <rojoRHI/Swapchain.h>
+#include <rojoRHI/TileMapping.h>
 
 #include <span>
 
@@ -31,6 +32,13 @@ namespace rojoRHI {
         /// (VU-rojo-present-0017). The image was last moved to `Layout::Present` (VU-rojo-present-0018) and no list submitted
         /// afterwards references it (VU-rojo-present-0019). Does not wait. Thread class queue.
         void present(Swapchain swapchain);
+
+        /// Applies `mappings` in order as a queue operation: after all work submitted earlier to this queue and before any work
+        /// submitted to it later. Every element obeys the `TileMapping` rules (VU-rojo-sparse-0002 to 0010) and no two elements name the
+        /// same tile (VU-rojo-sparse-0012). Work on another queue that accesses a tile whose mapping changes is complete or
+        /// ordered against the mapping by fences before it executes (VU-rojo-sparse-0013, checked by the validation tracker). A
+        /// heap stays alive while any tile remains mapped from it (VU-rojo-device-0009). Does not wait. Thread class queue.
+        void mapTiles(std::span<const TileMapping> mappings);
 
       private:
         friend struct QueueImpl;

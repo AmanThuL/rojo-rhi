@@ -95,13 +95,18 @@ namespace rojoRHI::core {
     {
         // A null, stale or foreign handle reaches the destroy below, which reports VU-rojo-core-0001 to 0003.
         [[maybe_unused]] uint64_t placed = 0;
+        [[maybe_unused]] uint64_t mapped = 0;
         [[maybe_unused]] std::string label;
         [[maybe_unused]] const LookupStatus status = core.pool<Heap>().update(heap, [&](HeapRecord& record) {
             placed = record.placedResources;
+            mapped = record.mappedTiles;
             label = record.label;
         });
         ROJORHI_VU(
             status != LookupStatus::Ok || placed == 0, "VU-rojo-device-0008", "the heap \"{}\" is destroyed with {} placed resources alive", label, placed
+        );
+        ROJORHI_VU(
+            status != LookupStatus::Ok || mapped == 0, "VU-rojo-device-0009", "the heap \"{}\" is destroyed with {} tiles still mapped from it", label, mapped
         );
         core.destroy(heap);
     }

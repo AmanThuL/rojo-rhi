@@ -17,6 +17,7 @@
 #include "Core/Draws.h"
 #include "Core/FrameArena.h"
 #include "Core/RenderPasses.h"
+#include "Core/Upscalers.h"
 
 #include <cstdlib>
 #include <cstring>
@@ -265,6 +266,12 @@ namespace rojoRHI {
     void CommandList::clearTexture(Texture texture, const SubresourceRange& range, const ClearValue& value)
     {
         core::clearTexture(CommandListImpl::of(*this).core, texture, range, value);
+    }
+
+    //==================================================================================================================
+    void CommandList::upscale(Upscaler upscaler, const UpscaleParams& params)
+    {
+        core::upscale(CommandListImpl::of(*this).core, upscaler, params);
     }
 
     //==================================================================================================================

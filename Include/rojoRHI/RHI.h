@@ -69,6 +69,11 @@
 #include <rojoRHI/TextureType.h>
 #include <rojoRHI/TextureUsage.h>
 #include <rojoRHI/TextureViewDesc.h>
+#include <rojoRHI/TileMapping.h>
+#include <rojoRHI/TileShape.h>
+#include <rojoRHI/UpscaleParams.h>
+#include <rojoRHI/UpscalerDesc.h>
+#include <rojoRHI/UpscalerFlags.h>
 #include <rojoRHI/UpscalerKind.h>
 #include <rojoRHI/Version.h>
 #include <rojoRHI/ViewIndex.h>
