@@ -225,13 +225,25 @@ frame that produced it, and its memory is recycled when
 [`Device::beginFrame`](02-device.md#devicebeginframe) reuses the frame slot. Binding a root block
 is a separate call ([`CommandList::setRoot`](05-shader-abi.md)), so a root may point at persistent
 data that is never re-uploaded; the default alignment satisfies the root-block placement rule.
+
+Frame data may serve as a root block, as data a shader reads through an address, and as the
+arguments and count of an indirect command ([GPU-driven rendering](08-gpu-driven.md)): the arena's
+memory counts as a buffer created with `BufferUsage::IndirectArgs`. The Debug tier checks
+`VU-rojo-buffer-0020` only where a command takes the address. It does not see an address reached
+through a root block or other buffer memory, or a shader's read, and it cannot tell a stale address
+once a list of a later frame holds the same arena memory again. An address carries no generation,
+so one into memory reused by a newer buffer names that buffer.
 #### Valid usage
 - `VU-rojo-buffer-0015` `bytes` is not empty.
 - `VU-rojo-buffer-0016` `alignment` is a power of two.
 - `VU-rojo-buffer-0017` A frame is open: `Device::beginFrame` has been called and the matching
   `Device::endFrame` has not.
-- `VU-rojo-buffer-0018` Only work submitted before the `Device::endFrame` that closes the producing
-  frame reads the returned address.
+- `VU-rojo-buffer-0018` Retired in 0.1.0: Only work submitted before the `Device::endFrame` that
+  closes the producing frame reads the returned address. The Debug tier sees only the commands that
+  take the address, not the shader reads through memory, so it checks the recording-time form,
+  `VU-rojo-buffer-0020`.
+- `VU-rojo-buffer-0020` The address is passed to a command only on a list acquired in the frame that
+  produced it.
 #### Mapping
 | | Metal 4 | D3D12 | Vulkan |
 |---|---|---|---|

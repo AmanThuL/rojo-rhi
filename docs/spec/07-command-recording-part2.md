@@ -21,7 +21,9 @@ void CommandList::setPipeline(Pipeline pipeline);
 Binds a graphics pipeline inside a render pass or a compute pipeline outside one. Binding a
 graphics pipeline resets the topology to the list form of its class. `beginRenderPass` and
 `endRenderPass` both unbind the pipeline, so a dispatch after a render pass binds its pipeline
-again. On Metal 4 binding a compute pipeline opens the lazy compute encoder if none is open.
+again. On Metal 4 binding a compute pipeline opens the lazy compute encoder if none is open. A
+render pass opens only on a `Graphics` list (`VU-rojo-cmd-0016`), so the list clause of
+`VU-rojo-cmd-0021` follows from its pass clause.
 
 #### Valid usage
 
@@ -190,7 +192,10 @@ is a debug group without timing.
 void CommandList::endScope();
 ```
 
-Closes the innermost open scope and writes its second timestamp.
+Closes the innermost open scope and writes its second timestamp. The scope a render pass forms is
+closed by `endRenderPass`, never by `endScope`, and is not one of the open scopes these rules count.
+Since `endRenderPass` requires every scope begun inside the pass to have ended (`VU-rojo-cmd-0019`),
+only the inside-a-pass half of `VU-rojo-cmd-0033` can be broken.
 
 #### Valid usage
 

@@ -185,6 +185,7 @@ the bound pipeline and root. Draws execute in record order.
 #### Valid usage
 - `VU-rojo-indirect-0001` Recorded inside a render pass with a graphics pipeline that has a vertex
   shader bound.
+- `VU-rojo-indirect-0021` A viewport and a scissor have been set since `beginRenderPass`.
 - `VU-rojo-indirect-0002` `args` is non-null and 4-byte aligned, and `maxCount` records from
   `args` lie in one buffer created with `BufferUsage::IndirectArgs`.
 - `VU-rojo-indirect-0003` `maxCount` is greater than zero and at most
@@ -215,6 +216,7 @@ in record order.
 #### Valid usage
 - `VU-rojo-indirect-0006` Recorded inside a render pass with a graphics pipeline that has a vertex
   shader bound.
+- `VU-rojo-indirect-0022` A viewport and a scissor have been set since `beginRenderPass`.
 - `VU-rojo-indirect-0007` `indices` was created with `BufferUsage::Index`.
 - `VU-rojo-indirect-0008` `args` is non-null and 4-byte aligned, and `maxCount` records from
   `args` lie in one buffer created with `BufferUsage::IndirectArgs`.
@@ -245,6 +247,7 @@ family, above the Apple7 floor (*unverified*), so support is reported per device
 #### Valid usage
 - `VU-rojo-indirect-0012` Recorded inside a render pass with a graphics pipeline that has a mesh
   shader bound.
+- `VU-rojo-indirect-0023` A viewport and a scissor have been set since `beginRenderPass`.
 - `VU-rojo-indirect-0013` The device reports `Capabilities::meshTasksIndirect`
   ([device](02-device.md)).
 - `VU-rojo-indirect-0014` `args` is non-null and 4-byte aligned, and `maxCount` records from

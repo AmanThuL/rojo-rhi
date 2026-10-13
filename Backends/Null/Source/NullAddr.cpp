@@ -5,10 +5,19 @@
 
 #include <rojoRHI/Addr.h>
 
+#include "Core/Addresses.h"
 #include "Core/Buffers.h"
 #include "NullDevice.h"
 
 namespace rojoRHI {
+    namespace core {
+        //==============================================================================================================
+        DecodedAddr decodeAddr(Addr addr)
+        {
+            return DecodedAddr{ addr.lo, addr.hi };
+        }
+    } // namespace core
+
     //==================================================================================================================
     Addr operator+(Addr base, uint64_t offset)
     {

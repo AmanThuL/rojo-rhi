@@ -90,7 +90,9 @@ Notes on the floor:
 - `maxTextureLayers` counts cube faces: a cube array holds at most `maxTextureLayers / 6` cubes.
 - `maxColorBytesPerSample` is a Metal tile-memory budget with no D3D12 counterpart; a render pass
   over it cannot run on Metal 4, so the floor binds every backend (`VU-rojo-cmd-0015` in
-  [`RenderPassDesc`](07-command-recording.md#renderpassdesc)).
+  [`RenderPassDesc`](07-command-recording.md#renderpassdesc)). The count is the sum of each color
+  attachment format's bytes per texel, which is *unverified* against Metal's per-format
+  render-target size table.
 - `maxGroupSize` takes its z floor of 64 from D3D12; Metal 4 allows 1,024 on every axis. A
   threadgroup also stays within `maxThreadsPerGroup` in total.
 - `maxDrawIndirectCount`'s floor mirrors the Vulkan oracle's minimum. Metal 4 reports the 65,536

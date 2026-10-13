@@ -9,6 +9,7 @@
 #include "Core/Label.h"
 
 #include <bit>
+#include <utility>
 
 namespace rojoRHI::core {
     //==================================================================================================================
@@ -20,7 +21,11 @@ namespace rojoRHI::core {
     //==================================================================================================================
     void beginList(CommandListCore& list, DeviceCore& core, QueueType type, std::string_view label)
     {
-        list = CommandListCore{};
+        // Every field starts afresh, but the containers are cleared and moved into the new state, so a list the pool hands
+        // out again keeps their capacity.
+        list.pass.colors.clear();
+        list.scopes.clear();
+        list = CommandListCore{ .pass = PassState{ .colors = std::move(list.pass.colors) }, .scopes = std::move(list.scopes) };
         list.label = resolveLabel(label, "rojorhi.commandlist.unnamed");
         list.device = &core;
         list.type = type;
@@ -29,11 +34,17 @@ namespace rojoRHI::core {
     }
 
     //==================================================================================================================
+    void checkRecording([[maybe_unused]] const CommandListCore& list)
+    {
+        ROJORHI_VU(list.state == ListState::Recording, "VU-rojo-cmd-0063", "a command was recorded on the list \"{}\", which is not recording", list.label);
+    }
+
+    //==================================================================================================================
     void endList(CommandListCore& list)
     {
         ROJORHI_VU(list.state == ListState::Recording, "VU-rojo-cmd-0002", "end was called on the list \"{}\", which is not recording", list.label);
         ROJORHI_VU(!list.passOpen, "VU-rojo-cmd-0003", "end was called on the list \"{}\" with a render pass open", list.label);
-        ROJORHI_VU(list.openScopes == 0, "VU-rojo-cmd-0004", "end was called on the list \"{}\" with {} scopes still open", list.label, list.openScopes);
+        ROJORHI_VU(list.scopes.empty(), "VU-rojo-cmd-0004", "end was called on the list \"{}\" with {} scopes still open", list.label, list.scopes.size());
         list.state = ListState::Ended;
     }
 
@@ -83,12 +94,15 @@ namespace rojoRHI::core {
         ROJORHI_VU(!bytes.empty(), "VU-rojo-buffer-0015", "uploadFrameData was called with no bytes");
         ROJORHI_VU(std::has_single_bit(alignment), "VU-rojo-buffer-0016", "the alignment {} is not a power of two", alignment);
         ROJORHI_VU(core.frameOpen(), "VU-rojo-buffer-0017", "uploadFrameData was called with no frame open");
+        checkRecording(list);
         uint64_t offset = (list.pageUsed + alignment - 1) & ~(uint64_t{ alignment } - 1);
         if (list.page.host == nullptr || offset + bytes.size() > list.page.size)
         {
-            // The list's page is full or missing: a new page's offset zero satisfies every alignment.
+            // The list's page is full or missing: a new page's offset zero satisfies every alignment. Claiming is the one place
+            // Release recording takes a lock (ADR 0019); the page's record is stamped with the frame for VU-rojo-buffer-0020.
             const uint32_t slot = static_cast<uint32_t>(list.frame % core.framesInFlight());
             list.page = core.arena().claim(slot, bytes.size(), core.capabilities().limits.maxBufferSize, source, context);
+            core.pool<Buffer>().update(list.page.buffer, [&](BufferRecord& record) { record.arenaFrame = list.frame; });
             offset = 0;
         }
         list.pageUsed = offset + bytes.size();

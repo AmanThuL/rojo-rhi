@@ -28,9 +28,9 @@ namespace rojoRHI::core {
     using ArenaPageSource = Result<ArenaPage> (*)(void* context, uint64_t size);
 
     /// One arena per frame slot. A slot owns pages that a command list claims whole, so a list bumps a cursor in its page
-    /// with no lock. Only claiming a page takes the arena's lock, and creating a page is a growth event. Pages keep their
-    /// memory and become claimable again when the slot is reused. Claiming is thread-safe: lists of one frame claim
-    /// concurrently.
+    /// with no lock. Only claiming a page takes the arena's lock, and creating a page is a growth event, which takes the
+    /// buffer pool's lock inside the arena's (ADR 0019). Pages keep their memory and become claimable again when the slot
+    /// is reused. Claiming is thread-safe: lists of one frame claim concurrently.
     class FrameArena
     {
       public:
