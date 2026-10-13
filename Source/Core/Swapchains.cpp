@@ -140,6 +140,8 @@ namespace rojoRHI::core {
             swapchain.label,
             swapchain.acquiredFrame
         );
+        // The image is judged before its release stops the tracker following it.
+        checkPresentLayout(core, swapchain.images[swapchain.acquired].texture);
         // With VU-rojo-present-0016 compiled out, presenting with no acquired image is undefined in Release, as misuse is elsewhere in the core.
         // The Null backend displays nothing, so the present completes during the call and the image is free again.
         releaseAcquired(core, swapchain);

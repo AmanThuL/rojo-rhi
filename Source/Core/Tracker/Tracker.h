@@ -51,6 +51,10 @@ namespace rojoRHI::core {
         /// and terminates at the first violation. `held` must be a lock `lock` returned.
         void replay(const TrackerLock& held, const TrackerLog& log, QueueType queue, std::string_view list);
 
+        /// Checks that every subresource of `image`, a swapchain image presented to the queue, is in `Layout::Present`
+        /// (VU-rojo-present-0018); an image the tracker does not follow is ignored. `held` must be a lock `lock` returned.
+        void checkPresent(const TrackerLock& held, Texture image);
+
       private:
         /// The tracker's view of one texture.
         struct TextureState
@@ -62,8 +66,13 @@ namespace rojoRHI::core {
             bool acquired = false;       ///< A swapchain image no barrier has been replayed on since its acquire.
         };
 
-        /// Replays one use.
-        void replayUse(const UseEvent& use, QueueType queue, std::string_view list);
+        /// Returns the state of `texture`, or null when the tracker does not follow it. Unlike the public lookups it takes no
+        /// lock, so the replay, which holds one, may call it.
+        TextureState* locate(const TrackerLock& held, Texture texture);
+
+        /// Replays one use: the layout of every subresource of its range against the layouts that permit it, reporting
+        /// VU-rojo-sync-0006, then the entry's own rule, then VU-rojo-sync-0004. A buffer use is not judged.
+        void replayUse(const TrackerLock& held, const UseEvent& use, QueueType queue, std::string_view list);
 
         /// Replays one global barrier.
         void replayGlobal(const GlobalBarrier& barrier, QueueType queue, std::string_view list);
@@ -83,6 +92,9 @@ namespace rojoRHI::core {
 
     /// Does the work of `replayLists` in a Debug build.
     void replayListsChecked(DeviceCore& core, QueueType type, std::span<const CommandList> lists, const TrackerLock& held);
+
+    /// Does the work of `checkPresentLayout` in a Debug build.
+    void checkPresentLayoutChecked(DeviceCore& core, Texture image);
 
     /// Does the work of `trackTexture` in a Debug build.
     void trackTextureChecked(DeviceCore& core, Texture texture, std::string_view label, uint32_t mips, uint32_t layers, Layout initial, bool acquired);
@@ -130,6 +142,15 @@ namespace rojoRHI::core {
     {
 #ifndef NDEBUG
         trackTextureChecked(core, texture, label, mips, layers, initial, acquired);
+#endif
+    }
+
+    /// Checks, under the tracker's lock, that the swapchain image `image` presented on `core` is in `Layout::Present`
+    /// (VU-rojo-present-0018) when `core` validates. Inline, as `replayLists` is.
+    inline void checkPresentLayout([[maybe_unused]] DeviceCore& core, [[maybe_unused]] Texture image)
+    {
+#ifndef NDEBUG
+        checkPresentLayoutChecked(core, image);
 #endif
     }
 
