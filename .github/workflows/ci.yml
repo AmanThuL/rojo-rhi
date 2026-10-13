@@ -46,9 +46,46 @@ jobs:
       - if: runner.os == 'Windows'
         uses: xmake-io/github-action-setup-xmake@v1
         with: {xmake-version: latest}
+      - uses: actions/cache@v5
+        with:
+          path: ThirdParty
+          key: ${{ runner.os }}-thirdparty-${{ hashFiles('xmake/setup.lua') }}
+      # The layout rule runs `python3`; setup-python on Windows installs only `python.exe`,
+      # so a python3 copy is added beside it when the runner has none.
+      - if: runner.os == 'Windows'
+        uses: actions/setup-python@v5
+        with: {python-version: '3.x'}
+      - if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          if (-not (Get-Command python3 -ErrorAction SilentlyContinue)) {
+            $python = (Get-Command python).Source
+            Copy-Item $python (Join-Path (Split-Path $python) 'python3.exe')
+          }
+          python3 --version
+      # DXIL needs dxcompiler.dll and dxil.dll on the loader path; the Windows SDK ships both.
+      # Without them the shader rule skips DXIL and says so, so a miss is a notice, not a failure.
+      - if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $root = 'C:\Program Files (x86)\Windows Kits\10\bin'
+          $dir = Get-ChildItem $root -Directory -ErrorAction SilentlyContinue |
+            Where-Object { $_.Name -match '^\d+\.\d+\.\d+\.\d+$' } |
+            Sort-Object { [version]$_.Name } -Descending |
+            ForEach-Object { Join-Path $_.FullName 'x64' } |
+            Where-Object { (Test-Path (Join-Path $_ 'dxcompiler.dll')) -and (Test-Path (Join-Path $_ 'dxil.dll')) } |
+            Select-Object -First 1
+          if ($dir) {
+            Add-Content $env:GITHUB_PATH $dir
+            Write-Host "DXIL runtime on PATH: $dir"
+          } else {
+            Write-Host '::notice::dxcompiler.dll and dxil.dll not found in the Windows SDK; DXIL will be skipped'
+          }
+      - run: xmake setup
       - run: xmake f -m debug -y --rojorhi_backend=null
       - run: xmake build RojoRHITests
       - run: xmake test RojoRHITests/contract
+      - run: xmake test RojoRHITests/abi
       - run: xmake f -m release -y --rojorhi_backend=null
       - run: xmake build RojoRHITests
   format:
