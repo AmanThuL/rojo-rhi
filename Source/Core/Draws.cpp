@@ -11,6 +11,7 @@
 #include "Core/Accesses.h"
 #include "Core/Addresses.h"
 #include "Core/Pipelines.h"
+#include "Core/Tracker/References.h"
 #include "Core/Tracker/TrackerLog.h"
 
 #include <format>
@@ -106,6 +107,8 @@ namespace rojoRHI::core {
         /// consumes the declarations; an indirect command's count is unknown while recording, so it always passes true.
         void logWork(CommandListCore& list, bool dispatch, bool work)
         {
+            // A draw or dispatch reads the root bound now, so only now does the list reference the root's buffer (VU-rojo-abi-0003).
+            noteReference(list, RefKind::Root, list.rootBuffer);
             consumeAccesses(list, dispatch, work);
             if (!dispatch && work)
             {
@@ -120,9 +123,11 @@ namespace rojoRHI::core {
             CommandListCore& list, const ResolvedAddr& args, uint64_t bytes, UseRule recordsRule, const ResolvedAddr& count, UseRule countRule
         )
         {
+            noteReference(list, RefKind::Addr, args.buffer);
             logUse(list, bufferUse(args.buffer, args.offset, bytes, Stage::IndirectArgs, Access::IndirectArgs, recordsRule));
             if (count.record != nullptr)
             {
+                noteReference(list, RefKind::Addr, count.buffer);
                 logUse(list, bufferUse(count.buffer, count.offset, sizeof(uint32_t), Stage::IndirectArgs, Access::IndirectArgs, countRule));
             }
         }
@@ -138,6 +143,11 @@ namespace rojoRHI::core {
         // Resolving reads the buffer pool under its lock, so only the Debug tier does it (ADR 0020).
         const ResolvedAddr at = resolveAddr(*list.device, list, root);
         ROJORHI_VU(at.offset % kRootAlignment == 0, "VU-rojo-abi-0002", "the root's byte offset {} is not a multiple of {}", at.offset, kRootAlignment);
+        if (list.device->validation())
+        {
+            // Only the references of a validating device read it.
+            list.rootBuffer = at.buffer;
+        }
 #endif
         list.root = root;
     }
@@ -178,6 +188,7 @@ namespace rojoRHI::core {
             buffer->size,
             hasUsage(buffer->usage, BufferUsage::Index) ? "" : "not "
         );
+        noteReference(list, RefKind::Handle, indices);
         if (count != 0 && instances != 0)
         {
             logUse(

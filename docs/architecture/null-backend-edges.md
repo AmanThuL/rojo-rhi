@@ -284,8 +284,11 @@ entry and coverage rules; `sync-0009` before the indirect rules. Limit: a discar
 use, so although on D3D12 it writes compression metadata, a later aliasing resource is checked
 only against the last use. Order between queues is `queue-0005`'s.
 
-**What remains.** The unsubmitted-reference counts of `VU-rojo-abi-0003`, `buffer-0019`,
-`device-0007` and `present-0019`. The queues part adds the clocks, the layout per queue and the
+**References of unsubmitted lists.** A list counts each object it references once (root, address or
+handle) in the record's `ListReferences`; submission or recycling removes them. `destroy` reports
+`VU-rojo-abi-0003`, `buffer-0019`, then `device-0007`; replay, `present-0019` for a presented image.
+
+**What remains.** The queues part adds the clocks, the layout per queue and the
 handoff, `VU-rojo-queue-0005`, `sync-0018`, `device-0006`, `VU-rojo-sparse-0013` and the lock in
 the calls named above.
 

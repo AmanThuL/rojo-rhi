@@ -12,6 +12,7 @@
 #include "Core/Fences.h"
 #include "Core/Sparse.h"
 #include "Core/Swapchains.h"
+#include "Core/Tracker/References.h"
 #include "Core/Tracker/Tracker.h"
 
 namespace rojoRHI {
@@ -36,13 +37,17 @@ namespace rojoRHI {
         const QueueImpl& queue = QueueImpl::of(*this);
         core::DeviceCore& core = queue.device->core;
         core::submitLists(core, queue.type, lists);
-        // A validating device judges the submission under its tracker's lock, held until the signals are published, so a
-        // submission on another queue sees the tracker state and the fence values move together.
-        const core::TrackerLock tracked = core::lockTracker(core);
-        core::checkSubmit(core, wait, signal);
-        core::replayLists(core, queue.type, lists, tracked);
-        // The Null queue executes nothing, so every signal is reached before the call returns.
-        core::recordSignals(core, signal, core::SignalCompletion::Immediate);
+        {
+            // A validating device judges the submission under its tracker's lock, held until the signals are published, so a
+            // submission on another queue sees the tracker state and the fence values move together.
+            const core::TrackerLock tracked = core::lockTracker(core);
+            core::checkSubmit(core, wait, signal);
+            core::replayLists(core, queue.type, lists, tracked);
+            // The Null queue executes nothing, so every signal is reached before the call returns.
+            core::recordSignals(core, signal, core::SignalCompletion::Immediate);
+        }
+        // The objects the lists name stay counted until replay has read them; the counts go outside the tracker's lock.
+        core::releaseSubmitted(lists);
     }
 
     //==================================================================================================================

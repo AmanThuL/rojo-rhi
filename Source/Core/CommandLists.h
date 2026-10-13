@@ -69,6 +69,7 @@ namespace rojoRHI::core {
         PassState pass;                              ///< The open pass; meaningful while `passOpen`.
         BoundPipeline pipeline;                      ///< The bound pipeline; cleared by `beginRenderPass` and `endRenderPass`.
         Addr root = {};                              ///< The root `setRoot` bound; null until one is.
+        Buffer rootBuffer = {};                      ///< The buffer `root` resolved to; written in Debug on a validating device only.
         std::vector<bool> scopes;                    ///< One entry per open scope, innermost last: true when it began inside a render pass.
         size_t passScopeBase = 0;                    ///< The number of open scopes when the open pass began.
         std::string label;                           ///< The label the list was acquired with.

@@ -23,8 +23,8 @@ namespace rojoRHI::core {
         }
 
         //==============================================================================================================
-        /// Returns true when a barrier since `earlier` orders it before `later`: one reach whose source covers `earlier` and
-        /// whose destination covers `later`.
+        /// Returns true when a barrier since `earlier` orders it before `later`: one reach that orders `earlier`, its source
+        /// covering it or chaining from a barrier that does, and whose destination covers `later`.
         bool ordered(const TrackedUse& earlier, Scope later)
         {
             const bool writes = isWrite(earlier);
@@ -98,6 +98,17 @@ namespace rojoRHI::core {
         Scope merged(Scope a, Scope b)
         {
             return Scope{ .stage = a.stage | b.stage, .access = a.access | b.access };
+        }
+
+        //==============================================================================================================
+        /// Returns true when a barrier from `source` recorded at `position` extends the execution chain of an earlier barrier
+        /// over `use`: one that orders the use, its source covering it or chaining in turn, and whose destination stage shares a
+        /// stage with `source`. A record of the same barrier call, at `position`, never chains.
+        bool chains(const TrackedUse& use, uint64_t position, Scope source)
+        {
+            return std::ranges::any_of(use.reaches, [&](const Reach& reach) {
+                return reach.position != position && reach.sourceCovers && sharesStage(reach.destination.stage, source.stage);
+            });
         }
 
         //==============================================================================================================
@@ -209,9 +220,10 @@ namespace rojoRHI::core {
             {
                 return;
             }
-            // After a transition a barrier orders the next use only through an execution chain: its source stage shares a stage
-            // with the transition's destination stage.
-            const bool orders = use.transition ? sharesStage(source.stage, use.scope.stage) : sourceCovers(source, use.scope);
+            // A barrier orders the use when its source covers it, or through an execution chain: its source stage shares a stage
+            // with the destination stage of an earlier barrier that orders the use. A transition is ordered only through a chain,
+            // from its own destination, its first reach.
+            const bool orders = (!use.transition && sourceCovers(source, use.scope)) || chains(use, position, source);
             // The first barrier of each kind is kept: an earlier one orders whatever a later one of its kind would.
             const Reach added{ .destination = destination, .sourceCovers = orders, .position = position };
             if (std::ranges::none_of(use.reaches, [&](const Reach& reach) { return sameKind(reach, added); }))
@@ -241,13 +253,9 @@ namespace rojoRHI::core {
     Hazard checkTransition(const QueueHazards& state, uint64_t position, Scope source, bool discard)
     {
         // The transition waits only through an execution chain: its own source covers an earlier use, or shares a stage with
-        // the destination of an earlier barrier whose source covers it. A source with no stage waits for nothing, and the
-        // records of the transition's own barrier call, at its position, never order it.
-        const auto chained = [&](const TrackedUse& earlier) {
-            return std::ranges::any_of(earlier.reaches, [&](const Reach& reach) {
-                return reach.position != position && reach.sourceCovers && sharesStage(reach.destination.stage, source.stage);
-            });
-        };
+        // the destination of an earlier barrier that orders it. A source with no stage waits for nothing, and the records of
+        // the transition's own barrier call, at its position, never order it.
+        const auto chained = [&](const TrackedUse& earlier) { return chains(earlier, position, source); };
         const auto orderedBefore = [&](const TrackedUse& earlier) { return transitionOrders(source, discard, earlier) || chained(earlier); };
         const auto missed = [](const TrackedUse& use) {
             return Hazard{ .kind = HazardKind::Unordered, .earlier = use.scope, .earlierTransition = use.transition };

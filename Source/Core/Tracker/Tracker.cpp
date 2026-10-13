@@ -103,9 +103,9 @@ namespace rojoRHI::core {
         }
 
         //==============================================================================================================
-        /// Returns the first mark of `marks` that a texture whose latest heap use has `ownStamp` must still follow, a mark newer
-        /// than that use, whose stage and access `source`, a discard's, does not cover; with no source, the first such mark.
-        /// Returns null when there is none. An older mark is one the texture is ordered against across queues.
+        /// Returns the first mark of `marks`, a subresource's, that the subresource whose latest use has `ownStamp` must still
+        /// follow, a mark newer than that use, whose stage and access `source`, a discard's, does not cover; with no source, the first such mark.
+        /// Returns null when there is none. An older mark is one the subresource is ordered against across queues.
         const AliasMark* uncovered(const AliasMarks& marks, uint64_t ownStamp, std::optional<Scope> source)
         {
             for (const AliasMarks::Range& range : marks.ranges())
@@ -275,6 +275,7 @@ namespace rojoRHI::core {
             placed.segments.merge(heapOffset, heapOffset + heapSize);
             placed.textures.push_back(texture.bits);
             state.aliases.assign(subresources, marks);
+            state.ownStamps.assign(subresources, 0);
         }
         m_textures.insert_or_assign(texture.bits, std::move(state));
     }
@@ -404,6 +405,18 @@ namespace rojoRHI::core {
     {
         ROJORHI_INTERNAL_ASSERT(held.owns_lock() && held.mutex() == &m_mutex, "a list was replayed without the tracker's lock");
         ROJORHI_INTERNAL_ASSERT(log.commands.size() == log.events.size(), "a tracker event was logged without its command");
+        // An image the list noted that the tracker no longer follows was presented since the list recorded it. Judging it first keeps the
+        // events that name it from reaching a texture that is gone.
+        for ([[maybe_unused]] const Texture image : log.images)
+        {
+            ROJORHI_VU(
+                locate(held, image) != nullptr,
+                "VU-rojo-present-0019",
+                "the list \"{}\" references the swapchain image {:#x}, which was presented after the list recorded it",
+                list,
+                image.bits
+            );
+        }
         uint64_t& position = m_positions[static_cast<size_t>(queue)];
         for (size_t index = 0; index < log.events.size(); ++index)
         {
@@ -565,7 +578,9 @@ namespace rojoRHI::core {
                 for (uint32_t layer = use.range.baseLayer; layer < layerEnd; ++layer)
                 {
                     [[maybe_unused]] const AliasMark* mark = uncovered(
-                        texture->aliases[static_cast<size_t>(mip) * texture->layers + layer][static_cast<size_t>(queue)], texture->ownStamp, std::nullopt
+                        texture->aliases[static_cast<size_t>(mip) * texture->layers + layer][static_cast<size_t>(queue)],
+                        texture->ownStamps[static_cast<size_t>(mip) * texture->layers + layer],
+                        std::nullopt
                     );
                     ROJORHI_VU(
                         mark == nullptr,
@@ -743,7 +758,7 @@ namespace rojoRHI::core {
             // A use of any subresource is a use of the texture's whole heap range: its subresources' bytes are not known.
             HeapState* heap = locate(held, texture->heap);
             ROJORHI_INTERNAL_ASSERT(heap != nullptr, "a placed texture is followed without its heap");
-            texture->ownStamp = noteHeapUse(
+            const uint64_t stamp = noteHeapUse(
                 held,
                 *heap,
                 HeapOwner{ .bits = use.texture.bits, .texture = true },
@@ -753,6 +768,14 @@ namespace rojoRHI::core {
                 position,
                 scopeOf(use)
             );
+            // Only the subresources the use names are ordered after the marks before it; the others still owe their discard.
+            for (uint32_t mip = use.range.baseMip; mip < mipEnd; ++mip)
+            {
+                for (uint32_t layer = use.range.baseLayer; layer < layerEnd; ++layer)
+                {
+                    texture->ownStamps[static_cast<size_t>(mip) * texture->layers + layer] = stamp;
+                }
+            }
         }
     }
 
@@ -978,9 +1001,9 @@ namespace rojoRHI::core {
                     std::array<AliasMarks, 3>& marks = texture.aliases[index];
                     const bool discards = barrier.oldLayout == Layout::Undefined;
                     // Each byte range's latest foreign use is waited for, so an older use of other bytes is not lost.
-                    const bool pending = uncovered(marks[static_cast<size_t>(queue)], texture.ownStamp, std::nullopt) != nullptr;
+                    const bool pending = uncovered(marks[static_cast<size_t>(queue)], texture.ownStamps[index], std::nullopt) != nullptr;
                     [[maybe_unused]] const AliasMark* mark =
-                        uncovered(marks[static_cast<size_t>(queue)], texture.ownStamp, discards ? std::optional<Scope>(source) : std::nullopt);
+                        uncovered(marks[static_cast<size_t>(queue)], texture.ownStamps[index], discards ? std::optional<Scope>(source) : std::nullopt);
                     ROJORHI_VU(
                         mark == nullptr,
                         "VU-rojo-sync-0017",

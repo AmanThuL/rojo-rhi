@@ -10,6 +10,7 @@
 #include "Core/Pipelines.h"
 #include "Core/Scopes.h"
 #include "Core/Textures.h"
+#include "Core/Tracker/References.h"
 #include "Core/Tracker/TrackerLog.h"
 
 #include <algorithm>
@@ -310,6 +311,7 @@ namespace rojoRHI::core {
         const LookupResult<PipelineRecord> found = list.device->pool<Pipeline>().lookup(pipeline);
         ROJORHI_VU(found.status == LookupStatus::Ok, "VU-rojo-cmd-0020", "setPipeline was given handle {:#x}, which is not a live pipeline", pipeline.bits);
         const PipelineRecord& record = *found.record;
+        noteReference(list, RefKind::Handle, pipeline);
         if (record.kind == PipelineKind::Graphics)
         {
             ROJORHI_VU(list.passOpen, "VU-rojo-cmd-0021", "the graphics pipeline \"{}\" was bound outside a render pass", record.label);

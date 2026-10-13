@@ -271,7 +271,7 @@ lacks is on the [command recording](null-backend-recording.md) page.
   or label yet. They arrive with a native backend, which must release native views and samplers at
   retirement and at `destroyDevice`.
 - The rest of the validation tracker: the identifiers of `Tools/vu_pending.txt` that only it
-  checks, such as `VU-rojo-buffer-0019`; [the edges](null-backend-edges.md#the-validation-tracker)
+  checks, such as `VU-rojo-queue-0005`; [the edges](null-backend-edges.md#the-validation-tracker)
   say what is built and what remains.
 - A Metal 4 v2 backend and T1 GPU conformance
   ([ADR 0009](../decisions/0009-conformance-and-valid-usage.md)).

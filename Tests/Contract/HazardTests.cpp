@@ -82,8 +82,8 @@ TEST_CASE("a write after a write is ordered through a read and two barriers", "[
     kit.list.fillBuffer(buffer, 0, kBytes, 0);
     writeToRead(kit.list);
     kit.list.copyBuffer(buffer, 0, other, 0, kBytes);
-    // Neither barrier covers both writes; the read between them chains the two.
-    global(kit.list, Stage::Copy, Access::CopyRead, Stage::Copy, Access::CopyWrite);
+    // The second barrier names no destination access, so it does not chain the writes; the read between them orders them.
+    global(kit.list, Stage::Copy, Access::None, Stage::Copy, Access::None);
     kit.list.fillBuffer(buffer, 0, kBytes, 1);
     kit.finish();
 #endif

@@ -8,6 +8,7 @@
 #include "Base/Assert.h"
 #include "Core/Accesses.h"
 #include "Core/Label.h"
+#include "Core/Tracker/References.h"
 
 #include <bit>
 #include <utility>
@@ -24,6 +25,8 @@ namespace rojoRHI::core {
     {
         // Every field starts afresh, but the containers are cleared and moved into the new state, so a list the pool hands
         // out again keeps their capacity.
+        // A list that was never submitted still holds the counts it added; its slot is reused now, so they go before the log is cleared.
+        releaseReferences(list);
         list.pass.colors.clear();
         list.scopes.clear();
         list.scopeLog.clear();
@@ -31,6 +34,7 @@ namespace rojoRHI::core {
         list.trackerLog.events.clear();
         list.trackerLog.commands.clear();
         list.trackerLog.passUses.clear();
+        list.trackerLog.images.clear();
         list = CommandListCore{ .pass = PassState{ .colors = std::move(list.pass.colors) },
                                 .scopes = std::move(list.scopes),
                                 .scopeLog = std::move(list.scopeLog),

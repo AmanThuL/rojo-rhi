@@ -216,7 +216,6 @@ textures and pipelines.
 ## What remains
 
 - Recording rules that need lifetime across commands or several queues: the rest of the
-  validation tracker (`tracker` entries of `Tools/vu_pending.txt`, among them `VU-rojo-buffer-0019`
-  and `VU-rojo-queue-0005`).
+  validation tracker (`tracker` entries of `Tools/vu_pending.txt`, among them `VU-rojo-queue-0005`).
 - A native backend: slot payloads for views and samplers, and the use of the retire and
   `frameSlot` hooks for native command lists and arena pages.

@@ -42,13 +42,14 @@ namespace rojoRHI::core {
     /// `Resolve`.
     bool hasWrite(Access access);
 
-    /// One barrier replayed after a use, on the use's queue and over its memory: the barrier's destination, and whether its
-    /// source covers the use.
+    /// One barrier replayed after a use, on the use's queue and over its memory: the barrier's destination, and whether it
+    /// orders the use before that destination.
     struct Reach
     {
         Scope destination; ///< The barrier's destination stage and access.
-        /// The barrier's source covers the use, or, for a layout transition, shares a stage with its destination, so it
-        /// orders the use before its destination.
+        /// The barrier's source covers the use, or extends an execution chain over it: its source stage shares a stage with
+        /// the destination stage of an earlier reach that orders the use. A layout transition's own destination is its first
+        /// reach, so a barrier after it is ordered only through a chain.
         bool sourceCovers = false;
         /// The position of the barrier on the queue: of the first barrier of its kind, since an earlier one orders whatever a
         /// later one would. A transition is never ordered by a reach at its own position, a record of its own barrier call.
@@ -127,11 +128,11 @@ namespace rojoRHI::core {
     };
 
     /// Judges `use`, made at `position`, against the uses `state` remembers (VU-rojo-sync-0021, VU-rojo-sync-0024): a read
-    /// against the last write, a write against the reads since it and the write itself. A pair is ordered by one barrier
-    /// whose source covers the earlier use and whose destination covers the later one; a write after a write also by a read
-    /// between them that one barrier orders after the first write and another before the second. A layout transition is
-    /// covered by its own destination, or by a later barrier whose source stage shares a stage with that destination. Returns
-    /// the latest pair that is not ordered. Uses at `position` belong to the same command and are not judged.
+    /// against the last write, a write against the reads since it and the write itself. A pair is ordered by a reach of the
+    /// earlier use that orders it, its source covering it or chaining from one that does, whose destination covers the later
+    /// one; a write after a write also by a read between them that a chain orders after the first write and another before
+    /// the second. Returns the latest pair that is not ordered. Uses at `position` belong to the same command and are not
+    /// judged.
     Hazard checkUse(const QueueHazards& state, uint64_t position, Scope use);
 
     /// Notes `use`, made at `position` and judged by `checkUse`: a read joins the reads, and a write replaces the write and the
@@ -139,13 +140,14 @@ namespace rojoRHI::core {
     void recordUse(QueueHazards& state, uint64_t position, Scope use);
 
     /// Notes a barrier recorded at `position` from `source` to `destination` that applies to the unit: each remembered use
-    /// before `position` gains its reach.
+    /// before `position` gains its reach, which orders the use when `source` covers it or extends a chain over it from a reach
+    /// of an earlier barrier call.
     void recordBarrier(QueueHazards& state, uint64_t position, Scope source, Scope destination);
 
     /// Judges a layout transition recorded at `position` from `source`, a discard from `Layout::Undefined` when `discard`,
     /// against the uses `state` remembers: it is a write ordered after the uses before it only through an execution chain.
-    /// Its own source orders a use it covers, and it chains from an earlier barrier that covers a use, or from an earlier
-    /// transition's destination, when it shares a stage with that destination; the last write may also be ordered through a
+    /// Its own source orders a use it covers, and it extends a chain over a use when it shares a stage with the destination
+    /// of a reach that orders the use, an earlier transition's own included; the last write may also be ordered through a
     /// read a barrier ordered after it. A record of the same barrier call, at `position`, never orders it, and a source with
     /// no stage orders nothing, which is right only when nothing came before. Returns the latest use it does not order as
     /// `HazardKind::Unordered`, since the transition is itself a barrier between.

@@ -111,3 +111,26 @@ TEST_CASE("indirect commands read arguments only the CPU wrote with no barrier",
     kit.finish();
 #endif
 }
+
+//======================================================================================================================
+TEST_CASE("a compute write after an indirect read is ordered after the earlier write by a chain of two barriers", "[contract]")
+{
+#ifdef NDEBUG
+    SKIP("validation exists only in a Debug build");
+#else
+    PassKit kit(QueueType::Graphics, true);
+    const Buffer args = kit.buffer(BufferUsage::IndirectArgs | BufferUsage::ShaderWrite);
+    const std::array<ResourceAccess, 1> writes{ ResourceAccess{ .buffer = args, .stage = Stage::ComputeShader, .access = Access::ShaderWrite } };
+    kit.list.setPipeline(kit.compute());
+    kit.list.declareAccess(writes);
+    kit.list.dispatch(1, 1, 1);
+    global(kit.list, Stage::ComputeShader, Access::ShaderWrite, Stage::IndirectArgs, Access::IndirectArgs);
+    kit.list.dispatchIndirect(kit.device.address(args));
+    // The dispatch read only its record; the bytes past it are ordered after the first write because this barrier's source
+    // shares the IndirectArgs stage with the earlier barrier's destination.
+    global(kit.list, Stage::IndirectArgs, Access::None, Stage::ComputeShader, Access::ShaderWrite);
+    kit.list.declareAccess(writes);
+    kit.list.dispatch(1, 1, 1);
+    kit.finish();
+#endif
+}

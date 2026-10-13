@@ -161,19 +161,19 @@ empty batch records nothing.
 - `VU-rojo-sync-0023` Retired in 0.1.0: Such a barrier covers both uses: its source stage and
   access include the earlier use's, and its destination stage and access include the later use's.
 - `VU-rojo-sync-0024` Between two uses of the same memory on one queue in which at least one writes,
-  one barrier's source covers the earlier use and its destination covers the later use. A source
-  covers a use when its stage includes the use's stages and its access includes the use's write
-  accesses; a barrier from `Undefined` needs no source access, and a source with no stage covers no
-  use. A destination covers a use when its stage includes the use's stages and, when the earlier use
-  writes, its access includes the use's accesses. For a write after a write, a read between them
-  also orders the pair when a barrier before the read covers the first write and the read, and one
-  after it covers the read and the second write. A texture barrier that changes the layout is a
-  write between the uses around it, ordered after the uses before it as a write is, with its own
-  source as one more barrier; with no use since the last layout change, its source stage shares a
-  stage with that change's destination stage or with the destination of a later barrier whose source
-  stage does. The next use is covered by the change's destination, or by the destination of a later
-  barrier whose source stage shares a stage with the change's destination stage. Two barriers of one
-  `CommandList::barrier` call never order a pair together. Checked by the validation tracker.
+  a chain of barriers orders the earlier use before the later one. A barrier whose source covers
+  the earlier use starts a chain; a later barrier whose source stage shares a stage with the
+  destination stage of a barrier of the chain extends it; the destination of a barrier of the chain
+  covers the later use. A source covers a use when its stage includes the use's stages and its
+  access includes the use's write accesses; a barrier from `Undefined` needs no source access, and a
+  source with no stage covers no use. A destination covers a use when its stage includes the use's
+  stages and, when the earlier use writes, its access includes the use's accesses. For a write after
+  a write, a read between them also orders the pair when a chain orders the first write before the
+  read and another orders the read before the second write. A texture barrier that changes the
+  layout is a write between the uses around it, ordered after the uses before it as a write is, with
+  its own source as the last barrier of a chain, and it starts a chain as a barrier whose source
+  covers it and whose destination is its own. Two barriers of one `CommandList::barrier` call never
+  chain. Checked by the validation tracker.
 
 #### Mapping
 | | Metal 4 | D3D12 | Vulkan |
