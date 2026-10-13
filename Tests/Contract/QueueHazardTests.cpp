@@ -477,3 +477,28 @@ TEST_CASE("a texture is moved on Compute after a fence orders the Graphics reads
     close(kit);
 #endif
 }
+
+//======================================================================================================================
+TEST_CASE("a buffer is filled on Compute over a placed texture Graphics moved, after a fence wait", "[contract]")
+{
+#ifdef NDEBUG
+    SKIP("validation exists only in a Debug build");
+#else
+    PassKit kit(QueueType::Graphics, true);
+    const Heap heap = makeHeap(kit);
+    const Texture placed = *kit.device.createTexture(
+        TextureDesc{ .format = Format::RGBA8Unorm, .extent = { PassKit::kSize, PassKit::kSize, 1 }, .usage = TextureUsage::Storage, .label = "test.placed" },
+        {},
+        Placement{ .heap = heap }
+    );
+    const Buffer buffer = placedBuffer(kit, heap);
+    const Fence fence = *kit.device.createFence(0, "test.fence");
+    const std::array<FenceValue, 1> moved{ FenceValue{ fence, 1 } };
+    test::transition(kit.list, placed, Layout::Undefined, Layout::General);
+    submitTo(kit.device, kit.list, QueueType::Graphics, {}, moved);
+    CommandList compute = kit.device.acquireCommandList(QueueType::Compute, "test.compute");
+    compute.fillBuffer(buffer, 0, kBytes, 1);
+    submitTo(kit.device, compute, QueueType::Compute, moved);
+    close(kit);
+#endif
+}

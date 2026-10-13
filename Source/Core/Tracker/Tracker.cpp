@@ -252,6 +252,37 @@ namespace rojoRHI::core {
             default: break;
             }
         }
+
+        //==============================================================================================================
+        /// Returns true when a subresource whose latest layout event, on `from` (none for a creation or an acquire), set
+        /// `layout` is handed over to `queue` (VU-rojo-sync-0025): the event is on another queue and keeps contents. An
+        /// `Undefined` event, another resource's use of the memory, hands over nothing, and the layout rules judge the next
+        /// event as they would on the queue.
+        [[maybe_unused]] bool handedOver(std::optional<QueueType> from, Layout layout, QueueType queue)
+        {
+            return from.has_value() && *from != queue && layout != Layout::Undefined;
+        }
+
+        //==============================================================================================================
+        /// Returns true when `layout` is one the queues `a` and `b` both accept at a handoff (VU-rojo-sync-0025): `General`
+        /// when either is the Copy queue; `General`, `ShaderRead`, `ShaderWrite`, `CopySrc` or `CopyDst` between the Graphics
+        /// and Compute queues.
+        [[maybe_unused]] bool sharedLayout(Layout layout, QueueType a, QueueType b)
+        {
+            if (a == QueueType::Copy || b == QueueType::Copy)
+            {
+                return layout == Layout::General;
+            }
+            switch (layout)
+            {
+            case Layout::General:
+            case Layout::ShaderRead:
+            case Layout::ShaderWrite:
+            case Layout::CopySrc:
+            case Layout::CopyDst: return true;
+            default: return false;
+            }
+        }
     } // namespace
 
     //==================================================================================================================
@@ -277,7 +308,7 @@ namespace rojoRHI::core {
         TextureState state{ .label = std::string(label),
                             .mips = mips,
                             .layers = layers,
-                            .layouts = std::vector<Layout>(subresources, initial),
+                            .layouts = std::vector<LayoutEvent>(subresources, LayoutEvent{ .layout = initial }),
                             .hazards = std::vector<UnitHazards>(subresources),
                             .acquired = acquired,
                             .heap = heap,
@@ -334,7 +365,7 @@ namespace rojoRHI::core {
         {
             return std::nullopt;
         }
-        return found->second.layouts[static_cast<size_t>(mip) * found->second.layers + layer];
+        return found->second.layouts[static_cast<size_t>(mip) * found->second.layers + layer].layout;
     }
 
     //==================================================================================================================
@@ -644,6 +675,16 @@ namespace rojoRHI::core {
     }
 
     //==================================================================================================================
+    std::optional<Layout> Tracker::layoutOn(const LayoutEvent& event, QueueType queue, const Clock& ordered)
+    {
+        if (event.queue.has_value() && *event.queue != queue && !covers(ordered, *event.queue, event.position))
+        {
+            return std::nullopt;
+        }
+        return event.layout;
+    }
+
+    //==================================================================================================================
     Clock Tracker::orderedBefore(QueueType queue) const
     {
         return join(m_waited[static_cast<size_t>(queue)], m_host);
@@ -651,12 +692,20 @@ namespace rojoRHI::core {
 
     //==================================================================================================================
     void Tracker::noteHeapUse(
-        const TrackerLock& held, HeapState& heap, HeapOwner owner, uint64_t begin, uint64_t end, QueueType queue, uint64_t position, Scope scope
+        const TrackerLock& held,
+        HeapState& heap,
+        HeapOwner owner,
+        uint64_t begin,
+        uint64_t end,
+        QueueType queue,
+        uint64_t position,
+        Scope scope,
+        bool transition
     )
     {
         for (HeapSegments::Range& segment : heap.segments.isolate(begin, end))
         {
-            core::noteHeapUse(segment.state, queue, owner, position, scope);
+            core::noteHeapUse(segment.state, queue, owner, position, scope, transition);
         }
         heap.segments.merge(begin, end);
         // Every other texture over these bytes loses its contents: its next event on the queue discards (VU-rojo-sync-0017).
@@ -672,6 +721,11 @@ namespace rojoRHI::core {
                 for (std::array<AliasMarks, 3>& marks : texture->aliases)
                 {
                     markAlias(marks[static_cast<size_t>(queue)], from, to, owner, position, scope);
+                }
+                // The use is a layout event of every subresource: a queue it is ordered before sees them Undefined (T6).
+                for (LayoutEvent& event : texture->layouts)
+                {
+                    event = LayoutEvent{ .layout = Layout::Undefined, .queue = queue, .position = position };
                 }
             }
         }
@@ -705,7 +759,8 @@ namespace rojoRHI::core {
                 const std::optional<HeapUse>& last = segment.state[index];
                 // The resource's own uses on other queues are judged by its own hazard state.
                 [[maybe_unused]] const bool unordered = other != queue && last.has_value() && !(last->owner == owner) &&
-                                                        (writes || hasWrite(last->use.scope.access)) && !covers(ordered, other, last->use.position);
+                                                        (writes || last->use.transition || hasWrite(last->use.scope.access)) &&
+                                                        !covers(ordered, other, last->use.position);
                 ROJORHI_VU(
                     !unordered,
                     "VU-rojo-queue-0005",
@@ -733,15 +788,19 @@ namespace rojoRHI::core {
         {
             return;
         }
+        // The image is presented on the graphics queue, which sees the layout its own work or a fence-ordered event set.
+        [[maybe_unused]] const Clock ordered = orderedBefore(QueueType::Graphics);
         for (size_t index = 0; index < texture->layouts.size(); ++index)
         {
+            [[maybe_unused]] const LayoutEvent& event = texture->layouts[index];
             ROJORHI_VU(
-                texture->layouts[index] == Layout::Present,
+                event.layout == Layout::Present && layoutOn(event, QueueType::Graphics, ordered).has_value(),
                 "VU-rojo-present-0018",
-                "the swapchain image \"{}\" is presented with subresource {} in layout {}, not Present",
+                "the swapchain image \"{}\" is presented with subresource {} in layout {}{}, not Present",
                 texture->label,
                 index,
-                static_cast<int>(texture->layouts[index])
+                static_cast<int>(event.layout),
+                layoutOn(event, QueueType::Graphics, ordered).has_value() ? "" : " set on another queue that no fence orders before the present"
             );
         }
     }
@@ -789,12 +848,34 @@ namespace rojoRHI::core {
                 }
             }
         }
+        const Clock ordered = orderedBefore(queue);
         for (uint32_t mip = use.range.baseMip; mip < mipEnd; ++mip)
         {
             for (uint32_t layer = use.range.baseLayer; layer < layerEnd; ++layer)
             {
-                const Layout current = texture->layouts[static_cast<size_t>(mip) * texture->layers + layer];
-                // The Copy queue's rule reports first, then the entry's own rule, then the general one.
+                const LayoutEvent& event = texture->layouts[static_cast<size_t>(mip) * texture->layers + layer];
+                const std::optional<Layout> visible = layoutOn(event, queue, ordered);
+                if (!visible.has_value())
+                {
+                    // No fence orders the latest layout event before the use: the hazard rules report the race below.
+                    continue;
+                }
+                const Layout current = *visible;
+                // A layout set on another queue reaches this one only in a layout both queues accept; that rule reports first,
+                // then the Copy queue's rule, then the entry's own rule, then the general one.
+                ROJORHI_VU(
+                    !handedOver(event.queue, current, queue) || sharedLayout(current, queue, *event.queue),
+                    "VU-rojo-sync-0025",
+                    "the list \"{}\" on the {} queue uses mip {} layer {} of the texture \"{}\", handed over from the {} queue in layout {}, which "
+                    "the two queues do not share",
+                    list,
+                    queueName(queue),
+                    mip,
+                    layer,
+                    texture->label,
+                    queueName(event.queue.value_or(queue)),
+                    static_cast<int>(current)
+                );
                 ROJORHI_VU(
                     queue != QueueType::Copy || current == Layout::General,
                     "VU-rojo-sync-0006",
@@ -947,7 +1028,6 @@ namespace rojoRHI::core {
         if (texture->heap.bits != 0)
         {
             // Only the subresources the use names follow the marks before it; the others still owe their discard.
-            const Clock ordered = orderedBefore(queue);
             for (uint32_t mip = use.range.baseMip; mip < mipEnd; ++mip)
             {
                 for (uint32_t layer = use.range.baseLayer; layer < layerEnd; ++layer)
@@ -1231,19 +1311,59 @@ namespace rojoRHI::core {
             for (uint32_t layer = barrier.range.baseLayer; layer < layerEnd; ++layer)
             {
                 const size_t index = static_cast<size_t>(mip) * texture.layers + layer;
-                Layout& current = texture.layouts[index];
-                ROJORHI_VU(
-                    barrier.oldLayout == Layout::Undefined || barrier.oldLayout == current,
-                    "VU-rojo-sync-0013",
-                    "a texture barrier in the list \"{}\" starts mip {} layer {} of the texture \"{}\" from layout {}, but it is in layout {}",
-                    list,
-                    mip,
-                    layer,
-                    texture.label,
-                    static_cast<int>(barrier.oldLayout),
-                    static_cast<int>(current)
-                );
-                current = barrier.newLayout;
+                LayoutEvent& event = texture.layouts[index];
+                // With no fence ordering the latest layout event before the barrier, the race is reported below, not a layout.
+                const std::optional<Layout> visible = layoutOn(event, queue, ordered);
+                if (visible.has_value())
+                {
+                    if (handedOver(event.queue, *visible, queue))
+                    {
+                        // The first barrier of the queue the subresource is handed to reports the handoff rule before sync-0013;
+                        // a discard takes nothing over, so the layout need not be one the two queues share.
+                        ROJORHI_VU(
+                            barrier.oldLayout == Layout::Undefined || sharedLayout(*visible, queue, *event.queue),
+                            "VU-rojo-sync-0025",
+                            "a texture barrier in the list \"{}\" on the {} queue takes mip {} layer {} of the texture \"{}\", handed over from the {} "
+                            "queue in layout {}, which the two queues do not share",
+                            list,
+                            queueName(queue),
+                            mip,
+                            layer,
+                            texture.label,
+                            queueName(*event.queue),
+                            static_cast<int>(*visible)
+                        );
+                        ROJORHI_VU(
+                            barrier.oldLayout == Layout::Undefined || barrier.oldLayout == *visible,
+                            "VU-rojo-sync-0025",
+                            "the first texture barrier in the list \"{}\" on the {} queue on mip {} layer {} of the texture \"{}\", handed over from the "
+                            "{} queue in layout {}, starts from layout {}; it must start from that layout or discard from Undefined",
+                            list,
+                            queueName(queue),
+                            mip,
+                            layer,
+                            texture.label,
+                            queueName(*event.queue),
+                            static_cast<int>(*visible),
+                            static_cast<int>(barrier.oldLayout)
+                        );
+                    }
+                    ROJORHI_VU(
+                        barrier.oldLayout == Layout::Undefined || barrier.oldLayout == *visible,
+                        "VU-rojo-sync-0013",
+                        "a texture barrier in the list \"{}\" starts mip {} layer {} of the texture \"{}\" from layout {}, but it is in layout {}",
+                        list,
+                        mip,
+                        layer,
+                        texture.label,
+                        static_cast<int>(barrier.oldLayout),
+                        static_cast<int>(*visible)
+                    );
+                }
+                if (transition)
+                {
+                    event = LayoutEvent{ .layout = barrier.newLayout, .queue = queue, .position = position };
+                }
                 const Scope destination{ .stage = barrier.dstStage, .access = barrier.dstAccess };
                 QueueHazards& state = texture.hazards[index].on(queue);
                 if (transition)
@@ -1294,22 +1414,16 @@ namespace rojoRHI::core {
         }
         if (transition && texture.heap.bits != 0)
         {
-            // A transition writes the texture's memory: another resource's use of those bytes on another queue must be ordered
-            // before it.
-            const HeapState* heap = locate(held, texture.heap);
+            // A transition writes the texture's memory, compression metadata included: another resource's use of those bytes on
+            // another queue must be ordered before it, and it is a heap use another resource's later use must follow.
+            HeapState* heap = locate(held, texture.heap);
             ROJORHI_INTERNAL_ASSERT(heap != nullptr, "a placed texture is followed without its heap");
-            checkHeapQueues(
-                held,
-                *heap,
-                HeapOwner{ .bits = barrier.texture.bits, .texture = true },
-                std::format("the placed texture \"{}\"", texture.label),
-                texture.heapOffset,
-                texture.heapOffset + texture.heapSize,
-                queue,
-                Scope{ .stage = barrier.dstStage, .access = barrier.dstAccess },
-                list,
-                true
-            );
+            const HeapOwner self{ .bits = barrier.texture.bits, .texture = true };
+            const Scope destination{ .stage = barrier.dstStage, .access = barrier.dstAccess };
+            const uint64_t begin = texture.heapOffset;
+            const uint64_t end = texture.heapOffset + texture.heapSize;
+            checkHeapQueues(held, *heap, self, std::format("the placed texture \"{}\"", texture.label), begin, end, queue, destination, list, true);
+            noteHeapUse(held, *heap, self, begin, end, queue, position, destination, true);
         }
     }
 

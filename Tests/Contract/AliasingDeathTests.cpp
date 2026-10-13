@@ -10,6 +10,7 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include <array>
+#include <span>
 
 using namespace rojoRHI;
 using test::PassKit;
@@ -65,6 +66,15 @@ namespace {
                                                                       .oldLayout = oldLayout,
                                                                       .newLayout = newLayout } };
         list.barrier({}, {}, barriers);
+    }
+
+    //==================================================================================================================
+    /// Ends `list` and submits it alone to the queue of `type` of `device`, waiting on `wait` and signalling `signal`.
+    void submitWith(Device device, CommandList list, QueueType type, std::span<const FenceValue> wait, std::span<const FenceValue> signal)
+    {
+        list.end();
+        const std::array<CommandList, 1> lists{ list };
+        device.queue(type).submit(lists, wait, signal);
     }
 } // namespace
 
@@ -122,8 +132,10 @@ TEST_CASE("VU-rojo-sync-0017 a placed texture is used first after a buffer used 
         const Heap heap = makeHeap(kit);
         const Texture texture = placedTexture(kit, heap, 0);
         const Buffer buffer = placedBuffer(kit, heap, 0);
-        // The texture's layout permits the clear, and its own barrier orders it; only the buffer's fill came between.
+        // The texture's layout permits the clear, and its own barrier orders it; only the buffer's fill came between. The
+        // global barrier orders the fill after the discard, which writes the heap bytes too.
         textureBarrier(kit.list, texture, Layout::Undefined, Layout::CopyDst, Stage::None, Access::CopyWrite);
+        global(kit.list, Stage::Copy, Access::CopyWrite, Stage::Copy, Access::CopyWrite);
         kit.list.fillBuffer(buffer, 0, kBytes, 0);
         kit.list.clearTexture(texture, {}, {});
         kit.finish();
@@ -300,6 +312,79 @@ TEST_CASE("VU-rojo-sync-0017 a placed texture's use of one mip does not exempt a
             kit.list, Stage::ColorAttachment, Access::ColorAttachmentWrite, Stage::ColorAttachment, Access::ColorAttachmentRead | Access::ColorAttachmentWrite
         );
         renderMip(kit.list, texture, 1, LoadOp::Load);
+        kit.finish();
+    });
+}
+
+//======================================================================================================================
+TEST_CASE("VU-rojo-cmd-0070 a placed texture is cleared on Graphics, with no discard, after a buffer used its memory on Compute", "[contract][death]")
+{
+    ROJORHI_EXPECT_DEATH("VU-rojo-cmd-0070", [] {
+        PassKit kit(QueueType::Graphics, true);
+        const Heap heap = makeHeap(kit);
+        const Buffer earlier = placedBuffer(kit, heap, 0);
+        const Buffer third = placedBuffer(kit, heap, 0);
+        // A Compute list clears only a texture with no attachment usage.
+        const TextureDesc desc{
+            .format = Format::RGBA8Unorm, .extent = { PassKit::kSize, PassKit::kSize, 1 }, .usage = TextureUsage::Storage, .label = "test.placed.texture"
+        };
+        const Texture texture = *kit.device.createTexture(desc, {}, Placement{ .heap = heap });
+        const Fence fence = *kit.device.createFence(0, "test.fence");
+        const std::array<FenceValue, 1> first{ FenceValue{ fence, 1 } };
+        const std::array<FenceValue, 1> second{ FenceValue{ fence, 2 } };
+        kit.list.fillBuffer(earlier, 0, kBytes, 0);
+        CommandList compute = kit.device.acquireCommandList(QueueType::Compute, "test.compute");
+        textureBarrier(compute, texture, Layout::Undefined, Layout::CopyDst, Stage::Copy, Access::CopyWrite);
+        compute.clearTexture(texture, {}, {});
+        global(compute, Stage::Copy, Access::CopyWrite, Stage::Copy, Access::CopyWrite);
+        compute.fillBuffer(third, 0, kBytes, 2);
+        // The fill leaves the texture Undefined on every queue a fence orders after it, so the clear needs a discard first.
+        CommandList later = kit.device.acquireCommandList(QueueType::Graphics, "test.later");
+        later.clearTexture(texture, {}, {});
+        submitWith(kit.device, kit.list, QueueType::Graphics, {}, first);
+        submitWith(kit.device, compute, QueueType::Compute, first, second);
+        submitWith(kit.device, later, QueueType::Graphics, second, {});
+    });
+}
+
+//======================================================================================================================
+TEST_CASE("VU-rojo-cmd-0007 a placed render target is drawn to on Graphics, with no discard, after a buffer used its memory on Compute", "[contract][death]")
+{
+    ROJORHI_EXPECT_DEATH("VU-rojo-cmd-0007", [] {
+        PassKit kit(QueueType::Graphics, true);
+        const Heap heap = makeHeap(kit);
+        const Texture texture = placedTexture(kit, heap, 0);
+        const Buffer buffer = placedBuffer(kit, heap, 0);
+        const Fence fence = *kit.device.createFence(0, "test.fence");
+        const std::array<FenceValue, 1> rendered{ FenceValue{ fence, 1 } };
+        const std::array<FenceValue, 1> filled{ FenceValue{ fence, 2 } };
+        test::transition(kit.list, texture, Layout::Undefined, Layout::ColorAttachment);
+        const std::array<ColorAttachment, 1> colors{ ColorAttachment{ .texture = texture } };
+        kit.list.beginRenderPass(test::fullPass(colors));
+        kit.list.endRenderPass();
+        submitWith(kit.device, kit.list, QueueType::Graphics, {}, rendered);
+        CommandList compute = kit.device.acquireCommandList(QueueType::Compute, "test.compute");
+        global(compute, Stage::All, Access::None, Stage::All, Access::CopyWrite);
+        compute.fillBuffer(buffer, 0, kBytes, 7);
+        submitWith(kit.device, compute, QueueType::Compute, rendered, filled);
+        // The fill leaves the target Undefined for Graphics, which waits on it, so the pass needs a discard first.
+        CommandList again = kit.device.acquireCommandList(QueueType::Graphics, "test.again");
+        again.beginRenderPass(test::fullPass(colors));
+        again.endRenderPass();
+        submitWith(kit.device, again, QueueType::Graphics, filled, {});
+    });
+}
+
+//======================================================================================================================
+TEST_CASE("VU-rojo-sync-0009 a placed buffer is filled right after a placed texture over its bytes is discarded", "[contract][death]")
+{
+    ROJORHI_EXPECT_DEATH("VU-rojo-sync-0009", [] {
+        PassKit kit(QueueType::Graphics, true);
+        const Heap heap = makeHeap(kit);
+        const Texture texture = placedTexture(kit, heap, 0);
+        const Buffer buffer = placedBuffer(kit, heap, 0);
+        textureBarrier(kit.list, texture, Layout::Undefined, Layout::CopyDst, Stage::Copy, Access::CopyWrite);
+        kit.list.fillBuffer(buffer, 0, kBytes, 0);
         kit.finish();
     });
 }

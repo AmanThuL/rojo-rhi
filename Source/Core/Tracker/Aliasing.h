@@ -58,8 +58,10 @@ namespace rojoRHI::core {
     using AliasMarks = OffsetMap<std::optional<AliasMark>>;
 
     /// Notes on `uses`, the last uses of some heap bytes, the use `scope`, at `position` on `queue`, by `owner`: it becomes
-    /// their last use there, merged into the remembered one when the same command of the same resource made both.
-    void noteHeapUse(HeapUses& uses, QueueType queue, HeapOwner owner, uint64_t position, Scope scope);
+    /// their last use there, merged into the remembered one when the same command of the same resource made both. A
+    /// `transition`, a placed texture's barrier that changes the layout or discards, passes its destination as `scope` and is
+    /// a write whatever its accesses; a later use is ordered after it only by a global barrier whose source covers it.
+    void noteHeapUse(HeapUses& uses, QueueType queue, HeapOwner owner, uint64_t position, Scope scope, bool transition = false);
 
     /// Notes a global barrier recorded at `position` from `source` to `destination` over the last use in `uses` on `queue`,
     /// when that use comes before it. The barrier orders the use when its source covers it or extends an execution chain over
@@ -67,7 +69,8 @@ namespace rojoRHI::core {
     void reachHeapUse(HeapUses& uses, QueueType queue, uint64_t position, Scope source, Scope destination);
 
     /// Returns true when a global barrier since `other`, another resource's last use of the bytes, orders `use`, a placed
-    /// buffer's first use of them since (VU-rojo-sync-0009): its source covers `other` and its destination covers `use`.
+    /// buffer's first use of them since (VU-rojo-sync-0009): its source covers `other` and its destination covers `use`, all
+    /// its accesses when `other` writes or is a transition.
     bool aliasOrdered(const HeapUse& other, Scope use);
 
     /// Notes on `mark`, the latest use another resource made of some bytes of a texture subresource's memory on one queue

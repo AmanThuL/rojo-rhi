@@ -32,8 +32,8 @@ fence alone, compute and copy work submitted in a frame is joined back into that
 work by a fence wait before `endFrame` (`VU-rojo-device-0006`). Data a frame wrote is readable on
 the CPU once the caller's own fence reaches its value, or once `beginFrame` has recycled the slot.
 A texture handed from one queue to another also sits, at the handoff, in a layout both queues
-accept: `General` for the copy queue, and also `ShaderRead`, `ShaderWrite`, `CopySrc` or `CopyDst`
-between the graphics and compute queues
+accept, unless the acquiring queue discards it: `General` for the copy queue, and also
+`ShaderRead`, `ShaderWrite`, `CopySrc` or `CopyDst` between the graphics and compute queues
 ([cross-queue handoff](09-synchronization-part2.md#cross-queue-handoff)).
 
 ## Host visibility
