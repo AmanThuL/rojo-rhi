@@ -6,6 +6,7 @@
 #include "Core/Formats.h"
 
 #include "Base/Assert.h"
+#include <bit>
 
 namespace rojoRHI::core {
     namespace {
@@ -112,6 +113,19 @@ namespace rojoRHI::core {
     bool isDepthFormat(Format format)
     {
         return classOf(format) == FormatClass::Depth;
+    }
+
+    //==================================================================================================================
+    bool samplesSupported(uint32_t samples, const FormatCapabilities& capabilities)
+    {
+        const bool valid = samples == 1 || samples == 2 || samples == 4 || samples == 8;
+        return valid && ((capabilities.sampleCounts >> std::countr_zero(samples)) & 1) != 0;
+    }
+
+    //==================================================================================================================
+    bool hasStencilPlane(Format format)
+    {
+        return format == Format::D32FloatS8;
     }
 
     //==================================================================================================================

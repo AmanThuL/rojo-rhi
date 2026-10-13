@@ -122,13 +122,16 @@ struct ColorTarget { Format format; BlendState blend; ColorWriteMask writeMask =
 One color output of a graphics pipeline: the attachment format, its blend state and the channels
 written. Entry `i` of `GraphicsPipelineDesc::colors` matches color attachment `i` of the render pass
 ([command recording](07-command-recording.md)). `Format` and `FormatCapabilities` are defined in
-[formats and limits](15-formats-and-limits.md).
+[formats and limits](15-formats-and-limits.md); the format reports `colorAttachment`, and `blend`
+when blending is enabled, as `VU-rojo-format-0003` requires.
 
 #### Valid usage
 
-- `VU-rojo-pipeline-0004` `Device::formatCapabilities(format)` reports `colorAttachment`.
-- `VU-rojo-pipeline-0005` `blend.enable` is true only when `Device::formatCapabilities(format)`
-  reports `blend`.
+- `VU-rojo-pipeline-0004` Retired in 0.1.0: `Device::formatCapabilities(format)` reports
+  `colorAttachment`. `VU-rojo-format-0003` states every format capability once
+  ([formats and limits](15-formats-and-limits.md)).
+- `VU-rojo-pipeline-0005` Retired in 0.1.0: `blend.enable` is true only when
+  `Device::formatCapabilities(format)` reports `blend`. `VU-rojo-format-0003` states it.
 
 #### Mapping
 
@@ -265,7 +268,9 @@ struct GraphicsPipelineDesc {
 ```
 
 Describes a vertex pipeline (`vertex`, optional `fragment`) or a mesh pipeline (optional `task`,
-`mesh`, optional `fragment`). Spans and strings are copied by `createPipeline`.
+`mesh`, optional `fragment`). Spans and strings are copied by `createPipeline`. Every color format
+and `depthFormat` report `samples` among their sample counts, and `depthFormat` reports
+`depthAttachment`, as `VU-rojo-format-0003` requires.
 
 #### Valid usage
 
@@ -275,8 +280,9 @@ Describes a vertex pipeline (`vertex`, optional `fragment`) or a mesh pipeline (
 - `VU-rojo-pipeline-0011` `depthFormat` is `Format::Undefined` or a depth or depth-stencil format;
   `depthStencil.depthTest` requires a depth component and `depthStencil.stencilTest` a stencil
   component in `depthFormat`.
-- `VU-rojo-pipeline-0012` `FormatCapabilities::sampleCounts` includes `samples` for every color
-  format and for `depthFormat` ([formats and limits](15-formats-and-limits.md)).
+- `VU-rojo-pipeline-0012` Retired in 0.1.0: `FormatCapabilities::sampleCounts` includes `samples`
+  for every color format and for `depthFormat`. `VU-rojo-format-0003` states every format
+  capability once ([formats and limits](15-formats-and-limits.md)).
 
 #### Mapping
 

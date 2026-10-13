@@ -13,6 +13,7 @@
 #include "Core/DeviceCore.h"
 
 #include <array>
+#include <atomic>
 #include <cstdint>
 #include <memory>
 #include <mutex>
@@ -74,6 +75,8 @@ namespace rojoRHI {
         core::DeviceCore core;                ///< Frame bookkeeping, pools, labels, capabilities and the format table.
         std::array<QueueImpl, 3> queues = {}; ///< One queue per `QueueType`, indexed by its value.
         std::array<ListPool, 3> listPools;    ///< One list pool per frame slot; a device uses its first `framesInFlight`.
+        /// Pipelines the cache blob covers: those carried in by `DeviceDesc::pipelineCache` and those created since.
+        std::atomic<uint64_t> cachedPipelines = 0;
 
         /// Returns the state `device` wraps; checks VU-rojo-core-0004.
         static DeviceImpl& of(Device device);

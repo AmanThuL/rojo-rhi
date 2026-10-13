@@ -8,10 +8,12 @@
 #include <rojoRHI/BufferDesc.h>
 #include <rojoRHI/Capabilities.h>
 #include <rojoRHI/CommandList.h>
+#include <rojoRHI/ComputePipelineDesc.h>
 #include <rojoRHI/DeviceDesc.h>
 #include <rojoRHI/FenceValue.h>
 #include <rojoRHI/Format.h>
 #include <rojoRHI/FormatCapabilities.h>
+#include <rojoRHI/GraphicsPipelineDesc.h>
 #include <rojoRHI/Handles.h>
 #include <rojoRHI/HeapDesc.h>
 #include <rojoRHI/IndexRange.h>
@@ -32,6 +34,7 @@
 #include <cstdint>
 #include <span>
 #include <string_view>
+#include <vector>
 
 namespace rojoRHI {
     /// The owner of every resource, queue and frame slot RojoRHI creates. It wraps one backend pointer: copies refer to the
@@ -128,6 +131,26 @@ namespace rojoRHI {
         /// pool when the frame retires, and every list acquired in a frame is submitted before its `endFrame`
         /// (VU-rojo-device-0005). Free-threaded.
         CommandList acquireCommandList(QueueType type, std::string_view label);
+
+        /// Loads a precompiled shader library from `blob`, which is not empty (VU-rojo-pipeline-0003), and labels it. A blob not
+        /// built for the active backend or malformed is `ErrorCategory::DriverFailure`; one stamped with another
+        /// `ROJORHI_SHADER_ABI_VERSION` is `ErrorCategory::ShaderAbiMismatch`. The bytes are consumed before return.
+        /// Free-threaded.
+        Result<ShaderLibrary> loadShaderLibrary(std::span<const std::byte> blob, std::string_view label);
+
+        /// Creates a graphics pipeline synchronously; on return binding it never compiles. The descriptor obeys
+        /// VU-rojo-pipeline-0001, 0002 and 0004 to 0012, and VU-rojo-format-0002 and 0003 for its formats. The device's
+        /// pipeline cache is consulted first. A compiler or driver failure is an error result. Free-threaded.
+        Result<Pipeline> createPipeline(const GraphicsPipelineDesc& desc);
+
+        /// Creates a compute pipeline synchronously; the descriptor obeys VU-rojo-pipeline-0001, 0002 and 0013. Otherwise as
+        /// the graphics overload. Free-threaded.
+        Result<Pipeline> createPipeline(const ComputePipelineDesc& desc);
+
+        /// Returns the current pipeline cache as a blob to pass back through `DeviceDesc::pipelineCache` at a later
+        /// `createDevice`; it covers every pipeline created so far, and one created concurrently may be missing. Failing to
+        /// serialize is an error result. Free-threaded.
+        Result<std::vector<std::byte>> pipelineCacheData();
 
         /// Creates a timeline fence whose completed value starts at `initial` and labels it. Out of memory is an error result.
         /// Free-threaded.
