@@ -18,7 +18,40 @@ jobs:
       - run: python3 Tools/check_spec.py
       - run: python3 -m unittest discover -s Tools/tests -v
       - run: python3 Tools/Rename/apply.py --selftest && python3 -m unittest discover -s Tools/Extract -p 'test_*.py'
-  build-test:
+  legacy:
+    runs-on: macos-26
+    steps:
+      - uses: actions/checkout@v5
+      - run: brew install xmake
+      - uses: actions/cache@v5
+        with:
+          path: ThirdParty
+          key: ${{ runner.os }}-thirdparty-${{ hashFiles('xmake/setup.lua') }}
+      - run: xmake setup
+      - run: xmake f -m release -y --ccache=n
+      - run: xmake -y && xmake test RojoRHILegacyTests/unit
+      # Hosted macOS has no Metal 4: compile and count the GPU cases; run them on hardware.
+      - run: |
+          xmake build RojoRHILegacyTests
+          n=$(./build/macosx/arm64/release/rojorhi-legacy-test/RojoRHILegacyTests --list-tests "[gpu]" | \
+            sed -n 's/^\([0-9][0-9]*\) matching test cases$/\1/p')
+          test -n "$n" && test "$n" -gt 0
+  interface:
+    strategy: {fail-fast: false, matrix: {os: [macos-26, windows-latest]}}
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v5
+      - if: runner.os == 'macOS'
+        run: brew install xmake
+      - if: runner.os == 'Windows'
+        uses: xmake-io/github-action-setup-xmake@v1
+        with: {xmake-version: latest}
+      - run: xmake f -m debug -y --rojorhi_backend=null
+      - run: xmake build RojoRHITests
+      - run: xmake test RojoRHITests/contract
+      - run: xmake f -m release -y --rojorhi_backend=null
+      - run: xmake build RojoRHITests
+  format:
     runs-on: macos-26
     steps:
       - uses: actions/checkout@v5
@@ -31,11 +64,4 @@ jobs:
       - run: xmake f -m release -y --ccache=n && xmake project -k compile_commands
       - run: python3 Tools/check_rhi_headers.py && python3 Tools/check_cpp_layout.py
       - run: python3 Tools/check_cpp_comments.py --public-api-docs error
-      - run: xmake -y && xmake test RojoRHILegacyTests/unit
-      # Hosted macOS has no Metal 4: compile and count the GPU cases; run them on hardware.
-      - run: |
-          xmake build RojoRHILegacyTests
-          n=$(./build/macosx/arm64/release/rojorhi-legacy-test/RojoRHILegacyTests --list-tests "[gpu]" | \
-            sed -n 's/^\([0-9][0-9]*\) matching test cases$/\1/p')
-          test -n "$n" && test "$n" -gt 0
       - run: xmake format --check
