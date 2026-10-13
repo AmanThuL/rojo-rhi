@@ -428,31 +428,19 @@ TEST_CASE("a placed buffer used on another queue since an alias's use stays exem
 }
 
 //======================================================================================================================
-TEST_CASE("a placed texture used on another queue since an alias's use stays exempt after a buffer's later use there", "[contract]")
+TEST_CASE("a placed buffer's fill follows a placed texture's discard through a global barrier from the discard's destination", "[contract]")
 {
 #ifdef NDEBUG
     SKIP("validation exists only in a Debug build");
 #else
     PassKit kit(QueueType::Graphics, true);
     const Heap heap = makeHeap(kit);
-    const Buffer earlier = placedBuffer(kit, heap, 0);
-    const Buffer third = placedBuffer(kit, heap, 0);
     const Texture texture = placedTexture(kit, heap, 0, TextureUsage::Storage);
-    const Fence fence = *kit.device.createFence(0, "test.fence");
-    const std::array<FenceValue, 1> first{ FenceValue{ fence, 1 } };
-    const std::array<FenceValue, 1> second{ FenceValue{ fence, 2 } };
-    kit.list.fillBuffer(earlier, 0, kBytes, 0);
-    CommandList compute = kit.device.acquireCommandList(QueueType::Compute, "test.compute");
-    discardAfterCopy(compute, texture);
-    compute.clearTexture(texture, {}, {});
-    global(compute, Stage::Copy, Access::CopyWrite, Stage::Copy, Access::CopyWrite);
-    compute.fillBuffer(third, 0, kBytes, 2);
-    CommandList later = kit.device.acquireCommandList(QueueType::Graphics, "test.later");
-    later.clearTexture(texture, {}, {});
-    submitWith(kit.device, kit.list, QueueType::Graphics, {}, first);
-    submitWith(kit.device, compute, QueueType::Compute, first, second);
-    submitWith(kit.device, later, QueueType::Graphics, second, {});
-    kit.device.endFrame();
-    destroyDevice(kit.device);
+    const Buffer buffer = placedBuffer(kit, heap, 0);
+    // The discard writes the texture's heap bytes, so the fill needs a global barrier whose source covers its destination.
+    discardAfterCopy(kit.list, texture);
+    global(kit.list, Stage::Copy, Access::CopyWrite, Stage::Copy, Access::CopyWrite);
+    kit.list.fillBuffer(buffer, 0, kBytes, 0);
+    kit.finish();
 #endif
 }

@@ -34,8 +34,8 @@ namespace rojoRHI::core {
     /// A hold on a tracker's mutex; an empty lock, which owns nothing, on a device without validation and in Release builds.
     using TrackerLock = std::unique_lock<std::mutex>;
 
-    /// The state the validation tracker of one device judges submitted work against: one layout per subresource of every live
-    /// texture, the hazard state per queue of every texture subresource and of the byte segments of every live buffer, per
+    /// The state the validation tracker of one device judges submitted work against: the latest layout event, with its queue,
+    /// of each subresource of every live texture, the hazard state per queue of every texture subresource and of the byte segments of every live buffer, per
     /// heap holding placed resources the resource that last used each byte range on each queue, and the clocks that order the
     /// queues: per queue the clocks of the fence values it waited on, per fence the clock of each value submitted for signal,
     /// and the host clock of what the CPU observed complete.
@@ -66,8 +66,8 @@ namespace rojoRHI::core {
         /// Stops following `texture`, destroyed or presented; a texture the tracker does not follow is ignored. Takes the lock.
         void removeTexture(Texture texture);
 
-        /// Returns the layout of mip `mip` and layer `layer` of `texture`, or nothing when the tracker does not follow it. Takes
-        /// the lock.
+        /// Returns the layout the latest layout event of mip `mip` and layer `layer` of `texture` set, on whichever queue, or
+        /// nothing when the tracker does not follow it. Takes the lock.
         std::optional<Layout> layoutOf(Texture texture, uint32_t mip, uint32_t layer);
 
         /// Starts following `buffer`, labelled `label`, of `size` bytes, with no hazard on any queue. A placed buffer names its
@@ -107,7 +107,8 @@ namespace rojoRHI::core {
         /// and terminates at the first violation. `held` must be a lock `lock` returned.
         void replay(const TrackerLock& held, const TrackerLog& log, QueueType queue, std::string_view list);
 
-        /// Checks that every subresource of `image`, a swapchain image presented to the queue, is in `Layout::Present`
+        /// Checks that every subresource of `image`, a swapchain image presented to the graphics queue, is in `Layout::Present`
+        /// as that queue sees it: the latest layout event set `Present` and is on the graphics queue or covered by its clock
         /// (VU-rojo-present-0018); an image the tracker does not follow is ignored. `held` must be a lock `lock` returned.
         void checkPresent(const TrackerLock& held, Texture image);
 
@@ -151,13 +152,25 @@ namespace rojoRHI::core {
         Clock hostClock();
 
       private:
+        /// The latest event that set the layout of one subresource: its creation, an acquire, a texture barrier that changed
+        /// the layout or discarded, or another resource's use of its memory, which leaves it `Undefined`. A queue sees the
+        /// layout it set when the event is on that queue, precedes every submission, or is covered by the clock of the queue's
+        /// submission; otherwise the two queues race (VU-rojo-queue-0005). An event on another queue that the clock covers
+        /// hands the subresource over (VU-rojo-sync-0025), unless it left the subresource `Undefined`.
+        struct LayoutEvent
+        {
+            Layout layout = Layout::Undefined; ///< The layout the event set.
+            std::optional<QueueType> queue;    ///< The queue of a barrier; none for a creation or an acquire.
+            uint64_t position = 0;             ///< The barrier's position on its queue.
+        };
+
         /// The tracker's view of one texture.
         struct TextureState
         {
             std::string label;                ///< The texture's label, for reports.
             uint32_t mips = 1;                ///< Mip levels.
             uint32_t layers = 1;              ///< Array layers.
-            std::vector<Layout> layouts;      ///< One layout per subresource, at `mip * layers + layer`.
+            std::vector<LayoutEvent> layouts; ///< The latest layout event of each subresource, at `mip * layers + layer`.
             std::vector<UnitHazards> hazards; ///< The hazard state of each subresource, indexed as `layouts`.
             bool acquired = false;            ///< A swapchain image no barrier has been replayed on since its acquire.
             Heap heap = {};                   ///< The heap the texture is placed in; null for a dedicated allocation.
@@ -200,14 +213,25 @@ namespace rojoRHI::core {
         std::string describe(const TrackerLock& held, HeapOwner owner);
 
         /// Notes the use `scope` by `owner` of the bytes `begin` to `end` of `heap` at `position` on `queue`: they become the
-        /// owner's on that queue, and every other texture placed over them must discard before its next event there.
+        /// owner's on that queue, and every other texture placed over them must discard before its next event there; their
+        /// subresources' latest layout event becomes this use, which leaves them `Undefined` on every queue it is ordered before.
+        /// A `transition`, a placed texture's barrier that changes the layout or discards, notes its destination as `scope` and
+        /// is a write whatever its accesses.
         void noteHeapUse(
-            const TrackerLock& held, HeapState& heap, HeapOwner owner, uint64_t begin, uint64_t end, QueueType queue, uint64_t position, Scope scope
+            const TrackerLock& held,
+            HeapState& heap,
+            HeapOwner owner,
+            uint64_t begin,
+            uint64_t end,
+            QueueType queue,
+            uint64_t position,
+            Scope scope,
+            bool transition = false
         );
 
         /// Checks `scope`, a use by `owner`, described as `resource`, of the bytes `begin` to `end` of `heap` on `queue`, against
         /// the last use another resource made of them on every other queue (VU-rojo-queue-0005): a pair at least one of which
-        /// writes is ordered only when the clock of the use's submission, or the host clock, covers the other use. A
+        /// writes, a transition counting as a write, is ordered only when the clock of the use's submission, or the host clock, covers the other use. A
         /// `transition`, a texture barrier that changes the layout or discards, is a write whatever its accesses.
         void checkHeapQueues(
             const TrackerLock& held,
@@ -233,6 +257,12 @@ namespace rojoRHI::core {
         /// submission joined with the host clock, covers, so none of them owes a discard any more.
         static void followMarks(TextureState& texture, size_t index, QueueType queue, const Clock& ordered);
 
+        /// Returns the layout a subresource whose latest layout event is `event` has on `queue`, for work ordered after
+        /// `ordered`, the clock of its submission joined with the host clock: the event's layout when the event precedes every
+        /// submission, is on `queue` or is covered by `ordered`; nothing when it is on another queue and not covered, a race
+        /// VU-rojo-queue-0005 reports rather than a layout either queue sees.
+        static std::optional<Layout> layoutOn(const LayoutEvent& event, QueueType queue, const Clock& ordered);
+
         /// Returns the clock that orders earlier work before the work replayed now on `queue`: the join of the clocks of the
         /// values its submissions waited on, so its own component is reached only through fences, and the host clock.
         Clock orderedBefore(QueueType queue) const;
@@ -245,10 +275,12 @@ namespace rojoRHI::core {
         /// `queue` or later: the current position on `queue`, one past the last elsewhere. Segments merge only below it.
         std::array<uint64_t, 3> mergeFloor(QueueType queue) const;
 
-        /// Replays one use at `position` on its queue: for a texture, the layout of every subresource of its range against the
-        /// layouts that permit it, reporting VU-rojo-sync-0006, then the entry's own rule, then VU-rojo-sync-0004; then, for a
-        /// texture or a buffer, its hazards on the queue (VU-rojo-sync-0021, then VU-rojo-sync-0024) and against every other
-        /// queue (VU-rojo-queue-0005).
+        /// Replays one use at `position` on its queue: for a texture, the layout every subresource of its range has on the queue
+        /// against the layouts that permit it, reporting VU-rojo-sync-0025 for a subresource handed over from another queue in
+        /// a layout the two queues do not share, then VU-rojo-sync-0006, then the entry's own rule, then VU-rojo-sync-0004; a
+        /// subresource whose latest layout event is on another queue that no fence orders before is left to VU-rojo-queue-0005.
+        /// Then, for a texture or a buffer, its hazards on the queue (VU-rojo-sync-0021, then VU-rojo-sync-0024) and against
+        /// every other queue (VU-rojo-queue-0005).
         void replayUse(const TrackerLock& held, const UseEvent& use, QueueType queue, std::string_view list, uint64_t position);
 
         /// Judges the hazards of `use`, a use of a texture, against every subresource of `texture` it names, on its queue and
@@ -266,10 +298,12 @@ namespace rojoRHI::core {
         /// Replays one buffer barrier recorded at `position`: exactly the segments of its range gain its reach.
         void replayBuffer(const TrackerLock& held, const BufferBarrier& barrier, QueueType queue, uint64_t position);
 
-        /// Replays one texture barrier recorded at `position`: its old layout (VU-rojo-present-0014, then VU-rojo-sync-0013),
-        /// then, for a transition, its source against the uses before it (VU-rojo-sync-0024) and, as a write, against the uses
-        /// of every other queue and, for a placed texture, other resources' uses of its heap bytes there (VU-rojo-queue-0005),
-        /// then its transition. A barrier that keeps the layout gains its reach over exactly its subresources.
+        /// Replays one texture barrier recorded at `position`: its old layout (VU-rojo-present-0014; for a subresource handed over
+        /// from another queue, VU-rojo-sync-0025 for a barrier that does not discard and either starts elsewhere or takes over a
+        /// layout the two queues do not share; then VU-rojo-sync-0013), then, for a transition, its source against the uses before it
+        /// (VU-rojo-sync-0024) and, as a write, against the uses of every other queue and, for a placed texture, other
+        /// resources' uses of its heap bytes there (VU-rojo-queue-0005), then its transition, the subresource's new layout event.
+        /// A barrier that keeps the layout sets no layout event and gains its reach over exactly its subresources.
         void replayTexture(const TrackerLock& held, const TextureBarrier& barrier, QueueType queue, std::string_view list, uint64_t position);
 
         std::mutex m_mutex;

@@ -223,3 +223,20 @@ TEST_CASE("VU-rojo-queue-0005 a placed texture is used on Compute over bytes a b
         submitTo(kit.device, second, QueueType::Compute);
     });
 }
+
+//======================================================================================================================
+TEST_CASE("VU-rojo-queue-0005 a buffer is filled on Compute over a placed texture Graphics moved, with no fence", "[contract][death]")
+{
+    ROJORHI_EXPECT_DEATH("VU-rojo-queue-0005", [] {
+        PassKit kit(QueueType::Graphics, true);
+        const Heap heap = *kit.device.createHeap(HeapDesc{ .size = 1u << 20, .label = "test.heap" });
+        const Texture placed = texture(kit, TextureUsage::Storage, heap);
+        const Buffer buffer = placedBuffer(kit, heap);
+        // The transition writes the texture's heap bytes on Graphics, so the fill on Compute races it.
+        move(kit.list, placed, Layout::Undefined, Layout::General);
+        submitTo(kit.device, kit.list, QueueType::Graphics);
+        CommandList compute = kit.device.acquireCommandList(QueueType::Compute, "test.compute");
+        compute.fillBuffer(buffer, 0, kBytes, 1);
+        submitTo(kit.device, compute, QueueType::Compute);
+    });
+}

@@ -120,11 +120,16 @@ A memory dependency and layout transition for a range of one texture.
 - `VU-rojo-sync-0017` The first use of a placed texture whose memory overlaps a resource used
   earlier on the queue is a texture barrier from `Undefined` whose source covers that resource's
   last use. Checked by the validation tracker.
-- `VU-rojo-sync-0018` A texture used on one queue and next used on another is, at the handoff, in a
-  layout both queues accept: `General` when either queue is the `Copy` queue, and `General`,
-  `ShaderRead`, `ShaderWrite`, `CopySrc` or `CopyDst` between the `Graphics` and `Compute` queues.
-  The acquiring queue's first barrier starts from that layout or discards from `Undefined`. Checked
-  by the validation tracker.
+- `VU-rojo-sync-0018` Retired in 0.1.0: A texture used on one queue and next used on another is,
+  at the handoff, in a layout both queues accept: `General` when either queue is the `Copy` queue,
+  and `General`, `ShaderRead`, `ShaderWrite`, `CopySrc` or `CopyDst` between the `Graphics` and
+  `Compute` queues. The acquiring queue's first barrier starts from that layout or discards from
+  `Undefined`. Checked by the validation tracker.
+- `VU-rojo-sync-0025` A texture used on one queue and next used on another is, at the handoff, in a
+  layout both queues accept, unless the acquiring queue's first barrier on it discards from
+  `Undefined`: `General` when either queue is the `Copy` queue, and `General`, `ShaderRead`,
+  `ShaderWrite`, `CopySrc` or `CopyDst` between the `Graphics` and `Compute` queues. A first
+  barrier that does not discard starts from that layout. Checked by the validation tracker.
 
 #### Mapping
 | | Metal 4 | D3D12 | Vulkan |
@@ -190,18 +195,19 @@ every batch with a global barrier, are tuning points measured under
 ## Cross-queue handoff
 
 A texture handed between queues is, at the handoff, in a layout both queues accept
-(`VU-rojo-sync-0018`). Between the graphics and compute queues that is `General`, `ShaderRead`,
-`ShaderWrite`, `CopySrc` or `CopyDst`: on D3D12 they lower to `LAYOUT_COMMON` and the generic
-`LAYOUT_SHADER_RESOURCE`, `LAYOUT_UNORDERED_ACCESS`, `LAYOUT_COPY_SOURCE` and `LAYOUT_COPY_DEST`,
-which direct and compute queues both accept, so a texture created with initial data in
-`ShaderRead` is read on either queue without a transition. A handoff to or from the copy queue is
-in `General`, which maps to `D3D12_BARRIER_LAYOUT_COMMON`, taken to be the one layout every D3D12
-queue type accepts (*unverified*; see [part 1](09-synchronization.md)). On Vulkan, resources are
-shared concurrently between queue families, so no ownership transfer is needed and every layout is
-valid on every queue that supports its use. Buffers need no transition. In every case the acquiring
-queue waits on a fence the releasing queue signals after its last use
-([queues and frames](10-queues-and-frames.md)). The validation tracker follows layouts per queue
-and checks the handoff.
+(`VU-rojo-sync-0025`), unless the acquiring queue discards it from `Undefined` first; a discard
+names no earlier layout on any backend (*unverified* on D3D12). Between the graphics and compute
+queues that is `General`, `ShaderRead`, `ShaderWrite`, `CopySrc` or `CopyDst`: on D3D12 they lower
+to `LAYOUT_COMMON` and the generic `LAYOUT_SHADER_RESOURCE`, `LAYOUT_UNORDERED_ACCESS`,
+`LAYOUT_COPY_SOURCE` and `LAYOUT_COPY_DEST`, which direct and compute queues both accept, so a
+texture created with initial data in `ShaderRead` is read on either queue without a transition. A
+handoff to or from the copy queue is in `General`, which maps to `D3D12_BARRIER_LAYOUT_COMMON`,
+taken to be the one layout every D3D12 queue type accepts (*unverified*; see
+[part 1](09-synchronization.md)). On Vulkan, resources are shared concurrently between queue
+families, so no ownership transfer is needed and every layout is valid on every queue that supports
+its use. Buffers need no transition. In every case the acquiring queue waits on a fence the
+releasing queue signals after its last use ([queues and frames](10-queues-and-frames.md)). The
+validation tracker follows layouts per queue and checks the handoff.
 
 ## First use of aliased memory
 

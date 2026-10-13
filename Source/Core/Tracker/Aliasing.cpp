@@ -10,15 +10,16 @@
 
 namespace rojoRHI::core {
     //==================================================================================================================
-    void noteHeapUse(HeapUses& uses, QueueType queue, HeapOwner owner, uint64_t position, Scope scope)
+    void noteHeapUse(HeapUses& uses, QueueType queue, HeapOwner owner, uint64_t position, Scope scope, bool transition)
     {
         std::optional<HeapUse>& last = uses[static_cast<size_t>(queue)];
         if (last.has_value() && last->owner == owner && last->use.position == position)
         {
             last->use.scope = Scope{ .stage = last->use.scope.stage | scope.stage, .access = last->use.scope.access | scope.access };
+            last->use.transition = last->use.transition || transition;
             return;
         }
-        last = HeapUse{ .owner = owner, .use = TrackedUse{ .position = position, .scope = scope } };
+        last = HeapUse{ .owner = owner, .use = TrackedUse{ .position = position, .scope = scope, .transition = transition } };
     }
 
     //==================================================================================================================
@@ -48,7 +49,7 @@ namespace rojoRHI::core {
     //==================================================================================================================
     bool aliasOrdered(const HeapUse& other, Scope use)
     {
-        const bool writes = hasWrite(other.use.scope.access);
+        const bool writes = other.use.transition || hasWrite(other.use.scope.access);
         return std::ranges::any_of(other.use.reaches, [&](const Reach& reach) {
             return reach.sourceCovers && destinationCovers(reach.destination, use, writes);
         });

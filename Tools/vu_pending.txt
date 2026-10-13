@@ -2,4 +2,3 @@
 # Each part removes its lines as it adds the tests; Tools/check_vu_coverage.py enforces it.
 VU-rojo-device-0006 tracker
 VU-rojo-sparse-0013 tracker
-VU-rojo-sync-0018 tracker
