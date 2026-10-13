@@ -6,7 +6,8 @@ Tests are Catch2 cases in one test tree per interface, built as one test target.
 owned by [naming.md](naming.md). Today the v1 suite, including the `[checkpoint-a]` cases, lives
 under `Legacy/Tests/` and builds as `RojoRHILegacyTests`. The top-level `Tests/` holds the v2
 interface's cases and builds as `RojoRHITests`; its T0 (CPU contract) cases carry `[contract]` and
-run as `xmake test RojoRHITests/contract` (ADR 0017).
+run as `xmake test RojoRHITests/contract` (ADR 0017). Its shader ABI cases carry `[abi]` and run
+as `xmake test RojoRHITests/abi`.
 
 ## Tiers
 
@@ -21,6 +22,12 @@ subresource, a mismatched attachment or an impossible pipeline descriptor is rep
 and that the neighbouring valid case is accepted. They need no device: an interface is a pure
 virtual class, so a fake implementation reporting a chosen shape is enough. These cases carry the
 same CPU tag as the contract tier and run in the same places.
+
+**Shader ABI tests** are the hosted half of the T3 tier (ADR 0009). They need no GPU: every
+conformance shader must compile to MSL, SPIR-V and HLSL, and the layout of each shared struct must
+match what Slang reflects on every target, which the build checks with generated `static_assert`s.
+They run on any hosted runner that has the pinned Slang. Compile-and-run of the ABI needs a backend
+that loads shader libraries, so it arrives with the Metal 4 v2 backend.
 
 **GPU conformance tests** run against a real device and are the only tier that observes what the
 backend actually does. They run with `MTL_DEBUG_LAYER=1` so the platform validation layer speaks up,

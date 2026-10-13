@@ -8,7 +8,7 @@ pass, writes argument records and optionally a draw count; a barrier orders thos
 indirect command; the command then issues up to `maxCount` draws that all share the root block bound
 by [`CommandList::setRoot`](05-shader-abi.md). Because one root serves the whole batch, every
 indirect draw record begins with a `uint32` draw identifier, which the shader reads through
-[`rojoRHI::drawId()`](05-shader-abi-part2.md) to find its own per-draw data.
+[`rojoRHI::drawId`](05-shader-abi-part3.md#rojorhidrawid) to find its own per-draw data.
 
 Rules shared by every entry in this chapter:
 
@@ -61,14 +61,14 @@ struct DrawIndirectArgs {        // 20 bytes, 4-byte aligned
 
 One non-indexed draw read by `CommandList::drawIndirect`.
 
-- `drawId`: caller-defined value that `rojoRHI::drawId()` returns in every invocation of this draw.
+- `drawId`: caller-defined value that `rojoRHI::drawId` returns in every invocation of this draw.
 - `vertexCount`: vertices per instance; zero makes the record a no-op.
 - `instanceCount`: instances; zero makes the record a no-op.
-- `firstVertex`: first vertex index; `rojoRHI::vertexIndex()` includes it, provisionally on D3D12
-  ([unverified](05-shader-abi-part2.md#rojorhivertexindex)).
+- `firstVertex`: first vertex index; `rojoRHI::vertexIndex` includes it, provisionally on D3D12
+  ([unverified](05-shader-abi-part3.md#rojorhivertexindex)).
 - `firstInstance`: first instance index. It is not visible to shaders:
-  [`rojoRHI::instanceIndex()`](05-shader-abi-part2.md) is zero-based, and per-draw data comes
-  through `drawId`.
+  [`rojoRHI::instanceIndex`](05-shader-abi-part3.md#rojorhiinstanceindex) is zero-based, and
+  per-draw data comes through `drawId`.
 
 `firstVertex + vertexCount` and `firstInstance + instanceCount` must not exceed 2^32 - 1.
 
@@ -97,15 +97,15 @@ struct DrawIndexedIndirectArgs { // 24 bytes, 4-byte aligned
 
 One indexed draw read by `CommandList::drawIndexedIndirect`.
 
-- `drawId`: caller-defined value that `rojoRHI::drawId()` returns in every invocation of this draw.
+- `drawId`: caller-defined value that `rojoRHI::drawId` returns in every invocation of this draw.
 - `indexCount`: indices per instance; zero makes the record a no-op.
 - `instanceCount`: instances; zero makes the record a no-op.
 - `firstIndex`: first element read from the index buffer.
-- `baseVertex`: signed value added to each fetched index; `rojoRHI::vertexIndex()` includes it,
-  provisionally on D3D12 ([unverified](05-shader-abi-part2.md#rojorhivertexindex)).
+- `baseVertex`: signed value added to each fetched index; `rojoRHI::vertexIndex` includes it,
+  provisionally on D3D12 ([unverified](05-shader-abi-part3.md#rojorhivertexindex)).
 - `firstInstance`: first instance index. It is not visible to shaders:
-  [`rojoRHI::instanceIndex()`](05-shader-abi-part2.md) is zero-based, and per-draw data comes
-  through `drawId`.
+  [`rojoRHI::instanceIndex`](05-shader-abi-part3.md#rojorhiinstanceindex) is zero-based, and
+  per-draw data comes through `drawId`.
 
 `firstIndex + indexCount` elements of the draw's index type must fit in the index buffer, and
 `firstInstance + instanceCount` must not exceed 2^32 - 1.
@@ -131,7 +131,7 @@ struct DrawMeshTasksIndirectArgs { // 16 bytes, 4-byte aligned
 
 One mesh-task draw read by `CommandList::drawMeshTasksIndirect`.
 
-- `drawId`: caller-defined value that `rojoRHI::drawId()` returns in every invocation of this draw.
+- `drawId`: caller-defined value that `rojoRHI::drawId` returns in every invocation of this draw.
 - `x`, `y`, `z`: threadgroup counts of the first stage, the task shader when the pipeline has one
   and the mesh shader otherwise, as for
   [`CommandList::drawMeshTasks`](07-command-recording.md); any zero makes the record a no-op.

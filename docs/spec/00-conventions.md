@@ -158,7 +158,7 @@ than `Cost` are free-form and name their subject in the first column (`Call`, `O
 | [02 Device](02-device.md) | `device` |
 | [03 Memory and buffers](03-memory-and-buffers.md), [part 2](03-memory-and-buffers-part2.md) | `buffer`, `heap` |
 | [04 Textures and heaps](04-textures-and-heaps.md), [part 2](04-textures-and-heaps-part2.md) | `texture` |
-| [05 Shader ABI](05-shader-abi.md), [part 2](05-shader-abi-part2.md) | `abi` |
+| [05 Shader ABI](05-shader-abi.md), [part 2](05-shader-abi-part2.md), [part 3](05-shader-abi-part3.md) | `abi` |
 | [06 Pipelines](06-pipelines.md), [part 2](06-pipelines-part2.md) | `pipeline` |
 | [07 Command recording](07-command-recording.md), [part 2](07-command-recording-part2.md), [part 3](07-command-recording-part3.md) | `cmd` |
 | [08 GPU-driven rendering](08-gpu-driven.md) | `indirect` |

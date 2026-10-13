@@ -6,19 +6,22 @@ This page describes RojoRHI's shape as the code stands today: the v1 interface i
 Luminex, implemented by the Metal 4 backend and frozen under `Legacy/` (ADR 0017). The top-level
 `Include/`, `Source/`, `Backends/`, `Tests/` and `Shaders/` are the permanent names, reserved for
 the v2 interface, which is specified in the ADRs and the API reference under `docs/spec/` and is
-not implemented yet.
+mostly not implemented yet: the shader ABI module and its hosted checks exist.
 
 ```
 rojo-rhi/
   LICENSE  AGENTS.md  CLAUDE.md  README.md  xmake.lua  root project settings only
   .github/workflows/                          CI: policy; legacy, format, interface
   xmake/targets.lua  setup.lua  shaders.lua   targets are includable by a host project
-  Include/ Source/ Backends/ Tests/ Shaders/  the v2 interface (Include/ and Tests/ so far)
+  xmake/slang.lua                             the Slang compile and layout-check rules
+  Include/ Source/ Backends/ Tests/ Shaders/  the v2 interface (Include/, Tests/, Shaders/ so far)
+  Shaders/RojoRHI/  Shaders/Tests/            the shader ABI module; its conformance shaders
   Legacy/Include/rojoRHI/                     v1 public headers, dependency-free
   Legacy/Source/  Legacy/Source/Base/         v1 shared implementation; private base
   Legacy/Backends/Metal4/Source/  Legacy/Backends/Metal4/ImGui/
   Legacy/Tests/  Legacy/Shaders/Tests/        v1 contract, validation and GPU conformance
   Tools/                                      public-header check, Patches/, ImGuiBufferProbe/
+  Tools/shader_layout.py                      generates the layout checks from Slang reflection
   Tools/Rename/  Tools/Extract/               the Luminex rename table and the extraction scripts
   docs/conventions/  docs/decisions/  docs/architecture/  docs/guides/
   docs/spec/  docs/research/                  the v2 API reference; the evidence behind it
@@ -26,20 +29,30 @@ rojo-rhi/
 
 ## Directory responsibilities
 
-`xmake.lua` at the root declares project settings, requires and the language level once; it is
-never included directly by a host project. `xmake/` holds `targets.lua` (the includable target
+`xmake.lua` at the root declares project settings, requires and the language level once; it is never
+included directly by a host project. `xmake/` holds `targets.lua` (the includable target
 declarations; the v1 targets are macOS only), a minimal `setup.lua` (metal-cpp and Slang pins,
-fetched on macOS only; it fetches nothing elsewhere yet), and
-a test-only copy of the shader-to-metallib rule, so RojoRHI configures, builds and tests
-standalone.
+fetched on macOS; Windows fetches Slang alone), and a test-only copy of the shader-to-metallib rule,
+so RojoRHI configures, builds and tests standalone.
 
 `Include/`, `Source/`, `Backends/`, `Tests/` and `Shaders/` are the permanent tree of the v2
 interface. Today `Include/rojoRHI/Version.h` and `Tests/` hold the first v2 code, built as the
 header-only `RojoRHI` target and the `RojoRHITests` binary, whose `contract` test runs the
 `[contract]` cases; the `rojorhi_backend` configure option accepts only `null` for now, and the
 GPU-free Null backend arrives with the work that adds it, so `RojoRHI` is header-only today. The
-rest is empty. v1 lives frozen beside them under `Legacy/` and is deleted
-with the consumer port; ADR 0017 owns the layout, the freeze and the consumer's dependency rename.
+`Source/` and `Backends/` are empty. `Include/rojoRHI/` also holds `Addr.h` and `IndirectArgs.h`,
+the shared C++ types of chapters 03 and 08. v1 lives frozen beside them under `Legacy/` and is
+deleted with the consumer port; ADR 0017 owns the layout, the freeze and the consumer's dependency
+rename.
+
+`Shaders/RojoRHI/RojoRHI.slang` is the module every v2 shader imports: it owns every binding and
+lowers the entries of chapter 05 per target, selected by one `ROJORHI_TARGET_*` macro (ADR 0018).
+`Shaders/Tests/` holds compile-only conformance shaders that call every entry in every stage it
+allows, and a layout probe. `xmake/slang.lua` declares two rules: `rojorhi.slang` compiles each
+shader to MSL, SPIR-V and HLSL on every host, to a metallib when the Metal toolchain is present
+and to DXIL when a DXC is reachable; `rojorhi.shader_layout` runs `Tools/shader_layout.py`, which
+reads the probe's reflection on each target and generates `static_assert`s compiled into
+`RojoRHITests`. The tests tagged `[abi]` run both.
 
 `Legacy/Include/rojoRHI/` is the v1 public surface: dependency-free headers naming no backend,
 windowing, ImGui or third-party type, rooted at the `rojoRHI/` include spelling ADR 0001 fixes.

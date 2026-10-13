@@ -5,9 +5,12 @@
 
 This chapter defines how a shader reaches data: the root block, the `RojoRHI.slang` module and the
 layout rules shared by C++ and Slang. It continues in [part 2](05-shader-abi-part2.md), which
-defines the `Addr` accessors, heap-index fetches and built-ins. Notation, cost classes and
-valid-usage identifiers follow [conventions](00-conventions.md). The decision behind this chapter
-is [ADR 0011](../decisions/0011-shader-abi.md).
+defines the `Addr` accessors and heap-index fetches, and [part 3](05-shader-abi-part3.md), which
+defines the built-ins. Notation, cost classes and valid-usage identifiers follow
+[conventions](00-conventions.md). The decisions behind this chapter are
+[ADR 0011](../decisions/0011-shader-abi.md), and
+[ADR 0018](../decisions/0018-root-srv-and-reserved-bindings.md) for the root's D3D12 form and the
+reserved bindings.
 
 ## Model
 
@@ -33,7 +36,7 @@ diagnostic.
 it is an 8-byte-aligned struct of two 32-bit words:
 
 ```slang
-typealias Addr = uint2;                          // RojoRHI.slang
+namespace rojoRHI { public typealias Addr = uint2; }   // RojoRHI.slang
 ```
 
 ```cpp
@@ -47,13 +50,21 @@ straddles a 16-byte row, so every target agrees.
 ```slang
 import RojoRHI;
 
-struct DrawRoot { Addr vertices; Addr instances; uint albedo; uint linearClamp; uint drawId; uint pad; };
+struct DrawRoot
+{
+    rojoRHI::Addr vertices;
+    rojoRHI::Addr instances;
+    uint albedo;
+    uint linearClamp;
+    uint drawId;
+    uint pad;
+};
 
 [shader("vertex")]
-VsOut vsMain(uint vertexId : SV_VertexID)
+VsOut vsMain(rojoRHI::VertexIds ids)
 {
     DrawRoot root = rojoRHI::root<DrawRoot>();
-    Vertex v = rojoRHI::load<Vertex>(root.vertices, rojoRHI::vertexIndex(vertexId));
+    Vertex v = rojoRHI::load<Vertex>(root.vertices, rojoRHI::vertexIndex(ids));
     // ...
 }
 
@@ -70,12 +81,30 @@ A bindless shader's reads are invisible to the CPU, so no tier can diagnose how 
 normative prose instead; meeting them is the shader author's obligation, and a violation gives
 undefined results on the GPU.
 
+## Reserved bindings
+
+The module owns every binding a shader has; a consumer shader declares none, and the shader rule
+compiles it for exactly one target at a time (ADR 0018). Changing any row bumps
+`ROJORHI_SHADER_ABI_VERSION`.
+
+| Use | Metal 4 argument table | D3D12 | Vulkan |
+|---|---|---|---|
+| Root | `buffer(0)` | root SRV `t0`, by GPU virtual address | push block: root `Addr` |
+| View ID table | `buffer(1)` | `ResourceDescriptorHeap` | resource heap, Slang `__slang_resource_heap` |
+| Sampler ID table | `buffer(2)` | `SamplerDescriptorHeap` | sampler heap, Slang `__slang_resource_heap` |
+| Draw record | `buffer(3)` | root constant `b1` | push block: record `Addr` and stride |
+
+The Vulkan push block is `{root Addr, record Addr, recordStride}`: `root` at offset 0, `record` at
+offset 8 and `recordStride` (a `uint`) at offset 16, 24 bytes in std430. On Vulkan, samplers sit at
+set 1 binding 0 and images at set 1 binding 2, the layout Slang chose.
+
 ## Layout rules
 
 A struct shared between C++ and Slang follows one of two layouts.
 
-The root block is read as constant data, whose offsets differ between Metal, HLSL `cbuffer` and
-std140 SPIR-V once nesting or three-component vectors appear. A root type is therefore flat:
+The root block is read in natural layout on every target, but the constant-buffer layouts of Metal,
+HLSL `cbuffer` and std140 SPIR-V differ from it once nesting or three-component vectors appear. A
+root type is therefore flat, which makes natural layout equal to constant-buffer layout:
 
 - Members are 32-bit scalars, two- or four-component vectors of them, and `Addr`.
 - No nested structs: a nested struct starts on a 16-byte boundary in HLSL and std140 but not on
@@ -86,26 +115,36 @@ std140 SPIR-V once nesting or three-component vectors appear. A root type is the
   four-component vectors, and 8 for two-component vectors and every `Addr` field. Padding is
   explicit, as in `DrawRoot::pad` above.
 - The struct is 16-byte aligned and its size is a multiple of 16 bytes.
-- The block is placed at 256-byte alignment, the D3D12 root constant-buffer requirement, and is at
-  most 65536 bytes, the D3D12 constant-buffer limit, kept as the portable cap.
+- The block is placed at 256-byte alignment, which D3D12 requires of a root address, and is at most
+  65536 bytes, the D3D12 constant-buffer limit, kept as the portable cap.
 
 Data behind an `Addr` uses natural layout on every target: C++ `offsetof` and `sizeof`, with
 nested structs allowed and three-component vectors packed to 12 bytes (`packed_float3` on Metal).
-A shared struct names buffer memory with `Addr`, never with a raw 64-bit pointer, because the D3D12
+Slang's natural layout aligns a `uint2` to 4 bytes while the C++ `alignas(8)` `Addr` aligns to 8, so
+an `Addr` in a record also sits at an 8-byte offset, with explicit padding, as in a root. On Vulkan
+the shader rule compiles with `-fvk-use-scalar-layout`, and natural layout behind an `Addr`, such as
+a `float3` followed by a `float2`, passes `spirv-val` only with `--scalar-block-layout`: the Vulkan
+mapping presumes the `scalarBlockLayout` feature. A shared struct names buffer memory with `Addr`,
+never with a raw 64-bit pointer, because the D3D12
 form of an address is not a virtual address. No shared struct contains a texture, sampler or handle
 type, a pointer to one, or an unsized array.
 
 ## Layout checking
 
-Every struct shared between C++ and Slang is checked at build time: a tool compares the Slang
-reflection offsets on each compiled target with the C++ `offsetof` values and fails the build on
-any drift. The rules above keep the check passing; the check, not the rules, is the authority.
+Every struct shared between C++ and Slang is checked at build time. `Tools/shader_layout.py`, driven
+by the `rojorhi.shader_layout` xmake rule, reads the Slang reflection of a probe shader on each
+target and generates `static_assert`s on `sizeof` and `offsetof` that compile into the tests, so
+drift on any target fails the build. A probe declares each struct as `gRecord_<Name>` for data
+behind an `Addr` and `gRoot_<Name>` for a root; a root is also checked against the flat rules
+above. The rules keep the check passing; the check, not the rules, is the authority.
 
 ## Shader build, ABI version and Slang upgrades
 
-The xmake shader rule compiles Slang offline to a metallib for Metal 4, and is to compile DXIL once
-the planned D3D12 backend exists. It compiles SPIR-V in CI only, so the Vulkan mapping is checked
-mechanically rather than on paper. RojoRHI never compiles shaders at run time. The rule stamps
+The xmake shader rule compiles Slang offline. On every host and at every build it emits MSL,
+SPIR-V and HLSL, so the Vulkan and D3D12 mappings are checked mechanically rather than on paper; it
+adds a metallib when the Metal toolchain exists and DXIL when a DXC loads, and prints which of the
+two it enabled. Hosted Windows CI compiles DXIL. RojoRHI never compiles shaders at run time. The
+rule stamps
 `ROJORHI_SHADER_ABI_VERSION` into every library it builds, and `Device::loadShaderLibrary` (see
 [pipelines](06-pipelines.md)) checks the stamp.
 
@@ -143,7 +182,7 @@ without re-uploading it.
 
 | | Metal 4 | D3D12 | Vulkan |
 |---|---|---|---|
-| Call | `MTL4::ArgumentTable::setAddress(root, 0)` on the table bound to every stage | `SetGraphicsRootConstantBufferView` or `SetComputeRootConstantBufferView` on `b0` of the one global root signature, with the GPU virtual address looked up from the `Addr`'s heap index plus its offset | `vkCmdPushDataEXT` of the address, or a push-constant `Addr` |
+| Call | `MTL4::ArgumentTable::setAddress(root, 0)` on the table bound to every stage | `SetGraphicsRootShaderResourceView` or `SetComputeRootShaderResourceView` on `t0` of the one global root signature, with the GPU virtual address looked up from the `Addr`'s heap index plus its offset | `vkCmdPushDataEXT` of the address, or a push-constant `Addr` |
 | Cost | native: one table write | cheap: index→GPU VA lookup | native |
 | Constraint | none | 256-byte alignment of the root address; 65536-byte cap | none: the root is read through the pushed address |
 
@@ -173,7 +212,7 @@ build-time [layout check](#layout-checking) rejects a root type that breaks the 
 
 | | Metal 4 | D3D12 | Vulkan |
 |---|---|---|---|
-| Call | frame-arena copy, then `setAddress(copy, 0)` | frame-arena copy, then the root CBV write | frame-arena copy, then `vkCmdPushDataEXT` of its address |
+| Call | frame-arena copy, then `setAddress(copy, 0)` | frame-arena copy, then the root SRV write | frame-arena copy, then `vkCmdPushDataEXT` of its address |
 | Cost | cheap: one suballocation and copy; Metal 4 has no inline root bytes | cheap: one suballocation and copy; root constants are not used, since the call returns an address | cheap: one suballocation and copy; inline push data is not used, for the same reason |
 
 ### `rojoRHI::root`
@@ -182,8 +221,9 @@ build-time [layout check](#layout-checking) rejects a root type that breaks the 
 T root<T>();
 ```
 
-Returns the root block bound for the executing draw or dispatch, read as `T` under the target's
-constant-buffer layout. Every stage of a draw that calls it reads the same bytes.
+Returns the root block bound for the executing draw or dispatch, read as `T` in natural layout,
+which the flat root rules make equal to the target's constant-buffer layout. Every stage of a draw
+that calls it reads the same bytes.
 
 Requirements: `T` follows the root layout rules of this chapter and is at most 65536 bytes; a root
 naming at least `sizeof(T)` bytes was bound on the command list before the draw or dispatch that
@@ -198,9 +238,9 @@ executes.
 
 | | Metal 4 | D3D12 | Vulkan |
 |---|---|---|---|
-| Lowering | `constant T&` at argument-table `buffer(0)` | `cbuffer` at `b0`, a root CBV | a buffer reference at the pushed address |
+| Lowering | a raw buffer at argument-table `buffer(0)`, read as `T` at offset 0 | a raw `ByteAddressBuffer` at `t0`, a root SRV, read as `T` at offset 0; unverified | `T` loaded through the root `Addr` in the push block, as a physical storage buffer pointer |
 | Cost | native | native | native |
-| Constraint | none | 256-byte alignment of the root address; 65536-byte cap | none: a buffer reference has no uniform-range limit |
+| Constraint | none | 256-byte alignment of the root address; 65536-byte cap | none: a pointer has no uniform-range limit |
 
 ### `ROJORHI_SHADER_ABI_VERSION`
 
@@ -224,6 +264,6 @@ The value is independent of the `ROJORHI_VERSION_*` macros (see [fundamentals](0
 
 | | Metal 4 | D3D12 | Vulkan |
 |---|---|---|---|
-| Stamp | carried in the metallib by the shader rule; mechanism unverified | carried in the DXIL container by the shader rule; mechanism unverified | none: SPIR-V is compiled in CI only |
-| Check | one integer compare in `loadShaderLibrary` | one integer compare in `loadShaderLibrary` | the CI compile |
+| Stamp | carried in the metallib by the shader rule; mechanism unverified | carried in the DXIL container by the shader rule; mechanism unverified | none: SPIR-V is a compile-time check |
+| Check | one integer compare in `loadShaderLibrary` | one integer compare in `loadShaderLibrary` | the shader rule's SPIR-V compile |
 | Cost | native | native | native |

@@ -48,7 +48,7 @@ identifier; this entry only defines the values.
 |---|---|---|---|---|
 | `maxViews` | 1,000,000 | 1,000,000 textures reachable per stage through argument buffers | at least 1,000,000 at resource binding tier 3; `OPTIONS19` may report more (shipping values *unverified*) | descriptor-heap size properties of `VK_EXT_descriptor_heap` |
 | `maxSamplers` | 996 | 996 on Apple7 and Apple8, 500,000 on Apple9+, from `maxArgumentBufferSamplerCount` (*unverified*) | 2,048 shader-visible samplers; `OPTIONS19` may report more | sampler-heap size properties of `VK_EXT_descriptor_heap` |
-| `maxRootBlockSize` | 65,536 | bounded by `maxBufferLength` | 65,536, one constant buffer view | bounded by the buffer, read through a device address |
+| `maxRootBlockSize` | 65,536 | bounded by `maxBufferLength` | 65,536, the constant buffer limit kept as the portable cap | bounded by the buffer, read through a device address |
 | `rootAlignment` | 256 | 4, raised to 256 | 256, `D3D12_CONSTANT_BUFFER_DATA_PLACEMENT_ALIGNMENT` | `minUniformBufferOffsetAlignment`, at most 256 |
 | `frameDataAlignment` | 256 | 256 | 256 | 256 |
 | `maxBufferSize` | device | `maxBufferLength` | adapter memory; an `Addr` reaches only `maxAddrOffset` bytes of it | `maxBufferSize` (Vulkan 1.3) |
