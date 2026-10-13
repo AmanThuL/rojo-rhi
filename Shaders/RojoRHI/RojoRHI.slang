@@ -343,4 +343,4 @@ namespace rojoRHI
 }
 
 /// The shader ABI version; changing a reserved binding bumps it.
-public static const uint ROJORHI_SHADER_ABI_VERSION = 1;
+public static const uint ROJORHI_SHADER_ABI_VERSION = 1; // Mirrored by core::kShaderAbiVersion in Source/Core/Pipelines.h.

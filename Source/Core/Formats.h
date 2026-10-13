@@ -42,6 +42,12 @@ namespace rojoRHI::core {
     /// Returns true for a format with a depth plane, with or without stencil.
     bool isDepthFormat(Format format);
 
+    /// Returns true when `samples` is 1, 2, 4 or 8 and bit log2(`samples`) of `capabilities.sampleCounts` is set.
+    bool samplesSupported(uint32_t samples, const FormatCapabilities& capabilities);
+
+    /// Returns true for a format with a stencil plane.
+    bool hasStencilPlane(Format format);
+
     /// Returns the format that differs from `format` only in sRGB transfer, or `Format::Undefined` when it has no such partner.
     Format srgbCounterpart(Format format);
 

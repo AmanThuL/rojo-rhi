@@ -8,14 +8,17 @@
 #include <rojoRHI/Device.h>
 
 #include "Base/Assert.h"
+#include "Base/Log.h"
 #include "Core/Buffers.h"
 #include "Core/DeviceCore.h"
 #include "Core/Fences.h"
 #include "Core/Formats.h"
 #include "Core/Heaps.h"
+#include "Core/Pipelines.h"
 #include "Core/Ranges.h"
 #include "Core/Samplers.h"
 #include "Core/Textures.h"
+#include "NullShaderLibrary.h"
 
 #include <algorithm>
 #include <array>
@@ -23,6 +26,7 @@
 #include <cstring>
 #include <format>
 #include <memory>
+#include <optional>
 
 namespace rojoRHI {
     namespace {
@@ -164,6 +168,18 @@ namespace rojoRHI {
         hooks.buffer = retireBuffer;
         hooks.frameSlot = returnSlotLists;
         impl->core.setRetireHooks(hooks);
+        if (!desc.pipelineCache.empty())
+        {
+            // A blob of any other origin or version is a cache miss, never an error.
+            if (const std::optional<uint64_t> carried = parseNullPipelineCache(desc.pipelineCache))
+            {
+                impl->cachedPipelines = *carried;
+            }
+            else
+            {
+                ROJORHI_LOG_WARN("the pipeline cache blob was not written by this version of the Null backend and is discarded");
+            }
+        }
         return DeviceImpl::wrap(impl.release());
     }
 
@@ -354,6 +370,45 @@ namespace rojoRHI {
         const size_t index = static_cast<size_t>(type);
         ROJORHI_INTERNAL_ASSERT(index < impl.queues.size(), "a QueueType outside the enumerators has no queue");
         return QueueImpl::wrap(&impl.queues[index]);
+    }
+
+    //==================================================================================================================
+    Result<ShaderLibrary> Device::loadShaderLibrary(std::span<const std::byte> blob, std::string_view label)
+    {
+        DeviceImpl& impl = DeviceImpl::of(*this);
+        core::ShaderLibraryRecord record = core::prepareShaderLibrary(blob, label);
+        Result<std::vector<core::ShaderEntryRecord>> entries = parseNullShaderLibrary(blob);
+        if (!entries)
+        {
+            return std::unexpected(std::move(entries.error()));
+        }
+        record.entries = std::move(*entries);
+        return impl.core.pool<ShaderLibrary>().allocate(std::move(record));
+    }
+
+    //==================================================================================================================
+    Result<Pipeline> Device::createPipeline(const GraphicsPipelineDesc& desc)
+    {
+        DeviceImpl& impl = DeviceImpl::of(*this);
+        // A Null pipeline owns no native object beyond its record.
+        const Pipeline pipeline = impl.core.pool<Pipeline>().allocate(core::prepareGraphicsPipeline(impl.core, desc));
+        ++impl.cachedPipelines;
+        return pipeline;
+    }
+
+    //==================================================================================================================
+    Result<Pipeline> Device::createPipeline(const ComputePipelineDesc& desc)
+    {
+        DeviceImpl& impl = DeviceImpl::of(*this);
+        const Pipeline pipeline = impl.core.pool<Pipeline>().allocate(core::prepareComputePipeline(impl.core, desc));
+        ++impl.cachedPipelines;
+        return pipeline;
+    }
+
+    //==================================================================================================================
+    Result<std::vector<std::byte>> Device::pipelineCacheData()
+    {
+        return serializeNullPipelineCache(DeviceImpl::of(*this).cachedPipelines);
     }
 
     //==================================================================================================================

@@ -9,12 +9,14 @@
 #include <rojoRHI/Geometry.h>
 #include <rojoRHI/Handles.h>
 #include <rojoRHI/Memory.h>
+#include <rojoRHI/PrimitiveClass.h>
 #include <rojoRHI/TextureType.h>
 #include <rojoRHI/TextureUsage.h>
 
 #include <cstdint>
 #include <string>
 #include <type_traits>
+#include <vector>
 
 namespace rojoRHI::core {
     /// What the core keeps about one live Buffer: its description; later parts add its state.
@@ -47,18 +49,50 @@ namespace rojoRHI::core {
         void* native = nullptr;                  ///< The backend's payload for the object; the core never reads it.
     };
 
-    /// What the core keeps about one live Pipeline; later parts add its description and state.
-    struct PipelineRecord
+    /// The shader stage an entry point of a library is compiled for.
+    enum class ShaderStage : uint8_t
     {
-        std::string label;      ///< The label the object was created with.
-        void* native = nullptr; ///< The backend's payload for the object; the core never reads it.
+        Vertex,   ///< A vertex entry.
+        Fragment, ///< A fragment entry.
+        Task,     ///< A mesh-pipeline task entry.
+        Mesh,     ///< A mesh entry.
+        Compute   ///< A compute entry.
     };
 
-    /// What the core keeps about one live ShaderLibrary; later parts add its description and state.
+    /// One entry point a shader library holds; the backend reads it from the blob.
+    struct ShaderEntryRecord
+    {
+        std::string name;                        ///< The entry point's name.
+        ShaderStage stage = ShaderStage::Vertex; ///< The stage it is compiled for.
+    };
+
+    /// What the core keeps about one live ShaderLibrary: its entry points, which pipeline creation checks against.
     struct ShaderLibraryRecord
     {
-        std::string label;      ///< The label the object was created with.
-        void* native = nullptr; ///< The backend's payload for the object; the core never reads it.
+        std::string label;                      ///< The label the object was created with.
+        std::vector<ShaderEntryRecord> entries; ///< Every entry point, filled by the backend that parsed the blob.
+        void* native = nullptr;                 ///< The backend's payload for the object; the core never reads it.
+    };
+
+    /// Whether a pipeline draws or dispatches.
+    enum class PipelineKind : uint8_t
+    {
+        Graphics, ///< Created from a `GraphicsPipelineDesc`.
+        Compute   ///< Created from a `ComputePipelineDesc`.
+    };
+
+    /// What the core keeps about one live Pipeline: the fields render-pass and draw checks compare against.
+    struct PipelineRecord
+    {
+        std::string label;                                   ///< The label the object was created with.
+        PipelineKind kind = PipelineKind::Graphics;          ///< Graphics or compute.
+        uint32_t stages = 0;                                 ///< Bit `1 << ShaderStage` for each stage present.
+        PrimitiveClass primitive = PrimitiveClass::Triangle; ///< The topology class; meaningful for a vertex pipeline.
+        std::vector<Format> colors;                          ///< The format of each color target, in order.
+        Format depthFormat = Format::Undefined;              ///< The depth attachment format; `Undefined` for none.
+        uint32_t samples = 1;                                ///< Samples per texel of every attachment.
+        bool depthBias = false;                              ///< `RasterState::depthBias` of the descriptor.
+        void* native = nullptr;                              ///< The backend's payload for the object; the core never reads it.
     };
 
     /// What the core keeps about one live Heap: its description and how many live resources are placed in it.

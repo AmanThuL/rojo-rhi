@@ -62,13 +62,6 @@ namespace rojoRHI::core {
         }
 
         //==============================================================================================================
-        [[maybe_unused]] bool samplesSupported(uint32_t samples, const FormatCapabilities& capabilities)
-        {
-            const bool valid = samples == 1 || samples == 2 || samples == 4 || samples == 8;
-            return valid && ((capabilities.sampleCounts >> std::countr_zero(samples)) & 1) != 0;
-        }
-
-        //==============================================================================================================
         /// The extent of mip `mip` in texels, never below one.
         [[maybe_unused]] Extent3D mipExtent(const Extent3D& extent, uint32_t mip)
         {

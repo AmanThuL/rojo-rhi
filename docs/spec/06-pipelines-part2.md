@@ -62,12 +62,14 @@ An opaque blob of compiled pipelines. The consumer saves the bytes returned by
 `Device::pipelineCacheData` and passes them back through `DeviceDesc::pipelineCache`
 ([device](02-device.md)); an empty span means no cache. A blob from another backend, device,
 driver or RojoRHI version is discarded as a cache miss and reported through the message callback;
-it is never an error. The bytes are read during `createDevice`.
+it is never an error. The bytes are read during `createDevice`, so the caller keeps them valid and
+unchanged until `createDevice` returns; no check can observe that lifetime, so it is a requirement
+of this entry and not a rule.
 
 #### Valid usage
 
-- `VU-rojo-pipeline-0014` The bytes passed through `DeviceDesc::pipelineCache` stay valid and
-  unchanged until `createDevice` returns.
+- `VU-rojo-pipeline-0014` Retired in 0.1.0: The bytes passed through `DeviceDesc::pipelineCache`
+  stay valid and unchanged until `createDevice` returns.
 
 #### Mapping
 
