@@ -7,9 +7,14 @@
 
 #include <rojoRHI/Device.h>
 
+#include "Core/Buffers.h"
 #include "Core/DeviceCore.h"
+#include "Core/Heaps.h"
 
 #include <array>
+#include <cstdlib>
+#include <cstring>
+#include <format>
 #include <memory>
 
 namespace rojoRHI {
@@ -30,7 +35,7 @@ namespace rojoRHI {
             limits.frameDataAlignment = 256;  // Floor.
             limits.maxBufferSize =
                 1ull << 32; // Unverified: the Floor column names no number ("device"); 4 GiB, an arbitrary value above the 2^32 - 1 Addr reach.
-            limits.maxAddrOffset = 4'294'967'295;      // Floor, 2^32 - 1.
+            limits.maxAddrOffset = kNullMaxAddrOffset; // Floor, 2^32 - 1.
             limits.maxTextureDimension1D = 16'384;     // Floor.
             limits.maxTextureDimension2D = 16'384;     // Floor.
             limits.maxTextureDimension3D = 2'048;      // Floor.
@@ -49,6 +54,24 @@ namespace rojoRHI {
             limits.maxMeshTaskGroups = 65'535;         // Floor.
             limits.maxMeshTaskGroupsTotal = 4'194'304; // Floor.
             return limits;
+        }
+
+        //==============================================================================================================
+        /// The Null device's placement answer for a buffer: the size rounded up to 256 bytes, at an alignment of 256 bytes. The
+        /// values are the Null backend's own choice, a round number that is neither Metal's nor D3D12's, so a caller that
+        /// hard-codes either finds out here.
+        PlacementRequirements nullBufferRequirements(const BufferDesc& desc)
+        {
+            constexpr uint64_t kAlignment = 256;
+            return PlacementRequirements{ (desc.size + kAlignment - 1) / kAlignment * kAlignment, kAlignment };
+        }
+
+        //==============================================================================================================
+        /// Frees the host memory of a retiring buffer; a Device buffer holds none.
+        void retireBuffer(void*, core::BufferRecord& record)
+        {
+            std::free(record.native);
+            record.native = nullptr;
         }
     } // namespace
 
@@ -95,6 +118,10 @@ namespace rojoRHI {
         capabilities.conservativeRaster = true;
         capabilities.upscalers = kUpscalers;
         impl->core.setFormatTable(core::formatCeilings());
+        core::RetireHooks hooks;
+        hooks.context = impl.get();
+        hooks.buffer = retireBuffer;
+        impl->core.setRetireHooks(hooks);
         return DeviceImpl::wrap(impl.release());
     }
 
@@ -131,9 +158,68 @@ namespace rojoRHI {
     }
 
     //==================================================================================================================
+    Result<Buffer> Device::createBuffer(const BufferDesc& desc, std::span<const std::byte> initial, Placement placement)
+    {
+        DeviceImpl& impl = DeviceImpl::of(*this);
+        const PlacementRequirements requirements = placement.heap.bits != 0 ? nullBufferRequirements(desc) : PlacementRequirements{};
+        core::BufferRecord record = core::prepareBuffer(impl.core, desc, initial, placement, requirements);
+        // Only Upload and Readback buffers get host memory; a Gpu buffer keeps its record and drops its initial data.
+        if (desc.memory != Memory::Gpu)
+        {
+            auto* host = static_cast<std::byte*>(std::calloc(desc.size, 1));
+            if (host == nullptr)
+            {
+                return std::unexpected(
+                    Error{ ErrorCategory::OutOfMemory, std::format("no host memory for {} bytes of buffer \"{}\"", desc.size, record.label) }
+                );
+            }
+            if (!initial.empty())
+            {
+                std::memcpy(host, initial.data(), initial.size());
+            }
+            record.native = host;
+        }
+        return core::addBuffer(impl.core, std::move(record));
+    }
+
+    //==================================================================================================================
+    Result<Heap> Device::createHeap(const HeapDesc& desc)
+    {
+        DeviceImpl& impl = DeviceImpl::of(*this);
+        // A Null heap owns no memory beyond its record.
+        return impl.core.pool<Heap>().allocate(core::prepareHeap(desc));
+    }
+
+    //==================================================================================================================
+    PlacementRequirements Device::placementRequirements(const BufferDesc& desc)
+    {
+        DeviceImpl& impl = DeviceImpl::of(*this);
+        core::checkBufferRequirementsQuery(impl.core, desc);
+        return nullBufferRequirements(desc);
+    }
+
+    //==================================================================================================================
+    Addr Device::address(Buffer buffer, uint64_t offset)
+    {
+        DeviceImpl& impl = DeviceImpl::of(*this);
+        core::checkBufferAddress(core::checkedBuffer(impl.core, buffer), offset, impl.core.capabilities().limits.maxAddrOffset);
+        // The Null encoding is D3D12's, not a virtual address: the buffer's slot index and the byte offset.
+        return Addr{ core::HandlePool<Buffer, core::BufferRecord>::slotIndex(buffer), static_cast<uint32_t>(offset) };
+    }
+
+    //==================================================================================================================
+    std::byte* Device::cpuPointer(Buffer buffer)
+    {
+        DeviceImpl& impl = DeviceImpl::of(*this);
+        core::BufferRecord& record = core::checkedBuffer(impl.core, buffer);
+        core::checkCpuAccess(record);
+        return static_cast<std::byte*>(record.native);
+    }
+
+    //==================================================================================================================
     void Device::destroy(Buffer buffer)
     {
-        DeviceImpl::of(*this).core.destroy(buffer);
+        core::destroyBuffer(DeviceImpl::of(*this).core, buffer);
     }
 
     //==================================================================================================================
@@ -157,7 +243,7 @@ namespace rojoRHI {
     //==================================================================================================================
     void Device::destroy(Heap heap)
     {
-        DeviceImpl::of(*this).core.destroy(heap);
+        core::destroyHeap(DeviceImpl::of(*this).core, heap);
     }
 
     //==================================================================================================================

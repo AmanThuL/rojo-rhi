@@ -17,6 +17,7 @@ namespace rojoRHI {
         uint32_t hi;
     };
 
-    /// Returns the address `offset` bytes further into the buffer `base` names.
+    /// Returns the address `offset` bytes further into the buffer `base` names. The result lies less than
+    /// `Limits::maxAddrOffset` bytes from the buffer's start (VU-rojo-buffer-0011).
     Addr operator+(Addr base, uint64_t offset);
 } // namespace rojoRHI

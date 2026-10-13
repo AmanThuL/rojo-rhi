@@ -155,12 +155,15 @@ hot data.
 A shader never dereferences the null address, and it writes through an address only into a buffer
 created with `BufferUsage::ShaderWrite`. No tier diagnoses either, because shader accesses are
 invisible to the CPU; the shader-side requirements are stated with
-[`rojoRHI::load` and `rojoRHI::store`](05-shader-abi-part2.md#addresses).
+[`rojoRHI::load` and `rojoRHI::store`](05-shader-abi-part2.md#addresses). Likewise, a shader that
+chases an address, including one stored in buffer memory, finishes before the buffer it names is
+destroyed; the submission of that work precedes the destruction, and no tier diagnoses the
+shader-side access.
 #### Valid usage
 - `VU-rojo-buffer-0009` The byte position named by `base + offset` lies inside the buffer `base`
   names.
-- `VU-rojo-buffer-0010` Work that dereferences an address is submitted before the buffer it names
-  is destroyed.
+- `VU-rojo-buffer-0010` Work recorded with an address passed to a recorded command is submitted
+  before the buffer the address names is destroyed. Checked by the validation tracker.
 - `VU-rojo-buffer-0011` Every address `operator+` produces, and every byte reached through an
   address, lies less than
   [`Limits::maxAddrOffset`](15-formats-and-limits-part2.md#limits) bytes from the start of the

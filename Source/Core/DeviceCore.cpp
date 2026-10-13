@@ -121,6 +121,12 @@ namespace rojoRHI::core {
     }
 
     //==================================================================================================================
+    const RetireHooks& DeviceCore::retireHooks() const
+    {
+        return m_hooks;
+    }
+
+    //==================================================================================================================
     Capabilities& DeviceCore::capabilities()
     {
         return m_capabilities;

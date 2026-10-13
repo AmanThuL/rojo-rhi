@@ -92,6 +92,12 @@ namespace rojoRHI::core {
             slots_.emplace_back(); // Slot zero is never issued.
         }
 
+        /// Returns the slot index of `handle`, which a backend may encode in its own values; it does not check the handle.
+        static uint32_t slotIndex(Handle handle)
+        {
+            return indexOf(handle.bits);
+        }
+
         /// Stores `record` in a free slot, or a new one, and returns the handle naming it.
         Handle allocate(Record record)
         {
@@ -205,6 +211,19 @@ namespace rojoRHI::core {
             ROJORHI_VU(result.status != LookupStatus::StaleGeneration, "VU-rojo-core-0002", "handle {:#x} names a destroyed resource", handle.bits);
             ROJORHI_VU(result.status != LookupStatus::WrongType, "VU-rojo-core-0003", "handle {:#x} has the type tag of another resource type", handle.bits);
             return result.record;
+        }
+
+        /// Calls `change` with the record `handle` names while holding the pool's lock, and returns the lookup status; `change`
+        /// runs only for Ok and must not call the pool. It is how a record's counters change without a race.
+        template<typename Change> LookupStatus update(Handle handle, Change&& change)
+        {
+            std::lock_guard lock(mutex_);
+            const LookupResult<Record> result = find(handle);
+            if (result.status == LookupStatus::Ok)
+            {
+                change(*result.record);
+            }
+            return result.status;
         }
 
         /// Calls `visit` with the record of every live slot while holding the pool's lock; `visit` must not call the pool.

@@ -4,17 +4,25 @@
 //----------------------------------------------------------------------------------------------------------------------
 #pragma once
 
+#include <rojoRHI/BufferUsage.h>
 #include <rojoRHI/Handles.h>
+#include <rojoRHI/Memory.h>
 
+#include <cstdint>
 #include <string>
 #include <type_traits>
 
 namespace rojoRHI::core {
-    /// What the core keeps about one live Buffer; later parts add its description and state.
+    /// What the core keeps about one live Buffer: its description; later parts add its state.
     struct BufferRecord
     {
-        std::string label;      ///< The label the object was created with.
-        void* native = nullptr; ///< The backend's payload for the object; the core never reads it.
+        std::string label;                     ///< The label the object was created with.
+        uint64_t size = 0;                     ///< Bytes.
+        uint64_t initialBytes = 0;             ///< Length of the initial data the buffer was created with.
+        Memory memory = Memory::Gpu;           ///< The memory class.
+        BufferUsage usage = BufferUsage::None; ///< The usage flags.
+        Heap heap = {};                        ///< The heap the buffer is placed in; null for a dedicated allocation.
+        void* native = nullptr;                ///< The backend's payload for the object; the core never reads it.
     };
 
     /// What the core keeps about one live Texture; later parts add its description and state.
@@ -38,11 +46,14 @@ namespace rojoRHI::core {
         void* native = nullptr; ///< The backend's payload for the object; the core never reads it.
     };
 
-    /// What the core keeps about one live Heap; later parts add its description and state.
+    /// What the core keeps about one live Heap: its description and how many live resources are placed in it.
     struct HeapRecord
     {
-        std::string label;      ///< The label the object was created with.
-        void* native = nullptr; ///< The backend's payload for the object; the core never reads it.
+        std::string label;            ///< The label the object was created with.
+        uint64_t size = 0;            ///< Usable bytes, at least the size requested.
+        Memory memory = Memory::Gpu;  ///< The memory class of every resource placed inside.
+        uint64_t placedResources = 0; ///< Resources created in the heap and not yet destroyed (VU-rojo-device-0008).
+        void* native = nullptr;       ///< The backend's payload for the object; the core never reads it.
     };
 
     /// What the core keeps about one live Fence; later parts add its description and state.
