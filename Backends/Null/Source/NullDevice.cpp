@@ -7,8 +7,10 @@
 
 #include <rojoRHI/Device.h>
 
+#include "Base/Assert.h"
 #include "Core/Buffers.h"
 #include "Core/DeviceCore.h"
+#include "Core/Fences.h"
 #include "Core/Formats.h"
 #include "Core/Heaps.h"
 #include "Core/Ranges.h"
@@ -333,6 +335,36 @@ namespace rojoRHI {
     void Device::destroy(Heap heap)
     {
         core::destroyHeap(DeviceImpl::of(*this).core, heap);
+    }
+
+    //==================================================================================================================
+    Queue Device::queue(QueueType type)
+    {
+        DeviceImpl& impl = DeviceImpl::of(*this);
+        const size_t index = static_cast<size_t>(type);
+        ROJORHI_INTERNAL_ASSERT(index < impl.queues.size(), "a QueueType outside the enumerators has no queue");
+        return QueueImpl::wrap(&impl.queues[index]);
+    }
+
+    //==================================================================================================================
+    Result<Fence> Device::createFence(uint64_t initial, std::string_view label)
+    {
+        DeviceImpl& impl = DeviceImpl::of(*this);
+        // A Null fence owns no native object beyond its record.
+        return impl.core.pool<Fence>().allocate(core::prepareFence(initial, label));
+    }
+
+    //==================================================================================================================
+    uint64_t Device::completedValue(Fence fence)
+    {
+        return core::completedValue(DeviceImpl::of(*this).core, fence);
+    }
+
+    //==================================================================================================================
+    bool Device::wait(FenceValue value, uint64_t timeoutNs)
+    {
+        // Work completes during Queue::submit, so a value not reached now is never reached by waiting.
+        return core::checkWait(DeviceImpl::of(*this).core, value, timeoutNs);
     }
 
     //==================================================================================================================

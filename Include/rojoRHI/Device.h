@@ -8,6 +8,7 @@
 #include <rojoRHI/BufferDesc.h>
 #include <rojoRHI/Capabilities.h>
 #include <rojoRHI/DeviceDesc.h>
+#include <rojoRHI/FenceValue.h>
 #include <rojoRHI/Format.h>
 #include <rojoRHI/FormatCapabilities.h>
 #include <rojoRHI/Handles.h>
@@ -15,6 +16,8 @@
 #include <rojoRHI/IndexRange.h>
 #include <rojoRHI/Placement.h>
 #include <rojoRHI/PlacementRequirements.h>
+#include <rojoRHI/Queue.h>
+#include <rojoRHI/QueueType.h>
 #include <rojoRHI/Result.h>
 #include <rojoRHI/SamplerDesc.h>
 #include <rojoRHI/SamplerIndex.h>
@@ -27,6 +30,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <span>
+#include <string_view>
 
 namespace rojoRHI {
     /// The owner of every resource, queue and frame slot RojoRHI creates. It wraps one backend pointer: copies refer to the
@@ -112,6 +116,22 @@ namespace rojoRHI {
         /// Releases a caller-owned range, deferred like `destroy`: its slots and what they hold return to the heap once the
         /// last frame that could have read them has retired. The range obeys VU-rojo-texture-0038. Free-threaded.
         void release(IndexRange range);
+
+        /// Returns the device's queue of `type`; the same queue on every call. The device owns it and it is never destroyed
+        /// separately. Free-threaded.
+        Queue queue(QueueType type);
+
+        /// Creates a timeline fence whose completed value starts at `initial` and labels it. Out of memory is an error result.
+        /// Free-threaded.
+        Result<Fence> createFence(uint64_t initial, std::string_view label);
+
+        /// Returns the greatest value `fence` has reached. Never blocks. Free-threaded.
+        uint64_t completedValue(Fence fence);
+
+        /// Blocks until `value.fence` reaches `value.value` or `timeoutNs` nanoseconds pass; returns true when the value was
+        /// reached. A `timeoutNs` of `UINT64_MAX` requires the value to be at most the fence's initial value or the greatest
+        /// value already submitted for signal (VU-rojo-queue-0008). Free-threaded.
+        bool wait(FenceValue value, uint64_t timeoutNs);
 
         /// Returns the shader-visible address of byte `offset` of `buffer`: `offset` is less than the buffer's size
         /// (VU-rojo-buffer-0012), the buffer is not `Readback` (VU-rojo-buffer-0013), and the address lies less than
