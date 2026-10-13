@@ -142,6 +142,122 @@ class ProjectPolicyTests(unittest.TestCase):
             ):
                 self.assertNotEqual(policy.main(), 0)
 
+    def test_v1_freeze_ignores_commits_before_legacy_exists(self) -> None:
+        self.assertEqual(
+            policy.legacy_freeze_errors(
+                "a" * 40, False, ["Legacy/Source/X.cpp", "Include/rojoRHI/X.h"], "build: move\n"
+            ),
+            [],
+        )
+
+    def test_v1_freeze_accepts_an_isolated_marked_fix(self) -> None:
+        body = "metal: clamp the scissor\n\nV1-fix: scissor exceeds the drawable\n"
+        paths = ["Legacy/Backends/Metal4/Source/Metal4CommandList.cpp", "xmake/targets.lua"]
+        self.assertEqual(policy.legacy_freeze_errors("a" * 40, True, paths, body), [])
+
+    def test_v1_freeze_rejects_a_change_outside_legacy(self) -> None:
+        errors = policy.legacy_freeze_errors(
+            "a" * 40, True, ["Legacy/Source/X.cpp", "Source/Y.cpp"], "rhi: x\n\nV1-fix: y\n"
+        )
+        self.assertIn("outside Legacy/: Source/Y.cpp", errors[0])
+
+    def test_v1_freeze_rejects_a_rename_out_of_legacy(self) -> None:
+        errors = policy.legacy_freeze_errors(
+            "a" * 40, True, ["Legacy/Tests/X.cpp", "Tests/X.cpp"], "test: x\n\nV1-fix: y\n"
+        )
+        self.assertEqual(len(errors), 1)
+
+    def test_v1_freeze_rejects_a_missing_or_empty_trailer(self) -> None:
+        for body in ("rhi: x\n", "rhi: x\n\nV1-fix:   \n"):
+            with self.subTest(body=body):
+                errors = policy.legacy_freeze_errors(
+                    "a" * 40, True, ["Legacy/Source/X.cpp"], body
+                )
+                self.assertIn("V1-fix", errors[0])
+
+    def test_v1_freeze_reads_history(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+
+            def run(*args: str) -> None:
+                subprocess.run(["git", "-C", directory, *args], check=True, capture_output=True)
+
+            run("init", "-q")
+            run("config", "user.email", "t@example.com")
+            run("config", "user.name", "t")
+            (root / "Source").mkdir()
+            (root / "Source/X.cpp").write_text("1\n")
+            run("add", "-A")
+            run("commit", "-qm", "build: start")
+            run("mv", "Source", "Legacy")
+            run("commit", "-qm", "build: move")
+            (root / "Legacy/X.cpp").write_text("2\n")
+            run("commit", "-qam", "rhi: change v1")
+            errors: list[str] = []
+            with mock.patch.object(policy, "ROOT", root):
+                policy.check_legacy_freeze("HEAD~2..HEAD", errors)
+            self.assertEqual(len(errors), 1)
+            self.assertIn("V1-fix", errors[0])
+
+    def _freeze_history(self, setup, commit_message):
+        """Build a repo with Legacy/ in place, apply setup, commit, return the errors."""
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+
+            def run(*args: str) -> None:
+                subprocess.run(["git", "-C", directory, *args], check=True, capture_output=True)
+
+            run("init", "-q")
+            run("config", "user.email", "t@example.com")
+            run("config", "user.name", "t")
+            run("config", "core.quotePath", "true")
+            (root / "Legacy").mkdir()
+            (root / "Legacy/X.cpp").write_text("1\n" * 20)
+            (root / "Legacy/Y.cpp").write_text("2\n" * 20)
+            (root / "AGENTS.md").write_text("a\n")
+            (root / "xmake").mkdir()
+            (root / "xmake/targets.lua").write_text("t\n")
+            run("add", "-A")
+            run("commit", "-qm", "build: start")
+            setup(root, run)
+            run("add", "-A")
+            run("commit", "-qm", commit_message)
+            errors: list[str] = []
+            with mock.patch.object(policy, "ROOT", root):
+                policy.check_legacy_freeze("HEAD~1..HEAD", errors)
+            return errors
+
+    def test_v1_freeze_accepts_deleting_legacy_with_other_paths(self) -> None:
+        def setup(root: Path, run) -> None:
+            run("rm", "-rq", "Legacy")
+            (root / "AGENTS.md").write_text("b\n")
+            (root / "xmake/targets.lua").write_text("u\n")
+
+        self.assertEqual(self._freeze_history(setup, "build: delete v1"), [])
+
+    def test_v1_freeze_rejects_a_rename_out_of_legacy_in_history(self) -> None:
+        def setup(root: Path, run) -> None:
+            run("mv", "Legacy/X.cpp", "X.cpp")
+
+        errors = self._freeze_history(setup, "build: move x\n\nV1-fix: y")
+        self.assertEqual(len(errors), 1)
+        self.assertIn("outside Legacy/: X.cpp", errors[0])
+
+    def test_v1_freeze_accepts_a_marked_fix_with_targets_edit_in_history(self) -> None:
+        def setup(root: Path, run) -> None:
+            (root / "Legacy/X.cpp").write_text("changed\n")
+            (root / "xmake/targets.lua").write_text("u\n")
+
+        self.assertEqual(self._freeze_history(setup, "rhi: fix x\n\nV1-fix: x is wrong"), [])
+
+    def test_v1_freeze_rejects_a_non_ascii_legacy_path_without_trailer(self) -> None:
+        def setup(root: Path, run) -> None:
+            (root / "Legacy/\u00e9.cpp").write_text("n\n")
+
+        errors = self._freeze_history(setup, "rhi: add accent")
+        self.assertEqual(len(errors), 1)
+        self.assertIn("V1-fix", errors[0])
+
 
 if __name__ == "__main__":
     unittest.main()

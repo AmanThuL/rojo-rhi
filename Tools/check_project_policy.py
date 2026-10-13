@@ -166,6 +166,66 @@ def check_commit_messages(commit_range: str | None, errors: list[str]) -> None:
             errors.append(f"commit {oid[:12]}: implementation-history narration in message")
 
 
+LEGACY_ROOT = "Legacy/"
+# A v1 fix that adds or removes a source file must also edit the legacy target's file list.
+LEGACY_FIX_EXCEPTIONS = frozenset({"xmake/targets.lua"})
+V1_FIX_TRAILER = re.compile(r"(?m)^V1-fix:[ \t]*\S")
+
+
+def legacy_freeze_errors(
+    oid: str,
+    parent_has_legacy: bool,
+    paths: list[str],
+    body: str,
+    tree_has_legacy: bool = True,
+) -> list[str]:
+    """Check one commit against the v1 freeze.
+
+    The commit that creates Legacy/ (its parent has none) and the commit that deletes it (its own
+    tree has none) are exempt: both necessarily touch paths outside Legacy/.
+    """
+    if not parent_has_legacy or not tree_has_legacy:
+        return []
+    if not any(path.startswith(LEGACY_ROOT) for path in paths):
+        return []
+    errors: list[str] = []
+    outside = sorted(
+        p for p in paths if not p.startswith(LEGACY_ROOT) and p not in LEGACY_FIX_EXCEPTIONS
+    )
+    if outside:
+        errors.append(
+            f"commit {oid[:12]}: a v1 fix changes paths outside Legacy/: {', '.join(outside)}"
+        )
+    if not V1_FIX_TRAILER.search(body):
+        errors.append(f"commit {oid[:12]}: a v1 change needs a 'V1-fix: <defect>' trailer")
+    return errors
+
+
+def has_legacy_tree(spec: str) -> bool:
+    probe = subprocess.run(["git", "cat-file", "-e", spec], cwd=ROOT, capture_output=True)
+    return probe.returncode == 0
+
+
+def check_legacy_freeze(commit_range: str | None, errors: list[str]) -> None:
+    if not commit_range:
+        return
+    for oid in git("rev-list", "--no-merges", commit_range).split():
+        names = git(
+            "diff-tree", "-z", "--no-commit-id", "--name-only", "-r", "--no-renames", oid
+        )
+        paths = [name for name in names.split("\0") if name]
+        body = git("log", "-1", "--format=%B", oid)
+        errors.extend(
+            legacy_freeze_errors(
+                oid,
+                has_legacy_tree(f"{oid}^:Legacy"),
+                paths,
+                body,
+                tree_has_legacy=has_legacy_tree(f"{oid}:Legacy"),
+            )
+        )
+
+
 def check_markdown(files: list[Path], errors: list[str]) -> None:
     markdown = [path for path in files if path.suffix.lower() == ".md"]
     for path in markdown:
@@ -283,6 +343,7 @@ def main() -> int:
             errors.append("no repository files found")
         check_identity(files, errors)
         check_commit_messages(args.commits, errors)
+        check_legacy_freeze(args.commits, errors)
         check_markdown(files, errors)
         check_line_budgets(files, errors)
         check_process_narration(files, errors)

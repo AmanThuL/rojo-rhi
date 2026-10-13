@@ -34,6 +34,10 @@
   it was developed in; that needed explicit owner confirmation at execution time and a verified
   archive tag over the prior `main` beforehand. That import has run. `main` is never rewritten
   again.
+- A commit that changes `Legacy/` changes nothing else except `xmake/targets.lua`, and carries a
+  trailer `V1-fix: <defect>`. The project policy check enforces both on a pull request's commits
+  (ADR 0017). The commit that creates `Legacy/` and the consumer-port commit that deletes it are
+  exempt, because each necessarily touches other paths.
 
 ## Validation before a commit
 
