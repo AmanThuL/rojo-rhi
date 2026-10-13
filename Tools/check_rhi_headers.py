@@ -9,8 +9,8 @@ from pathlib import Path
 
 
 COMPONENT = Path(__file__).resolve().parents[1]
-PUBLIC_INCLUDE = COMPONENT / "Include"
-HEADERS = tuple(sorted(PUBLIC_INCLUDE.glob("rojoRHI/**/*.h")))
+PUBLIC_ROOTS = tuple(COMPONENT / name for name in ("Include", "Legacy/Include"))
+HEADERS = tuple((root, header) for root in PUBLIC_ROOTS for header in sorted(root.glob("rojoRHI/**/*.h")))
 
 
 def main() -> int:
@@ -18,22 +18,21 @@ def main() -> int:
         print("RHI public header check failed (no headers found)", file=sys.stderr)
         return 1
 
-    include_dirs = (PUBLIC_INCLUDE,)
-    command = [
-        "xcrun",
-        "clang++",
-        "-std=c++23",
-        "-fsyntax-only",
-        "-Werror",
-        "-x",
-        "c++",
-        *[argument for directory in include_dirs for argument in ("-I", str(directory))],
-        "-",
-    ]
-
     failures: list[tuple[Path, str]] = []
-    for header in HEADERS:
-        include = header.relative_to(PUBLIC_INCLUDE).as_posix()
+    for root, header in HEADERS:
+        command = [
+            "xcrun",
+            "clang++",
+            "-std=c++23",
+            "-fsyntax-only",
+            "-Werror",
+            "-x",
+            "c++",
+            "-I",
+            str(root),
+            "-",
+        ]
+        include = header.relative_to(root).as_posix()
         result = subprocess.run(
             command,
             cwd=COMPONENT,

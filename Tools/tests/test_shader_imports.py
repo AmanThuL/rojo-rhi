@@ -9,13 +9,15 @@ from unittest import mock
 from Tools import check_shader_imports
 from Tools.check_shader_imports import check_shaders
 
+SHADER_ROOT = check_shader_imports.TREES[0][0]
+
 
 class ShaderImportTests(unittest.TestCase):
     def check(self, sources: dict[str, str]) -> tuple[list[str], int, int]:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             for name, text in sources.items():
-                path = root / "Shaders" / name
+                path = root / SHADER_ROOT / name
                 path.parent.mkdir(parents=True, exist_ok=True)
                 path.write_text(text, encoding="utf-8")
             return check_shaders(root)
@@ -49,7 +51,7 @@ class ShaderImportTests(unittest.TestCase):
         })
         self.assertEqual(imports, 2)
         self.assertEqual(len(errors), 1)
-        self.assertIn("Shaders/Tests/Oracle.slang:6: unresolved", errors[0])
+        self.assertIn(f"{SHADER_ROOT}/Tests/Oracle.slang:6: unresolved", errors[0])
 
     def test_comment_and_string_entry_examples_do_not_make_module_an_entry(self) -> None:
         errors, _, _ = self.check({
@@ -63,7 +65,7 @@ class ShaderImportTests(unittest.TestCase):
                 with self.subTest(source=source, target=target):
                     errors, _, _ = self.check({source: f"import {Path(target).stem};", target: ""})
                     self.assertTrue(
-                        any("imports may target Shaders/Tests/Modules only" in error for error in errors)
+                        any(f"imports may target {SHADER_ROOT}/Tests/Modules only" in error for error in errors)
                     )
 
     def test_missing_and_wrong_case_modules_fail(self) -> None:

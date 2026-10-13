@@ -14,14 +14,14 @@ from typing import Any, BinaryIO
 
 
 ROOT = Path(__file__).resolve().parents[1]
-CPP_ROOTS = ("Source", "Backends", "Tests", "Tools")
+CPP_ROOTS = ("Source", "Backends", "Tests", "Tools", "Legacy")
 FUNCTION_SYMBOL_KINDS = {6, 9, 12}  # Method, Constructor, Function (LSP SymbolKind)
 RULER = re.compile(r"^\s*//.*(?:={8,}|-{8,})")
 SEPARATOR_BODY = re.compile(r"^//={8,}$")
 FILE_RULER = "//" + "-" * 118
 # The ImGui adapter compiles only against a host's ImGui target, so a standalone compilation
 # database never holds it. It is checked whenever the database covers it.
-ADAPTER_DIR = "Backends/Metal4/ImGui"
+ADAPTER_DIR = "Legacy/Backends/Metal4/ImGui"
 
 
 class LayoutSetupError(RuntimeError):

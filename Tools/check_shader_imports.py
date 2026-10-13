@@ -16,8 +16,9 @@ MODULE_NAME = re.compile(r"[A-Za-z_]\w*(?:(?:::|\.)[A-Za-z_]\w*)*")
 ENTRY = re.compile(r'\[\s*shader\s*\(')
 INCLUDE = re.compile(r"^\s*#\s*include\b", re.MULTILINE)
 # Each Slang tree, paired with the directory holding its shared modules. The component has one
-# tree: the test oracles under Shaders/Tests and the modules they share under Shaders/Tests/Modules.
-TREES = (("Shaders", "Tests/Modules"),)
+# tree: the frozen v1 test oracles under Legacy/Shaders/Tests and the modules they share under
+# Legacy/Shaders/Tests/Modules.
+TREES = (("Legacy/Shaders", "Tests/Modules"),)
 
 
 def without_comments(text: str) -> str:

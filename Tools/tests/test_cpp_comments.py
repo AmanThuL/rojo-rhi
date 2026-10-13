@@ -65,7 +65,8 @@ class CppCommentTests(unittest.TestCase):
             root = Path(directory)
             for relative in (
                 "Include/rojoRHI/RHI.h",
-                "Backends/Metal4/ImGui/Include/rojoRHI/Metal4/Metal4ImGui.h",
+                f"{comments.ADAPTER_DIR}/Include/rojoRHI/Metal4/Metal4ImGui.h",
+                "Legacy/Include/rojoRHI/Legacy.h",
                 "Backends/Metal4/Source/Private.h",
                 "Source/Validate.h",
             ):
@@ -75,8 +76,9 @@ class CppCommentTests(unittest.TestCase):
             self.assertEqual(
                 [path.relative_to(root).as_posix() for path in comments.public_header_files(root)],
                 [
-                    "Backends/Metal4/ImGui/Include/rojoRHI/Metal4/Metal4ImGui.h",
                     "Include/rojoRHI/RHI.h",
+                    f"{comments.ADAPTER_DIR}/Include/rojoRHI/Metal4/Metal4ImGui.h",
+                    "Legacy/Include/rojoRHI/Legacy.h",
                 ],
             )
 
@@ -84,7 +86,7 @@ class CppCommentTests(unittest.TestCase):
         root = Path(directory)
         for relative in (
             "Include/rojoRHI/RHI.h",
-            "Backends/Metal4/ImGui/Include/rojoRHI/Metal4/Metal4ImGui.h",
+            f"{comments.ADAPTER_DIR}/Include/rojoRHI/Metal4/Metal4ImGui.h",
         ):
             path = root / relative
             path.parent.mkdir(parents=True, exist_ok=True)
@@ -98,14 +100,14 @@ class CppCommentTests(unittest.TestCase):
             headers, notices = comments.api_headers(root, entries)
             self.assertEqual([p.relative_to(root).as_posix() for p in headers], ["Include/rojoRHI/RHI.h"])
             self.assertEqual(len(notices), 1)
-            self.assertIn("Backends/Metal4/ImGui", notices[0])
+            self.assertIn(comments.ADAPTER_DIR, notices[0])
 
     def test_adapter_headers_are_checked_when_the_database_has_them(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = self.adapter_root(directory)
             entries = [
                 {"directory": str(root.parent), "file": f"{root.name}/Source/Validate.cpp"},
-                {"directory": str(root), "file": "Backends/Metal4/ImGui/Source/Metal4ImGui.cpp"},
+                {"directory": str(root), "file": f"{comments.ADAPTER_DIR}/Source/Metal4ImGui.cpp"},
             ]
             headers, notices = comments.api_headers(root, entries)
             self.assertEqual(len(headers), 2)
@@ -118,21 +120,42 @@ class CppCommentTests(unittest.TestCase):
             with self.assertRaisesRegex(RuntimeError, "no entry under the component"):
                 comments.component_entries(entries, root)
 
-    def test_header_entry_prefers_a_matching_stem_from_any_entry(self) -> None:
+    def test_header_entry_prefers_a_matching_stem_within_its_tree(self) -> None:
         root = Path("/component")
         entries = [
-            {"file": "Tests/RHIResultTests.cpp"},
-            {"file": "Source/Validate.cpp"},
-            {"file": "Backends/Metal4/Source/Metal4Device.cpp"},
+            {"directory": str(root), "file": "Tests/RHIResultTests.cpp"},
+            {"directory": str(root), "file": "Source/Validate.cpp"},
+            {"directory": str(root), "file": "Backends/Metal4/Source/Metal4Device.cpp"},
         ]
         self.assertEqual(
             comments._entry_for_header(root / "Include/rojoRHI/Validate.h", entries, root),
-            {"file": "Source/Validate.cpp"},
+            entries[1],
         )
         self.assertEqual(
             comments._entry_for_header(root / "Include/rojoRHI/Heap.h", entries, root),
-            {"file": "Tests/RHIResultTests.cpp"},
+            entries[0],
         )
+
+    def test_header_entry_comes_from_the_headers_own_tree(self) -> None:
+        root = Path("/component")
+        entries = [
+            {"directory": str(root), "file": "Tests/VersionTests.cpp"},
+            {"directory": str(root), "file": "Legacy/Source/Validate.cpp"},
+        ]
+        self.assertEqual(
+            comments._entry_for_header(root / "Legacy/Include/rojoRHI/Device.h", entries, root),
+            entries[1],
+        )
+        self.assertEqual(
+            comments._entry_for_header(root / "Include/rojoRHI/Version.h", entries, root),
+            entries[0],
+        )
+
+    def test_header_whose_tree_has_no_entry_fails(self) -> None:
+        root = Path("/component")
+        entries = [{"directory": str(root), "file": "Tests/VersionTests.cpp"}]
+        with self.assertRaisesRegex(RuntimeError, "Device.h"):
+            comments._entry_for_header(root / "Legacy/Include/rojoRHI/Device.h", entries, root)
 
     def test_an_empty_root_fails(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

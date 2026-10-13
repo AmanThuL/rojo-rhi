@@ -2,8 +2,10 @@
 
 **Status**: Accepted
 
-Tests are Catch2 cases in one test tree, built as one test target. Names and tags are owned by
-[naming.md](naming.md).
+Tests are Catch2 cases in one test tree per interface, built as one test target. Names and tags are
+owned by [naming.md](naming.md). Today the v1 suite, including the `[checkpoint-a]` cases, lives
+under `Legacy/Tests/` and builds as `RojoRHILegacyTests`; the top-level `Tests/` is reserved for the
+v2 interface (ADR 0017).
 
 ## Tiers
 
@@ -28,7 +30,7 @@ shader library paths relative to the current directory.
 
 [ADR 0005](../decisions/0005-conformance-checkpoint.md) freezes eight semantic areas behind the
 single tag `[checkpoint-a]`. The frozen set is exactly that tag as one filter, run from the test
-build directory with the validation layer enabled. A future backend is accepted only when every
+build directory with the validation layer enabled (`Legacy/Tests/` holds the cases today). A future backend is accepted only when every
 listed case passes unchanged — no edited assertion, no relaxed tolerance.
 
 Adding the tag to a further case needs no ADR; it adds evidence for an area already frozen.
@@ -46,8 +48,9 @@ GPU case is RojoRHI's, while a fixture that builds a consumer's scene is not.
 
 ## Shaders for tests
 
-- Test oracles are the only shaders this repository owns. They live under `Shaders/Tests/` and are
-  compiled into the test target's own directory.
+- Test oracles are the only shaders this repository owns. They live under `Shaders/Tests/`; v1's
+  oracles live under `Legacy/Shaders/Tests/`. Each is compiled into its test target's own
+  directory.
 - A smoke shader that both RojoRHI and a consumer need is copied, not shared. The duplication is
   deliberate: it buys independence, and a later divergence between the two copies is then a
   decision someone makes rather than a break someone suffers.
