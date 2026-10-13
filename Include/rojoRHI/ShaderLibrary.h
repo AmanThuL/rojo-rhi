@@ -6,11 +6,12 @@
 
 namespace rojoRHI {
 
-/// Represents a loaded backend shader library.
-class ShaderLibrary {
-public:
-    /// Destroys the shader library.
-    virtual ~ShaderLibrary() = default;
-};
+    /// Represents a loaded backend shader library.
+    class ShaderLibrary
+    {
+      public:
+        /// Destroys the shader library.
+        virtual ~ShaderLibrary() = default;
+    };
 
 } // namespace rojoRHI

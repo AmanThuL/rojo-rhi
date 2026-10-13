@@ -37,6 +37,11 @@ class CppLayoutTests(unittest.TestCase):
         self.assertEqual(layout.check_layout(Path("Tests/Local.cpp"), text, {3}), [])
         self.assertEqual(len(text.splitlines()[2]), 120)
 
+    def test_deeply_namespace_indented_definition_keeps_physical_width(self) -> None:
+        indent = " " * 20
+        text = "\n".join([separator(indent), indent + "void run() {}"])
+        self.assertEqual(layout.check_layout(Path("Source/Nested.cpp"), text, {1}), [])
+
     def test_template_prefix_claims_the_function_separator(self) -> None:
         text = "\n".join([separator(), "template <typename T>", "T load() { return {}; }"])
         self.assertEqual(layout.check_layout(Path("Backends/Metal4/Source/Load.cpp"), text, {2}), [])

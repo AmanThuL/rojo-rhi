@@ -2,8 +2,10 @@
 
 **Status**: Accepted
 
-Formatting is owned by a `.clang-format` file that arrives with the code import; this file covers
-what a formatter cannot. Names are owned by [naming.md](naming.md).
+Formatting is owned by the repository's `.clang-format`, the No Graphics API style that
+[ADR 0016](../decisions/0016-cpp-format.md) adopts: Microsoft base style, 160 columns and indented
+namespace contents. This file covers what a formatter cannot. Names are owned by
+[naming.md](naming.md).
 
 - **C++23.** Prefer `std::expected`, `std::span`, `std::string_view`, `std::format` and ranges. No
   RTTI-dependent design. Exceptions only cross third-party boundaries and never leave the public
@@ -61,21 +63,25 @@ belongs only to these two lines. Fetched and third-party code is outside this ru
 ## Function boundaries in implementation files
 
 Every hand-written named function definition in a `.cpp` file the repository owns starts with a
-separator whose physical line is exactly 120 characters: `//` followed by 118 `=` characters.
+separator whose physical line is exactly 120 characters; at column 0 that is `//` followed by 118
+`=` characters.
 
 ```cpp
 //======================================================================================================================
 ```
 
-- Source stays at the formatter's 100-column limit; the separator is the only routine exception.
+- Source stays within the formatter's 160-column limit. The separator does not widen with it and
+  stays exactly 120 characters.
 - Put one blank line before the separator, and the separator before the earliest token of the
   definition, including an attribute, `template` or `requires` clause. Function-specific rationale
   may sit between the separator and the signature with no blank line between.
 - It applies to free and anonymous-namespace functions, out-of-line members, constructors,
   destructors, conversions, operators, templates and specializations, `main`, and out-of-class
   `= default` or `= delete` definitions. Each overload gets its own separator.
-- Avoid in-class definitions in `.cpp` files. If an unavoidable local class defines one, indent the
-  separator with the function and reduce its `=` padding so the line stays exactly 120 characters.
+- The separator takes the indentation of the definition it precedes, which inside a namespace is
+  the indentation the formatter gives the namespace's contents, and reduces its `=` padding so the
+  line stays exactly 120 characters. Avoid in-class definitions in `.cpp` files; an unavoidable
+  one in a local class follows the same rule.
 - Do not add separators to declarations, explicit instantiations, lambdas, control-flow blocks or
   function-like macro definitions. Catch2 `TEST_CASE` and related macros are test-unit boundaries
   and take the canonical separator.
@@ -83,8 +89,8 @@ separator whose physical line is exactly 120 characters: `//` followed by 118 `=
   envelope. Do not invent titled or alternate ruler styles.
 
 A Clang-based check rejects missing, duplicate, malformed and orphan separators using the
-compilation database rather than a regular expression guessing at C++ definitions. It arrives with
-the code import.
+compilation database rather than a regular expression guessing at C++ definitions:
+`Tools/check_cpp_layout.py`.
 
 ## Comments
 
