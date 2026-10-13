@@ -93,8 +93,9 @@ Copies `size` bytes from `src` at `srcOffset` to `dst` at `dstOffset`.
 - `VU-rojo-cmd-0043` `size` is greater than zero, both ranges lie within their buffers, and
   `srcOffset`, `dstOffset` and `size` are multiples of 4.
 - `VU-rojo-cmd-0044` When `src` and `dst` are the same buffer, the ranges do not overlap.
-- `VU-rojo-cmd-0045` `src` is not `Memory::Readback` and `dst` is not `Memory::Upload`
-  ([memory and buffers](03-memory-and-buffers.md)).
+- `VU-rojo-cmd-0045` Retired in 0.1.0: `src` is not `Memory::Readback` and `dst` is not
+  `Memory::Upload`. `VU-rojo-buffer-0001` and `VU-rojo-buffer-0002` state the copy roles of every
+  buffer once, for every copy command ([memory and buffers](03-memory-and-buffers.md)).
 
 #### Mapping
 
@@ -115,10 +116,16 @@ Copies texel data laid out by `layout` in `src` into `region` of `dst`.
 #### Valid usage
 
 - `VU-rojo-cmd-0046` Recorded outside a render pass.
-- `VU-rojo-cmd-0047` The bytes `layout` addresses for `region` lie within `src`, and `src` is not
-  `Memory::Readback`.
-- `VU-rojo-cmd-0048` `dst` has one sample, and the region's subresources are in `Layout::CopyDst` or
-  `Layout::General`. Checked by the validation tracker.
+- `VU-rojo-cmd-0047` Retired in 0.1.0: The bytes `layout` addresses for `region` lie within `src`,
+  and `src` is not `Memory::Readback`. The bounds are `VU-rojo-cmd-0064`; the memory class is
+  `VU-rojo-buffer-0002`.
+- `VU-rojo-cmd-0064` The bytes `layout` addresses for `region` lie within `src`.
+- `VU-rojo-cmd-0048` Retired in 0.1.0: `dst` has one sample, and the region's subresources are in
+  `Layout::CopyDst` or `Layout::General`. The sample count is `VU-rojo-cmd-0066`, a Debug-tier
+  rule; the layouts are `VU-rojo-cmd-0067`.
+- `VU-rojo-cmd-0066` `dst` has one sample.
+- `VU-rojo-cmd-0067` The region's subresources are in `Layout::CopyDst` or `Layout::General`.
+  Checked by the validation tracker.
 
 #### Mapping
 
@@ -139,10 +146,16 @@ Copies `region` of `src` into `dst`, laid out by `layout`.
 #### Valid usage
 
 - `VU-rojo-cmd-0049` Recorded outside a render pass.
-- `VU-rojo-cmd-0050` The bytes `layout` addresses for `region` lie within `dst`, and `dst` is not
-  `Memory::Upload`.
-- `VU-rojo-cmd-0051` `src` has one sample, and the region's subresources are in `Layout::CopySrc` or
-  `Layout::General`. Checked by the validation tracker.
+- `VU-rojo-cmd-0050` Retired in 0.1.0: The bytes `layout` addresses for `region` lie within `dst`,
+  and `dst` is not `Memory::Upload`. The bounds are `VU-rojo-cmd-0065`; the memory class is
+  `VU-rojo-buffer-0001`.
+- `VU-rojo-cmd-0065` The bytes `layout` addresses for `region` lie within `dst`.
+- `VU-rojo-cmd-0051` Retired in 0.1.0: `src` has one sample, and the region's subresources are in
+  `Layout::CopySrc` or `Layout::General`. The sample count is `VU-rojo-cmd-0068`, a Debug-tier
+  rule; the layouts are `VU-rojo-cmd-0069`.
+- `VU-rojo-cmd-0068` `src` has one sample.
+- `VU-rojo-cmd-0069` The region's subresources are in `Layout::CopySrc` or `Layout::General`.
+  Checked by the validation tracker.
 
 #### Mapping
 
@@ -242,8 +255,11 @@ native transitions its clear needs and returns the subresources to that layout.
 - `VU-rojo-cmd-0060` Recorded outside a render pass on a `Graphics` or `Compute` list.
 - `VU-rojo-cmd-0061` `texture` was created with `RenderTarget`, `DepthStencil` or `Storage` usage;
   on a `Compute` list, with `Storage` and neither of the others.
-- `VU-rojo-cmd-0062` `range` lies within `texture`, and its subresources are in `Layout::CopyDst` or
-  `Layout::General`. Checked by the validation tracker.
+- `VU-rojo-cmd-0062` Retired in 0.1.0: `range` lies within `texture`, and its subresources are in
+  `Layout::CopyDst` or `Layout::General`. The range is `VU-rojo-texture-0016`, `0017` and `0041`
+  ([textures and heaps](04-textures-and-heaps.md)); the layouts are `VU-rojo-cmd-0070`.
+- `VU-rojo-cmd-0070` The subresources of `range` are in `Layout::CopyDst` or `Layout::General`.
+  Checked by the validation tracker.
 
 #### Mapping
 

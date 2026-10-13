@@ -265,8 +265,10 @@ starts as listed in [dynamic state](06-pipelines-part2.md), and no pipeline is b
 #### Valid usage
 
 - `VU-rojo-cmd-0016` Recorded on a `Graphics` command list with no render pass open.
-- `VU-rojo-cmd-0017` Until `endRenderPass`, the list records no barrier, dispatch, copy, fill or
-  clear.
+- `VU-rojo-cmd-0017` Retired in 0.1.0: Until `endRenderPass`, the list records no barrier,
+  dispatch, copy, fill or clear. Each of those commands states it: `VU-rojo-sync-0019`,
+  `VU-rojo-cmd-0029`, `VU-rojo-indirect-0018`, `VU-rojo-cmd-0042`, `0046`, `0049`, `0052`, `0056`
+  and `0060`.
 
 #### Mapping
 

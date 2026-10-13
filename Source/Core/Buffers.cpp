@@ -126,4 +126,26 @@ namespace rojoRHI::core {
     {
         ROJORHI_VU(record.memory != Memory::Gpu, "VU-rojo-buffer-0014", "the buffer \"{}\" is a Gpu buffer and is not mapped", record.label);
     }
+
+    //==================================================================================================================
+    void checkCopySource([[maybe_unused]] const BufferRecord& record)
+    {
+        ROJORHI_VU(
+            record.memory == Memory::Gpu || record.memory == Memory::Upload,
+            "VU-rojo-buffer-0002",
+            "the buffer \"{}\" is the source of a copy but its memory is neither Gpu nor Upload",
+            record.label
+        );
+    }
+
+    //==================================================================================================================
+    void checkCopyDestination([[maybe_unused]] const BufferRecord& record)
+    {
+        ROJORHI_VU(
+            record.memory == Memory::Gpu || record.memory == Memory::Readback,
+            "VU-rojo-buffer-0001",
+            "the buffer \"{}\" is the destination of a copy but its memory is neither Gpu nor Readback",
+            record.label
+        );
+    }
 } // namespace rojoRHI::core

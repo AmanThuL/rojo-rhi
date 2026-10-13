@@ -5,11 +5,18 @@
 #pragma once
 
 #include <rojoRHI/Addr.h>
+#include <rojoRHI/BufferBarrier.h>
+#include <rojoRHI/BufferTextureLayout.h>
+#include <rojoRHI/ClearValue.h>
 #include <rojoRHI/Geometry.h>
+#include <rojoRHI/GlobalBarrier.h>
 #include <rojoRHI/Handles.h>
 #include <rojoRHI/IndexType.h>
 #include <rojoRHI/PrimitiveTopology.h>
 #include <rojoRHI/RenderPassDesc.h>
+#include <rojoRHI/SubresourceRange.h>
+#include <rojoRHI/TextureBarrier.h>
+#include <rojoRHI/TextureRegion.h>
 #include <rojoRHI/Viewport.h>
 
 #include <cstddef>
@@ -171,6 +178,52 @@ namespace rojoRHI {
         /// (VU-rojo-indirect-0019); the barrier of VU-rojo-indirect-0020 is checked by the validation tracker. Thread class
         /// command list.
         void dispatchIndirect(Addr args);
+
+        /// Copies `size` bytes from `src` at `srcOffset` to `dst` at `dstOffset`, outside a render pass
+        /// (VU-rojo-cmd-0042). `size` is above zero, both ranges lie within their buffers and the offsets and size are
+        /// multiples of 4 (VU-rojo-cmd-0043); when `src` and `dst` are one buffer the ranges do not overlap
+        /// (VU-rojo-cmd-0044). `src` is `Gpu` or `Upload` and `dst` is `Gpu` or `Readback` (VU-rojo-buffer-0001, 0002). Thread
+        /// class command list.
+        void copyBuffer(Buffer src, uint64_t srcOffset, Buffer dst, uint64_t dstOffset, uint64_t size);
+
+        /// Copies texel data laid out by `layout` in `src` into `region` of `dst`, outside a render pass (VU-rojo-cmd-0046).
+        /// `region` obeys VU-rojo-cmd-0038 to 0041 and `layout` VU-rojo-cmd-0034 to 0037; the bytes `layout` addresses lie
+        /// within `src` (VU-rojo-cmd-0064), which is `Gpu` or `Upload` (VU-rojo-buffer-0002); `dst` has one sample
+        /// (VU-rojo-cmd-0066). The layout of the subresources is checked by the validation tracker (VU-rojo-cmd-0067). Thread
+        /// class command list.
+        void copyBufferToTexture(Buffer src, const BufferTextureLayout& layout, Texture dst, const TextureRegion& region);
+
+        /// Copies `region` of `src` into `dst`, laid out by `layout`, outside a render pass (VU-rojo-cmd-0049). The rules of
+        /// `copyBufferToTexture` apply to `region` and `layout`; the bytes `layout` addresses lie within `dst`
+        /// (VU-rojo-cmd-0065), which is `Gpu` or `Readback` (VU-rojo-buffer-0001); `src` has one sample (VU-rojo-cmd-0068).
+        /// The layout of the subresources is checked by the validation tracker (VU-rojo-cmd-0069). Thread class command list.
+        void copyTextureToBuffer(Texture src, const TextureRegion& region, Buffer dst, const BufferTextureLayout& layout);
+
+        /// Copies texels between textures of one format, or of two formats that differ only in sRGB transfer, outside a
+        /// render pass (VU-rojo-cmd-0052). Both regions obey VU-rojo-cmd-0038 to 0041; the formats are copy-compatible, both
+        /// textures have one sample and the regions have equal extents in texel blocks and equal layer counts
+        /// (VU-rojo-cmd-0053); within one texture the regions share no subresource (VU-rojo-cmd-0055). The layouts are checked
+        /// by the validation tracker (VU-rojo-cmd-0054). Thread class command list.
+        void copyTexture(Texture src, const TextureRegion& srcRegion, Texture dst, const TextureRegion& dstRegion);
+
+        /// Writes `pattern`, repeated in little-endian byte order, over `size` bytes of `dst` from `offset`. Recorded outside a
+        /// render pass on a `Graphics` or `Compute` list (VU-rojo-cmd-0056); `size` is above zero, `offset` and `size` are
+        /// multiples of 4 and the range lies within `dst` (VU-rojo-cmd-0057); `dst` was created with
+        /// `BufferUsage::ShaderWrite` (VU-rojo-cmd-0058). Thread class command list.
+        void fillBuffer(Buffer dst, uint64_t offset, uint64_t size, uint32_t pattern);
+
+        /// Clears every subresource in `range` to `value`. Recorded outside a render pass on a `Graphics` or `Compute` list
+        /// (VU-rojo-cmd-0060); `value` obeys VU-rojo-cmd-0059; `range` obeys VU-rojo-texture-0016, 0017 and 0041; `texture`
+        /// was created with a usage VU-rojo-cmd-0061 allows. The layouts are checked by the validation tracker
+        /// (VU-rojo-cmd-0070). Thread class command list.
+        void clearTexture(Texture texture, const SubresourceRange& range, const ClearValue& value);
+
+        /// Records one batch of barriers: all source scopes complete, then all layout transitions, then all destination scopes
+        /// may begin. An empty batch records nothing. Recorded outside a render pass (VU-rojo-sync-0019); no two entries of
+        /// `textures` cover the same subresource (VU-rojo-sync-0020). Each barrier obeys the rules of its descriptor. The
+        /// ordering and layout rules are checked by the validation tracker (VU-rojo-sync-0021 to 0023). Thread class command
+        /// list.
+        void barrier(std::span<const GlobalBarrier> globals, std::span<const BufferBarrier> buffers = {}, std::span<const TextureBarrier> textures = {});
 
       private:
         friend struct CommandListImpl;
