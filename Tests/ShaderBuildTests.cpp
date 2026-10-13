@@ -52,6 +52,7 @@ static bool declaresCapability(const std::filesystem::path& module, std::uint32_
     return false;
 }
 
+//======================================================================================================================
 TEST_CASE("SPIR-V heap fetches carry the NonUniform capability", "[abi]")
 {
     constexpr std::uint32_t kShaderNonUniform = 5301;

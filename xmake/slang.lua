@@ -11,6 +11,8 @@
 -- `kConformanceShaders` for a test to enumerate. Any failed compile fails the build with the
 -- compiler's own output. This rule is separate from the v1 rule of shaders.lua, which Legacy/ keeps.
 --
+-- Rule "rojorhi.shader_layout", declared below, checks C++ struct layouts against the reflection of a probe.
+--
 -- The work runs in before_build so the generated header exists before the target's C++ compiles. Each
 -- output is skipped while it is newer than every entry, every module and the compiler.
 
@@ -79,8 +81,19 @@ rule("rojorhi.slang")
                               "rojorhi.slang: set_values(\"slang.slangc\", <slangc>)")
         assert(os.isfile(slangc), format("rojorhi.slang: %s is missing; run `xmake setup`", slangc))
 
+        -- Layout probes (see rojorhi.shader_layout) have no entry point of their own to ship, so they are not
+        -- conformance shaders.
+        local probes = {}
+        for _, probe in ipairs(table.wrap(target:values("slang.layout_probe"))) do
+            probes[path.absolute(probe)] = true
+        end
         local batch = target:sourcebatches()["rojorhi.slang"]
-        local sources = table.unique(table.wrap(batch and batch.sourcefiles))
+        local sources = {}
+        for _, source in ipairs(table.unique(table.wrap(batch and batch.sourcefiles))) do
+            if not probes[path.absolute(source)] then
+                table.insert(sources, source)
+            end
+        end
         table.sort(sources)
 
         if #sources == 0 then
@@ -130,6 +143,13 @@ rule("rojorhi.slang")
         local has_metal = is_host("macosx") and try {function ()
             os.runv("xcrun", {"-f", "metal"}); return true
         end}
+        if has_metal then
+            cprint("${green}slang: metallib enabled (xcrun metal)")
+        elseif is_host("macosx") then
+            cprint("${yellow}slang: metallib skipped, `xcrun -f metal` found no Metal toolchain")
+        else
+            cprint("${yellow}slang: metallib skipped, the host is not macOS")
+        end
         -- DXIL needs a DXC the compiler can load, so one known-good compile decides, once per build,
         -- whether DXIL is attempted at all. Without a DXC, slangc (v2026.14.1, macOS) exits non-zero
         -- with, among other lines: "error[E00100]: failed to load downstream compiler 'dxc'". Only
@@ -145,6 +165,8 @@ rule("rojorhi.slang")
         if not dxil_available then
             local reason = probe_err:match("[^\n]*failed to load[^\n]*") or probe_err:match("[^\n]+") or "unknown"
             cprint("${yellow}slang: DXIL skipped, the probe compile failed (%s)", reason)
+        else
+            cprint("${green}slang: DXIL enabled (dxc probe ok)")
         end
         for _, source in ipairs(sources) do
             local name = path.basename(source)
@@ -158,7 +180,8 @@ rule("rojorhi.slang")
             end
             local spv = path.join(outdir, name .. ".spv")
             if stale(spv) then
-                run_slangc(slangc, table.join(base, {"-D", "ROJORHI_TARGET_SPIRV", "-target", "spirv", "-o", spv}))
+                run_slangc(slangc, table.join(base, {"-D", "ROJORHI_TARGET_SPIRV", "-target", "spirv",
+                    "-fvk-use-scalar-layout", "-o", spv}))
             end
             -- HLSL has no single-output form for several entries, so its text is the compiler's
             -- standard output, which holds every entry of the file.
@@ -185,4 +208,88 @@ rule("rojorhi.slang")
                 end
             end
         end
+    end)
+
+
+-- Compares the layout of C++ structs with what Slang reflects for a probe shader on every target, and fails
+-- the build on drift. A target opts in with add_rules("rojorhi.shader_layout") and supplies, besides the
+-- two values rojorhi.slang reads (slang.slangc, slang.moduledir):
+--
+--   slang.layout_probe    the probe .slang file: StructuredBuffer<T> parameters named gRecord_<Name> and
+--                         gRoot_<Name> (Tools/shader_layout.py documents them). rojorhi.slang leaves a
+--                         probe out of the conformance shaders when the target also uses that rule.
+--   slang.layout_map      optional "Name=Type" entries for names that are not rojoRHI::<Name>
+--   slang.layout_include  optional headers, written as in `#include <...>`, that declare the C++ types
+--
+-- The generator writes $(builddir)/rojorhi/ShaderLayout.h, a header of static_asserts for the target's C++
+-- to include, and exits non-zero on a root that breaks the flat root rules.
+rule("rojorhi.shader_layout")
+    on_load(function (target)
+        target:add("includedirs", path.join("$(builddir)", "rojorhi"))
+    end)
+
+    before_build(function (target)
+        import("core.project.config")
+        local moduledir = assert(target:values("slang.moduledir"),
+                                 "rojorhi.shader_layout: set_values(\"slang.moduledir\", <dir>)")
+        local slangc = assert(target:values("slang.slangc"),
+                              "rojorhi.shader_layout: set_values(\"slang.slangc\", <slangc>)")
+        local probe = assert(target:values("slang.layout_probe"),
+                             "rojorhi.shader_layout: set_values(\"slang.layout_probe\", <file>)")
+        assert(os.isfile(slangc), format("rojorhi.shader_layout: %s is missing; run `xmake setup`", slangc))
+        local tool = path.join(path.directory(path.directory(moduledir)), "Tools", "shader_layout.py")
+        assert(os.isfile(tool), format("rojorhi.shader_layout: %s is missing", tool))
+
+        local outdir = path.join(config.builddir(), "rojorhi")
+        local header = path.join(outdir, "ShaderLayout.h")
+        local newest = math.max(os.mtime(slangc), os.mtime(tool), os.mtime(probe))
+        for _, file in ipairs(os.files(path.join(moduledir, "**.slang"))) do
+            newest = math.max(newest, os.mtime(file))
+        end
+        if os.isfile(header) and os.mtime(header) >= newest then
+            return
+        end
+
+        -- One compile per target, each with its own macro, profile and flags. SPIR-V takes no -profile, as in
+        -- rojorhi.slang, so both read the one default. The compiled output is discarded; only the reflection
+        -- is read.
+        local targets = {
+            {name = "metal", define = "ROJORHI_TARGET_METAL", profile = nil},
+            {name = "spirv", define = "ROJORHI_TARGET_SPIRV", profile = nil,
+             flags = {"-fvk-use-scalar-layout"}},
+            {name = "hlsl", define = "ROJORHI_TARGET_HLSL", profile = "sm_6_6"},
+        }
+        cprint("${color.build.object}slang layout %s", probe)
+        os.mkdir(outdir)
+        local inputs = {}
+        for _, t in ipairs(targets) do
+            local json = path.join(outdir, "layout." .. t.name .. ".json")
+            local args = {probe, "-I", moduledir, "-D", t.define, "-target", t.name,
+                          "-entry", "probeMain", "-stage", "compute",
+                          "-o", path.join(outdir, "layout." .. t.name .. ".out"), "-reflection-json", json}
+            if t.profile then
+                table.insert(args, "-profile")
+                table.insert(args, t.profile)
+            end
+            -- `load<T>` dereferences natural layout, which SPIR-V names scalar layout; without the flag the
+            -- reflection reports std430.
+            table.join2(args, t.flags or {})
+            local errfile = os.tmpfile()
+            local ok = try {function () os.execv(slangc, args, {stderr = errfile}); return true end}
+            local err = os.isfile(errfile) and io.readfile(errfile) or ""
+            os.tryrm(errfile)
+            if not ok then
+                os.raise("rojorhi.shader_layout: slangc failed for %s\n%s", table.concat(args, " "), err)
+            end
+            table.insert(inputs, t.name .. "=" .. json)
+        end
+
+        local args = table.join({tool}, inputs, {"--out", header})
+        for _, entry in ipairs(table.wrap(target:values("slang.layout_map"))) do
+            table.join2(args, {"--map", entry})
+        end
+        for _, include in ipairs(table.wrap(target:values("slang.layout_include"))) do
+            table.join2(args, {"--include", include})
+        end
+        os.runv("python3", args)
     end)
