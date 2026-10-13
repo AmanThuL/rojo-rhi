@@ -15,6 +15,10 @@ task("setup")
     set_menu {usage = "xmake setup", description = "fetch the pinned third-party dependencies",
               options = {}}
     on_run(function ()
+        if not is_host("macosx") then
+            print("setup done: nothing to fetch on %s", os.host())
+            return
+        end
         local thirdparty = path.join(os.projectdir(), "ThirdParty")
         local metalcpp = path.join(thirdparty, "metal-cpp")
         local slang = path.join(thirdparty, "slang")
