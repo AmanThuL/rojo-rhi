@@ -100,3 +100,19 @@
   checks heap-slot typing is removed from chapters 01, 02, 04 and 14, since no rule states it and a
   shader's reads through a heap index are invisible to the CPU; chapter 12 states that `upscale`
   reads and writes mip level 0 of array layer 0 of each texture.
+- The validation tracker, hazard, aliasing and lifetime part: on a validating Debug device the
+  Null backend checks same-queue hazards and barrier coverage (`VU-rojo-sync-0021` and
+  `VU-rojo-sync-0024`), indirect reads of argument and count bytes (`VU-rojo-indirect-0005`,
+  `0011`, `0017` and `0020`), placed resources that alias memory (`VU-rojo-sync-0009` and `0017`)
+  and the references of unsubmitted lists (`VU-rojo-abi-0003`, `buffer-0019`, `device-0007` and
+  `present-0019`)
+  ([architecture](docs/architecture/validation-tracker.md)). Cross-queue ordering remains.
+- `VU-rojo-sync-0023` is retired for `VU-rojo-sync-0024`: a source covers a use by its stages and
+  the use's write accesses, so reads and a barrier from `Undefined` need no source access, a
+  destination covers a use by its stages and, after a write, its accesses, a layout transition is
+  a write, and a later barrier whose source stage shares a stage with the destination stage of an
+  earlier barrier that orders a use extends that execution chain, for barriers and transitions
+  alike.
+- Chapter 09 states how a barrier from `Undefined` lowers: Vulkan widens `srcAccessMask` to the
+  write accesses of its source stages, and D3D12 pairs `D3D12_BARRIER_ACCESS_NO_ACCESS` with the
+  source stages, which is unverified.

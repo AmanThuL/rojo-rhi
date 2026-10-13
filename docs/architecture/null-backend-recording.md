@@ -30,7 +30,7 @@ whether a render pass is open and its `PassState` (attachment formats, sample co
 a viewport and scissor were set), the bound pipeline, the root address, one entry per open scope
 (true when it began inside a pass), the label and the frame-data page. Commands are not stored:
 the Null backend renders nothing, and on a validating device the list also owns the tracker log
-of [the edges](null-backend-edges.md#the-validation-tracker).
+of [the validation tracker](validation-tracker.md).
 
 Recording follows [ADR 0020](../decisions/0020-recording-locks-scope-labels.md). Every lookup of a
 handle's or an address's record, and every loop, whose only purpose is a Debug-tier check sits under
@@ -200,8 +200,8 @@ The same range rules serve views, copies, clears and barriers.
 type, a buffer range inside its buffer and a texture's layouts and subresource range, the live
 resource lookups, and no barrier inside a pass (`VU-rojo-sync-0019`). Rules that follow a resource's
 state across commands are the validation tracker's. On a validating device each record is logged
-and replayed at submission, which judges the layouts; the hazard rules are still pending
-([the tracker](null-backend-edges.md#the-validation-tracker)). The Null backend discards the
+and replayed at submission, which judges the layouts, the hazards, aliasing and the references of
+unsubmitted lists ([the tracker](validation-tracker.md)). The Null backend discards the
 barriers.
 
 ## Tests
@@ -215,7 +215,8 @@ textures and pipelines.
 
 ## What remains
 
-- Recording rules that need lifetime across commands or several queues: the rest of the
-  validation tracker (`tracker` entries of `Tools/vu_pending.txt`, among them `VU-rojo-queue-0005`).
+- The rest of the validation tracker, its four `tracker` entries of `Tools/vu_pending.txt`, all of
+  them ordering across queues: `VU-rojo-queue-0005`, `VU-rojo-sync-0018`, `VU-rojo-device-0006` and
+  `VU-rojo-sparse-0013`.
 - A native backend: slot payloads for views and samplers, and the use of the retire and
   `frameSlot` hooks for native command lists and arena pages.

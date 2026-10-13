@@ -6,8 +6,10 @@ the only backend implemented today; D3D12 is planned and Vulkan is a design orac
 (ADR 0008). The v1 interface is what the code implements now; v2 is specified in the decisions and
 the API reference below and is implemented on the test-only Null backend: chapters 01 to 15, the C++
 entries of 05 included (devices, resources, pipelines, command recording, queues and fences,
-swapchains, upscalers, sparse tiles, diagnostics and counters). The validation tracker is built as
-far as its layout rules (ADR 0021). ADR 0001 owns the identity spelling every document here applies.
+swapchains, upscalers, sparse tiles, diagnostics and counters). The validation tracker is built
+except cross-queue ordering: layouts, same-queue hazards, indirect reads, aliasing and the
+references of unsubmitted lists (ADR 0021). ADR 0001 owns the identity spelling every document
+here applies.
 Luminex is its required consumer: it will mount the library as a submodule at `RojoRHI/` and drive
 every change through a RojoRHI branch and pull request first ([commits](docs/conventions/commits.md)
 owns that workflow). The repository is public and licensed under the Apache License, Version 2.0
@@ -47,8 +49,9 @@ Metal 4 backend, the optional ImGui adapter, tests and shaders — alongside its
 - Architecture: [overview](docs/architecture/overview.md),
   [the Null backend](docs/architecture/null-backend.md),
   [command recording on it](docs/architecture/null-backend-recording.md),
-  [its edges: presentation, upscaling, sparse, diagnostics, the validation tracker](
-  docs/architecture/null-backend-edges.md)
+  [its edges: presentation, upscaling, sparse, diagnostics](
+  docs/architecture/null-backend-edges.md),
+  [the validation tracker](docs/architecture/validation-tracker.md)
 
 ## Commands
 
