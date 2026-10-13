@@ -147,32 +147,34 @@ namespace rojoRHI::core {
     }
 
     //==================================================================================================================
-    Hazard checkUse(const QueueHazards& state, uint64_t position, Scope use)
+    Hazard checkUse(const QueueHazards& state, uint64_t position, Scope use, uint64_t fenced)
     {
+        // A fence wait or the CPU's observation orders a use with full visibility, as a barrier covering it would.
+        const auto orderedBefore = [&](const TrackedUse& earlier) { return earlier.position <= fenced || ordered(earlier, use); };
         const bool otherWrite = state.write.has_value() && state.write->position != position;
         if (!hasWrite(use.access))
         {
-            return otherWrite && !ordered(*state.write, use) ? unordered(*state.write) : Hazard{};
+            return otherWrite && !orderedBefore(*state.write) ? unordered(*state.write) : Hazard{};
         }
         // A write after reads: each read, latest first, then the write before them, which a read between may order.
         for (const TrackedUse& read : std::views::reverse(state.reads))
         {
-            if (read.position != position && !ordered(read, use))
+            if (read.position != position && !orderedBefore(read))
             {
                 return unordered(read);
             }
         }
-        if (!otherWrite || ordered(*state.write, use))
+        if (!otherWrite || orderedBefore(*state.write))
         {
             return Hazard{};
         }
         const bool chained =
-            std::ranges::any_of(state.reads, [&](const TrackedUse& read) { return read.afterWrite && read.position != position && ordered(read, use); });
+            std::ranges::any_of(state.reads, [&](const TrackedUse& read) { return read.afterWrite && read.position != position && orderedBefore(read); });
         return chained ? Hazard{} : unordered(*state.write);
     }
 
     //==================================================================================================================
-    void recordUse(QueueHazards& state, uint64_t position, Scope use)
+    void recordUse(QueueHazards& state, uint64_t position, Scope use, uint64_t fenced)
     {
         if (!hasWrite(use.access))
         {
@@ -187,7 +189,8 @@ namespace rojoRHI::core {
                 same->scope = merged(same->scope, use);
                 return;
             }
-            const TrackedUse read{ .position = position, .scope = use, .afterWrite = state.write.has_value() && ordered(*state.write, use) };
+            const bool afterWrite = state.write.has_value() && (state.write->position <= fenced || ordered(*state.write, use));
+            const TrackedUse read{ .position = position, .scope = use, .afterWrite = afterWrite };
             // A read alike to one remembered adds nothing, so reads repeated without a write between keep the state bounded.
             if (std::ranges::none_of(state.reads, [&](const TrackedUse& other) { return alike(other, read, position); }))
             {
@@ -250,12 +253,13 @@ namespace rojoRHI::core {
     }
 
     //==================================================================================================================
-    Hazard checkTransition(const QueueHazards& state, uint64_t position, Scope source, bool discard)
+    Hazard checkTransition(const QueueHazards& state, uint64_t position, Scope source, bool discard, uint64_t fenced)
     {
         // The transition waits only through an execution chain: its own source covers an earlier use, or shares a stage with
         // the destination of an earlier barrier that orders it. A source with no stage waits for nothing, and the records of
-        // the transition's own barrier call, at its position, never order it.
-        const auto chained = [&](const TrackedUse& earlier) { return chains(earlier, position, source); };
+        // the transition's own barrier call, at its position, never order it. A fence wait or the CPU's observation orders an
+        // earlier use as a chain would.
+        const auto chained = [&](const TrackedUse& earlier) { return earlier.position <= fenced || chains(earlier, position, source); };
         const auto orderedBefore = [&](const TrackedUse& earlier) { return transitionOrders(source, discard, earlier) || chained(earlier); };
         const auto missed = [](const TrackedUse& use) {
             return Hazard{ .kind = HazardKind::Unordered, .earlier = use.scope, .earlierTransition = use.transition };
@@ -297,13 +301,40 @@ namespace rojoRHI::core {
     }
 
     //==================================================================================================================
-    WriteOrder lastWriteOrder(const QueueHazards& state, Scope use)
+    std::optional<QueueHazard> checkOtherQueues(const UnitHazards& unit, QueueType queue, Scope use, const Clock& ordered, bool transition)
+    {
+        const bool writes = transition || hasWrite(use.access);
+        for (size_t index = 0; index < unit.queues.size(); ++index)
+        {
+            const QueueType other = static_cast<QueueType>(index);
+            if (other == queue)
+            {
+                continue;
+            }
+            const auto missed = [&](const TrackedUse& earlier) { return (writes || isWrite(earlier)) && !covers(ordered, other, earlier.position); };
+            const QueueHazards& state = unit.queues[index];
+            if (state.write.has_value() && missed(*state.write))
+            {
+                return QueueHazard{ .queue = other, .earlier = state.write->scope, .earlierTransition = state.write->transition };
+            }
+            // Reads conflict only with a write.
+            const auto read = std::ranges::find_if(state.reads, missed);
+            if (read != state.reads.end())
+            {
+                return QueueHazard{ .queue = other, .earlier = read->scope };
+            }
+        }
+        return std::nullopt;
+    }
+
+    //==================================================================================================================
+    WriteOrder lastWriteOrder(const QueueHazards& state, Scope use, uint64_t fenced)
     {
         if (!state.write.has_value())
         {
             return WriteOrder::None;
         }
-        if (ordered(*state.write, use))
+        if (state.write->position <= fenced || ordered(*state.write, use))
         {
             return WriteOrder::Ordered;
         }

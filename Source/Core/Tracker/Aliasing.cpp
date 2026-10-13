@@ -10,16 +10,15 @@
 
 namespace rojoRHI::core {
     //==================================================================================================================
-    void noteHeapUse(HeapUses& uses, QueueType queue, HeapOwner owner, uint64_t position, uint64_t stamp, Scope scope)
+    void noteHeapUse(HeapUses& uses, QueueType queue, HeapOwner owner, uint64_t position, Scope scope)
     {
         std::optional<HeapUse>& last = uses[static_cast<size_t>(queue)];
         if (last.has_value() && last->owner == owner && last->use.position == position)
         {
             last->use.scope = Scope{ .stage = last->use.scope.stage | scope.stage, .access = last->use.scope.access | scope.access };
-            last->stamp = stamp;
             return;
         }
-        last = HeapUse{ .owner = owner, .use = TrackedUse{ .position = position, .scope = scope }, .stamp = stamp };
+        last = HeapUse{ .owner = owner, .use = TrackedUse{ .position = position, .scope = scope } };
     }
 
     //==================================================================================================================
@@ -30,8 +29,13 @@ namespace rojoRHI::core {
         {
             return;
         }
+        // A barrier of another call that orders the use and shares a stage with this source chains into it, as VU-rojo-sync-0024
+        // reads a chain.
+        const bool chains = std::ranges::any_of(last->use.reaches, [&](const Reach& reach) {
+            return reach.position != position && reach.sourceCovers && sharesStage(reach.destination.stage, source.stage);
+        });
         // The first barrier of each kind is kept: an earlier one orders whatever a later one of its kind would.
-        const Reach added{ .destination = destination, .sourceCovers = sourceCovers(source, last->use.scope), .position = position };
+        const Reach added{ .destination = destination, .sourceCovers = chains || sourceCovers(source, last->use.scope), .position = position };
         const bool known = std::ranges::any_of(last->use.reaches, [&](const Reach& reach) {
             return reach.destination == added.destination && reach.sourceCovers == added.sourceCovers;
         });
@@ -51,26 +55,38 @@ namespace rojoRHI::core {
     }
 
     //==================================================================================================================
-    void markAlias(std::optional<AliasMark>& mark, HeapOwner owner, uint64_t position, uint64_t stamp, Scope scope)
+    void markAlias(std::optional<AliasMark>& mark, HeapOwner owner, uint64_t position, Scope scope)
     {
         if (mark.has_value() && mark->owner == owner && mark->position == position)
         {
-            mark->stamp = std::max(mark->stamp, stamp);
             mark->scope = Scope{ .stage = mark->scope.stage | scope.stage, .access = mark->scope.access | scope.access };
             return;
         }
-        if (!mark.has_value() || mark->stamp < stamp)
+        if (!mark.has_value() || mark->position < position)
         {
-            mark = AliasMark{ .owner = owner, .position = position, .stamp = stamp, .scope = scope };
+            mark = AliasMark{ .owner = owner, .position = position, .scope = scope };
         }
     }
 
     //==================================================================================================================
-    void markAlias(AliasMarks& marks, uint64_t begin, uint64_t end, HeapOwner owner, uint64_t position, uint64_t stamp, Scope scope)
+    void markAlias(AliasMarks& marks, uint64_t begin, uint64_t end, HeapOwner owner, uint64_t position, Scope scope)
     {
         for (AliasMarks::Range& range : marks.isolate(begin, end))
         {
-            markAlias(range.state, owner, position, stamp, scope);
+            markAlias(range.state, owner, position, scope);
+        }
+        marks.merge(begin, end);
+    }
+
+    //==================================================================================================================
+    void clearCovered(AliasMarks& marks, uint64_t begin, uint64_t end, QueueType queue, const Clock& ordered)
+    {
+        for (AliasMarks::Range& range : marks.ranges())
+        {
+            if (range.state.has_value() && covers(ordered, queue, range.state->position))
+            {
+                range.state.reset();
+            }
         }
         marks.merge(begin, end);
     }

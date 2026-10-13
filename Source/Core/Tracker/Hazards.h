@@ -8,6 +8,8 @@
 #include <rojoRHI/QueueType.h>
 #include <rojoRHI/Stage.h>
 
+#include "Core/Tracker/Clocks.h"
+
 #include <array>
 #include <cstddef>
 #include <cstdint>
@@ -131,13 +133,14 @@ namespace rojoRHI::core {
     /// against the last write, a write against the reads since it and the write itself. A pair is ordered by a reach of the
     /// earlier use that orders it, its source covering it or chaining from one that does, whose destination covers the later
     /// one; a write after a write also by a read between them that a chain orders after the first write and another before
-    /// the second. Returns the latest pair that is not ordered. Uses at `position` belong to the same command and are not
-    /// judged.
-    Hazard checkUse(const QueueHazards& state, uint64_t position, Scope use);
+    /// the second. A use at or below `fenced` is ordered before `use` by a fence wait or the CPU's observation, with full
+    /// visibility, and needs no barrier. Returns the latest pair that is not ordered. Uses at `position` belong to the same
+    /// command and are not judged.
+    Hazard checkUse(const QueueHazards& state, uint64_t position, Scope use, uint64_t fenced = 0);
 
-    /// Notes `use`, made at `position` and judged by `checkUse`: a read joins the reads, and a write replaces the write and the
-    /// reads. A use at the position of a remembered one, made by the same command, is merged into it.
-    void recordUse(QueueHazards& state, uint64_t position, Scope use);
+    /// Notes `use`, made at `position` and judged by `checkUse` with `fenced`: a read joins the reads, and a write replaces the
+    /// write and the reads. A use at the position of a remembered one, made by the same command, is merged into it.
+    void recordUse(QueueHazards& state, uint64_t position, Scope use, uint64_t fenced = 0);
 
     /// Notes a barrier recorded at `position` from `source` to `destination` that applies to the unit: each remembered use
     /// before `position` gains its reach, which orders the use when `source` covers it or extends a chain over it from a reach
@@ -149,16 +152,32 @@ namespace rojoRHI::core {
     /// Its own source orders a use it covers, and it extends a chain over a use when it shares a stage with the destination
     /// of a reach that orders the use, an earlier transition's own included; the last write may also be ordered through a
     /// read a barrier ordered after it. A record of the same barrier call, at `position`, never orders it, and a source with
-    /// no stage orders nothing, which is right only when nothing came before. Returns the latest use it does not order as
-    /// `HazardKind::Unordered`, since the transition is itself a barrier between.
-    Hazard checkTransition(const QueueHazards& state, uint64_t position, Scope source, bool discard);
+    /// no stage orders nothing, which is right only when nothing came before. A use at or below `fenced` is ordered before it
+    /// by a fence wait or the CPU's observation. Returns the latest use it does not order as `HazardKind::Unordered`, since
+    /// the transition is itself a barrier between.
+    Hazard checkTransition(const QueueHazards& state, uint64_t position, Scope source, bool discard, uint64_t fenced = 0);
 
     /// Notes a layout transition recorded at `position` to `destination`: it becomes the write, the reads are forgotten, and
     /// its own destination is its first reach.
     void recordTransition(QueueHazards& state, uint64_t position, Scope destination);
 
-    /// Returns how the last write `state` remembers is ordered before a use of `use`.
-    WriteOrder lastWriteOrder(const QueueHazards& state, Scope use);
+    /// An earlier use on another queue that a later use conflicts with and that no fence orders before it.
+    struct QueueHazard
+    {
+        QueueType queue = QueueType::Graphics; ///< The queue of the earlier use.
+        Scope earlier;                         ///< The stage and access of the earlier use; a transition's destination.
+        bool earlierTransition = false;        ///< The earlier use is a transition.
+    };
+
+    /// Judges `use`, made on `queue`, against the last write and the reads since it that `unit` remembers on every other queue
+    /// (VU-rojo-queue-0005): a pair at least one of which writes is ordered only when `ordered`, the clock of the later use's
+    /// submission joined with the host clock, covers the earlier use. A `transition`, a texture barrier that changes the
+    /// layout or discards, is a write whatever its accesses. Returns the first pair that is not ordered, if any.
+    std::optional<QueueHazard> checkOtherQueues(const UnitHazards& unit, QueueType queue, Scope use, const Clock& ordered, bool transition = false);
+
+    /// Returns how the last write `state` remembers is ordered before a use of `use`; a write at or below `fenced` is ordered
+    /// by a fence wait or the CPU's observation.
+    WriteOrder lastWriteOrder(const QueueHazards& state, Scope use, uint64_t fenced = 0);
 
     /// Returns true when the units `a` and `b` are judged alike by every later use, transition and barrier, so neighbouring
     /// buffer segments in those states may merge: on each queue type their writes and reads match in all but position, with

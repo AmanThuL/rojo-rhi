@@ -5,18 +5,21 @@
 #pragma once
 
 #include <rojoRHI/CommandList.h>
+#include <rojoRHI/FenceValue.h>
 #include <rojoRHI/Handles.h>
 #include <rojoRHI/Layout.h>
 #include <rojoRHI/QueueType.h>
 
 #include "Core/Tracker/Aliasing.h"
 #include "Core/Tracker/ByteSegments.h"
+#include "Core/Tracker/Clocks.h"
 #include "Core/Tracker/Hazards.h"
 #include "Core/Tracker/TrackerLog.h"
 
 #include <array>
 #include <cstddef>
 #include <cstdint>
+#include <map>
 #include <mutex>
 #include <optional>
 #include <span>
@@ -32,8 +35,10 @@ namespace rojoRHI::core {
     using TrackerLock = std::unique_lock<std::mutex>;
 
     /// The state the validation tracker of one device judges submitted work against: one layout per subresource of every live
-    /// texture, the hazard state per queue of every texture subresource and of the byte segments of every live buffer, and, per
-    /// heap holding placed resources, the resource that last used each byte range on each queue.
+    /// texture, the hazard state per queue of every texture subresource and of the byte segments of every live buffer, per
+    /// heap holding placed resources the resource that last used each byte range on each queue, and the clocks that order the
+    /// queues: per queue the clocks of the fence values it waited on, per fence the clock of each value submitted for signal,
+    /// and the host clock of what the CPU observed complete.
     /// Lists record events without it; `Queue::submit` replays their logs into it in queue submission order. Every member
     /// takes or requires its mutex, so queues submitting on several threads see one order.
     class Tracker
@@ -80,6 +85,10 @@ namespace rojoRHI::core {
         /// lock.
         std::optional<size_t> segmentCount(Buffer buffer);
 
+        /// Returns the number of values the tracker keeps the clocks of for `fence`, or nothing when no submission signalled it.
+        /// Takes the lock.
+        std::optional<size_t> fenceValueCount(Fence fence);
+
         /// Returns the number of alias marks `texture` holds over every subresource and queue, or nothing when the tracker does
         /// not follow it. Takes the lock.
         std::optional<size_t> aliasMarkCount(Texture texture);
@@ -102,6 +111,45 @@ namespace rojoRHI::core {
         /// (VU-rojo-present-0018); an image the tracker does not follow is ignored. `held` must be a lock `lock` returned.
         void checkPresent(const TrackerLock& held, Texture image);
 
+        /// Orders the submission to `queue` about to be replayed, and every later one there, after `value` of `fence`, which it
+        /// waits on: the queue's clock joins what reaching the value orders. A value at most the fence's initial value orders
+        /// nothing. `held` must be a lock `lock` returned.
+        void wait(const TrackerLock& held, QueueType queue, Fence fence, uint64_t value);
+
+        /// Notes that the submission to `queue` just replayed signals `value` of `fence`, created at `initial`: the value records
+        /// the queue's running clock. `held` must be a lock `lock` returned.
+        void signal(const TrackerLock& held, QueueType queue, Fence fence, uint64_t initial, uint64_t value);
+
+        /// Notes that the CPU observed `fence` reach `value`, through `Device::wait` or `Device::completedValue`: the host clock
+        /// joins what reaching the value orders, so every later check finds that work complete. `held` must be a lock `lock`
+        /// returned.
+        void observe(const TrackerLock& held, Fence fence, uint64_t value);
+
+        /// Notes that frame `frame` ended: its slot's internal fence, signalled on the graphics queue, orders what the graphics
+        /// queue's running clock does now. `held` must be a lock `lock` returned.
+        void endFrame(const TrackerLock& held, uint64_t frame);
+
+        /// Notes that `beginFrame` retired the slot of frame `frame`, waiting on its internal fence: the host clock joins the
+        /// graphics clock its `endFrame` recorded. `held` must be a lock `lock` returned.
+        void retireFrame(const TrackerLock& held, uint64_t frame);
+
+        /// Forgets the clocks of the values of `fence`, destroyed; a fence no submission signalled is ignored. Takes the lock.
+        void removeFence(Fence fence);
+
+        /// Returns the running clock of `queue`: the join of its submissions' clocks, whose own component is the position of the
+        /// last command replayed there. A signal records it. `held` must be a lock `lock` returned.
+        Clock runningClock(const TrackerLock& held, QueueType queue) const;
+
+        /// Returns the running clock of `queue`, as the overload with a lock does. Takes the lock.
+        Clock runningClock(QueueType queue);
+
+        /// Returns the host clock: what the CPU has observed complete through fences and retired frame slots. `held` must be a
+        /// lock `lock` returned.
+        Clock hostClock(const TrackerLock& held) const;
+
+        /// Returns the host clock, as the overload with a lock does. Takes the lock.
+        Clock hostClock();
+
       private:
         /// The tracker's view of one texture.
         struct TextureState
@@ -116,12 +164,9 @@ namespace rojoRHI::core {
             uint64_t heapOffset = 0;          ///< The byte offset of the texture in `heap`.
             uint64_t heapSize = 0;            ///< The bytes the texture occupies in `heap` from `heapOffset`.
             /// For a placed texture, per subresource indexed as `layouts` and per queue type, the latest use other resources made
-            /// of each byte range of its memory since the subresource's last event on that queue; empty for a dedicated texture.
+            /// of each byte range of its memory since the subresource's last event on that queue, or since an event on another
+            /// queue that a clock orders after that use; empty for a dedicated texture.
             std::vector<std::array<AliasMarks, 3>> aliases;
-            /// For a placed texture, per subresource indexed as `layouts`, the stamp of the latest use of the subresource on any
-            /// queue, so a mark of that subresource older than it is one it is ordered against across queues
-            /// (VU-rojo-queue-0005), not by these rules; empty for a dedicated texture.
-            std::vector<uint64_t> ownStamps;
         };
 
         /// The tracker's view of one buffer.
@@ -132,10 +177,6 @@ namespace rojoRHI::core {
             Heap heap = {};          ///< The heap the buffer is placed in; null for a dedicated allocation.
             uint64_t heapOffset = 0; ///< The byte offset of the buffer in `heap`; its heap range runs `size` bytes from there.
             ByteSegments segments;   ///< The hazard state of its bytes.
-            /// For a placed buffer, the stamp of its latest use of each byte range on any queue, by offset in the buffer, so a
-            /// use of the bytes by another resource older than it is ordered across queues (VU-rojo-queue-0005), not by these
-            /// rules.
-            OffsetMap<uint64_t> stamps;
         };
 
         /// The tracker's view of one heap that holds or held a followed placed resource.
@@ -159,20 +200,42 @@ namespace rojoRHI::core {
         std::string describe(const TrackerLock& held, HeapOwner owner);
 
         /// Notes the use `scope` by `owner` of the bytes `begin` to `end` of `heap` at `position` on `queue`: they become the
-        /// owner's on that queue, and every other texture placed over them must discard before its next event there. Returns
-        /// the use's stamp, its order among the heap uses of every queue.
-        uint64_t noteHeapUse(
+        /// owner's on that queue, and every other texture placed over them must discard before its next event there.
+        void noteHeapUse(
             const TrackerLock& held, HeapState& heap, HeapOwner owner, uint64_t begin, uint64_t end, QueueType queue, uint64_t position, Scope scope
         );
 
+        /// Checks `scope`, a use by `owner`, described as `resource`, of the bytes `begin` to `end` of `heap` on `queue`, against
+        /// the last use another resource made of them on every other queue (VU-rojo-queue-0005): a pair at least one of which
+        /// writes is ordered only when the clock of the use's submission, or the host clock, covers the other use. A
+        /// `transition`, a texture barrier that changes the layout or discards, is a write whatever its accesses.
+        void checkHeapQueues(
+            const TrackerLock& held,
+            const HeapState& heap,
+            HeapOwner owner,
+            std::string_view resource,
+            uint64_t begin,
+            uint64_t end,
+            QueueType queue,
+            Scope scope,
+            std::string_view list,
+            bool transition = false
+        );
+
         /// Checks `use`, a use of the placed buffer `buffer`, at `position` on `queue`, against the last use by another resource of
-        /// each heap byte range it covers (VU-rojo-sync-0009), then notes it on the heap. The buffer's own hazard state on the
-        /// queue starts afresh over the bytes that pass against another resource's use.
+        /// each heap byte range it covers, on the queue (VU-rojo-sync-0009) and on every other queue (VU-rojo-queue-0005), then
+        /// notes it on the heap. A use a fence or the CPU's observation orders needs no barrier. The buffer's own hazard state
+        /// on the queue starts afresh over the bytes that pass against another resource's use there.
         void replayBufferAlias(const TrackerLock& held, BufferState& buffer, const UseEvent& use, QueueType queue, std::string_view list, uint64_t position);
 
-        /// Returns true when `buffer` used every byte from `begin` to `end` of it after the heap use of `stamp`: on another queue,
-        /// since a use on the same queue would be the bytes' last there.
-        static bool ownSince(const BufferState& buffer, uint64_t begin, uint64_t end, uint64_t stamp);
+        /// Notes that subresource `index` of `texture`, a placed one, had an event on `queue` that passed its marks there: it
+        /// follows every mark on that queue, and every mark on another queue that `ordered`, the clock of the event's
+        /// submission joined with the host clock, covers, so none of them owes a discard any more.
+        static void followMarks(TextureState& texture, size_t index, QueueType queue, const Clock& ordered);
+
+        /// Returns the clock that orders earlier work before the work replayed now on `queue`: the join of the clocks of the
+        /// values its submissions waited on, so its own component is reached only through fences, and the host clock.
+        Clock orderedBefore(QueueType queue) const;
 
         /// Checks `use`, an indirect argument or count read of `buffer` on `queue`, against the last write of its bytes there and
         /// reports the rule of the entry that made it (VU-rojo-indirect-0005, 0011, 0017 or 0020).
@@ -184,13 +247,16 @@ namespace rojoRHI::core {
 
         /// Replays one use at `position` on its queue: for a texture, the layout of every subresource of its range against the
         /// layouts that permit it, reporting VU-rojo-sync-0006, then the entry's own rule, then VU-rojo-sync-0004; then, for a
-        /// texture or a buffer, its hazards (VU-rojo-sync-0021, then VU-rojo-sync-0024).
+        /// texture or a buffer, its hazards on the queue (VU-rojo-sync-0021, then VU-rojo-sync-0024) and against every other
+        /// queue (VU-rojo-queue-0005).
         void replayUse(const TrackerLock& held, const UseEvent& use, QueueType queue, std::string_view list, uint64_t position);
 
-        /// Judges the hazards of `use`, a use of a texture, against every subresource of `texture` it names, and notes it.
+        /// Judges the hazards of `use`, a use of a texture, against every subresource of `texture` it names, on its queue and
+        /// against every other queue, and notes it.
         void replayTextureHazards(TextureState& texture, const UseEvent& use, QueueType queue, std::string_view list, uint64_t position);
 
-        /// Judges the hazards of `use`, a use of a buffer, against every segment of its range, and notes it.
+        /// Judges the hazards of `use`, a use of a buffer, against every segment of its range, on its queue and against every
+        /// other queue, and notes it.
         void replayBufferUse(const TrackerLock& held, const UseEvent& use, QueueType queue, std::string_view list, uint64_t position);
 
         /// Replays one global barrier recorded at `position`: every subresource of every texture and every segment of every
@@ -201,8 +267,9 @@ namespace rojoRHI::core {
         void replayBuffer(const TrackerLock& held, const BufferBarrier& barrier, QueueType queue, uint64_t position);
 
         /// Replays one texture barrier recorded at `position`: its old layout (VU-rojo-present-0014, then VU-rojo-sync-0013),
-        /// then, for a transition, its source against the uses before it (VU-rojo-sync-0024), then its transition. A barrier that
-        /// keeps the layout gains its reach over exactly its subresources.
+        /// then, for a transition, its source against the uses before it (VU-rojo-sync-0024) and, as a write, against the uses
+        /// of every other queue and, for a placed texture, other resources' uses of its heap bytes there (VU-rojo-queue-0005),
+        /// then its transition. A barrier that keeps the layout gains its reach over exactly its subresources.
         void replayTexture(const TrackerLock& held, const TextureBarrier& barrier, QueueType queue, std::string_view list, uint64_t position);
 
         std::mutex m_mutex;
@@ -212,16 +279,40 @@ namespace rojoRHI::core {
         /// The position on each queue type of the last command replayed there: each command takes the next one, so a use's
         /// position orders it against the barriers of the same queue.
         std::array<uint64_t, 3> m_positions = {};
-        /// The order of the last heap use replayed on any queue: each heap use takes the next one, so a use on one queue is told
-        /// apart from a later one on another.
-        uint64_t m_heapStamp = 0;
+        /// Per queue type, the join of the clocks of every fence value a submission there waited on: the work every later
+        /// submission there is ordered after, its own component reached only through a fence.
+        std::array<Clock, 3> m_waited = {};
+        /// What the CPU has observed complete: `Device::wait` returning true, `completedValue` reporting a value, and
+        /// `beginFrame` retiring a slot.
+        Clock m_host = {};
+        std::unordered_map<uint64_t, FenceClocks> m_fences; ///< The clocks of the values submitted for signal, by fence handle bits.
+        std::map<uint64_t, Clock> m_frames;                 ///< The graphics clock at each ended frame's end, until its slot retires.
     };
 
     /// Does the work of `lockTracker` in a Debug build.
     TrackerLock lockTrackerChecked(DeviceCore& core);
 
     /// Does the work of `replayLists` in a Debug build.
-    void replayListsChecked(DeviceCore& core, QueueType type, std::span<const CommandList> lists, const TrackerLock& held);
+    void replayListsChecked(
+        DeviceCore& core,
+        QueueType type,
+        std::span<const CommandList> lists,
+        std::span<const FenceValue> wait,
+        std::span<const FenceValue> signal,
+        const TrackerLock& held
+    );
+
+    /// Does the work of `observeFence` in a Debug build.
+    void observeFenceChecked(DeviceCore& core, Fence fence, uint64_t value);
+
+    /// Does the work of `endFrameClock` in a Debug build.
+    void endFrameClockChecked(DeviceCore& core, uint64_t frame);
+
+    /// Does the work of `retireFrameClock` in a Debug build.
+    void retireFrameClockChecked(DeviceCore& core, uint64_t frame);
+
+    /// Does the work of `forgetFence` in a Debug build.
+    void forgetFenceChecked(DeviceCore& core, Fence fence);
 
     /// Does the work of `checkPresentLayout` in a Debug build.
     void checkPresentLayoutChecked(DeviceCore& core, Texture image);
@@ -263,18 +354,56 @@ namespace rojoRHI::core {
 #endif
     }
 
-    /// Replays the logs of `lists`, submitted to a queue of `type` and accepted by `submitLists`, in span order, under `held`,
-    /// which `lockTracker` returned. A backend calls it in `Queue::submit` after `checkSubmit`. Inline, so a Release build
-    /// compiles the call to nothing.
+    /// Replays a submission to a queue of `type` under `held`, which `lockTracker` returned: orders it after the values of
+    /// `wait`, replays the logs of `lists`, accepted by `submitLists`, in span order, and records the queue's running clock for
+    /// each value of `signal`. A backend calls it in `Queue::submit` after `checkSubmit` and before `recordSignals`, so a value
+    /// is never published without its clock. Inline, so a Release build compiles the call to nothing.
     inline void replayLists(
         [[maybe_unused]] DeviceCore& core,
         [[maybe_unused]] QueueType type,
         [[maybe_unused]] std::span<const CommandList> lists,
+        [[maybe_unused]] std::span<const FenceValue> wait,
+        [[maybe_unused]] std::span<const FenceValue> signal,
         [[maybe_unused]] const TrackerLock& held
     )
     {
 #ifndef NDEBUG
-        replayListsChecked(core, type, lists, held);
+        replayListsChecked(core, type, lists, wait, signal, held);
+#endif
+    }
+
+    /// Notes, under the tracker's lock, that the CPU observed `fence` of `core` reach `value` when `core` validates. The fence
+    /// calls run it after reading the fence's record, never holding its pool lock. Inline, as `replayLists` is.
+    inline void observeFence([[maybe_unused]] DeviceCore& core, [[maybe_unused]] Fence fence, [[maybe_unused]] uint64_t value)
+    {
+#ifndef NDEBUG
+        observeFenceChecked(core, fence, value);
+#endif
+    }
+
+    /// Records, under the tracker's lock, the graphics queue's running clock as what frame `frame` of `core` ordered when it
+    /// ended, when `core` validates. Inline, as `replayLists` is.
+    inline void endFrameClock([[maybe_unused]] DeviceCore& core, [[maybe_unused]] uint64_t frame)
+    {
+#ifndef NDEBUG
+        endFrameClockChecked(core, frame);
+#endif
+    }
+
+    /// Joins, under the tracker's lock, what frame `frame` of `core` ordered into the host clock as `beginFrame` retires its
+    /// slot, when `core` validates. Inline, as `replayLists` is.
+    inline void retireFrameClock([[maybe_unused]] DeviceCore& core, [[maybe_unused]] uint64_t frame)
+    {
+#ifndef NDEBUG
+        retireFrameClockChecked(core, frame);
+#endif
+    }
+
+    /// Forgets the clocks of a fence destroyed on `core`. Inline, as `replayLists` is.
+    inline void forgetFence([[maybe_unused]] DeviceCore& core, [[maybe_unused]] Fence fence)
+    {
+#ifndef NDEBUG
+        forgetFenceChecked(core, fence);
 #endif
     }
 
