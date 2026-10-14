@@ -168,10 +168,11 @@ every backend; a count in a backend is that backend's own site. `Device::wait` a
 ## The validation tracker
 
 [ADR 0021](../decisions/0021-validation-tracker-replays-at-submission.md) decides its shape. The
-tracker lives in `Source/Core/Tracker/`, runs in Debug on a validating device and is built except
-for cross-queue ordering: layouts, same-queue hazards and barrier coverage, indirect reads,
-aliasing and the references of unsubmitted lists. Its page,
-[the validation tracker](validation-tracker.md), describes it.
+tracker lives in `Source/Core/Tracker/`, runs in Debug on a validating device and is complete:
+layouts, hazards and barrier coverage, indirect reads, aliasing, the references of unsubmitted
+lists, and the order of the queues, frames and sparse mapping. Its pages,
+[the validation tracker](validation-tracker.md) and
+[across queues](validation-tracker-queues.md), describe it.
 
 ## What remains
 - A native backend registers its own surface predicate, capture hook and tile table, and measures

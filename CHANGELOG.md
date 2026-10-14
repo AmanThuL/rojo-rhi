@@ -106,7 +106,7 @@
   `0011`, `0017` and `0020`), placed resources that alias memory (`VU-rojo-sync-0009` and `0017`)
   and the references of unsubmitted lists (`VU-rojo-abi-0003`, `buffer-0019`, `device-0007` and
   `present-0019`)
-  ([architecture](docs/architecture/validation-tracker.md)). Cross-queue ordering remains.
+  ([architecture](docs/architecture/validation-tracker.md)).
 - `VU-rojo-sync-0023` is retired for `VU-rojo-sync-0024`: a source covers a use by its stages and
   the use's write accesses, so reads and a barrier from `Undefined` need no source access, a
   destination covers a use by its stages and, after a write, its accesses, a layout transition is
@@ -116,3 +116,20 @@
 - Chapter 09 states how a barrier from `Undefined` lowers: Vulkan widens `srcAccessMask` to the
   write accesses of its source stages, and D3D12 pairs `D3D12_BARRIER_ACCESS_NO_ACCESS` with the
   source stages, which is unverified.
+- The validation tracker, cross-queue part: on a validating Debug device the Null backend orders
+  the queues with vector clocks over fences, the host clock and `beginFrame`, so a fence wait is a
+  full dependency and a pair the later use's clock covers needs no barrier. It checks hazards
+  between queues (`VU-rojo-queue-0005`, transitions and aliased heap bytes included), the layout
+  each queue sees and its handoff (`VU-rojo-sync-0025`), `VU-rojo-present-0018` from the graphics
+  queue's view, placed-texture transitions and discards as heap writes, frame joins
+  (`VU-rojo-device-0006`) and tile-mapping order (`VU-rojo-sparse-0013`)
+  ([architecture](docs/architecture/validation-tracker-queues.md)).
+- `VU-rojo-sync-0018` is retired for `VU-rojo-sync-0025`: a discard from `Undefined` on the
+  acquiring queue needs no accepted layout.
+- API reference clarifications that keep their identifiers: ordering through an earlier submission
+  on the same queue, and completion the CPU observed through a fence, count as orderings by a
+  fence for `VU-rojo-queue-0005` and `VU-rojo-sparse-0013`, and uses of the same heap bytes by two
+  placed resources are uses of the same memory; `VU-rojo-device-0006` counts the graphics-queue
+  submissions of a frame together.
+- Every valid-usage rule of the API reference now has a death test, and `Tools/vu_pending.txt` is
+  empty.

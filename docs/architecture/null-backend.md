@@ -28,7 +28,7 @@ pipelines, command lists, passes, draws, copies and barriers), which
 [command recording](null-backend-recording.md) describes, and the swapchains, upscalers, sparse
 resources, access declarations, scope timings, capture and counters of chapters 11 to 14, which
 [the edges](null-backend-edges.md) describe. Every chapter is implemented; the validation tracker
-is built except cross-queue ordering, and [its page](validation-tracker.md) describes it.
+is complete, and [its page](validation-tracker.md) describes it.
 
 ## Two layers
 
@@ -157,8 +157,8 @@ The Null device is deterministic and does no work.
   `Format::Undefined` and a value that is not an enumerator are violations
   (`VU-rojo-format-0005`, `0001`).
 - `DeviceDesc::validation` is `ErrorCategory::Unsupported` in a Release build. In Debug it creates a
-  device that warns of leaks at destruction and runs the validation tracker, which is built except
-  for cross-queue ordering ([the tracker](validation-tracker.md)).
+  device that warns of leaks at destruction and runs the validation tracker, which is complete
+  ([the tracker](validation-tracker.md)).
 - A pipeline cache blob in `DeviceDesc` is read as described in
   [command recording](null-backend-recording.md): a blob this backend wrote is carried forward,
   any other is discarded with a warning.
@@ -269,11 +269,8 @@ lacks is on the [command recording](null-backend-recording.md) page.
 - Native payloads for views and samplers: their slots carry no backend payload, retire hook, drain
   or label yet. They arrive with a native backend, which must release native views and samplers at
   retirement and at `destroyDevice`.
-- The rest of the validation tracker: the identifiers of `Tools/vu_pending.txt` that only it
-  checks, such as `VU-rojo-queue-0005`; [the tracker](validation-tracker.md)
-  says what is built and what remains.
 - A Metal 4 v2 backend and T1 GPU conformance
   ([ADR 0009](../decisions/0009-conformance-and-valid-usage.md)).
 
 `Tools/vu_pending.txt` lists each identifier whose death test is still to come, with the part that
-will add it ([testing](../conventions/testing.md)).
+will add it; it is empty today ([testing](../conventions/testing.md)).

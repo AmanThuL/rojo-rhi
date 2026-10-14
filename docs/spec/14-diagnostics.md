@@ -26,6 +26,10 @@ on a device created without it, and a violation of one is then undefined behavio
 |---|---|
 | Every observable access and every barrier: a missing barrier, a stage or access that does not cover the use, a wrong old layout, a layout that does not permit the use | [synchronization](09-synchronization.md) |
 | Cross-queue texture handoff, per queue | [synchronization](09-synchronization.md) |
+| Cross-queue ordering: two uses of the same memory on two queues, at least one a write, with no fence between | [queues and frames](10-queues-and-frames.md) |
+| Frame joins: compute and copy submissions of a frame that its graphics submissions do not wait on | [device](02-device.md) |
+| Tile-mapping order: a mapping change and a use of its tiles on another queue with no fence between | [sparse resources](13-sparse.md) |
+| Present layout: an image presented in a layout other than `Present` on the graphics queue | [presentation](11-presentation.md) |
 | Lifetime: destroying a resource that recorded but unsubmitted work references | [device](02-device.md) |
 
 The observable accesses are attachments, copy and clear endpoints, index reads, indirect-argument

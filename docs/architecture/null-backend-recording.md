@@ -215,8 +215,5 @@ textures and pipelines.
 
 ## What remains
 
-- The rest of the validation tracker, its four `tracker` entries of `Tools/vu_pending.txt`, all of
-  them ordering across queues: `VU-rojo-queue-0005`, `VU-rojo-sync-0018`, `VU-rojo-device-0006` and
-  `VU-rojo-sparse-0013`.
 - A native backend: slot payloads for views and samplers, and the use of the retire and
   `frameSlot` hooks for native command lists and arena pages.
