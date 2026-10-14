@@ -3,13 +3,15 @@
 **Status**: Implemented
 
 This page describes the validation tracker as built on the test-only Null backend: the checks that
-follow a resource across commands, lists and the submissions of one queue. It continues
+follow a resource across commands, lists, submissions and queues. It is complete: every
+valid-usage identifier of the API reference is checked and has a death test. It continues
 [the edges of the Null backend](null-backend-edges.md). [ADR 0021](
 ../decisions/0021-validation-tracker-replays-at-submission.md) decides its shape and
 [ADR 0020](../decisions/0020-recording-locks-scope-labels.md) keeps Release recording free of
 locks; the [API reference](../spec/14-diagnostics.md) and chapters
 [08](../spec/08-gpu-driven.md) and [09](../spec/09-synchronization-part2.md) are the
-authority for every rule, and this page never restates their semantics. The tracker lives in
+authority for every rule, and this page never restates their semantics. How the queues are ordered
+against each other is on [its own page](validation-tracker-queues.md). The tracker lives in
 `Source/Core/Tracker/`. Its objects are compiled into every build, but its paths run only in Debug,
 on a device created with `DeviceDesc::validation`; the Release hooks are empty. The Null backend
 adds two calls to `Queue::submit`, `lockTracker` and `replayLists`, and no check.
@@ -59,30 +61,32 @@ counters outside the lock, then `lockTracker`, `checkSubmit` (the wait check), `
 `recordSignals`, and last, once the lock is released, `releaseSubmitted`, which removes the lists'
 reference counts. The lock is held from the wait check to the publication of the signal values, and
 is empty unless the build is Debug and the device validates. Under it a submission takes no pool
-lock but the fences', and no path takes the tracker mutex while it holds a pool lock; the counts
-live under their objects' pool locks, so they go after it rather than add a lock order. Replay
+lock but the fences', and no path takes the tracker mutex while it holds a pool lock: the tracker
+lock comes before the fence and pool locks, never after them. The counts live under their objects'
+pool locks, so they go after it rather than add a lock order. Replay
 reads every list before its counts go. `replayLists` visits the lists in span order and the events
 of each list in log order, through one `std::visit` whose `static_assert` covers every event kind.
 
 Creating a texture or buffer and acquiring a swapchain image take the same mutex for their single
 call, after the pool call returns. Destroying a texture, buffer or heap takes it once, to stop
 following the resource; its reference check and its pool release take only pool locks, never under
-the tracker mutex. Destroying a swapchain takes it only to release an acquired image, and
-destroying a pipeline, shader library, fence or upscaler does not take it. `presentImage` takes it
-to check the image's layout, then again to release the image, since one hold would deadlock. A
-resource or barrier destroyed between recording and submission is skipped at replay: the lifetime
-rules, not these, judge it. `beginFrame`, `endFrame`, `Device::wait`, `completedValue` and
-`mapTiles` do not take the tracker lock; they read no tracker state until the queues part. Release
-recording takes no tracker lock.
+the tracker mutex. Destroying a swapchain takes it only to release an acquired image, and destroying
+a pipeline, shader library, fence or upscaler does not take it. `presentImage` takes it to check the
+image's layout, then again to release the image, since one hold would deadlock. A resource or
+barrier destroyed between recording and submission is skipped at replay: the lifetime rules, not
+these, judge it. `beginFrame`, `endFrame`, `Device::wait`, `completedValue`, destroying a fence and
+`mapTiles` take it for their clock work, after their pool reads and with no pool lock held ([the
+queues page](validation-tracker-queues.md)). Release recording takes no tracker lock.
 
 ## Layouts
 
-`TextureState` holds the label, the mip and layer counts and one `Layout` per subresource, indexed
-by mip and then layer, keyed in a map by the texture handle's bits. A texture starts in
+`TextureState` holds the label, the mip and layer counts and one layout event per subresource,
+indexed by mip and then layer, keyed in a map by the texture handle's bits. A texture starts in
 `Undefined`, or in `ShaderRead` when created with initial data; an acquired swapchain image starts
-in `Undefined` and is flagged until its first barrier. A texture barrier sets every subresource of
-its range to its `newLayout`; no other event changes a layout. There is one layout per
-subresource, not per queue, so state persists across submissions, frames and queues.
+in `Undefined` and is flagged until its first barrier. A texture barrier that changes the layout
+or discards from `Undefined` sets every subresource of its range to its `newLayout`, as an event on
+its queue; so does another resource's use of a placed texture's memory, as an `Undefined` event.
+The state persists across submissions and frames. Which layout a queue sees is the queues page's.
 
 For each subresource of a use, replay reports the first rule that fails: `VU-rojo-sync-0017` for a
 placed texture (see aliasing), `VU-rojo-sync-0006` (a use on a Copy list while the layout is not
@@ -141,29 +145,27 @@ Bytes only the CPU wrote, initial data or frame data, have no write.
 ## Aliasing
 
 Each heap holding a followed placed resource keeps ordered disjoint byte ranges
-(`Tracker/OffsetMap.h`) that record per queue type the placed resource that last used them, that
-use with the global barriers since, and a stamp ordering heap uses across queues
-(`Tracker/Aliasing.*`); `destroyHeap` drops it. A buffer's use maps its bytes into the heap; a
-texture's use covers its whole heap range, its placement `heapSize`.
+(`Tracker/OffsetMap.h`) that record per queue type the placed resource that last used them, that use
+with the global barriers since (`Tracker/Aliasing.*`); `destroyHeap` drops it. A buffer's use maps
+its bytes into the heap; a texture's use covers its whole heap range, its placement `heapSize`.
 
 - A buffer's bytes last used on the queue by another resource report `VU-rojo-sync-0009` unless a
-  global barrier since covers that use at its source and this one at its destination, or the
-  buffer's own stamps show it used them since, on another queue.
+  global barrier since covers that use at its source and this one at its destination, a chain of
+  global barriers does, or the buffer's clock covers that use.
 - Every other placed texture over the bytes, and one placed later, gains on each subresource and
   that queue a mark per heap byte range: the latest foreign use of those bytes, which a newer one
   replaces, so marks stay as few as the ranges. Its next event there must be a texture barrier
-  from `Undefined` whose source covers every mark newer than that subresource's own last use, or
-  `VU-rojo-sync-0017` reports. The stamp of that use is kept per subresource beside its marks, and
-  a use sets it only for the subresources it names. A covering discard clears its marks on every
-  queue.
-- A buffer keeps own-use stamps per byte range, so its earlier use on another queue is not
-  mistaken for a foreign one.
+  from `Undefined` whose source covers every mark, or `VU-rojo-sync-0017` reports. An event of the
+  subresource on a queue clears its own marks there, and clears those on other queues that its
+  clock covers. A covering discard clears its marks on every queue.
 - Passing `sync-0009` or `sync-0017` resets the resource's own hazard state on the queue, since
   the aliasing chain orders its old uses and their contents are undefined.
 - Precedence: `sync-0017` before `sync-0006` and the layout, entry and coverage rules; `sync-0009`
   before the indirect rules.
-- Limit: a discard is not a heap use, so although on D3D12 it writes compression metadata, a later
-  aliasing resource is checked only against the last use. Order between queues is `queue-0005`'s.
+- A placed texture's layout change or discard is a write of its whole heap range on its queue, as
+  on D3D12 it writes compression metadata. A later use of those bytes by another resource follows
+  it only through a global barrier whose source covers its destination. Order between queues is
+  `queue-0005`'s.
 
 ## References of unsubmitted lists
 
@@ -187,18 +189,18 @@ with zero counts; destroying a swapchain runs none, and an image it releases is 
 
 ## Reporting precedence
 
-For one event, replay reports in this order: `present-0019` for the list (before every event);
-for a texture use, `sync-0017` on every subresource it names, then per subresource `sync-0006`, the
+For one event, replay reports in this order: `present-0019` for the list (before every event); for a
+texture use, `sync-0017` on every subresource it names, then per subresource `sync-0006`, the
 entry's rule or, for a use no entry rule names, `sync-0004`, then `sync-0021` or `sync-0024`; for a
 texture barrier, `present-0014`, `sync-0017` on every subresource it names, then per subresource
 `sync-0013`, then, for a transition, `sync-0024`; for a buffer use, `sync-0009`, then the indirect
-rule, then `sync-0021` or `sync-0024`. A global or buffer barrier reports nothing. At destruction
-the order is `abi-0003`, `buffer-0019`, then `device-0007`. Each rule has one `ROJORHI_VU` site per
-arm and a death test that breaks only that rule; tests pin `present-0014` before `sync-0013`,
-`sync-0006` before the entry's rule, and the destruction order.
+rule, then `sync-0021` or `sync-0024`. The cross-queue rules slot in as the queues page says. A
+global or buffer barrier reports nothing. At destruction the order is `abi-0003`, `buffer-0019`,
+then `device-0007`. Each rule has one `ROJORHI_VU` site per arm and a death test that breaks only
+that rule; tests pin `present-0014` before `sync-0013`, `sync-0006` before the entry's rule, and the
+destruction order.
 
-## What the queues part adds
+## Known limits
 
-The tracker follows one queue's order. The queues part adds the clocks that order uses across
-queues, a layout per queue and the handoff between them, `VU-rojo-queue-0005`, `VU-rojo-sync-0018`,
-`VU-rojo-device-0006` and `VU-rojo-sparse-0013`, and the lock in the calls named above.
+The queues page lists those of cross-queue order. Besides them, a barrier that keeps the layout
+is not compared with another queue, and the tracker never checks the memory of a frame-arena page.

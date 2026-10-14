@@ -6,8 +6,8 @@ This page describes RojoRHI's shape as the code stands today: the v1 interface i
 Luminex, implemented by the Metal 4 backend and frozen under `Legacy/` (ADR 0017). The top-level
 `Include/`, `Source/`, `Backends/`, `Tests/` and `Shaders/` are the permanent names, reserved for
 the v2 interface, which is specified in the ADRs and the API reference under `docs/spec/` and is
-implemented on the test-only Null backend, whose validation tracker is built except for cross-queue
-ordering; the shader ABI module and its hosted checks exist.
+implemented on the test-only Null backend, whose validation tracker is complete; the shader ABI
+module and its hosted checks exist.
 
 ```
 rojo-rhi/
@@ -49,8 +49,8 @@ public entries over it. [The Null backend](null-backend.md) describes both layer
 implemented, [command recording](null-backend-recording.md) the recording chapters, and [the
 edges](null-backend-edges.md) presentation, upscaling, sparse resources, diagnostics and counters,
 and [the validation tracker](validation-tracker.md) the checks that follow a resource across
-commands and lists. `Include/rojoRHI/` holds the v2 public headers, one primary type per header;
-`Handles.h` and `Geometry.h` each hold several small types.
+commands, lists, submissions and queues. `Include/rojoRHI/` holds the v2 public headers, one primary
+type per header; `Handles.h` and `Geometry.h` each hold several small types.
 
 `Tests/` builds as the `RojoRHITests` binary with three entries: `contract` runs the T0 cases of
 `Tests/Contract/`, `Tests/Core/` and `Tests/Null/` except the death tests, `death` runs the
