@@ -29,6 +29,8 @@ jobs:
           path: ThirdParty
           key: ${{ runner.os }}-thirdparty-${{ hashFiles('xmake/setup.lua') }}
       - run: xmake setup
+      # Some hosted images ship Xcode without the Metal toolchain the v1 shaders compile with.
+      - run: xcrun metal --version >/dev/null 2>&1 || xcodebuild -downloadComponent MetalToolchain
       - run: xmake f -m release -y --ccache=n
       - run: xmake -y && xmake test RojoRHILegacyTests/unit
       # Hosted macOS has no Metal 4: compile and count the GPU cases; run them on hardware.
