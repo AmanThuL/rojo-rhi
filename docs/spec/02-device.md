@@ -221,8 +221,9 @@ see `Queue::present` in [presentation](11-presentation.md). Thread class: frame.
 - `VU-rojo-device-0004` A frame is open.
 - `VU-rojo-device-0005` Every command list acquired during the open frame has been submitted.
 - `VU-rojo-device-0006` Every submission of the open frame to a compute or copy queue is ordered
-  before the frame's graphics-queue signal by a caller fence: a graphics-queue submission of the
-  same frame waits on a fence value signalled after it. Checked by the validation tracker.
+  before the frame's graphics-queue signal by a caller fence: the graphics-queue submissions of the
+  same frame, together, wait, directly or through other fences, on fence values signalled by or
+  after each of them. Checked by the validation tracker.
 
 #### Mapping
 | | Metal 4 | D3D12 | Vulkan |

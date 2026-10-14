@@ -12,9 +12,13 @@
 #include <rojoRHI/Stage.h>
 #include <rojoRHI/SubresourceRange.h>
 #include <rojoRHI/TextureBarrier.h>
+#include <rojoRHI/TextureRegion.h>
+
+#include "Core/Tracker/Tiles.h"
 
 #include <cstdint>
 #include <initializer_list>
+#include <optional>
 #include <variant>
 
 namespace rojoRHI::core {
@@ -76,6 +80,9 @@ namespace rojoRHI::core {
         Access access = Access::None; ///< The accesses the use makes.
         LayoutSet layouts = 0;        ///< The layouts that permit the use; empty for a buffer.
         UseRule rule = UseRule::None; ///< The rule of the entry that made the use, reported ahead of the general rules.
+        /// The texels a copy uses in each subresource of `range`, which the sparse mapping rule judges per tile; empty for a use
+        /// of whole subresources.
+        std::optional<TexelBox> box;
     };
 
     /// One event of a list's log: a use, or one record of a barrier batch as the list was given it.
@@ -85,6 +92,16 @@ namespace rojoRHI::core {
     constexpr UseEvent textureUse(Texture texture, const SubresourceRange& range, Stage stage, Access access, LayoutSet layouts, UseRule rule)
     {
         return UseEvent{ .texture = texture, .range = range, .stage = stage, .access = access, .layouts = layouts, .rule = rule };
+    }
+
+    /// Returns the use of `region` of `texture` by a copy at `access`, permitted by `layouts` and reported as `rule`: the
+    /// subresources of its mip and layers, and its box of texels in each.
+    constexpr UseEvent regionUse(Texture texture, const TextureRegion& region, Access access, LayoutSet layouts, UseRule rule)
+    {
+        const SubresourceRange range{ .baseMip = region.mip, .mipCount = 1, .baseLayer = region.layer, .layerCount = region.layers };
+        UseEvent use = textureUse(texture, range, Stage::Copy, access, layouts, rule);
+        use.box = TexelBox{ .offset = region.offset, .extent = region.extent };
+        return use;
     }
 
     /// Returns the use of `size` bytes from `offset` of `buffer` at `stage` with `access`, reported as `rule`.

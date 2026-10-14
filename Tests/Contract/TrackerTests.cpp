@@ -108,7 +108,10 @@ TEST_CASE("the tracker carries layouts from one submission to the next", "[contr
     move(second, texture, Layout::CopyDst, Layout::ShaderRead);
     second.end();
     const std::array<CommandList, 1> secondLists{ second };
-    device.queue(QueueType::Compute).submit(secondLists, moved);
+    const std::array<FenceValue, 1> read{ FenceValue{ fence, 2 } };
+    device.queue(QueueType::Compute).submit(secondLists, moved, read);
+    // The frame's graphics work joins the compute work before it ends.
+    device.queue(QueueType::Graphics).submit({}, read);
     device.endFrame();
     destroyDevice(device);
 #endif
@@ -211,6 +214,11 @@ TEST_CASE("two queues submitting from two threads share the tracker without a ra
     std::thread compute(work, QueueType::Compute);
     graphics.join();
     compute.join();
+    // The frame's graphics work joins the compute work before it ends.
+    const Fence fence = *device.createFence(0, "test.fence");
+    const std::array<FenceValue, 1> joined{ FenceValue{ fence, 1 } };
+    device.queue(QueueType::Compute).submit({}, {}, joined);
+    device.queue(QueueType::Graphics).submit({}, joined);
     device.endFrame();
     destroyDevice(device);
 #endif

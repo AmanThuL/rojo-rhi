@@ -10,7 +10,9 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include <array>
+#include <cstddef>
 #include <span>
+#include <vector>
 
 using namespace rojoRHI;
 using test::PassKit;
@@ -127,6 +129,32 @@ TEST_CASE("VU-rojo-sync-0025 Compute's first barrier on a swapchain image handed
         CommandList compute = device.acquireCommandList(QueueType::Compute, "test.compute");
         test::transition(compute, image, Layout::ShaderRead, Layout::General);
         submitTo(device, compute, QueueType::Compute, drawn);
+    });
+}
+
+//======================================================================================================================
+TEST_CASE("VU-rojo-sync-0025 Copy's first barrier on a texture created with data and sampled on Graphics starts from ShaderRead", "[contract][death]")
+{
+    ROJORHI_EXPECT_DEATH("VU-rojo-sync-0025", [] {
+        PassKit kit(QueueType::Graphics, true);
+        const std::vector<std::byte> texels(static_cast<size_t>(PassKit::kSize) * PassKit::kSize * 4);
+        const std::array<TextureData, 1> initial{ TextureData{ .bytes = texels, .bytesPerRow = PassKit::kSize * 4 } };
+        const Texture texture = *kit.device.createTexture(
+            TextureDesc{
+                .format = Format::RGBA8Unorm, .extent = { PassKit::kSize, PassKit::kSize, 1 }, .usage = TextureUsage::Sampled, .label = "test.texture" },
+            initial
+        );
+        const Buffer staging = kit.buffer(BufferUsage::None, 64 * 1024);
+        const Fence fence = *kit.device.createFence(0, "test.fence");
+        const std::array<FenceValue, 1> sampled{ FenceValue{ fence, 1 } };
+        // Initial data leaves the texture in ShaderRead, and the Graphics queue samples it there with no barrier.
+        dispatchWith(kit, kit.list, texture, Access::ShaderRead);
+        submitTo(kit.device, kit.list, QueueType::Graphics, {}, sampled);
+        // The Copy queue takes it over from Graphics in ShaderRead, which the two queues do not share.
+        CommandList copy = kit.device.acquireCommandList(QueueType::Copy, "test.copy");
+        test::transition(copy, texture, Layout::ShaderRead, Layout::General);
+        copy.copyBufferToTexture(staging, BufferTextureLayout{ .rowPitch = 256 }, texture, kRow);
+        submitTo(kit.device, copy, QueueType::Copy, sampled);
     });
 }
 

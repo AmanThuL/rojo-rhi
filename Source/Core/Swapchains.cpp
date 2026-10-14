@@ -111,7 +111,7 @@ namespace rojoRHI::core {
         // The image is a native memory object for the counters but no native creation, so the pool does not count it itself.
         image.texture = core.pool<Texture>().allocate(std::move(record), false);
         // Every acquire hands out an image with undefined contents, whose first barrier starts from Undefined (chapter 11).
-        trackTexture(core, image.texture, swapchain.label, 1, 1, Layout::Undefined, true, Heap{}, 0, 0);
+        trackTexture(core, image.texture, swapchain.label, 1, 1, Layout::Undefined, true, Heap{}, 0, 0, false);
         DeviceCounts::add(core.counts().gpuAllocations);
         image.state = ImageState::Acquired;
         swapchain.acquired = index;

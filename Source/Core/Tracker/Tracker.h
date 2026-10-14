@@ -14,6 +14,7 @@
 #include "Core/Tracker/ByteSegments.h"
 #include "Core/Tracker/Clocks.h"
 #include "Core/Tracker/Hazards.h"
+#include "Core/Tracker/Tiles.h"
 #include "Core/Tracker/TrackerLog.h"
 
 #include <array>
@@ -36,9 +37,10 @@ namespace rojoRHI::core {
 
     /// The state the validation tracker of one device judges submitted work against: the latest layout event, with its queue,
     /// of each subresource of every live texture, the hazard state per queue of every texture subresource and of the byte segments of every live buffer, per
-    /// heap holding placed resources the resource that last used each byte range on each queue, and the clocks that order the
-    /// queues: per queue the clocks of the fence values it waited on, per fence the clock of each value submitted for signal,
-    /// and the host clock of what the CPU observed complete.
+    /// heap holding placed resources the resource that last used each byte range on each queue, per sparse resource the latest
+    /// use and mapping change of its tiles on each queue, and the clocks that order the queues: per queue the clocks of the
+    /// fence values it waited on, per fence the clock of each value submitted for signal, the host clock of what the CPU
+    /// observed complete, and the position of each queue's last submission against the open frame's start.
     /// Lists record events without it; `Queue::submit` replays their logs into it in queue submission order. Every member
     /// takes or requires its mutex, so queues submitting on several threads see one order.
     class Tracker
@@ -50,7 +52,8 @@ namespace rojoRHI::core {
         /// Starts following `texture`, labelled `label`, of `mips` mips and `layers` layers, with every subresource in
         /// `initial`. `acquired` marks a swapchain image whose first barrier must start from `Undefined` (VU-rojo-present-0014).
         /// A placed texture names its `heap` and the `heapSize` bytes from `heapOffset` it occupies there; it follows the uses
-        /// other resources already made of those bytes. A dedicated one passes a null heap. Takes the lock.
+        /// other resources already made of those bytes. A dedicated one passes a null heap. A `sparse` texture also has the uses
+        /// and mapping changes of its tiles followed per queue (VU-rojo-sparse-0013). Takes the lock.
         void addTexture(
             Texture texture,
             std::string_view label,
@@ -60,7 +63,8 @@ namespace rojoRHI::core {
             bool acquired,
             Heap heap,
             uint64_t heapOffset,
-            uint64_t heapSize
+            uint64_t heapSize,
+            bool sparse
         );
 
         /// Stops following `texture`, destroyed or presented; a texture the tracker does not follow is ignored. Takes the lock.
@@ -71,8 +75,9 @@ namespace rojoRHI::core {
         std::optional<Layout> layoutOf(Texture texture, uint32_t mip, uint32_t layer);
 
         /// Starts following `buffer`, labelled `label`, of `size` bytes, with no hazard on any queue. A placed buffer names its
-        /// `heap` and the byte offset `heapOffset` it occupies there; a dedicated one passes a null heap. Takes the lock.
-        void addBuffer(Buffer buffer, std::string_view label, uint64_t size, Heap heap, uint64_t heapOffset);
+        /// `heap` and the byte offset `heapOffset` it occupies there; a dedicated one passes a null heap. A `sparse` buffer also
+        /// has the uses and mapping changes of its byte ranges followed per queue (VU-rojo-sparse-0013). Takes the lock.
+        void addBuffer(Buffer buffer, std::string_view label, uint64_t size, Heap heap, uint64_t heapOffset, bool sparse);
 
         /// Stops following `buffer`, destroyed; a buffer the tracker does not follow is ignored. Takes the lock.
         void removeBuffer(Buffer buffer);
@@ -88,6 +93,10 @@ namespace rojoRHI::core {
         /// Returns the number of values the tracker keeps the clocks of for `fence`, or nothing when no submission signalled it.
         /// Takes the lock.
         std::optional<size_t> fenceValueCount(Fence fence);
+
+        /// Returns the position on `queue` of the latest mapping change of any tile of mip `mip` and layer `layer` of `texture`,
+        /// zero for none, or nothing when the tracker does not follow it as a sparse texture. Takes the lock.
+        std::optional<uint64_t> lastMapping(Texture texture, uint32_t mip, uint32_t layer, QueueType queue);
 
         /// Returns the number of alias marks `texture` holds over every subresource and queue, or nothing when the tracker does
         /// not follow it. Takes the lock.
@@ -117,6 +126,17 @@ namespace rojoRHI::core {
         /// nothing. `held` must be a lock `lock` returned.
         void wait(const TrackerLock& held, QueueType queue, Fence fence, uint64_t value);
 
+        /// Notes that a submission to `queue`, its waits joined and its lists replayed, is complete as a submission: it takes the
+        /// next position on the queue, so its signals, and a frame's join, cover it even when it has no lists.
+        void submitted(const TrackerLock& held, QueueType queue);
+
+        /// Checks `changes`, the mapping changes of one `Queue::mapTiles` call on `queue`, against the uses of their tiles on
+        /// every other queue: each use must be covered by the queue's clock, through its earlier submissions' waits, or by the
+        /// host clock (VU-rojo-sparse-0013). Then notes them as one event at the next position on the queue, which later uses on
+        /// other queues must be ordered after. A resource the tracker does not follow as sparse is ignored. `held` must be a
+        /// lock `lock` returned.
+        void mapTiles(const TrackerLock& held, QueueType queue, std::span<const TileChange> changes);
+
         /// Notes that the submission to `queue` just replayed signals `value` of `fence`, created at `initial`: the value records
         /// the queue's running clock. `held` must be a lock `lock` returned.
         void signal(const TrackerLock& held, QueueType queue, Fence fence, uint64_t initial, uint64_t value);
@@ -126,19 +146,30 @@ namespace rojoRHI::core {
         /// returned.
         void observe(const TrackerLock& held, Fence fence, uint64_t value);
 
-        /// Notes that frame `frame` ended: its slot's internal fence, signalled on the graphics queue, orders what the graphics
-        /// queue's running clock does now. `held` must be a lock `lock` returned.
+        /// Checks that frame `frame` may end: the graphics queue's running clock covers the last compute and copy submissions of
+        /// the frame (VU-rojo-device-0006). Then notes that its slot's internal fence, signalled on the graphics queue, orders
+        /// what that clock does now. `held` must be a lock `lock` returned.
         void endFrame(const TrackerLock& held, uint64_t frame);
 
-        /// Notes that `beginFrame` retired the slot of frame `frame`, waiting on its internal fence: the host clock joins the
-        /// graphics clock its `endFrame` recorded. `held` must be a lock `lock` returned.
-        void retireFrame(const TrackerLock& held, uint64_t frame);
+        /// Notes that `beginFrame` opened a frame: submissions from now on are the frame's. When it retired the slot of frame
+        /// `retired`, zero for none, waiting on its internal fence, the host clock joins the graphics clock that frame's
+        /// `endFrame` recorded. `held` must be a lock `lock` returned.
+        void beginFrame(const TrackerLock& held, uint64_t retired);
+
+        /// Returns the first of the compute and copy queues whose last submission of the open frame the graphics queue's running
+        /// clock does not cover, or nothing when the graphics submissions of the frame, together, wait on every such
+        /// submission. `held` must be a lock `lock` returned.
+        std::optional<QueueType> unjoined(const TrackerLock& held) const;
+
+        /// Returns the queue `unjoined` returns, as the overload with a lock does. Takes the lock.
+        std::optional<QueueType> unjoined();
 
         /// Forgets the clocks of the values of `fence`, destroyed; a fence no submission signalled is ignored. Takes the lock.
         void removeFence(Fence fence);
 
         /// Returns the running clock of `queue`: the join of its submissions' clocks, whose own component is the position of the
-        /// last command replayed there. A signal records it. `held` must be a lock `lock` returned.
+        /// last event there, its last submission or a later tile mapping change. A signal records it. `held` must be a lock `lock`
+        /// returned.
         Clock runningClock(const TrackerLock& held, QueueType queue) const;
 
         /// Returns the running clock of `queue`, as the overload with a lock does. Takes the lock.
@@ -156,12 +187,14 @@ namespace rojoRHI::core {
         /// the layout or discarded, or another resource's use of its memory, which leaves it `Undefined`. A queue sees the
         /// layout it set when the event is on that queue, precedes every submission, or is covered by the clock of the queue's
         /// submission; otherwise the two queues race (VU-rojo-queue-0005). An event on another queue that the clock covers
-        /// hands the subresource over (VU-rojo-sync-0025), unless it left the subresource `Undefined`.
+        /// hands the subresource over (VU-rojo-sync-0025), unless it left the subresource `Undefined`. An event with no queue
+        /// is held by the queue of the latest use since, and a use on another queue takes it over in the event's layout.
         struct LayoutEvent
         {
             Layout layout = Layout::Undefined; ///< The layout the event set.
             std::optional<QueueType> queue;    ///< The queue of a barrier; none for a creation or an acquire.
             uint64_t position = 0;             ///< The barrier's position on its queue.
+            std::optional<QueueType> lastUse;  ///< With no `queue`, the queue of the latest use or barrier since the event.
         };
 
         /// The tracker's view of one texture.
@@ -180,16 +213,25 @@ namespace rojoRHI::core {
             /// of each byte range of its memory since the subresource's last event on that queue, or since an event on another
             /// queue that a clock orders after that use; empty for a dedicated texture.
             std::vector<std::array<AliasMarks, 3>> aliases;
+            /// For a sparse texture, per subresource indexed as `layouts` and per queue type, the latest uses of its tiles; empty
+            /// for a texture that is not sparse.
+            std::vector<std::array<TileEvents, 3>> tileUses;
+            /// For a sparse texture, per subresource indexed as `layouts` and per queue type, the latest mapping changes of its
+            /// tiles; empty for a texture that is not sparse.
+            std::vector<std::array<TileEvents, 3>> tileMaps;
         };
 
         /// The tracker's view of one buffer.
         struct BufferState
         {
-            std::string label;       ///< The buffer's label, for reports.
-            uint64_t size = 0;       ///< Bytes.
-            Heap heap = {};          ///< The heap the buffer is placed in; null for a dedicated allocation.
-            uint64_t heapOffset = 0; ///< The byte offset of the buffer in `heap`; its heap range runs `size` bytes from there.
-            ByteSegments segments;   ///< The hazard state of its bytes.
+            std::string label;                  ///< The buffer's label, for reports.
+            uint64_t size = 0;                  ///< Bytes.
+            Heap heap = {};                     ///< The heap the buffer is placed in; null for a dedicated allocation.
+            uint64_t heapOffset = 0;            ///< The byte offset of the buffer in `heap`; its heap range runs `size` bytes from there.
+            ByteSegments segments;              ///< The hazard state of its bytes.
+            bool sparse = false;                ///< The buffer is sparse: the uses and mapping changes of its tiles are followed.
+            std::array<ByteEvents, 3> byteUses; ///< For a sparse buffer, per queue type, the latest use of each byte range.
+            std::array<ByteEvents, 3> byteMaps; ///< For a sparse buffer, per queue type, the latest mapping change of each range.
         };
 
         /// The tracker's view of one heap that holds or held a followed placed resource.
@@ -263,9 +305,28 @@ namespace rojoRHI::core {
         /// VU-rojo-queue-0005 reports rather than a layout either queue sees.
         static std::optional<Layout> layoutOn(const LayoutEvent& event, QueueType queue, const Clock& ordered);
 
+        /// Returns the queue that holds a subresource whose latest layout event is `event`, for the handoff rule
+        /// (VU-rojo-sync-0025): the event's queue, or, for a creation or an acquire, the queue of the latest use or barrier
+        /// since; none before the first.
+        static std::optional<QueueType> holderOf(const LayoutEvent& event);
+
         /// Returns the clock that orders earlier work before the work replayed now on `queue`: the join of the clocks of the
         /// values its submissions waited on, so its own component is reached only through fences, and the host clock.
         Clock orderedBefore(QueueType queue) const;
+
+        /// Checks the use, or the transition, at `position` on `queue` of the texels `box` of subresource `index` of `texture`,
+        /// the whole subresource when `box` is empty, against the mapping changes of its tiles on every other queue: `ordered`,
+        /// the clock of the use's submission joined with the host clock, must cover each (VU-rojo-sparse-0013). Then notes the
+        /// use. A texture that is not sparse is ignored.
+        void replayTileUse(
+            TextureState& texture,
+            size_t index,
+            const std::optional<TexelBox>& box,
+            QueueType queue,
+            std::string_view list,
+            uint64_t position,
+            const Clock& ordered
+        );
 
         /// Checks `use`, an indirect argument or count read of `buffer` on `queue`, against the last write of its bytes there and
         /// reports the rule of the entry that made it (VU-rojo-indirect-0005, 0011, 0017 or 0020).
@@ -279,8 +340,9 @@ namespace rojoRHI::core {
         /// against the layouts that permit it, reporting VU-rojo-sync-0025 for a subresource handed over from another queue in
         /// a layout the two queues do not share, then VU-rojo-sync-0006, then the entry's own rule, then VU-rojo-sync-0004; a
         /// subresource whose latest layout event is on another queue that no fence orders before is left to VU-rojo-queue-0005.
-        /// Then, for a texture or a buffer, its hazards on the queue (VU-rojo-sync-0021, then VU-rojo-sync-0024) and against
-        /// every other queue (VU-rojo-queue-0005).
+        /// Then, for a sparse texture or buffer, the mapping changes of its tiles on other queues (VU-rojo-sparse-0013); then,
+        /// for a texture or a buffer, its hazards on the queue (VU-rojo-sync-0021, then VU-rojo-sync-0024) and against every
+        /// other queue (VU-rojo-queue-0005).
         void replayUse(const TrackerLock& held, const UseEvent& use, QueueType queue, std::string_view list, uint64_t position);
 
         /// Judges the hazards of `use`, a use of a texture, against every subresource of `texture` it names, on its queue and
@@ -301,8 +363,9 @@ namespace rojoRHI::core {
         /// Replays one texture barrier recorded at `position`: its old layout (VU-rojo-present-0014; for a subresource handed over
         /// from another queue, VU-rojo-sync-0025 for a barrier that does not discard and either starts elsewhere or takes over a
         /// layout the two queues do not share; then VU-rojo-sync-0013), then, for a transition, its source against the uses before it
-        /// (VU-rojo-sync-0024) and, as a write, against the uses of every other queue and, for a placed texture, other
-        /// resources' uses of its heap bytes there (VU-rojo-queue-0005), then its transition, the subresource's new layout event.
+        /// (VU-rojo-sync-0024) and, as a write of every tile, against the mapping changes of a sparse texture on other queues
+        /// (VU-rojo-sparse-0013), the uses of every other queue and, for a placed texture, other resources' uses of its heap
+        /// bytes there (VU-rojo-queue-0005), then its transition, the subresource's new layout event.
         /// A barrier that keeps the layout sets no layout event and gains its reach over exactly its subresources.
         void replayTexture(const TrackerLock& held, const TextureBarrier& barrier, QueueType queue, std::string_view list, uint64_t position);
 
@@ -310,8 +373,9 @@ namespace rojoRHI::core {
         std::unordered_map<uint64_t, TextureState> m_textures; ///< The followed textures, by handle bits.
         std::unordered_map<uint64_t, BufferState> m_buffers;   ///< The followed buffers, by handle bits.
         std::unordered_map<uint64_t, HeapState> m_heaps;       ///< The heaps of followed placed resources, by handle bits.
-        /// The position on each queue type of the last command replayed there: each command takes the next one, so a use's
-        /// position orders it against the barriers of the same queue.
+        /// The position on each queue type of the last event there: each command replayed, each submission once its lists are
+        /// replayed, and each `mapTiles` call takes the next one, so a use's position orders it against the barriers of the same
+        /// queue and a clock that reaches a position covers everything before it on that queue.
         std::array<uint64_t, 3> m_positions = {};
         /// Per queue type, the join of the clocks of every fence value a submission there waited on: the work every later
         /// submission there is ordered after, its own component reached only through a fence.
@@ -321,6 +385,10 @@ namespace rojoRHI::core {
         Clock m_host = {};
         std::unordered_map<uint64_t, FenceClocks> m_fences; ///< The clocks of the values submitted for signal, by fence handle bits.
         std::map<uint64_t, Clock> m_frames;                 ///< The graphics clock at each ended frame's end, until its slot retires.
+        /// The position on each queue type when the open frame began: a submission above it is the frame's.
+        std::array<uint64_t, 3> m_frameStart = {};
+        /// The position on each queue type of its last submission; zero before the first.
+        std::array<uint64_t, 3> m_submitted = {};
     };
 
     /// Does the work of `lockTracker` in a Debug build.
@@ -342,8 +410,11 @@ namespace rojoRHI::core {
     /// Does the work of `endFrameClock` in a Debug build.
     void endFrameClockChecked(DeviceCore& core, uint64_t frame);
 
-    /// Does the work of `retireFrameClock` in a Debug build.
-    void retireFrameClockChecked(DeviceCore& core, uint64_t frame);
+    /// Does the work of `beginFrameClock` in a Debug build.
+    void beginFrameClockChecked(DeviceCore& core, uint64_t retired);
+
+    /// Does the work of `mapTileChanges` in a Debug build.
+    void mapTileChangesChecked(DeviceCore& core, QueueType queue, std::span<const TileChange> changes);
 
     /// Does the work of `forgetFence` in a Debug build.
     void forgetFenceChecked(DeviceCore& core, Fence fence);
@@ -362,14 +433,15 @@ namespace rojoRHI::core {
         bool acquired,
         Heap heap,
         uint64_t heapOffset,
-        uint64_t heapSize
+        uint64_t heapSize,
+        bool sparse
     );
 
     /// Does the work of `forgetTexture` in a Debug build.
     void forgetTextureChecked(DeviceCore& core, Texture texture);
 
     /// Does the work of `trackBuffer` in a Debug build.
-    void trackBufferChecked(DeviceCore& core, Buffer buffer, std::string_view label, uint64_t size, Heap heap, uint64_t heapOffset);
+    void trackBufferChecked(DeviceCore& core, Buffer buffer, std::string_view label, uint64_t size, Heap heap, uint64_t heapOffset, bool sparse);
 
     /// Does the work of `forgetBuffer` in a Debug build.
     void forgetBufferChecked(DeviceCore& core, Buffer buffer);
@@ -415,8 +487,9 @@ namespace rojoRHI::core {
 #endif
     }
 
-    /// Records, under the tracker's lock, the graphics queue's running clock as what frame `frame` of `core` ordered when it
-    /// ended, when `core` validates. Inline, as `replayLists` is.
+    /// Checks, under the tracker's lock, that the graphics queue's running clock covers the compute and copy submissions of
+    /// frame `frame` of `core` (VU-rojo-device-0006), and records it as what the frame ordered when it ended, when `core`
+    /// validates. Inline, as `replayLists` is.
     inline void endFrameClock([[maybe_unused]] DeviceCore& core, [[maybe_unused]] uint64_t frame)
     {
 #ifndef NDEBUG
@@ -424,12 +497,23 @@ namespace rojoRHI::core {
 #endif
     }
 
-    /// Joins, under the tracker's lock, what frame `frame` of `core` ordered into the host clock as `beginFrame` retires its
-    /// slot, when `core` validates. Inline, as `replayLists` is.
-    inline void retireFrameClock([[maybe_unused]] DeviceCore& core, [[maybe_unused]] uint64_t frame)
+    /// Notes, under the tracker's lock, that `beginFrame` opened a frame of `core`, and joins what frame `retired`, zero for
+    /// none, ordered into the host clock as it retires that frame's slot, when `core` validates. Inline, as `replayLists` is.
+    inline void beginFrameClock([[maybe_unused]] DeviceCore& core, [[maybe_unused]] uint64_t retired)
     {
 #ifndef NDEBUG
-        retireFrameClockChecked(core, frame);
+        beginFrameClockChecked(core, retired);
+#endif
+    }
+
+    /// Checks, under the tracker's lock, the mapping changes `changes` of one `Queue::mapTiles` call on a queue of `queue` of
+    /// `core` against the uses of their tiles on other queues, and notes them, when `core` validates
+    /// (`Tracker::mapTiles`). The caller reads the records it builds them from before, never holding the tracker's lock.
+    /// Inline, as `replayLists` is.
+    inline void mapTileChanges([[maybe_unused]] DeviceCore& core, [[maybe_unused]] QueueType queue, [[maybe_unused]] std::span<const TileChange> changes)
+    {
+#ifndef NDEBUG
+        mapTileChangesChecked(core, queue, changes);
 #endif
     }
 
@@ -453,11 +537,12 @@ namespace rojoRHI::core {
         [[maybe_unused]] bool acquired,
         [[maybe_unused]] Heap heap,
         [[maybe_unused]] uint64_t heapOffset,
-        [[maybe_unused]] uint64_t heapSize
+        [[maybe_unused]] uint64_t heapSize,
+        [[maybe_unused]] bool sparse
     )
     {
 #ifndef NDEBUG
-        trackTextureChecked(core, texture, label, mips, layers, initial, acquired, heap, heapOffset, heapSize);
+        trackTextureChecked(core, texture, label, mips, layers, initial, acquired, heap, heapOffset, heapSize, sparse);
 #endif
     }
 
@@ -486,11 +571,12 @@ namespace rojoRHI::core {
         [[maybe_unused]] std::string_view label,
         [[maybe_unused]] uint64_t size,
         [[maybe_unused]] Heap heap,
-        [[maybe_unused]] uint64_t heapOffset
+        [[maybe_unused]] uint64_t heapOffset,
+        [[maybe_unused]] bool sparse
     )
     {
 #ifndef NDEBUG
-        trackBufferChecked(core, buffer, label, size, heap, heapOffset);
+        trackBufferChecked(core, buffer, label, size, heap, heapOffset, sparse);
 #endif
     }
 

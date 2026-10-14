@@ -106,6 +106,7 @@ TEST_CASE("a queue's running clock joins the clock of the value it waits on, and
     CHECK(tracker.runningClock(QueueType::Copy) == core::Clock{});
     CHECK(kit.device.wait(done[0], UINT64_MAX));
     CHECK(tracker.hostClock()[0] == graphics);
+    kit.joinQueues();
     kit.device.endFrame();
     destroyDevice(kit.device);
 #endif

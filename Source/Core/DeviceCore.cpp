@@ -75,12 +75,13 @@ namespace rojoRHI::core {
         const uint64_t frame = (state >> 1) + 1;
         m_state.store((frame << 1) | 1);
         m_scopes.clearReport();
+        // The retired slot's work is published to the host clock here, before any wait, because the Null backend completes
+        // work at submission; a native backend must publish it after its wait on the slot's fence. The submissions from here
+        // on are the new frame's. No pool lock is held here.
+        beginFrameClock(*this, frame > m_framesInFlight ? frame - m_framesInFlight : 0);
         if (frame > m_framesInFlight)
         {
             const uint64_t retired = frame - m_framesInFlight;
-            // The slot's internal fence is waited on first: the work of its frame is complete for every later check. No pool
-            // lock is held here.
-            retireFrameClock(*this, retired);
             forEachPool([&](auto& pool) {
                 const auto hook = m_hooks.forType<typename std::remove_reference_t<decltype(pool)>::HandleType>();
                 pool.retire(retired, [&](auto& record) {
@@ -122,7 +123,8 @@ namespace rojoRHI::core {
             m_unsubmittedLists.load(),
             state >> 1
         );
-        // The slot's internal fence is signalled on the graphics queue after the frame's graphics submissions.
+        // The slot's internal fence is signalled on the graphics queue after the frame's graphics submissions, which must have
+        // joined the frame's compute and copy work (VU-rojo-device-0006).
         endFrameClock(*this, state >> 1);
         m_state.store(state & ~uint64_t{ 1 });
     }

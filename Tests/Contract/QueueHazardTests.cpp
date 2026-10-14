@@ -56,9 +56,10 @@ namespace {
     }
 
     //==================================================================================================================
-    /// Ends the frame and destroys the device of `kit`.
+    /// Joins the compute and copy work into the frame's graphics work, ends the frame and destroys the device of `kit`.
     [[maybe_unused]] void close(PassKit& kit)
     {
+        kit.joinQueues();
         kit.device.endFrame();
         destroyDevice(kit.device);
     }
@@ -351,6 +352,9 @@ TEST_CASE("three queues submit while another thread waits on and reads their fen
     {
         CHECK(device.completedValue(fence) == kRounds);
     }
+    // The frame's graphics work joins the compute and copy work before it ends.
+    const std::array<FenceValue, 2> joined{ FenceValue{ fences[1], kRounds }, FenceValue{ fences[2], kRounds } };
+    device.queue(QueueType::Graphics).submit({}, joined);
     device.endFrame();
     destroyDevice(device);
 #endif

@@ -1,0 +1,198 @@
+//----------------------------------------------------------------------------------------------------------------------
+/// @file SparseOrderDeathTests.cpp
+/// @brief Death tests for work on one queue that accesses tiles whose mapping changes on another, with no fence between.
+//----------------------------------------------------------------------------------------------------------------------
+#include <rojoRHI/RHI.h>
+
+#include "Support/Death.h"
+#include "Support/PassKit.h"
+
+#include <catch2/catch_test_macros.hpp>
+
+#include <array>
+#include <span>
+
+using namespace rojoRHI;
+using test::PassKit;
+
+namespace {
+    /// The bytes every test copies into the sparse buffer.
+    constexpr uint64_t kBytes = 256;
+
+    /// A `Memory::Gpu` heap, a sparse buffer of four tiles and a sparse 2D texture of two layers with a mip tail.
+    struct SparseSet
+    {
+        Heap heap;       ///< The heap tiles map onto.
+        Buffer buffer;   ///< The sparse buffer.
+        Texture texture; ///< The sparse texture.
+        TileShape shape; ///< The tile shape of `texture`.
+    };
+
+    //==================================================================================================================
+    /// Creates the sparse resources of a test on the device of `kit`.
+    SparseSet sparse(PassKit& kit)
+    {
+        SparseSet set;
+        set.heap = *kit.device.createHeap(HeapDesc{ .size = 64 * 65536, .memory = Memory::Gpu, .label = "test.sparse.heap" });
+        set.buffer =
+            *kit.device.createBuffer(BufferDesc{ .size = 4 * 65536, .memory = Memory::Gpu, .usage = BufferUsage::Sparse, .label = "test.sparse.buffer" });
+        set.texture = *kit.device.createTexture(
+            TextureDesc{ .type = TextureType::Tex2DArray,
+                         .format = Format::RGBA8Unorm,
+                         .extent = { 512, 512, 1 },
+                         .mips = 10,
+                         .layers = 2,
+                         .usage = TextureUsage::Sampled | TextureUsage::Sparse,
+                         .label = "test.sparse.texture" }
+        );
+        set.shape = kit.device.tileShape(set.texture);
+        return set;
+    }
+
+    //==================================================================================================================
+    /// Returns the mapping of the first tile of `set`'s buffer onto the heap's first tile.
+    TileMapping bufferTile(const SparseSet& set)
+    {
+        return TileMapping{ .buffer = set.buffer, .bufferSize = 65536, .heap = set.heap };
+    }
+
+    //==================================================================================================================
+    /// Returns the region of the first tile of mip 0, layer 0 of `set`'s texture.
+    TextureRegion firstTile(const SparseSet& set)
+    {
+        return TextureRegion{ .extent = { set.shape.width, set.shape.height, 1 } };
+    }
+
+    //==================================================================================================================
+    /// Returns the mapping of the first tile of mip 0, layer 0 of `set`'s texture onto the heap's first tile.
+    TileMapping textureTile(const SparseSet& set)
+    {
+        return TileMapping{ .texture = set.texture, .region = firstTile(set), .heap = set.heap };
+    }
+
+    //==================================================================================================================
+    /// Ends `list` and submits it alone to the queue of `type` of `device`, waiting on `wait` and signalling `signal`.
+    void submitTo(Device device, CommandList list, QueueType type, std::span<const FenceValue> wait = {}, std::span<const FenceValue> signal = {})
+    {
+        list.end();
+        const std::array<CommandList, 1> lists{ list };
+        device.queue(type).submit(lists, wait, signal);
+    }
+} // namespace
+
+//======================================================================================================================
+TEST_CASE("VU-rojo-sparse-0013 a sparse buffer copied to on Compute is remapped on Graphics with no fence", "[contract][death]")
+{
+    ROJORHI_EXPECT_DEATH("VU-rojo-sparse-0013", [] {
+        PassKit kit(QueueType::Graphics, true);
+        const SparseSet set = sparse(kit);
+        const Buffer source = kit.buffer(BufferUsage::None, kBytes);
+        CommandList compute = kit.device.acquireCommandList(QueueType::Compute, "test.compute");
+        compute.copyBuffer(source, 0, set.buffer, 0, kBytes);
+        submitTo(kit.device, compute, QueueType::Compute);
+        kit.device.queue(QueueType::Graphics).mapTiles(std::array{ bufferTile(set) });
+    });
+}
+
+//======================================================================================================================
+TEST_CASE("VU-rojo-sparse-0013 a sparse buffer remapped on Graphics is copied to on Compute with no fence", "[contract][death]")
+{
+    ROJORHI_EXPECT_DEATH("VU-rojo-sparse-0013", [] {
+        PassKit kit(QueueType::Graphics, true);
+        const SparseSet set = sparse(kit);
+        const Buffer source = kit.buffer(BufferUsage::None, kBytes);
+        kit.device.queue(QueueType::Graphics).mapTiles(std::array{ bufferTile(set) });
+        CommandList compute = kit.device.acquireCommandList(QueueType::Compute, "test.compute");
+        compute.copyBuffer(source, 0, set.buffer, 0, kBytes);
+        submitTo(kit.device, compute, QueueType::Compute);
+    });
+}
+
+//======================================================================================================================
+TEST_CASE("VU-rojo-sparse-0013 a sparse texture remapped on Graphics is moved on Compute with no fence", "[contract][death]")
+{
+    ROJORHI_EXPECT_DEATH("VU-rojo-sparse-0013", [] {
+        PassKit kit(QueueType::Graphics, true);
+        const SparseSet set = sparse(kit);
+        const TileMapping tile{ .texture = set.texture, .region = { .extent = { set.shape.width, set.shape.height, 1 } }, .heap = set.heap };
+        kit.device.queue(QueueType::Graphics).mapTiles(std::array{ tile });
+        CommandList compute = kit.device.acquireCommandList(QueueType::Compute, "test.compute");
+        test::transition(compute, set.texture, Layout::Undefined, Layout::General);
+        submitTo(kit.device, compute, QueueType::Compute);
+    });
+}
+
+//======================================================================================================================
+TEST_CASE("VU-rojo-sparse-0013 a sparse texture copied on Compute is remapped on Graphics with no fence", "[contract][death]")
+{
+    ROJORHI_EXPECT_DEATH("VU-rojo-sparse-0013", [] {
+        PassKit kit(QueueType::Graphics, true);
+        const SparseSet set = sparse(kit);
+        const Buffer source = kit.buffer(BufferUsage::None, 65536);
+        CommandList compute = kit.device.acquireCommandList(QueueType::Compute, "test.compute");
+        test::transition(compute, set.texture, Layout::Undefined, Layout::General);
+        compute.copyBufferToTexture(source, { .rowPitch = set.shape.width * 4 }, set.texture, firstTile(set));
+        submitTo(kit.device, compute, QueueType::Compute);
+        kit.device.queue(QueueType::Graphics).mapTiles(std::array{ textureTile(set) });
+    });
+}
+
+//======================================================================================================================
+TEST_CASE("VU-rojo-sparse-0013 a sparse buffer written and remapped on Graphics is written on Compute with no fence, not queue-0005", "[contract][death]")
+{
+    // The Compute copy races both the Graphics copy (queue-0005) and the remap; the mapping rule reports first.
+    ROJORHI_EXPECT_DEATH("VU-rojo-sparse-0013", [] {
+        PassKit kit(QueueType::Graphics, true);
+        const SparseSet set = sparse(kit);
+        const Buffer source = kit.buffer(BufferUsage::None, kBytes);
+        kit.list.copyBuffer(source, 0, set.buffer, 0, kBytes);
+        submitTo(kit.device, kit.list, QueueType::Graphics);
+        kit.device.queue(QueueType::Graphics).mapTiles(std::array{ bufferTile(set) });
+        CommandList compute = kit.device.acquireCommandList(QueueType::Compute, "test.compute");
+        compute.copyBuffer(source, 0, set.buffer, 0, kBytes);
+        submitTo(kit.device, compute, QueueType::Compute);
+    });
+}
+
+//======================================================================================================================
+TEST_CASE("VU-rojo-sparse-0013 a sparse texture written and remapped on Graphics is written on Compute with no fence, not queue-0005", "[contract][death]")
+{
+    // A fence hands the texture over in General before the Graphics copy, so only the copy and the remap race the Compute copy.
+    ROJORHI_EXPECT_DEATH("VU-rojo-sparse-0013", [] {
+        PassKit kit(QueueType::Graphics, true);
+        const SparseSet set = sparse(kit);
+        const Buffer source = kit.buffer(BufferUsage::None, 65536);
+        const Fence fence = *kit.device.createFence(0, "test.fence");
+        const std::array<FenceValue, 1> moved{ FenceValue{ fence, 1 } };
+        test::transition(kit.list, set.texture, Layout::Undefined, Layout::General);
+        submitTo(kit.device, kit.list, QueueType::Graphics, {}, moved);
+        CommandList graphics = kit.device.acquireCommandList(QueueType::Graphics, "test.graphics");
+        graphics.copyBufferToTexture(source, { .rowPitch = set.shape.width * 4 }, set.texture, firstTile(set));
+        submitTo(kit.device, graphics, QueueType::Graphics);
+        kit.device.queue(QueueType::Graphics).mapTiles(std::array{ textureTile(set) });
+        CommandList compute = kit.device.acquireCommandList(QueueType::Compute, "test.compute");
+        compute.copyBufferToTexture(source, { .rowPitch = set.shape.width * 4 }, set.texture, firstTile(set));
+        submitTo(kit.device, compute, QueueType::Compute, moved);
+    });
+}
+
+//======================================================================================================================
+TEST_CASE("VU-rojo-sparse-0013 a copy on Compute targets a texture tile Graphics remapped with no fence", "[contract][death]")
+{
+    // The move to General is ordered before the remap, so only the copy's tile meets it.
+    ROJORHI_EXPECT_DEATH("VU-rojo-sparse-0013", [] {
+        PassKit kit(QueueType::Graphics, true);
+        const SparseSet set = sparse(kit);
+        const Buffer source = kit.buffer(BufferUsage::None, 65536);
+        const Fence fence = *kit.device.createFence(0, "test.fence");
+        const std::array<FenceValue, 1> moved{ FenceValue{ fence, 1 } };
+        CommandList move = kit.device.acquireCommandList(QueueType::Compute, "test.move");
+        test::transition(move, set.texture, Layout::Undefined, Layout::General);
+        submitTo(kit.device, move, QueueType::Compute, {}, moved);
+        kit.device.queue(QueueType::Graphics).submit({}, moved);
+        kit.device.queue(QueueType::Graphics).mapTiles(std::array{ textureTile(set) });
+        CommandList compute = kit.device.acquireCommandList(QueueType::Compute, "test.compute");
+        compute.copyBufferToTexture(source, { .rowPitch = set.shape.width * 4 }, set.texture, firstTile(set));
+        submitTo(kit.device, compute, QueueType::Compute);
+    });
+}

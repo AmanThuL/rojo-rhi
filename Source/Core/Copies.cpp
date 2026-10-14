@@ -26,13 +26,6 @@ namespace rojoRHI::core {
         [[maybe_unused]] constexpr LayoutSet kCopyDestination = layoutSet({ Layout::CopyDst, Layout::General });
 
         //==============================================================================================================
-        /// Returns the subresources a copy region names: one mip and its run of layers.
-        [[maybe_unused]] SubresourceRange regionRange(const TextureRegion& region)
-        {
-            return SubresourceRange{ .baseMip = region.mip, .mipCount = 1, .baseLayer = region.layer, .layerCount = region.layers };
-        }
-
-        //==============================================================================================================
         [[maybe_unused]] bool hasUsage(BufferUsage usage, BufferUsage flag)
         {
             return (usage & flag) != BufferUsage::None;
@@ -297,7 +290,7 @@ namespace rojoRHI::core {
             from->size
         );
         logUse(list, bufferUse(src, layout.offset, *end - layout.offset, Stage::Copy, Access::CopyRead));
-        logUse(list, textureUse(dst, regionRange(region), Stage::Copy, Access::CopyWrite, kCopyDestination, UseRule::Cmd0067));
+        logUse(list, regionUse(dst, region, Access::CopyWrite, kCopyDestination, UseRule::Cmd0067));
 #endif
     }
 
@@ -332,7 +325,7 @@ namespace rojoRHI::core {
             to->label,
             to->size
         );
-        logUse(list, textureUse(src, regionRange(region), Stage::Copy, Access::CopyRead, kCopySource, UseRule::Cmd0069));
+        logUse(list, regionUse(src, region, Access::CopyRead, kCopySource, UseRule::Cmd0069));
         logUse(list, bufferUse(dst, layout.offset, *end - layout.offset, Stage::Copy, Access::CopyWrite));
 #endif
     }
@@ -377,8 +370,8 @@ namespace rojoRHI::core {
             "copyTexture within the texture \"{}\" names regions that share a subresource",
             from->label
         );
-        logUse(list, textureUse(src, regionRange(srcRegion), Stage::Copy, Access::CopyRead, kCopySource, UseRule::Cmd0054));
-        logUse(list, textureUse(dst, regionRange(dstRegion), Stage::Copy, Access::CopyWrite, kCopyDestination, UseRule::Cmd0054));
+        logUse(list, regionUse(src, srcRegion, Access::CopyRead, kCopySource, UseRule::Cmd0054));
+        logUse(list, regionUse(dst, dstRegion, Access::CopyWrite, kCopyDestination, UseRule::Cmd0054));
 #endif
     }
 

@@ -97,6 +97,48 @@ namespace rojoRHI::core {
         }
 
         //==============================================================================================================
+        /// Reports `race`, a change on another queue to the mapping of tiles of `memory`, a description of a subresource or
+        /// byte range that names its resource by label, that no fence orders before the use the list `list` makes of them on
+        /// `queue` and that the CPU has not seen complete (VU-rojo-sparse-0013).
+        void reportMappingRace(
+            [[maybe_unused]] const std::optional<TileRace>& race,
+            [[maybe_unused]] std::string_view memory,
+            [[maybe_unused]] QueueType queue,
+            [[maybe_unused]] std::string_view list
+        )
+        {
+            ROJORHI_VU(
+                !race.has_value(),
+                "VU-rojo-sparse-0013",
+                "the list \"{}\" on the {} queue uses tiles of {} whose mapping changed at position {} on the {} queue, and no fence orders "
+                "the change before the use",
+                list,
+                queueName(queue),
+                memory,
+                race->position,
+                queueName(race->queue)
+            );
+        }
+
+        //==============================================================================================================
+        /// Reports `race`, a use on another queue of tiles of `memory`, a description of a subresource or byte range that names
+        /// its resource by label, whose mapping `Queue::mapTiles` on `queue` changes, when no fence orders the use before the
+        /// change and the CPU has not seen it complete (VU-rojo-sparse-0013).
+        void reportUseRace([[maybe_unused]] const std::optional<TileRace>& race, [[maybe_unused]] std::string_view memory, [[maybe_unused]] QueueType queue)
+        {
+            ROJORHI_VU(
+                !race.has_value(),
+                "VU-rojo-sparse-0013",
+                "mapTiles on the {} queue changes the mapping of tiles of {}, which work on the {} queue used at position {}; no fence orders "
+                "that work before the change, and the CPU has not seen it complete",
+                queueName(queue),
+                memory,
+                queueName(race->queue),
+                race->position
+            );
+        }
+
+        //==============================================================================================================
         /// Returns the scope of `use`.
         Scope scopeOf(const UseEvent& use)
         {
@@ -254,8 +296,8 @@ namespace rojoRHI::core {
         }
 
         //==============================================================================================================
-        /// Returns true when a subresource whose latest layout event, on `from` (none for a creation or an acquire), set
-        /// `layout` is handed over to `queue` (VU-rojo-sync-0025): the event is on another queue and keeps contents. An
+        /// Returns true when a subresource held by `from` (none before its first use since a creation or an acquire) in
+        /// `layout` is handed over to `queue` (VU-rojo-sync-0025): `from` is another queue and the layout keeps contents. An
         /// `Undefined` event, another resource's use of the memory, hands over nothing, and the layout rules judge the next
         /// event as they would on the queue.
         [[maybe_unused]] bool handedOver(std::optional<QueueType> from, Layout layout, QueueType queue)
@@ -301,7 +343,8 @@ namespace rojoRHI::core {
         bool acquired,
         Heap heap,
         uint64_t heapOffset,
-        uint64_t heapSize
+        uint64_t heapSize,
+        bool sparse
     )
     {
         const size_t subresources = static_cast<size_t>(mips) * layers;
@@ -314,6 +357,11 @@ namespace rojoRHI::core {
                             .heap = heap,
                             .heapOffset = heapOffset,
                             .heapSize = heapSize };
+        if (sparse)
+        {
+            state.tileUses.resize(subresources);
+            state.tileMaps.resize(subresources);
+        }
         const std::lock_guard held(m_mutex);
         if (heap.bits != 0)
         {
@@ -369,9 +417,11 @@ namespace rojoRHI::core {
     }
 
     //==================================================================================================================
-    void Tracker::addBuffer(Buffer buffer, std::string_view label, uint64_t size, Heap heap, uint64_t heapOffset)
+    void Tracker::addBuffer(Buffer buffer, std::string_view label, uint64_t size, Heap heap, uint64_t heapOffset, bool sparse)
     {
-        BufferState state{ .label = std::string(label), .size = size, .heap = heap, .heapOffset = heapOffset, .segments = ByteSegments(size) };
+        BufferState state{
+            .label = std::string(label), .size = size, .heap = heap, .heapOffset = heapOffset, .segments = ByteSegments(size), .sparse = sparse
+        };
         const std::lock_guard held(m_mutex);
         if (heap.bits != 0)
         {
@@ -416,6 +466,18 @@ namespace rojoRHI::core {
             return std::nullopt;
         }
         return found->second.size();
+    }
+
+    //==================================================================================================================
+    std::optional<uint64_t> Tracker::lastMapping(Texture texture, uint32_t mip, uint32_t layer, QueueType queue)
+    {
+        const std::lock_guard held(m_mutex);
+        const auto found = m_textures.find(texture.bits);
+        if (found == m_textures.end() || found->second.tileMaps.empty() || mip >= found->second.mips || layer >= found->second.layers)
+        {
+            return std::nullopt;
+        }
+        return found->second.tileMaps[static_cast<size_t>(mip) * found->second.layers + layer][static_cast<size_t>(queue)].latest(std::nullopt);
     }
 
     //==================================================================================================================
@@ -543,6 +605,84 @@ namespace rojoRHI::core {
     }
 
     //==================================================================================================================
+    void Tracker::submitted([[maybe_unused]] const TrackerLock& held, QueueType queue)
+    {
+        ROJORHI_INTERNAL_ASSERT(held.owns_lock() && held.mutex() == &m_mutex, "a submission was noted without the tracker's lock");
+        const size_t index = static_cast<size_t>(queue);
+        m_submitted[index] = ++m_positions[index];
+    }
+
+    //==================================================================================================================
+    void Tracker::mapTiles(const TrackerLock& held, QueueType queue, std::span<const TileChange> changes)
+    {
+        // The change is a queue operation after every earlier submission to the queue: the waits of those submissions, and what
+        // the CPU observed, order the work of other queues before it.
+        const Clock ordered = orderedBefore(queue);
+        for (const TileChange& change : changes)
+        {
+            if (change.texture.bits == 0)
+            {
+                const BufferState* buffer = locate(held, change.buffer);
+                if (buffer == nullptr || !buffer->sparse)
+                {
+                    continue;
+                }
+                const std::optional<TileRace> race = findRace(buffer->byteUses, change.offset, change.offset + change.size, queue, ordered);
+                reportUseRace(
+                    race,
+                    race.has_value() ? std::format("bytes {} to {} of the buffer \"{}\"", change.offset, change.offset + change.size, buffer->label)
+                                     : std::string(),
+                    queue
+                );
+                continue;
+            }
+            const TextureState* texture = locate(held, change.texture);
+            if (texture == nullptr || texture->tileUses.empty())
+            {
+                continue;
+            }
+            for (uint32_t mip = change.range.baseMip; mip < change.range.baseMip + change.range.mipCount; ++mip)
+            {
+                for (uint32_t layer = change.range.baseLayer; layer < change.range.baseLayer + change.range.layerCount; ++layer)
+                {
+                    const std::optional<TileRace> race =
+                        findRace(texture->tileUses[static_cast<size_t>(mip) * texture->layers + layer], change.box, queue, ordered);
+                    reportUseRace(
+                        race, race.has_value() ? std::format("mip {} layer {} of the texture \"{}\"", mip, layer, texture->label) : std::string(), queue
+                    );
+                }
+            }
+        }
+        // Every change of the call is one queue operation: one position, which a later use on another queue must be ordered after.
+        const size_t index = static_cast<size_t>(queue);
+        const uint64_t position = ++m_positions[index];
+        for (const TileChange& change : changes)
+        {
+            if (change.texture.bits == 0)
+            {
+                BufferState* buffer = locate(held, change.buffer);
+                if (buffer != nullptr && buffer->sparse)
+                {
+                    buffer->byteMaps[index].note(change.offset, change.offset + change.size, position, m_host[index]);
+                }
+                continue;
+            }
+            TextureState* texture = locate(held, change.texture);
+            if (texture == nullptr || texture->tileMaps.empty())
+            {
+                continue;
+            }
+            for (uint32_t mip = change.range.baseMip; mip < change.range.baseMip + change.range.mipCount; ++mip)
+            {
+                for (uint32_t layer = change.range.baseLayer; layer < change.range.baseLayer + change.range.layerCount; ++layer)
+                {
+                    texture->tileMaps[static_cast<size_t>(mip) * texture->layers + layer][index].note(change.box, position, m_host[index]);
+                }
+            }
+        }
+    }
+
+    //==================================================================================================================
     void Tracker::signal(const TrackerLock& held, QueueType queue, Fence fence, uint64_t initial, uint64_t value)
     {
         FenceClocks& clocks = m_fences.try_emplace(fence.bits, initial).first->second;
@@ -570,20 +710,55 @@ namespace rojoRHI::core {
     //==================================================================================================================
     void Tracker::endFrame(const TrackerLock& held, uint64_t frame)
     {
+        [[maybe_unused]] const std::optional<QueueType> open = unjoined(held);
+        ROJORHI_VU(
+            !open.has_value(),
+            "VU-rojo-device-0006",
+            "endFrame closes frame {}, but the submission to the {} queue at position {} is not ordered before the frame's graphics-queue "
+            "signal: no graphics submission of the frame waits, directly or through other fences, on a value signalled by or after it",
+            frame,
+            queueName(*open),
+            m_submitted[static_cast<size_t>(*open)]
+        );
         m_frames.insert_or_assign(frame, runningClock(held, QueueType::Graphics));
     }
 
     //==================================================================================================================
-    void Tracker::retireFrame([[maybe_unused]] const TrackerLock& held, uint64_t frame)
+    void Tracker::beginFrame([[maybe_unused]] const TrackerLock& held, uint64_t retired)
     {
-        ROJORHI_INTERNAL_ASSERT(held.owns_lock() && held.mutex() == &m_mutex, "a frame was retired without the tracker's lock");
-        const auto found = m_frames.find(frame);
-        if (found == m_frames.end())
+        ROJORHI_INTERNAL_ASSERT(held.owns_lock() && held.mutex() == &m_mutex, "a frame was begun without the tracker's lock");
+        m_frameStart = m_positions;
+        const auto found = m_frames.find(retired);
+        if (retired == 0 || found == m_frames.end())
         {
             return;
         }
         m_host = join(m_host, found->second);
         m_frames.erase(m_frames.begin(), std::next(found));
+    }
+
+    //==================================================================================================================
+    std::optional<QueueType> Tracker::unjoined(const TrackerLock& held) const
+    {
+        // The graphics submissions of the frame join a compute or copy submission through the values they waited on, which the
+        // graphics running clock gathers; the queue's later submissions of the frame cover its earlier ones in queue order.
+        const Clock graphics = runningClock(held, QueueType::Graphics);
+        for (const QueueType queue : { QueueType::Compute, QueueType::Copy })
+        {
+            const size_t index = static_cast<size_t>(queue);
+            if (m_submitted[index] > m_frameStart[index] && !covers(graphics, queue, m_submitted[index]))
+            {
+                return queue;
+            }
+        }
+        return std::nullopt;
+    }
+
+    //==================================================================================================================
+    std::optional<QueueType> Tracker::unjoined()
+    {
+        const TrackerLock held = lock();
+        return unjoined(held);
     }
 
     //==================================================================================================================
@@ -682,6 +857,12 @@ namespace rojoRHI::core {
             return std::nullopt;
         }
         return event.layout;
+    }
+
+    //==================================================================================================================
+    std::optional<QueueType> Tracker::holderOf(const LayoutEvent& event)
+    {
+        return event.queue.has_value() ? event.queue : event.lastUse;
     }
 
     //==================================================================================================================
@@ -853,7 +1034,7 @@ namespace rojoRHI::core {
         {
             for (uint32_t layer = use.range.baseLayer; layer < layerEnd; ++layer)
             {
-                const LayoutEvent& event = texture->layouts[static_cast<size_t>(mip) * texture->layers + layer];
+                LayoutEvent& event = texture->layouts[static_cast<size_t>(mip) * texture->layers + layer];
                 const std::optional<Layout> visible = layoutOn(event, queue, ordered);
                 if (!visible.has_value())
                 {
@@ -861,10 +1042,16 @@ namespace rojoRHI::core {
                     continue;
                 }
                 const Layout current = *visible;
-                // A layout set on another queue reaches this one only in a layout both queues accept; that rule reports first,
-                // then the Copy queue's rule, then the entry's own rule, then the general one.
+                // A layout held by another queue reaches this one only in a layout both queues accept; that rule reports first,
+                // then the Copy queue's rule, then the entry's own rule, then the general one. A creation or an acquire is held
+                // by the queue of the latest use since.
+                [[maybe_unused]] const std::optional<QueueType> holder = holderOf(event);
+                if (!event.queue.has_value())
+                {
+                    event.lastUse = queue;
+                }
                 ROJORHI_VU(
-                    !handedOver(event.queue, current, queue) || sharedLayout(current, queue, *event.queue),
+                    !handedOver(holder, current, queue) || sharedLayout(current, queue, *holder),
                     "VU-rojo-sync-0025",
                     "the list \"{}\" on the {} queue uses mip {} layer {} of the texture \"{}\", handed over from the {} queue in layout {}, which "
                     "the two queues do not share",
@@ -873,7 +1060,7 @@ namespace rojoRHI::core {
                     mip,
                     layer,
                     texture->label,
-                    queueName(event.queue.value_or(queue)),
+                    queueName(holder.value_or(queue)),
                     static_cast<int>(current)
                 );
                 ROJORHI_VU(
@@ -1024,6 +1211,17 @@ namespace rojoRHI::core {
                 }
             }
         }
+        if (!texture->tileUses.empty())
+        {
+            // A change to the mapping of the tiles on another queue reports before the hazards against that queue's uses.
+            for (uint32_t mip = use.range.baseMip; mip < mipEnd; ++mip)
+            {
+                for (uint32_t layer = use.range.baseLayer; layer < layerEnd; ++layer)
+                {
+                    replayTileUse(*texture, static_cast<size_t>(mip) * texture->layers + layer, use.box, queue, list, position, ordered);
+                }
+            }
+        }
         replayTextureHazards(*texture, use, queue, list, position);
         if (texture->heap.bits != 0)
         {
@@ -1110,6 +1308,15 @@ namespace rojoRHI::core {
         const uint64_t end = rangeEnd(use.offset, use.size, buffer->size);
         const Clock ordered = orderedBefore(queue);
         const uint64_t fenced = ordered[static_cast<size_t>(queue)];
+        if (buffer->sparse)
+        {
+            // A change to the mapping of the tiles on another queue reports before the hazards against that queue's uses.
+            const std::optional<TileRace> race = findRace(buffer->byteMaps, use.offset, end, queue, ordered);
+            reportMappingRace(
+                race, race.has_value() ? std::format("bytes {} to {} of the buffer \"{}\"", use.offset, end, buffer->label) : std::string(), queue, list
+            );
+            buffer->byteUses[static_cast<size_t>(queue)].note(use.offset, end, position, m_host[static_cast<size_t>(queue)]);
+        }
         for (ByteSegment& segment : buffer->segments.isolate(use.offset, end))
         {
             QueueHazards& state = segment.hazards.on(queue);
@@ -1176,6 +1383,32 @@ namespace rojoRHI::core {
         }
         checkHeapQueues(held, *heap, self, std::format("the placed buffer \"{}\"", buffer.label), begin, end, queue, later, list);
         noteHeapUse(held, *heap, self, begin, end, queue, position, later);
+    }
+
+    //==================================================================================================================
+    void Tracker::replayTileUse(
+        TextureState& texture,
+        size_t index,
+        const std::optional<TexelBox>& box,
+        QueueType queue,
+        [[maybe_unused]] std::string_view list,
+        uint64_t position,
+        const Clock& ordered
+    )
+    {
+        if (texture.tileUses.empty())
+        {
+            return;
+        }
+        const std::optional<TileRace> race = findRace(texture.tileMaps[index], box, queue, ordered);
+        reportMappingRace(
+            race,
+            race.has_value() ? std::format("mip {} layer {} of the texture \"{}\"", index / texture.layers, index % texture.layers, texture.label)
+                             : std::string(),
+            queue,
+            list
+        );
+        texture.tileUses[index][static_cast<size_t>(queue)].note(box, position, m_host[static_cast<size_t>(queue)]);
     }
 
     //==================================================================================================================
@@ -1314,14 +1547,20 @@ namespace rojoRHI::core {
                 LayoutEvent& event = texture.layouts[index];
                 // With no fence ordering the latest layout event before the barrier, the race is reported below, not a layout.
                 const std::optional<Layout> visible = layoutOn(event, queue, ordered);
+                // A creation or an acquire is held by the queue of the latest use or barrier since, which hands it over.
+                const std::optional<QueueType> holder = holderOf(event);
+                if (!event.queue.has_value())
+                {
+                    event.lastUse = queue;
+                }
                 if (visible.has_value())
                 {
-                    if (handedOver(event.queue, *visible, queue))
+                    if (handedOver(holder, *visible, queue))
                     {
                         // The first barrier of the queue the subresource is handed to reports the handoff rule before sync-0013;
                         // a discard takes nothing over, so the layout need not be one the two queues share.
                         ROJORHI_VU(
-                            barrier.oldLayout == Layout::Undefined || sharedLayout(*visible, queue, *event.queue),
+                            barrier.oldLayout == Layout::Undefined || sharedLayout(*visible, queue, *holder),
                             "VU-rojo-sync-0025",
                             "a texture barrier in the list \"{}\" on the {} queue takes mip {} layer {} of the texture \"{}\", handed over from the {} "
                             "queue in layout {}, which the two queues do not share",
@@ -1330,7 +1569,7 @@ namespace rojoRHI::core {
                             mip,
                             layer,
                             texture.label,
-                            queueName(*event.queue),
+                            queueName(*holder),
                             static_cast<int>(*visible)
                         );
                         ROJORHI_VU(
@@ -1343,7 +1582,7 @@ namespace rojoRHI::core {
                             mip,
                             layer,
                             texture.label,
-                            queueName(*event.queue),
+                            queueName(*holder),
                             static_cast<int>(*visible),
                             static_cast<int>(barrier.oldLayout)
                         );
@@ -1368,6 +1607,8 @@ namespace rojoRHI::core {
                 QueueHazards& state = texture.hazards[index].on(queue);
                 if (transition)
                 {
+                    // The transition writes every tile of the subresource: a change to their mapping on another queue reports first.
+                    replayTileUse(texture, index, std::nullopt, queue, list, position, ordered);
                     // The transition writes the subresource on its queue, so a use on another queue no fence orders before it races it.
                     [[maybe_unused]] const std::optional<QueueHazard> across = checkOtherQueues(texture.hazards[index], queue, destination, ordered, true);
                     ROJORHI_VU(
@@ -1457,6 +1698,7 @@ namespace rojoRHI::core {
             const CommandListCore& list = coreOf(handle);
             tracker.replay(held, list.trackerLog, type, list.label);
         }
+        tracker.submitted(held, type);
         for (const FenceValue& entry : signal)
         {
             // Under the tracker's lock a submission takes the fences' pool lock, never the other way round.
@@ -1487,12 +1729,22 @@ namespace rojoRHI::core {
     }
 
     //==================================================================================================================
-    void retireFrameClockChecked(DeviceCore& core, uint64_t frame)
+    void beginFrameClockChecked(DeviceCore& core, uint64_t retired)
     {
         if (core.validation())
         {
             const TrackerLock held = core.tracker().lock();
-            core.tracker().retireFrame(held, frame);
+            core.tracker().beginFrame(held, retired);
+        }
+    }
+
+    //==================================================================================================================
+    void mapTileChangesChecked(DeviceCore& core, QueueType queue, std::span<const TileChange> changes)
+    {
+        if (core.validation())
+        {
+            const TrackerLock held = core.tracker().lock();
+            core.tracker().mapTiles(held, queue, changes);
         }
     }
 
@@ -1526,12 +1778,13 @@ namespace rojoRHI::core {
         bool acquired,
         Heap heap,
         uint64_t heapOffset,
-        uint64_t heapSize
+        uint64_t heapSize,
+        bool sparse
     )
     {
         if (core.validation())
         {
-            core.tracker().addTexture(texture, label, mips, layers, initial, acquired, heap, heapOffset, heapSize);
+            core.tracker().addTexture(texture, label, mips, layers, initial, acquired, heap, heapOffset, heapSize, sparse);
         }
     }
 
@@ -1545,11 +1798,11 @@ namespace rojoRHI::core {
     }
 
     //==================================================================================================================
-    void trackBufferChecked(DeviceCore& core, Buffer buffer, std::string_view label, uint64_t size, Heap heap, uint64_t heapOffset)
+    void trackBufferChecked(DeviceCore& core, Buffer buffer, std::string_view label, uint64_t size, Heap heap, uint64_t heapOffset, bool sparse)
     {
         if (core.validation())
         {
-            core.tracker().addBuffer(buffer, label, size, heap, heapOffset);
+            core.tracker().addBuffer(buffer, label, size, heap, heapOffset, sparse);
         }
     }
 

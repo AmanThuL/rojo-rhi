@@ -5,6 +5,7 @@
 #pragma once
 
 #include <rojoRHI/Handles.h>
+#include <rojoRHI/QueueType.h>
 #include <rojoRHI/TileMapping.h>
 #include <rojoRHI/TileShape.h>
 
@@ -31,10 +32,12 @@ namespace rojoRHI::core {
     /// Returns the tile shape of `buffer` after checking VU-rojo-sparse-0001 (VU-rojo-core-0001 to 0003 for the handle).
     TileShape tileShape(DeviceCore& core, Buffer buffer);
 
-    /// Applies `mappings` in order to the mapping state of the resources they name and to the mapped-tile count of each heap.
-    /// Debug builds first check every element (VU-rojo-present-0012, VU-rojo-sparse-0002 to 0012; VU-rojo-core-0001 to 0003
-    /// for the handles); an invalid element reports its own rule, whatever the call length. Release applies without checking.
-    void mapTiles(DeviceCore& core, std::span<const TileMapping> mappings);
+    /// Applies `mappings`, mapped on a queue of `queue`, in order to the mapping state of the resources they name and to the
+    /// mapped-tile count of each heap. Debug builds first check every element (VU-rojo-present-0012, VU-rojo-sparse-0002 to
+    /// 0012; VU-rojo-core-0001 to 0003 for the handles); an invalid element reports its own rule, whatever the call length.
+    /// Then a validating device's tracker judges the changes against work on other queues (VU-rojo-sparse-0013). Release
+    /// applies without checking.
+    void mapTiles(DeviceCore& core, QueueType queue, std::span<const TileMapping> mappings);
 
     /// Drops the mapping `tiles` of a sparse resource that was destroyed: each tile no longer counts against its heap.
     void releaseTiles(DeviceCore& core, const TileMap& tiles);
