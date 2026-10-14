@@ -60,6 +60,7 @@ namespace rojoRHI {
     //==================================================================================================================
     void Queue::mapTiles(std::span<const TileMapping> mappings)
     {
-        core::mapTiles(QueueImpl::of(*this).device->core, mappings);
+        const QueueImpl& queue = QueueImpl::of(*this);
+        core::mapTiles(queue.device->core, queue.type, mappings);
     }
 } // namespace rojoRHI

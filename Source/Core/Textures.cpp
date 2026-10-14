@@ -451,8 +451,9 @@ namespace rojoRHI::core {
         const Heap heap = record.heap;
         const uint64_t heapOffset = record.heapOffset;
         const uint64_t heapSize = record.heapSize;
+        const bool sparse = hasUsage(record.usage, TextureUsage::Sparse);
         const Texture texture = core.pool<Texture>().allocate(std::move(record));
-        trackTexture(core, texture, label, mips, layers, initial, false, heap, heapOffset, heapSize);
+        trackTexture(core, texture, label, mips, layers, initial, false, heap, heapOffset, heapSize, sparse);
         return texture;
 #else
         return core.pool<Texture>().allocate(std::move(record));

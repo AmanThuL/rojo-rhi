@@ -9,7 +9,9 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include <array>
+#include <cstddef>
 #include <span>
+#include <vector>
 
 using namespace rojoRHI;
 using test::PassKit;
@@ -43,9 +45,10 @@ namespace {
     }
 
     //==================================================================================================================
-    /// Ends the frame and destroys the device of `kit`.
+    /// Joins the compute and copy work into the frame's graphics work, ends the frame and destroys the device of `kit`.
     [[maybe_unused]] void close(PassKit& kit)
     {
+        kit.joinQueues();
         kit.device.endFrame();
         destroyDevice(kit.device);
     }
@@ -66,6 +69,31 @@ TEST_CASE("a texture handed from Graphics to Compute in ShaderRead is read there
     CommandList compute = kit.device.acquireCommandList(QueueType::Compute, "test.compute");
     dispatchWith(kit, compute, texture, Access::ShaderRead);
     submitTo(kit.device, compute, QueueType::Compute, moved);
+    close(kit);
+#endif
+}
+
+//======================================================================================================================
+TEST_CASE("a texture created with data and sampled on Graphics is read on Compute with no barrier", "[contract]")
+{
+#ifdef NDEBUG
+    SKIP("validation exists only in a Debug build");
+#else
+    PassKit kit(QueueType::Graphics, true);
+    const std::vector<std::byte> texels(static_cast<size_t>(PassKit::kSize) * PassKit::kSize * 4);
+    const std::array<TextureData, 1> initial{ TextureData{ .bytes = texels, .bytesPerRow = PassKit::kSize * 4 } };
+    const Texture texture = *kit.device.createTexture(
+        TextureDesc{ .format = Format::RGBA8Unorm, .extent = { PassKit::kSize, PassKit::kSize, 1 }, .usage = TextureUsage::Sampled, .label = "test.texture" },
+        initial
+    );
+    const Fence fence = *kit.device.createFence(0, "test.fence");
+    const std::array<FenceValue, 1> sampled{ FenceValue{ fence, 1 } };
+    // The texture starts in ShaderRead, which the Graphics and Compute queues share, so neither queue needs a barrier.
+    dispatchWith(kit, kit.list, texture, Access::ShaderRead);
+    submitTo(kit.device, kit.list, QueueType::Graphics, {}, sampled);
+    CommandList compute = kit.device.acquireCommandList(QueueType::Compute, "test.compute");
+    dispatchWith(kit, compute, texture, Access::ShaderRead);
+    submitTo(kit.device, compute, QueueType::Compute, sampled);
     close(kit);
 #endif
 }

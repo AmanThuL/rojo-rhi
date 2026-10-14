@@ -141,8 +141,9 @@ that only it kept alive may then be destroyed.
   rules.
 - `VU-rojo-sparse-0012` No two elements of `mappings` name the same tile.
 - `VU-rojo-sparse-0013` Work on another queue that accesses a tile whose mapping changes is
-  complete, or ordered against the mapping by fences, before the mapping executes. Checked by the
-  validation tracker.
+  complete, or ordered against the mapping by fences, before the mapping executes. Ordering through
+  an earlier submission on the same queue, and completion the CPU observed through a fence, count
+  as orderings by a fence. Checked by the validation tracker.
 #### Mapping
 | | Metal 4 | D3D12 | Vulkan |
 |---|---|---|---|

@@ -93,8 +93,9 @@ namespace rojoRHI::core {
         const uint64_t size = record.size;
         const Heap heap = record.heap;
         const uint64_t heapOffset = record.heapOffset;
+        const bool sparse = (record.usage & BufferUsage::Sparse) != BufferUsage::None;
         const Buffer buffer = core.pool<Buffer>().allocate(std::move(record));
-        trackBuffer(core, buffer, label, size, heap, heapOffset);
+        trackBuffer(core, buffer, label, size, heap, heapOffset, sparse);
         return buffer;
 #else
         return core.pool<Buffer>().allocate(std::move(record));

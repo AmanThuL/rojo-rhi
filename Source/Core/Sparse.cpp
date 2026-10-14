@@ -7,6 +7,7 @@
 
 #include "Base/Assert.h"
 #include "Core/Textures.h"
+#include "Core/Tracker/Tracker.h"
 
 #include <cstdint>
 #include <format>
@@ -14,6 +15,7 @@
 #include <set>
 #include <string>
 #include <utility>
+#include <vector>
 
 namespace rojoRHI::core {
     namespace {
@@ -279,6 +281,54 @@ namespace rojoRHI::core {
         }
 
         //==============================================================================================================
+        /// Passes the changes `mappings` make on a queue of `queue` to the tracker of a validating device: the subresources and
+        /// texels of each texture region, every tail mip of each layer of a mip tail, and each buffer byte range. The records
+        /// are read here, so the tracker's lock is never held with a pool's. Debug builds only.
+        void orderMappings([[maybe_unused]] DeviceCore& core, [[maybe_unused]] QueueType queue, [[maybe_unused]] std::span<const TileMapping> mappings)
+        {
+#ifndef NDEBUG
+            if (!core.validation())
+            {
+                return;
+            }
+            std::vector<TileChange> changes;
+            changes.reserve(mappings.size());
+            for (const TileMapping& mapping : mappings)
+            {
+                if (mapping.texture.bits == 0)
+                {
+                    changes.push_back(TileChange{ .buffer = mapping.buffer, .offset = mapping.bufferOffset, .size = mapping.bufferSize });
+                    continue;
+                }
+                // The handle was checked live; a destroy racing the call is misuse that no tier detects, and the change is skipped.
+                const LookupResult<TextureRecord> found = core.pool<Texture>().lookup(mapping.texture);
+                if (found.status != LookupStatus::Ok)
+                {
+                    continue;
+                }
+                const TextureRegion& region = mapping.region;
+                if (mapping.mipTail)
+                {
+                    // A mip tail is mapped as a whole: the change touches every tail mip of each of its layers.
+                    const uint32_t first = textureTileShape(core, *found.record).mipTailFirst;
+                    changes.push_back(
+                        TileChange{
+                            .texture = mapping.texture,
+                            .range = { .baseMip = first, .mipCount = found.record->mips - first, .baseLayer = region.layer, .layerCount = region.layers } }
+                    );
+                    continue;
+                }
+                changes.push_back(
+                    TileChange{ .texture = mapping.texture,
+                                .range = { .baseMip = region.mip, .mipCount = 1, .baseLayer = region.layer, .layerCount = region.layers },
+                                .box = TexelBox{ .offset = region.offset, .extent = region.extent } }
+                );
+            }
+            mapTileChanges(core, queue, changes);
+#endif
+        }
+
+        //==============================================================================================================
         /// Adds each delta of `deltas`, keyed by heap handle bits, to the mapped-tile count of its heap.
         void applyHeapDeltas(DeviceCore& core, const std::map<uint64_t, int64_t>& deltas)
         {
@@ -373,9 +423,10 @@ namespace rojoRHI::core {
     }
 
     //==================================================================================================================
-    void mapTiles(DeviceCore& core, std::span<const TileMapping> mappings)
+    void mapTiles(DeviceCore& core, QueueType queue, std::span<const TileMapping> mappings)
     {
         checkMappings(core, mappings);
+        orderMappings(core, queue, mappings);
         DeviceCounts::add(core.counts().nativeSubmitCalls);
         std::map<uint64_t, int64_t> deltas;
         for (const TileMapping& mapping : mappings)

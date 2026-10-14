@@ -58,7 +58,13 @@ namespace rojoRHI::test {
         /// Begins a simple pass, binds a vertex pipeline (a mesh pipeline when `mesh` is set) and sets a viewport and scissor.
         void readyToDraw(bool mesh = false);
 
-        /// Ends the list, submits it to the queue of its type, ends the frame and destroys the device.
+        /// Joins the work submitted so far to the compute and copy queues into the graphics queue's, as VU-rojo-device-0006
+        /// requires of a frame: each signals a fence value from a submission with no lists, which a graphics submission with no
+        /// lists then waits on.
+        void joinQueues();
+
+        /// Ends the list, submits it to the queue of its type, joins a validating kit's queues, ends the frame and destroys the
+        /// device.
         void finish();
 
         Device device;         ///< The device.
@@ -67,7 +73,9 @@ namespace rojoRHI::test {
         QueueType type;        ///< The queue type of `list`.
 
       private:
-        bool m_validation; ///< The device was created with validation.
+        bool m_validation;     ///< The device was created with validation.
+        Fence m_join;          ///< The fence `joinQueues` signals and waits on; null until its first call.
+        uint64_t m_joined = 0; ///< The last value `joinQueues` signalled on `m_join`.
     };
 
     /// Returns a pass description of the color attachments `colors` that renders to the whole `PassKit::kSize` square.

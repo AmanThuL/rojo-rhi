@@ -125,11 +125,30 @@ namespace rojoRHI::test {
     }
 
     //==================================================================================================================
+    void PassKit::joinQueues()
+    {
+        if (m_join.bits == 0)
+        {
+            m_join = *device.createFence(0, "kit.join");
+        }
+        for (const QueueType other : { QueueType::Compute, QueueType::Copy })
+        {
+            const std::array<FenceValue, 1> joined{ FenceValue{ m_join, ++m_joined } };
+            device.queue(other).submit({}, {}, joined);
+            device.queue(QueueType::Graphics).submit({}, joined);
+        }
+    }
+
+    //==================================================================================================================
     void PassKit::finish()
     {
         list.end();
         const std::array<CommandList, 1> lists{ list };
         device.queue(type).submit(lists);
+        if (m_validation)
+        {
+            joinQueues();
+        }
         device.endFrame();
         destroyDevice(device);
     }

@@ -1,4 +1,2 @@
 # Valid-usage rules that have no death test yet: '<identifier> <part>', sorted by identifier.
 # Each part removes its lines as it adds the tests; Tools/check_vu_coverage.py enforces it.
-VU-rojo-device-0006 tracker
-VU-rojo-sparse-0013 tracker
