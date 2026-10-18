@@ -37,8 +37,9 @@ namespace rojoRHI::bench {
 
     //==================================================================================================================
     // Measures one arm. Per measured frame: the arm's CPU and GPU spans, the allocations of the whole frame() call, and
-    // the native calls and barriers the frame made, read from the context after the allocation window closes. R adds
-    // its counters after warm-up and at the end, each frame's cpuAllocations and the first measured frame's delta.
+    // the native calls and barriers the frame made, read from the context after the allocation window closes, or those
+    // of the narrower window the arm counted itself. R adds its counters after warm-up and at the end, each frame's
+    // cpuAllocations and the first measured frame's delta.
     template<WorkloadArm A> ArmResult runArm(const Config& config, const RunOptions& options)
     {
         ArmResult result;
@@ -105,8 +106,8 @@ namespace rojoRHI::bench {
             result.cpuNs.push_back(frame->cpuNs);
             result.gpuNs.push_back(frame->gpuNs);
             result.allocations.push_back(allocationsAfter - allocationsBefore);
-            result.nativeCalls.push_back(after.calls - before.calls);
-            result.nativeBarriers.push_back(after.barriers - before.barriers);
+            result.nativeCalls.push_back(frame->counted ? frame->counted->calls : after.calls - before.calls);
+            result.nativeBarriers.push_back(frame->counted ? frame->counted->barriers : after.barriers - before.barriers);
             if (after.counters && before.counters)
             {
                 cpuAllocations.push_back(after.counters->cpuAllocations - before.counters->cpuAllocations);
