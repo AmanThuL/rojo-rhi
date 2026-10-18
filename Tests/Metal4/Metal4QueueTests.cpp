@@ -147,7 +147,7 @@ TEST_CASE("a submission's waits and signals each count one native call", "[metal
     const std::array<FenceValue, 3> signal{ FenceValue{ b, 1 }, FenceValue{ c, 1 }, FenceValue{ d, 1 } };
     queue.submit({}, wait, signal);
     const Counters carried = device.counters();
-    // A list encodes no native command yet, so no submission commits a command buffer: an empty one makes no native call.
+    // A submission with no list commits no command buffer: an empty one makes no native call.
     CHECK(empty.nativeSubmitCalls == start.nativeSubmitCalls);
     // Two waits, three signals and the signal of the queue's progress event, which releases the events it holds.
     CHECK(carried.nativeSubmitCalls == empty.nativeSubmitCalls + 6);

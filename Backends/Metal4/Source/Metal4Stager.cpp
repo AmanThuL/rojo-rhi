@@ -17,6 +17,7 @@
 
 #include <Metal/Metal.hpp>
 
+#include <array>
 #include <chrono>
 #include <condition_variable>
 #include <cstddef>
@@ -84,11 +85,9 @@ namespace rojoRHI::metal4 {
         }
 
         //==============================================================================================================
-        /// Blocks until Metal ran the feedback handler that shares `completion` and then released the handler, which is the
-        /// last reference of the commit's completion path: the allocator, the command buffer and the buffers it used are then
-        /// held by the stager alone, and a release cannot leave the final one to Metal's notification thread, which holds no
-        /// autorelease pool. Logs a warning after each slice of `kWaitSlice` that passes. Returns the reported error.
-        std::string waitForCompletion(std::shared_ptr<Completion>& completion)
+        /// Blocks until Metal ran the feedback handler that shares `completion` and then released the handler, on queue
+        /// `label`. Logs a warning after each slice of `kWaitSlice` that passes. Returns the reported error.
+        std::string waitForCompletion(std::shared_ptr<Completion>& completion, std::string_view label)
         {
             uint64_t waitedSeconds = 0;
             {
@@ -96,7 +95,7 @@ namespace rojoRHI::metal4 {
                 while (!completion->reported.wait_for(lock, kWaitSlice, [&] { return completion->finished; }))
                 {
                     waitedSeconds += kWaitSlice.count();
-                    ROJORHI_LOG_WARN("still waiting after {} s for a copy on queue \"rojorhi.upload\" to complete", waitedSeconds);
+                    ROJORHI_LOG_WARN("still waiting after {} s for a commit on queue \"{}\" to complete", waitedSeconds, label);
                 }
             }
             // Metal releases the handler just after it returns, on its own thread.
@@ -104,11 +103,30 @@ namespace rojoRHI::metal4 {
             while (!releasedWithin(completion, kWaitSlice))
             {
                 waitedSeconds += kWaitSlice.count();
-                ROJORHI_LOG_WARN("still waiting after {} s for queue \"rojorhi.upload\" to release a completed copy", waitedSeconds);
+                ROJORHI_LOG_WARN("still waiting after {} s for queue \"{}\" to release a completed commit", waitedSeconds, label);
             }
             return std::move(completion->error);
         }
     } // namespace
+
+    //==================================================================================================================
+    std::string commitAndWait(MTL4::CommandQueue* queue, std::span<const MTL4::CommandBuffer* const> buffers, std::string_view label)
+    {
+        auto completion = std::make_shared<Completion>();
+        MTL4::CommitOptions* options = MTL4::CommitOptions::alloc()->init();
+        options->addFeedbackHandler([completion](MTL4::CommitFeedback* feedback) {
+            // Metal's notification thread holds no autorelease pool, and the error's description is autoreleased.
+            const AutoreleasePool handlerPool;
+            std::string error = feedback->error() != nullptr ? describe(feedback->error()) : std::string();
+            std::lock_guard lock(completion->mutex);
+            completion->error = std::move(error);
+            completion->finished = true;
+            completion->reported.notify_all();
+        });
+        queue->commit(buffers.data(), buffers.size(), options);
+        options->release();
+        return waitForCompletion(completion, label);
+    }
 
     //==================================================================================================================
     Result<void> Stager::create(MTL::Device* device)
@@ -353,22 +371,9 @@ namespace rojoRHI::metal4 {
         {
             return std::unexpected(Error{ ErrorCategory::DriverFailure, "no compute encoder was created on queue rojorhi.upload" });
         }
-        auto completion = std::make_shared<Completion>();
-        MTL4::CommitOptions* options = MTL4::CommitOptions::alloc()->init();
-        options->addFeedbackHandler([completion](MTL4::CommitFeedback* feedback) {
-            // Metal's notification thread holds no autorelease pool, and the error's description is autoreleased.
-            const AutoreleasePool handlerPool;
-            std::string error = feedback->error() != nullptr ? describe(feedback->error()) : std::string();
-            std::lock_guard lock(completion->mutex);
-            completion->error = std::move(error);
-            completion->finished = true;
-            completion->reported.notify_all();
-        });
-        const MTL4::CommandBuffer* submitted[] = { m_commands };
-        m_queue->commit(submitted, 1, options);
+        const std::array<const MTL4::CommandBuffer*, 1> submitted{ m_commands };
+        const std::string error = commitAndWait(m_queue, submitted, "rojorhi.upload");
         core::DeviceCounts::add(device.core.counts().nativeSubmitCalls);
-        options->release();
-        const std::string error = waitForCompletion(completion);
         if (!error.empty())
         {
             return std::unexpected(Error{ ErrorCategory::DriverFailure, std::format("a copy on queue rojorhi.upload failed: {}", error) });

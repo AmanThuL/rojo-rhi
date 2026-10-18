@@ -19,8 +19,8 @@ namespace rojoRHI::core {
         uint64_t globalBarriers = 0;    ///< Global barrier records passed to `CommandList::barrier`.
         uint64_t bufferBarriers = 0;    ///< Buffer barrier records passed to `CommandList::barrier`.
         uint64_t textureBarriers = 0;   ///< Texture barrier records passed to `CommandList::barrier`.
-        uint64_t nativeBarriers = 0;    ///< `CommandList::barrier` calls with at least one record, each batched into one native command.
-        uint64_t encodersOpened = 0;    ///< `beginRenderPass` calls.
+        uint64_t nativeBarriers = 0;    ///< Native barrier commands emitted after batching, counted by the backend.
+        uint64_t encodersOpened = 0;    ///< Native encoders on Metal 4; render passes begun elsewhere. Counted by the backend.
     };
 
     /// The device's counts, all incremented relaxed from any thread and read with relaxed loads, so a snapshot takes no lock.

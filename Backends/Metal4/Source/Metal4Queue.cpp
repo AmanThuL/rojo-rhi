@@ -1,6 +1,6 @@
 //----------------------------------------------------------------------------------------------------------------------
 /// @file Metal4Queue.cpp
-/// @brief Implements the public queue entries for the Metal 4 backend: submissions wait and signal fence events on the native queue.
+/// @brief Implements the public queue entries for the Metal 4 backend: submissions wait, commit the lists and signal on the native queue.
 //----------------------------------------------------------------------------------------------------------------------
 
 #include "Metal4Device.h"
@@ -63,7 +63,17 @@ namespace rojoRHI {
             {
                 queue.native->wait(static_cast<const MTL::SharedEvent*>(core.pool<Fence>().native(entry.fence)), entry.value);
             }
-            // A list encodes no native command yet, so no command buffer is committed and none is counted.
+            if (!lists.empty())
+            {
+                // One commit of every list's command buffer, in span order, from a vector only this queue's submissions touch.
+                queue.commitBuffers.clear();
+                for (const CommandList& list : lists)
+                {
+                    queue.commitBuffers.push_back(CommandListImpl::of(list).state.commandBuffer);
+                }
+                queue.native->commit(queue.commitBuffers.data(), queue.commitBuffers.size());
+                core::DeviceCounts::add(core.counts().nativeSubmitCalls);
+            }
             for (const FenceValue& entry : signal)
             {
                 queue.native->signalEvent(static_cast<const MTL::SharedEvent*>(core.pool<Fence>().native(entry.fence)), entry.value);

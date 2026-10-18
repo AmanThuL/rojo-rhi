@@ -1,12 +1,14 @@
 //----------------------------------------------------------------------------------------------------------------------
 /// @file Metal4CommandList.cpp
-/// @brief Implements the public command list entries for the Metal 4 backend: lists keep a state, frame data lives in arena pages.
+/// @brief Implements the public command list entries for the Metal 4 backend: lists record into command buffers, frame data lives in arena pages.
 //----------------------------------------------------------------------------------------------------------------------
 
 #include "Metal4Device.h"
 
 #include <rojoRHI/RHI.h>
 
+#include "Base/Log.h"
+#include "Core/Accesses.h"
 #include "Core/Buffers.h"
 #include "Core/CommandLists.h"
 #include "Core/Counters.h"
@@ -14,6 +16,7 @@
 #include "Core/FrameArena.h"
 #include "Core/HandlePool.h"
 #include "Core/Records.h"
+#include "Metal4Barriers.h"
 #include "Metal4Common.h"
 #include "Metal4Memory.h"
 
@@ -21,6 +24,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <cstdlib>
 #include <cstring>
 #include <format>
 #include <memory>
@@ -98,19 +102,53 @@ namespace rojoRHI {
             std::lock_guard lock(pool.mutex);
             if (pool.used == pool.lists.size())
             {
-                pool.lists.push_back(std::make_unique<CommandListImpl>());
+                auto created = std::make_unique<CommandListImpl>();
                 core::DeviceCounts::add(impl.core.counts().cpuAllocations);
+                // The list's objects are its own for good: the pool keeps the list, and the slot's reuse resets its allocator.
+                if (Result<void> made = created->state.create(impl.device, impl.viewTable->gpuAddress(), impl.samplerTable->gpuAddress()); !made)
+                {
+                    ROJORHI_LOG_ERROR("acquireCommandList on device \"{}\": {}", impl.core.label(), made.error().message);
+                    std::abort();
+                }
+                core::DeviceCounts::add(impl.core.counts().nativeCreateCalls, 3);
+                pool.lists.push_back(std::move(created));
             }
             list = pool.lists[pool.used++].get();
         }
         core::beginList(list->core, impl.core, type, label);
+        metal4::ListState& state = list->state;
+        // A list that never ended, which only a Release build lets through, leaves its encoder behind; one that ended with
+        // scopes open leaves their strings.
+        list->encoders.release();
+        for (NS::String* scopeLabel : state.scopeLabels)
+        {
+            scopeLabel->release();
+        }
+        state.scopeLabels.clear();
+        if (state.label != nullptr)
+        {
+            state.label->release();
+        }
+        // Made with alloc and init, so not autoreleased: acquisition opens no pool. The string stays for encoder labels.
+        state.label = NS::String::alloc()->init(list->core.label.c_str(), NS::UTF8StringEncoding);
+        state.commandBuffer->beginCommandBuffer(state.allocator);
+        core::noteNativeCall(list->core);
+        state.commandBuffer->setLabel(state.label);
+        core::noteNativeCall(list->core);
         return CommandListImpl::wrap(list);
     }
 
     //==================================================================================================================
     void CommandList::end()
     {
-        core::endList(CommandListImpl::of(*this).core);
+        CommandListImpl& list = CommandListImpl::of(*this);
+        // The core's checks run before any native call.
+        core::endList(list.core);
+        list.encoders.close(list.core);
+        // A barrier still pending orders the work of later lists on the queue.
+        metal4::emitTrailing(list.core, list.state, list.encoders.barriers());
+        list.state.commandBuffer->endCommandBuffer();
+        core::noteNativeCall(list.core);
     }
 
     //==================================================================================================================
@@ -138,20 +176,6 @@ namespace rojoRHI {
     {
         CommandListImpl::of(*this);
         metal4::notImplemented("CommandList::endRenderPass");
-    }
-
-    //==================================================================================================================
-    void CommandList::beginScope([[maybe_unused]] std::string_view label)
-    {
-        CommandListImpl::of(*this);
-        metal4::notImplemented("CommandList::beginScope");
-    }
-
-    //==================================================================================================================
-    void CommandList::endScope()
-    {
-        CommandListImpl::of(*this);
-        metal4::notImplemented("CommandList::endScope");
     }
 
     //==================================================================================================================
@@ -283,64 +307,6 @@ namespace rojoRHI {
     }
 
     //==================================================================================================================
-    void CommandList::copyBuffer(
-        [[maybe_unused]] Buffer src,
-        [[maybe_unused]] uint64_t srcOffset,
-        [[maybe_unused]] Buffer dst,
-        [[maybe_unused]] uint64_t dstOffset,
-        [[maybe_unused]] uint64_t size
-    )
-    {
-        CommandListImpl::of(*this);
-        metal4::notImplemented("CommandList::copyBuffer");
-    }
-
-    //==================================================================================================================
-    void CommandList::copyBufferToTexture(
-        [[maybe_unused]] Buffer src,
-        [[maybe_unused]] const BufferTextureLayout& layout,
-        [[maybe_unused]] Texture dst,
-        [[maybe_unused]] const TextureRegion& region
-    )
-    {
-        CommandListImpl::of(*this);
-        metal4::notImplemented("CommandList::copyBufferToTexture");
-    }
-
-    //==================================================================================================================
-    void CommandList::copyTextureToBuffer(
-        [[maybe_unused]] Texture src,
-        [[maybe_unused]] const TextureRegion& region,
-        [[maybe_unused]] Buffer dst,
-        [[maybe_unused]] const BufferTextureLayout& layout
-    )
-    {
-        CommandListImpl::of(*this);
-        metal4::notImplemented("CommandList::copyTextureToBuffer");
-    }
-
-    //==================================================================================================================
-    void CommandList::copyTexture(
-        [[maybe_unused]] Texture src,
-        [[maybe_unused]] const TextureRegion& srcRegion,
-        [[maybe_unused]] Texture dst,
-        [[maybe_unused]] const TextureRegion& dstRegion
-    )
-    {
-        CommandListImpl::of(*this);
-        metal4::notImplemented("CommandList::copyTexture");
-    }
-
-    //==================================================================================================================
-    void CommandList::fillBuffer(
-        [[maybe_unused]] Buffer dst, [[maybe_unused]] uint64_t offset, [[maybe_unused]] uint64_t size, [[maybe_unused]] uint32_t pattern
-    )
-    {
-        CommandListImpl::of(*this);
-        metal4::notImplemented("CommandList::fillBuffer");
-    }
-
-    //==================================================================================================================
     void CommandList::clearTexture([[maybe_unused]] Texture texture, [[maybe_unused]] const SubresourceRange& range, [[maybe_unused]] const ClearValue& value)
     {
         CommandListImpl::of(*this);
@@ -355,20 +321,9 @@ namespace rojoRHI {
     }
 
     //==================================================================================================================
-    void CommandList::declareAccessChecked([[maybe_unused]] std::span<const ResourceAccess> accesses)
+    void CommandList::declareAccessChecked(std::span<const ResourceAccess> accesses)
     {
-        CommandListImpl::of(*this);
-        metal4::notImplemented("CommandList::declareAccess");
-    }
-
-    //==================================================================================================================
-    void CommandList::barrier(
-        [[maybe_unused]] std::span<const GlobalBarrier> globals,
-        [[maybe_unused]] std::span<const BufferBarrier> buffers,
-        [[maybe_unused]] std::span<const TextureBarrier> textures
-    )
-    {
-        CommandListImpl::of(*this);
-        metal4::notImplemented("CommandList::barrier");
+        // A record for the validation tracker only: no native call.
+        core::declareAccess(CommandListImpl::of(*this).core, accesses);
     }
 } // namespace rojoRHI

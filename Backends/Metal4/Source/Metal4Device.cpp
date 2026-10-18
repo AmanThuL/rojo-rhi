@@ -20,6 +20,7 @@
 #include "Metal4Common.h"
 #include "Metal4Fences.h"
 #include "Metal4Formats.h"
+#include "Metal4Stager.h"
 #include "Metal4Textures.h"
 #include "Metal4Views.h"
 
@@ -33,6 +34,7 @@
 #include <memory>
 #include <mutex>
 #include <span>
+#include <string>
 #include <string_view>
 #include <utility>
 
@@ -52,9 +54,13 @@ namespace rojoRHI {
         }
 
         //==============================================================================================================
-        /// Blocks until `queue`, labelled `label`, has finished the work submitted to it so far, through an event of its own.
-        /// Logs and aborts, in every build, when Metal makes no event: the device's objects cannot be released while the
-        /// queue may still use them.
+        /// Blocks until `queue`, labelled `label`, has finished the work submitted to it so far, through an event of its own,
+        /// and then until Metal's completion work for those commits has let go of what it held, through a last empty commit
+        /// that `metal4::commitAndWait` waits for: a list's allocator released afterwards is released for the last time here,
+        /// not on Metal's notification thread, which holds no autorelease pool. Logs and aborts, in every build, when Metal
+        /// makes no event, allocator or command buffer: the device's objects cannot be released while the queue may still
+        /// use them. The caller holds an autorelease pool. Only `destroyDevice` calls it, after the caller's last submission:
+        /// its empty commit is the one native commit on a caller queue that no `Queue::submit` makes, and it is not counted.
         void drainQueue(MTL::Device* device, MTL4::CommandQueue* queue, std::string_view label)
         {
             MTL::SharedEvent* drained = device->newSharedEvent();
@@ -66,17 +72,41 @@ namespace rojoRHI {
             queue->signalEvent(drained, 1);
             metal4::waitUntilSignaled(drained, 1, "the drain event of queue", label);
             drained->release();
+            MTL4::CommandAllocator* allocator = device->newCommandAllocator();
+            MTL4::CommandBuffer* last = device->newCommandBuffer();
+            if (allocator == nullptr || last == nullptr)
+            {
+                ROJORHI_LOG_ERROR("Metal made no command buffer to drain queue \"{}\" at device destruction", label);
+                std::abort();
+            }
+            last->beginCommandBuffer(allocator);
+            last->setLabel(metal4::makeString("rojorhi.drain"));
+            last->endCommandBuffer();
+            const std::array<const MTL4::CommandBuffer*, 1> buffers{ last };
+            const std::string error = metal4::commitAndWait(queue, buffers, label);
+            if (!error.empty())
+            {
+                ROJORHI_LOG_WARN("the drain commit on queue \"{}\" reported: {}", label, error);
+            }
+            last->release();
+            allocator->release();
         }
 
         //==============================================================================================================
-        /// Returns the command lists of a reused frame slot to its pool, and releases the events of destroyed fences every
-        /// queue has passed.
+        /// Returns the command lists of a reused frame slot to its pool, each list's allocator reset, and releases the events of
+        /// destroyed fences every queue has passed. The frame wait before it has proven the slot's work complete, the compute
+        /// and copy work included, which the frame's graphics work joins.
         void reuseSlot(void* context, uint32_t slot)
         {
             DeviceImpl& impl = *static_cast<DeviceImpl*>(context);
             {
                 ListPool& pool = impl.listPools[slot];
                 std::lock_guard lock(pool.mutex);
+                for (size_t i = 0; i < pool.used; ++i)
+                {
+                    pool.lists[i]->state.allocator->reset();
+                    core::DeviceCounts::add(impl.core.counts().nativeHostCalls);
+                }
                 pool.used = 0;
             }
             metal4::releasePassedFences(impl);
@@ -342,6 +372,15 @@ namespace rojoRHI {
             }
             drainQueue(impl.device, impl.stager.queue(), "rojorhi.upload");
             impl.core.beginDestroy();
+            // The lists' objects go before the device's, which they were created on.
+            for (ListPool& listPool : impl.listPools)
+            {
+                for (const std::unique_ptr<CommandListImpl>& list : listPool.lists)
+                {
+                    list->encoders.release();
+                    list->state.release();
+                }
+            }
             releaseNative(impl);
         }
         delete &impl;
