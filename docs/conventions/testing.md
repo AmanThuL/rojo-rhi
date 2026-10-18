@@ -121,13 +121,24 @@ and its own test support. The rule is checkable, so placement is decided by read
 than by judgement. A test that reaches a consumer's renderer, scene or editor headers stays with
 that consumer, even when the behaviour it observes is ultimately RojoRHI's.
 
+**Benchmark checks** are Catch2 cases in `Benchmarks/Checks/`, run by `RojoRHIBench check` and
+described in [the benchmark harness](../architecture/benchmarks.md). `[host]` cases need nothing
+and run everywhere. `[null]` cases run every RojoRHI workload on the Null backend and assert its
+counters and call sequence, and `xmake test RojoRHIBench/null` runs both tags in the macOS
+interface CI job, in Debug and Release; the `metal4` job does not build the harness. `[native]`
+cases check the native arm against CPU oracles under `MTL_DEBUG_LAYER=1` with
+`xmake test RojoRHIBench/native`, on local Apple Silicon only; CI requires their inventory to be
+non-zero. `[metal4]` holds the counter case of a `metal4` build, run by
+`xmake test RojoRHIBench/metal4`. Timed runs are not tests: they follow ADR 0014.
+
 Test support follows the same rule: the bootstrap that creates a device and a shader library for a
 GPU case is RojoRHI's, while a fixture that builds a consumer's scene is not.
 
 ## Shaders for tests
 
-- Test oracles are the only shaders this repository owns. They live under `Shaders/Tests/`; v1's
-  oracles live under `Legacy/Shaders/Tests/`. Each is compiled into its test target's own
+- Test oracles and benchmark workloads are the only shaders this repository owns. Oracles live
+  under `Shaders/Tests/` and the benchmark's workloads under `Shaders/Bench/`, prefixed `Bench`;
+  v1's oracles live under `Legacy/Shaders/Tests/`. Each is compiled into its target's own
   directory.
 - A smoke shader that both RojoRHI and a consumer need is copied, not shared. The duplication is
   deliberate: it buys independence, and a later divergence between the two copies is then a

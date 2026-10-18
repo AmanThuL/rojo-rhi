@@ -74,8 +74,17 @@ caller-supplied label is used verbatim and keeps the caller's own prefix; RojoRH
   makes in `Tests/Metal4/`, `[conformance]` for the T1 cases in `Tests/Conformance/`, which
   skip on the Null backend, `[abi]` for the v2 shader ABI compile and layout cases, `[rhi]` for
   the v1 CPU contract and validation cases, `[gpu]` for cases needing a real device,
-  `[checkpoint-a]` for the frozen conformance set, `[.]` for a case hidden from the default run. A
-  case carries its own tags plus any set tag it belongs to.
+  `[checkpoint-a]` for the frozen conformance set, `[host]`, `[native]` and `[metal4]` for the
+  benchmark checks in `Benchmarks/Checks/` (`[null]` also tags the cases there that run every
+  RojoRHI workload on the Null backend), and `[.]` for a case hidden from the default run. A case
+  carries its own tags plus any set tag it belongs to.
+
+## Benchmarks
+
+The harness target is `RojoRHIBench`, in `Benchmarks/` under namespace `rojoRHI::bench`. Files of the
+native arm are prefixed `Native` (`NativeC3.cpp`) and files of the RojoRHI arm `Rojo`
+(`RojoC3.cpp`); shared files carry no prefix. Its Slang sources in `Shaders/Bench/` are prefixed
+`Bench`.
 
 ## Process environment
 
