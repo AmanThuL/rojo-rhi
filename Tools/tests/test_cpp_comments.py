@@ -60,6 +60,18 @@ class CppCommentTests(unittest.TestCase):
                 ["Backends/Metal4/Source/Private.h", "Include/rojoRHI/RHI.h", "Source/Validate.h"],
             )
 
+    def test_benchmark_sources_are_owned(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            for relative in ("Benchmarks/Main.cpp", "Benchmarks/Host/HostClock.h"):
+                path = root / relative
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_text("", encoding="utf-8")
+            self.assertEqual(
+                [path.relative_to(root).as_posix() for path in comments.project_cpp_files(root)],
+                ["Benchmarks/Host/HostClock.h", "Benchmarks/Main.cpp"],
+            )
+
     def test_public_header_roots_exclude_backend_and_implementation_headers(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

@@ -18,7 +18,7 @@ INCLUDE = re.compile(r"^\s*#\s*include\b", re.MULTILINE)
 # Each Slang tree, paired with the directory holding its shared modules. The component has two
 # trees: the frozen v1 test oracles under Legacy/Shaders/Tests with the modules they share under
 # Legacy/Shaders/Tests/Modules, and the interface's module under Shaders/RojoRHI with the entry
-# files that import it under Shaders/Tests.
+# files that import it under Shaders/Tests and Shaders/Bench.
 TREES = (("Legacy/Shaders", "Tests/Modules"), ("Shaders", "RojoRHI"))
 
 

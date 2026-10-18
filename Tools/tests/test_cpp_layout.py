@@ -254,6 +254,14 @@ class CppLayoutTests(unittest.TestCase):
         with self.assertRaisesRegex(layout.LayoutSetupError, "metal4/compile_commands.json is missing"):
             layout.compilation_database_files(missing)
 
+    def test_benchmark_sources_are_checked(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            source = root / "Benchmarks" / "Host" / "HostClock.cpp"
+            source.parent.mkdir(parents=True)
+            source.write_text("", encoding="utf-8")
+            self.assertEqual(layout.project_cpp_files(root), [source])
+
     def test_an_empty_root_fails(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             argv = ["check_cpp_layout.py", "--root", directory]

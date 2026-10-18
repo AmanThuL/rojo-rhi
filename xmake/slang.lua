@@ -7,8 +7,9 @@
 --   slang.moduledir   the directory `import` resolves through (-I)
 --
 -- Outputs land in <targetdir>/Shaders/<name>.{metal,spv,hlsl} plus .metallib and .dxil when the host
--- has the toolchain, and the basenames are written to $(builddir)/rojorhi/ShaderList.h as
--- `kConformanceShaders` for a test to enumerate. Any failed compile fails the build with the
+-- has the toolchain, and the basenames are written to $(builddir)/rojorhi/<target>/ShaderList.h as
+-- `kConformanceShaders` for a test to enumerate. The directory is per target, so two targets using the rule
+-- each include their own list. Any failed compile fails the build with the
 -- compiler's own output. This rule is separate from the v1 rule of shaders.lua, which Legacy/ keeps.
 --
 -- Rule "rojorhi.shader_layout", declared below, checks C++ struct layouts against the reflection of a probe.
@@ -21,7 +22,7 @@ rule("rojorhi.slang")
     set_extensions(".slang")
 
     on_load(function (target)
-        target:add("includedirs", path.join("$(builddir)", "rojorhi"))
+        target:add("includedirs", path.join("$(builddir)", "rojorhi", target:name()))
     end)
 
     before_build(function (target)
@@ -123,9 +124,10 @@ rule("rojorhi.slang")
             table.insert(lines, format("    \"%s\",", name))
         end
         table.insert(lines, "};")
-        local header = path.join(config.builddir(), "rojorhi", "ShaderList.h")
+        local header = path.join(config.builddir(), "rojorhi", target:name(), "ShaderList.h")
         local content = table.concat(lines, "\n") .. "\n"
         if not os.isfile(header) or io.readfile(header) ~= content then
+            os.mkdir(path.directory(header))
             io.writefile(header, content)
         end
 
@@ -221,11 +223,11 @@ rule("rojorhi.slang")
 --   slang.layout_map      optional "Name=Type" entries for names that are not rojoRHI::<Name>
 --   slang.layout_include  optional headers, written as in `#include <...>`, that declare the C++ types
 --
--- The generator writes $(builddir)/rojorhi/ShaderLayout.h, a header of static_asserts for the target's C++
--- to include, and exits non-zero on a root that breaks the flat root rules.
+-- The generator writes $(builddir)/rojorhi/<target>/ShaderLayout.h, a header of static_asserts for the target's
+-- C++ to include, and exits non-zero on a root that breaks the flat root rules.
 rule("rojorhi.shader_layout")
     on_load(function (target)
-        target:add("includedirs", path.join("$(builddir)", "rojorhi"))
+        target:add("includedirs", path.join("$(builddir)", "rojorhi", target:name()))
     end)
 
     before_build(function (target)
@@ -240,7 +242,7 @@ rule("rojorhi.shader_layout")
         local tool = path.join(path.directory(path.directory(moduledir)), "Tools", "shader_layout.py")
         assert(os.isfile(tool), format("rojorhi.shader_layout: %s is missing", tool))
 
-        local outdir = path.join(config.builddir(), "rojorhi")
+        local outdir = path.join(config.builddir(), "rojorhi", target:name())
         local header = path.join(outdir, "ShaderLayout.h")
         local newest = math.max(os.mtime(slangc), os.mtime(tool), os.mtime(probe))
         for _, file in ipairs(os.files(path.join(moduledir, "**.slang"))) do

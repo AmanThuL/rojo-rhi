@@ -15,7 +15,9 @@ from typing import Any
 
 
 ROOT = Path(__file__).resolve().parents[1]
-SOURCE_ROOTS = ("Include", "Source", "Backends", "Legacy/Include", "Legacy/Source", "Legacy/Backends")
+SOURCE_ROOTS = (
+    "Include", "Source", "Backends", "Benchmarks", "Legacy/Include", "Legacy/Source", "Legacy/Backends",
+)
 # Test sources carry no file envelope; the Tests root already lies outside SOURCE_ROOTS.
 EXCLUDED_ROOTS = ()
 SOURCE_SUFFIXES = {".h", ".cpp"}

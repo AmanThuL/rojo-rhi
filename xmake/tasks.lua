@@ -9,7 +9,7 @@ task("format")
         local args = {"-style=file"}
         table.insert(args, option.get("check") and "--dry-run" or "-i")
         if option.get("check") then table.insert(args, "--Werror") end
-        for _, root in ipairs({"Include", "Source", "Backends", "Tests", "Tools", "Legacy"}) do
+        for _, root in ipairs({"Include", "Source", "Backends", "Benchmarks", "Tests", "Tools", "Legacy"}) do
             for _, f in ipairs(os.files(root .. "/**.h")) do table.insert(args, f) end
             for _, f in ipairs(os.files(root .. "/**.cpp")) do table.insert(args, f) end
         end
