@@ -41,8 +41,8 @@ minimum and departs from them where native code would do less; each workload sta
 operation, inside the passes and encoders the operation needs: C1 to C3 and C8 render to a 256×256
 `RGBA8Unorm` target; C1 to C3 set the viewport and scissor, and C1 and C2 the pipeline, once before
 the repetitions; C4 and C6 set their compute pipeline once. `K` is swept over 1, 10, 100, 1,000,
-10,000 and 100,000. `c` is the number of RojoRHI calls per repetition, and N's column lists its
-native calls per repetition.
+10,000 and 100,000, except where a workload states otherwise. `c` is the number of RojoRHI calls per
+repetition, and N's column lists its native calls per repetition.
 
 | Id | Operation per repetition | `c` | N per repetition | Departures |
 |---|---|---|---|---|
@@ -53,18 +53,29 @@ native calls per repetition.
 | C5 | `uploadFrameData` of 256 bytes | 1 | arena copy: 0 calls | none |
 | C6 | `dispatch`, then a global barrier from `ComputeShader`/`ShaderWrite` to `ComputeShader`/`ShaderRead` | 2 | `dispatchThreadgroups`, `barrierAfterEncoderStages`: 2 calls | none |
 | C7 | `copyBuffer` of 256 bytes between `Gpu` buffers | 1 | `copyFromBuffer`: 1 call | none |
-| C8 | `beginRenderPass` with one color attachment, `setPipeline`, `setViewport`, `setScissor`, one `draw` of 3 vertices, `endRenderPass` | 6 | the 11 calls listed below | N binds no argument table, since the pass's shaders read no reserved binding; R binds the list's table at every encoder it opens (ADR 0018) |
+| C8 | `barrier` on the target (none before the first pass), `beginRenderPass` with one color attachment, `setPipeline`, `setViewport`, `setScissor`, one `draw` of 3 vertices, `endRenderPass` | 7 | the 12 calls listed below | N binds no argument table, since the pass's shaders read no reserved binding; R binds the list's table at every encoder it opens (ADR 0018) |
 | C9 | `Queue::submit` of one pre-recorded list, signalling one fence value | 1 | `commit`, `signalEvent`: 2 calls | none |
 | C10 | counted `drawIndirect` with `maxCount` 256 and a count of 256 | 1 | spike 3's arm E, encoded by hand: the kernels of the pass batched in one compute encoder ahead of the render encoder, as R batches them | none |
 
-C8's sequence, in order. R makes 12 native calls per repetition: on the command buffer
+C8's barrier exists because consecutive passes write the same target, which the validation tracker
+rejects without one (`VU-rojo-sync-0021`). After each `endRenderPass` but the last, R records
+`barrier` with one `TextureBarrier` on the target: `ColorAttachment`/`ColorAttachmentWrite` →
+`ColorAttachment`/`ColorAttachmentRead|ColorAttachmentWrite`, with the old and new layout both
+`ColorAttachment`. Its source lies in an earlier encoder, so chapter 09 lowers it to a consumer
+`barrierAfterQueueStages` on the next render encoder, from the fragment stage to the fragment stage
+with visibility `Device`; N encodes that call by hand.
+
+C8's sequence, in order. R makes 13 native calls per repetition: on the command buffer
 `pushDebugGroup` and `writeTimestampIntoHeap` at `beginRenderPass`; at the draw, the encoder opens
-with `renderCommandEncoder`, `setLabel` and `setArgumentTable`, then the cached
-`setRenderPipelineState`, `setViewport` and `setScissorRect`, then `drawPrimitives`; at
-`endRenderPass`, `endEncoding`, then `writeTimestampIntoHeap` and `popDebugGroup` on the command
-buffer. N makes the same calls in the same order except `setArgumentTable`, 11 in all. N mirrors the
+with `renderCommandEncoder`, `setLabel` and `setArgumentTable`, then the consumer
+`barrierAfterQueueStages` (none in the first pass), the cached `setRenderPipelineState`,
+`setViewport` and `setScissorRect`, then `drawPrimitives`; at `endRenderPass`, `endEncoding`, then
+`writeTimestampIntoHeap` and `popDebugGroup` on the command buffer; `barrier` itself makes no call.
+N makes the same calls in the same order except `setArgumentTable`, 12 in all. N mirrors the
 profiling markers R's pass scope emits (the debug group, the two timestamps and the encoder label),
-because a renderer with GPU profiling writes them.
+because a renderer with GPU profiling writes them. C8 runs `K` up to 10,000 only: one Metal 4
+command buffer aborts the process between 95,000 and 100,000 render encoders, and two timestamps
+per pass at 100,000 passes exceed the 32 counter heaps Metal allows a process.
 
 C9 records `K` lists before the timed span, `K` in 1, 10 and 100, each holding one `copyBuffer` of
 256 bytes, then makes `K` submit calls of one list each, each signalling the next value of one
@@ -220,6 +231,12 @@ the drawable wait and present that a real frame pays. Departures: none.
 - Raw logs and per-process results are kept in `rojo-rhi-evidence/t2/<date>/` with checksums
   ([GPU evidence](../guides/gpu-evidence.md)); this note keeps the environment, the summary tables
   and the decisions.
+
+## Amendments
+
+2026-10-18, before any timed run: C8 registers the barrier between consecutive passes, so its `c`
+becomes 7, N's count 12 and R's 13; and C8's `K` sweep stops at 10,000, for the two Metal limits
+stated with its sequence. Both were found while implementing the harness, before anything was timed.
 
 ## Results
 
