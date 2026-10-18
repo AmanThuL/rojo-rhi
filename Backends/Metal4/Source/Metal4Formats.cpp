@@ -1,6 +1,6 @@
 //----------------------------------------------------------------------------------------------------------------------
 /// @file Metal4Formats.cpp
-/// @brief Implements the Metal 4 pixel format of each `Format` and the format table a Metal 4 device reports.
+/// @brief Implements the Metal 4 pixel format of each `Format`, its inverse, and the format table a Metal 4 device reports.
 //----------------------------------------------------------------------------------------------------------------------
 
 #include "Metal4Formats.h"
@@ -43,6 +43,28 @@ namespace rojoRHI::metal4 {
         case Format::RGB10A2Unorm: return MTL::PixelFormatRGB10A2Unorm;
         }
         return MTL::PixelFormatInvalid;
+    }
+
+    //==================================================================================================================
+    Format formatOf(MTL::PixelFormat pixelFormat)
+    {
+        switch (pixelFormat)
+        {
+        case MTL::PixelFormatBGRA8Unorm: return Format::BGRA8Unorm;
+        case MTL::PixelFormatRGBA8Unorm: return Format::RGBA8Unorm;
+        case MTL::PixelFormatRGBA8Unorm_sRGB: return Format::RGBA8Unorm_sRGB;
+        case MTL::PixelFormatRGBA16Float: return Format::RGBA16Float;
+        case MTL::PixelFormatRG16Float: return Format::RG16Float;
+        case MTL::PixelFormatR8Unorm: return Format::R8Unorm;
+        case MTL::PixelFormatBC1_RGBA: return Format::BC1Unorm;
+        case MTL::PixelFormatBC1_RGBA_sRGB: return Format::BC1Unorm_sRGB;
+        case MTL::PixelFormatDepth32Float: return Format::D32Float;
+        case MTL::PixelFormatR16Float: return Format::R16Float;
+        case MTL::PixelFormatR32Float: return Format::R32Float;
+        case MTL::PixelFormatDepth32Float_Stencil8: return Format::D32FloatS8;
+        case MTL::PixelFormatRGB10A2Unorm: return Format::RGB10A2Unorm;
+        default: return Format::Undefined;
+        }
     }
 
     //==================================================================================================================

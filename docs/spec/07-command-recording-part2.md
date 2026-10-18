@@ -183,8 +183,8 @@ is a debug group without timing.
 
 | | Metal 4 | D3D12 | Vulkan |
 |---|---|---|---|
-| Call | `MTL4::CommandBuffer::pushDebugGroup` and an `MTL4::CounterHeap` timestamp | `BeginEvent` and `EndQuery` with `D3D12_QUERY_TYPE_TIMESTAMP` | `vkCmdBeginDebugUtilsLabelEXT` and `vkCmdWriteTimestamp2` |
-| Cost | cheap: one timestamp write, resolved once per frame | cheap: one query, resolved once per frame | cheap: one query, read once per frame |
+| Call | outside a render pass, `MTL4::CommandEncoder::endEncoding` on the open compute encoder, then `MTL4::CommandBuffer::pushDebugGroup`; no GPU timestamp is written yet | `BeginEvent` and `EndQuery` with `D3D12_QUERY_TYPE_TIMESTAMP` | `vkCmdBeginDebugUtilsLabelEXT` and `vkCmdWriteTimestamp2` |
+| Cost | cheap: one debug group, after the open encoder ends | cheap: one query, resolved once per frame | cheap: one query, read once per frame |
 
 ### `CommandList::endScope`
 
@@ -207,5 +207,5 @@ only the inside-a-pass half of `VU-rojo-cmd-0033` can be broken.
 
 | | Metal 4 | D3D12 | Vulkan |
 |---|---|---|---|
-| Call | `MTL4::CommandBuffer::popDebugGroup` and an `MTL4::CounterHeap` timestamp | `EndEvent` and `EndQuery` | `vkCmdEndDebugUtilsLabelEXT` and `vkCmdWriteTimestamp2` |
-| Cost | cheap: one timestamp write | cheap: one query | cheap: one query |
+| Call | outside a render pass, `MTL4::CommandEncoder::endEncoding` on the open compute encoder, then `MTL4::CommandBuffer::popDebugGroup`; no GPU timestamp is written yet | `EndEvent` and `EndQuery` | `vkCmdEndDebugUtilsLabelEXT` and `vkCmdWriteTimestamp2` |
+| Cost | cheap: one debug group, after the open encoder ends | cheap: one query | cheap: one query |

@@ -11,6 +11,8 @@
 #include "Core/FrameArena.h"
 #include "Core/Swapchains.h"
 #include "Metal4AddressMap.h"
+#include "Metal4Encoders.h"
+#include "Metal4ListState.h"
 #include "Metal4Residency.h"
 #include "Metal4Stager.h"
 
@@ -41,6 +43,8 @@ namespace rojoRHI {
         /// The last value submitted for signal on `progress`. Only `submit`, which the caller serialises per queue, writes it;
         /// a fence's destruction reads it, after the submissions that named the fence.
         std::atomic<uint64_t> progressValue = 0;
+        /// The command buffers of the submission being committed, kept for its capacity. Only `submit` touches it.
+        std::vector<MTL4::CommandBuffer*> commitBuffers;
 
         /// Returns the state `queue` wraps; checks VU-rojo-core-0004.
         static QueueImpl& of(Queue queue);
@@ -49,10 +53,13 @@ namespace rojoRHI {
         static Queue wrap(QueueImpl* impl);
     };
 
-    /// The Metal 4 backend's command list: the core's recording state and the device that acquired it.
+    /// The Metal 4 backend's command list: the core's recording state and the device that acquired it, and the native objects
+    /// the list records into.
     struct CommandListImpl
     {
         core::CommandListCore core; ///< The state machine the recording rules read, and the device that acquired the list.
+        metal4::ListState state;    ///< The list's allocator, command buffer and argument table, and its debug-group labels.
+        metal4::Encoders encoders;  ///< The encoder the list has open, if any.
 
         /// Returns the state `list` wraps; checks VU-rojo-core-0004.
         static CommandListImpl& of(CommandList list);

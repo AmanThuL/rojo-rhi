@@ -131,7 +131,7 @@ Copies texel data laid out by `layout` in `src` into `region` of `dst`.
 
 | | Metal 4 | D3D12 | Vulkan |
 |---|---|---|---|
-| Call | `MTL4::ComputeCommandEncoder::copyFromBuffer` (buffer to texture) | `CopyTextureRegion` from a placed footprint, one call per layer | `vkCmdCopyBufferToImage2` |
+| Call | `MTL4::ComputeCommandEncoder::copyFromBuffer` (buffer to texture), one call per layer, or one over the depth of a 3D texture | `CopyTextureRegion` from a placed footprint, one call per layer | `vkCmdCopyBufferToImage2` |
 | Cost | native | native | native |
 
 ### `CommandList::copyTextureToBuffer`
@@ -161,7 +161,7 @@ Copies `region` of `src` into `dst`, laid out by `layout`.
 
 | | Metal 4 | D3D12 | Vulkan |
 |---|---|---|---|
-| Call | `MTL4::ComputeCommandEncoder::copyFromTexture` (texture to buffer) | `CopyTextureRegion` to a placed footprint, one call per layer | `vkCmdCopyImageToBuffer2` |
+| Call | `MTL4::ComputeCommandEncoder::copyFromTexture` (texture to buffer), one call per layer, or one over the depth of a 3D texture | `CopyTextureRegion` to a placed footprint, one call per layer | `vkCmdCopyImageToBuffer2` |
 | Cost | native | native | native |
 
 ### `CommandList::copyTexture`
@@ -189,7 +189,7 @@ copy-compatible: the stored bits move unchanged.
 
 | | Metal 4 | D3D12 | Vulkan |
 |---|---|---|---|
-| Call | `MTL4::ComputeCommandEncoder::copyFromTexture` (texture to texture) | `CopyTextureRegion` | `vkCmdCopyImage2` |
+| Call | `MTL4::ComputeCommandEncoder::copyFromTexture` (texture to texture), one call per layer, or one over the depth when either texture is 3D; the size counts whole blocks | `CopyTextureRegion` | `vkCmdCopyImage2` |
 | Cost | native | native | native |
 
 ### `CommandList::fillBuffer`

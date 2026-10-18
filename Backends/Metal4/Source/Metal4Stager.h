@@ -14,12 +14,22 @@
 #include <cstdint>
 #include <mutex>
 #include <span>
+#include <string>
+#include <string_view>
 
 namespace rojoRHI {
     struct DeviceImpl;
 } // namespace rojoRHI
 
 namespace rojoRHI::metal4 {
+    /// Commits `buffers` on `queue`, labelled `label`, with a feedback handler and blocks until Metal ran the handler and then
+    /// released it, which is the last reference of the commit's completion path: Metal's completion work for this commit and
+    /// for every earlier commit on `queue` has then let go of the allocators, command buffers and resources it held, so a
+    /// release by the caller cannot leave the final one to Metal's notification thread, which holds no autorelease pool. Logs
+    /// a warning after each ten seconds it waits. Returns the execution error Metal reported, empty when there was none; it
+    /// counts nothing. The caller holds an autorelease pool.
+    std::string commitAndWait(MTL4::CommandQueue* queue, std::span<const MTL4::CommandBuffer* const> buffers, std::string_view label);
+
     /// The device's internal upload path: a fourth queue, `rojorhi.upload`, that no `QueueType` names, with one allocator, one
     /// command buffer and a residency set of its own for the buffers a copy makes. A copy commits on the upload queue and
     /// waits until Metal reports it complete and has dropped every reference the commit took, so the data is visible to work

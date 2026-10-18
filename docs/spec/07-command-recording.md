@@ -17,11 +17,11 @@ columns are the design oracle. This chapter continues in
 **Only render passes have scope.** Compute and copy commands are valid anywhere outside a render
 pass; there is no `beginComputePass` or `beginCopyPass`. On D3D12 and Vulkan such scopes would be
 empty, because neither has encoders. On Metal 4 the backend opens a compute encoder lazily on the
-first compute or copy command and closes it at the next `beginRenderPass` or at `end`. Metal 4
-records copies on the compute encoder, so merged work avoids encoder switches, and dependencies
-inside one encoder use the lighter intra-encoder barrier instead of the queue-level one. Work
-inside one encoder is ordered only by barriers ([synchronization](09-synchronization.md)): two
-dispatches, or a dispatch and a copy, recorded without a barrier between them may overlap.
+first compute or copy command and closes it at the next `beginRenderPass` or scope boundary, or at
+`end`. Metal 4 records copies on the compute encoder, so merged work avoids encoder switches, and
+dependencies inside one encoder use the lighter intra-encoder barrier instead of the queue-level
+one. Work inside one encoder is ordered only by barriers ([synchronization](09-synchronization.md)):
+two dispatches, or a dispatch and a copy, recorded without a barrier between them may overlap.
 
 **Render passes perform no layout transitions.** Attachments arrive in their attachment layouts
 through explicit barriers recorded before `beginRenderPass`. Barriers inside a render pass are
@@ -83,7 +83,7 @@ that frame's `Device::endFrame`, as `VU-rojo-device-0005` of
 
 | | Metal 4 | D3D12 | Vulkan |
 |---|---|---|---|
-| Call | pooled `MTL4::CommandBuffer`, `MTL4::CommandBuffer::beginCommandBuffer` with a per-frame `MTL4::CommandAllocator` | `Reset` with a per-frame allocator of the list type; for `Graphics` and `Compute` lists, then the descriptor heaps and the global root signature | `vkBeginCommandBuffer` from a per-frame pool; for `Graphics` and `Compute` lists, then the descriptor heaps |
+| Call | pooled `MTL4::CommandBuffer`, `MTL4::CommandBuffer::beginCommandBuffer` with the list's own `MTL4::CommandAllocator` of its frame slot, reset when the slot is reused | `Reset` with a per-frame allocator of the list type; for `Graphics` and `Compute` lists, then the descriptor heaps and the global root signature | `vkBeginCommandBuffer` from a per-frame pool; for `Graphics` and `Compute` lists, then the descriptor heaps |
 | Cost | native | native | native |
 
 ### `CommandList::end`
@@ -92,8 +92,8 @@ that frame's `Device::endFrame`, as `VU-rojo-device-0005` of
 void CommandList::end();
 ```
 
-Ends recording. On Metal 4 it closes the lazily opened compute encoder, if any. After `end` the
-list records nothing further and is ready for `Queue::submit`.
+Ends recording; the list records nothing further and is ready for `Queue::submit`. On Metal 4 it
+closes the open encoder, then emits a barrier still pending on an encoder of its own.
 
 #### Valid usage
 
@@ -107,7 +107,7 @@ list records nothing further and is ready for `Queue::submit`.
 
 | | Metal 4 | D3D12 | Vulkan |
 |---|---|---|---|
-| Call | `MTL4::CommandEncoder::endEncoding` on an open encoder, then `MTL4::CommandBuffer::endCommandBuffer` | `Close` | `vkEndCommandBuffer` |
+| Call | `MTL4::CommandEncoder::endEncoding` on an open encoder; for a barrier still pending, on a compute encoder that holds no command: `barrierAfterQueueStages` from its source stages to `MTL::StageDispatch \| MTL::StageBlit`, `barrierAfterStages` from those to the destination stages it still names, and `endEncoding` ([synchronization](09-synchronization-part2.md#commandlistbarrier)); then `MTL4::CommandBuffer::endCommandBuffer` | `Close` | `vkEndCommandBuffer` |
 | Cost | native | native | native |
 
 ### `LoadOp`
