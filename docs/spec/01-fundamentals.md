@@ -136,8 +136,9 @@ enum class ErrorCategory : uint8_t {
   [the device chapter](02-device.md) predicts it.
 - `OutOfMemory`: device or host memory is exhausted. Retrying after freeing memory may succeed.
 - `DriverFailure`: the native API rejected a request RojoRHI considers valid, for example a pipeline
-  the driver fails to compile or a malformed shader library blob.
-- `ShaderAbiMismatch`: `Device::loadShaderLibrary` was given a library compiled against another
+  the driver fails to compile, or a shader library blob that is malformed or not built for the
+  active backend (another magic, or no container).
+- `ShaderAbiMismatch`: `Device::loadShaderLibrary` was given a library stamped with another
   shader ABI version (see [shader ABI](05-shader-abi.md)).
 
 Enumerators are only ever appended; an existing value keeps its meaning.

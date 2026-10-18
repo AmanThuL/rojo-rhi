@@ -192,3 +192,9 @@
   and a RojoRHI arm of every workload of the overhead round, its Null-backend checks, and the
   driver `Tools/bench.py` with its statistics and decision rules
   ([architecture](docs/architecture/benchmarks.md)).
+- Metal shader libraries (`.metal4lib`) with the ABI stamp and each entry's stage and threadgroup
+  size, built for macOS 26; conformance shaders for the fragment stage, readback-ready vertex and
+  per-type texture kernels.
+- API reference changes in chapters 05 and 06: `Device::loadShaderLibrary` returns
+  `ErrorCategory::ShaderAbiMismatch` for another ABI version and `ErrorCategory::DriverFailure` for
+  a blob built for another backend or carrying no stamp.

@@ -73,7 +73,8 @@ xmake         # builds the frozen v1 library, RojoRHILegacy
 xmake test RojoRHILegacyTests/unit   # runs the v1 CPU contract cases
 xmake test RojoRHITests/contract     # runs the v2 contract cases on the Null backend, no GPU
 xmake test RojoRHITests/death        # runs the v2 death tests (Debug only)
-xmake test RojoRHITests/abi          # compiles the ABI conformance shaders, checks shared layouts
+xmake test RojoRHITests/abi          # compiles the ABI shaders, checks shared layouts and, on macOS,
+                                     # the packaged Metal shader library headers
 xmake f --rojorhi_backend=null       # selects the v2 backend: null (the default) or metal4
 ```
 
@@ -151,10 +152,11 @@ and a real device on Metal 4 Apple Silicon, and there is no CPU-only substitute 
 The shader ABI module `Shaders/RojoRHI/RojoRHI.slang` and its hosted checks exist: the conformance
 shaders under `Shaders/Tests/` compile to MSL, SPIR-V and HLSL on every host, and the build checks
 the layout of the shared structs against Slang reflection. That is the hosted half of the T3 tier
-(ADR 0009). DXIL compiles wherever a DXC loads, as on hosted Windows CI. Compile-and-run and the ABI
-version stamp are not implemented; `Device::loadShaderLibrary` loads a library on the Null backend only
-(a text format, see [command recording](docs/architecture/null-backend-recording.md)); on Metal 4
-it returns `Unsupported`.
+(ADR 0009). DXIL compiles wherever a DXC loads, as on hosted Windows CI. On Metal the rule writes
+the ABI stamp into each shader library (`.metal4lib`); loading on Metal and compile-and-run are not
+implemented yet. `Device::loadShaderLibrary` loads a library on the Null backend only (a text
+format, see [command recording](docs/architecture/null-backend-recording.md)); on Metal 4 it
+returns `Unsupported`.
 
 ## Hard rules
 

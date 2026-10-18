@@ -143,10 +143,31 @@ above. The rules keep the check passing; the check, not the rules, is the author
 The xmake shader rule compiles Slang offline. On every host and at every build it emits MSL,
 SPIR-V and HLSL, so the Vulkan and D3D12 mappings are checked mechanically rather than on paper; it
 adds a metallib when the Metal toolchain exists and DXIL when a DXC loads, and prints which of the
-two it enabled. Hosted Windows CI compiles DXIL. RojoRHI never compiles shaders at run time. The
-rule stamps
-`ROJORHI_SHADER_ABI_VERSION` into every library it builds, and `Device::loadShaderLibrary` (see
-[pipelines](06-pipelines.md)) checks the stamp.
+two it enabled. Hosted Windows CI compiles DXIL. RojoRHI never compiles shaders at run time.
+
+On Metal the rule packages each metallib into a RojoRHI shader library, `<name>.metal4lib`. Its
+text header, one LF-ended line each, holds the magic `rojorhi.metal4.shaderlibrary`,
+`abi <N>` with the value of `ROJORHI_SHADER_ABI_VERSION`, one `entry <name> <stage> <x> <y> <z>`
+line per entry point and `metallib <bytes>`; exactly that many metallib bytes follow, to the end of
+the file. The threadgroup size is the entry's `[numthreads]` as the compiler resolved it (`0 0 0`
+for vertex and fragment); the rule carries it because no size reaches a metallib. An entry point
+named `main` fails the build, because MSL renames it. The metallib targets macOS 26 (ADR 0010).
+`Device::loadShaderLibrary` (see [pipelines](06-pipelines.md)) checks the stamp.
+
+A reader takes the header lines up to the `metallib` line and never reads the payload as text. It
+checks in order: the magic, else `ErrorCategory::DriverFailure` (a bare metallib, which starts with
+`MTLB`, lands here); `abi <number>`, else `DriverFailure`; the ABI value, where another value is
+`ErrorCategory::ShaderAbiMismatch`, before any entry line; then the rest, where a malformed line is
+`DriverFailure` naming the line, and so is a header with no entry line or no `metallib` line.
+Malformed means an entry line without exactly six fields; a stage word outside `vertex fragment
+task mesh compute`; a name that is not `[A-Za-z_][A-Za-z0-9_]*` or repeats; a number that is not
+canonical unsigned decimal; a size of 0 for compute, task or mesh, or nonzero for vertex or
+fragment; a byte count other than the bytes that remain (the payload has no trailing newline).
+
+A vertex entry point that returns non-void and reaches the root or a table draws the Metal
+compiler's warning "writable resources in non-void vertex function". The pinned Slang lowers every
+reserved binding to a writable `device` pointer and has no `const` form, the compiler offers no
+switch to silence the warning, and the writes are legal; the rule prints it.
 
 Slang's Metal bindless support is young and fails silently in places: handle pointers inside
 structs, unsized arrays and combined texture-samplers miscompile, and HLSL pointer text is emitted
@@ -252,9 +273,11 @@ A positive integer naming the ABI contract this chapter defines: the root bindin
 encoding, the hidden heap tables and the lowering of every built-in. It increases whenever any of
 them changes. `RojoRHI.slang` declares it as a constant rather than a macro, because macros do not
 cross a Slang `import`. The shader rule reads the value from that file and stamps it into every
-compiled library, and `Device::loadShaderLibrary` returns an error for a library whose stamp is
-missing or differs from the value RojoRHI itself was built with, instead of running a stale shader.
-The value is independent of the `ROJORHI_VERSION_*` macros (see [fundamentals](01-fundamentals.md)).
+compiled Metal library, and `Device::loadShaderLibrary` returns
+`ErrorCategory::ShaderAbiMismatch` for a library stamped with another version and
+`ErrorCategory::DriverFailure` for a blob that carries no stamp for the active backend, instead of
+running a stale shader. The value is independent of the `ROJORHI_VERSION_*` macros (see
+[fundamentals](01-fundamentals.md)).
 
 #### Valid usage
 
@@ -264,6 +287,6 @@ The value is independent of the `ROJORHI_VERSION_*` macros (see [fundamentals](0
 
 | | Metal 4 | D3D12 | Vulkan |
 |---|---|---|---|
-| Stamp | carried in the metallib by the shader rule; mechanism unverified | carried in the DXIL container by the shader rule; mechanism unverified | none: SPIR-V is a compile-time check |
+| Stamp | the `abi` line of the RojoRHI shader library the rule writes around the metallib | carried in the DXIL container by the shader rule; mechanism unverified | none: SPIR-V is a compile-time check |
 | Check | one integer compare in `loadShaderLibrary` | one integer compare in `loadShaderLibrary` | the shader rule's SPIR-V compile |
 | Cost | native | native | native |
