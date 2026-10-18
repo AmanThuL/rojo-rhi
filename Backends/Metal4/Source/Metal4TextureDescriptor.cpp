@@ -96,6 +96,11 @@ namespace rojoRHI::metal4 {
         {
             descriptor->setHazardTrackingMode(MTL::HazardTrackingModeUntracked);
         }
+        // A Sparse texture is a placement sparse texture whose tiles map onto 64 KiB pages of a heap.
+        if (hasUsage(desc.usage, TextureUsage::Sparse))
+        {
+            descriptor->setPlacementSparsePageSize(MTL::SparsePageSize64);
+        }
         return descriptor;
     }
 } // namespace rojoRHI::metal4

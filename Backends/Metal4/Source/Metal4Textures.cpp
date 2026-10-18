@@ -13,6 +13,8 @@
 #include "Core/Textures.h"
 #include "Metal4Common.h"
 #include "Metal4Device.h"
+#include "Metal4Formats.h"
+#include "Metal4Sparse.h"
 #include "Metal4TextureDescriptor.h"
 
 #include <Metal/Metal.hpp>
@@ -44,6 +46,23 @@ namespace rojoRHI {
                 impl.residency.remove(texture);
             }
             texture->release();
+        }
+
+        //==============================================================================================================
+        /// Returns the name of `type` as `TextureType` spells it.
+        const char* typeName(TextureType type)
+        {
+            switch (type)
+            {
+            case TextureType::Tex1D: return "Tex1D";
+            case TextureType::Tex1DArray: return "Tex1DArray";
+            case TextureType::Tex2D: return "Tex2D";
+            case TextureType::Tex2DArray: return "Tex2DArray";
+            case TextureType::Tex3D: return "Tex3D";
+            case TextureType::Cube: return "Cube";
+            case TextureType::CubeArray: return "CubeArray";
+            }
+            return "unknown";
         }
     } // namespace
 
@@ -93,6 +112,14 @@ namespace rojoRHI {
             requirements = placedRequirements(impl.device, desc);
         }
         core::TextureRecord record = core::prepareTexture(impl.core, desc, initial, placement, requirements);
+        const bool sparse = (desc.usage & TextureUsage::Sparse) != TextureUsage::None;
+        // A type Metal does not tile has no tile shape, so it is refused before a native texture exists.
+        if (sparse && metal4::sparseTileExtent(impl.device, metal4::textureType(desc.type, desc.samples), metal4::pixelFormat(desc.format)).width == 0)
+        {
+            return std::unexpected(
+                Error{ ErrorCategory::Unsupported, std::format("the device has no sparse tile for a {} texture, \"{}\"", typeName(desc.type), record.label) }
+            );
+        }
         MTL::TextureDescriptor* descriptor = metal4::textureDescriptor(desc, placed);
         MTL::Texture* texture = nullptr;
         if (placed)
@@ -110,6 +137,11 @@ namespace rojoRHI {
             return std::unexpected(Error{ ErrorCategory::OutOfMemory, std::format("no device memory for texture \"{}\"", record.label) });
         }
         texture->setLabel(metal4::makeString(record.label));
+        if (sparse)
+        {
+            // Set before the handle exists: the core reads the shape without the pool's lock.
+            record.tiles = metal4::measureTiles(impl.device, texture, desc.mips);
+        }
         if (!placed)
         {
             impl.residency.add(texture);

@@ -8,6 +8,7 @@
 #include <rojoRHI/RHI.h>
 
 #include "Core/Formats.h"
+#include "Metal4Sparse.h"
 
 #include <Metal/Metal.hpp>
 
@@ -71,10 +72,11 @@ namespace rojoRHI::metal4 {
     core::FormatTable metalFormatTable(MTL::Device* device)
     {
         core::FormatTable table = core::formatCeilings();
-        for (FormatCapabilities& capabilities : table)
+        for (uint32_t value = 0; value < core::kFormatCount; ++value)
         {
-            // Sparse resources are not created yet, so the device reports placementSparse false and no format reports sparse.
-            capabilities.sparse = false;
+            FormatCapabilities& capabilities = table[value];
+            // A format is sparse when the device tiles its 2D textures with 64 KiB pages.
+            capabilities.sparse = capabilities.sparse && value != 0 && sparseFormat(device, pixelFormat(static_cast<Format>(value)));
             // Each count follows supportsTextureSampleCount; bit i of the mask is a count of 1 << i, so count n is bit mask n.
             for (const uint32_t samples : { 2u, 4u, 8u })
             {

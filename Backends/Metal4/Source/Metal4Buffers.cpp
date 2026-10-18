@@ -108,6 +108,11 @@ namespace rojoRHI {
             auto* heap = static_cast<MTL::Heap*>(core::checkedHeap(impl.core, placement.heap).native);
             buffer = heap->newBuffer(desc.size, metal4::placedOptions(desc.memory), placement.offset);
         }
+        else if ((desc.usage & BufferUsage::Sparse) != BufferUsage::None)
+        {
+            // A placement sparse buffer of any length; its last tile may be partial and maps like any other.
+            buffer = impl.device->newBuffer(desc.size, metal4::resourceOptions(desc.memory), MTL::SparsePageSize64);
+        }
         else
         {
             buffer = impl.device->newBuffer(desc.size, metal4::resourceOptions(desc.memory));
@@ -160,6 +165,12 @@ namespace rojoRHI {
         descriptor->setStorageMode(metal4::storageMode(desc.memory));
         descriptor->setCpuCacheMode(MTL::CPUCacheModeDefaultCache);
         descriptor->setHazardTrackingMode(MTL::HazardTrackingModeUntracked);
+        // Memory::Gpu is the only class that backs sparse tiles (VU-rojo-sparse-0009), and Metal maps a tile only from a heap
+        // whose compatible page size is at least the resource's.
+        if (desc.memory == Memory::Gpu && impl.core.capabilities().placementSparse)
+        {
+            descriptor->setMaxCompatiblePlacementSparsePageSize(MTL::SparsePageSize64);
+        }
         MTL::Heap* heap = impl.device->newHeap(descriptor);
         descriptor->release();
         if (heap == nullptr)

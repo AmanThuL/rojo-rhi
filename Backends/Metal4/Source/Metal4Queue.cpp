@@ -14,6 +14,7 @@
 #include "Core/Tracker/References.h"
 #include "Core/Tracker/Tracker.h"
 #include "Metal4Common.h"
+#include "Metal4Sparse.h"
 
 #include <Metal/Metal.hpp>
 
@@ -128,9 +129,8 @@ namespace rojoRHI {
     }
 
     //==================================================================================================================
-    void Queue::mapTiles([[maybe_unused]] std::span<const TileMapping> mappings)
+    void Queue::mapTiles(std::span<const TileMapping> mappings)
     {
-        QueueImpl::of(*this);
-        metal4::notImplemented("Queue::mapTiles");
+        metal4::mapTiles(QueueImpl::of(*this), mappings);
     }
 } // namespace rojoRHI

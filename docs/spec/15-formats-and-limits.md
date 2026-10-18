@@ -194,7 +194,7 @@ capability in the `Format` entry above. Capabilities are fixed for the lifetime 
 |---|---|---|---|
 | Source | Apple7+ feature set tables keyed by `supportsFamily`, refined by `supports32BitFloatFiltering` and `supportsTextureSampleCount`; `supportsBCTextureCompression` is part of the floor `createDevice` checks | `D3D12_FEATURE_FORMAT_SUPPORT` (`Support1`, `Support2`) | `VkFormatProperties3` optimal tiling features |
 | Sample counts | `supportsTextureSampleCount` per count | `D3D12_FEATURE_MULTISAMPLE_QUALITY_LEVELS` per count | `vkGetPhysicalDeviceImageFormatProperties2` |
-| Sparse | `supportsPlacementSparse` with the family table | `D3D12_FORMAT_SUPPORT2_TILED` | `vkGetPhysicalDeviceSparseImageFormatProperties2` |
+| Sparse | `supportsPlacementSparse` and a nonzero `sparseTileSize` of the 2D type at `MTL::SparsePageSize64` | `D3D12_FORMAT_SUPPORT2_TILED` | `vkGetPhysicalDeviceSparseImageFormatProperties2` |
 | Cost | cheap: backend-owned table, no per-format native query | native | native |
 
 ### `Device::formatCapabilities`

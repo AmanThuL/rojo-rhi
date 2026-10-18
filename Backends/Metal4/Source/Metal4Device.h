@@ -36,15 +36,17 @@ namespace rojoRHI {
     struct DeviceImpl;
 
     /// The Metal 4 backend's queue: its type, the device that owns it, which is how a queue used with another device is told
-    /// apart, the native queue it submits to, and a progress event only it signals, after each submission that names a fence.
-    /// A native queue does not retain the events it waits on or signals, so a destroyed fence's event is kept until every
-    /// queue's progress passes the value it had at the destruction (`metal4::releasePassedFences`).
+    /// apart, the native queue it submits to, and a progress event only it signals: after each submission that names a fence,
+    /// and after each tile mapping call that maps a buffer. A native queue does not retain the events it waits on or signals, so a destroyed fence's event is
+    /// kept until every queue's progress passes the value it had at the destruction (`metal4::releasePassedFences`).
     struct QueueImpl
     {
         DeviceImpl* device = nullptr;         ///< The device that owns the queue.
         QueueType type = QueueType::Graphics; ///< The queue's type.
         MTL4::CommandQueue* native = nullptr; ///< The native queue, owned by the device.
-        MTL::SharedEvent* progress = nullptr; ///< Signalled by this queue alone after each submission that names a fence.
+        /// Signalled by this queue alone: after each submission that names a fence, with the next progress value, and after each
+        /// `mapTiles` call that maps a buffer, with the current value, so a later texture mapping does not fault in the driver.
+        MTL::SharedEvent* progress = nullptr;
         /// The last value submitted for signal on `progress`. Only `submit`, which the caller serialises per queue, writes it;
         /// a fence's destruction reads it, after the submissions that named the fence.
         std::atomic<uint64_t> progressValue = 0;

@@ -49,9 +49,9 @@ packed into one tail per layer and mapped as a unit.
 #### Mapping
 | | Metal 4 | D3D12 | Vulkan |
 |---|---|---|---|
-| Tile extent | `MTL::Device::sparseTileSize` with the texture type, pixel format, sample count and `MTL::SparsePageSize64` | `D3D12_TILE_SHAPE` | `VkSparseImageFormatProperties::imageGranularity` |
+| Tile extent | `MTL::Device::sparseTileSize` with the texture type, pixel format, sample count and `MTL::SparsePageSize64`, read when the texture is created; a type the device has no tile for fails creation with `ErrorCategory::Unsupported` | `D3D12_TILE_SHAPE` | `VkSparseImageFormatProperties::imageGranularity` |
 | Tile bytes | 64 KiB, `MTL::SparsePageSize64` | 64 KiB, `D3D12_TILED_RESOURCE_TILE_SIZE_IN_BYTES` | `VkMemoryRequirements::alignment` |
-| Mip tail | `MTL::Texture::firstMipmapInTail`, `MTL::Texture::tailSizeInBytes` | `D3D12_PACKED_MIP_INFO` | `imageMipTailFirstLod`, `imageMipTailSize`; a format with `VK_SPARSE_IMAGE_FORMAT_SINGLE_MIPTAIL_BIT` has one tail shared by all layers, mapped once through layer 0 |
+| Mip tail | `MTL::Texture::firstMipmapInTail`, `MTL::Texture::tailSizeInBytes`; a first tail level at or past the mip count is no tail | `D3D12_PACKED_MIP_INFO` | `imageMipTailFirstLod`, `imageMipTailSize`; a format with `VK_SPARSE_IMAGE_FORMAT_SINGLE_MIPTAIL_BIT` has one tail shared by all layers, mapped once through layer 0 |
 | Cost | native | native | native |
 
 ### `Device::tileShape`
@@ -117,10 +117,10 @@ buffer range maps onto consecutive heap bytes from `heapOffset`.
 #### Mapping
 | | Metal 4 | D3D12 | Vulkan |
 |---|---|---|---|
-| Texture region | `MTL4::UpdateSparseTextureMappingOperation` with `textureRegion`, `textureLevel`, `textureSlice`, `heapOffset` | `D3D12_TILED_RESOURCE_COORDINATE` and `D3D12_TILE_REGION_SIZE` | `VkSparseImageMemoryBind` |
-| Mip tail | the same operation naming the first tail level | a coordinate in the first packed mip | `VkSparseMemoryBind` at `imageMipTailOffset` |
-| Buffer range | `MTL4::UpdateSparseBufferMappingOperation` | buffer tile coordinates | `VkSparseBufferMemoryBindInfo` |
-| Unmap | `MTL::SparseTextureMappingModeUnmap` | `D3D12_TILE_RANGE_FLAG_NULL` | `VK_NULL_HANDLE` memory |
+| Texture region | `MTL4::UpdateSparseTextureMappingOperation` with `textureRegion`, `textureLevel`, `textureSlice`, `heapOffset`, one per layer, region and heap offset counted in tiles | `D3D12_TILED_RESOURCE_COORDINATE` and `D3D12_TILE_REGION_SIZE` | `VkSparseImageMemoryBind` |
+| Mip tail | the same operation naming the first tail level, one per layer, with a region of the tail's tiles along x | a coordinate in the first packed mip | `VkSparseMemoryBind` at `imageMipTailOffset` |
+| Buffer range | `MTL4::UpdateSparseBufferMappingOperation`, range and heap offset counted in tiles | buffer tile coordinates | `VkSparseBufferMemoryBindInfo` |
+| Unmap | `MTL::SparseTextureMappingModeUnmap` with a null heap | `D3D12_TILE_RANGE_FLAG_NULL` | `VK_NULL_HANDLE` memory |
 | Cost | native | native | native |
 
 ### `Queue::mapTiles`
@@ -147,6 +147,6 @@ that only it kept alive may then be destroyed.
 #### Mapping
 | | Metal 4 | D3D12 | Vulkan |
 |---|---|---|---|
-| Call | `MTL4::CommandQueue::updateTextureMappings` and `MTL4::CommandQueue::updateBufferMappings` | `ID3D12CommandQueue::UpdateTileMappings` | `vkQueueBindSparse` |
+| Call | `MTL4::CommandQueue::updateTextureMappings` and `MTL4::CommandQueue::updateBufferMappings`, one per resource, heap and mode, textures first; a call that maps a buffer ends with a signal of the queue's own event, which keeps a later texture mapping from faulting in the driver. Destroying a sparse resource issues no unmap: its tiles leave with the native object when its frame retires | `ID3D12CommandQueue::UpdateTileMappings` | `vkQueueBindSparse` |
 | Ordering | queue order | queue order | timeline semaphores against the queue's submissions; the queue's family needs `VK_QUEUE_SPARSE_BINDING_BIT` |
-| Cost | native | native | native |
+| Cost | cheap: one queue signal after a call that maps a buffer | native | native |
