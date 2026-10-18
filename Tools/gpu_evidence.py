@@ -84,13 +84,19 @@ def environment() -> dict[str, str]:
     }
 
 
-def write_checksums(directory: Path) -> None:
-    """Write one `<sha256>  <name>` line per file of the directory, sorted by name."""
+def write_checksums(directory: Path, recursive: bool = False) -> None:
+    """Write one `<sha256>  <name>` line per file of the directory, sorted by name.
+
+    With `recursive`, files at any depth are listed, named by their POSIX path relative to the
+    directory.
+    """
     lines = []
-    for path in sorted(directory.iterdir()):
-        if path.is_file() and path.name != CHECKSUM_FILE:
+    paths = directory.rglob("*") if recursive else directory.iterdir()
+    entries = sorted((path.relative_to(directory).as_posix(), path) for path in paths)
+    for name, path in entries:
+        if path.is_file() and name != CHECKSUM_FILE:
             digest = hashlib.sha256(path.read_bytes()).hexdigest()
-            lines.append(f"{digest}  {path.name}\n")
+            lines.append(f"{digest}  {name}\n")
     (directory / CHECKSUM_FILE).write_text("".join(lines))
 
 
@@ -103,7 +109,7 @@ def record(directory: Path, label: str, command: list[str], cwd: Path) -> int:
              f"{shlex.join(command)}\n"
     (directory / f"{label}.txt").write_text(header + result.stdout + f"exit={result.returncode}\n")
     (directory / ENVIRONMENT_FILE).write_text(json.dumps(environment(), indent=2) + "\n")
-    write_checksums(directory)
+    write_checksums(directory, recursive=True)
     return result.returncode
 
 
