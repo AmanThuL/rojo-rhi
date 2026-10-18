@@ -1,8 +1,11 @@
 //----------------------------------------------------------------------------------------------------------------------
 /// @file NullHeapTests.cpp
-/// @brief Tests what only the Null backend promises about heaps: its placement requirements.
+/// @brief Tests what only the Null backend promises about heaps: its placement requirements and its unrounded size.
 //----------------------------------------------------------------------------------------------------------------------
 #include <rojoRHI/RHI.h>
+
+#include "Core/DeviceCore.h"
+#include "Core/Heaps.h"
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -28,5 +31,14 @@ TEST_CASE("the Null device's placement requirements do not depend on the memory 
     const PlacementRequirements upload = device.placementRequirements(BufferDesc{ .size = 300, .memory = Memory::Upload });
     CHECK(gpu.size == upload.size);
     CHECK(gpu.alignment == upload.alignment);
+    destroyDevice(device);
+}
+
+//======================================================================================================================
+TEST_CASE("the Null device's heap is exactly the size requested", "[null]")
+{
+    Device device = *createDevice();
+    const Heap heap = *device.createHeap({ .size = 1000 });
+    CHECK(core::checkedHeap(core::coreOf(device), heap).size == 1000);
     destroyDevice(device);
 }

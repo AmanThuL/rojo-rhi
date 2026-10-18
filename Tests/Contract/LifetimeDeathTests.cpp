@@ -4,6 +4,7 @@
 //----------------------------------------------------------------------------------------------------------------------
 #include <rojoRHI/RHI.h>
 
+#include "Support/Backend.h"
 #include "Support/Death.h"
 #include "Support/PassKit.h"
 #include "Support/UpscaleKit.h"
@@ -17,9 +18,6 @@ using test::PassKit;
 using test::UpscaleKit;
 
 namespace {
-    /// A stand-in for a native surface: the Null backend never dereferences it.
-    int g_surface = 0;
-
     //==================================================================================================================
     /// Records a barrier on `texture` that moves it from `oldLayout` to `newLayout`: a command that names the texture and uses nothing else.
     void move(CommandList list, Texture texture, Layout oldLayout, Layout newLayout)
@@ -141,7 +139,7 @@ TEST_CASE("VU-rojo-present-0019 a list recorded before a present is submitted af
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-present-0019", [] {
         Device device = *createDevice(DeviceDesc{ .validation = true });
-        Swapchain swapchain = *device.createSwapchain(SwapchainDesc{ .nativeSurface = &g_surface, .label = "test.swapchain" });
+        Swapchain swapchain = *device.createSwapchain(SwapchainDesc{ .nativeSurface = test::surface(), .label = "test.swapchain" });
         device.beginFrame();
         const Texture image = swapchain.acquire();
         CommandList first = device.acquireCommandList(QueueType::Graphics, "test.first");

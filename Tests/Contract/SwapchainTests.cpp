@@ -4,6 +4,8 @@
 //----------------------------------------------------------------------------------------------------------------------
 #include <rojoRHI/RHI.h>
 
+#include "Support/Backend.h"
+
 #include <catch2/catch_test_macros.hpp>
 
 #include <array>
@@ -15,15 +17,6 @@
 using namespace rojoRHI;
 
 namespace {
-    /// Stand-ins for native surfaces: the tests never dereference them.
-    std::array<int, 4> g_surfaces = {};
-
-    //==================================================================================================================
-    void* surface(size_t index)
-    {
-        return &g_surfaces[index];
-    }
-
     std::vector<std::string> g_warnings;
 
     //==================================================================================================================
@@ -36,9 +29,9 @@ namespace {
     }
 
     //==================================================================================================================
-    Swapchain makeSwapchain(Device device, size_t index = 0)
+    Swapchain makeSwapchain(Device device, uint32_t index = 0)
     {
-        Result<Swapchain> created = device.createSwapchain(SwapchainDesc{ .nativeSurface = surface(index), .label = "test.swapchain" });
+        Result<Swapchain> created = device.createSwapchain(SwapchainDesc{ .nativeSurface = test::surface(index), .label = "test.swapchain" });
         REQUIRE(created.has_value());
         return *created;
     }
@@ -82,7 +75,7 @@ namespace {
 TEST_CASE("a swapchain is created from a description with every default", "[contract]")
 {
     Device device = *createDevice();
-    CHECK(device.createSwapchain(SwapchainDesc{ .nativeSurface = surface(0) }).has_value());
+    CHECK(device.createSwapchain(SwapchainDesc{ .nativeSurface = test::surface(0) }).has_value());
     destroyDevice(device);
 }
 
@@ -90,10 +83,12 @@ TEST_CASE("a swapchain is created from a description with every default", "[cont
 TEST_CASE("each color space is created with its format", "[contract]")
 {
     Device device = *createDevice();
-    CHECK(device.createSwapchain(SwapchainDesc{ .nativeSurface = surface(0), .format = Format::BGRA8Unorm, .colorSpace = ColorSpace::SRGB }).has_value());
-    CHECK(device.createSwapchain(SwapchainDesc{ .nativeSurface = surface(1), .format = Format::RGBA16Float, .colorSpace = ColorSpace::ExtendedLinear })
+    CHECK(device.createSwapchain(SwapchainDesc{ .nativeSurface = test::surface(0), .format = Format::BGRA8Unorm, .colorSpace = ColorSpace::SRGB }).has_value());
+    CHECK(device.createSwapchain(SwapchainDesc{ .nativeSurface = test::surface(1), .format = Format::RGBA16Float, .colorSpace = ColorSpace::ExtendedLinear })
               .has_value());
-    CHECK(device.createSwapchain(SwapchainDesc{ .nativeSurface = surface(2), .format = Format::RGB10A2Unorm, .colorSpace = ColorSpace::HDR10 }).has_value());
+    CHECK(
+        device.createSwapchain(SwapchainDesc{ .nativeSurface = test::surface(2), .format = Format::RGB10A2Unorm, .colorSpace = ColorSpace::HDR10 }).has_value()
+    );
     destroyDevice(device);
 }
 
@@ -101,8 +96,12 @@ TEST_CASE("each color space is created with its format", "[contract]")
 TEST_CASE("every image count and present mode is accepted", "[contract]")
 {
     Device device = *createDevice();
-    CHECK(device.createSwapchain(SwapchainDesc{ .nativeSurface = surface(0), .imageCount = 2, .mode = PresentMode::Mailbox, .maxLatency = 1 }).has_value());
-    CHECK(device.createSwapchain(SwapchainDesc{ .nativeSurface = surface(1), .imageCount = 3, .mode = PresentMode::Immediate, .maxLatency = 3 }).has_value());
+    CHECK(
+        device.createSwapchain(SwapchainDesc{ .nativeSurface = test::surface(0), .imageCount = 2, .mode = PresentMode::Mailbox, .maxLatency = 1 }).has_value()
+    );
+    CHECK(
+        device.createSwapchain(SwapchainDesc{ .nativeSurface = test::surface(1), .imageCount = 3, .mode = PresentMode::Immediate, .maxLatency = 3 }).has_value()
+    );
     destroyDevice(device);
 }
 
@@ -175,7 +174,7 @@ TEST_CASE("a destroyed swapchain's surface takes a new swapchain", "[contract]")
     Device device = *createDevice();
     const Swapchain first = makeSwapchain(device);
     device.destroy(first);
-    CHECK(device.createSwapchain(SwapchainDesc{ .nativeSurface = surface(0) }).has_value());
+    CHECK(device.createSwapchain(SwapchainDesc{ .nativeSurface = test::surface(0) }).has_value());
     destroyDevice(device);
 }
 

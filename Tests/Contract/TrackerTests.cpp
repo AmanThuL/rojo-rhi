@@ -4,6 +4,7 @@
 //----------------------------------------------------------------------------------------------------------------------
 #include <rojoRHI/RHI.h>
 
+#include "Support/Backend.h"
 #include "Support/PassKit.h"
 #include "Support/UpscaleKit.h"
 
@@ -19,9 +20,6 @@ using test::PassKit;
 using test::UpscaleKit;
 
 namespace {
-    /// A stand-in for a native surface: the Null backend never dereferences it.
-    [[maybe_unused]] int g_surface = 0;
-
     //==================================================================================================================
     /// Records the barrier that moves every subresource of `texture` from `oldLayout` to `newLayout`, with no access on either
     /// side: it orders the transitions of a chain, and no use.
@@ -165,7 +163,7 @@ TEST_CASE("each acquire of a swapchain image starts a chain from Undefined", "[c
     SKIP("validation exists only in a Debug build");
 #else
     Device device = *createDevice(DeviceDesc{ .validation = true });
-    Swapchain swapchain = *device.createSwapchain(SwapchainDesc{ .nativeSurface = &g_surface, .imageCount = 2, .label = "test.swapchain" });
+    Swapchain swapchain = *device.createSwapchain(SwapchainDesc{ .nativeSurface = test::surface(), .imageCount = 2, .label = "test.swapchain" });
     Queue queue = device.queue(QueueType::Graphics);
     // Three frames reuse an image of two: its second acquire starts from Undefined again, though it was left in Present.
     for (int frame = 0; frame < 3; ++frame)
@@ -300,7 +298,7 @@ TEST_CASE("an image acquired, drawn to in ColorAttachment and moved to Present i
 {
 #ifndef NDEBUG
     Device device = *createDevice(DeviceDesc{ .validation = true });
-    Swapchain swapchain = *device.createSwapchain(SwapchainDesc{ .nativeSurface = &g_surface, .label = "test.swapchain" });
+    Swapchain swapchain = *device.createSwapchain(SwapchainDesc{ .nativeSurface = test::surface(), .label = "test.swapchain" });
     device.beginFrame();
     const Texture image = swapchain.acquire();
     CommandList list = device.acquireCommandList(QueueType::Graphics, "test.list");

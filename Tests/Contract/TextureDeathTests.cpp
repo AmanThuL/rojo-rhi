@@ -281,6 +281,12 @@ TEST_CASE("VU-rojo-texture-0019 initial data is given for a Sparse texture", "[c
     ROJORHI_EXPECT_DEATH("VU-rojo-texture-0019", [] {
         Device device = *createDevice();
         TextureDesc desc = validDesc();
+        core::DeviceCore& core = core::coreOf(device);
+        core.capabilities().placementSparse = true;
+        // The format must report sparse residency too, or VU-rojo-format-0003 fires first.
+        FormatCapabilities rgba = core.formatCapabilities(desc.format);
+        rgba.sparse = true;
+        core.setFormatCapabilities(desc.format, rgba);
         desc.usage = TextureUsage::Sampled | TextureUsage::Sparse;
         const std::array<TextureData, 1> data = {};
         (void)device.createTexture(desc, data);

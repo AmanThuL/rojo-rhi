@@ -5,8 +5,8 @@
 #include <rojoRHI/RHI.h>
 
 #include "Core/DeviceCore.h"
+#include "Support/Backend.h"
 #include "Support/Death.h"
-#include "Support/NullLibrary.h"
 
 #include <catch2/catch_test_macros.hpp>
 

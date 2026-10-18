@@ -4,6 +4,7 @@
 //----------------------------------------------------------------------------------------------------------------------
 #include <rojoRHI/RHI.h>
 
+#include "Support/Backend.h"
 #include "Support/Death.h"
 #include "Support/SparseKit.h"
 
@@ -15,9 +16,6 @@ using namespace rojoRHI;
 using rojoRHI::test::SparseKit;
 
 namespace {
-    /// Stand-in for a native surface: the tests never dereference it.
-    int g_surface = 0;
-
     //==================================================================================================================
     Texture plainTexture(Device device)
     {
@@ -61,7 +59,7 @@ TEST_CASE("VU-rojo-present-0012 the tile shape of a swapchain image is asked", "
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-present-0012", [] {
         Device device = *createDevice();
-        Swapchain swapchain = *device.createSwapchain(SwapchainDesc{ .nativeSurface = &g_surface, .label = "test.swapchain" });
+        Swapchain swapchain = *device.createSwapchain(SwapchainDesc{ .nativeSurface = test::surface(), .label = "test.swapchain" });
         device.beginFrame();
         (void)device.tileShape(swapchain.acquire());
     });
@@ -72,7 +70,7 @@ TEST_CASE("VU-rojo-present-0012 a swapchain image is mapped", "[contract][death]
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-present-0012", [] {
         SparseKit kit;
-        Swapchain swapchain = *kit.device.createSwapchain(SwapchainDesc{ .nativeSurface = &g_surface, .label = "test.swapchain" });
+        Swapchain swapchain = *kit.device.createSwapchain(SwapchainDesc{ .nativeSurface = test::surface(), .label = "test.swapchain" });
         kit.device.beginFrame();
         TileMapping mapping = kit.firstTile();
         mapping.texture = swapchain.acquire();
