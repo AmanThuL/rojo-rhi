@@ -52,7 +52,7 @@ identifier; this entry only defines the values.
 | `rootAlignment` | 256 | 4, raised to 256 | 256, `D3D12_CONSTANT_BUFFER_DATA_PLACEMENT_ALIGNMENT` | `minUniformBufferOffsetAlignment`, at most 256 |
 | `frameDataAlignment` | 256 | 256 | 256 | 256 |
 | `maxBufferSize` | device | `maxBufferLength` | adapter memory; an `Addr` reaches only `maxAddrOffset` bytes of it | `maxBufferSize` (Vulkan 1.3) |
-| `maxAddrOffset` | 4,294,967,295 (2^32 − 1) | per device, up to 2^64 − 1: a GPU virtual address | 2^32 − 1: the 32-bit byte offset an `Addr` carries into a `ByteAddressBuffer` (*unverified*: the raw-view limit of 2^27 elements may cap one raw view at 512 MiB) | per device, up to 2^64 − 1: a buffer device address |
+| `maxAddrOffset` | 4,294,967,295 (2^32 − 1) | `maxBufferLength` − 1, per device: an `Addr` is a GPU virtual address and reaches every byte of the largest buffer, and `createDevice` refuses a `maxBufferLength` below 2^32 | 2^32 − 1: the 32-bit byte offset an `Addr` carries into a `ByteAddressBuffer` (*unverified*: the raw-view limit of 2^27 elements may cap one raw view at 512 MiB) | per device, up to 2^64 − 1: a buffer device address |
 | `maxTextureDimension1D` | 16,384 | 16,384 | 16,384 | `maxImageDimension1D` |
 | `maxTextureDimension2D` | 16,384 | 16,384 | 16,384 | `maxImageDimension2D` |
 | `maxTextureDimension3D` | 2,048 | 2,048 | 2,048 | `maxImageDimension3D` |

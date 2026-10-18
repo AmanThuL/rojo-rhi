@@ -103,10 +103,9 @@ end
 -- The backend compiled into RojoRHI (ADR 0012); one backend per build.
 option("rojorhi_backend")
     set_default("null")
-    set_values("null")
+    set_values("null", "metal4")
     set_showmenu(true)
-    set_description("Backend for RojoRHI; null is the only accepted value. The GPU-free Null backend",
-                    "arrives with the work that adds it, and metal4 later becomes the macOS default")
+    set_description("Backend for RojoRHI: null, the GPU-free test backend, or metal4, which builds on macOS only")
 option_end()
 
 -- Release builds use link-time optimization, so a call into the library inlines into its caller
@@ -122,20 +121,43 @@ local function release_lto()
     end
 end
 
+-- The one metal-cpp implementation unit: it emits the Objective-C class and selector tables every
+-- metal-cpp caller links against, so a binary links exactly one copy. The frameworks are public so a
+-- binary linking the backend gets them.
+if is_plat("macosx") then
+    target("RojoRHIMetalCpp")
+        set_kind("static")
+        set_default(false)
+        release_lto()
+        add_files(path.join(component, "Backends/Metal4/MetalCpp/MetalCppImpl.cpp"))
+        add_includedirs(path.join(thirdparty, "metal-cpp"))
+        add_frameworks("Metal", "MetalFX", "QuartzCore", "Foundation", {public = true})
+end
+
 target("RojoRHI")
     set_kind("static")
     add_options("rojorhi_backend")
     release_lto()
     add_files(path.join(component, "Source/**.cpp"))
+    if is_config("rojorhi_backend", "metal4") then
+        add_files(path.join(component, "Backends/Metal4/Source/*.cpp"))
+        add_includedirs(path.join(thirdparty, "metal-cpp"))
+        if is_plat("macosx") then
+            add_deps("RojoRHIMetalCpp")
+        end
     -- The Null backend directory holds no source until a part adds one, and xmake warns on an empty glob.
-    if #os.files(path.join(component_dir, "Backends/Null/Source/*.cpp")) > 0 then
+    elseif #os.files(path.join(component_dir, "Backends/Null/Source/*.cpp")) > 0 then
         add_files(path.join(component, "Backends/Null/Source/*.cpp"))
     end
     add_includedirs(path.join(component, "Include"), {public = true})
     add_includedirs(path.join(component, "Source"))
     on_config(function (target)
         local backend = get_config("rojorhi_backend")
-        assert(backend == "null", format("rojorhi_backend=%s is not a backend; the only value is null", tostring(backend)))
+        if backend == "metal4" then
+            assert(target:is_plat("macosx"), format("rojorhi_backend=metal4 builds on macOS only; this platform is %s, so use null", target:plat()))
+        else
+            assert(backend == "null", format("rojorhi_backend=%s is not a backend; the values are null and metal4", tostring(backend)))
+        end
     end)
 
 target("RojoRHITests")
@@ -143,7 +165,44 @@ target("RojoRHITests")
     set_default(false)
     set_targetdir("$(builddir)/$(plat)/$(arch)/$(mode)/rojorhi-test")
     add_files(path.join(component, "Tests/*.cpp"))
-    add_files(path.join(component, "Tests/Contract/*.cpp"))
+    if is_config("rojorhi_backend", "metal4") then
+        -- The contract files whose chapters the Metal 4 backend does not implement yet. A file leaves the list when it
+        -- passes whole, and the list ends empty.
+        local metal4_pending = {
+            "AliasingDeathTests.cpp", "AliasingTests.cpp", "BarrierDeathTests.cpp", "BarrierTests.cpp",
+            "CopyDeathTests.cpp", "CopyTests.cpp", "CounterTests.cpp", "DiagnosticsDeathTests.cpp",
+            "DiagnosticsTests.cpp", "DrawDeathTests.cpp", "DrawTests.cpp", "FrameJoinDeathTests.cpp",
+            "FrameJoinTests.cpp", "HandoffDeathTests.cpp", "HandoffTests.cpp", "HazardDeathTests.cpp",
+            "HazardTests.cpp", "IndirectHazardDeathTests.cpp", "IndirectHazardTests.cpp", "LifetimeDeathTests.cpp",
+            "LifetimeTests.cpp", "PipelineDeathTests.cpp", "PipelineTests.cpp", "QueueHazardDeathTests.cpp",
+            "QueueHazardTests.cpp", "RenderPassDeathTests.cpp", "RenderPassTests.cpp", "SparseDeathTests.cpp",
+            "SparseOrderDeathTests.cpp", "SparseOrderTests.cpp", "SparseTests.cpp", "SwapchainDeathTests.cpp",
+            "SwapchainTests.cpp", "TrackerDeathTests.cpp", "TrackerTests.cpp", "UpscaleDeathTests.cpp",
+            "UpscalerTests.cpp",
+        }
+        local pending = {}
+        for _, name in ipairs(metal4_pending) do
+            pending[name] = true
+        end
+        -- A renamed or deleted contract file must leave the list too, so on_config fails on a name that matches no file.
+        -- The check runs in script scope, the only scope that can fail a configuration, so the values travel absolute.
+        set_values("rojorhi.metal4_pending", metal4_pending)
+        set_values("rojorhi.contract_dir", path.join(component_dir, "Tests/Contract"))
+        on_config(function (target)
+            local contract_dir = target:values("rojorhi.contract_dir")
+            for _, name in ipairs(table.wrap(target:values("rojorhi.metal4_pending"))) do
+                assert(os.isfile(path.join(contract_dir, name)),
+                       format("metal4_pending names Tests/Contract/%s, which does not exist; remove or rename the entry", name))
+            end
+        end)
+        for _, file in ipairs(os.files(path.join(component_dir, "Tests/Contract/*.cpp"))) do
+            if not pending[path.filename(file)] then
+                add_files(path.join(component, "Tests/Contract", path.filename(file)))
+            end
+        end
+    else
+        add_files(path.join(component, "Tests/Contract/*.cpp"))
+    end
     add_files(path.join(component, "Tests/Support/*.cpp"))
     -- The conformance directory holds no source until a part adds one, and xmake warns on an empty glob.
     if #os.files(path.join(component_dir, "Tests/Conformance/*.cpp")) > 0 then
@@ -155,6 +214,15 @@ target("RojoRHITests")
         add_files(path.join(component, "Tests/Null/*.cpp"))
         add_files(path.join(component, "Tests/Support/Null/*.cpp"))
     end
+    -- Metal 4 cases may reach the backend's private headers and metal-cpp.
+    if is_config("rojorhi_backend", "metal4") then
+        if #os.files(path.join(component_dir, "Tests/Metal4/*.cpp")) > 0 then
+            add_files(path.join(component, "Tests/Metal4/*.cpp"))
+        end
+        add_files(path.join(component, "Tests/Support/Metal4/*.cpp"))
+        add_includedirs(path.join(component, "Backends/Metal4/Source"))
+        add_includedirs(path.join(thirdparty, "metal-cpp"))
+    end
     add_includedirs(path.join(component, "Source"))
     add_includedirs(path.join(component, "Tests"))
     add_deps("RojoRHI")
@@ -164,9 +232,18 @@ target("RojoRHITests")
     if is_plat("windows") then
         add_defines("_CRT_SECURE_NO_WARNINGS")
     end
-    add_tests("contract", {runargs = {"[contract]~[death],[core]~[death],[null]~[death]"}})
-    -- Each case spawns this executable again, so keep Catch2's summary in the log and bound a hang.
-    add_tests("death", {runargs = {"[death]"}, realtime_output = true, run_timeout = 300000})
+    if is_config("rojorhi_backend", "metal4") then
+        -- Every Metal 4 entry runs under the Metal validation layer, from the test directory.
+        local layer = {MTL_DEBUG_LAYER = "1"}
+        add_tests("contract", {runargs = {"[contract]~[death],[metal4]~[death]"}, runenvs = layer})
+        -- Each case spawns this executable again, so keep Catch2's summary in the log and bound a hang.
+        add_tests("death", {runargs = {"[death]"}, runenvs = layer, realtime_output = true, run_timeout = 300000})
+        add_tests("conformance", {runargs = {"[conformance]"}, runenvs = layer})
+    else
+        add_tests("contract", {runargs = {"[contract]~[death],[core]~[death],[null]~[death]"}})
+        -- Each case spawns this executable again, so keep Catch2's summary in the log and bound a hang.
+        add_tests("death", {runargs = {"[death]"}, realtime_output = true, run_timeout = 300000})
+    end
     -- Conformance shaders compile for every target on any host; the rule needs only the Slang
     -- compiler, which setup fetches. Windows names it slangc.exe.
     add_rules("rojorhi.slang")
@@ -180,7 +257,11 @@ target("RojoRHITests")
     set_values("slang.layout_probe", path.join(component_dir, "Shaders/Tests/LayoutProbe.slang"))
     set_values("slang.layout_map", "DrawRoot=rojoRHI::test::DrawRoot")
     set_values("slang.layout_include", "rojoRHI/RHI.h")
-    add_tests("abi", {runargs = {"[abi]"}})
+    if is_config("rojorhi_backend", "metal4") then
+        add_tests("abi", {runargs = {"[abi]"}, runenvs = {MTL_DEBUG_LAYER = "1"}})
+    else
+        add_tests("abi", {runargs = {"[abi]"}})
+    end
 
 -- A Release probe that Tools/check_lto_inline.py disassembles to show a library entry inlined into
 -- the caller. It keeps its symbol table, which Release strips, to name the probe function, and

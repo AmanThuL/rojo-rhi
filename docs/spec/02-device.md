@@ -76,7 +76,8 @@ contains no validation tracker, or when the floor is not met, naming the first m
 in the message:
 
 - Metal 4: macOS 26 or later and a GPU of the Apple7 family (M1) or newer, with read-write texture
-  tier 2.
+  tier 2, BC texture compression, and at least the floor of each limit the device reports
+  ([formats and limits, part 2](15-formats-and-limits-part2.md#limits)).
 - D3D12, as designed: Windows 11, Agility SDK 1.619 or later, feature level 12_2, Shader Model 6.6
   with resource binding tier 3, `TypedUAVLoadAdditionalFormats`, enhanced barriers, and
   `DynamicDepthBiasSupported` for dynamic depth bias ([pipelines](06-pipelines-part2.md)).
@@ -91,7 +92,7 @@ A device is not tied to a thread. Free-threaded; several devices may coexist.
 | | Metal 4 | D3D12 | Vulkan |
 |---|---|---|---|
 | Open | `MTL::CreateSystemDefaultDevice` | `IDXGIFactory6::EnumAdapterByGpuPreference`, `D3D12CreateDevice` at `D3D_FEATURE_LEVEL_12_2` | `vkCreateInstance`, `vkEnumeratePhysicalDevices`, `vkCreateDevice` |
-| Floor check | `MTL::Device::supportsFamily` with `MTL::GPUFamilyMetal4` and `MTL::GPUFamilyApple7`; `MTL::Device::readWriteTextureSupport` at `MTL::ReadWriteTextureTier2` | `ID3D12Device::CheckFeatureSupport` for `D3D12_FEATURE_SHADER_MODEL`, `D3D12_FEATURE_D3D12_OPTIONS` (binding tier, `TypedUAVLoadAdditionalFormats`), `D3D12_FEATURE_D3D12_OPTIONS12` (`EnhancedBarriersSupported`) and `D3D12_FEATURE_D3D12_OPTIONS16` (`DynamicDepthBiasSupported`) | `vkGetPhysicalDeviceFeatures2` for Vulkan 1.4, descriptor heap, device address commands and mesh shaders |
+| Floor check | `MTL::Device::supportsFamily` with `MTL::GPUFamilyMetal4` and `MTL::GPUFamilyApple7`; `MTL::Device::readWriteTextureSupport` at `MTL::ReadWriteTextureTier2`; `MTL::Device::maxArgumentBufferSamplerCount` at least 996, `MTL::Device::maxBufferLength` at least 2^32 (a `maxAddrOffset` of 2^32 − 1), `MTL::Device::maxThreadsPerThreadgroup` at least 1,024 x 1,024 x 64 and `MTL::Device::maxThreadgroupMemoryLength` at least 32,768, the floors of [formats and limits, part 2](15-formats-and-limits-part2.md#limits); `MTL::Device::supportsBCTextureCompression`, which the BC1 rows of [formats and limits](15-formats-and-limits.md) need | `ID3D12Device::CheckFeatureSupport` for `D3D12_FEATURE_SHADER_MODEL`, `D3D12_FEATURE_D3D12_OPTIONS` (binding tier, `TypedUAVLoadAdditionalFormats`), `D3D12_FEATURE_D3D12_OPTIONS12` (`EnhancedBarriersSupported`) and `D3D12_FEATURE_D3D12_OPTIONS16` (`DynamicDepthBiasSupported`) | `vkGetPhysicalDeviceFeatures2` for Vulkan 1.4, descriptor heap, device address commands and mesh shaders |
 | Device state | `MTL::Device::newMTL4CommandQueue`, `MTL::Device::newResidencySet` added with `MTL4::CommandQueue::addResidencySet` | `ID3D12Device::CreateCommandQueue`, one shader-visible `ID3D12DescriptorHeap` per heap type, one global `ID3D12RootSignature` | `vkGetDeviceQueue`, `vkCreateCommandPool`, resource and sampler descriptor heaps |
 | Cost | native | native | native |
 
@@ -271,5 +272,5 @@ Caller-reserved index ranges are released through `Device::release` instead
 #### Mapping
 | | Metal 4 | D3D12 | Vulkan |
 |---|---|---|---|
-| Release | `MTL::ResidencySet::removeAllocation` and `commit`, then `release` on the object | `Release` on the `ID3D12Resource`, `ID3D12PipelineState`, `ID3D12Heap`, `ID3D12Fence` or `IDXGISwapChain4`; slot returned to the descriptor-heap free list | `vkDestroyBuffer`, `vkDestroyImage`, `vkDestroyImageView`, `vkDestroySampler`, `vkDestroyPipeline`, `vkFreeMemory`, `vkDestroySemaphore`, `vkDestroySwapchainKHR` |
+| Release | `MTL::ResidencySet::removeAllocation`, then `release` on the object; the set is committed later, at the next submission or staged upload | `Release` on the `ID3D12Resource`, `ID3D12PipelineState`, `ID3D12Heap`, `ID3D12Fence` or `IDXGISwapChain4`; slot returned to the descriptor-heap free list | `vkDestroyBuffer`, `vkDestroyImage`, `vkDestroyImageView`, `vkDestroySampler`, `vkDestroyPipeline`, `vkFreeMemory`, `vkDestroySemaphore`, `vkDestroySwapchainKHR` |
 | Cost | cheap: one deferred-release queue entry, released at slot retirement | cheap: same | cheap: same |

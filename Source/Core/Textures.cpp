@@ -336,6 +336,12 @@ namespace rojoRHI::core {
             mipLimit,
             largest
         );
+        ROJORHI_VU(
+            desc.mips == 1 || (desc.type != TextureType::Tex1D && desc.type != TextureType::Tex1DArray),
+            "VU-rojo-texture-0042",
+            "a one-dimensional texture has {} mips; it has exactly one",
+            desc.mips
+        );
         ROJORHI_VU(samplesSupported(desc.samples, formatCaps), "VU-rojo-texture-0007", "{} samples are not supported for the format", desc.samples);
         ROJORHI_VU(
             desc.samples == 1 || ((desc.type == TextureType::Tex2D || desc.type == TextureType::Tex2DArray) && desc.mips == 1 &&

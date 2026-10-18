@@ -1,5 +1,10 @@
 #!/usr/bin/env python3
-"""Validate C++ function boundaries using clangd's parsed document symbols."""
+"""Validate C++ function boundaries using clangd's parsed document symbols.
+
+Several compilation databases may be given: each backend's build compiles only its own sources,
+so no single database lists every file. The union must cover every file, and each file is checked
+with clangd started on the first database that lists it.
+"""
 
 from __future__ import annotations
 
@@ -37,7 +42,7 @@ def compilation_database_files(database: Path) -> set[Path]:
         entries = json.loads(database.read_text(encoding="utf-8"))
     except FileNotFoundError as exc:
         raise LayoutSetupError(
-            "compile_commands.json is missing; run `xmake project -k compile_commands` first"
+            f"{database} is missing; run `xmake project -k compile_commands` first"
         ) from exc
     except (OSError, json.JSONDecodeError) as exc:
         raise LayoutSetupError(f"cannot read compile_commands.json: {exc}") from exc
@@ -66,15 +71,34 @@ def select_checked_files(
     return kept, [f"{ADAPTER_DIR} skipped: the compilation database has no entry for the ImGui adapter"]
 
 
-def ensure_database_covers(files: list[Path], database: Path, root: Path) -> None:
-    covered = compilation_database_files(database)
+def databases_files(databases: list[Path]) -> set[Path]:
+    covered: set[Path] = set()
+    for database in databases:
+        covered |= compilation_database_files(database)
+    return covered
+
+
+def assign_databases(files: list[Path], databases: list[Path]) -> dict[Path, list[Path]]:
+    """Map each database to the files it checks: the first database listing a file owns it."""
+    listed = {database: compilation_database_files(database) for database in databases}
+    assigned: dict[Path, list[Path]] = {database: [] for database in databases}
+    for path in files:
+        for database in databases:
+            if path.resolve() in listed[database]:
+                assigned[database].append(path)
+                break
+    return assigned
+
+
+def ensure_database_covers(files: list[Path], databases: list[Path], root: Path) -> None:
+    covered = databases_files(databases)
     missing = [path for path in files if path.resolve() not in covered]
     if not missing:
         return
     names = ", ".join(path.relative_to(root).as_posix() for path in missing)
     raise LayoutSetupError(
-        "compile_commands.json does not cover every project .cpp file "
-        f"({names}); rerun `xmake project -k compile_commands`"
+        "the compilation databases do not cover every project .cpp file "
+        f"({names}); rerun `xmake project -k compile_commands <dir>` for each backend to generate a database per backend"
     )
 
 
@@ -318,7 +342,9 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--compile-commands",
         type=Path,
-        help="path to compile_commands.json (default: <component root>/compile_commands.json)",
+        action="append",
+        help="path to a compile_commands.json, repeatable; the union must cover every source "
+        "(default: <component root>/compile_commands.json)",
     )
     parser.add_argument("--clangd", help="clangd executable (defaults to CLANGD/PATH)")
     return parser.parse_args()
@@ -327,7 +353,7 @@ def parse_args() -> argparse.Namespace:
 def main() -> int:
     args = parse_args()
     root = args.root.resolve()
-    database = (args.compile_commands or root / "compile_commands.json").resolve()
+    databases = [path.resolve() for path in (args.compile_commands or [root / "compile_commands.json"])]
     executable = args.clangd or shutil.which("clangd")
     if not executable:
         print("C++ layout check could not run: clangd is not on PATH", file=sys.stderr)
@@ -338,28 +364,30 @@ def main() -> int:
         print(f"error: {', '.join(CPP_ROOTS)}: no C++ sources found", file=sys.stderr)
         print("C++ layout check failed with 1 error(s)", file=sys.stderr)
         return 1
-    client: ClangdClient | None = None
+    errors: list[str] = []
+    definitions = 0
     try:
-        files, notices = select_checked_files(files, compilation_database_files(database), root)
+        files, notices = select_checked_files(files, databases_files(databases), root)
         for notice in notices:
             print(f"notice: {notice}")
-        ensure_database_covers(files, database, root)
-        client = ClangdClient(executable, root, database)
-        client.initialize()
-        errors: list[str] = []
-        definitions = 0
-        for path in files:
-            text = path.read_text(encoding="utf-8")
-            starts = client.definition_lines(path, text)
-            definitions += len(starts)
-            errors.extend(check_layout(path.relative_to(root), text, starts))
+        ensure_database_covers(files, databases, root)
+        for database, checked in assign_databases(files, databases).items():
+            if not checked:
+                continue
+            client = ClangdClient(executable, root, database)
+            try:
+                client.initialize()
+                for path in checked:
+                    text = path.read_text(encoding="utf-8")
+                    starts = client.definition_lines(path, text)
+                    definitions += len(starts)
+                    errors.extend(check_layout(path.relative_to(root), text, starts))
+            finally:
+                client.close()
     except (OSError, LayoutSetupError, ValueError) as exc:
         message = str(exc).replace(str(root), ".")
         print(f"C++ layout check could not run: {message}", file=sys.stderr)
         return 2
-    finally:
-        if client is not None:
-            client.close()
 
     if errors:
         for error in errors:
