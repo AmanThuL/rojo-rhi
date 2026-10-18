@@ -148,6 +148,7 @@ target("RojoRHI")
         add_includedirs(path.join(thirdparty, "metal-cpp"))
         if is_plat("macosx") then
             add_deps("RojoRHIMetalCpp")
+            add_frameworks("CoreGraphics", {public = true})
         end
     -- The Null backend directory holds no source until a part adds one, and xmake warns on an empty glob.
     elseif #os.files(path.join(component_dir, "Backends/Null/Source/*.cpp")) > 0 then
@@ -180,7 +181,7 @@ target("RojoRHITests")
             "IndirectHazardTests.cpp", "LifetimeDeathTests.cpp", "LifetimeTests.cpp", "PipelineDeathTests.cpp",
             "PipelineTests.cpp", "RenderPassDeathTests.cpp", "RenderPassTests.cpp",
             "SparseDeathTests.cpp", "SparseOrderDeathTests.cpp", "SparseOrderTests.cpp", "SparseTests.cpp",
-            "SwapchainDeathTests.cpp", "SwapchainTests.cpp", "TrackerDeathTests.cpp", "TrackerTests.cpp",
+            "SwapchainTests.cpp", "TrackerDeathTests.cpp", "TrackerTests.cpp",
             "UpscaleDeathTests.cpp", "UpscalerTests.cpp",
         }
         local pending = {}
