@@ -123,6 +123,12 @@ class ProjectPolicyTests(unittest.TestCase):
                     policy.check_process_narration([Path(path)], errors)
                 self.assertEqual(len(errors), 1)
 
+    def test_process_policy_covers_benchmark_sources(self) -> None:
+        errors: list[str] = []
+        with mock.patch.object(policy, "read_text", return_value="// Close the backlog."):
+            policy.check_process_narration([Path("Benchmarks/Main.cpp")], errors)
+        self.assertEqual(len(errors), 1)
+
     def test_commit_messages_are_checked_only_when_a_range_is_given(self) -> None:
         errors: list[str] = []
         with mock.patch.object(policy, "git", side_effect=AssertionError("git must not run")):

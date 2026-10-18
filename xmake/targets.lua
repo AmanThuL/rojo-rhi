@@ -5,7 +5,7 @@
 --
 -- The shader rules the test targets opt into are part of that interface, so this file includes them
 -- rather than leaving a host to remember more includes.
-includes("shaders.lua", "slang.lua")
+includes("shaders.lua", "slang.lua", "metal.lua")
 
 -- Two values a host may set as plain globals before the include, because xmake evaluates an
 -- included description script in the same interpreter as the including one:
@@ -277,3 +277,43 @@ target("RojoRHILtoProbe")
     if is_plat("windows") then
         set_symbols("debug")
     end
+
+-- The benchmark harness under Benchmarks/, one executable so that a process measures RojoRHI and hand-written
+-- metal-cpp code on the same device. It links RojoRHI of the configured backend and runs its own Catch2 session, so
+-- it links Catch2 without Catch2Main. Its native code needs Metal, so it builds on macOS only.
+if is_plat("macosx") then
+    target("RojoRHIBench")
+        set_kind("binary")
+        set_default(false)
+        set_targetdir("$(builddir)/$(plat)/$(arch)/$(mode)/rojorhi-bench")
+        release_lto()
+        -- The native arm's metal-cpp calls link the one shared metal-cpp unit, the same one a metal4 RojoRHI links.
+        add_deps("RojoRHI", "RojoRHIMetalCpp")
+        add_packages("catch2", {components = "lib"})
+        add_includedirs(path.join(component, "Benchmarks"))
+        add_sysincludedirs(path.join(thirdparty, "metal-cpp"))
+        add_frameworks("Metal", "QuartzCore", "Foundation")
+        add_files(path.join(component, "Benchmarks/**.cpp"))
+        if is_config("rojorhi_backend", "metal4") then
+            add_includedirs(path.join(component, "Backends/Metal4/Source"))
+            add_defines("ROJORHI_BENCH_BACKEND_METAL4")
+        else
+            add_defines("ROJORHI_BENCH_BACKEND_NULL")
+        end
+        -- Both shader rules raise on an empty file list, so each is added only when its directory holds a source.
+        if #os.files(path.join(component_dir, "Shaders/Bench/*.slang")) > 0 then
+            add_rules("rojorhi.slang")
+            set_values("slang.moduledir", path.join(component_dir, "Shaders/RojoRHI"))
+            set_values("slang.slangc", path.join(thirdparty_dir, "slang/bin/slangc"))
+            add_files(path.join(component, "Shaders/Bench/*.slang"))
+        end
+        if #os.files(path.join(component_dir, "Benchmarks/Native/Kernels/*.metal")) > 0 then
+            add_rules("rojorhi.metal")
+            add_files(path.join(component, "Benchmarks/Native/Kernels/*.metal"))
+        end
+        add_tests("null", {runargs = {"check", "[null],[host]"}, realtime_output = true})
+        add_tests("native", {runargs = {"check", "[native]"}, runenvs = {MTL_DEBUG_LAYER = "1"}, realtime_output = true})
+        if is_config("rojorhi_backend", "metal4") then
+            add_tests("metal4", {runargs = {"check", "[metal4]"}, runenvs = {MTL_DEBUG_LAYER = "1"}, realtime_output = true})
+        end
+end

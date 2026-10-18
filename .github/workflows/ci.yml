@@ -111,9 +111,19 @@ jobs:
       - run: xmake test RojoRHITests/contract
       - run: xmake test RojoRHITests/death
       - run: xmake test RojoRHITests/abi
+      # The benchmark harness builds on macOS only; hosted runners have no Metal 4, so its GPU cases are counted.
+      - if: runner.os == 'macOS'
+        run: xmake build RojoRHIBench && xmake test RojoRHIBench/null
+      - if: runner.os == 'macOS'
+        run: |
+          n=$(./build/macosx/arm64/debug/rojorhi-bench/RojoRHIBench check --list-tests "[native]" | \
+            sed -n 's/^\([0-9][0-9]*\) matching test cases$/\1/p')
+          test -n "$n" && test "$n" -gt 0
       - run: xmake f -m release -y --rojorhi_backend=null
       - run: xmake build RojoRHITests
       - run: xmake test RojoRHITests/contract
+      - if: runner.os == 'macOS'
+        run: xmake build RojoRHIBench && xmake test RojoRHIBench/null
       # Release links with LTO (ADR 0012); the probe shows a library entry inlined into its caller.
       - run: xmake build RojoRHILtoProbe && xmake run RojoRHILtoProbe
       - run: python3 Tools/check_lto_inline.py

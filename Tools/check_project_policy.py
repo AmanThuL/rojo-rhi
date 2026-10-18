@@ -40,7 +40,8 @@ PROCESS_PATTERNS = (
     re.compile(r"(?i)\b(?:as requested|per the prompt|controller resolution)\b"),
 )
 PROCESS_ROOTS = (
-    "xmake/", "Include/", "Source/", "Backends/", "Shaders/", "Tests/", "Legacy/", "Tools/ImGuiBufferProbe/",
+    "xmake/", "Include/", "Source/", "Backends/", "Benchmarks/", "Shaders/", "Tests/", "Legacy/",
+    "Tools/ImGuiBufferProbe/",
 )
 COMMIT_SUBJECT = re.compile(
     r"^(?:rhi|metal|render|shader|scene|asset|engine|editor|app|core|tool|build|ci|docs|test|spike): "
