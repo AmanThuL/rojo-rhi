@@ -73,6 +73,8 @@ that loads shader libraries, so it arrives with the Metal 4 v2 backend.
 backend actually does. They run with `MTL_DEBUG_LAYER=1` so the platform validation layer speaks up,
 and with the test binary's build directory as the working directory, because the backend resolves
 shader library paths relative to the current directory.
+[Recording GPU evidence](../guides/gpu-evidence.md) says where a run's raw output is kept and how
+it is checksummed.
 
 ## The conformance filter
 

@@ -45,7 +45,8 @@ Metal 4 backend, the optional ImGui adapter, tests and shaders — alongside its
   chapter
 - Research: [docs/research/](docs/research/2026-10-11-rhi-redesign/01-nographicsapi.md), the
   evidence notes behind the decisions
-- Guide: [extracting RojoRHI from Luminex](docs/guides/luminex-extraction.md)
+- Guides: [extracting RojoRHI from Luminex](docs/guides/luminex-extraction.md),
+  [recording GPU evidence](docs/guides/gpu-evidence.md)
 - Architecture: [overview](docs/architecture/overview.md),
   [the Null backend](docs/architecture/null-backend.md),
   [command recording on it](docs/architecture/null-backend-recording.md),
