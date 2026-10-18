@@ -110,7 +110,7 @@ namespace rojoRHI {
                     ROJORHI_LOG_ERROR("acquireCommandList on device \"{}\": {}", impl.core.label(), made.error().message);
                     std::abort();
                 }
-                core::DeviceCounts::add(impl.core.counts().nativeCreateCalls, 3);
+                core::DeviceCounts::add(impl.core.counts().nativeCreateCalls, 4);
                 pool.lists.push_back(std::move(created));
             }
             list = pool.lists[pool.used++].get();
@@ -304,13 +304,6 @@ namespace rojoRHI {
     {
         CommandListImpl::of(*this);
         metal4::notImplemented("CommandList::dispatchIndirect");
-    }
-
-    //==================================================================================================================
-    void CommandList::clearTexture([[maybe_unused]] Texture texture, [[maybe_unused]] const SubresourceRange& range, [[maybe_unused]] const ClearValue& value)
-    {
-        CommandListImpl::of(*this);
-        metal4::notImplemented("CommandList::clearTexture");
     }
 
     //==================================================================================================================

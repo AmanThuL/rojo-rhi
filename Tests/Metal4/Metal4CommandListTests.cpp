@@ -89,7 +89,7 @@ TEST_CASE("a list records into its own command buffer, labelled with the list's 
 }
 
 //======================================================================================================================
-TEST_CASE("a new list creates its allocator, command buffer and table once and a reused list creates none", "[metal4]")
+TEST_CASE("a new list creates its allocator, command buffer and tables once and a reused list creates none", "[metal4]")
 {
     Device device = *createDevice();
     const uint32_t slots = core::coreOf(device).framesInFlight();
@@ -100,8 +100,8 @@ TEST_CASE("a new list creates its allocator, command buffer and table once and a
         const std::array<CommandList, 2> lists{ device.acquireCommandList(QueueType::Graphics, "test.a"),
                                                 device.acquireCommandList(QueueType::Graphics, "test.b") };
         const Counters after = device.counters();
-        // The first frame of each slot grows its pool by two lists of three objects; later frames reuse them.
-        CHECK(after.nativeCreateCalls == before.nativeCreateCalls + (frame < slots ? 6 : 0));
+        // The first frame of each slot grows its pool by two lists of four objects; later frames reuse them.
+        CHECK(after.nativeCreateCalls == before.nativeCreateCalls + (frame < slots ? 8 : 0));
         CHECK(after.cpuAllocations == before.cpuAllocations + (frame < slots ? 2 : 0));
         endAndSubmit(device, lists);
         device.endFrame();

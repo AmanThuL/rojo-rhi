@@ -21,6 +21,33 @@
 #include <span>
 
 namespace rojoRHI {
+    namespace {
+        //==============================================================================================================
+        /// Commits the buffers in `queue.commitBuffers` in one native call. With a commit timing callback set, the commit carries
+        /// feedback that reports the GPU span of this commit; commit options are not native calls and count nothing.
+        void commit(QueueImpl& queue)
+        {
+            if (queue.commitCallback == nullptr)
+            {
+                queue.native->commit(queue.commitBuffers.data(), queue.commitBuffers.size());
+                return;
+            }
+            const metal4::CommitTimingCallback callback = queue.commitCallback;
+            void* const user = queue.commitUser;
+            const QueueType type = queue.type;
+            const uint64_t serial = ++queue.commitSerial;
+            MTL4::CommitOptions* options = MTL4::CommitOptions::alloc()->init();
+            options->addFeedbackHandler([callback, user, type, serial](MTL4::CommitFeedback* feedback) {
+                // Metal's notification thread holds no autorelease pool.
+                const metal4::AutoreleasePool handlerPool;
+                const metal4::CommitTime time{ type, serial, feedback->GPUStartTime(), feedback->GPUEndTime(), feedback->error() != nullptr };
+                callback(user, time);
+            });
+            queue.native->commit(queue.commitBuffers.data(), queue.commitBuffers.size(), options);
+            options->release();
+        }
+    } // namespace
+
     //==================================================================================================================
     QueueImpl& QueueImpl::of(Queue queue)
     {
@@ -71,7 +98,7 @@ namespace rojoRHI {
                 {
                     queue.commitBuffers.push_back(CommandListImpl::of(list).state.commandBuffer);
                 }
-                queue.native->commit(queue.commitBuffers.data(), queue.commitBuffers.size());
+                commit(queue);
                 core::DeviceCounts::add(core.counts().nativeSubmitCalls);
             }
             for (const FenceValue& entry : signal)

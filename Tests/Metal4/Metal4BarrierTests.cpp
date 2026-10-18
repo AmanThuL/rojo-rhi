@@ -518,3 +518,45 @@ TEST_CASE("visibility is Device for named accesses and adds ResourceAlias for a 
     submitAndWait(device, lists);
     destroyDevice(device);
 }
+
+//======================================================================================================================
+TEST_CASE("an encoder-level barrier keeps the destination stages no command has run in yet for later encoders", "[metal4]")
+{
+    Device device = *createDevice();
+    const Buffer a = *device.createBuffer({ .size = 256, .label = "test.a" });
+    const Buffer b = *device.createBuffer({ .size = 256, .label = "test.b" });
+    const Buffer x = *device.createBuffer({ .size = 256, .usage = BufferUsage::ShaderWrite, .label = "test.x" });
+    const Buffer y = *device.createBuffer({ .size = 256, .usage = BufferUsage::ShaderWrite, .label = "test.y" });
+    device.beginFrame();
+    CommandList list = device.acquireCommandList(QueueType::Compute, "test.list");
+    list.barrier(std::array{ copyToCopy() });
+    // The kernel fill opens the encoder, whose opening barrier covers both of its stages; the copy writes x.
+    list.fillBuffer(y, 0, 256, 0x01020304u);
+    list.copyBuffer(a, 0, x, 0, 256);
+    CHECK(countsOf(list).nativeBarriers == 1);
+    list.barrier(
+        std::array{ GlobalBarrier{ .srcStage = Stage::Copy,
+                                   .srcAccess = Access::CopyWrite,
+                                   .dstStage = Stage::Copy | Stage::ComputeShader,
+                                   .dstAccess = Access::CopyRead | Access::CopyWrite } }
+    );
+    CHECK(barriersOf(list).deferredDestination == metal4::kComputeStages);
+    // A copy is a blit: the barrier is emitted for the blit stage and still held for the dispatch stage.
+    list.copyBuffer(a, 0, b, 0, 256);
+    CHECK(countsOf(list).nativeBarriers == 2);
+    CHECK(barriersOf(list).deferredDestination == MTL::StageDispatch);
+    // The scope boundary closes the encoder before any dispatch: the dispatch stage joins the pending barrier, and the next
+    // encoder emits it at queue level before its kernel fill of x.
+    list.beginScope("test.next");
+    CHECK(barriersOf(list).deferredDestination == 0);
+    CHECK(barriersOf(list).pendingDestination == MTL::StageDispatch);
+    list.fillBuffer(x, 0, 256, 0x05060708u);
+    CHECK(countsOf(list).encodersOpened == 2);
+    CHECK(countsOf(list).nativeBarriers == 3);
+    CHECK(barriersOf(list).openDestination == MTL::StageDispatch);
+    CHECK(barriersOf(list).pendingDestination == 0);
+    list.endScope();
+    list.end();
+    submitAndWait(device, std::array{ list }, QueueType::Compute);
+    destroyDevice(device);
+}

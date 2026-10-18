@@ -12,9 +12,12 @@
 #include "Core/Swapchains.h"
 #include "Metal4AddressMap.h"
 #include "Metal4Encoders.h"
+#include "Metal4Kernels.h"
 #include "Metal4ListState.h"
 #include "Metal4Residency.h"
 #include "Metal4Stager.h"
+
+#include "CommitTiming.h"
 
 #include <Metal/Metal.hpp>
 
@@ -45,6 +48,11 @@ namespace rojoRHI {
         std::atomic<uint64_t> progressValue = 0;
         /// The command buffers of the submission being committed, kept for its capacity. Only `submit` touches it.
         std::vector<MTL4::CommandBuffer*> commitBuffers;
+        /// The commit timing callback `metal4::setCommitTiming` set, or null; with it set, every commit carries feedback. Only
+        /// a queue-class call writes it, so no submission runs while it changes; `submit` reads it.
+        metal4::CommitTimingCallback commitCallback = nullptr;
+        void* commitUser = nullptr; ///< The user pointer `commitCallback` is called with.
+        uint64_t commitSerial = 0;  ///< The commits of this queue since the callback was set; `submit` writes it and `setCommitTiming` resets it.
 
         /// Returns the state `queue` wraps; checks VU-rojo-core-0004.
         static QueueImpl& of(Queue queue);
@@ -118,6 +126,7 @@ namespace rojoRHI {
         std::array<ListPool, 3> listPools;    ///< One list pool per frame slot; a device uses its first `framesInFlight`.
         MTL::Device* device = nullptr;        ///< The system default device.
         MTL4::Compiler* compiler = nullptr;   ///< The device's one compiler.
+        metal4::Kernels kernels;              ///< The backend's own kernels, made with `compiler`.
         metal4::Residency residency;          ///< The residency set every queue of the device keeps attached.
         /// Copies initial data into Private memory on the internal upload queue, which also keeps `residency` attached.
         metal4::Stager stager;

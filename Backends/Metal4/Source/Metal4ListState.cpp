@@ -26,12 +26,18 @@ namespace rojoRHI::metal4 {
 
         /// The binding of the sampler table's address (ADR 0018).
         constexpr NS::UInteger kSamplerTableBinding = 2;
+
+        /// The buffer bindings of a list's kernel table: a backend kernel's parameters and the buffer it writes.
+        constexpr NS::UInteger kKernelBufferBindings = 2;
+
+        /// The texture bindings of a list's kernel table: the texture a backend kernel writes.
+        constexpr NS::UInteger kKernelTextureBindings = 1;
     } // namespace
 
     //==================================================================================================================
     Result<void> ListState::create(MTL::Device* device, uint64_t viewTableAddress, uint64_t samplerTableAddress)
     {
-        // The table's label and the error are autoreleased.
+        // The tables' labels and the errors are autoreleased.
         const AutoreleasePool pool;
         allocator = device->newCommandAllocator();
         if (allocator == nullptr)
@@ -59,6 +65,20 @@ namespace rojoRHI::metal4 {
         }
         table->setAddress(viewTableAddress, kViewTableBinding);
         table->setAddress(samplerTableAddress, kSamplerTableBinding);
+        MTL4::ArgumentTableDescriptor* kernelDescriptor = MTL4::ArgumentTableDescriptor::alloc()->init();
+        kernelDescriptor->setMaxBufferBindCount(kKernelBufferBindings);
+        kernelDescriptor->setMaxTextureBindCount(kKernelTextureBindings);
+        kernelDescriptor->setInitializeBindings(true);
+        kernelDescriptor->setLabel(makeString("rojorhi.list.kernelTable"));
+        error = nullptr;
+        kernelTable = device->newArgumentTable(kernelDescriptor, &error);
+        kernelDescriptor->release();
+        if (kernelTable == nullptr)
+        {
+            const std::string reason = describe(error);
+            release();
+            return std::unexpected(Error{ ErrorCategory::DriverFailure, std::format("the kernel table of a command list was not created: {}", reason) });
+        }
         return {};
     }
 
@@ -74,6 +94,11 @@ namespace rojoRHI::metal4 {
         {
             label->release();
             label = nullptr;
+        }
+        if (kernelTable != nullptr)
+        {
+            kernelTable->release();
+            kernelTable = nullptr;
         }
         if (table != nullptr)
         {
