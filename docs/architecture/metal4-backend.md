@@ -4,11 +4,12 @@
 
 This page describes the Metal 4 backend of the v2 interface as it stands: the part that creates a
 device, reports its capabilities, owns buffers, heaps, textures, views and samplers, and runs
-queues, fences and frames, and records command lists as far as copies, fills, clears, barriers and
-scopes. Render passes, pipelines, dispatches, draws, presentation, upscaling and sparse resources
-arrive with later work. The API reference under `docs/spec/` stays the authority on every
-entry's semantics and Metal 4 mapping; [the Null backend](null-backend.md) describes the shared core
-this backend translates to. The backend builds with `xmake f --rojorhi_backend=metal4`, on macOS
+queues, fences and frames, records command lists as far as copies, fills, clears, barriers and
+scopes, presents swapchains on a Metal layer, maps placement sparse resources and captures
+programmatically ([the edges](metal4-backend-edges.md)). Render passes, pipelines, dispatches,
+draws and upscaling arrive with later work. The API reference under `docs/spec/` stays the
+authority on every entry's semantics and Metal 4 mapping; [the Null backend](null-backend.md)
+describes the shared core this backend translates to. The backend builds with `xmake f --rojorhi_backend=metal4`, on macOS
 only, and `null` stays the default.
 
 ## What exists
@@ -23,6 +24,9 @@ only, and `null` stays the default.
 | Textures and views | `Metal4Textures.*`, `Metal4TextureDescriptor.*`, `Metal4Views.*` | textures, views, samplers, reserved ranges and the two ID tables |
 | Residency | `Metal4Residency.*` | the device's one residency set |
 | Queues and fences | `Metal4Queue.cpp`, `Metal4Fences.*` | `Queue::submit`, `createFence`, `completedValue`, `wait` |
+| Presentation | `Metal4Swapchain.*`, `Metal4Presentation.*` | `createSwapchain`, `acquire`, `present`, `resize`, the device's presentation state |
+| Sparse | `Metal4Sparse.*` | the format probe, measured tile shapes, `Queue::mapTiles` |
+| Capture | `Metal4Capture.*` | `beginCapture`, `endCapture` |
 | Lists | `Metal4CommandList.cpp`, `Metal4ListState.*`, `Metal4Scopes.cpp` | `acquireCommandList`, `end`, `uploadFrameData`, the frame-arena pages, scopes |
 | Recording | `Metal4Encoders.*`, `Metal4Copies.cpp`, `Metal4Clears.cpp`, `Metal4Barriers.*` | the open encoder, copies and fills, clears, barrier lowering |
 | Kernels | `Metal4Kernels.*`, `Backends/Metal4/Kernels/`, `xmake/kernels.lua` | the embedded library, the fill and clear pipelines |
@@ -32,15 +36,14 @@ only, and `null` stays the default.
 [Command recording](metal4-recording.md) describes the lists. Every entry not implemented yet takes
 one of two forms:
 
-- `Device::loadShaderLibrary`, both `createPipeline` overloads, `pipelineCacheData`,
-  `createSwapchain` and `createUpscaler` return `ErrorCategory::Unsupported`, naming the entry.
-- The pass, pipeline, dispatch and draw entries of `CommandList`, `Queue::present`,
-  `Queue::mapTiles` and the swapchain entries log `<entry> is not implemented by the Metal 4
-  backend` and abort in every build, after the core's handle check, so a default-constructed
-  object still fails `VU-rojo-core-0004` first. The core serves the destroys of pipelines, shader
-  libraries and upscalers and `tileShape`. The device reports no sparse placement, no upscaler and
-  no conservative rasterisation. Capture has no tool yet and reports `Unsupported`, and
-  `scopeTimings` reports no durations; both arrive with timestamps and passes.
+- `Device::loadShaderLibrary`, both `createPipeline` overloads, `pipelineCacheData` and
+  `createUpscaler` return `ErrorCategory::Unsupported`, naming the entry.
+- The pass, pipeline, dispatch and draw entries of `CommandList` log `<entry> is not implemented by
+  the Metal 4 backend` and abort in every build, after the core's handle check, so a
+  default-constructed object still fails `VU-rojo-core-0004` first. The core serves the destroys of
+  pipelines, shader libraries and upscalers and `tileShape`. The device reports no upscaler and no
+  conservative rasterisation, and `scopeTimings` reports no durations; that arrives with timestamps
+  and passes.
 
 ## Device objects and teardown
 
@@ -67,22 +70,24 @@ commits it. Capabilities come from the device and from the Metal 4 column of the
 [formats and limits](../spec/15-formats-and-limits-part2.md); a limit whose column is not a number
 reports the floor. The floor name is the highest Apple family the device supports.
 
-`Metal4Formats` starts from the core's class ceiling and removes what the hardware lacks: sparse
-everywhere and sample counts without `supportsTextureSampleCount`. BC formats keep their ceiling,
-because `createDevice` requires `supportsBCTextureCompression`. Three narrowings follow the Metal Feature Set Tables. A storage view
-is read-write in the shader ABI, and read-write texture tier 2 lists neither `BGRA8Unorm`,
-`RG16Float` nor `RGB10A2Unorm`, so storage read is off for all three and storage write is off for
-`BGRA8Unorm` and `RGB10A2Unorm`; `RG16Float` keeps storage write, which chapter 15 guarantees at
-the floor. `R32Float` filtering and resolve follow `supports32BitFloatFiltering`. Linear filtering
-of depth formats needs Apple9. Each line carries its source in a comment.
+`Metal4Formats` starts from the core's class ceiling and removes what the hardware lacks: sparse for
+a format the device does not tile ([sparse resources](metal4-backend-edges.md#sparse-resources)) and
+sample counts without `supportsTextureSampleCount`. BC formats keep their ceiling, because
+`createDevice` requires `supportsBCTextureCompression`. Three narrowings follow the Metal Feature
+Set Tables. A storage view is read-write in the shader ABI, and read-write texture tier 2 lists
+neither `BGRA8Unorm`, `RG16Float` nor `RGB10A2Unorm`, so storage read is off for all three and
+storage write is off for `BGRA8Unorm` and `RGB10A2Unorm`; `RG16Float` keeps storage write, which
+chapter 15 guarantees at the floor. `R32Float` filtering and resolve follow
+`supports32BitFloatFiltering`. Linear filtering of depth formats needs Apple9. Each line carries its
+source in a comment.
 
 ## Residency
 
 One `MTL::ResidencySet`, labelled `rojorhi.residency`, belongs to the device and is attached to the
-three queues and to the internal upload queue. Allocations join it from any thread under its
-mutex and mark it dirty, through an atomic flag: every dedicated buffer and texture, every heap, every frame-arena
-page and the two ID tables. A placed buffer or texture never joins, because its heap did. An
-allocation leaves the set when its retire hook runs.
+three queues and to the internal upload queue. Allocations join it from any thread under its mutex
+and mark it dirty, through an atomic flag: every dedicated buffer and texture, every heap, every
+frame-arena page and the two ID tables. A placed buffer or texture never joins, because its heap
+did. An allocation leaves the set when its retire hook runs.
 
 The set is committed when it is dirty and something needs it: `Queue::submit` commits before it
 encodes its waits and signals, and the stager commits before a copy. A commit counts one
@@ -186,21 +191,23 @@ The wait is one `nativeHostCalls` and `endFrame` is one `nativeSubmitCalls`.
 
 ## Counting
 
-The core counts what it can see; a backend counts at its native call sites. In the core:
-creation, allocation and descriptor counts, `completedValue`, one `nativeSubmitCalls` for each
-fence wait and signal a submission carries, frame data and arena growth. In this backend:
-`nativeSubmitCalls` counts native queue calls only, so Metal 4 counts its own commits and signals
-(the stager's upload, a submission's commit, `endFrame`'s frame-event signal and a submission's
-progress signal) and the
-Null backend counts its one per `Queue::submit`; a submission that names a fence therefore counts
-its waits, its signals, one commit when it has lists and one progress signal, and an empty
-submission counts none.
-`nativeHostCalls` counts residency commits, of the device set and of the stager's own, frame waits,
-allocator resets, a native `Device::wait` and the progress reads of a frame-slot reuse and of
-`Device::destroy(Fence)`; the stager counts its staging buffer in `nativeCreateCalls`.
-`nativeRecordCalls`, `nativeBarriers` and `encodersOpened` are noted by the backend on the list at
-each recording site and folded into the device by the core at submission; the tracker numbers
-commands itself and counts nothing. [Command recording](metal4-recording.md) lists the sites.
+The core counts what it can see; a backend counts at its native call sites. In the core: creation,
+allocation and descriptor counts, `completedValue`, one `nativeSubmitCalls` for each fence wait and
+signal a submission carries, frame data and arena growth. In this backend: `nativeSubmitCalls`
+counts native queue calls only, so Metal 4 counts its own commits and signals (the stager's upload,
+a submission's commit, `endFrame`'s frame-event signal, a submission's progress signal, a
+drawable's wait and signal, a residency-set attach or detach, and each native mapping update) and
+the Null backend counts its one per `Queue::submit`; a submission that names a fence therefore
+counts its waits, its signals, one commit when it has lists and one progress signal, and an empty
+submission counts none. `nativeHostCalls` counts residency commits, of the device set and of the
+stager's own, frame waits, allocator resets, a native `Device::wait` and the progress reads of a
+frame-slot reuse and of `Device::destroy(Fence)`, each `nextDrawable` call, a `present` and the
+frame wait of a `resize`, and the start and stop of a capture; the stager counts its staging buffer
+in `nativeCreateCalls`. Presentation and sparse mapping add to `nativeSubmitCalls` as [their
+page](metal4-backend-edges.md) states. `nativeRecordCalls`, `nativeBarriers` and `encodersOpened`
+are noted by the backend on the list at each recording site and folded into the device by the core
+at submission; the tracker numbers commands itself and counts nothing. [Command
+recording](metal4-recording.md) lists the sites.
 
 ## Threading and locks
 
@@ -213,24 +220,27 @@ The backend's mutexes nest in one order, outermost first:
 
 1. the frame arena's, the validation tracker's or the stager's, which never nest in one another;
 2. a `HandlePool`'s, such as the buffer pool's;
-3. the residency set's or the Debug address map's, which are leaves: nothing is taken while either
-   is held, and neither is taken inside the other.
+3. the residency set's, the Debug address map's or `Presentation::mutex`, which are leaves: nothing
+   is taken while any of them is held, and none is taken inside another.
 
 A thread may skip a level but never takes a lock of an earlier level while it holds one of a later
 level. Claiming an arena page holds the arena's mutex while it adds the page to the residency set,
 then to the buffer pool, then in Debug to the address map, one after another. A retire hook runs
 under its pool's mutex and takes the residency set's and, for a buffer, the address map's; it calls
-neither a pool nor the arena. `Queue::submit` takes the residency set's mutex inside the tracker's
-lock, and a copy takes it inside the stager's. Creating a buffer or texture takes no two of them at
-once: it adds the object to the residency set, then to its pool, then to the address map, releasing
-each before the next.
+neither a pool nor the arena. `Queue::submit` takes the residency set's mutex and, through
+`flushPresentation`, the presentation mutex inside the tracker's lock (the tracker's lock is held
+only on a validating device), and a copy takes the residency set's inside the stager's. The
+presentation mutex is never held across `nextDrawable` or the latency wait; `acquire` waits on the
+latency state's own mutex and condition variable, which are leaves and are never taken with another
+lock held. Creating a buffer or texture takes no two of them at once: it adds the object to the
+residency set, then to its pool, then to the address map, releasing each before the next.
 
 `Queue::submit` holds the tracker's lock, which only a validating device takes, from the check to
 its last native call. Inside it, it takes the fence pool's mutex once for each fence it checks and
-once for each signal it records, in the shared core code, as on Null, in Debug the pool mutexes of the lookups its checks and the replay
-make, each released before the next, and the residency set's mutex only when the set is dirty. A
-clean set costs one atomic load, so residency adds no lock to a submission once the set is
-committed.
+once for each signal it records, in the shared core code, as on Null, in Debug the pool mutexes of
+the lookups its checks and the replay make, each released before the next, and the residency set's
+mutex only when the set is dirty. A clean set costs one atomic load, so residency adds no lock to a
+submission once the set is committed.
 
 Two more mutexes are taken alone, never with another held: each frame slot's list pool's, taken by
 `acquireCommandList` and by the frame-slot reuse (acquisition is free-threaded and is not recording
@@ -270,6 +280,9 @@ By hand, in Debug, from `build/macosx/arm64/debug/rojorhi-test`:
 MTL_DEBUG_LAYER=1 ./RojoRHITests "[contract]~[death],[metal4]~[death]"
 ```
 
-A validation-layer message is a failure, and so is an `autoreleased with no pool` line under
-`OBJC_DEBUG_MISSING_POOLS=YES`. A death test needs no GPU path of its own: the checks live in the
-core, so the same cases run on both backends. [Testing](../conventions/testing.md) owns the tiers.
+A validation-layer message is a failure, and so is an `autoreleased with no pool` line with a
+RojoRHI frame under `OBJC_DEBUG_MISSING_POOLS=YES`; the lines Apple's own threads print once a
+drawable is presented do not count
+([presentation](metal4-backend-edges.md#presenting-under-objc_debug_missing_pools)). A death test
+needs no GPU path of its own: the checks live in the core, so the same cases run on both backends.
+[Testing](../conventions/testing.md) owns the tiers.
