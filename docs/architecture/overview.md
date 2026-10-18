@@ -5,21 +5,26 @@
 This page describes RojoRHI's shape as the code stands today: the v1 interface imported from
 Luminex, implemented by the Metal 4 backend and frozen under `Legacy/` (ADR 0017). The top-level
 `Include/`, `Source/`, `Backends/`, `Tests/` and `Shaders/` are the permanent names, reserved for
-the v2 interface, which is specified in the ADRs and the API reference under `docs/spec/` and is
-implemented on the test-only Null backend, whose validation tracker is complete; the shader ABI
-module and its hosted checks exist.
+the v2 interface, which is specified in the ADRs and the API reference under `docs/spec/`. The
+test-only Null backend implements all of it and its validation tracker is complete; the Metal 4
+backend implements the device, its resources, queues, fences and frames and is described in [its
+page](metal4-backend.md). The shader ABI module and its hosted checks exist.
 
 ```
 rojo-rhi/
   LICENSE  AGENTS.md  CLAUDE.md  README.md  xmake.lua  root project settings only
-  .github/workflows/                          CI: policy; legacy, format, interface
+  .github/workflows/                          CI: policy; legacy, metal4, format, interface
   xmake/targets.lua  setup.lua  shaders.lua   targets are includable by a host project
   xmake/slang.lua                             the Slang compile and layout-check rules
   Include/rojoRHI/                            v2 public headers, dependency-free
   Source/Base/  Source/Core/                  v2 private base; the backend-neutral core
   Backends/Null/Source/                       the Null backend (no GPU)
-  Tests/Contract/  Tests/Core/  Tests/Null/   v2 contract cases; core internals; Null expectations
-  Tests/Support/                              the death-test harness
+  Backends/Metal4/Source/                     the Metal 4 backend
+  Backends/Metal4/MetalCpp/                   the one metal-cpp unit, shared with Legacy
+  Tests/Contract/                             backend-neutral contract cases
+  Tests/Core/  Tests/Null/                    core internals; Null expectations (Null builds)
+  Tests/Metal4/  Tests/Conformance/           Metal 4 expectations; T1 readback oracles
+  Tests/Support/                              the death-test harness; per-backend helpers
   Shaders/RojoRHI/  Shaders/Tests/            the shader ABI module; its conformance shaders
   Legacy/Include/rojoRHI/                     v1 public headers, dependency-free
   Legacy/Source/  Legacy/Source/Base/         v1 shared implementation; private base
@@ -42,19 +47,27 @@ so RojoRHI configures, builds and tests standalone.
 
 `Include/`, `Source/`, `Backends/`, `Tests/` and `Shaders/` are the permanent tree of the v2
 interface. `RojoRHI` is a static library of `Source/**/*.cpp` and the selected backend's sources;
-the `rojorhi_backend` configure option accepts only `null`, the GPU-free Null backend.
-`Source/Base/` is the private base (the Debug-tier `ROJORHI_VU` check and the message sink) and
-`Source/Core/` the backend-neutral core every backend embeds; `Backends/Null/Source/` implements the
-public entries over it. [The Null backend](null-backend.md) describes both layers and what is
-implemented, [command recording](null-backend-recording.md) the recording chapters, and [the
-edges](null-backend-edges.md) presentation, upscaling, sparse resources, diagnostics and counters,
-and [the validation tracker](validation-tracker.md) the checks that follow a resource across
-commands, lists, submissions and queues. `Include/rojoRHI/RHI.h` is the whole v2 public interface,
-one header in sections by API-reference chapter.
+the `rojorhi_backend` configure option accepts `null`, the GPU-free Null backend and the default,
+and `metal4`, which builds on macOS only. `Source/Base/` is the private base (the Debug-tier
+`ROJORHI_VU` check and the message sink) and `Source/Core/` the backend-neutral core every backend
+embeds; `Backends/Null/Source/` and `Backends/Metal4/Source/` implement the public entries over it,
+each one backend per build. `Backends/Metal4/MetalCpp/` holds the one metal-cpp implementation unit,
+the `RojoRHIMetalCpp` target, which the Metal 4 backend and `RojoRHILegacy` both link, so a host
+that links both has one definition of metal-cpp's tables. [The Null backend](null-backend.md)
+describes both layers and what is implemented, [command recording](null-backend-recording.md) the
+recording chapters, and [the edges](null-backend-edges.md) presentation, upscaling, sparse
+resources, diagnostics and counters, and [the validation tracker](validation-tracker.md) the checks
+that follow a resource across commands, lists, submissions and queues. `Include/rojoRHI/RHI.h` is
+the whole v2 public interface, one header in sections by API-reference chapter.
 
-`Tests/` builds as the `RojoRHITests` binary with three entries: `contract` runs the T0 cases of
-`Tests/Contract/`, `Tests/Core/` and `Tests/Null/` except the death tests, `death` runs the
-`[death]` cases and `abi` the shader ABI cases. `Tests/Support/` holds the death-test harness.
+`Tests/` builds as the `RojoRHITests` binary, whose file set depends on the backend. With `null`,
+`contract` runs the T0 cases of `Tests/Contract/`, `Tests/Core/` and `Tests/Null/` except the death
+tests, `death` runs the `[death]` cases and `abi` the shader ABI cases. With `metal4`, `contract`
+runs `Tests/Contract/` (minus the files `metal4_pending` names) and `Tests/Metal4/`, `death` and
+`abi` run as on Null, and `conformance` runs the `[conformance]` cases of `Tests/Conformance/`,
+which observe GPU results; every Metal 4 entry runs under `MTL_DEBUG_LAYER=1`. `Tests/Core/` and
+`Tests/Null/` build with Null only. `Tests/Support/` holds the death-test harness and the helpers
+of each backend. [Testing](../conventions/testing.md) owns the tiers.
 v1 lives frozen beside them under `Legacy/` and is deleted with the consumer port; ADR 0017 owns
 the layout, the freeze and the consumer's dependency rename.
 
@@ -91,9 +104,10 @@ an include root not spelled exactly `rojoRHI/`, the maintained `Patches/`, and `
 extraction and stays as the record of what that rename did; `Tools/Extract/` holds the scripts that
 ran the extraction itself and the verifier that checked its result, both kept for a future re-run.
 
-`.github/workflows/` runs the project policy check on Linux; the legacy, format and interface jobs
-on hosted macOS; and the interface job also on Windows. Hosted macOS has no Metal 4 device, so the
-GPU cases run on Apple Silicon before merge ([testing](../conventions/testing.md)).
+`.github/workflows/` runs the project policy check on Linux; the legacy, metal4, format and
+interface jobs on hosted macOS; and the interface job also on Windows. The metal4 job builds the
+Metal 4 backend in Debug and Release and counts its cases per tag. Hosted macOS has no Metal 4
+device, so the GPU cases run on Apple Silicon before merge ([testing](../conventions/testing.md)).
 
 `docs/conventions/`, `docs/decisions/`, `docs/architecture/` and `docs/guides/` hold this
 repository's own conventions, ADRs, architecture pages and procedures, standing alone from
@@ -103,9 +117,9 @@ provenance.
 
 `docs/spec/` is the API reference for the v2 interface: a conventions chapter and one chapter per
 area, each entry giving semantics, valid usage and a mapping to Metal 4, D3D12 and Vulkan. It
-specifies the interface and does not describe code that exists. Metal 4 is the only backend
-implemented today; the D3D12 and Vulkan columns are designed mappings, since D3D12 is planned and
-Vulkan is a design oracle with no code (ADR 0008).
+specifies the interface and does not describe code that exists. Metal 4 is the only native backend
+implemented today, and only in part; the D3D12 and Vulkan columns are designed mappings, since D3D12
+is planned and Vulkan is a design oracle with no code (ADR 0008).
 
 `docs/research/` holds the dated evidence notes the decisions cite, such as
 `docs/research/2026-10-11-rhi-redesign/`. Notes record what was found and are not binding;

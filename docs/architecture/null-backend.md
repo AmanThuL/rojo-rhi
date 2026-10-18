@@ -8,7 +8,8 @@ Null backend of [ADR 0008](../decisions/0008-backends-and-vulkan-oracle.md) rend
 needs no GPU; it exists so the contract of
 [ADR 0009](../decisions/0009-conformance-and-valid-usage.md) can be tested on any machine. The API
 reference under `docs/spec/` stays the authority on every entry's semantics; this page records how
-the code realises it.
+the code realises it. [The Metal 4 backend](metal4-backend.md) is the native backend over the same
+core.
 
 ## What exists
 
@@ -107,7 +108,13 @@ Debug.
 
 Every record ends in `void* native`, the backend's payload, which the core never reads. The
 backend fills it between `prepareBuffer` (which checks and returns a record with no payload) and
-`addBuffer` (which stores it), and likewise for textures.
+`addBuffer` (which stores it), and likewise for textures. The pool publishes the payload into its
+native table when it stores the record, and `HandlePool::native(handle)` reads it with one acquire
+load, taking no lock and checking nothing, so an entry that records under no lock can reach a
+native object. The table holds 2^22 slots unless a pool is built smaller; a creation that finds it
+full returns `OutOfMemory` and the backend releases the object it made. The pool clears the table
+entry before it runs the retire hook, so a racing misuse reads null, never a pointer the hook is
+releasing.
 
 A backend frees its payload through `RetireHooks`: one function pointer per handle type plus a
 `context`, set once with `DeviceCore::setRetireHooks`; a `frameSlot` function the core calls
@@ -130,7 +137,9 @@ so the free-threaded `destroy` reads a consistent pair while the frame class wri
 destroyed while a frame is open is released with that frame's slot; one destroyed with no frame
 open is released with the next frame opened. `beginFrame` retires the slot it reuses: every pool
 releases the records destroyed at frames up to N minus `framesInFlight`, passing each to the
-retire hook its backend registered.
+retire hook its backend registered. Before it retires anything it calls the `waitFrame` hook with
+the frame whose slot it reuses; Null registers none, because its work is complete at submission,
+and a native backend blocks there until that frame's work finishes.
 Frame misuse is `VU-rojo-device-0002` to `0004`. `destroyDevice` with validation selected warns
 once per live object, by label, then passes every live and pending record through the same hooks
 exactly once. The core also keeps the `Capabilities` and the format table, which the backend fills
@@ -217,15 +226,15 @@ releasing a view slot or range lowers that texture's count.
 
 Each slot also keeps a `native` payload, the backend's view or sampler, which the core never reads;
 the Null backend stores null. The view and sampler entries are two core calls each, so a backend
-creates its native object between them: `checkView` and `addView`, `checkViewWrite` and
-`placeView`, `checkSampler` and `addSampler`, `checkSamplerWrite` and `placeSampler`. The checks
-come first and hold every rule; the second call places the payload, and returns `OutOfMemory` or,
-for a write that lost its range to a racing release, false, leaving the payload with the caller. A
-payload leaves its slot when the slot or its range is released or a write replaces it, and waits
-for the frame of that release or write: `retire` hands it to the `view` or `sampler` hook when the frame retires, never at
-the call, and `beginDestroy` drains every payload still held or waiting through the same hooks,
-once. The counters count only single slot releases; a payload from a range or a replaced write is
-released uncounted.
+creates its native object between them: `checkView` and `addView`, `checkViewWrite` and `placeView`,
+`checkSampler` and `addSampler`, `checkSamplerWrite` and `placeSampler`. The checks come first and
+hold every rule; the second call places the payload, and returns `OutOfMemory` or, for a write that
+lost its range to a racing release, false, leaving the payload with the caller. A payload leaves its
+slot when the slot or its range is released or a write replaces it (`replace`), and waits for the
+frame of that release or write: `retire` hands it to the `view` or `sampler` hook when the frame
+retires, never at the call, and `drain`, which `beginDestroy` runs, hands over every payload still
+held or waiting through the same hooks, once. The counters count only single slot releases; a
+payload from a range or a replaced write is released uncounted.
 
 `reserveViews` and `reserveSamplers` take a contiguous run of free slots, retired or never used,
 as one range that belongs to the caller until `releaseRange`. `writeView` and `writeSampler` write
@@ -268,8 +277,11 @@ The entries that reach two locks
 `writeView` and `destroyView`, which pair the view slot allocator with the texture pool) release
 the first before taking the second. One pair nests: `FrameArena::claim` holds the arena's mutex
 while the backend creates a new page in the buffer pool, so the order is always the arena's mutex,
-then the buffer pool's, and nothing takes them the other way round. Pool hooks and callbacks never
-call a pool.
+then the buffer pool's, and nothing takes them the other way round; a native backend that takes
+more locks inside the claim keeps the order ([the Metal 4 backend](metal4-backend.md) also takes
+its residency set's and Debug address map's mutexes inside the claim, which nest inside a pool's
+and take nothing themselves, so the order is the arena's, then a pool's, then either of those two). Pool hooks and callbacks
+never call a pool.
 Capability queries read data fixed at creation and touch no pool. Each slot allocator has its own
 mutex, and a fence read copies the record under its pool's lock. The frame class (`beginFrame`,
 `endFrame`) is externally synchronised by the caller, as chapter 01 requires, and takes no lock of
@@ -281,9 +293,8 @@ flag is thread-local.
 These arrive with the work that adds them; this page then describes them. What recording still
 lacks is on the [command recording](null-backend-recording.md) page.
 
-- Labels for views and samplers: their slots carry a native payload but no label yet.
-- A Metal 4 v2 backend and T1 GPU conformance
-  ([ADR 0009](../decisions/0009-conformance-and-valid-usage.md)).
+- The rest of the native backend, which [its page](metal4-backend.md) lists, and the remaining T1
+  GPU conformance ([ADR 0009](../decisions/0009-conformance-and-valid-usage.md)).
 
 `Tools/vu_pending.txt` lists each identifier whose death test is still to come, with the part that
 will add it; it is empty today ([testing](../conventions/testing.md)).

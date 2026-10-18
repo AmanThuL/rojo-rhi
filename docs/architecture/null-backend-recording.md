@@ -46,6 +46,12 @@ and keeps its lists; when `beginFrame` reuses the slot, the `frameSlot` hook set
 core state while keeping the capacity of its containers, checks the label and counts the list as
 unsubmitted. `Device::endFrame` requires that count to be zero (`VU-rojo-device-0005`).
 
+A recording entry counts its own native call: the Null backend calls `noteNativeCall` at each
+recording entry that names a native call, and the barrier and encoder counts in `RecordCounts`
+follow the same rule, so a backend counts the calls it makes and the core's checks count none. The
+validation tracker numbers the commands of a list itself and counts nothing. The counts fold into
+the device at submission ([the edges](null-backend-edges.md#counters)).
+
 `CommandList::end` requires a recording list with no pass and no scope open
 (`VU-rojo-cmd-0002` to `0004`). `submitLists` runs first in `Queue::submit`: for each list it
 checks the default handle (`VU-rojo-core-0004`), the device (`VU-rojo-core-0005`), the queue type
@@ -218,5 +224,6 @@ textures and pipelines.
 
 ## What remains
 
-- A native backend: the use of the retire and `frameSlot` hooks for native command lists and
-  arena pages.
+- A native backend: the use of the retire and `frameSlot` hooks for native command lists. The
+  [Metal 4 backend](metal4-backend.md) acquires, ends and submits lists and serves frame-arena
+  pages from Shared buffers, but encodes no native command yet.

@@ -130,18 +130,22 @@ it and checks `VU-rojo-diag-0010`. Null therefore always reports that it has no 
 
 ## Counters
 
-`Counters` in `RHI.h` is the public struct and `Device::counters` a snapshot of relaxed atomic
-loads that takes no lock. The fields are always compiled in. A recording entry adds to plain fields
-of its command list (`RecordCounts`), which fold into the device's atomics at `Queue::submit`, so a
-list that is recorded and held shows nothing yet. Creation and queue counts increment where they
-happen. Each field counts what the Metal 4 mapping row of the entry does: one native call for each
-entry whose row names a call.
+`Counters` in `RHI.h` is the public struct and `Device::counters` a snapshot of relaxed atomic loads
+that takes no lock. The fields are always compiled in. A recording entry adds to plain fields of its
+command list (`RecordCounts`), which fold into the device's atomics at `Queue::submit`, so a list
+that is recorded and held shows nothing yet. Creation and queue counts increment where they happen.
+The backend counts each native call it makes: the recording counts below are incremented by the
+backend's own recording entries (`noteNativeCall` and the barrier and encoder counts), which on Null
+sit in `NullCommandList.cpp`, and the validation tracker numbers its commands itself and counts
+nothing. The core counts creation, fence and frame-data counts, and one
+`nativeSubmitCalls` for each fence wait and signal a submission carries. Each field counts what the
+Metal 4 mapping row of the entry does: one native call for each entry whose row names a call.
 
 | Field | What increments it |
 |---|---|
 | `nativeCreateCalls` | A successful create entry (a view and a sampler included, since their Metal 4 rows are `newTextureView` and `newSamplerState`), a swapchain, a frame-arena page, and each native release when a deferred destruction runs, a destroyed view or sampler included (not a swapchain image, and not the range a `release` call returns) |
 | `nativeRecordCalls` | Each recording entry whose row names a native call: state sets, draws, dispatches, the indirect forms, copies, clears, pass begin and end, scope begin and end, `upscale`, and one per `barrier` call with records; not `setPrimitiveTopology`, `declareAccess`, `uploadFrameData` or `end` |
-| `nativeSubmitCalls` | `Queue::submit`, `present` and `mapTiles`, and each fence wait or signal a submit performs |
+| `nativeSubmitCalls` | Native queue calls only: the backend counts each submission it commits and each signal of its own (Null: one per `Queue::submit`; Metal 4: commits, frame signals and a queue progress signal), plus `present` and `mapTiles`; the core adds one for each fence wait or signal a submit carries |
 | `nativeHostCalls` | `completedValue`, and `scopeTimings` when the report is not empty |
 | `cpuAllocations` | Explicit sites only: the host block of an `Upload` or `Readback` buffer, an arena page, a new command list, a swapchain; container growth is not counted |
 | `gpuAllocations` | A buffer, texture, heap or arena page, and a swapchain image at each acquire |
@@ -152,18 +156,18 @@ entry whose row names a call.
 | `nativeBarriers` | One per `barrier` call with at least one record, since a call is one native command |
 | `pipelinesCreated`, `pipelineCacheMisses` | Each pipeline; Null has no cache, so `pipelineCacheHits` stays zero |
 | `pipelineCompileNanoseconds` | The `steady_clock` time of the core's pipeline preparation; not exact |
-| `encodersOpened` | `beginRenderPass`, since Null is not Metal 4 |
+| `encodersOpened` | `beginRenderPass` on Null, counted by the backend, since Null is not Metal 4 |
 | `deferredDestructionsRetired` | Each deferred destruction a retire hook runs, and each destroyed view or sampler a retire frees |
 
-Three counts live in the core and need no Null code. `HandlePool::countInto` ties a pool's
+Three counts live in the core and need no backend code. `HandlePool::countInto` ties a pool's
 allocations to up to two device counters when the `DeviceCore` is constructed, which counts
 creation, `nativeCreateCalls`, `gpuAllocations` and `pipelinesCreated` however a backend allocates;
 `allocate(record, counted = false)` lets a swapchain image count in `gpuAllocations` only.
 `FrameArena::growths()` is an atomic read. Null adds only what the core cannot see: the four
-`cpuAllocations` sites above, which are host allocations the backend makes itself, and the
-release of a swapchain, whose retire loop is Null's. A count taken in the core is taken once for
-every backend; a count in a backend is that backend's own site. `Device::wait` and the drain at
-`destroyDevice` count nothing.
+`cpuAllocations` sites above, which are host allocations the backend makes itself, the release of a
+swapchain, whose retire loop is Null's, and its recording and submission counts. A count taken in
+the core is taken once for every backend; a count in a backend is that backend's own site.
+`Device::wait` and the drain at `destroyDevice` count nothing.
 
 ## The validation tracker
 

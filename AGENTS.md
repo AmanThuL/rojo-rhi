@@ -2,13 +2,18 @@
 
 RojoRHI is a dependency-free C++23 rendering hardware interface (RHI) library, thin, explicit and
 honest over the shared conceptual core of Metal 4, D3D12 and Vulkan. Metal 4 through metal-cpp is
-the only backend implemented today; D3D12 is planned and Vulkan is a design oracle with no code
-(ADR 0008). The v1 interface is what the code implements now; v2 is specified in the decisions and
-the API reference below and is implemented on the test-only Null backend: chapters 01 to 15, the C++
-entries of 05 included (devices, resources, pipelines, command recording, queues and fences,
-swapchains, upscalers, sparse tiles, diagnostics and counters), in full, with the validation
-tracker (ADR 0021): every valid-usage identifier of the API reference is checked and has a death
-test. ADR 0001 owns the identity spelling every document here applies.
+the only native backend implemented today; D3D12 is planned and Vulkan is a design oracle with no
+code (ADR 0008). The v1 interface is what the code implements now and what Luminex uses; v2 is
+specified in the decisions and the API reference below. The test-only Null backend implements it in
+full, chapters 01 to 15, the C++ entries of 05 included (devices, resources, pipelines, command
+recording, queues and fences, swapchains, upscalers, sparse tiles, diagnostics and counters), with
+the validation tracker (ADR 0021): every valid-usage identifier of the API reference is checked and
+has a death test. The Metal 4 backend of v2 is partial and not the default: it implements the
+device, capabilities, formats, buffers, heaps, textures, views, samplers, queues, fences and frames,
+and command lists as far as `acquireCommandList`, `end` and `uploadFrameData`; the other recording
+entries and those of presentation and sparse resources abort, and shader libraries, pipelines,
+swapchains and upscalers are refused with `Unsupported`. ADR 0001 owns the identity spelling every document
+here applies.
 Luminex is its required consumer: it will mount the library as a submodule at `RojoRHI/` and drive
 every change through a RojoRHI branch and pull request first ([commits](docs/conventions/commits.md)
 owns that workflow). The repository is public and licensed under the Apache License, Version 2.0
@@ -53,7 +58,8 @@ Metal 4 backend, the optional ImGui adapter, tests and shaders — alongside its
   [its edges: presentation, upscaling, sparse, diagnostics](
   docs/architecture/null-backend-edges.md),
   [the validation tracker](docs/architecture/validation-tracker.md),
-  [the tracker across queues](docs/architecture/validation-tracker-queues.md)
+  [the tracker across queues](docs/architecture/validation-tracker-queues.md),
+  [the Metal 4 backend](docs/architecture/metal4-backend.md)
 
 ## Commands
 
@@ -66,8 +72,23 @@ xmake test RojoRHILegacyTests/unit   # runs the v1 CPU contract cases
 xmake test RojoRHITests/contract     # runs the v2 contract cases on the Null backend, no GPU
 xmake test RojoRHITests/death        # runs the v2 death tests (Debug only)
 xmake test RojoRHITests/abi          # compiles the ABI conformance shaders, checks shared layouts
-xmake f --rojorhi_backend=null       # selects the v2 backend; null is the only value yet
+xmake f --rojorhi_backend=null       # selects the v2 backend: null (the default) or metal4
 ```
+
+The Metal 4 backend builds on macOS only. After `xmake f -m debug -y --rojorhi_backend=metal4`, the
+entries run under `MTL_DEBUG_LAYER=1` and need a real device:
+
+```
+xmake build RojoRHITests
+xmake test RojoRHITests/contract      # [contract] and [metal4] cases, minus the death tests
+xmake test RojoRHITests/death         # the death tests
+xmake test RojoRHITests/abi           # the ABI cases
+xmake test RojoRHITests/conformance   # the [conformance] cases (T1)
+cd build/macosx/arm64/debug/rojorhi-test
+MTL_DEBUG_LAYER=1 ./RojoRHITests "[contract]~[death],[metal4]~[death]"   # the contract entry by hand
+```
+
+`xmake f -m debug -y --rojorhi_backend=null` restores the default.
 
 The v1 GPU conformance suite runs from its test directory, after `xmake build RojoRHILegacyTests`:
 
@@ -88,6 +109,8 @@ xmake test RojoRHITests/contract -P .
 xmake test RojoRHITests/death -P .
 ```
 
+On a Metal 4 configure the same `-P .` applies to its entries, `conformance` included.
+
 `python3 Tools/check_lto_inline.py`, after `xmake build RojoRHILtoProbe` in a Release configure,
 fails unless link-time optimization inlined `Device::capabilities` into its caller in the probe
 (ADR 0012); the interface CI job runs it on macOS and Windows.
@@ -98,17 +121,18 @@ tests than `ROJORHI_VU` sites in `Source/`, and on any `ROJORHI_VU` under `Backe
 job runs it
 ([testing](docs/conventions/testing.md)).
 
-GPU conformance today is checkpoint A, the cases tagged `[checkpoint-a]`
-([ADR 0005](docs/decisions/0005-conformance-checkpoint.md)); it needs `MTL_DEBUG_LAYER=1` and a real
-device on Metal 4 Apple Silicon, and there is no CPU-only substitute for it. ADR 0009 defines the
-conformance tiers that replace it for the v2 interface.
+v1 GPU conformance is checkpoint A, the cases tagged `[checkpoint-a]`
+([ADR 0005](docs/decisions/0005-conformance-checkpoint.md)). The v2 interface's T1 conformance
+cases of ADR 0009 begin with the `[conformance]` entry on Metal 4. Both need `MTL_DEBUG_LAYER=1`
+and a real device on Metal 4 Apple Silicon, and there is no CPU-only substitute for either.
 
 The shader ABI module `Shaders/RojoRHI/RojoRHI.slang` and its hosted checks exist: the conformance
 shaders under `Shaders/Tests/` compile to MSL, SPIR-V and HLSL on every host, and the build checks
 the layout of the shared structs against Slang reflection. That is the hosted half of the T3 tier
 (ADR 0009). DXIL compiles wherever a DXC loads, as on hosted Windows CI. Compile-and-run and the ABI
-version stamp are not implemented; `Device::loadShaderLibrary` exists on the Null backend only
-(a text format, see [command recording](docs/architecture/null-backend-recording.md)).
+version stamp are not implemented; `Device::loadShaderLibrary` loads a library on the Null backend only
+(a text format, see [command recording](docs/architecture/null-backend-recording.md)); on Metal 4
+it returns `Unsupported`.
 
 ## Hard rules
 
@@ -119,9 +143,15 @@ version stamp are not implemented; `Device::loadShaderLibrary` exists on the Nul
   `ROJORHI_ASSERT` ([C++ style](docs/conventions/cpp-style.md), ADR 0009).
 - Every GPU object is created with a label, defaulted to the `rojorhi.` prefix when the caller
   supplies none.
-- Metal 4 is the only backend implemented today. D3D12 is planned and Vulkan is a design oracle
-  with no code; no document claims either as a capability until it is real. The Null backend is
-  test-only and implements the device, its resources and command recording (ADR 0008).
+- Metal 4 is the only native backend implemented today, and the v2 one is partial: device,
+  resources, queues, fences and frames, with recording, pipelines, presentation, upscaling and
+  sparse resources still to come. It is not the default (`rojorhi_backend` stays `null`). D3D12 is
+  planned and Vulkan is a design oracle with no code; no document claims either as a capability
+  until it is real. The Null backend is test-only and implements every chapter (ADR 0008).
+- Every check lives in `Source/Core`; a backend entry calls the core's check first, then
+  translates, and holds no `ROJORHI_VU`. A Metal 4 entry that calls an autoreleasing factory opens
+  an `NS::AutoreleasePool`, and so does every retire hook ([Metal 4 backend](
+  docs/architecture/metal4-backend.md)).
 - Rules for v2 work: the v2 interface is address-first and has no binding slots (ADR 0007); it is
   a C++23 subset with one backend per build, chosen by an xmake option, and no virtual interfaces
   (ADR 0012). The v1 code still has binding slots and virtual interfaces until it is ported to v2.

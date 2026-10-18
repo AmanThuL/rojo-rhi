@@ -55,5 +55,7 @@ label replaces that log and refreshes the checksums of the whole directory.
 | Topic | Date | Result |
 |---|---|---|
 | `v1-gpu-conformance` | 2026-10-18 | the frozen v1 suite on an Apple M3 Max, macOS 27.0.1: 58 `[gpu]` cases, the 16 `[checkpoint-a]` cases and 143 CPU cases pass under the validation layer, the first run since v1 moved under `Legacy/` |
+| `t1` | 2026-10-18 | the first Metal 4 runs of the v2 interface under the validation layer, one log per `contract`, `death` and `conformance` entry; the results are in the log summaries |
+| `v1-gpu-conformance` (`gpu-shared-metalcpp`) | 2026-10-18 | the frozen v1 suite rerun after `RojoRHILegacy` linked the shared metal-cpp unit: 58 `[gpu]` cases, 7416 assertions, all passed |
 | `spike-2-texture-indexing` | 2026-10-12 | [spike 2](../research/2026-10-12-spike-2-texture-indexing.md) |
 | `spike-3-multi-draw-indirect` | 2026-10-12 | [spike 3](../research/2026-10-12-spike-3-multi-draw-indirect.md) |

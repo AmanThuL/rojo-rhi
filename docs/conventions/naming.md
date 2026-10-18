@@ -68,13 +68,14 @@ caller-supplied label is used verbatim and keeps the caller's own prefix; RojoRH
 - A `TEST_CASE` name is a lowercase sentence stating the observable behaviour, not the function
   under test: "a Greater depth test keeps the nearer fragment in reversed-Z".
 - Tags are lowercase in brackets: `[contract]` for the v2 CPU contract cases in `Tests/Contract/`,
-  `[death]` for the death tests, which also carry `[contract]` and are named
-  `"<identifier> <behaviour>"`, `[core]` for the core internals in `Tests/Core/`, `[null]` for
-  expectations only the Null backend makes in `Tests/Null/`, `[abi]`
-  for the v2 shader ABI compile and layout cases, `[rhi]` for the v1 CPU contract and validation
-  cases, `[gpu]` for cases needing a real device, `[checkpoint-a]` for the frozen conformance set,
-  `[.]` for a case hidden from the default run. A case carries its own tags plus any set tag it
-  belongs to.
+  `[death]` for the death tests, which also carry `[contract]` and are named `"<identifier>
+  <behaviour>"`, `[core]` for the core internals in `Tests/Core/`, `[null]` for expectations only
+  the Null backend makes in `Tests/Null/`, `[metal4]` for expectations only the Metal 4 backend
+  makes in `Tests/Metal4/`, `[conformance]` for the T1 cases in `Tests/Conformance/`, which
+  skip on the Null backend, `[abi]` for the v2 shader ABI compile and layout cases, `[rhi]` for
+  the v1 CPU contract and validation cases, `[gpu]` for cases needing a real device,
+  `[checkpoint-a]` for the frozen conformance set, `[.]` for a case hidden from the default run. A
+  case carries its own tags plus any set tag it belongs to.
 
 ## Process environment
 
