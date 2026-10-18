@@ -10,7 +10,8 @@ it is recorded, so a later reader can check that a log is the one a pull request
 ## Where evidence lives
 
 Evidence lives in a plain directory beside the checkout, `../rojo-rhi-evidence/`, one directory per
-topic and one per date under it:
+topic and one per date under it. Run from a git worktree, the tool still finds the directory beside
+the main checkout, not beside the worktree:
 
 ```
 rojo-rhi-evidence/

@@ -26,7 +26,20 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
-DEFAULT_EVIDENCE_ROOT = ROOT.parent / "rojo-rhi-evidence"
+
+
+def main_checkout(root: Path) -> Path:
+    """The main worktree of the repository holding root, or root when git cannot say."""
+    try:
+        result = subprocess.run(
+            ["git", "rev-parse", "--path-format=absolute", "--git-common-dir"],
+            cwd=root, text=True, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, check=True)
+    except (OSError, subprocess.CalledProcessError):
+        return root
+    return Path(result.stdout.strip()).parent
+
+
+DEFAULT_EVIDENCE_ROOT = main_checkout(ROOT).parent / "rojo-rhi-evidence"
 ENVIRONMENT_FILE = "environment.json"
 CHECKSUM_FILE = "SHA256SUMS"
 

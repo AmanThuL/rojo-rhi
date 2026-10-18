@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -34,6 +35,23 @@ class GpuEvidenceTests(unittest.TestCase):
 
     def test_missing_tool_probes_as_unknown(self) -> None:
         self.assertEqual(gpu_evidence.probe("rojorhi-no-such-tool"), "unknown")
+
+    def test_main_checkout_of_a_worktree_is_the_main_worktree(self) -> None:
+        with tempfile.TemporaryDirectory() as name:
+            main = Path(name).resolve() / "main"
+            main.mkdir()
+            git = ["git", "-c", "user.name=t", "-c", "user.email=t@t"]
+            subprocess.run([*git, "init", "-q"], cwd=main, check=True)
+            subprocess.run([*git, "commit", "-q", "--allow-empty", "-m", "x"], cwd=main, check=True)
+            work = Path(name).resolve() / "trees" / "w"
+            subprocess.run([*git, "worktree", "add", "-q", "-b", "w", str(work)], cwd=main,
+                           check=True)
+            self.assertEqual(gpu_evidence.main_checkout(work), main)
+            self.assertEqual(gpu_evidence.main_checkout(main), main)
+
+    def test_main_checkout_falls_back_outside_a_repository(self) -> None:
+        with tempfile.TemporaryDirectory() as name:
+            self.assertEqual(gpu_evidence.main_checkout(Path(name)), Path(name))
 
 
 if __name__ == "__main__":
