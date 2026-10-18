@@ -93,6 +93,9 @@ jobs:
       - run: xmake f -m release -y --rojorhi_backend=null
       - run: xmake build RojoRHITests
       - run: xmake test RojoRHITests/contract
+      # Release links with LTO (ADR 0012); the probe shows a library entry inlined into its caller.
+      - run: xmake build RojoRHILtoProbe && xmake run RojoRHILtoProbe
+      - run: python3 Tools/check_lto_inline.py
   format:
     runs-on: macos-26
     steps:
