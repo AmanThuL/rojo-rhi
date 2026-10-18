@@ -15,10 +15,19 @@ namespace rojoRHI::test {
     PassKit::PassKit(QueueType listType, bool validation) : type(listType), m_validation(validation)
     {
         device = *createDevice(DeviceDesc{ .validation = validation });
-        const std::vector<std::byte> blob = standardLibrary();
-        library = *device.loadShaderLibrary(blob, "kit.library");
         device.beginFrame();
         list = device.acquireCommandList(type, "kit.list");
+    }
+
+    //==================================================================================================================
+    ShaderLibrary PassKit::ensureLibrary()
+    {
+        if (library.bits == 0)
+        {
+            const std::vector<std::byte> blob = standardLibrary();
+            library = *device.loadShaderLibrary(blob, "kit.library");
+        }
+        return library;
     }
 
     //==================================================================================================================
@@ -47,6 +56,7 @@ namespace rojoRHI::test {
     //==================================================================================================================
     Pipeline PassKit::graphics(std::span<const Format> colors, Format depth, uint32_t samples, PrimitiveClass primitive, bool depthBias, bool mesh)
     {
+        const ShaderLibrary loaded = ensureLibrary();
         std::vector<ColorTarget> targets;
         for (const Format format : colors)
         {
@@ -55,11 +65,11 @@ namespace rojoRHI::test {
         GraphicsPipelineDesc desc{ .primitive = primitive, .colors = targets, .depthFormat = depth, .samples = samples, .label = "kit.pipeline" };
         if (mesh)
         {
-            desc.mesh = { library, "msMain" };
+            desc.mesh = { loaded, "msMain" };
         }
         else
         {
-            desc.vertex = { library, "vsMain" };
+            desc.vertex = { loaded, "vsMain" };
         }
         desc.raster.depthBias = depthBias;
         return *device.createPipeline(desc);
@@ -68,8 +78,9 @@ namespace rojoRHI::test {
     //==================================================================================================================
     Pipeline PassKit::graphicsWith(std::span<const ColorTarget> targets, Format depth, const DepthStencilState& depthStencil, uint32_t samples)
     {
+        const ShaderLibrary loaded = ensureLibrary();
         GraphicsPipelineDesc desc{
-            .vertex = { library, "vsMain" }, .depthStencil = depthStencil, .colors = targets, .depthFormat = depth, .samples = samples, .label = "kit.pipeline"
+            .vertex = { loaded, "vsMain" }, .depthStencil = depthStencil, .colors = targets, .depthFormat = depth, .samples = samples, .label = "kit.pipeline"
         };
         return *device.createPipeline(desc);
     }
@@ -77,7 +88,8 @@ namespace rojoRHI::test {
     //==================================================================================================================
     Pipeline PassKit::compute()
     {
-        return *device.createPipeline(ComputePipelineDesc{ .compute = { library, "csMain" }, .label = "kit.compute" });
+        const ShaderLibrary loaded = ensureLibrary();
+        return *device.createPipeline(ComputePipelineDesc{ .compute = { loaded, "csMain" }, .label = "kit.compute" });
     }
 
     //==================================================================================================================
