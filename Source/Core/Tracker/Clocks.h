@@ -4,7 +4,7 @@
 //----------------------------------------------------------------------------------------------------------------------
 #pragma once
 
-#include <rojoRHI/QueueType.h>
+#include <rojoRHI/RHI.h>
 
 #include <array>
 #include <cstddef>

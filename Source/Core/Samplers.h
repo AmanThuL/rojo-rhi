@@ -4,10 +4,7 @@
 //----------------------------------------------------------------------------------------------------------------------
 #pragma once
 
-#include <rojoRHI/IndexRange.h>
-#include <rojoRHI/Result.h>
-#include <rojoRHI/SamplerDesc.h>
-#include <rojoRHI/SamplerIndex.h>
+#include <rojoRHI/RHI.h>
 
 #include "Core/DeviceCore.h"
 

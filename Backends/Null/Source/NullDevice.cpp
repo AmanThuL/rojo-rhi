@@ -5,7 +5,7 @@
 
 #include "NullDevice.h"
 
-#include <rojoRHI/Device.h>
+#include <rojoRHI/RHI.h>
 
 #include "Base/Assert.h"
 #include "Base/Log.h"

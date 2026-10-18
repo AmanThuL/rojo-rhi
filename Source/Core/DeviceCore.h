@@ -4,13 +4,7 @@
 //----------------------------------------------------------------------------------------------------------------------
 #pragma once
 
-#include <rojoRHI/Capabilities.h>
-#include <rojoRHI/Counters.h>
-#include <rojoRHI/Device.h>
-#include <rojoRHI/DeviceDesc.h>
-#include <rojoRHI/Handles.h>
-#include <rojoRHI/Result.h>
-#include <rojoRHI/ScopeTiming.h>
+#include <rojoRHI/RHI.h>
 
 #include "Core/Counters.h"
 #include "Core/Formats.h"

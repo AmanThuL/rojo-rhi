@@ -4,10 +4,7 @@
 //----------------------------------------------------------------------------------------------------------------------
 #pragma once
 
-#include <rojoRHI/Handles.h>
-#include <rojoRHI/Result.h>
-#include <rojoRHI/UpscaleParams.h>
-#include <rojoRHI/UpscalerDesc.h>
+#include <rojoRHI/RHI.h>
 
 #include "Core/CommandLists.h"
 #include "Core/DeviceCore.h"

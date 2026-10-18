@@ -5,7 +5,7 @@
 
 #include "NullDevice.h"
 
-#include <rojoRHI/Queue.h>
+#include <rojoRHI/RHI.h>
 
 #include "Core/CommandLists.h"
 #include "Core/DeviceCore.h"

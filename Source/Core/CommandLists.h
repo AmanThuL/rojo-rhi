@@ -4,12 +4,7 @@
 //----------------------------------------------------------------------------------------------------------------------
 #pragma once
 
-#include <rojoRHI/CommandList.h>
-#include <rojoRHI/Format.h>
-#include <rojoRHI/Geometry.h>
-#include <rojoRHI/PrimitiveClass.h>
-#include <rojoRHI/QueueType.h>
-#include <rojoRHI/ResourceAccess.h>
+#include <rojoRHI/RHI.h>
 
 #include "Core/Counters.h"
 #include "Core/DeviceCore.h"

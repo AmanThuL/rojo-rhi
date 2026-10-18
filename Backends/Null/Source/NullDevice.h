@@ -4,11 +4,7 @@
 //----------------------------------------------------------------------------------------------------------------------
 #pragma once
 
-#include <rojoRHI/CommandList.h>
-#include <rojoRHI/Device.h>
-#include <rojoRHI/Queue.h>
-#include <rojoRHI/QueueType.h>
-#include <rojoRHI/Swapchain.h>
+#include <rojoRHI/RHI.h>
 
 #include "Core/CommandLists.h"
 #include "Core/DeviceCore.h"

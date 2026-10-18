@@ -4,16 +4,7 @@
 //----------------------------------------------------------------------------------------------------------------------
 #pragma once
 
-#include <rojoRHI/BufferUsage.h>
-#include <rojoRHI/Format.h>
-#include <rojoRHI/Geometry.h>
-#include <rojoRHI/Handles.h>
-#include <rojoRHI/Memory.h>
-#include <rojoRHI/PrimitiveClass.h>
-#include <rojoRHI/TextureType.h>
-#include <rojoRHI/TextureUsage.h>
-#include <rojoRHI/UpscalerFlags.h>
-#include <rojoRHI/UpscalerKind.h>
+#include <rojoRHI/RHI.h>
 
 #include <atomic>
 #include <compare>

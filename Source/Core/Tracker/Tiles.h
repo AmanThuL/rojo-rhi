@@ -4,10 +4,7 @@
 //----------------------------------------------------------------------------------------------------------------------
 #pragma once
 
-#include <rojoRHI/Geometry.h>
-#include <rojoRHI/Handles.h>
-#include <rojoRHI/QueueType.h>
-#include <rojoRHI/SubresourceRange.h>
+#include <rojoRHI/RHI.h>
 
 #include "Core/Tracker/Clocks.h"
 #include "Core/Tracker/OffsetMap.h"

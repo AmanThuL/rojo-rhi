@@ -4,11 +4,7 @@
 //----------------------------------------------------------------------------------------------------------------------
 #pragma once
 
-#include <rojoRHI/CommandList.h>
-#include <rojoRHI/FenceValue.h>
-#include <rojoRHI/Handles.h>
-#include <rojoRHI/Layout.h>
-#include <rojoRHI/QueueType.h>
+#include <rojoRHI/RHI.h>
 
 #include "Core/Tracker/Aliasing.h"
 #include "Core/Tracker/ByteSegments.h"

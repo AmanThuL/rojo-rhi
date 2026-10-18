@@ -4,11 +4,7 @@
 //----------------------------------------------------------------------------------------------------------------------
 #pragma once
 
-#include <rojoRHI/BufferTextureLayout.h>
-#include <rojoRHI/ClearValue.h>
-#include <rojoRHI/Handles.h>
-#include <rojoRHI/SubresourceRange.h>
-#include <rojoRHI/TextureRegion.h>
+#include <rojoRHI/RHI.h>
 
 #include "Core/CommandLists.h"
 

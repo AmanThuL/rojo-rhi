@@ -4,7 +4,7 @@
 //----------------------------------------------------------------------------------------------------------------------
 #pragma once
 
-#include <rojoRHI/Message.h>
+#include <rojoRHI/RHI.h>
 
 #include <format>
 #include <string_view>

@@ -4,8 +4,7 @@
 //----------------------------------------------------------------------------------------------------------------------
 #pragma once
 
-#include <rojoRHI/Handles.h>
-#include <rojoRHI/Result.h>
+#include <rojoRHI/RHI.h>
 
 #include <atomic>
 #include <cstddef>
