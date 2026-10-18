@@ -119,9 +119,9 @@ measured. Depth is reverse Z, cleared to 0 and tested with `Greater`. A barrier 
 | # | Pass (label) | Queue, list | Work | Inputs | Outputs | Barrier batch before it |
 |---|---|---|---|---|---|---|
 | 1 | `cull` | Compute, `cull` | `dispatch(625, 1, 1)`, 64 threads a group, one per box and view | `instances` | `records[s]` | none |
-| 2 | `geometry` | Graphics, `gbuffer` | one counted `drawIndexedIndirect`, camera view; clears all targets | `records[s]`, `instances`, meshes | `albedo`, `normal`, `material`, `depth` | `albedo`, `normal`, `material`: Undefined→ColorAttachment, ComputeShader/None → ColorAttachment/ColorAttachmentWrite; `depth`: Undefined→DepthStencilWrite, DepthStencil/None → DepthStencil/DepthStencilWrite |
+| 2 | `geometry` | Graphics, `gbuffer` | one counted `drawIndexedIndirect`, camera view; clears all targets | `records[s]`, `instances`, meshes | `albedo`, `normal`, `material`, `depth` | `albedo`, `normal`, `material`: Undefined→ColorAttachment, ComputeShader/None → ColorAttachment/ColorAttachmentWrite; `depth`: Undefined→DepthStencilWrite, DepthStencil/None → DepthStencil/DepthStencilRead+DepthStencilWrite |
 | 3 | `ao` | Compute, `ao` | `dispatch(240, 135, 1)` writing `aoRaw`, a barrier `aoRaw`: ShaderWrite→ShaderRead, ComputeShader/ShaderWrite → ComputeShader/ShaderRead, then a blur `dispatch(240, 135, 1)`; 8×8 groups | `depth`, `normal` | `ao` | `aoRaw`, `ao`: Undefined→ShaderWrite, None/None → ComputeShader/ShaderWrite |
-| 4–6 | `shadow0` to `shadow2` | Graphics, `shadows` | one counted `drawIndexedIndirect` each, cascade view, into its layer; clears it | `records[s]`, `instances`, meshes | `shadow` layer 0 to 2 | before pass 4 only: `shadow`: Undefined→DepthStencilWrite, ComputeShader/None → DepthStencil/DepthStencilWrite |
+| 4–6 | `shadow0` to `shadow2` | Graphics, `shadows` | one counted `drawIndexedIndirect` each, cascade view, into its layer; clears it | `records[s]`, `instances`, meshes | `shadow` layer 0 to 2 | before pass 4 only: `shadow`: Undefined→DepthStencilWrite, ComputeShader/None → DepthStencil/DepthStencilRead+DepthStencilWrite |
 | 7 | `lighting` | Graphics, `lighting` | `dispatch(240, 135, 1)`, 8×8 groups | `albedo`, `normal`, `material`, `depth`, `shadow`, `ao` | `hdr` | `shadow`: DepthStencilWrite→ShaderRead, DepthStencil/DepthStencilWrite → ComputeShader/ShaderRead; `hdr`: Undefined→ShaderWrite, FragmentShader/None → ComputeShader/ShaderWrite |
 | 8 | `forward` | Graphics, `lighting` | 500 alpha-blended boxes in index order, each a `pushRoot` of its 64-byte transform and color and a direct `drawIndexed`; `depth` loaded, tested, not written | `depth`, meshes | `hdr` | `hdr`: ShaderWrite→ColorAttachment, ComputeShader/ShaderWrite → ColorAttachment/ColorAttachmentRead+ColorAttachmentWrite; `depth`: ShaderRead→DepthStencilWrite, ComputeShader/None → DepthStencil/DepthStencilRead |
 | 9 | `bloomDown0` | Graphics, `lighting` | one fullscreen `draw` of 3 vertices, linear sampling | `hdr` | `bloom0` | `hdr`: ColorAttachment→ShaderRead, ColorAttachment/ColorAttachmentWrite → FragmentShader/ShaderRead; `bloom0`: Undefined→ColorAttachment, FragmentShader/None → ColorAttachment/ColorAttachmentWrite |
@@ -237,6 +237,11 @@ the drawable wait and present that a real frame pays. Departures: none.
 2026-10-18, before any timed run: C8 registers the barrier between consecutive passes, so its `c`
 becomes 7, N's count 12 and R's 13; and C8's `K` sweep stops at 10,000, for the two Metal limits
 stated with its sequence. Both were found while implementing the harness, before anything was timed.
+
+2026-10-18, before any timed run: the barriers of rows 2 (`geometry`, `depth`) and 4
+(`shadow0`, `shadow` before pass 4) now end at `DepthStencilRead+DepthStencilWrite`, because those
+passes test and write depth, which chapter 09 counts as both accesses; stages and layouts are
+unchanged. The change adds no native call, since Metal 4 barriers are stage-based.
 
 ## Results
 
