@@ -52,12 +52,12 @@ if is_plat("macosx") then
         add_files(path.join(component, "Legacy/Backends/Metal4/Source/Metal4Resources.cpp"))
         add_files(path.join(component, "Legacy/Backends/Metal4/Source/Metal4Swapchain.cpp"))
         add_files(path.join(component, "Legacy/Backends/Metal4/Source/Metal4TemporalScaler.cpp"))
-        add_files(path.join(component, "Legacy/Backends/Metal4/Source/MetalCppImpl.cpp"))
         add_includedirs(path.join(component, "Legacy/Include"), {public = true})
         add_includedirs(path.join(component, "Legacy/Source"))
         add_includedirs(path.join(component, "Legacy/Backends/Metal4/Source"))
         add_includedirs(path.join(thirdparty, "metal-cpp"))
         add_frameworks("Metal", "MetalFX", "QuartzCore", "Foundation")
+        add_deps("RojoRHIMetalCpp")
 
     -- Frozen v1 interface: optional Dear ImGui renderer integration. Keeping this in a separate
     -- target lets the core RHI build and link without ImGui while a host opts into the
