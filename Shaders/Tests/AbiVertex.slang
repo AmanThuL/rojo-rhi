@@ -1,23 +1,25 @@
 //----------------------------------------------------------------------------------------------------------------------
 /// @file AbiVertex.slang
-/// @brief Compile-only conformance shader: the three vertex-stage built-ins, with varyings.
+/// @brief Conformance vertex entry that stores what it was given: it writes `(vertexIndex, instanceIndex, drawId)`
+/// at a position derived from the three built-ins, so a rasterization-disabled draw can be read back. The function
+/// is void, which Metal accepts with writable resources; the fragment entry lives in `AbiFragment.slang`.
 //----------------------------------------------------------------------------------------------------------------------
 
 import RojoRHI;
 
-struct VertexOutput
+struct VertexRoot
 {
-    float4 position : SV_Position;
-    nointerpolation uint drawId : DRAWID;
-    float2 uv : TEXCOORD0;
+    rojoRHI::Addr output;
+    uint firstVertex;
+    uint verticesPerInstance;
 };
 
 [shader("vertex")]
-VertexOutput vertexMain(rojoRHI::VertexIds ids)
+void vertexMain(rojoRHI::VertexIds ids)
 {
-    VertexOutput output;
-    output.position = float4(float(rojoRHI::vertexIndex(ids)), 0, 0, 1);
-    output.drawId = rojoRHI::drawId(ids);
-    output.uv = float2(float(rojoRHI::instanceIndex(ids)), 0);
-    return output;
+    VertexRoot root = rojoRHI::root<VertexRoot>();
+    uint vertex = rojoRHI::vertexIndex(ids);
+    uint instance = rojoRHI::instanceIndex(ids);
+    uint index = instance * root.verticesPerInstance + vertex - root.firstVertex;
+    rojoRHI::store<uint4>(root.output, index, uint4(vertex, instance, rojoRHI::drawId(ids), 0));
 }
