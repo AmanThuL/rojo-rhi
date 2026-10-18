@@ -87,6 +87,10 @@ xmake test RojoRHITests/contract -P .
 xmake test RojoRHITests/death -P .
 ```
 
+`python3 Tools/check_lto_inline.py`, after `xmake build RojoRHILtoProbe` in a Release configure,
+fails unless link-time optimization inlined `Device::capabilities` into its caller in the probe
+(ADR 0012); the interface CI job runs it on macOS and Windows.
+
 `python3 Tools/check_vu_coverage.py` fails when a valid-usage identifier of `docs/spec/` has
 neither a death test nor an entry in `Tools/vu_pending.txt`, when an identifier has fewer death
 tests than `ROJORHI_VU` sites in `Source/`, and on any `ROJORHI_VU` under `Backends/`; the policy CI

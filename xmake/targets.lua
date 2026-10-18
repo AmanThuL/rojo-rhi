@@ -109,9 +109,23 @@ option("rojorhi_backend")
                     "arrives with the work that adds it, and metal4 later becomes the macOS default")
 option_end()
 
+-- Release builds use link-time optimization, so a call into the library inlines into its caller
+-- (ADR 0012): ThinLTO with clang, /GL with /LTCG on MSVC. A host compiles its own Release targets
+-- with the same policy for the call to inline into its code; its linker accepts the library's
+-- objects either way.
+local function release_lto()
+    if is_mode("release") then
+        set_policy("build.optimization.lto", true)
+        if is_plat("windows") then
+            add_arflags("/LTCG")
+        end
+    end
+end
+
 target("RojoRHI")
     set_kind("static")
     add_options("rojorhi_backend")
+    release_lto()
     add_files(path.join(component, "Source/**.cpp"))
     -- The Null backend directory holds no source until a part adds one, and xmake warns on an empty glob.
     if #os.files(path.join(component_dir, "Backends/Null/Source/*.cpp")) > 0 then
@@ -134,6 +148,7 @@ target("RojoRHITests")
     add_includedirs(path.join(component, "Tests"))
     add_deps("RojoRHI")
     add_packages("catch2")
+    release_lto()
     -- The tests use the standard tmpfile and getenv, which the MSVC runtime marks as deprecated.
     if is_plat("windows") then
         add_defines("_CRT_SECURE_NO_WARNINGS")
@@ -155,3 +170,18 @@ target("RojoRHITests")
     set_values("slang.layout_map", "DrawRoot=rojoRHI::test::DrawRoot")
     set_values("slang.layout_include", "rojoRHI/RHI.h")
     add_tests("abi", {runargs = {"[abi]"}})
+
+-- A Release probe that Tools/check_lto_inline.py disassembles to show a library entry inlined into
+-- the caller. It keeps its symbol table, which Release strips, to name the probe function, and
+-- Windows links a program database, the only place dumpbin finds that name.
+target("RojoRHILtoProbe")
+    set_kind("binary")
+    set_default(false)
+    set_targetdir("$(builddir)/$(plat)/$(arch)/$(mode)/rojorhi-lto-probe")
+    add_files(path.join(component, "Tools/LtoProbe/LtoProbe.cpp"))
+    add_deps("RojoRHI")
+    release_lto()
+    set_strip("none")
+    if is_plat("windows") then
+        set_symbols("debug")
+    end

@@ -84,11 +84,12 @@ in from Luminex's flat test tree without changing their assertions. They remain 
 conformance set until the v2 tiers of ADR 0009 exist.
 
 `Tools/` holds `check_vu_coverage.py`, which requires a death test or a pending entry for every
-valid-usage identifier of the reference, the public-header check that rejects an include root not
-spelled exactly `rojoRHI/`, the maintained `Patches/`, and `ImGuiBufferProbe/`. `Tools/Rename/`
-holds the substitution table that renamed the component inside Luminex before the extraction and
-stays as the record of what that rename did; `Tools/Extract/` holds the scripts that ran the
-extraction itself and the verifier that checked its result, both kept for a future re-run.
+valid-usage identifier of the reference, `check_lto_inline.py` with its probe `LtoProbe/`, which
+shows a Release build inlining a library entry into its caller, the public-header check that rejects
+an include root not spelled exactly `rojoRHI/`, the maintained `Patches/`, and `ImGuiBufferProbe/`.
+`Tools/Rename/` holds the substitution table that renamed the component inside Luminex before the
+extraction and stays as the record of what that rename did; `Tools/Extract/` holds the scripts that
+ran the extraction itself and the verifier that checked its result, both kept for a future re-run.
 
 `.github/workflows/` runs the project policy check on Linux; the legacy, format and interface jobs
 on hosted macOS; and the interface job also on Windows. Hosted macOS has no Metal 4 device, so the
