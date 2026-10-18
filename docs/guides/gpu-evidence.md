@@ -1,0 +1,59 @@
+# Recording GPU Evidence
+
+**Status**: Accepted
+
+Hosted runners have no Metal 4 device, so every GPU run that a change relies on happens on local
+Apple Silicon, and its raw output is kept outside the published tree
+([documentation](../conventions/documentation.md)). This guide says where that output goes and how
+it is recorded, so a later reader can check that a log is the one a pull request cited.
+
+## Where evidence lives
+
+Evidence lives in a plain directory beside the checkout, `../rojo-rhi-evidence/`, one directory per
+topic and one per date under it:
+
+```
+rojo-rhi-evidence/
+  v1-gpu-conformance/2026-10-18/   gpu.txt  checkpoint-a.txt  unit.txt
+                                   environment.json  SHA256SUMS
+  spike-3-multi-draw-indirect/2026-10-12/  ...
+```
+
+The directory is not a repository and is not published. A pull request that cites a run names the
+topic and date and quotes the `SHA256SUMS` line of the log it relies on.
+
+## Recording a run
+
+`Tools/gpu_evidence.py` runs one command, saves its combined output as `<label>.txt` with the
+command line at the top and the exit code at the bottom, and rewrites `environment.json` (machine,
+OS build, Xcode, Metal and clang versions, the metal-cpp and repository commits, and whether the
+checkout had changes) and `SHA256SUMS` over every file of the directory. It exits with the
+command's code, so a failing run still leaves its log.
+
+```
+xmake f -m debug -y && xmake build RojoRHILegacyTests
+python3 Tools/gpu_evidence.py --topic v1-gpu-conformance --label gpu \
+    --cwd build/macosx/arm64/debug/rojorhi-legacy-test \
+    -- env MTL_DEBUG_LAYER=1 ./RojoRHILegacyTests "[gpu]~[.]"
+```
+
+`--root` names another evidence root and `--date` another date directory. A rerun with the same
+label replaces that log and refreshes the checksums of the whole directory.
+
+## Rules
+
+- Correctness runs use a Debug build with `MTL_DEBUG_LAYER=1`. Timed runs follow the protocol of
+  [ADR 0014](../decisions/0014-overhead-measurement.md): Release, validation off, and a
+  pre-registration fixed before the first timed run.
+- A log is never edited. A run that must be repeated is recorded again, under the same label to
+  replace it or under a new one to keep both.
+- A run from a checkout with changes says so in `environment.json`; the pull request then states
+  what the changes were.
+
+## Recorded runs
+
+| Topic | Date | Result |
+|---|---|---|
+| `v1-gpu-conformance` | 2026-10-18 | the frozen v1 suite on an Apple M3 Max, macOS 27.0.1: 58 `[gpu]` cases, the 16 `[checkpoint-a]` cases and 143 CPU cases pass under the validation layer, the first run since v1 moved under `Legacy/` |
+| `spike-2-texture-indexing` | 2026-10-12 | [spike 2](../research/2026-10-12-spike-2-texture-indexing.md) |
+| `spike-3-multi-draw-indirect` | 2026-10-12 | [spike 3](../research/2026-10-12-spike-3-multi-draw-indirect.md) |
