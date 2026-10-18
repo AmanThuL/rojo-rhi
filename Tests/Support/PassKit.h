@@ -10,8 +10,9 @@
 #include <span>
 
 namespace rojoRHI::test {
-    /// A device with an open frame, a library of the standard entries and one acquired list, with factories for the objects a
-    /// render pass names. It never ends or destroys anything, so a death test can abort at any point.
+    /// A device with an open frame and one acquired list, with factories for the objects a render pass names. The library of
+    /// the standard entries loads when the first pipeline needs it, so a kit that only copies or clears never loads one. It
+    /// never ends or destroys anything, so a death test can abort at any point.
     class PassKit
     {
       public:
@@ -68,11 +69,14 @@ namespace rojoRHI::test {
         void finish();
 
         Device device;         ///< The device.
-        ShaderLibrary library; ///< The standard library.
+        ShaderLibrary library; ///< The standard library; null until the first pipeline is created, then kept for the kit's life.
         CommandList list;      ///< The acquired list.
         QueueType type;        ///< The queue type of `list`.
 
       private:
+        /// Loads the standard library on the first call and returns it.
+        ShaderLibrary ensureLibrary();
+
         bool m_validation;     ///< The device was created with validation.
         Fence m_join;          ///< The fence `joinQueues` signals and waits on; null until its first call.
         uint64_t m_joined = 0; ///< The last value `joinQueues` signalled on `m_join`.
