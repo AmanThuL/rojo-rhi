@@ -21,6 +21,27 @@ class GpuEvidenceTests(unittest.TestCase):
         expected = [f"{hashlib.sha256(text.encode()).hexdigest()}  {text}.txt" for text in "ab"]
         self.assertEqual(lines, expected)
 
+    def test_recursive_checksums_name_nested_files_by_relative_path(self) -> None:
+        with tempfile.TemporaryDirectory() as name:
+            directory = Path(name)
+            (directory / "b" / "c").mkdir(parents=True)
+            (directory / "top.txt").write_text("t")
+            (directory / "b" / "c" / "deep.bin").write_bytes(b"d")
+            (directory / "b" / "mid.txt").write_text("m")
+            gpu_evidence.write_checksums(directory, recursive=True)
+            lines = (directory / gpu_evidence.CHECKSUM_FILE).read_text().splitlines()
+        names = [line.split("  ", 1)[1] for line in lines]
+        self.assertEqual(names, ["b/c/deep.bin", "b/mid.txt", "top.txt"])
+
+    def test_recursive_checksums_skip_a_stale_checksum_file(self) -> None:
+        with tempfile.TemporaryDirectory() as name:
+            directory = Path(name)
+            (directory / "a.txt").write_text("a")
+            gpu_evidence.write_checksums(directory, recursive=True)
+            gpu_evidence.write_checksums(directory, recursive=True)
+            lines = (directory / gpu_evidence.CHECKSUM_FILE).read_text().splitlines()
+        self.assertEqual(len(lines), 1)
+
     def test_record_keeps_the_log_and_returns_the_exit_code(self) -> None:
         with tempfile.TemporaryDirectory() as name:
             directory = Path(name) / "topic" / "2026-10-18"
@@ -32,6 +53,17 @@ class GpuEvidenceTests(unittest.TestCase):
         self.assertIn("ran\n", log)
         self.assertTrue(log.endswith("exit=3\n"))
         self.assertEqual(names, ["SHA256SUMS", "environment.json", "run.txt"])
+
+    def test_record_checksums_files_the_command_wrote_in_subdirectories(self) -> None:
+        with tempfile.TemporaryDirectory() as name:
+            directory = Path(name) / "topic" / "2026-10-18"
+            script = ("import pathlib; p = pathlib.Path(r'%s') / 'sub'; p.mkdir(parents=True); "
+                      "(p / 'deep.bin').write_bytes(b'd')" % directory)
+            code = gpu_evidence.record(directory, "run", [sys.executable, "-c", script], Path(name))
+            lines = (directory / gpu_evidence.CHECKSUM_FILE).read_text().splitlines()
+        names = [line.split("  ", 1)[1] for line in lines]
+        self.assertEqual(code, 0)
+        self.assertIn("sub/deep.bin", names)
 
     def test_missing_tool_probes_as_unknown(self) -> None:
         self.assertEqual(gpu_evidence.probe("rojorhi-no-such-tool"), "unknown")
