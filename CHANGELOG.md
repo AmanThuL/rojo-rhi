@@ -6,7 +6,7 @@
   ([ADR 0017](docs/decisions/0017-v1-frozen-under-legacy.md)).
 - The shader ABI module `Shaders/RojoRHI/RojoRHI.slang`, with compile-only conformance shaders for
   MSL, SPIR-V and HLSL ([ADR 0018](docs/decisions/0018-root-srv-and-reserved-bindings.md)).
-- The public headers `<rojoRHI/Addr.h>` and `<rojoRHI/IndirectArgs.h>`.
+- The public types `Addr` and `IndirectArgs`, shared with the shader ABI module.
 - A build-time check of shared struct layouts against Slang reflection on every target.
 - The Null backend: devices with frame slots and deferred destruction, generation-checked handles,
   capabilities, format capabilities, limits and the message callback, over a backend-neutral core
@@ -133,3 +133,10 @@
   submissions of a frame together.
 - Every valid-usage rule of the API reference now has a death test, and `Tools/vu_pending.txt` is
   empty.
+- The v2 public interface is the single header `<rojoRHI/RHI.h>`, in sections by API-reference
+  chapter; the 77 per-type headers it used to include, `<rojoRHI/Addr.h>` and
+  `<rojoRHI/IndirectArgs.h>` among them, are gone, and an include of one of them becomes an include
+  of `<rojoRHI/RHI.h>`. The declarations are unchanged. The v1 headers under `Legacy/` keep their
+  own layout.
+- ADR 0022 supersedes ADR 0015: the version macros are defined in `<rojoRHI/RHI.h>`, and the
+  rest of the versioning decision is unchanged.

@@ -14,7 +14,7 @@ the code realises it.
 
 | Area | Where | Content |
 |---|---|---|
-| Public headers | `Include/rojoRHI/` | `Result.h`, `Handles.h`, `Geometry.h`, `Message.h`, `Device.h`, `DeviceDesc.h`, `Capabilities.h`, `Limits.h`, `UpscalerKind.h`, `Format.h`, `FormatCapabilities.h`, the buffer, heap, texture, view, sampler and fence descriptors and indices (`BufferDesc.h`, `HeapDesc.h`, `TextureDesc.h`, `SamplerIndex.h`, `IndexRange.h`, `FenceValue.h` and the like), `Queue.h`, `Swapchain.h`, `Addr.h`, `IndirectArgs.h`, `Version.h`, the recording headers described in [command recording](null-backend-recording.md), and the umbrella `RHI.h` |
+| Public header | `Include/rojoRHI/RHI.h` | the whole v2 interface in one header, in sections by API-reference chapter: the version macros, then chapters 01 to 15, with `Format` and `CompareOp` before chapter 04, `Capabilities` after chapter 15 and the object handles `CommandList`, `Queue` and `Device` last, because each names a type of a later chapter |
 | Private base | `Source/Base/` | `ROJORHI_VU`, `ROJORHI_INTERNAL_ASSERT`, the message sink |
 | Shared core | `Source/Core/` | `HandlePool`, `DeviceCore`, `Records.h`, `SlotAllocator`, the format rules, label checks and the checks of buffers, heaps, textures, samplers, ranges, fences, command lists, pipelines, passes, draws, copies and barriers |
 | Null backend | `Backends/Null/Source/` | `NullDevice`, `NullQueue`, `NullAddr`, `NullCommandList`, `NullShaderLibrary`: the public entries, translating to the core |
@@ -83,9 +83,8 @@ A `Swapchain` is a pointer wrapper, not a pooled handle: the backend's `Swapchai
 frame slot is reused, and a default-constructed one is rejected (`VU-rojo-core-0004`). `ViewIndex`
 and `SamplerIndex` are not pooled handles; they release slots of the heaps described below.
 
-`Handles.h` holds the seven small handle structs and `Geometry.h` the four geometry structs
-(`Extent2D`, `Extent3D`, `Offset3D`, `Rect2D`); each is a single-entry header for several types
-that have no behaviour beyond their fields ([naming](../conventions/naming.md)).
+The seven small handle structs and the four geometry structs (`Extent2D`, `Extent3D`, `Offset3D`,
+`Rect2D`) sit in the chapter 01 section of `RHI.h`; they have no behaviour beyond their fields.
 
 ## Records and the backend payload
 

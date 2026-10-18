@@ -49,8 +49,8 @@ public entries over it. [The Null backend](null-backend.md) describes both layer
 implemented, [command recording](null-backend-recording.md) the recording chapters, and [the
 edges](null-backend-edges.md) presentation, upscaling, sparse resources, diagnostics and counters,
 and [the validation tracker](validation-tracker.md) the checks that follow a resource across
-commands, lists, submissions and queues. `Include/rojoRHI/` holds the v2 public headers, one primary
-type per header; `Handles.h` and `Geometry.h` each hold several small types.
+commands, lists, submissions and queues. `Include/rojoRHI/RHI.h` is the whole v2 public interface,
+one header in sections by API-reference chapter.
 
 `Tests/` builds as the `RojoRHITests` binary with three entries: `contract` runs the T0 cases of
 `Tests/Contract/`, `Tests/Core/` and `Tests/Null/` except the death tests, `death` runs the

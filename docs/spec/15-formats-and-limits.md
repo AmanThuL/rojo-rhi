@@ -38,7 +38,8 @@ or a pipeline target. The set is the one the frozen v1 interface names, with v1'
 `Undefined`, plus `D32FloatS8` so that the stencil state and operations of the interface have a
 format to act on, and `RGB10A2Unorm` so that the `HDR10` color space of
 [presentation](11-presentation.md) has a format. New formats are appended in later API versions;
-existing enumerator values never change ([ADR 0015](../decisions/0015-versioning.md)).
+existing enumerator values never change
+([ADR 0022](../decisions/0022-versioning-in-the-single-header.md)).
 
 | `Format` | Texel or block | Family | `MTL::PixelFormat` | `DXGI_FORMAT` | `VkFormat` |
 |---|---|---|---|---|---|
