@@ -88,7 +88,7 @@ every Apple7 GPU.
 |---|---|---|---|
 | `Index`, `IndirectArgs` | no flag | no flag | `VK_BUFFER_USAGE_INDEX_BUFFER_BIT`, `VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT` |
 | `ShaderWrite` | no flag | `D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS` and one raw UAV | no flag beyond `VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT` |
-| `Sparse` | placement sparse buffer, `MTL::Device::newBuffer(length, options, placementSparsePageSize)` (signature unverified) | reserved resource | `VK_BUFFER_CREATE_SPARSE_BINDING_BIT \| VK_BUFFER_CREATE_SPARSE_RESIDENCY_BIT` |
+| `Sparse` | placement sparse buffer, `MTL::Device::newBuffer(length, options, placementSparsePageSize)` with `MTL::SparsePageSize64`, at the buffer's own length | reserved resource | `VK_BUFFER_CREATE_SPARSE_BINDING_BIT \| VK_BUFFER_CREATE_SPARSE_RESIDENCY_BIT` |
 | Cost | native | native | native |
 
 ### `BufferDesc`

@@ -9,7 +9,6 @@
 
 #include "Base/Assert.h"
 #include "Base/Log.h"
-#include "Core/Captures.h"
 #include "Core/Counters.h"
 #include "Core/DeviceCore.h"
 #include "Core/Sparse.h"
@@ -17,6 +16,7 @@
 #include "Metal4AddressMap.h"
 #include "Metal4Buffers.h"
 #include "Metal4Capabilities.h"
+#include "Metal4Capture.h"
 #include "Metal4Common.h"
 #include "Metal4Fences.h"
 #include "Metal4Formats.h"
@@ -285,7 +285,8 @@ namespace rojoRHI {
             capabilities.maxViews = capabilities.limits.maxViews;
             capabilities.maxSamplers = capabilities.limits.maxSamplers;
             capabilities.uploadInDeviceMemory = true; // Unified memory.
-            capabilities.placementSparse = false;     // Sparse resources are not created yet.
+            // Sparse resources are placement sparse resources with 64 KiB pages.
+            capabilities.placementSparse = impl.device->supportsPlacementSparse();
             capabilities.meshTasksIndirect = impl.device->supportsFamily(MTL::GPUFamilyApple9);
             capabilities.conservativeRaster = false; // Metal 4 has no conservative rasterization.
             capabilities.upscalers = {};             // No upscaler is created yet.
@@ -363,6 +364,7 @@ namespace rojoRHI {
         impl->core.setRetireHooks(hooks);
         impl->core.setArenaSource(metal4::createArenaPage);
         metal4::setMaxAddrOffset(impl->core.capabilities().limits.maxAddrOffset);
+        impl->core.setCaptureAvailable(metal4::startCapture);
         return DeviceImpl::wrap(impl.release());
     }
 
@@ -442,18 +444,6 @@ namespace rojoRHI {
     std::span<const ScopeTiming> Device::scopeTimings()
     {
         return DeviceImpl::of(*this).core.scopeTimings();
-    }
-
-    //==================================================================================================================
-    Result<void> Device::beginCapture(std::string_view path)
-    {
-        return core::beginCapture(DeviceImpl::of(*this).core, path);
-    }
-
-    //==================================================================================================================
-    void Device::endCapture()
-    {
-        core::endCapture(DeviceImpl::of(*this).core);
     }
 
     //==================================================================================================================

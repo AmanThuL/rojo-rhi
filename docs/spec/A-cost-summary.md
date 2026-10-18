@@ -174,7 +174,7 @@ leaving its rows `costly`, and moved `drawId` into the base instance, making two
 | [`TileShape`](13-sparse.md#tileshape) | 13 | native | native | native |
 | [`Device::tileShape`](13-sparse.md#devicetileshape) | 13 | native | native | native |
 | [`TileMapping`](13-sparse.md#tilemapping) | 13 | native | native | native |
-| [`Queue::mapTiles`](13-sparse.md#queuemaptiles) | 13 | native | native | native |
+| [`Queue::mapTiles`](13-sparse.md#queuemaptiles) | 13 | cheap | native | native |
 | [`ResourceAccess`](14-diagnostics.md#resourceaccess) | 14 | native | native | native |
 | [`CommandList::declareAccess`](14-diagnostics.md#commandlistdeclareaccess) | 14 | cheap | cheap | cheap |
 | [`Counters`](14-diagnostics.md#counters) | 14 | cheap | cheap | cheap |

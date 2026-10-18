@@ -18,7 +18,7 @@ namespace rojoRHI::metal4 {
     /// format RojoRHI does not map.
     Format formatOf(MTL::PixelFormat pixelFormat);
 
-    /// Returns the format table of `device`: `core::formatCeilings()` narrowed by what the device and its families support, with
-    /// every sparse capability clear.
+    /// Returns the format table of `device`: `core::formatCeilings()` narrowed by what the device and its families support; a
+    /// format is sparse when `sparseFormat` reports it.
     core::FormatTable metalFormatTable(MTL::Device* device);
 } // namespace rojoRHI::metal4

@@ -180,9 +180,8 @@ target("RojoRHITests")
             "HandoffTests.cpp", "HazardDeathTests.cpp", "HazardTests.cpp", "IndirectHazardDeathTests.cpp",
             "IndirectHazardTests.cpp", "LifetimeDeathTests.cpp", "LifetimeTests.cpp", "PipelineDeathTests.cpp",
             "PipelineTests.cpp", "RenderPassDeathTests.cpp", "RenderPassTests.cpp",
-            "SparseDeathTests.cpp", "SparseOrderDeathTests.cpp", "SparseOrderTests.cpp", "SparseTests.cpp",
-            "SwapchainTests.cpp", "TrackerDeathTests.cpp", "TrackerTests.cpp",
-            "UpscaleDeathTests.cpp", "UpscalerTests.cpp",
+            "SwapchainTests.cpp", "TrackerDeathTests.cpp", "TrackerTests.cpp", "UpscaleDeathTests.cpp",
+            "UpscalerTests.cpp",
         }
         local pending = {}
         for _, name in ipairs(metal4_pending) do

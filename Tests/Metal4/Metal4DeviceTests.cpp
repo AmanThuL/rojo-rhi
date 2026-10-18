@@ -8,6 +8,7 @@
 #include "Metal4Capabilities.h"
 #include "Metal4Common.h"
 #include "Metal4Device.h"
+#include "Metal4Formats.h"
 
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/generators/catch_generators.hpp>
@@ -181,20 +182,30 @@ TEST_CASE("the format table narrows storage, R32Float resolve and depth filterin
 }
 
 //======================================================================================================================
-TEST_CASE("no format reports sparse and the device reports no sparse, upscaler or conservative raster", "[metal4]")
+TEST_CASE("the device reports no upscaler or conservative raster, upload in device memory and mesh tasks on Apple9", "[metal4]")
 {
     Device device = *createDevice();
     MTL::Device* native = nativeOf(device);
     const Capabilities& caps = device.capabilities();
-    CHECK_FALSE(caps.placementSparse);
     CHECK(caps.upscalers.empty());
     CHECK_FALSE(caps.conservativeRaster);
     CHECK(caps.uploadInDeviceMemory);
     CHECK(caps.meshTasksIndirect == native->supportsFamily(MTL::GPUFamilyApple9));
+    destroyDevice(device);
+}
+
+//======================================================================================================================
+TEST_CASE("placementSparse follows the device, and a format is sparse when the device tiles its 2D textures at 64 KiB", "[metal4]")
+{
+    Device device = *createDevice();
+    MTL::Device* native = nativeOf(device);
+    CHECK(device.capabilities().placementSparse == native->supportsPlacementSparse());
     for (uint32_t value = 1; value < core::kFormatCount; ++value)
     {
+        const auto format = static_cast<Format>(value);
         CAPTURE(value);
-        CHECK_FALSE(device.formatCapabilities(static_cast<Format>(value)).sparse);
+        const MTL::Size tile = native->sparseTileSize(MTL::TextureType2D, metal4::pixelFormat(format), 1, MTL::SparsePageSize64);
+        CHECK(device.formatCapabilities(format).sparse == (native->supportsPlacementSparse() && tile.width != 0));
     }
     destroyDevice(device);
 }
