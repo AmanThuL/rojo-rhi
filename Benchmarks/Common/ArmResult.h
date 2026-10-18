@@ -23,12 +23,23 @@ namespace rojoRHI::bench {
         std::vector<std::byte> bytes;
     };
 
+    // The native calls and barriers an arm counted over a window narrower than its whole frame() call.
+    struct CallWindow
+    {
+        uint64_t calls = 0;
+        uint64_t barriers = 0;
+    };
+
     // What an arm's frame() measures itself: the CPU span of metric 5 and the GPU span of its commits. Either is empty
-    // where it does not exist (the composed frame has no CPU span; Null has no GPU time).
+    // where it does not exist (the composed frame has no CPU span; Null has no GPU time). `counted` is empty when the
+    // frame's native calls are those of the whole frame() call; C9 counts its submit calls only, the window its CPU span
+    // times, because its lists are recorded before that span. RojoRHI folds a list's recorded calls into its counters at
+    // submission, so R's window takes only the queue and host calls of that window.
     struct FrameResult
     {
         std::optional<double> cpuNs;
         std::optional<double> gpuNs;
+        std::optional<CallWindow> counted;
     };
 
     // The native calls an arm has made so far: RojoRHI's from Device::counters, N's from its own increments.
