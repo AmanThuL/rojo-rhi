@@ -81,7 +81,7 @@ to stderr. The new callback receives every message emitted after the call return
 
 ### `ROJORHI_VERSION_*`
 ```cpp
-// <rojoRHI/Version.h>
+// <rojoRHI/RHI.h>
 #define ROJORHI_VERSION_MAJOR 0
 #define ROJORHI_VERSION_MINOR 1
 #define ROJORHI_VERSION_PATCH 0

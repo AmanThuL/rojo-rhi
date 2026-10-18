@@ -130,10 +130,10 @@ it and checks `VU-rojo-diag-0010`. Null therefore always reports that it has no 
 
 ## Counters
 
-`Counters.h` is the public struct and `Device::counters` a snapshot of relaxed atomic loads that
-takes no lock. The fields are always compiled in. A recording entry adds to plain fields of its
-command list (`RecordCounts`), which fold into the device's atomics at `Queue::submit`, so a list
-that is recorded and held shows nothing yet. Creation and queue counts increment where they
+`Counters` in `RHI.h` is the public struct and `Device::counters` a snapshot of relaxed atomic
+loads that takes no lock. The fields are always compiled in. A recording entry adds to plain fields
+of its command list (`RecordCounts`), which fold into the device's atomics at `Queue::submit`, so a
+list that is recorded and held shows nothing yet. Creation and queue counts increment where they
 happen. Each field counts what the Metal 4 mapping row of the entry does: one native call for each
 entry whose row names a call.
 

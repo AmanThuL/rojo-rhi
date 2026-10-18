@@ -13,15 +13,15 @@ differently, ADR 0001 wins; nothing here may contradict its table.
 | Namespace | `rojoRHI` | `rojoRHI::Device` |
 | Backend namespace | `rojoRHI::metal4` | `rojoRHI::metal4::frameDataCounters` |
 | Diagnostics namespace | `rojoRHI::debug` | the capture-schema names in `CaptureSchema.h` |
-| Public include root | `rojoRHI/` | `#include <rojoRHI/Device.h>` |
-| Umbrella header | `<rojoRHI/RHI.h>` | keeps the name `RHI.h`; only its root is renamed |
+| Public include root | `rojoRHI/` | `#include <rojoRHI/RHI.h>` |
+| Public header | `<rojoRHI/RHI.h>` | keeps the name `RHI.h`; the whole v2 interface, and v1's umbrella |
 | Macro prefix | `ROJORHI_` | `ROJORHI_ASSERT`, `ROJORHI_LOG_INFO` |
 | Default GPU label prefix | `rojorhi.` | `rojorhi.buffer.unnamed` |
 | Build targets | `RojoRHI`, `RojoRHITests` | the v2 library and its tests (ADR 0017) |
 | Frozen v1 targets | `RojoRHILegacy`, `RojoRHILegacyMetal4ImGui`, `RojoRHILegacyTests` | the v1 library, its ImGui adapter and its tests (ADR 0017, which amends ADR 0001's target row) |
 | Repository | `rojo-rhi` | the directory this file lives in |
 | Prose name | RojoRHI | "RojoRHI exposes no backend type" |
-| Mount path in a consumer | `RojoRHI/` | `RojoRHI/Include/rojoRHI/Version.h` |
+| Mount path in a consumer | `RojoRHI/` | `RojoRHI/Include/rojoRHI/RHI.h` |
 
 Namespaces are otherwise lowercase; `rojoRHI` and the matching include root are the one approved
 exception, because RHI is an initialism and the mixed case keeps the word boundary visible. The
@@ -44,9 +44,10 @@ with the code import.
 
 ## Files and directories
 
-- One primary type per header, in `PascalCase.h` and `PascalCase.cpp` named after it. Two headers
-  are single-entry headers for several small types with no behaviour beyond their fields:
-  `Handles.h` (the resource handles) and `Geometry.h` (the extents, offset and rectangle).
+- The v2 public interface is the single header `Include/rojoRHI/RHI.h`, in sections by
+  API-reference chapter. Private headers (`Source/`, `Backends/`, `Tests/`) keep one primary type
+  per header, in `PascalCase.h` and `PascalCase.cpp` named after it. v1 under `Legacy/` keeps its
+  own layout.
 - Directory names are `PascalCase`: `Include`, `Source`, `Backends/Metal4`, `Tests`, `Shaders`,
   `Tools`, and `Legacy` for the frozen v1 tree, which repeats the same layout beneath it (ADR
   0017). Public headers live under `Include/rojoRHI/`; v1's private base lives in

@@ -1,6 +1,6 @@
 # ADR 0015: Versioning
 
-**Status**: Accepted (2026-10-12)
+**Status**: Superseded by [ADR 0022](0022-versioning-in-the-single-header.md)
 
 ## Context
 

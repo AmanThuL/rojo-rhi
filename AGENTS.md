@@ -30,7 +30,6 @@ Metal 4 backend, the optional ImGui adapter, tests and shaders — alongside its
   [0012 language and dispatch](docs/decisions/0012-language-and-dispatch.md),
   [0013 RojoRHI creates no threads](docs/decisions/0013-threading.md),
   [0014 overhead is measured against native code](docs/decisions/0014-overhead-measurement.md),
-  [0015 versioning](docs/decisions/0015-versioning.md),
   [0016 C++ format follows the No Graphics API style](docs/decisions/0016-cpp-format.md),
   [0017 v1 is frozen under Legacy/ until the consumer port](
   docs/decisions/0017-v1-frozen-under-legacy.md),
@@ -39,7 +38,9 @@ Metal 4 backend, the optional ImGui adapter, tests and shaders — alongside its
   [0020 recording takes no locks in Release, except to claim a frame-arena page](
   docs/decisions/0020-recording-locks-scope-labels.md),
   [0021 the validation tracker records while recording and judges at submission](
-  docs/decisions/0021-validation-tracker-replays-at-submission.md)
+  docs/decisions/0021-validation-tracker-replays-at-submission.md),
+  [0022 versioning, with the version in the single public header](
+  docs/decisions/0022-versioning-in-the-single-header.md)
 - API reference: [docs/spec/](docs/spec/00-conventions.md), entered through its conventions
   chapter
 - Research: [docs/research/](docs/research/2026-10-11-rhi-redesign/01-nographicsapi.md), the
