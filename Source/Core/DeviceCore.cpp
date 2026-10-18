@@ -32,6 +32,16 @@ namespace rojoRHI::core {
         {
             return !record.swapchainImage;
         }
+
+        //==============================================================================================================
+        /// Passes a view or sampler slot's payload to `hook`, which may be null.
+        void releaseSlotPayload(void (*hook)(void* context, void* native), void* context, void* native)
+        {
+            if (hook != nullptr)
+            {
+                hook(context, native);
+            }
+        }
     } // namespace
 
     //==================================================================================================================
@@ -54,8 +64,17 @@ namespace rojoRHI::core {
     }
 
     //==================================================================================================================
-    DeviceCore::DeviceCore(const DeviceDesc& desc)
-        : m_framesInFlight(desc.framesInFlight), m_validation(desc.validation), m_label(resolveLabel(desc.label, "rojorhi.device.unnamed")),
+    DeviceCore::DeviceCore(const DeviceDesc& desc, uint32_t poolCapacity)
+        : m_pools(
+              PoolCapacity{ poolCapacity },
+              PoolCapacity{ poolCapacity },
+              PoolCapacity{ poolCapacity },
+              PoolCapacity{ poolCapacity },
+              PoolCapacity{ poolCapacity },
+              PoolCapacity{ poolCapacity },
+              PoolCapacity{ poolCapacity }
+          ),
+          m_framesInFlight(desc.framesInFlight), m_validation(desc.validation), m_label(resolveLabel(desc.label, "rojorhi.device.unnamed")),
           m_scopes(desc.framesInFlight), m_arena(desc.framesInFlight)
     {
         std::get<HandlePool<Buffer, BufferRecord>>(m_pools).countInto(&m_counts.nativeCreateCalls, &m_counts.gpuAllocations);
@@ -73,11 +92,15 @@ namespace rojoRHI::core {
         const uint64_t state = m_state.load();
         ROJORHI_VU((state & 1) == 0, "VU-rojo-device-0003", "beginFrame was called while frame {} is still open", state >> 1);
         const uint64_t frame = (state >> 1) + 1;
+        if (frame > m_framesInFlight && m_hooks.waitFrame != nullptr)
+        {
+            m_hooks.waitFrame(m_hooks.context, frame - m_framesInFlight);
+        }
         m_state.store((frame << 1) | 1);
         m_scopes.clearReport();
-        // The retired slot's work is published to the host clock here, before any wait, because the Null backend completes
-        // work at submission; a native backend must publish it after its wait on the slot's fence. The submissions from here
-        // on are the new frame's. No pool lock is held here.
+        // A backend's wait for the reused slot's frame has returned by now, and a backend with no wait completed the work at
+        // submission, so the retired slot's work is complete when the host clock records it. The submissions from here on
+        // are the new frame's. No pool lock is held here.
         beginFrameClock(*this, frame > m_framesInFlight ? frame - m_framesInFlight : 0);
         if (frame > m_framesInFlight)
         {
@@ -96,8 +119,10 @@ namespace rojoRHI::core {
                     }
                 });
             });
-            // A destroyed view or sampler is a native object released now; a released range owns none.
-            const uint64_t heapReleases = m_views.retire(retired) + m_samplers.retire(retired);
+            // A destroyed view or sampler is a native object released now and counted; the payloads a released range or a
+            // replaced write leaves go to the hooks uncounted.
+            const uint64_t heapReleases = m_views.retire(retired, [&](void* native) { releaseSlotPayload(m_hooks.view, m_hooks.context, native); }) +
+                                          m_samplers.retire(retired, [&](void* native) { releaseSlotPayload(m_hooks.sampler, m_hooks.context, native); });
             DeviceCounts::add(m_counts.deferredRetired, heapReleases);
             DeviceCounts::add(m_counts.nativeCreateCalls, heapReleases);
             const uint32_t slot = static_cast<uint32_t>(frame % m_framesInFlight);
@@ -170,6 +195,8 @@ namespace rojoRHI::core {
             m_swapchains.clear();
         }
         drain();
+        m_views.drain([&](void* native) { releaseSlotPayload(m_hooks.view, m_hooks.context, native); });
+        m_samplers.drain([&](void* native) { releaseSlotPayload(m_hooks.sampler, m_hooks.context, native); });
     }
 
     //==================================================================================================================
@@ -191,7 +218,7 @@ namespace rojoRHI::core {
     {
         bool empty = true;
         forEachPool([&](auto& pool) { empty = pool.empty() && empty; });
-        return empty;
+        return empty && m_views.empty() && m_samplers.empty();
     }
 
     //==================================================================================================================

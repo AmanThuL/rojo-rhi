@@ -48,10 +48,12 @@ namespace rojoRHI::core {
     {
       public:
         /// Creates the core of a device from a description `validateDeviceDesc` accepted: it resolves the label (VU-rojo-core-0006,
-        /// VU-rojo-core-0007), records `validation` and opens no frame.
-        explicit DeviceCore(const DeviceDesc& desc);
+        /// VU-rojo-core-0007), records `validation` and opens no frame. Each pool holds `poolCapacity` slots, slot zero
+        /// included; a backend passes none, and a test passes a small value to fill a pool.
+        explicit DeviceCore(const DeviceDesc& desc, uint32_t poolCapacity = NativeTable::kCapacity);
 
-        /// Requires that `beginDestroy` drained every pool, and calls no hook: the backend's state is already destroyed.
+        /// Requires that `beginDestroy` drained every pool and slot allocator, and calls no hook: the backend's state is already
+        /// destroyed.
         ~DeviceCore();
 
         DeviceCore(const DeviceCore&) = delete;
@@ -136,14 +138,17 @@ namespace rojoRHI::core {
         /// Returns the tile extent of a single-sample texture of `type` and `format` through the registered function.
         TileExtent tileExtent(Format format, TextureType type) const;
 
-        /// Opens the next frame and passes what the slot it reuses held to the retire hooks (VU-rojo-device-0003). Frame class.
+        /// Opens the next frame (VU-rojo-device-0003): once a slot is reused, it first waits through the `waitFrame` hook for
+        /// the frame that last used the slot, then passes what the slot held to the retire hooks. Frame class.
         void beginFrame();
 
         /// Closes the open frame (VU-rojo-device-0004, VU-rojo-device-0005). Frame class.
         void endFrame();
 
         /// Starts teardown: VU-rojo-device-0002, then, when validation was selected, a warning for each live object, then every
-        /// live and pending record goes through the retire hooks once.
+        /// live and pending record, and every payload the view and sampler heaps hold or keep waiting, goes through the retire
+        /// hooks once and is released at once. The backend has already waited for all work submitted on the device's queues to
+        /// complete, as `destroyDevice` requires, so no work still reads what the hooks release.
         void beginDestroy();
 
         /// Destroys the object `handle` names, deferred to the retirement of the open frame, or of the next one opened if none
@@ -209,7 +214,7 @@ namespace rojoRHI::core {
         /// Passes every live and pending record to its hook, once.
         void drain();
 
-        /// Returns true when no pool holds a live or pending record.
+        /// Returns true when no pool holds a live or pending record and neither slot allocator holds a slot or payload.
         bool drained();
 
         std::tuple<

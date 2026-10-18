@@ -5,11 +5,17 @@
 #include <rojoRHI/RHI.h>
 
 #include "Core/DeviceCore.h"
+#include "Core/Ranges.h"
+#include "Core/Samplers.h"
+#include "Core/Textures.h"
 
 #include <catch2/catch_test_macros.hpp>
 
+#include <array>
+#include <cstdint>
 #include <string>
 #include <type_traits>
+#include <utility>
 #include <vector>
 
 using namespace rojoRHI;
@@ -46,6 +52,55 @@ namespace {
         hooks.buffer = onBuffer;
         hooks.texture = onTexture;
         return hooks;
+    }
+
+    /// What the frame-wait and buffer hooks saw: each waited frame with the buffers retired by then, and the retired total.
+    struct Waits
+    {
+        std::vector<std::pair<uint64_t, uint64_t>> frames;
+        uint64_t retired = 0;
+    };
+
+    //==================================================================================================================
+    void onWaitFrame(void* context, uint64_t frame)
+    {
+        Waits& waits = *static_cast<Waits*>(context);
+        waits.frames.emplace_back(frame, waits.retired);
+    }
+
+    //==================================================================================================================
+    void onRetiredBuffer(void* context, core::BufferRecord&)
+    {
+        ++static_cast<Waits*>(context)->retired;
+    }
+
+    /// The slot payloads the view and sampler hooks received, in order.
+    struct Payloads
+    {
+        std::vector<void*> views;
+        std::vector<void*> samplers;
+    };
+
+    //==================================================================================================================
+    void onView(void* context, void* native)
+    {
+        static_cast<Payloads*>(context)->views.push_back(native);
+    }
+
+    //==================================================================================================================
+    void onSampler(void* context, void* native)
+    {
+        static_cast<Payloads*>(context)->samplers.push_back(native);
+    }
+
+    //==================================================================================================================
+    void runFrames(core::DeviceCore& core, int count)
+    {
+        for (int i = 0; i < count; ++i)
+        {
+            core.beginFrame();
+            core.endFrame();
+        }
     }
 
     //==================================================================================================================
@@ -184,4 +239,68 @@ TEST_CASE("destroying a core that was never drained calls no hook", "[core]")
 #else
     SUCCEED("the Debug build asserts that every pool is drained");
 #endif
+}
+
+//======================================================================================================================
+TEST_CASE("beginFrame waits for the frame whose slot it reuses before it retires anything", "[core]")
+{
+    Waits waits;
+    core::DeviceCore core{ DeviceDesc{ .framesInFlight = 2 } };
+    core.setRetireHooks({ .context = &waits, .buffer = onRetiredBuffer, .waitFrame = onWaitFrame });
+    core.beginFrame();
+    core.destroy(core.pool<Buffer>().allocate({ "waited.buffer" }));
+    core.endFrame();
+    runFrames(core, 1);
+    CHECK(waits.frames.empty());
+    runFrames(core, 2);
+    CHECK(waits.frames == std::vector<std::pair<uint64_t, uint64_t>>{ { 1, 0 }, { 2, 1 } });
+    CHECK(waits.retired == 1);
+    core.beginDestroy();
+}
+
+//======================================================================================================================
+TEST_CASE("the view and sampler hooks receive slot payloads at retirement and at destruction", "[core]")
+{
+    std::array<int, 4> payload{};
+    Payloads seen;
+    core::DeviceCore core{ DeviceDesc{ .framesInFlight = 2 } };
+    core.setRetireHooks({ .context = &seen, .view = onView, .sampler = onSampler });
+    const auto frame = [&core] { return core.releaseFrame(); };
+    const uint32_t view = *core.views().allocate(8, 0, &payload[0]);
+    REQUIRE(core.views().allocate(8, 0, &payload[1]).has_value());
+    const uint32_t sampler = *core.samplers().allocate(8, 0, &payload[2]);
+    REQUIRE(core.samplers().allocate(8, 0, &payload[3]).has_value());
+    core.beginFrame();
+    REQUIRE(core.views().release(view, frame).has_value());
+    REQUIRE(core.samplers().release(sampler, frame).has_value());
+    core.endFrame();
+    runFrames(core, 1);
+    CHECK(seen.views.empty());
+    CHECK(seen.samplers.empty());
+    runFrames(core, 1);
+    CHECK(seen.views == std::vector<void*>{ &payload[0] });
+    CHECK(seen.samplers == std::vector<void*>{ &payload[2] });
+    core.beginDestroy();
+    CHECK(seen.views == std::vector<void*>{ &payload[0], &payload[1] });
+    CHECK(seen.samplers == std::vector<void*>{ &payload[2], &payload[3] });
+}
+
+//======================================================================================================================
+TEST_CASE("a placement into a range a racing release took writes nothing and moves no count", "[core]")
+{
+    core::DeviceCore core{ DeviceDesc{ .framesInFlight = 2 } };
+    core.capabilities().maxViews = 8;
+    core.capabilities().maxSamplers = 8;
+    const Texture texture = core.pool<Texture>().allocate({ "placed.texture" });
+    const IndexRange views = *core::reserveViews(core, 2);
+    const IndexRange samplers = *core::reserveSamplers(core, 2);
+    core::releaseRange(core, views);
+    core::releaseRange(core, samplers);
+    const uint64_t writes = core.counters().descriptorWrites;
+    int payload = 0;
+    CHECK_FALSE(core::placeView(core, views, 0, texture, &payload));
+    CHECK_FALSE(core::placeSampler(core, samplers, 0, &payload));
+    CHECK(core.pool<Texture>().lookup(texture).record->views == 0);
+    CHECK(core.counters().descriptorWrites == writes);
+    core.beginDestroy();
 }

@@ -6,6 +6,9 @@
 
 #include <catch2/catch_test_macros.hpp>
 
+#include <algorithm>
+#include <array>
+#include <functional>
 #include <optional>
 #include <vector>
 
@@ -13,6 +16,28 @@ using namespace rojoRHI::core;
 
 namespace {
     constexpr uint32_t kCapacity = 4;
+
+    /// Collects the native payloads an allocator hands over, in order.
+    struct Handed
+    {
+        std::vector<void*> payloads;
+
+        //==============================================================================================================
+        /// Returns the function `retire` and `drain` call with each payload.
+        auto sink()
+        {
+            return [this](void* native) { payloads.push_back(native); };
+        }
+
+        //==============================================================================================================
+        /// Returns the payloads handed over so far in address order, which for elements of one array is index order.
+        std::vector<void*> sorted() const
+        {
+            std::vector<void*> ordered = payloads;
+            std::ranges::sort(ordered, std::less<>{});
+            return ordered;
+        }
+    };
 } // namespace
 
 //======================================================================================================================
@@ -145,7 +170,7 @@ TEST_CASE("a released range returns its owners and is not reused before its fram
 {
     SlotAllocator slots;
     REQUIRE(slots.allocateRange(4, 3, 0) == 0);
-    REQUIRE(slots.replaceOwner(1, 77) == 0);
+    REQUIRE(slots.replace(1, 77, nullptr, [] { return uint64_t{ 1 }; }) == 0);
     const std::optional<std::vector<uint64_t>> owners = slots.releaseRange(0, 3, [] { return uint64_t{ 2 }; });
     REQUIRE(owners.has_value());
     CHECK(*owners == std::vector<uint64_t>{ 0, 77, 0 });
@@ -188,12 +213,13 @@ TEST_CASE("an owner is replaced only in a slot of an assigned range", "[core]")
     SlotAllocator slots;
     REQUIRE(slots.allocate(8, 5) == 0);
     REQUIRE(slots.allocateRange(8, 2, 0) == 1);
-    CHECK_FALSE(slots.replaceOwner(0, 9).has_value());
-    CHECK_FALSE(slots.replaceOwner(7, 9).has_value());
-    CHECK(slots.replaceOwner(2, 9) == 0);
-    CHECK(slots.replaceOwner(2, 10) == 9);
-    slots.releaseRange(1, 2, [] { return uint64_t{ 1 }; });
-    CHECK_FALSE(slots.replaceOwner(2, 11).has_value());
+    const auto frame = [] { return uint64_t{ 1 }; };
+    CHECK_FALSE(slots.replace(0, 9, nullptr, frame).has_value());
+    CHECK_FALSE(slots.replace(7, 9, nullptr, frame).has_value());
+    CHECK(slots.replace(2, 9, nullptr, frame) == 0);
+    CHECK(slots.replace(2, 10, nullptr, frame) == 9);
+    slots.releaseRange(1, 2, frame);
+    CHECK_FALSE(slots.replace(2, 11, nullptr, frame).has_value());
 }
 
 //======================================================================================================================
@@ -209,4 +235,99 @@ TEST_CASE("holdsRange is true only for the exact assigned range", "[core]")
     CHECK_FALSE(slots.holdsRange(1, 0));
     slots.releaseRange(1, 3, [] { return uint64_t{ 1 }; });
     CHECK_FALSE(slots.holdsRange(1, 3));
+}
+
+//======================================================================================================================
+TEST_CASE("a released slot hands its native payload over when its frame retires, not before", "[core]")
+{
+    std::array<int, 1> payload{};
+    SlotAllocator slots;
+    REQUIRE(slots.allocate(kCapacity, 42, &payload[0]) == 0);
+    REQUIRE(slots.release(0, [] { return uint64_t{ 3 }; }) == 42);
+    Handed handed;
+    slots.retire(2, handed.sink());
+    CHECK(handed.payloads.empty());
+    slots.retire(3, handed.sink());
+    CHECK(handed.payloads == std::vector<void*>{ &payload[0] });
+    slots.retire(4, handed.sink());
+    CHECK(handed.payloads.size() == 1);
+}
+
+//======================================================================================================================
+TEST_CASE("a replaced payload waits for the frame the replacement was made in", "[core]")
+{
+    std::array<int, 2> payload{};
+    SlotAllocator slots;
+    REQUIRE(slots.allocateRange(kCapacity, 2, 0) == 0);
+    Handed handed;
+    // The slot held no payload, so the first write queues nothing.
+    REQUIRE(slots.replace(0, 5, &payload[0], [] { return uint64_t{ 1 }; }) == 0);
+    slots.retire(1, handed.sink());
+    CHECK(handed.payloads.empty());
+    REQUIRE(slots.replace(0, 6, &payload[1], [] { return uint64_t{ 2 }; }) == 5);
+    slots.retire(1, handed.sink());
+    CHECK(handed.payloads.empty());
+    slots.retire(2, handed.sink());
+    CHECK(handed.payloads == std::vector<void*>{ &payload[0] });
+    CHECK(slots.state(0) == SlotState::Assigned);
+}
+
+//======================================================================================================================
+TEST_CASE("a released range hands over the payload of every slot it holds", "[core]")
+{
+    std::array<int, 3> payload{};
+    SlotAllocator slots;
+    REQUIRE(slots.allocateRange(kCapacity, 3, 0) == 0);
+    const auto frame = [] { return uint64_t{ 1 }; };
+    REQUIRE(slots.replace(0, 1, &payload[0], frame).has_value());
+    REQUIRE(slots.replace(2, 1, &payload[1], frame).has_value());
+    // Replacing slot 0 queues payload 0; the range then releases payload 2 in its place, and each goes over once.
+    REQUIRE(slots.replace(0, 1, &payload[2], frame).has_value());
+    REQUIRE(slots.releaseRange(0, 3, frame).has_value());
+    Handed handed;
+    slots.retire(1, handed.sink());
+    CHECK(handed.sorted() == std::vector<void*>{ &payload[0], &payload[1], &payload[2] });
+    slots.retire(2, handed.sink());
+    CHECK(handed.payloads.size() == 3);
+}
+
+//======================================================================================================================
+TEST_CASE("retire still counts only single slots", "[core]")
+{
+    std::array<int, 3> payload{};
+    SlotAllocator slots;
+    const auto frame = [] { return uint64_t{ 1 }; };
+    REQUIRE(slots.allocate(8, 1, &payload[0]) == 0);
+    REQUIRE(slots.allocateRange(8, 2, 0) == 1);
+    REQUIRE(slots.replace(1, 1, &payload[1], frame).has_value());
+    REQUIRE(slots.replace(1, 1, &payload[2], frame).has_value());
+    REQUIRE(slots.release(0, frame).has_value());
+    REQUIRE(slots.releaseRange(1, 2, frame).has_value());
+    Handed handed;
+    CHECK(slots.retire(1, handed.sink()) == 1);
+    CHECK(handed.payloads.size() == 3);
+}
+
+//======================================================================================================================
+TEST_CASE("drain hands over every held and pending payload once and empties the allocator", "[core]")
+{
+    std::array<int, 4> payload{};
+    SlotAllocator slots;
+    const auto frame = [] { return uint64_t{ 1 }; };
+    REQUIRE(slots.allocate(8, 1, &payload[0]) == 0);
+    REQUIRE(slots.allocate(8, 1, &payload[1]) == 1);
+    REQUIRE(slots.allocate(8, 1) == 2);
+    REQUIRE(slots.allocateRange(8, 2, 0) == 3);
+    REQUIRE(slots.release(1, frame).has_value());
+    REQUIRE(slots.replace(3, 1, &payload[2], frame).has_value());
+    REQUIRE(slots.replace(3, 1, &payload[3], frame).has_value());
+    Handed handed;
+    slots.drain(handed.sink());
+    CHECK(handed.sorted() == std::vector<void*>{ &payload[0], &payload[1], &payload[2], &payload[3] });
+    CHECK(slots.assignedCount() == 0);
+    CHECK(slots.state(1) == SlotState::Free);
+    slots.retire(1, handed.sink());
+    slots.drain(handed.sink());
+    CHECK(handed.payloads.size() == 4);
+    CHECK(slots.allocate(8, 1) == 0);
 }

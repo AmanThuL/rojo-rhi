@@ -33,9 +33,10 @@ namespace rojoRHI::core {
         DeviceCore& core, const TextureDesc& desc, std::span<const TextureData> initial, const Placement& placement, const PlacementRequirements& requirements
     );
 
-    /// Stores `record`, which `prepareTexture` returned, in the texture pool, counts it against its heap and returns its
-    /// handle.
-    Texture addTexture(DeviceCore& core, TextureRecord record);
+    /// Stores `record`, which `prepareTexture` returned, in the texture pool, counts it against its heap, starts the validation
+    /// tracker following it and returns its handle. When the pool's native table is full it returns `OutOfMemory`, counts
+    /// nothing and tracks nothing; the caller still owns `record.native` and releases it.
+    Result<Texture> addTexture(DeviceCore& core, TextureRecord record);
 
     /// Destroys `texture`, deferred as `DeviceCore::destroy` does, after checking that it is not a swapchain image
     /// (VU-rojo-present-0013) and that no view slot still holds a view of it (VU-rojo-texture-0028), and releases its claim on
@@ -50,16 +51,28 @@ namespace rojoRHI::core {
     /// one site of the rules, shared by views and barriers.
     void checkSubresourceRange(const TextureRecord& texture, const SubresourceRange& range);
 
-    /// Creates a view of `texture`: checks the descriptor against the texture (VU-rojo-core-0001 to 0003 for the handle,
-    /// VU-rojo-texture-0016, 0017, 0022 to 0027, VU-rojo-format-0003), takes a slot of the view heap and counts the view
-    /// against the texture. A full heap is an error result. The Null backend has no native view, so this is the whole entry.
-    Result<ViewIndex> createView(DeviceCore& core, Texture texture, const TextureViewDesc& desc);
+    /// Checks the creation of a view of `texture` (VU-rojo-core-0001 to 0003 for the handle, VU-rojo-present-0012,
+    /// VU-rojo-texture-0016, 0017, 0022 to 0027, VU-rojo-format-0003) and returns the texture's record, whose address is stable
+    /// while the texture lives. A backend calls it first in `createView`, then creates its native view and calls `addView`.
+    const TextureRecord& checkView(DeviceCore& core, Texture texture, const TextureViewDesc& desc);
 
-    /// Writes a view of `texture` into slot `range.base + index` of a reserved view range (VU-rojo-texture-0033; VU-rojo-core-0001
-    /// to 0003 for the handle; VU-rojo-texture-0034 for the descriptor, which is the rules of `createView` asked as one
-    /// question; VU-rojo-texture-0031 for a range that is not a reserved, unreleased one as returned), replacing the view
-    /// there, and moves the per-texture view counts.
-    void writeView(DeviceCore& core, IndexRange range, uint32_t index, Texture texture, const TextureViewDesc& desc);
+    /// Takes a slot of the view heap holding `native`, the backend's view or null, and counts the view against `texture`,
+    /// which `checkView` accepted. A full heap is `OutOfMemory`, counting nothing; the caller still owns `native` and
+    /// releases it. The slot's payload goes to the `view` retire hook when the slot retires or the device is destroyed.
+    Result<ViewIndex> addView(DeviceCore& core, Texture texture, void* native);
+
+    /// Checks a write of a view of `texture` into slot `range.base + index` of a reserved view range (VU-rojo-texture-0033;
+    /// VU-rojo-core-0001 to 0003 for the handle; VU-rojo-present-0012; VU-rojo-texture-0034 for the descriptor, which is the
+    /// rules of `checkView` asked as one question; VU-rojo-texture-0031 for a range that is not a reserved, unreleased one as
+    /// returned) and returns the texture's record. A backend calls it first in `writeView`, then creates its native view and
+    /// calls `placeView`.
+    const TextureRecord& checkViewWrite(DeviceCore& core, IndexRange range, uint32_t index, Texture texture, const TextureViewDesc& desc);
+
+    /// Places `native`, the backend's view of `texture` or null, in slot `range.base + index`, which `checkViewWrite`
+    /// accepted, and moves the per-texture view counts. The payload it replaces waits for the open frame, or the next one,
+    /// and then goes to the `view` retire hook. Returns false, placing nothing, when a racing release took the range after
+    /// the check; the caller then still owns `native` and releases it.
+    bool placeView(DeviceCore& core, IndexRange range, uint32_t index, Texture texture, void* native);
 
     /// Releases the view slot `view`, deferred to the retirement of the frame that is open, or of the next one; it was
     /// returned by `createView` (VU-rojo-device-0010). The texture it described no longer counts the view.

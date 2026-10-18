@@ -81,31 +81,44 @@ namespace rojoRHI::core {
     }
 
     //==================================================================================================================
-    Buffer addBuffer(DeviceCore& core, BufferRecord record)
+    Result<Buffer> addBuffer(DeviceCore& core, BufferRecord record)
     {
-        if (record.heap.bits != 0)
+        const Heap heap = record.heap;
+        if (heap.bits != 0)
         {
-            addPlacedResource(core, record.heap);
+            addPlacedResource(core, heap);
         }
 #ifndef NDEBUG
         // The tracker copies what it follows before the record moves into the pool.
         const std::string label = record.label;
         const uint64_t size = record.size;
-        const Heap heap = record.heap;
         const uint64_t heapOffset = record.heapOffset;
         const bool sparse = (record.usage & BufferUsage::Sparse) != BufferUsage::None;
-        const Buffer buffer = core.pool<Buffer>().allocate(std::move(record));
-        trackBuffer(core, buffer, label, size, heap, heapOffset, sparse);
-        return buffer;
-#else
-        return core.pool<Buffer>().allocate(std::move(record));
 #endif
+        const Buffer buffer = core.pool<Buffer>().allocate(std::move(record));
+        if (buffer.bits == 0)
+        {
+            if (heap.bits != 0)
+            {
+                removePlacedResource(core, heap);
+            }
+            return std::unexpected(tableFull("buffer", core.pool<Buffer>().capacity()));
+        }
+#ifndef NDEBUG
+        trackBuffer(core, buffer, label, size, heap, heapOffset, sparse);
+#endif
+        return buffer;
     }
 
     //==================================================================================================================
-    Buffer addFrameArenaPage(DeviceCore& core, BufferRecord record)
+    Result<Buffer> addFrameArenaPage(DeviceCore& core, BufferRecord record)
     {
-        return core.pool<Buffer>().allocate(std::move(record));
+        const Buffer page = core.pool<Buffer>().allocate(std::move(record));
+        if (page.bits == 0)
+        {
+            return std::unexpected(tableFull("buffer", core.pool<Buffer>().capacity()));
+        }
+        return page;
     }
 
     //==================================================================================================================

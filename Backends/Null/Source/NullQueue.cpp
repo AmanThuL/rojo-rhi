@@ -8,6 +8,7 @@
 #include <rojoRHI/RHI.h>
 
 #include "Core/CommandLists.h"
+#include "Core/Counters.h"
 #include "Core/DeviceCore.h"
 #include "Core/Fences.h"
 #include "Core/Sparse.h"
@@ -43,6 +44,8 @@ namespace rojoRHI {
             const core::TrackerLock tracked = core::lockTracker(core);
             core::checkSubmit(core, wait, signal);
             core::replayLists(core, queue.type, lists, wait, signal, tracked);
+            // Every submission counts as one native submission, as a native queue commits one per call.
+            core::DeviceCounts::add(core.counts().nativeSubmitCalls);
             // The Null queue executes nothing, so every signal is reached before the call returns.
             core::recordSignals(core, signal, core::SignalCompletion::Immediate);
         }

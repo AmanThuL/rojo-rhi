@@ -60,7 +60,7 @@ namespace rojoRHI::core {
             return;
         }
         list.trackerLog.events.emplace_back(use);
-        list.trackerLog.commands.push_back(list.counts.nativeRecordCalls);
+        list.trackerLog.commands.push_back(list.trackerLog.command);
 #endif
     }
 
@@ -89,7 +89,7 @@ namespace rojoRHI::core {
         events.insert(events.end(), globals.begin(), globals.end());
         events.insert(events.end(), buffers.begin(), buffers.end());
         events.insert(events.end(), textures.begin(), textures.end());
-        list.trackerLog.commands.resize(events.size(), list.counts.nativeRecordCalls);
+        list.trackerLog.commands.resize(events.size(), list.trackerLog.command);
 #endif
     }
 

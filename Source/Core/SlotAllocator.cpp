@@ -7,7 +7,7 @@
 
 namespace rojoRHI::core {
     //==================================================================================================================
-    std::optional<uint32_t> SlotAllocator::allocate(uint32_t capacity, uint64_t owner)
+    std::optional<uint32_t> SlotAllocator::allocate(uint32_t capacity, uint64_t owner, void* native)
     {
         std::lock_guard lock(m_mutex);
         uint32_t index = 0;
@@ -25,7 +25,7 @@ namespace rojoRHI::core {
         {
             return std::nullopt;
         }
-        m_slots[index] = Slot{ SlotState::Assigned, owner };
+        m_slots[index] = Slot{ SlotState::Assigned, owner, 0, false, native };
         return index;
     }
 
@@ -72,35 +72,16 @@ namespace rojoRHI::core {
     }
 
     //==================================================================================================================
-    std::optional<uint64_t> SlotAllocator::replaceOwner(uint32_t index, uint64_t owner)
+    uint64_t SlotAllocator::retire(uint64_t upToFrame)
     {
-        std::lock_guard lock(m_mutex);
-        if (index >= m_slots.size() || m_slots[index].state != SlotState::Assigned || !m_slots[index].inRange)
-        {
-            return std::nullopt;
-        }
-        return std::exchange(m_slots[index].owner, owner);
+        return retire(upToFrame, [](void*) { ROJORHI_INTERNAL_ASSERT(false, "a slot payload was retired with no one to release it"); });
     }
 
     //==================================================================================================================
-    uint64_t SlotAllocator::retire(uint64_t upToFrame)
+    bool SlotAllocator::empty()
     {
         std::lock_guard lock(m_mutex);
-        uint64_t singles = 0;
-        std::erase_if(m_pending, [&](const Pending& entry) {
-            if (entry.frame > upToFrame)
-            {
-                return false;
-            }
-            for (uint32_t i = 0; i < entry.count; ++i)
-            {
-                m_slots[entry.index + i] = Slot{};
-                m_free.push_back(entry.index + i);
-            }
-            singles += entry.range ? 0 : 1;
-            return true;
-        });
-        return singles;
+        return m_slots.empty() && m_pending.empty();
     }
 
     //==================================================================================================================

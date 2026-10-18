@@ -28,13 +28,14 @@ namespace rojoRHI::core {
     );
 
     /// Stores `record`, which `prepareBuffer` returned, in the buffer pool, counts it against its heap, starts the validation
-    /// tracker following it and returns its handle.
-    Buffer addBuffer(DeviceCore& core, BufferRecord record);
+    /// tracker following it and returns its handle. When the pool's native table is full it returns `OutOfMemory`, counts
+    /// nothing and tracks nothing; the caller still owns `record.native` and releases it.
+    Result<Buffer> addBuffer(DeviceCore& core, BufferRecord record);
 
     /// Stores `record`, a frame-arena page that `prepareBuffer` returned with no placement, in the buffer pool and returns its
-    /// handle. The validation tracker does not follow a page: the CPU writes frame data and the GPU only reads it within its
-    /// frame.
-    Buffer addFrameArenaPage(DeviceCore& core, BufferRecord record);
+    /// handle, or `OutOfMemory` when the pool's native table is full, leaving `record.native` to the caller. The validation
+    /// tracker does not follow a page: the CPU writes frame data and the GPU only reads it within its frame.
+    Result<Buffer> addFrameArenaPage(DeviceCore& core, BufferRecord record);
 
     /// Destroys `buffer`, deferred as `DeviceCore::destroy` does, and releases its claim on its heap.
     void destroyBuffer(DeviceCore& core, Buffer buffer);

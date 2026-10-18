@@ -7,6 +7,7 @@
 #include <rojoRHI/RHI.h>
 
 #include "Base/Assert.h"
+#include "Core/NativeTable.h"
 
 #include <algorithm>
 #include <array>
@@ -14,8 +15,10 @@
 #include <cstddef>
 #include <cstdint>
 #include <deque>
+#include <format>
 #include <mutex>
 #include <optional>
+#include <string_view>
 #include <utility>
 #include <vector>
 
@@ -82,11 +85,27 @@ namespace rojoRHI::core {
         Record* record; ///< The slot's record.
     };
 
+    /// Returns the `OutOfMemory` error of a creation that found the native table of `type` objects full at `capacity` slots,
+    /// slot zero included.
+    inline Error tableFull(std::string_view type, uint32_t capacity)
+    {
+        return Error{ ErrorCategory::OutOfMemory, std::format("the {} table of {} objects is full", type, capacity - 1) };
+    }
+
+    /// The number of slots a pool is created with, slot zero included, as one argument so a set of pools is built from one
+    /// value.
+    struct PoolCapacity
+    {
+        uint32_t slots = NativeTable::kCapacity; ///< Slots, at most `NativeTable::kCapacity`.
+    };
+
     /// One pool of slots for one handle type. A handle packs a 32-bit slot index, a 24-bit generation and an 8-bit type
     /// tag; slot zero and tag zero are never issued, so the null handle is never valid. Releasing a slot advances its
     /// generation at once, so the old handle is rejected immediately, and the slot is reused only after the frame it
     /// was released in has retired. A slot whose generation reaches the limit is never reused. All operations take one
-    /// mutex; the record pointers a lookup returns are stable until the slot is released.
+    /// mutex; the record pointers a lookup returns are stable until the slot is released. Beside the records the pool keeps a
+    /// `NativeTable` of each slot's `native` payload, which `native` reads without the mutex; its capacity, 2^22 slots unless a
+    /// test passes less, bounds the slot indices, and an allocation past it issues the null handle.
     template<typename Handle, typename Record> class HandlePool
     {
       public:
@@ -95,11 +114,24 @@ namespace rojoRHI::core {
         /// The largest generation a slot can hold; a slot released at this generation is retired for good.
         static constexpr uint32_t kMaxGeneration = (1u << 24) - 1;
 
-        /// Creates an empty pool. `maxGeneration` exists so a test can reach the limit without 2^24 reuses.
-        explicit HandlePool(uint32_t maxGeneration = kMaxGeneration) : maxGeneration_(maxGeneration)
+        /// Creates an empty pool of at most `capacity` slots, slot zero included. `maxGeneration` and `capacity` exist so a test
+        /// can reach either limit without 2^24 reuses or 2^22 objects.
+        explicit HandlePool(uint32_t maxGeneration = kMaxGeneration, uint32_t capacity = NativeTable::kCapacity)
+            : maxGeneration_(maxGeneration), m_table(capacity)
         {
             ROJORHI_INTERNAL_ASSERT(maxGeneration <= kMaxGeneration, "a generation wider than 24 bits would corrupt the type tag");
             slots_.emplace_back(); // Slot zero is never issued.
+        }
+
+        /// Creates an empty pool of `capacity` slots with the default generation limit.
+        explicit HandlePool(PoolCapacity capacity) : HandlePool(kMaxGeneration, capacity.slots)
+        {
+        }
+
+        /// Returns the number of slots the pool can issue, slot zero included.
+        uint32_t capacity() const
+        {
+            return m_table.capacity();
         }
 
         /// Returns the slot index of `handle`, which a backend may encode in its own values; it does not check the handle.
@@ -108,9 +140,11 @@ namespace rojoRHI::core {
             return indexOf(handle.bits);
         }
 
-        /// Stores `record` in a free slot, or a new one, and returns the handle naming it. `counted` false leaves the counters
-        /// of `countInto` alone, for a record that stands for no native creation.
-        Handle allocate(Record record, bool counted = true)
+        /// Stores `record` in a free slot, or a new one, publishes its `native` payload and returns the handle naming it.
+        /// `counted` false leaves the counters of `countInto` alone, for a record that stands for no native creation. When no
+        /// slot is free and a new one would reach the capacity, it returns the null handle, counts nothing and leaves `record`
+        /// unmoved, so the caller still owns its payload.
+        Handle allocate(Record&& record, bool counted = true)
         {
             std::lock_guard lock(mutex_);
             uint32_t index = 0;
@@ -118,6 +152,10 @@ namespace rojoRHI::core {
             {
                 index = free_.back();
                 free_.pop_back();
+            }
+            else if (slots_.size() >= m_table.capacity())
+            {
+                return Handle{};
             }
             else
             {
@@ -134,6 +172,7 @@ namespace rojoRHI::core {
                     counter->fetch_add(1, std::memory_order_relaxed);
                 }
             }
+            m_table.publish(index, slot.record.native);
             return Handle{ pack(index, slot.generation) };
         }
 
@@ -168,9 +207,9 @@ namespace rojoRHI::core {
             ROJORHI_VU(status != LookupStatus::WrongType, "VU-rojo-core-0003", "handle {:#x} has the type tag of another resource type", handle.bits);
         }
 
-        /// Retires every slot released at a frame up to and including `upToFrame`: `onRetire` receives its record, then the
-        /// record is cleared and the slot becomes available for reuse unless its generation reached the limit. `onRetire`
-        /// runs under the pool's lock and must not call the pool.
+        /// Retires every slot released at a frame up to and including `upToFrame`: the slot's native payload reads null, then
+        /// `onRetire` receives its record, then the record is cleared and the slot becomes available for reuse unless its
+        /// generation reached the limit. `onRetire` runs under the pool's lock and must not call the pool.
         template<typename OnRetire> void retire(uint64_t upToFrame, OnRetire&& onRetire)
         {
             std::lock_guard lock(mutex_);
@@ -180,6 +219,7 @@ namespace rojoRHI::core {
                     return false;
                 }
                 Slot& slot = slots_[entry.index];
+                clearNative(entry.index, slot);
                 onRetire(slot.record);
                 slot.record = Record{};
                 if (entry.reusable)
@@ -191,23 +231,27 @@ namespace rojoRHI::core {
         }
 
         /// Hands `onRecord` the record of every live slot and of every slot released but not yet retired, each exactly once, and
-        /// empties the pool: no handle it issued is valid afterwards and no slot is reused. `onRecord` runs under the pool's
-        /// lock and must not call the pool.
+        /// empties the pool: every native payload reads null before its record is handed over, no handle it issued is valid
+        /// afterwards and no slot is reused.
+        /// `onRecord` runs under the pool's lock and must not call the pool.
         template<typename OnRecord> void drain(OnRecord&& onRecord)
         {
             std::lock_guard lock(mutex_);
             for (const Pending& entry : pending_)
             {
                 Slot& slot = slots_[entry.index];
+                clearNative(entry.index, slot);
                 onRecord(slot.record);
                 slot.record = Record{};
             }
             pending_.clear();
             free_.clear();
-            for (Slot& slot : slots_)
+            for (uint32_t index = 1; index < slots_.size(); ++index)
             {
+                Slot& slot = slots_[index];
                 if (slot.live)
                 {
+                    clearNative(index, slot);
                     onRecord(slot.record);
                     slot.record = Record{};
                     slot.live = false;
@@ -219,6 +263,15 @@ namespace rojoRHI::core {
         void retire(uint64_t upToFrame)
         {
             retire(upToFrame, [](Record&) {});
+        }
+
+        /// Returns the native payload of the slot `handle` names with one acquire load, taking no lock and checking nothing. It
+        /// is valid for a live handle that a Debug build has already looked up, or one that valid usage keeps alive until its
+        /// frame retires; a record's `native` does not change between `allocate` and retirement. The null handle reads slot
+        /// zero, which is always null.
+        void* native(Handle handle) const
+        {
+            return m_table.load(slotIndex(handle));
         }
 
         /// Finds the record `handle` names, or reports which rule it breaks.
@@ -332,6 +385,13 @@ namespace rojoRHI::core {
             bool reusable;
         };
 
+        // Clears the slot's native payload before its record leaves the pool, so no reader is handed a payload being released.
+        void clearNative(uint32_t index, [[maybe_unused]] const Slot& slot)
+        {
+            ROJORHI_INTERNAL_ASSERT(slot.record.native == m_table.load(index), "a record's native payload changed after it was published");
+            m_table.publish(index, nullptr);
+        }
+
         static uint64_t pack(uint32_t index, uint32_t generation)
         {
             return static_cast<uint64_t>(index) | (static_cast<uint64_t>(generation) << 32) | (static_cast<uint64_t>(handleTypeTag<Handle>()) << 56);
@@ -367,5 +427,6 @@ namespace rojoRHI::core {
         std::deque<Slot> slots_;
         std::vector<uint32_t> free_;
         std::vector<Pending> pending_;
+        NativeTable m_table;
     };
 } // namespace rojoRHI::core

@@ -15,7 +15,7 @@ namespace rojoRHI::core {
         {
             return ResolvedAddr{};
         }
-        const DecodedAddr decoded = decodeAddr(addr);
+        const DecodedAddr decoded = decodeAddr(core, addr);
         const auto live = core.pool<Buffer>().liveAt(decoded.slot);
         ROJORHI_VU(
             live && decoded.offset < live->record->size,

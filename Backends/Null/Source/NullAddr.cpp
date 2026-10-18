@@ -12,8 +12,9 @@
 namespace rojoRHI {
     namespace core {
         //==============================================================================================================
-        DecodedAddr decodeAddr(Addr addr)
+        DecodedAddr decodeAddr(DeviceCore&, Addr addr)
         {
+            // The Null encoding is the address itself, so the decode needs no per-device state.
             return DecodedAddr{ addr.lo, addr.hi };
         }
     } // namespace core

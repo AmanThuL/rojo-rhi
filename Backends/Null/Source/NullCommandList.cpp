@@ -37,8 +37,14 @@ namespace rojoRHI {
             return std::unexpected(Error{ ErrorCategory::OutOfMemory, std::format("no host memory for {} bytes of a frame arena page", size) });
         }
         record.native = host;
+        Result<Buffer> page = core::addFrameArenaPage(core, std::move(record));
+        if (!page)
+        {
+            std::free(host);
+            return std::unexpected(std::move(page.error()));
+        }
         core::DeviceCounts::add(core.counts().cpuAllocations);
-        return core::ArenaPage{ core::addFrameArenaPage(core, std::move(record)), host, size };
+        return core::ArenaPage{ *page, host, size };
     }
 
     //==================================================================================================================
@@ -103,55 +109,74 @@ namespace rojoRHI {
     //==================================================================================================================
     void CommandList::beginRenderPass(const RenderPassDesc& desc)
     {
-        core::beginPass(CommandListImpl::of(*this).core, desc);
+        core::CommandListCore& list = CommandListImpl::of(*this).core;
+        core::beginPass(list, desc);
+        core::noteNativeCall(list);
+        ++list.counts.encodersOpened;
     }
 
     //==================================================================================================================
     void CommandList::endRenderPass()
     {
-        core::endPass(CommandListImpl::of(*this).core);
+        core::CommandListCore& list = CommandListImpl::of(*this).core;
+        core::endPass(list);
+        core::noteNativeCall(list);
     }
 
     //==================================================================================================================
     void CommandList::beginScope(std::string_view label)
     {
-        core::beginScope(CommandListImpl::of(*this).core, label);
+        core::CommandListCore& list = CommandListImpl::of(*this).core;
+        core::beginScope(list, label);
+        core::noteNativeCall(list);
     }
 
     //==================================================================================================================
     void CommandList::endScope()
     {
-        core::endScope(CommandListImpl::of(*this).core);
+        core::CommandListCore& list = CommandListImpl::of(*this).core;
+        core::endScope(list);
+        core::noteNativeCall(list);
     }
 
     //==================================================================================================================
     void CommandList::setPipeline(Pipeline pipeline)
     {
-        core::bindPipeline(CommandListImpl::of(*this).core, pipeline);
+        core::CommandListCore& list = CommandListImpl::of(*this).core;
+        core::bindPipeline(list, pipeline);
+        core::noteNativeCall(list);
     }
 
     //==================================================================================================================
     void CommandList::setViewport(const Viewport& viewport)
     {
-        core::setViewport(CommandListImpl::of(*this).core, viewport);
+        core::CommandListCore& list = CommandListImpl::of(*this).core;
+        core::setViewport(list, viewport);
+        core::noteNativeCall(list);
     }
 
     //==================================================================================================================
     void CommandList::setScissor(const Rect2D& rect)
     {
-        core::setScissor(CommandListImpl::of(*this).core, rect);
+        core::CommandListCore& list = CommandListImpl::of(*this).core;
+        core::setScissor(list, rect);
+        core::noteNativeCall(list);
     }
 
     //==================================================================================================================
     void CommandList::setStencilReference([[maybe_unused]] uint8_t reference)
     {
-        core::setStencilReference(CommandListImpl::of(*this).core);
+        core::CommandListCore& list = CommandListImpl::of(*this).core;
+        core::setStencilReference(list);
+        core::noteNativeCall(list);
     }
 
     //==================================================================================================================
     void CommandList::setBlendConstants([[maybe_unused]] float r, [[maybe_unused]] float g, [[maybe_unused]] float b, [[maybe_unused]] float a)
     {
-        core::setBlendConstants(CommandListImpl::of(*this).core);
+        core::CommandListCore& list = CommandListImpl::of(*this).core;
+        core::setBlendConstants(list);
+        core::noteNativeCall(list);
     }
 
     //==================================================================================================================
@@ -163,19 +188,25 @@ namespace rojoRHI {
     //==================================================================================================================
     void CommandList::setDepthBias([[maybe_unused]] float constant, [[maybe_unused]] float slopeScaled, [[maybe_unused]] float clamp)
     {
-        core::setDepthBias(CommandListImpl::of(*this).core);
+        core::CommandListCore& list = CommandListImpl::of(*this).core;
+        core::setDepthBias(list);
+        core::noteNativeCall(list);
     }
 
     //==================================================================================================================
     void CommandList::setRoot(Addr root)
     {
-        core::setRoot(CommandListImpl::of(*this).core, root);
+        core::CommandListCore& list = CommandListImpl::of(*this).core;
+        core::setRoot(list, root);
+        core::noteNativeCall(list);
     }
 
     //==================================================================================================================
     void CommandList::draw(uint32_t vertices, uint32_t instances, [[maybe_unused]] uint32_t firstVertex, [[maybe_unused]] uint32_t firstInstance)
     {
-        core::draw(CommandListImpl::of(*this).core, vertices, instances);
+        core::CommandListCore& list = CommandListImpl::of(*this).core;
+        core::draw(list, vertices, instances);
+        core::noteNativeCall(list);
     }
 
     //==================================================================================================================
@@ -189,85 +220,113 @@ namespace rojoRHI {
         [[maybe_unused]] uint32_t firstInstance
     )
     {
-        core::drawIndexed(CommandListImpl::of(*this).core, indices, type, count, instances, firstIndex);
+        core::CommandListCore& list = CommandListImpl::of(*this).core;
+        core::drawIndexed(list, indices, type, count, instances, firstIndex);
+        core::noteNativeCall(list);
     }
 
     //==================================================================================================================
     void CommandList::drawMeshTasks(uint32_t x, uint32_t y, uint32_t z)
     {
-        core::drawMeshTasks(CommandListImpl::of(*this).core, x, y, z);
+        core::CommandListCore& list = CommandListImpl::of(*this).core;
+        core::drawMeshTasks(list, x, y, z);
+        core::noteNativeCall(list);
     }
 
     //==================================================================================================================
     void CommandList::dispatch(uint32_t x, uint32_t y, uint32_t z)
     {
-        core::dispatch(CommandListImpl::of(*this).core, x, y, z);
+        core::CommandListCore& list = CommandListImpl::of(*this).core;
+        core::dispatch(list, x, y, z);
+        core::noteNativeCall(list);
     }
 
     //==================================================================================================================
     void CommandList::drawIndirect(Addr args, uint32_t maxCount, Addr count)
     {
-        core::drawIndirect(CommandListImpl::of(*this).core, args, maxCount, count);
+        core::CommandListCore& list = CommandListImpl::of(*this).core;
+        core::drawIndirect(list, args, maxCount, count);
+        core::noteNativeCall(list);
     }
 
     //==================================================================================================================
     void CommandList::drawIndexedIndirect(Buffer indices, [[maybe_unused]] IndexType type, Addr args, uint32_t maxCount, Addr count)
     {
-        core::drawIndexedIndirect(CommandListImpl::of(*this).core, indices, args, maxCount, count);
+        core::CommandListCore& list = CommandListImpl::of(*this).core;
+        core::drawIndexedIndirect(list, indices, args, maxCount, count);
+        core::noteNativeCall(list);
     }
 
     //==================================================================================================================
     void CommandList::drawMeshTasksIndirect(Addr args, uint32_t maxCount, Addr count)
     {
-        core::drawMeshTasksIndirect(CommandListImpl::of(*this).core, args, maxCount, count);
+        core::CommandListCore& list = CommandListImpl::of(*this).core;
+        core::drawMeshTasksIndirect(list, args, maxCount, count);
+        core::noteNativeCall(list);
     }
 
     //==================================================================================================================
     void CommandList::dispatchIndirect(Addr args)
     {
-        core::dispatchIndirect(CommandListImpl::of(*this).core, args);
+        core::CommandListCore& list = CommandListImpl::of(*this).core;
+        core::dispatchIndirect(list, args);
+        core::noteNativeCall(list);
     }
 
     //==================================================================================================================
     void CommandList::copyBuffer(Buffer src, uint64_t srcOffset, Buffer dst, uint64_t dstOffset, uint64_t size)
     {
-        core::copyBuffer(CommandListImpl::of(*this).core, src, srcOffset, dst, dstOffset, size);
+        core::CommandListCore& list = CommandListImpl::of(*this).core;
+        core::copyBuffer(list, src, srcOffset, dst, dstOffset, size);
+        core::noteNativeCall(list);
     }
 
     //==================================================================================================================
     void CommandList::copyBufferToTexture(Buffer src, const BufferTextureLayout& layout, Texture dst, const TextureRegion& region)
     {
-        core::copyBufferToTexture(CommandListImpl::of(*this).core, src, layout, dst, region);
+        core::CommandListCore& list = CommandListImpl::of(*this).core;
+        core::copyBufferToTexture(list, src, layout, dst, region);
+        core::noteNativeCall(list);
     }
 
     //==================================================================================================================
     void CommandList::copyTextureToBuffer(Texture src, const TextureRegion& region, Buffer dst, const BufferTextureLayout& layout)
     {
-        core::copyTextureToBuffer(CommandListImpl::of(*this).core, src, region, dst, layout);
+        core::CommandListCore& list = CommandListImpl::of(*this).core;
+        core::copyTextureToBuffer(list, src, region, dst, layout);
+        core::noteNativeCall(list);
     }
 
     //==================================================================================================================
     void CommandList::copyTexture(Texture src, const TextureRegion& srcRegion, Texture dst, const TextureRegion& dstRegion)
     {
-        core::copyTexture(CommandListImpl::of(*this).core, src, srcRegion, dst, dstRegion);
+        core::CommandListCore& list = CommandListImpl::of(*this).core;
+        core::copyTexture(list, src, srcRegion, dst, dstRegion);
+        core::noteNativeCall(list);
     }
 
     //==================================================================================================================
     void CommandList::fillBuffer(Buffer dst, uint64_t offset, uint64_t size, [[maybe_unused]] uint32_t pattern)
     {
-        core::fillBuffer(CommandListImpl::of(*this).core, dst, offset, size);
+        core::CommandListCore& list = CommandListImpl::of(*this).core;
+        core::fillBuffer(list, dst, offset, size);
+        core::noteNativeCall(list);
     }
 
     //==================================================================================================================
     void CommandList::clearTexture(Texture texture, const SubresourceRange& range, const ClearValue& value)
     {
-        core::clearTexture(CommandListImpl::of(*this).core, texture, range, value);
+        core::CommandListCore& list = CommandListImpl::of(*this).core;
+        core::clearTexture(list, texture, range, value);
+        core::noteNativeCall(list);
     }
 
     //==================================================================================================================
     void CommandList::upscale(Upscaler upscaler, const UpscaleParams& params)
     {
-        core::upscale(CommandListImpl::of(*this).core, upscaler, params);
+        core::CommandListCore& list = CommandListImpl::of(*this).core;
+        core::upscale(list, upscaler, params);
+        core::noteNativeCall(list);
     }
 
     //==================================================================================================================
@@ -279,6 +338,12 @@ namespace rojoRHI {
     //==================================================================================================================
     void CommandList::barrier(std::span<const GlobalBarrier> globals, std::span<const BufferBarrier> buffers, std::span<const TextureBarrier> textures)
     {
-        core::barrier(CommandListImpl::of(*this).core, globals, buffers, textures);
+        core::CommandListCore& list = CommandListImpl::of(*this).core;
+        core::barrier(list, globals, buffers, textures);
+        if (!globals.empty() || !buffers.empty() || !textures.empty())
+        {
+            ++list.counts.nativeBarriers;
+            core::noteNativeCall(list);
+        }
     }
 } // namespace rojoRHI

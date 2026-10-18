@@ -19,7 +19,8 @@ namespace rojoRHI::core {
     FenceRecord prepareFence(uint64_t initial, std::string_view label);
 
     /// Checks the fences of a submission before a backend runs it (VU-rojo-queue-0003, VU-rojo-queue-0007, VU-rojo-core-0001 to
-    /// 0003 for each fence) and changes nothing. A backend calls it in `Queue::submit` after `submitLists`.
+    /// 0003 for each fence) and counts one `nativeSubmitCalls` for each wait and signal; the backend counts each native
+    /// submission it commits. A backend calls it in `Queue::submit` after `submitLists`.
     void checkSubmit(DeviceCore& core, std::span<const FenceValue> wait, std::span<const FenceValue> signal);
 
     /// Whether a backend's work completes within the submission call or later, through `completeFence`.

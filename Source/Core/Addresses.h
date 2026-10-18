@@ -20,10 +20,13 @@ namespace rojoRHI::core {
         uint64_t offset; ///< Bytes from the start of the buffer.
     };
 
-    /// Decodes a non-null `addr` as the backend encodes it. Each backend defines it, as it does `coreOf`: Null keeps the slot
-    /// index in `lo` and the byte offset in `hi`. An address carries no generation, so the decode ignores it: an address
-    /// into a destroyed buffer whose slot was reused resolves to the new buffer.
-    DecodedAddr decodeAddr(Addr addr);
+    /// Decodes a non-null `addr`, which a buffer of the device `core` belongs to, as the backend encodes it. Each backend
+    /// defines it, as it does `coreOf`, and may decode through its per-device state, which it reaches from `core`: Null keeps
+    /// the slot index in `lo` and the byte offset in `hi` and ignores `core`. A backend whose encoding is not the slot index
+    /// decodes an address outside every live buffer to slot 0, which names no buffer, so `resolveAddr` reports it. An address
+    /// carries no generation, so the decode ignores it: an address into a destroyed buffer whose slot was reused resolves to
+    /// the new buffer.
+    DecodedAddr decodeAddr(DeviceCore& core, Addr addr);
 
     /// The buffer an address names.
     struct ResolvedAddr

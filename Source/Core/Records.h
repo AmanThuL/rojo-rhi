@@ -257,6 +257,15 @@ namespace rojoRHI::core {
         /// Called when `beginFrame` reuses frame slot `slot`, after the slot's pools retired: the backend returns what it
         /// pooled for that slot, such as its command lists. Null when the backend pools nothing per slot.
         void (*frameSlot)(void* context, uint32_t slot) = nullptr;
+        /// Releases the native payload of a view slot: one whose release or replacement retired, or, at device destruction,
+        /// one still held or waiting. Called once per non-null payload; null when the backend's view slots hold none.
+        void (*view)(void* context, void* native) = nullptr;
+        /// Releases the native payload of a sampler slot, as `view` does a view slot's; null when the backend's sampler slots
+        /// hold none.
+        void (*sampler)(void* context, void* native) = nullptr;
+        /// Blocks until the work of frame `frame` is complete. `beginFrame` calls it before it retires anything, with the frame
+        /// whose slot it reuses; null when the backend completes work at submission.
+        void (*waitFrame)(void* context, uint64_t frame) = nullptr;
 
         /// Returns the hook for `Handle`, which may be null.
         template<typename Handle> RetireFn<RecordFor<Handle>> forType() const
