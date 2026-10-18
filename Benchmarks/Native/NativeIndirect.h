@@ -16,7 +16,8 @@
 namespace rojoRHI::bench {
     // One counted draw as the encode kernel reads it. Records are chapter 08's DrawIndirectArgs, or DrawIndexedIndirectArgs
     // when indexed, with the index buffer's UInt16 indices at `indices`. A draw may read different records and a different
-    // count in each frame slot; a null count (address 0) means exactly maxCount.
+    // count in each frame slot; a null count (address 0) means exactly maxCount. Draws are points unless `triangles`, which
+    // only an indexed draw takes.
     struct CountedDraw
     {
         std::array<uint64_t, NativeContext::kFrameSlots> records{};
@@ -24,6 +25,7 @@ namespace rojoRHI::bench {
         uint64_t indices = 0;
         uint32_t maxCount = 0;
         bool indexed = false;
+        bool triangles = false;
     };
 
     // Every counted draw of a workload, each with its own indirect command buffer and execution range in every frame
@@ -63,10 +65,12 @@ namespace rojoRHI::bench {
         static constexpr uint32_t kThreadgroup = 64;
 
         uint64_t element(uint32_t slot, uint32_t draw) const;
+        MTL::ComputePipelineState* kernel(const CountedDraw& draw) const;
 
         NativeContext& m_context;
         MTL::ComputePipelineState* m_encodeDraw = nullptr;
         MTL::ComputePipelineState* m_encodeIndexed = nullptr;
+        MTL::ComputePipelineState* m_encodeIndexedTriangles = nullptr; ///< Created only when a draw takes triangles.
         MTL::Buffer* m_inputs = nullptr;
         MTL::Buffer* m_ranges = nullptr;
         std::vector<MTL::IndirectCommandBuffer*> m_icbs; ///< Draw-major, one per slot.

@@ -306,6 +306,16 @@ if is_plat("macosx") then
             set_values("slang.moduledir", path.join(component_dir, "Shaders/RojoRHI"))
             set_values("slang.slangc", path.join(thirdparty_dir, "slang/bin/slangc"))
             add_files(path.join(component, "Shaders/Bench/*.slang"))
+            -- The composed frame's roots and records, checked against Benchmarks/Common/FrameRoots.h and Scene.h.
+            add_rules("rojorhi.shader_layout")
+            set_values("slang.layout_probe", path.join(component_dir, "Shaders/Bench/BenchFrameProbe.slang"))
+            set_values("slang.layout_map", "Transform=rojoRHI::bench::Transform", "MeshVertex=rojoRHI::bench::MeshVertex",
+                       "CullRoot=rojoRHI::bench::CullRoot", "GeometryRoot=rojoRHI::bench::GeometryRoot",
+                       "ShadowRoot=rojoRHI::bench::ShadowRoot", "AoRoot=rojoRHI::bench::AoRoot",
+                       "BlurRoot=rojoRHI::bench::BlurRoot", "LightingRoot=rojoRHI::bench::LightingRoot",
+                       "ForwardRoot=rojoRHI::bench::ForwardRoot", "BloomDownRoot=rojoRHI::bench::BloomDownRoot",
+                       "BloomUpRoot=rojoRHI::bench::BloomUpRoot", "ToneMapRoot=rojoRHI::bench::ToneMapRoot")
+            set_values("slang.layout_include", "rojoRHI/RHI.h", "Common/Scene.h", "Common/FrameRoots.h")
         end
         if #os.files(path.join(component_dir, "Benchmarks/Native/Kernels/*.metal")) > 0 then
             add_rules("rojorhi.metal")

@@ -19,6 +19,17 @@ namespace rojoRHI::bench {
     void stopTrace();
     std::span<const std::string_view> tracedCalls();
 
+    // One texture barrier record passed to a traced barrier call, with the call's position among the traced barrier
+    // calls, counted from 0.
+    struct TracedTextureBarrier
+    {
+        uint32_t call;
+        TextureBarrier barrier;
+    };
+
+    // The texture barrier records of the traced barrier calls, in order; cleared by startTrace.
+    std::span<const TracedTextureBarrier> tracedTextureBarriers();
+
     // A CommandList that logs each member's name, then forwards it. pushRoot logs uploadFrameData then setRoot, the
     // two calls RHI.h's template makes.
     class TracedList

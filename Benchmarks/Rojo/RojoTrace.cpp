@@ -11,6 +11,8 @@ namespace rojoRHI::bench {
     namespace {
         // The frame thread is the only writer; only Null builds, which are never timed, record through the wrappers.
         std::vector<std::string_view> g_calls;
+        std::vector<TracedTextureBarrier> g_textureBarriers;
+        uint32_t g_barrierCalls = 0;
         bool g_tracing = false;
         // Lists per submission unwrapped without an allocation.
         constexpr size_t kStackLists = 16;
@@ -30,6 +32,8 @@ namespace rojoRHI::bench {
     {
         g_calls.clear();
         g_calls.reserve(capacity);
+        g_textureBarriers.clear();
+        g_barrierCalls = 0;
         g_tracing = true;
     }
 
@@ -43,6 +47,12 @@ namespace rojoRHI::bench {
     std::span<const std::string_view> tracedCalls()
     {
         return g_calls;
+    }
+
+    //==================================================================================================================
+    std::span<const TracedTextureBarrier> tracedTextureBarriers()
+    {
+        return g_textureBarriers;
     }
 
     //==================================================================================================================
@@ -258,6 +268,14 @@ namespace rojoRHI::bench {
     void TracedList::barrier(std::span<const GlobalBarrier> globals, std::span<const BufferBarrier> buffers, std::span<const TextureBarrier> textures)
     {
         traceCall("barrier");
+        if (g_tracing)
+        {
+            for (const TextureBarrier& texture : textures)
+            {
+                g_textureBarriers.push_back(TracedTextureBarrier{ .call = g_barrierCalls, .barrier = texture });
+            }
+            ++g_barrierCalls;
+        }
         m_list.barrier(globals, buffers, textures);
     }
 

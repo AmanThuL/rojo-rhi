@@ -91,6 +91,38 @@ class ShaderImportTests(unittest.TestCase):
         errors, _, _ = self.check({"Tests/Smoke.slang": '#include "Tests/Oracle.slang"'})
         self.assertTrue(any("textual includes" in error for error in errors))
 
+    def check_bench(self, sources: dict[str, str]) -> list[str]:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            for name, text in sources.items():
+                path = root / "Shaders" / name
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_text(text, encoding="utf-8")
+            return check_shaders(root)[0]
+
+    def test_bench_struct_copy_matching_the_probe_passes(self) -> None:
+        errors = self.check_bench({
+            "RojoRHI/RojoRHI.slang": "module RojoRHI;",
+            "Bench/BenchFrameProbe.slang": "struct Root { uint a;\n uint b; };",
+            "Bench/BenchCull.slang": "// c\nstruct Root\n{\n    uint a; /* x */\n    uint b;\n};\nstruct Local { float c; };",
+        })
+        self.assertEqual(errors, [])
+
+    def test_bench_struct_copy_that_drifts_from_the_probe_fails(self) -> None:
+        errors = self.check_bench({
+            "RojoRHI/RojoRHI.slang": "module RojoRHI;",
+            "Bench/BenchFrameProbe.slang": "struct Root { uint a; uint b; };",
+            "Bench/BenchCull.slang": "struct Root { uint a; uint c; };",
+        })
+        self.assertTrue(any("struct Root differs" in error for error in errors))
+
+    def test_bench_shaders_without_the_probe_fail(self) -> None:
+        errors = self.check_bench({
+            "RojoRHI/RojoRHI.slang": "module RojoRHI;",
+            "Bench/BenchCull.slang": "struct Root { uint a; };",
+        })
+        self.assertTrue(any("layout probe is missing" in error for error in errors))
+
     def test_an_empty_root_fails(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             argv = ["check_shader_imports.py", "--root", directory]
