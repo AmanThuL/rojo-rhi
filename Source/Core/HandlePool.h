@@ -4,7 +4,7 @@
 //----------------------------------------------------------------------------------------------------------------------
 #pragma once
 
-#include <rojoRHI/Handles.h>
+#include <rojoRHI/RHI.h>
 
 #include "Base/Assert.h"
 

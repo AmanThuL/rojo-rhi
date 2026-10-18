@@ -1,4 +1,4 @@
-#include <rojoRHI/Version.h>
+#include <rojoRHI/RHI.h>
 
 #include <catch2/catch_test_macros.hpp>
 

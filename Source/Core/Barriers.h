@@ -4,9 +4,7 @@
 //----------------------------------------------------------------------------------------------------------------------
 #pragma once
 
-#include <rojoRHI/BufferBarrier.h>
-#include <rojoRHI/GlobalBarrier.h>
-#include <rojoRHI/TextureBarrier.h>
+#include <rojoRHI/RHI.h>
 
 #include "Core/CommandLists.h"
 

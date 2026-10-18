@@ -4,10 +4,7 @@
 //----------------------------------------------------------------------------------------------------------------------
 #pragma once
 
-#include <rojoRHI/Handles.h>
-#include <rojoRHI/QueueType.h>
-#include <rojoRHI/TileMapping.h>
-#include <rojoRHI/TileShape.h>
+#include <rojoRHI/RHI.h>
 
 #include "Core/DeviceCore.h"
 #include "Core/Records.h"

@@ -4,16 +4,7 @@
 //----------------------------------------------------------------------------------------------------------------------
 #pragma once
 
-#include <rojoRHI/Handles.h>
-#include <rojoRHI/IndexRange.h>
-#include <rojoRHI/Placement.h>
-#include <rojoRHI/PlacementRequirements.h>
-#include <rojoRHI/Result.h>
-#include <rojoRHI/SubresourceRange.h>
-#include <rojoRHI/TextureData.h>
-#include <rojoRHI/TextureDesc.h>
-#include <rojoRHI/TextureViewDesc.h>
-#include <rojoRHI/ViewIndex.h>
+#include <rojoRHI/RHI.h>
 
 #include "Core/DeviceCore.h"
 #include "Core/Records.h"

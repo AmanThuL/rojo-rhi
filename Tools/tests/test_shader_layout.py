@@ -72,8 +72,8 @@ class ShaderLayoutTests(unittest.TestCase):
         self.assertNotIn("rojoRHI::DrawIndirectArgs", text)
 
     def test_includes_are_written_in_angle_form(self) -> None:
-        text = self.render({"metal": probe(DRAW)}, includes=["rojoRHI/IndirectArgs.h"])
-        self.assertIn("#include <rojoRHI/IndirectArgs.h>", text)
+        text = self.render({"metal": probe(DRAW)}, includes=["rojoRHI/RHI.h"])
+        self.assertIn("#include <rojoRHI/RHI.h>", text)
 
     def test_targets_that_disagree_on_the_struct_set_are_rejected(self) -> None:
         with self.assertRaisesRegex(layout.LayoutError, "DrawIndirectArgs.*spirv"):

@@ -4,9 +4,7 @@
 //----------------------------------------------------------------------------------------------------------------------
 #pragma once
 
-#include <rojoRHI/Addr.h>
-#include <rojoRHI/Handles.h>
-#include <rojoRHI/IndexType.h>
+#include <rojoRHI/RHI.h>
 
 #include "Core/CommandLists.h"
 

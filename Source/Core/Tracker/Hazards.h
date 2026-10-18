@@ -4,9 +4,7 @@
 //----------------------------------------------------------------------------------------------------------------------
 #pragma once
 
-#include <rojoRHI/Access.h>
-#include <rojoRHI/QueueType.h>
-#include <rojoRHI/Stage.h>
+#include <rojoRHI/RHI.h>
 
 #include "Core/Tracker/Clocks.h"
 

@@ -4,15 +4,7 @@
 //----------------------------------------------------------------------------------------------------------------------
 #pragma once
 
-#include <rojoRHI/Access.h>
-#include <rojoRHI/BufferBarrier.h>
-#include <rojoRHI/GlobalBarrier.h>
-#include <rojoRHI/Handles.h>
-#include <rojoRHI/Layout.h>
-#include <rojoRHI/Stage.h>
-#include <rojoRHI/SubresourceRange.h>
-#include <rojoRHI/TextureBarrier.h>
-#include <rojoRHI/TextureRegion.h>
+#include <rojoRHI/RHI.h>
 
 #include "Core/Tracker/Tiles.h"
 

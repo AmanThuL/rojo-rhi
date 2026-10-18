@@ -4,7 +4,7 @@
 //----------------------------------------------------------------------------------------------------------------------
 #pragma once
 
-#include <rojoRHI/ResourceAccess.h>
+#include <rojoRHI/RHI.h>
 
 #include "Core/CommandLists.h"
 

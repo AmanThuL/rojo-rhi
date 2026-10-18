@@ -4,9 +4,7 @@
 //----------------------------------------------------------------------------------------------------------------------
 #pragma once
 
-#include <rojoRHI/Format.h>
-#include <rojoRHI/FormatCapabilities.h>
-#include <rojoRHI/TextureType.h>
+#include <rojoRHI/RHI.h>
 
 #include <array>
 #include <cstdint>

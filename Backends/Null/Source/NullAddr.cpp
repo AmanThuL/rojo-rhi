@@ -3,7 +3,7 @@
 /// @brief Implements address arithmetic for the Null backend's address encoding.
 //----------------------------------------------------------------------------------------------------------------------
 
-#include <rojoRHI/Addr.h>
+#include <rojoRHI/RHI.h>
 
 #include "Core/Addresses.h"
 #include "Core/Buffers.h"

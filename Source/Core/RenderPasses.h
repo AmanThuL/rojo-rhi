@@ -4,11 +4,7 @@
 //----------------------------------------------------------------------------------------------------------------------
 #pragma once
 
-#include <rojoRHI/Geometry.h>
-#include <rojoRHI/Handles.h>
-#include <rojoRHI/PrimitiveTopology.h>
-#include <rojoRHI/RenderPassDesc.h>
-#include <rojoRHI/Viewport.h>
+#include <rojoRHI/RHI.h>
 
 #include "Core/CommandLists.h"
 

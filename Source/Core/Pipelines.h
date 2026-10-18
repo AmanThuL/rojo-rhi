@@ -4,8 +4,7 @@
 //----------------------------------------------------------------------------------------------------------------------
 #pragma once
 
-#include <rojoRHI/ComputePipelineDesc.h>
-#include <rojoRHI/GraphicsPipelineDesc.h>
+#include <rojoRHI/RHI.h>
 
 #include "Core/DeviceCore.h"
 #include "Core/Records.h"

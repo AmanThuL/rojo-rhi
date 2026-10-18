@@ -5,7 +5,7 @@
 
 #include "Core/Draws.h"
 
-#include <rojoRHI/IndirectArgs.h>
+#include <rojoRHI/RHI.h>
 
 #include "Base/Assert.h"
 #include "Core/Accesses.h"

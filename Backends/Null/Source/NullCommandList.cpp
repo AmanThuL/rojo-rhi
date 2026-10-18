@@ -5,8 +5,7 @@
 
 #include "NullDevice.h"
 
-#include <rojoRHI/CommandList.h>
-#include <rojoRHI/Device.h>
+#include <rojoRHI/RHI.h>
 
 #include "Base/Log.h"
 #include "Core/Accesses.h"

@@ -4,8 +4,7 @@
 //----------------------------------------------------------------------------------------------------------------------
 #pragma once
 
-#include <rojoRHI/FenceValue.h>
-#include <rojoRHI/Handles.h>
+#include <rojoRHI/RHI.h>
 
 #include "Core/DeviceCore.h"
 #include "Core/Records.h"

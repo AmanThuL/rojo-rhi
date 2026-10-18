@@ -147,7 +147,7 @@ class CppCommentTests(unittest.TestCase):
             entries[1],
         )
         self.assertEqual(
-            comments._entry_for_header(root / "Include/rojoRHI/Version.h", entries, root),
+            comments._entry_for_header(root / "Include/rojoRHI/RHI.h", entries, root),
             entries[0],
         )
 

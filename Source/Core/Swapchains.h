@@ -4,14 +4,7 @@
 //----------------------------------------------------------------------------------------------------------------------
 #pragma once
 
-#include <rojoRHI/ColorSpace.h>
-#include <rojoRHI/Format.h>
-#include <rojoRHI/Geometry.h>
-#include <rojoRHI/Handles.h>
-#include <rojoRHI/PresentMode.h>
-#include <rojoRHI/QueueType.h>
-#include <rojoRHI/Swapchain.h>
-#include <rojoRHI/SwapchainDesc.h>
+#include <rojoRHI/RHI.h>
 
 #include <cstdint>
 #include <string>

@@ -5,8 +5,7 @@
 
 #include "Core/Accesses.h"
 
-#include <rojoRHI/BufferUsage.h>
-#include <rojoRHI/TextureUsage.h>
+#include <rojoRHI/RHI.h>
 
 #include "Base/Assert.h"
 #include "Core/Tracker/TrackerLog.h"

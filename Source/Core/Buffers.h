@@ -4,10 +4,7 @@
 //----------------------------------------------------------------------------------------------------------------------
 #pragma once
 
-#include <rojoRHI/BufferDesc.h>
-#include <rojoRHI/Handles.h>
-#include <rojoRHI/Placement.h>
-#include <rojoRHI/PlacementRequirements.h>
+#include <rojoRHI/RHI.h>
 
 #include "Core/DeviceCore.h"
 #include "Core/Records.h"
