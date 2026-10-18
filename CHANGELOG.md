@@ -136,7 +136,7 @@
 - The v2 public interface is the single header `<rojoRHI/RHI.h>`, in sections by API-reference
   chapter; the 77 per-type headers it used to include, `<rojoRHI/Addr.h>` and
   `<rojoRHI/IndirectArgs.h>` among them, are gone, and an include of one of them becomes an include
-  of `<rojoRHI/RHI.h>`. The declarations are unchanged. The v1 headers under `Legacy/` keep their
-  own layout.
+  of `<rojoRHI/RHI.h>`. The declarations are unchanged; the header keeps only short notes, and the
+  API reference holds the documentation. The v1 headers under `Legacy/` keep their own layout.
 - ADR 0022 supersedes ADR 0015: the version macros are defined in `<rojoRHI/RHI.h>`, and the
   rest of the versioning decision is unchanged.
