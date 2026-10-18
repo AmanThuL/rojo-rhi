@@ -163,7 +163,7 @@ leaving its rows `costly`, and moved `drawId` into the base instance, making two
 | [`SwapchainDesc`](11-presentation.md#swapchaindesc) | 11 | cheap | native | cheap |
 | [`Device::createSwapchain`](11-presentation.md#devicecreateswapchain) | 11 | native | native | native |
 | [`Swapchain::resize`](11-presentation.md#swapchainresize) | 11 | native | native | native |
-| [`Swapchain::acquire`](11-presentation.md#swapchainacquire) | 11 | native | native | native |
+| [`Swapchain::acquire`](11-presentation.md#swapchainacquire) | 11 | cheap | native | native |
 | [`Queue::present`](11-presentation.md#queuepresent) | 11 | native | native | native |
 | [`UpscalerKind`](12-upscaling.md#upscalerkind) | 12 | native | native | native |
 | [`UpscalerFlags`](12-upscaling.md#upscalerflags) | 12 | native | native | native |

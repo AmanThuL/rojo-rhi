@@ -85,6 +85,8 @@ namespace rojoRHI {
             // The signals are recorded before the queue can reach them, so a value completedValue observes is never above
             // the greatest value submitted for signal (VU-rojo-queue-0008 reads both).
             core::recordSignals(core, signal, core::SignalCompletion::Later);
+            // What swapchain creation and retirement left for the graphics queue is applied before any command buffer commits.
+            metal4::flushPresentation(queue);
             // checkSubmit has accepted every fence, so their events are read without a lock.
             for (const FenceValue& entry : wait)
             {
@@ -119,10 +121,10 @@ namespace rojoRHI {
     }
 
     //==================================================================================================================
-    void Queue::present([[maybe_unused]] Swapchain swapchain)
+    void Queue::present(Swapchain swapchain)
     {
-        QueueImpl::of(*this);
-        metal4::notImplemented("Queue::present");
+        QueueImpl& queue = QueueImpl::of(*this);
+        metal4::presentSwapchain(queue, SwapchainImpl::of(swapchain));
     }
 
     //==================================================================================================================

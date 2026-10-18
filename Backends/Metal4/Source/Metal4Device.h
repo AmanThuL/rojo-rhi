@@ -14,8 +14,10 @@
 #include "Metal4Encoders.h"
 #include "Metal4Kernels.h"
 #include "Metal4ListState.h"
+#include "Metal4Presentation.h"
 #include "Metal4Residency.h"
 #include "Metal4Stager.h"
+#include "Metal4Swapchain.h"
 
 #include "CommitTiming.h"
 
@@ -80,6 +82,9 @@ namespace rojoRHI {
     struct SwapchainImpl
     {
         core::SwapchainCore core; ///< The description, extent and image state the presentation rules read.
+        /// The layer and its residency set, retained until the swapchain is freed, the drawable of the acquired image and the
+        /// pending presents shared with the presented handlers.
+        metal4::SwapchainNative native;
 
         /// Returns the state `swapchain` wraps; checks VU-rojo-core-0004.
         static SwapchainImpl& of(Swapchain swapchain);
@@ -141,6 +146,7 @@ namespace rojoRHI {
         MTL::Buffer* samplerTable = nullptr;               ///< The `MTL::ResourceID` of each sampler slot, `maxSamplers` entries, Shared.
         std::string adapterName;                           ///< The storage `Capabilities::adapterName` views.
         std::string floorName;                             ///< The storage `Capabilities::floorName` views.
+        metal4::Presentation presentation;                 ///< The swapchains and what they leave to the graphics queue.
 
         /// Returns the state `device` wraps; checks VU-rojo-core-0004.
         static DeviceImpl& of(Device device);

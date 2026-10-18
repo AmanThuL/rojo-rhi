@@ -47,8 +47,8 @@ the formats listed, named in [formats and limits](15-formats-and-limits.md).
 | | Metal 4 | D3D12 | Vulkan |
 |---|---|---|---|
 | `SRGB` | `CA::MetalLayer::setColorspace` with `kCGColorSpaceSRGB` | `DXGI_COLOR_SPACE_RGB_FULL_G22_NONE_P709` | `VK_COLOR_SPACE_SRGB_NONLINEAR_KHR` |
-| `ExtendedLinear` | `kCGColorSpaceExtendedLinearSRGB` with the layer's `wantsExtendedDynamicRangeContent` (metal-cpp wrapper unverified) | `DXGI_COLOR_SPACE_RGB_FULL_G10_NONE_P709` (scRGB) | `VK_COLOR_SPACE_EXTENDED_SRGB_LINEAR_EXT` |
-| `HDR10` | `kCGColorSpaceITUR_2100_PQ` with the layer's `wantsExtendedDynamicRangeContent` (metal-cpp wrapper unverified) | `DXGI_COLOR_SPACE_RGB_FULL_G2084_NONE_P2020` | `VK_COLOR_SPACE_HDR10_ST2084_EXT` |
+| `ExtendedLinear` | `kCGColorSpaceExtendedLinearSRGB` with the layer's `wantsExtendedDynamicRangeContent` (set through the Objective-C runtime: metal-cpp has no wrapper) | `DXGI_COLOR_SPACE_RGB_FULL_G10_NONE_P709` (scRGB) | `VK_COLOR_SPACE_EXTENDED_SRGB_LINEAR_EXT` |
+| `HDR10` | `kCGColorSpaceITUR_2100_PQ` with the layer's `wantsExtendedDynamicRangeContent` (set through the Objective-C runtime: metal-cpp has no wrapper) | `DXGI_COLOR_SPACE_RGB_FULL_G2084_NONE_P2020` | `VK_COLOR_SPACE_HDR10_ST2084_EXT` |
 | Cost | native | native: set through `SetColorSpace1` after `CheckColorSpaceSupport` | native: the non-sRGB spaces need `VK_EXT_swapchain_colorspace` |
 
 ### `PresentMode`
@@ -111,7 +111,7 @@ struct SwapchainDesc {
 |---|---|---|---|
 | Surface | `CA::MetalLayer` | `HWND` | `VkSurfaceKHR` |
 | Image count | `CA::MetalLayer::setMaximumDrawableCount` | `BufferCount` | `minImageCount` |
-| Latency | the backend counts pending presents through drawable presented handlers | `SetMaximumFrameLatency` | `vkWaitForPresentKHR`, which needs `VK_KHR_present_wait` |
+| Latency | the backend counts pending presents: `Queue::present` adds one, and the presented handler it adds with `MTL::Drawable::addPresentedHandler`, which runs once the drawable is displayed or dropped, takes it away | `SetMaximumFrameLatency` | `vkWaitForPresentKHR`, which needs `VK_KHR_present_wait` |
 | Cost | cheap: `maxLatency` is enforced by the backend, since a layer has no latency setting | native | cheap: `maxLatency` is enforced by the backend through present waits |
 
 ### `Device::createSwapchain`
@@ -131,7 +131,7 @@ Creation is free-threaded.
 #### Mapping
 | | Metal 4 | D3D12 | Vulkan |
 |---|---|---|---|
-| Call | configure the `CA::MetalLayer`: `setDevice`, `setPixelFormat`, `setColorspace`, `setMaximumDrawableCount`, `setDisplaySyncEnabled`, `setFramebufferOnly`, and `wantsExtendedDynamicRangeContent` (metal-cpp wrapper unverified) | `IDXGIFactory2::CreateSwapChainForHwnd` with `DXGI_SWAP_EFFECT_FLIP_DISCARD` and `DXGI_SWAP_CHAIN_FLAG_FRAME_LATENCY_WAITABLE_OBJECT`, then `SetMaximumFrameLatency` and `SetColorSpace1` | `vkCreateSwapchainKHR` |
+| Call | configure the `CA::MetalLayer`: `setDevice`, `setPixelFormat`, `setColorspace`, `setMaximumDrawableCount`, `setDisplaySyncEnabled`, `setFramebufferOnly`, `setAllowsNextDrawableTimeout(true)`, and `wantsExtendedDynamicRangeContent` (set through the Objective-C runtime: metal-cpp has no wrapper) | `IDXGIFactory2::CreateSwapChainForHwnd` with `DXGI_SWAP_EFFECT_FLIP_DISCARD` and `DXGI_SWAP_CHAIN_FLAG_FRAME_LATENCY_WAITABLE_OBJECT`, then `SetMaximumFrameLatency` and `SetColorSpace1` | `vkCreateSwapchainKHR` |
 | Cost | native | native | native |
 
 ### `Swapchain::resize`
@@ -153,7 +153,7 @@ presentation while the window has a zero extent.
 #### Mapping
 | | Metal 4 | D3D12 | Vulkan |
 |---|---|---|---|
-| Call | `CA::MetalLayer::setDrawableSize` after the swapchain's drawables retire | `IDXGISwapChain::ResizeBuffers` after the swapchain's images retire | swapchain re-creation with `oldSwapchain` |
+| Call | `CA::MetalLayer::setDrawableSize` after waiting on the frame event of the last ended frame, which the graphics queue signals after every list that used the images | `IDXGISwapChain::ResizeBuffers` after the swapchain's images retire | swapchain re-creation with `oldSwapchain` |
 | Cost | native | native | native |
 
 ### `Swapchain::acquire`
@@ -174,8 +174,9 @@ while a D3D12 back buffer is in `D3D12_BARRIER_LAYOUT_PRESENT` and Metal 4 has n
 
 The image may be used only as a color attachment and in texture barriers. Its handle stays valid
 until `Queue::present` on this swapchain; afterwards it is stale and fails the generation check.
-On Metal 4 the call also makes the graphics queue wait for the drawable, so every later submission
-to that queue is ordered after the display releases it.
+On Metal 4 the next `Queue::submit` or `Queue::present` on the graphics queue waits for the
+drawable, so every submission to that queue after the call is ordered after the display releases
+it.
 
 #### Valid usage
 - `VU-rojo-present-0010` A frame is open: the call comes between `Device::beginFrame` and
@@ -189,8 +190,8 @@ to that queue is ordered after the display releases it.
 #### Mapping
 | | Metal 4 | D3D12 | Vulkan |
 |---|---|---|---|
-| Call | `CA::MetalLayer::nextDrawable`, then `MTL4::CommandQueue::wait` with the drawable on the graphics queue | wait on `GetFrameLatencyWaitableObject`, then `GetCurrentBackBufferIndex` | `vkAcquireNextImageKHR` signalling a binary semaphore |
-| Cost | native | native | native: the semaphore joins the next graphics submission |
+| Call | `CA::MetalLayer::nextDrawable`; the next `Queue::submit` or `Queue::present` on the graphics queue calls `MTL4::CommandQueue::wait` with the drawable | wait on `GetFrameLatencyWaitableObject`, then `GetCurrentBackBufferIndex` | `vkAcquireNextImageKHR` signalling a binary semaphore |
+| Cost | cheap: the backend enforces `maxLatency` (one load below the limit, a wait at it) and files the drawable for the graphics queue's wait; one deadline of one second from the call bounds the latency wait, and `nextDrawable` keeps Core Animation's own one-second timeout, which hand-written code pays as well, so a null result takes about two seconds at worst; a swapchain of zero extent returns null without calling `nextDrawable` | native | native: the semaphore joins the next graphics submission |
 
 ### `Queue::present`
 ```cpp

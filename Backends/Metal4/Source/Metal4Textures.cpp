@@ -58,8 +58,9 @@ namespace rojoRHI {
             }
             DeviceImpl& impl = *static_cast<DeviceImpl*>(context);
             const AutoreleasePool pool;
-            // A placed texture never joined the set: its heap did.
-            if (record.heap.bits == 0)
+            // A placed texture never joined the set: its heap did. A swapchain image is a drawable's texture, which the layer's
+            // set holds; its record holds one reference.
+            if (record.heap.bits == 0 && !record.swapchainImage)
             {
                 impl.residency.remove(texture);
             }

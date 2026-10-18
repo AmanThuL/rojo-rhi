@@ -93,9 +93,10 @@ namespace rojoRHI {
         }
 
         //==============================================================================================================
-        /// Returns the command lists of a reused frame slot to its pool, each list's allocator reset, and releases the events of
-        /// destroyed fences every queue has passed. The frame wait before it has proven the slot's work complete, the compute
-        /// and copy work included, which the frame's graphics work joins.
+        /// Returns the command lists of a reused frame slot to its pool, each list's allocator reset, frees the swapchains
+        /// destroyed in the slot's frames, and releases the events of destroyed fences every queue has passed. The frame wait
+        /// before it has proven the slot's work complete, the compute and copy work included, which the frame's graphics work
+        /// joins.
         void reuseSlot(void* context, uint32_t slot)
         {
             DeviceImpl& impl = *static_cast<DeviceImpl*>(context);
@@ -109,6 +110,7 @@ namespace rojoRHI {
                 }
                 pool.used = 0;
             }
+            metal4::freeSlotSwapchains(impl, slot);
             metal4::releasePassedFences(impl);
         }
 
@@ -342,6 +344,7 @@ namespace rojoRHI {
         auto impl = std::make_unique<DeviceImpl>(desc);
         impl->device = device;
         reportCapabilities(*impl);
+        impl->core.setSurfaceCheck(metal4::isMetalLayer);
         if (Result<void> created = createNative(*impl); !created)
         {
             releaseNative(*impl);
@@ -386,6 +389,7 @@ namespace rojoRHI {
                     list->state.release();
                 }
             }
+            metal4::releaseSwapchains(impl);
             releaseNative(impl);
         }
         delete &impl;

@@ -47,6 +47,8 @@ namespace rojoRHI::test {
         {
             const metal4::AutoreleasePool pool;
             g_layers[index] = CA::MetalLayer::layer()->retain();
+            // A layer outside a window has no drawable size; each test surface starts with one, as a Null surface has.
+            g_layers[index]->setDrawableSize(CGSize{ 256, 256 });
         }
         return g_layers[index];
     }
