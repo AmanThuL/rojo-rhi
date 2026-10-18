@@ -360,7 +360,7 @@ namespace rojoRHI::test {
 #if defined(_WIN32)
             // A crash must end the child without a modal dialog that would hang a runner.
             _set_abort_behavior(0, _WRITE_ABORT_MSG | _CALL_REPORTFAULT);
-            for (const int kind : { _CRT_WARN, _CRT_ERROR, _CRT_ASSERT })
+            for ([[maybe_unused]] const int kind : { _CRT_WARN, _CRT_ERROR, _CRT_ASSERT })
             {
                 _CrtSetReportMode(kind, _CRTDBG_MODE_FILE);
                 _CrtSetReportFile(kind, _CRTDBG_FILE_STDERR);
