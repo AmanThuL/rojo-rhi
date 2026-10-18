@@ -35,7 +35,9 @@ order and `present` takes the held image back. `maxLatency` is stored and never 
 
 Images are fresh texture records per acquire. A Null swapchain holds no standing image textures:
 `acquire` allocates a `TextureRecord` marked `swapchainImage` with the usage and format chapter 11
-gives it, and `present` releases it through the deferred path. The handle an earlier acquire
+gives it, and `present` releases it through the deferred path. `core::acquireImage` takes the
+image's native payload and publishes it before the handle exists; the Null backend passes a null
+one. The handle an earlier acquire
 returned is therefore stale once the image is presented, as chapter 11 says, and `resize` has
 nothing to retire because it requires that no image is held (`VU-rojo-present-0008`). A Presented
 state collapses into Available, since a Null present completes inside the call, as a submit signals
@@ -76,7 +78,9 @@ through `DeviceCore::setTileExtents`; `Sparse.cpp` derives the rest from it. A t
 Block-compressed formats take the standard shape of their block size in blocks, `D32FloatS8` tiles
 as 64 bits per texel, and a one-dimensional texture tiles as a row. The table holds single-sample
 shapes only, because `VU-rojo-texture-0008` forbids Sparse with more samples. `mipTailFirst` and
-`mipTailBytes` follow from the extent.
+`mipTailBytes` follow from the extent. A backend that measures a texture's shape at creation stores
+it in the record's `tiles` instead, and `textureTileShape` returns that shape unchanged; the Null
+backend stores none.
 
 `Queue::mapTiles` keeps each resource's mapping in its record (`TextureRecord::mapped`,
 `BufferRecord::mapped`) and the count of mapped tiles in `HeapRecord::mappedTiles`, which

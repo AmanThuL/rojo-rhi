@@ -84,7 +84,11 @@ namespace rojoRHI::core {
         bool swapchainImage = false;             ///< True for an image `Swapchain::acquire` returned (VU-rojo-present-0012, 0013, VU-rojo-sync-0005).
         ListReferences refs = {};                ///< The unsubmitted lists that reference the texture.
         TileMap mapped = {};                     ///< The mapped tiles of a Sparse texture; empty for any other texture.
-        void* native = nullptr;                  ///< The backend's payload for the object; the core never reads it.
+        /// The tile shape of a Sparse texture its backend measured at creation; `bytes` zero when the core computes it from the
+        /// registered tile extents. The backend sets it before `allocate` and it never changes while the texture lives, because
+        /// Release reads it without the pool's lock (ADR 0020).
+        TileShape tiles = {};
+        void* native = nullptr; ///< The backend's payload for the object; the core never reads it.
     };
 
     /// The shader stage an entry point of a library is compiled for.

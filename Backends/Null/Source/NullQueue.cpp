@@ -58,6 +58,8 @@ namespace rojoRHI {
     {
         const QueueImpl& queue = QueueImpl::of(*this);
         core::presentImage(queue.device->core, queue.type, SwapchainImpl::of(swapchain).core);
+        // The Null backend displays nothing, so the present completes during the call; it counts as one native present.
+        core::DeviceCounts::add(queue.device->core.counts().nativeSubmitCalls);
     }
 
     //==================================================================================================================
@@ -65,5 +67,7 @@ namespace rojoRHI {
     {
         const QueueImpl& queue = QueueImpl::of(*this);
         core::mapTiles(queue.device->core, queue.type, mappings);
+        // Every call counts as one native mapping update, as a native queue takes the whole list in one call.
+        core::DeviceCounts::add(queue.device->core.counts().nativeSubmitCalls);
     }
 } // namespace rojoRHI

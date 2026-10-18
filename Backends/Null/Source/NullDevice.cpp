@@ -616,7 +616,8 @@ namespace rojoRHI {
     //==================================================================================================================
     Texture Swapchain::acquire()
     {
-        return core::acquireImage(SwapchainImpl::of(*this).core);
+        // A Null image has no native object, so its texture holds a null payload.
+        return core::acquireImage(SwapchainImpl::of(*this).core, nullptr);
     }
 
     //==================================================================================================================

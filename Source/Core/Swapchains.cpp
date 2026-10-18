@@ -89,10 +89,9 @@ namespace rojoRHI::core {
     }
 
     //==================================================================================================================
-    Texture acquireImage(SwapchainCore& swapchain)
+    void checkAcquireImage([[maybe_unused]] const SwapchainCore& swapchain)
     {
-        DeviceCore& core = *swapchain.device;
-        ROJORHI_VU(core.frameOpen(), "VU-rojo-present-0010", "acquire was called on the swapchain \"{}\" with no frame open", swapchain.label);
+        ROJORHI_VU(swapchain.device->frameOpen(), "VU-rojo-present-0010", "acquire was called on the swapchain \"{}\" with no frame open", swapchain.label);
         ROJORHI_VU(
             swapchain.acquired == SwapchainCore::kNoImage,
             "VU-rojo-present-0011",
@@ -100,6 +99,13 @@ namespace rojoRHI::core {
             swapchain.label,
             swapchain.acquiredFrame
         );
+    }
+
+    //==================================================================================================================
+    Texture acquireImage(SwapchainCore& swapchain, void* native)
+    {
+        DeviceCore& core = *swapchain.device;
+        checkAcquireImage(swapchain);
         const uint32_t index = swapchain.next;
         SwapchainImage& image = swapchain.images[index];
         ROJORHI_INTERNAL_ASSERT(image.state == ImageState::Available, "a swapchain with no image acquired holds an image that is not available");
@@ -110,6 +116,8 @@ namespace rojoRHI::core {
         record.extent = { swapchain.extent.width, swapchain.extent.height, 1 };
         record.usage = TextureUsage::RenderTarget;
         record.swapchainImage = true;
+        // The pool publishes the payload before the handle exists, so a lock-free `native` read never sees it change.
+        record.native = native;
         // The image is a native memory object for the counters but no native creation, so the pool does not count it itself.
         image.texture = core.pool<Texture>().allocate(std::move(record), false);
         if (image.texture.bits == 0)
@@ -153,9 +161,8 @@ namespace rojoRHI::core {
         // The image is judged before its release stops the tracker following it.
         checkPresentLayout(core, swapchain.images[swapchain.acquired].texture);
         // With VU-rojo-present-0016 compiled out, presenting with no acquired image is undefined in Release, as misuse is elsewhere in the core.
-        // The Null backend displays nothing, so the present completes during the call and the image is free again.
+        // The image's texture retires through the frame, so a backend's native present may still read it after this returns.
         releaseAcquired(core, swapchain);
-        DeviceCounts::add(core.counts().nativeSubmitCalls);
     }
 
     //==================================================================================================================

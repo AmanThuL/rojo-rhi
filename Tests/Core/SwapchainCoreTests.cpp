@@ -174,6 +174,44 @@ TEST_CASE("an image acquired again after a present is a different texture of the
 }
 
 //======================================================================================================================
+TEST_CASE("an acquired image's texture carries the backend's payload from its allocation", "[core]")
+{
+    Device device = *createDevice();
+    Swapchain swapchain = makeSwapchain(device);
+    int payload = 0;
+    device.beginFrame();
+    const Texture image = core::acquireImage(core::coreOf(swapchain), &payload);
+    CHECK(core::coreOf(device).pool<Texture>().native(image) == &payload);
+    device.queue(QueueType::Graphics).present(swapchain);
+    device.endFrame();
+    destroyDevice(device);
+}
+
+//======================================================================================================================
+TEST_CASE("checkAcquireImage refuses no valid acquire and leaves the swapchain unchanged", "[core]")
+{
+    Device device = *createDevice();
+    Swapchain swapchain = makeSwapchain(device);
+    acquireAndPresent(device, swapchain);
+    device.beginFrame();
+    const core::SwapchainCore& record = core::coreOf(swapchain);
+    const core::SwapchainCore before = record;
+    core::checkAcquireImage(record);
+    CHECK(record.acquired == before.acquired);
+    CHECK(record.next == before.next);
+    CHECK(record.acquiredFrame == before.acquiredFrame);
+    REQUIRE(record.images.size() == before.images.size());
+    for (size_t index = 0; index < record.images.size(); ++index)
+    {
+        CHECK(record.images[index].state == before.images[index].state);
+        CHECK(record.images[index].texture.bits == before.images[index].texture.bits);
+    }
+    CHECK(core::coreOf(device).pool<Texture>().liveCount() == 0);
+    device.endFrame();
+    destroyDevice(device);
+}
+
+//======================================================================================================================
 TEST_CASE("VU-rojo-present-0002 a surface the backend's predicate rejects creates a swapchain", "[core][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-present-0002", [] {
