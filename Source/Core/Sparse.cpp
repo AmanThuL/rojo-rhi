@@ -377,6 +377,14 @@ namespace rojoRHI::core {
     //==================================================================================================================
     TileShape textureTileShape(const DeviceCore& core, const TextureRecord& record)
     {
+        if (record.tiles.bytes != 0)
+        {
+            ROJORHI_INTERNAL_ASSERT(
+                record.tiles.bytes == kTileBytes && record.tiles.mipTailFirst <= record.mips,
+                "a measured tile shape has a tile other than 64 KiB or a tail past the last mip"
+            );
+            return record.tiles;
+        }
         const TileExtent extent = core.tileExtent(record.format, record.type);
         TileShape shape;
         shape.width = extent.width;
@@ -427,7 +435,6 @@ namespace rojoRHI::core {
     {
         checkMappings(core, mappings);
         orderMappings(core, queue, mappings);
-        DeviceCounts::add(core.counts().nativeSubmitCalls);
         std::map<uint64_t, int64_t> deltas;
         for (const TileMapping& mapping : mappings)
         {

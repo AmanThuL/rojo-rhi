@@ -62,12 +62,18 @@ namespace rojoRHI::core {
     /// `DeviceCore::setSurfaceCheck`; a backend that registered none accepts every surface.
     void checkSurface(const DeviceCore& core, const void* surface);
 
-    /// Acquires the next image of `swapchain`: checks VU-rojo-present-0010 and 0011, takes the next available image, stores a
-    /// `RenderTarget` texture record of the swapchain's format and extent for it and returns the handle.
-    Texture acquireImage(SwapchainCore& swapchain);
+    /// Checks that `swapchain` can acquire an image (VU-rojo-present-0010 and 0011) and changes nothing.
+    void checkAcquireImage(const SwapchainCore& swapchain);
+
+    /// Acquires the next image of `swapchain`: runs `checkAcquireImage`, takes the next available image, stores a `RenderTarget`
+    /// texture record of the swapchain's format and extent for it and returns the handle. `native` is the backend's payload for
+    /// the image; it is published with the handle, before the handle exists, and never changes while the handle is live. A
+    /// backend whose native acquire can fail calls `checkAcquireImage` first, then its native acquire, then this.
+    Texture acquireImage(SwapchainCore& swapchain, void* native);
 
     /// Presents the acquired image of `swapchain` on a queue of `type` of device `core`: checks VU-rojo-core-0005,
-    /// VU-rojo-present-0015, 0016 and 0017, then releases the image's texture, deferred, and makes the image available.
+    /// VU-rojo-present-0015, 0016 and 0017, then releases the image's texture, deferred, and makes the image available. It
+    /// counts no native call; the backend counts the native calls its present makes.
     void presentImage(DeviceCore& core, QueueType type, SwapchainCore& swapchain);
 
     /// Sets the extent of `swapchain` to `extent`: checks VU-rojo-present-0007 to 0009. The images of the old extent exist

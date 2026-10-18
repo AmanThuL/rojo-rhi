@@ -5,6 +5,9 @@
 #include <rojoRHI/RHI.h>
 
 #include "Core/DeviceCore.h"
+#include "Core/Records.h"
+#include "Core/Sparse.h"
+#include "Support/Death.h"
 #include "Support/SparseKit.h"
 
 #include <catch2/catch_test_macros.hpp>
@@ -31,6 +34,41 @@ namespace {
     size_t tilesOf(Device device, Buffer buffer)
     {
         return core::coreOf(device).pool<Buffer>().lookup(buffer).record->mapped.size();
+    }
+
+    /// A tile shape unlike the standard one of `measuredTexture`: its tail starts a mip earlier and spans two tiles, as a 3D
+    /// texture's tail can on a backend that measures it.
+    constexpr TileShape kMeasuredShape = { .width = 32, .height = 32, .depth = 16, .bytes = 65536, .mipTailFirst = 2, .mipTailBytes = 2 * 65536 };
+
+    //==================================================================================================================
+    /// Creates a sparse 3D texture on `device` and records `kMeasuredShape` as the shape its backend measured.
+    Texture measuredTexture(Device device)
+    {
+        const Texture texture = *device.createTexture(
+            TextureDesc{ .type = TextureType::Tex3D,
+                         .format = Format::RGBA8Unorm,
+                         .extent = { 128, 128, 64 },
+                         .mips = 4,
+                         .usage = TextureUsage::Sampled | TextureUsage::Sparse,
+                         .label = "core.sparse.measured" }
+        );
+        // The test stands in for the backend after creation; nothing reads the record concurrently here.
+        core::coreOf(device).pool<Texture>().update(texture, [](core::TextureRecord& record) { record.tiles = kMeasuredShape; });
+        return texture;
+    }
+
+    //==================================================================================================================
+    /// Returns a mapping of the mip tail of `texture` onto `heap` at `heapOffset`.
+    TileMapping measuredTail(Texture texture, Heap heap, uint64_t heapOffset)
+    {
+        return TileMapping{ .texture = texture, .region = { .mip = kMeasuredShape.mipTailFirst }, .mipTail = true, .heap = heap, .heapOffset = heapOffset };
+    }
+
+    //==================================================================================================================
+    bool sameShape(const TileShape& left, const TileShape& right)
+    {
+        return left.width == right.width && left.height == right.height && left.depth == right.depth && left.bytes == right.bytes &&
+               left.mipTailFirst == right.mipTailFirst && left.mipTailBytes == right.mipTailBytes;
     }
 } // namespace
 
@@ -109,4 +147,29 @@ TEST_CASE("a partial unmap leaves the other tiles mapped", "[core]")
     CHECK(tilesOf(kit.device, kit.texture) == before - 1);
     CHECK(mappedFrom(kit.device, kit.heap) == before - 1);
     destroyDevice(kit.device);
+}
+
+//======================================================================================================================
+TEST_CASE("a texture record with a measured tile shape reports it unchanged", "[core]")
+{
+    Device device = *createDevice();
+    const Texture texture = measuredTexture(device);
+    CHECK(sameShape(core::tileShape(core::coreOf(device), texture), kMeasuredShape));
+    // A heap of exactly the measured tail holds it.
+    const Heap heap = *device.createHeap({ .size = kMeasuredShape.mipTailBytes, .memory = Memory::Gpu });
+    device.queue(QueueType::Graphics).mapTiles(std::array{ measuredTail(texture, heap, 0) });
+    CHECK(tilesOf(device, texture) == 1);
+    CHECK(mappedFrom(device, heap) == 1);
+    destroyDevice(device);
+}
+
+//======================================================================================================================
+TEST_CASE("VU-rojo-sparse-0008 a measured tail of two tiles does not fit the last tile of a heap", "[core][death]")
+{
+    ROJORHI_EXPECT_DEATH("VU-rojo-sparse-0008", [] {
+        Device device = *createDevice();
+        const Texture texture = measuredTexture(device);
+        const Heap heap = *device.createHeap({ .size = kMeasuredShape.mipTailBytes, .memory = Memory::Gpu });
+        device.queue(QueueType::Graphics).mapTiles(std::array{ measuredTail(texture, heap, kMeasuredShape.bytes) });
+    });
 }

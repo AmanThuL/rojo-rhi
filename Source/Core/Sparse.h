@@ -15,8 +15,9 @@ namespace rojoRHI::core {
     /// The heap bytes of one tile of every sparse resource: the fixed 64 KiB tile chapter 13 names for Metal 4 and D3D12.
     inline constexpr uint32_t kTileBytes = 65536;
 
-    /// Returns the tile shape of the texture `record` describes, from the extents the backend registered with
-    /// `DeviceCore::setTileExtents`. It checks nothing; `tileShape` is the checked entry.
+    /// Returns the tile shape of the texture `record` describes: `record.tiles` when its backend measured one at creation,
+    /// otherwise one computed from the extents the backend registered with `DeviceCore::setTileExtents`, with a tail of
+    /// `kTileBytes` when the texture has one. It checks nothing; `tileShape` is the checked entry.
     TileShape textureTileShape(const DeviceCore& core, const TextureRecord& record);
 
     /// Returns the tile shape of a sparse buffer: `kTileBytes` wide, one row and one slice, with no mip tail.
@@ -33,7 +34,7 @@ namespace rojoRHI::core {
     /// mapped-tile count of each heap. Debug builds first check every element (VU-rojo-present-0012, VU-rojo-sparse-0002 to
     /// 0012; VU-rojo-core-0001 to 0003 for the handles); an invalid element reports its own rule, whatever the call length.
     /// Then a validating device's tracker judges the changes against work on other queues (VU-rojo-sparse-0013). Release
-    /// applies without checking.
+    /// applies without checking. It counts no native call; the backend counts the native calls its mapping makes.
     void mapTiles(DeviceCore& core, QueueType queue, std::span<const TileMapping> mappings);
 
     /// Drops the mapping `tiles` of a sparse resource that was destroyed: each tile no longer counts against its heap.
