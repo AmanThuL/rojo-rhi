@@ -49,6 +49,8 @@ jobs:
           path: ThirdParty
           key: ${{ runner.os }}-thirdparty-${{ hashFiles('xmake/setup.lua') }}
       - run: xmake setup
+      # The metal4 backend compiles its own kernels, so its build needs the Metal toolchain some hosted images lack.
+      - run: xcrun metal --version >/dev/null 2>&1 || xcodebuild -downloadComponent MetalToolchain
       - run: xmake f -m debug -y --rojorhi_backend=metal4 --ccache=n
       - run: xmake build RojoRHITests
       # Lists the cases of each tag and requires a non-zero count; no GPU case runs in this job.

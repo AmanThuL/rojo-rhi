@@ -3,9 +3,10 @@
 -- it and nothing else, so project settings, language level and package requires stay declared once
 -- per root rather than once per include.
 --
--- The shader rules the test targets opt into are part of that interface, so this file includes them
--- rather than leaving a host to remember more includes.
-includes("shaders.lua", "slang.lua", "metal.lua")
+-- The shader rules the test targets opt into, and the rule that compiles the Metal 4 backend's own
+-- kernels, are part of that interface, so this file includes them rather than leaving a host to
+-- remember more includes.
+includes("shaders.lua", "slang.lua", "metal.lua", "kernels.lua")
 
 -- Two values a host may set as plain globals before the include, because xmake evaluates an
 -- included description script in the same interpreter as the including one:
@@ -141,6 +142,9 @@ target("RojoRHI")
     add_files(path.join(component, "Source/**.cpp"))
     if is_config("rojorhi_backend", "metal4") then
         add_files(path.join(component, "Backends/Metal4/Source/*.cpp"))
+        -- The backend's kernels, compiled into a library its sources embed; only this backend needs the Metal toolchain.
+        add_rules("rojorhi.metal4_kernels")
+        add_files(path.join(component, "Backends/Metal4/Kernels/*.metal"))
         add_includedirs(path.join(thirdparty, "metal-cpp"))
         if is_plat("macosx") then
             add_deps("RojoRHIMetalCpp")
@@ -171,14 +175,13 @@ target("RojoRHITests")
         local metal4_pending = {
             "AliasingDeathTests.cpp", "AliasingTests.cpp", "BarrierDeathTests.cpp", "BarrierTests.cpp",
             "CopyDeathTests.cpp", "CopyTests.cpp", "CounterTests.cpp", "DiagnosticsDeathTests.cpp",
-            "DiagnosticsTests.cpp", "DrawDeathTests.cpp", "DrawTests.cpp", "FrameJoinDeathTests.cpp",
-            "FrameJoinTests.cpp", "HandoffDeathTests.cpp", "HandoffTests.cpp", "HazardDeathTests.cpp",
-            "HazardTests.cpp", "IndirectHazardDeathTests.cpp", "IndirectHazardTests.cpp", "LifetimeDeathTests.cpp",
-            "LifetimeTests.cpp", "PipelineDeathTests.cpp", "PipelineTests.cpp", "QueueHazardDeathTests.cpp",
-            "QueueHazardTests.cpp", "RenderPassDeathTests.cpp", "RenderPassTests.cpp", "SparseDeathTests.cpp",
-            "SparseOrderDeathTests.cpp", "SparseOrderTests.cpp", "SparseTests.cpp", "SwapchainDeathTests.cpp",
-            "SwapchainTests.cpp", "TrackerDeathTests.cpp", "TrackerTests.cpp", "UpscaleDeathTests.cpp",
-            "UpscalerTests.cpp",
+            "DiagnosticsTests.cpp", "DrawDeathTests.cpp", "DrawTests.cpp", "HandoffDeathTests.cpp",
+            "HandoffTests.cpp", "HazardDeathTests.cpp", "HazardTests.cpp", "IndirectHazardDeathTests.cpp",
+            "IndirectHazardTests.cpp", "LifetimeDeathTests.cpp", "LifetimeTests.cpp", "PipelineDeathTests.cpp",
+            "PipelineTests.cpp", "RenderPassDeathTests.cpp", "RenderPassTests.cpp",
+            "SparseDeathTests.cpp", "SparseOrderDeathTests.cpp", "SparseOrderTests.cpp", "SparseTests.cpp",
+            "SwapchainDeathTests.cpp", "SwapchainTests.cpp", "TrackerDeathTests.cpp", "TrackerTests.cpp",
+            "UpscaleDeathTests.cpp", "UpscalerTests.cpp",
         }
         local pending = {}
         for _, name in ipairs(metal4_pending) do

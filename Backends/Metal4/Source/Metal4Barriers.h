@@ -25,7 +25,8 @@ namespace rojoRHI::metal4 {
     /// What a list still owes of its barriers, and what the open encoder's opening barrier covered. A pending barrier waits at
     /// queue level for its source stages before the destination stages it still names; each encoder that opens emits the part
     /// of it that falls on its own stages, and a closing encoder emits the rest at `CommandList::end`. An encoder-level barrier
-    /// is held back until the open encoder's next command, and joins the pending barrier if the encoder closes first.
+    /// is held back until the open encoder's next command in one of its remaining destination stages, which it emits for those
+    /// stages and keeps the rest, and what remains joins the pending barrier if the encoder closes first.
     struct BarrierState
     {
         MTL::Stages pendingSource = 0;                  ///< The source stages of the pending barrier.
@@ -34,8 +35,8 @@ namespace rojoRHI::metal4 {
         MTL::Stages openSource = 0;                     ///< The source stages the open encoder's opening barrier waited for; empty when it emitted none.
         MTL::Stages openDestination = 0;                ///< The open encoder's stages its opening barrier held back; empty when it emitted none.
         MTL4::VisibilityOptions openVisibility = 0;     ///< The visibility of the open encoder's opening barrier.
-        MTL::Stages deferredSource = 0;                 ///< The source stages of the encoder-level barrier held back until the encoder's next command.
-        MTL::Stages deferredDestination = 0;            ///< Its destination stages, all of the open encoder's; empty when none is held back.
+        MTL::Stages deferredSource = 0;                 ///< The source stages of the encoder-level barrier held back until a command in one of its stages.
+        MTL::Stages deferredDestination = 0;            ///< Its destination stages not yet emitted, all of the open encoder's; empty when none is held back.
         MTL4::VisibilityOptions deferredVisibility = 0; ///< Its visibility.
 
         /// Adds a barrier from `source` to `destination` with `visibility` to the pending barrier.
@@ -55,8 +56,8 @@ namespace rojoRHI::metal4 {
             deferredVisibility |= visibility;
         }
 
-        /// Moves the barrier held back into the pending barrier, as when its encoder closes before any command follows it: an
-        /// encoder-level barrier orders only later commands of its own encoder.
+        /// Moves what remains of the barrier held back into the pending barrier, as when its encoder closes before a command
+        /// follows it in those stages: an encoder-level barrier orders only later commands of its own encoder.
         void queueDeferred()
         {
             if (deferredDestination != 0)
@@ -100,9 +101,10 @@ namespace rojoRHI::metal4 {
     /// encoder's opening covered nothing when no part falls on its stages.
     void emitAtOpen(core::CommandListCore& list, BarrierState& barriers, MTL4::CommandEncoder* encoder, MTL::Stages stages);
 
-    /// Emits on `encoder`, open with `stages`, the encoder-level barrier held back, before a command about to be recorded in
-    /// stage `command`; counts it on `list`. Its sources outside the encoder were covered by the encoder's opening barrier, so
-    /// only those on its stages need it. Does nothing when no barrier is held back or it does not hold back `command`.
+    /// Emits on `encoder`, open with `stages`, the part of the encoder-level barrier held back that holds back stage
+    /// `command`, before a command about to be recorded in that stage; counts it on `list`. Its sources outside the encoder
+    /// were covered by the encoder's opening barrier, so only those on its stages need it. Its other destination stages stay
+    /// held. Does nothing when no barrier is held back or it does not hold back `command`.
     void emitDeferred(core::CommandListCore& list, BarrierState& barriers, MTL4::CommandEncoder* encoder, MTL::Stages stages, MTL::Stages command);
 
     /// Emits the barrier still pending at `CommandList::end` on a compute encoder that holds no command: a queue-level barrier

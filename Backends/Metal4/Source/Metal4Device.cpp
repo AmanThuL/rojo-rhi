@@ -159,6 +159,7 @@ namespace rojoRHI {
             }
             impl.stager.release();
             impl.residency.release();
+            impl.kernels.release();
             if (impl.compiler != nullptr)
             {
                 impl.compiler->release();
@@ -221,6 +222,10 @@ namespace rojoRHI {
             if (impl.compiler == nullptr)
             {
                 return std::unexpected(Error{ ErrorCategory::DriverFailure, std::format("the compiler was not created: {}", metal4::describe(error)) });
+            }
+            if (Result<void> created = impl.kernels.create(impl.device, impl.compiler); !created)
+            {
+                return created;
             }
             if (Result<void> created = impl.residency.create(impl.device); !created)
             {

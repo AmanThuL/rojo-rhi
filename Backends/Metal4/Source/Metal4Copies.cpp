@@ -15,11 +15,14 @@
 #include "Metal4Common.h"
 #include "Metal4Encoders.h"
 #include "Metal4Formats.h"
+#include "Metal4Kernels.h"
 
 #include <Foundation/Foundation.hpp>
 #include <Metal/Metal.hpp>
 
+#include <algorithm>
 #include <cstdint>
+#include <cstring>
 
 namespace rojoRHI {
     namespace {
@@ -37,6 +40,10 @@ namespace rojoRHI {
         {
             return static_cast<const MTL::Texture*>(list.device->pool<Texture>().native(texture));
         }
+
+        /// The arena bytes, and their alignment, a fill dispatch's parameters take.
+        constexpr uint32_t kFillParamsBytes = 16;
+        static_assert(sizeof(metal4::FillParams) <= kFillParamsBytes);
 
         /// How a copy between a buffer and a texture walks the buffer: one native call for a volume, else one per layer.
         struct BufferImages
@@ -80,7 +87,7 @@ namespace rojoRHI {
         core::copyBuffer(list, src, srcOffset, dst, dstOffset, size);
         const MTL::Buffer* source = nativeBuffer(list, src);
         const MTL::Buffer* destination = nativeBuffer(list, dst);
-        MTL4::ComputeCommandEncoder* encoder = impl.encoders.compute(list, impl.state);
+        MTL4::ComputeCommandEncoder* encoder = impl.encoders.compute(list, impl.state, MTL::StageBlit);
         // The driver builds an internal blit pipeline on a shape's first use and autoreleases while it does.
         const metal4::AutoreleasePool pool;
         encoder->copyFromBuffer(source, srcOffset, destination, dstOffset, size);
@@ -97,7 +104,7 @@ namespace rojoRHI {
         const MTL::Buffer* source = nativeBuffer(list, src);
         const MTL::Texture* texture = nativeTexture(list, dst);
         const BufferImages images = bufferImages(texture, layout, region);
-        MTL4::ComputeCommandEncoder* encoder = impl.encoders.compute(list, impl.state);
+        MTL4::ComputeCommandEncoder* encoder = impl.encoders.compute(list, impl.state, MTL::StageBlit);
         // The driver builds an internal blit pipeline on a shape's first use and autoreleases while it does.
         const metal4::AutoreleasePool pool;
         if (images.volume)
@@ -146,7 +153,7 @@ namespace rojoRHI {
         const MTL::Texture* texture = nativeTexture(list, src);
         const MTL::Buffer* destination = nativeBuffer(list, dst);
         const BufferImages images = bufferImages(texture, layout, region);
-        MTL4::ComputeCommandEncoder* encoder = impl.encoders.compute(list, impl.state);
+        MTL4::ComputeCommandEncoder* encoder = impl.encoders.compute(list, impl.state, MTL::StageBlit);
         // The driver builds an internal blit pipeline on a shape's first use and autoreleases while it does.
         const metal4::AutoreleasePool pool;
         if (images.volume)
@@ -207,7 +214,7 @@ namespace rojoRHI {
         const MTL::Size size(
             blocks(srcRegion.extent.width, packing.blockWidth), blocks(srcRegion.extent.height, packing.blockHeight), volume ? srcRegion.extent.depth : 1
         );
-        MTL4::ComputeCommandEncoder* encoder = impl.encoders.compute(list, impl.state);
+        MTL4::ComputeCommandEncoder* encoder = impl.encoders.compute(list, impl.state, MTL::StageBlit);
         // The driver builds an internal blit pipeline on a shape's first use and autoreleases while it does.
         const metal4::AutoreleasePool pool;
         for (uint32_t layer = 0; layer < calls; ++layer)
@@ -235,17 +242,43 @@ namespace rojoRHI {
         CommandListImpl& impl = CommandListImpl::of(*this);
         core::CommandListCore& list = impl.core;
         core::fillBuffer(list, dst, offset, size);
-        const auto byte = static_cast<uint8_t>(pattern & 0xFFu);
-        if (pattern != byte * 0x01010101u)
-        {
-            metal4::notImplemented("fillBuffer with a pattern of unequal bytes");
-        }
         const MTL::Buffer* destination = nativeBuffer(list, dst);
-        MTL4::ComputeCommandEncoder* encoder = impl.encoders.compute(list, impl.state);
-        // The driver builds an internal blit pipeline on a shape's first use and autoreleases while it does.
-        const metal4::AutoreleasePool pool;
-        encoder->fillBuffer(destination, NS::Range(offset, size), byte);
-        core::noteNativeCall(list);
+        const auto byte = static_cast<uint8_t>(pattern & 0xFFu);
+        if (pattern == byte * 0x01010101u)
+        {
+            MTL4::ComputeCommandEncoder* encoder = impl.encoders.compute(list, impl.state, MTL::StageBlit);
+            // The driver builds an internal blit pipeline on a shape's first use and autoreleases while it does.
+            const metal4::AutoreleasePool pool;
+            encoder->fillBuffer(destination, NS::Range(offset, size), byte);
+            core::noteNativeCall(list);
+            impl.encoders.markWork();
+            return;
+        }
+        // The fill kernel is a dispatch, so a barrier held back for the dispatch stage goes before it.
+        MTL4::ComputeCommandEncoder* encoder = impl.encoders.compute(list, impl.state, MTL::StageDispatch);
+        // The fill kernel writes one word per thread. Its parameters live in the list's arena page, which only a claim locks;
+        // they are not frame data, so they count as no upload. The retire hooks' context is the device that owns the core,
+        // and the kernels are fixed from its creation to its destruction.
+        core::DeviceCore& device = *list.device;
+        const metal4::Kernels& kernels = static_cast<const DeviceImpl*>(device.retireHooks().context)->kernels;
+        const uint64_t words = size / sizeof(uint32_t);
+        const uint32_t dispatches = metal4::fillDispatchCount(words);
+        for (uint32_t i = 0; i < dispatches; ++i)
+        {
+            const uint64_t first = uint64_t{ i } * metal4::kFillDispatchWords;
+            const uint64_t count = std::min(words - first, metal4::kFillDispatchWords);
+            const core::ArenaAllocation place = core::bumpArenaPage(device, list, kFillParamsBytes, kFillParamsBytes, device.arenaSource(), &device);
+            const metal4::FillParams params{ pattern, static_cast<uint32_t>(count) };
+            std::memcpy(place.memory, &params, sizeof(params));
+            const auto* page = static_cast<const MTL::Buffer*>(device.pool<Buffer>().native(place.page));
+            metal4::bindKernel(list, impl.state, impl.encoders, kernels.fill);
+            impl.state.kernelTable->setAddress(page->gpuAddress() + place.offset, 0);
+            core::noteNativeCall(list);
+            impl.state.kernelTable->setAddress(destination->gpuAddress() + offset + first * sizeof(uint32_t), 1);
+            core::noteNativeCall(list);
+            const uint64_t groups = (count + metal4::kFillGroupThreads - 1) / metal4::kFillGroupThreads;
+            metal4::dispatchKernel(list, impl.state, encoder, MTL::Size(groups, 1, 1), MTL::Size(metal4::kFillGroupThreads, 1, 1));
+        }
         impl.encoders.markWork();
     }
 } // namespace rojoRHI

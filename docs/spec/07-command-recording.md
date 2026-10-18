@@ -16,12 +16,12 @@ columns are the design oracle. This chapter continues in
 
 **Only render passes have scope.** Compute and copy commands are valid anywhere outside a render
 pass; there is no `beginComputePass` or `beginCopyPass`. On D3D12 and Vulkan such scopes would be
-empty, because neither has encoders. On Metal 4 the backend opens a compute encoder lazily on the
-first compute or copy command and closes it at the next `beginRenderPass` or scope boundary, or at
-`end`. Metal 4 records copies on the compute encoder, so merged work avoids encoder switches, and
-dependencies inside one encoder use the lighter intra-encoder barrier instead of the queue-level
-one. Work inside one encoder is ordered only by barriers ([synchronization](09-synchronization.md)):
-two dispatches, or a dispatch and a copy, recorded without a barrier between them may overlap.
+empty, as neither has encoders. On Metal 4 the backend opens a compute encoder lazily on the first
+compute or copy command and closes it at the next `beginRenderPass`, scope boundary or `end`, an
+ordering barrier or a render-target `clearTexture`. Copies record on the compute encoder, so merged
+work avoids encoder switches and uses the lighter intra-encoder barrier, not the queue-level one.
+Work inside one encoder is ordered only by barriers ([synchronization](09-synchronization.md)): two
+dispatches, or a dispatch and a copy, without a barrier between them may overlap.
 
 **Render passes perform no layout transitions.** Attachments arrive in their attachment layouts
 through explicit barriers recorded before `beginRenderPass`. Barriers inside a render pass are

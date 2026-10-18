@@ -214,8 +214,8 @@ needs descriptor handles; that is why `dst` needs `ShaderWrite` and why fills ar
 
 | | Metal 4 | D3D12 | Vulkan |
 |---|---|---|---|
-| Call | `MTL4::ComputeCommandEncoder::fillBuffer` when the four pattern bytes are equal, else a backend kernel | backend compute kernel through the buffer's raw unordered-access descriptor | `vkCmdFillBuffer` |
-| Cost | cheap: a one-byte fill value, else one dispatch on the open encoder | costly: one dispatch, pipeline and root restored after it, copy barriers widened to compute | native |
+| Call | `MTL4::ComputeCommandEncoder::fillBuffer` when the four pattern bytes are equal, else the backend's fill kernel, one thread per word | backend compute kernel through the buffer's raw unordered-access descriptor | `vkCmdFillBuffer` |
+| Cost | cheap: a one-byte fill value, else one dispatch per 2^31 words on the open encoder | costly: one dispatch, pipeline and root restored after it, copy barriers widened to compute | native |
 
 ### `ClearValue`
 
@@ -265,5 +265,5 @@ native transitions its clear needs and returns the subresources to that layout.
 
 | | Metal 4 | D3D12 | Vulkan |
 |---|---|---|---|
-| Call | layouts ignored; per subresource, a render encoder from `MTL4::CommandBuffer::renderCommandEncoder` with `MTL::LoadActionClear`, or a backend compute kernel for `Storage`-only textures | barriers `COPY_DEST` to `RENDER_TARGET`, `DEPTH_STENCIL_WRITE` or `UNORDERED_ACCESS` and back around `ClearRenderTargetView`, `ClearDepthStencilView` or `ClearUnorderedAccessView*` per subresource; the last needs backend-written GPU and CPU descriptors | `vkCmdClearColorImage` or `vkCmdClearDepthStencilImage` in `TRANSFER_DST_OPTIMAL` or `GENERAL` |
-| Cost | costly: one render encoder per subresource, closing the compute encoder, or one dispatch | costly: two hidden layout transitions per subresource and transient descriptors | native |
+| Call | layouts ignored; per mip and layer, and per depth plane of each mip of a 3D texture, a render encoder from `MTL4::CommandBuffer::renderCommandEncoder` with `MTL::LoadActionClear` and `MTL::StoreActionStore`, or for `Storage`-only textures one dispatch of the backend's clear kernel per mip | barriers `COPY_DEST` to `RENDER_TARGET`, `DEPTH_STENCIL_WRITE` or `UNORDERED_ACCESS` and back around `ClearRenderTargetView`, `ClearDepthStencilView` or `ClearUnorderedAccessView*` per subresource; the last needs backend-written GPU and CPU descriptors | `vkCmdClearColorImage` or `vkCmdClearDepthStencilImage` in `TRANSFER_DST_OPTIMAL` or `GENERAL` |
+| Cost | costly: one render encoder per mip and layer, per depth plane for a 3D texture, closing the compute encoder; or one dispatch per mip on the compute encoder | costly: two hidden layout transitions per subresource and transient descriptors | native |

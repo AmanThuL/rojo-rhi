@@ -118,20 +118,26 @@ namespace rojoRHI {
         //==============================================================================================================
         void emitDeferred(core::CommandListCore& list, BarrierState& barriers, MTL4::CommandEncoder* encoder, MTL::Stages stages, MTL::Stages command)
         {
-            if ((barriers.deferredDestination & command) == 0)
+            const MTL::Stages held = barriers.deferredDestination & command;
+            if (held == 0)
             {
                 return;
             }
             const MTL::Stages after = barriers.deferredSource & stages;
             if (after != 0)
             {
-                encoder->barrierAfterEncoderStages(after, barriers.deferredDestination, barriers.deferredVisibility);
+                encoder->barrierAfterEncoderStages(after, held, barriers.deferredVisibility);
                 core::noteNativeCall(list);
                 ++list.counts.nativeBarriers;
             }
-            barriers.deferredSource = 0;
-            barriers.deferredDestination = 0;
-            barriers.deferredVisibility = 0;
+            // The stages no command has run in since stay held, for a later command in them or, if the encoder closes first,
+            // for the pending barrier.
+            barriers.deferredDestination &= ~held;
+            if (barriers.deferredDestination == 0)
+            {
+                barriers.deferredSource = 0;
+                barriers.deferredVisibility = 0;
+            }
         }
 
         //==============================================================================================================
