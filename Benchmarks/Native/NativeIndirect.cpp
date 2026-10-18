@@ -4,6 +4,7 @@
 //----------------------------------------------------------------------------------------------------------------------
 #include "Native/NativeIndirect.h"
 
+#include <algorithm>
 #include <cstring>
 #include <format>
 
@@ -35,6 +36,16 @@ namespace rojoRHI::bench {
     }
 
     //==================================================================================================================
+    MTL::ComputePipelineState* NativeIndirect::kernel(const CountedDraw& draw) const
+    {
+        if (!draw.indexed)
+        {
+            return m_encodeDraw;
+        }
+        return draw.triangles ? m_encodeIndexedTriangles : m_encodeIndexed;
+    }
+
+    //==================================================================================================================
     std::expected<void, std::string> NativeIndirect::create(std::span<const CountedDraw> draws)
     {
         m_draws.assign(draws.begin(), draws.end());
@@ -56,6 +67,23 @@ namespace rojoRHI::bench {
         }
         m_encodeDraw = *encodeDraw;
         m_encodeIndexed = *encodeIndexed;
+        for (const CountedDraw& draw : draws)
+        {
+            if (draw.triangles && !draw.indexed)
+            {
+                return std::unexpected("counted draws: triangles are encoded for indexed draws only");
+            }
+        }
+        if (std::any_of(draws.begin(), draws.end(), [](const CountedDraw& draw) { return draw.triangles; }))
+        {
+            const std::expected<MTL::ComputePipelineState*, std::string> encodeTriangles =
+                m_context.computePipeline(*library, "encodeIndexedTriangles", "bench.encodeIndexedTriangles");
+            if (!encodeTriangles)
+            {
+                return std::unexpected(encodeTriangles.error());
+            }
+            m_encodeIndexedTriangles = *encodeTriangles;
+        }
 
         const uint64_t elements = uint64_t{ draws.size() } * NativeContext::kFrameSlots;
         if (elements == 0)
@@ -132,7 +160,7 @@ namespace rojoRHI::bench {
         for (uint32_t draw = first; draw < first + count; ++draw)
         {
             const CountedDraw& counted = m_draws[draw];
-            MTL::ComputePipelineState* pipeline = counted.indexed ? m_encodeIndexed : m_encodeDraw;
+            MTL::ComputePipelineState* pipeline = kernel(counted);
             if (pipeline != bound)
             {
                 encoder->setComputePipelineState(pipeline);

@@ -30,6 +30,39 @@ def without_comments(text: str) -> str:
     )
 
 
+STRUCT = re.compile(r"\bstruct\s+(\w+)\s*\{(.*?)\}\s*;", re.DOTALL)
+BENCH_PROBE = "Bench/BenchFrameProbe.slang"
+
+
+def struct_bodies(path: Path) -> dict[str, str]:
+    """The whitespace-normalised body of every struct in a Slang file, comments removed."""
+    text = without_comments(path.read_text(encoding="utf-8"))
+    return {match.group(1): " ".join(match.group(2).split()) for match in STRUCT.finditer(text)}
+
+
+def check_probe_copies(root: Path, shaders: Path) -> list[str]:
+    """Every struct a Bench entry file shares with the layout probe must match the probe's text.
+
+    Textual includes are banned, so each entry file repeats the structs it reads; only the probe is
+    compared with the C++ layout, so a drifting copy would go unnoticed without this check.
+    """
+    probe = shaders / BENCH_PROBE
+    entries = sorted((shaders / "Bench").glob("Bench*.slang"))
+    if not probe.is_file():
+        if entries:
+            return [f"{probe.relative_to(root)}: the layout probe is missing, so the structs of {len(entries)} Bench shaders are unchecked"]
+        return []
+    reference = struct_bodies(probe)
+    errors: list[str] = []
+    for path in entries:
+        if path == probe:
+            continue
+        for name, body in struct_bodies(path).items():
+            if name in reference and reference[name] != body:
+                errors.append(f"{path.relative_to(root)}: struct {name} differs from {probe.relative_to(root)}")
+    return errors
+
+
 def check_shaders(root: Path) -> tuple[list[str], int, int]:
     """Check every Slang tree in the component, each in its own namespace.
 
@@ -43,6 +76,7 @@ def check_shaders(root: Path) -> tuple[list[str], int, int]:
         if not shaders.is_dir():
             continue
         tree_errors, tree_files, tree_imports = check_tree(root, shaders, modules)
+        tree_errors += check_probe_copies(root, shaders)
         errors += tree_errors
         files += tree_files
         imports += tree_imports

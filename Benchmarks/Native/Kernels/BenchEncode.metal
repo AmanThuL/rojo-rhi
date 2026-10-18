@@ -57,7 +57,7 @@ kernel void encodeDraw(constant Root& root [[buffer(0)]], uint index [[thread_po
     command.draw_primitives(primitive_type::point, args.firstVertex, args.vertexCount, args.instanceCount, args.drawId);
 }
 
-kernel void encodeIndexed(constant Root& root [[buffer(0)]], uint index [[thread_position_in_grid]])
+static void encodeIndexedRecord(constant Root& root, uint index, primitive_type primitive)
 {
     const uint count = drawCount(root);
     if (index == 0)
@@ -70,7 +70,16 @@ kernel void encodeIndexed(constant Root& root [[buffer(0)]], uint index [[thread
     }
     const IndexedArgs args = reinterpret_cast<constant IndexedArgs*>(root.records)[index];
     render_command command(reinterpret_cast<device Icb*>(root.icb)->commands, index);
-    command.draw_indexed_primitives(
-        primitive_type::point, args.indexCount, root.indices + args.firstIndex, args.instanceCount, args.baseVertex, args.drawId
-    );
+    command.draw_indexed_primitives(primitive, args.indexCount, root.indices + args.firstIndex, args.instanceCount, args.baseVertex, args.drawId);
+}
+
+kernel void encodeIndexed(constant Root& root [[buffer(0)]], uint index [[thread_position_in_grid]])
+{
+    encodeIndexedRecord(root, index, primitive_type::point);
+}
+
+// The same records drawn as triangle lists, for meshes.
+kernel void encodeIndexedTriangles(constant Root& root [[buffer(0)]], uint index [[thread_position_in_grid]])
+{
+    encodeIndexedRecord(root, index, primitive_type::triangle);
 }
