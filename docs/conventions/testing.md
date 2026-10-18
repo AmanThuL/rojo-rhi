@@ -99,8 +99,10 @@ equivalent is the death test.
 **Shader ABI tests** are the hosted half of the T3 tier (ADR 0009). They need no GPU: every
 conformance shader must compile to MSL, SPIR-V and HLSL, and the layout of each shared struct must
 match what Slang reflects on every target, which the build checks with generated `static_assert`s.
-They run on any hosted runner that has the pinned Slang. Compile-and-run of the ABI needs a backend
-that loads shader libraries, so it arrives with the Metal 4 backend's pipelines.
+The `[abi]` cases also check the header of every Metal shader library where the Metal toolchain
+exists (skipped elsewhere), and that every SPIR-V heap fetch is decorated NonUniform. They run on
+any hosted runner that has the pinned Slang. Compile-and-run of the ABI needs a backend that loads
+shader libraries, so it arrives with the Metal 4 backend's pipelines.
 
 **GPU conformance tests** run against a real device and are the only tier that observes what the
 backend actually does. They run with `MTL_DEBUG_LAYER=1` so the platform validation layer speaks up,

@@ -59,6 +59,9 @@ the fetch is cheap enough for hot paths is spike 1 of [ADR
 0014](../decisions/0014-overhead-measurement.md), still pending. Until it reports, per-draw hot data
 belongs in root fields and heap indices, and an `Addr` hop is for bulk and cold data.
 
+In SPIR-V, with the pinned Slang, a helper that is not inlined and takes a texture parameter loses
+the `NonUniform` decoration on its fetch; the conformance shaders mark such helpers `[ForceInline]`.
+
 ### `rojoRHI::load`
 
 ```slang
@@ -163,7 +166,7 @@ or marked with `rojoRHI::nonUniform`.
 
 | | Metal 4 | D3D12 | Vulkan |
 |---|---|---|---|
-| Lowering | 8-byte resource ID read from the ID table at `buffer(1)`, through a Slang `__intrinsic_asm` over an argument-buffer table; `texture2DMS` and `texture2DMSArray` compile, but reading them miscompiles under the pinned Slang, which emits invalid MSL for `Load` and `GetDimensions`, and stays unverified until compile-and-run | `ResourceDescriptorHeap[view]`; unverified | resource descriptor heap, Slang's `__slang_resource_heap` runtime arrays, each fetch marked `NonUniform` |
+| Lowering | 8-byte resource ID read from the ID table at `buffer(1)`, through a Slang `__intrinsic_asm` over an argument-buffer table; `texture2DMS` and `texture2DMSArray` compile, but reading them miscompiles under the pinned Slang, which emits invalid MSL for `Load` and `GetDimensions`, and stays unverified until compile-and-run; the conformance multisample kernels read only the dimensions on Metal, through an `__intrinsic_asm` helper, so `Load` on a multisample texture is not exercised there | `ResourceDescriptorHeap[view]`; unverified | resource descriptor heap, Slang's `__slang_resource_heap` runtime arrays, each fetch marked `NonUniform` |
 | Cost | cheap: one extra 8-byte load, measured at about 3% for `read` and 7.5% for `sample` in a fetch-only kernel | native | cheap: every fetch is marked `NonUniform`, since the `uint` marker cannot reach the handle; correct for a uniform index too |
 
 ### `rojoRHI::sampler`

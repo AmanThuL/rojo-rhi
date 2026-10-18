@@ -58,14 +58,13 @@ Result<ShaderLibrary> Device::loadShaderLibrary(std::span<const std::byte> blob,
                                                 std::string_view label);
 ```
 
-Loads a precompiled shader library: a metallib on Metal 4, a DXIL container on D3D12, produced by
-the xmake shader rule and stamped with `ROJORHI_SHADER_ABI_VERSION`
-([shader ABI](05-shader-abi.md)).
-A blob whose stamp differs from the library's ABI version returns
-`ErrorCategory::ShaderAbiMismatch`, and one not built for the active backend or malformed returns
-`ErrorCategory::DriverFailure`, instead of loading a stale shader. RojoRHI never compiles shader
-source at run time. The bytes are consumed before return. Free-threaded. Destroyed through
-`Device::destroy` ([device](02-device.md)).
+Loads a precompiled shader library the xmake shader rule produced and stamped with
+`ROJORHI_SHADER_ABI_VERSION` ([shader ABI](05-shader-abi.md)): on Metal 4 a RojoRHI shader library
+around a metallib, on D3D12 a DXIL container. A blob stamped with another ABI version returns
+`ErrorCategory::ShaderAbiMismatch`; one not built for the active backend (another magic, or no
+container) or malformed returns `ErrorCategory::DriverFailure`, instead of loading a stale shader.
+RojoRHI never compiles shader source at run time. The bytes are consumed before return.
+Free-threaded. Destroyed through `Device::destroy` ([device](02-device.md)).
 
 #### Valid usage
 
@@ -75,7 +74,7 @@ source at run time. The bytes are consumed before return. Free-threaded. Destroy
 
 | | Metal 4 | D3D12 | Vulkan |
 |---|---|---|---|
-| Call | `MTL::Device::newLibrary` from the blob's data | no native object: the backend keeps one DXIL shader per entry point | `vkCreateShaderModule` (SPIR-V) |
+| Call | `MTL::Device::newLibrary` from the metallib bytes after the header | no native object: the backend keeps one DXIL shader per entry point | `vkCreateShaderModule` (SPIR-V) |
 | Cost | native | cheap: blob parsed and copied | native |
 
 ### `BlendState`

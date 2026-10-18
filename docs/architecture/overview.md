@@ -39,6 +39,7 @@ rojo-rhi/
   Tools/                                      checks, Patches/, ImGuiBufferProbe/
   Tools/bench.py  Tools/bench_analysis.py     the benchmark driver and its statistics
   Tools/shader_layout.py                      generates the layout checks from Slang reflection
+  Tools/shader_library.py                     packages a metallib into a .metal4lib
   Tools/Rename/  Tools/Extract/               the Luminex rename table and the extraction scripts
   docs/conventions/  docs/decisions/  docs/architecture/  docs/guides/
   docs/spec/  docs/research/                  the v2 API reference; the evidence behind it
@@ -86,9 +87,10 @@ lowers the entries of chapter 05 per target, selected by one `ROJORHI_TARGET_*` 
 `Shaders/Tests/` holds compile-only conformance shaders that call every entry in every stage it
 allows, and a layout probe. `xmake/slang.lua` declares two rules: `rojorhi.slang` compiles each
 shader to MSL, SPIR-V and HLSL on every host, to a metallib when the Metal toolchain is present
-and to DXIL when a DXC is reachable; `rojorhi.shader_layout` runs `Tools/shader_layout.py`, which
-reads the probe's reflection on each target and generates `static_assert`s compiled into
-`RojoRHITests`. The tests tagged `[abi]` run both.
+(packaged with the ABI stamp and each entry's stage and threadgroup size into a `.metal4lib` by
+`Tools/shader_library.py`) and to DXIL when a DXC is reachable; `rojorhi.shader_layout` runs
+`Tools/shader_layout.py`, which reads the probe's reflection on each target and generates
+`static_assert`s compiled into `RojoRHITests`. The tests tagged `[abi]` run both.
 
 `Benchmarks/` builds as the macOS executable `RojoRHIBench`, which runs a native Metal 4 arm and a
 RojoRHI arm of the same workloads in one process and takes the measurements of the overhead
