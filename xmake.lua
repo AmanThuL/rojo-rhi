@@ -8,6 +8,10 @@ add_rules("mode.debug", "mode.release")
 set_defaultmode("debug")
 set_warnings("allextra")
 set_policy("build.warning", true)
+-- MSVC warnings fail the build; hosted Windows CI is the only MSVC build there is.
+if is_plat("windows") then
+    add_cxflags("/WX")
+end
 
 add_requires("catch2 3.x", "glm")
 
