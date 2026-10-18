@@ -108,8 +108,20 @@ jobs:
             Write-Host '::notice::dxcompiler.dll and dxil.dll not found in the Windows SDK; DXIL will be skipped'
           }
       - run: xmake setup
+      # Some hosted images ship Xcode without the Metal toolchain the metallibs and shader libraries need.
+      - if: runner.os == 'macOS'
+        run: xcrun metal --version >/dev/null 2>&1 || xcodebuild -downloadComponent MetalToolchain
       - run: xmake f -m debug -y --rojorhi_backend=null
       - run: xmake build RojoRHITests
+      # Without the Metal toolchain the build skips packaging and the shader library cases skip too,
+      # so hosted macOS fails here instead of passing with nothing packaged.
+      - if: runner.os == 'macOS'
+        run: |
+          header=$(find build -name ShaderList.h -path '*/rojorhi/*' | head -n 1)
+          if [ -z "$header" ]; then echo "::error::no generated ShaderList.h under build/"; exit 1; fi
+          if ! grep -q 'kMetalLibrariesBuilt = true;' "$header"; then
+            echo "::error::$header says the Metal shader libraries were not built"; exit 1
+          fi
       - run: xmake test RojoRHITests/contract
       - run: xmake test RojoRHITests/death
       - run: xmake test RojoRHITests/abi
