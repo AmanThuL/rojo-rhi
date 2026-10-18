@@ -7,7 +7,9 @@ owned by [naming.md](naming.md). Today the v1 suite, including the `[checkpoint-
 under `Legacy/Tests/` and builds as `RojoRHILegacyTests`. The top-level `Tests/` holds the v2
 interface's cases and builds as `RojoRHITests`; its T0 (CPU contract) cases run as
 `xmake test RojoRHITests/contract` (ADR 0017), its death tests as `xmake test RojoRHITests/death`
-and its shader ABI cases, tagged `[abi]`, as `xmake test RojoRHITests/abi`.
+and its shader ABI cases, tagged `[abi]`, as `xmake test RojoRHITests/abi`. Built with
+`--rojorhi_backend=metal4`, the same binary also runs the `[conformance]` cases as
+`xmake test RojoRHITests/conformance`.
 
 ## Tiers
 
@@ -16,16 +18,32 @@ domain and `Result<T>`, descriptor defaults, size and alignment arithmetic, per-
 bookkeeping and any pure helper the interface exposes. They run anywhere, including a hosted runner
 with no GPU, and a failure here is a contract change rather than a driver difference.
 
-**T0 contract tests** of the v2 interface run against the Null backend with no GPU, in three
-directories. `Tests/Contract/` holds the backend-neutral reference rules, one file per area, tagged
-`[contract]`: every expectation there must hold for any backend, so it states only what the
-reference states. `Tests/Null/` holds what only the Null backend promises (the values it reports for
-limits and formats), tagged `[null]`. `Tests/Core/` holds the core's internals, such as the handle
-pool, tagged `[core]`, and may include private headers. `Tests/Support/` holds shared helpers:
-`Death.h`, `NullLibrary.h` (builds Null shader library blobs, including ones the backend must
-refuse) and `PassKit.h` (a device with an open frame, a library, a list, attachment textures and
-pipelines for recording tests). The `contract` entry runs all three tags and excludes `[death]`;
-Release CI runs it too.
+**T0 contract tests** of the v2 interface are backend-neutral and run on Null with no GPU, and on
+Metal 4 under the validation layer. The test tree is split by backend. `Tests/Contract/` holds the
+backend-neutral reference rules, one file per area, tagged `[contract]`: every expectation there
+must hold for any backend, so it states only what the reference states, and it includes no backend
+header. One file is a known exception: `PipelineTests.cpp`, pending on Metal 4, includes
+`Support/NullLibrary.h` for its Null-format library blobs (issue #48). `Tests/Null/` holds what only the Null backend promises (the values it reports for limits
+and formats), tagged `[null]`. `Tests/Metal4/` holds what only the Metal 4 backend makes (native
+call counts, residency commits, the descriptors it builds), tagged `[metal4]`; it may include
+`Backends/Metal4/Source` headers and metal-cpp. `Tests/Core/` holds the core's internals, such as
+the handle pool, tagged `[core]`, and may include private headers; it builds with Null only, as
+`Tests/Null/` does. `Tests/Support/` holds shared helpers, and `Tests/Support/Null/` and
+`Tests/Support/Metal4/` the helpers of each backend (the Metal 4 ones create a surface, read Private
+memory back and report `runsOnGpu`): `Death.h`, `NullLibrary.h` (builds Null shader library blobs,
+including ones the backend must refuse) and `PassKit.h` (a device with an open frame, a library, a
+list, attachment textures and pipelines for recording tests). On Null the `contract` entry runs
+`[contract]`, `[core]` and `[null]` and excludes `[death]`; on Metal 4 it runs `[contract]` and
+`[metal4]`, with the Metal 4 entries running from the test directory under `MTL_DEBUG_LAYER=1`.
+Release CI runs it too. A failing validation-layer message is a failure.
+
+Metal 4 builds `Tests/Contract/` minus the files named in `metal4_pending` in `xmake/targets.lua`,
+the contract files of chapters the backend does not implement yet. A file leaves the list when it
+passes whole on Metal 4, a name that matches no file fails the configuration, and the list ends
+empty. The files it holds today cover recording (passes, draws, copies, barriers), pipelines,
+presentation, upscaling, sparse resources, and the counters, diagnostics, lifetime, hazard,
+handoff, frame-join, aliasing and validation-tracker cases that need recording; the Metal 4
+backend does not implement these yet.
 
 **Death tests** pin each Debug-tier valid-usage rule (ADR 0009). A death test is a `TEST_CASE` named
 `"<identifier> <behaviour>"`, such as `"VU-rojo-device-0003 beginFrame runs while a frame is open"`,
@@ -55,6 +73,15 @@ work (`resources`, `recording`, `edges` or `tracker`) that will add the test; no
 The tool also fails when a listed identifier has a death test, so the list only shrinks, and when it
 names an unknown identifier or part. A part removes its lines in the change that adds the tests.
 
+**Conformance tests** (`[conformance]`, `Tests/Conformance/`) are the v2 interface's T1 cases
+(ADR 0009): cases that observe on a GPU what the API reference promises. Today they check fence
+values and CPU-visible buffer memory; readback oracles of GPU-written data arrive with recording.
+They compile on every backend and each starts with `test::requireGpu()` from
+`Tests/Support/Conformance.h`, which skips the case where `test::runsOnGpu()` is false: always on
+Null, never on Metal 4, whose devices need a GPU; Catch2 exits non-zero when every case
+skips, which is why Null has no `conformance` entry. They use public entries only and run on
+Metal 4 under `MTL_DEBUG_LAYER=1`.
+
 **Validation tests (v1)** pin what the interface rejects. The predicates behind each
 `ROJORHI_ASSERT` precondition are testable functions, so a case asserts that an invalid range, an
 out-of-bounds subresource, a mismatched attachment or an impossible pipeline descriptor is reported
@@ -67,7 +94,7 @@ equivalent is the death test.
 conformance shader must compile to MSL, SPIR-V and HLSL, and the layout of each shared struct must
 match what Slang reflects on every target, which the build checks with generated `static_assert`s.
 They run on any hosted runner that has the pinned Slang. Compile-and-run of the ABI needs a backend
-that loads shader libraries, so it arrives with the Metal 4 v2 backend.
+that loads shader libraries, so it arrives with the Metal 4 backend's pipelines.
 
 **GPU conformance tests** run against a real device and are the only tier that observes what the
 backend actually does. They run with `MTL_DEBUG_LAYER=1` so the platform validation layer speaks up,

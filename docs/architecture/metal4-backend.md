@@ -1,0 +1,265 @@
+# The Metal 4 Backend
+
+**Status**: Accepted
+
+This page describes the Metal 4 backend of the v2 interface as it stands: the part that creates a
+device, reports its capabilities, owns buffers, heaps, textures, views and samplers, and runs
+queues, fences and frames. Command recording, pipelines, presentation, upscaling and sparse
+resources arrive with later work. The API reference under `docs/spec/` stays the authority on every
+entry's semantics and Metal 4 mapping; [the Null backend](null-backend.md) describes the shared core
+this backend translates to. The backend builds with `xmake f --rojorhi_backend=metal4`, on macOS
+only, and `null` stays the default.
+
+## What exists
+
+| Area | Where | Content |
+|---|---|---|
+| Device | `Metal4Device.*`, `Metal4Capabilities.*` | `createDevice`, `destroyDevice`, capabilities, limits, `beginFrame`, `endFrame`, the three queues |
+| Formats | `Metal4Formats.*` | the pixel format table and the format capabilities the device reports |
+| Buffers and heaps | `Metal4Buffers.*`, `Metal4Memory.*` | buffers, heaps, placement, `address`, `cpuPointer` |
+| Addresses | `Metal4Addr.cpp`, `Metal4AddressMap.*` | `operator+`, `core::decodeAddr`, the map from GPU address to buffer |
+| Staging | `Metal4Stager.*` | initial data of Private buffers and textures |
+| Textures and views | `Metal4Textures.*`, `Metal4TextureDescriptor.*`, `Metal4Views.*` | textures, views, samplers, reserved ranges and the two ID tables |
+| Residency | `Metal4Residency.*` | the device's one residency set |
+| Queues and fences | `Metal4Queue.cpp`, `Metal4Fences.*` | `Queue::submit`, `createFence`, `completedValue`, `wait` |
+| Lists | `Metal4CommandList.cpp` | `acquireCommandList`, `end`, `uploadFrameData` and the frame-arena pages |
+| Helpers | `Metal4Common.*` | autorelease pools, string conversion, bounded event waits |
+
+A command list is acquired, given frame data from real arena pages, ended and submitted, but it
+encodes no native command yet. Every other recording entry, and everything below, arrives with the
+work that adds it. Until then an entry takes one of two forms:
+
+- `Device::loadShaderLibrary`, both `createPipeline` overloads, `pipelineCacheData`,
+  `createSwapchain` and `createUpscaler` return `ErrorCategory::Unsupported`, naming the entry.
+- The recording entries of `CommandList`, `Queue::present`, `Queue::mapTiles` and the swapchain
+  entries log `<entry> is not implemented by the Metal 4 backend` and abort in every build, after
+  the core's handle check, so a default-constructed object still fails `VU-rojo-core-0004` first.
+  The core serves the destroys of pipelines, shader libraries and upscalers and `tileShape`. The
+  device reports no sparse placement, no upscaler and no conservative rasterisation. Capture has
+  no tool yet and reports `Unsupported`, and `scopeTimings` reports no durations; both arrive with
+  recording.
+
+## Device objects and teardown
+
+`createDevice` validates the description in the core, takes `MTL::CreateSystemDefaultDevice` and
+requires the Metal 4 family, the Apple7 family, read-write texture tier 2, 996 argument-buffer
+samplers, a `maxBufferLength` of 2^32 bytes (so `maxAddrOffset` reaches its floor of 2^32 − 1),
+1,024 x 1,024 x 64 threads per threadgroup, 32,768 bytes of threadgroup memory and BC texture
+compression: every floor item of chapters 02 and 15 that Metal reports. The first missing one is
+named in an `Unsupported` result. It then creates, in this
+order: the three `MTL4::CommandQueue`s (graphics, compute, copy), one `MTL4::Compiler`, the
+residency set, the stager and its internal queue, the frame event, and the two ID tables. Each of
+the three queues also owns a progress event, described under fences. Any
+failure releases what exists in reverse and returns the error. `destroyDevice` drains every queue,
+the internal upload queue included, by signalling a throwaway event and waiting for it (Metal making no event is
+fatal, since nothing could be released safely), so the
+retire hooks that `beginDestroy` runs find idle queues; `VU-rojo-device-0002` therefore fires after
+the drain. It then releases the native objects in reverse order of creation. The device's own
+objects and the calls that create, drain and release them are not counted.
+
+`createDevice` leaves the residency set dirty: the first submission, or the first staged upload,
+commits it. Capabilities come from the device and from the Metal 4 column of the limits table of
+[formats and limits](../spec/15-formats-and-limits-part2.md); a limit whose column is not a number
+reports the floor. The floor name is the highest Apple family the device supports.
+
+`Metal4Formats` starts from the core's class ceiling and removes what the hardware lacks: sparse
+everywhere and sample counts without `supportsTextureSampleCount`. BC formats keep their ceiling,
+because `createDevice` requires `supportsBCTextureCompression`. Three narrowings follow the Metal Feature Set Tables. A storage view
+is read-write in the shader ABI, and read-write texture tier 2 lists neither `BGRA8Unorm`,
+`RG16Float` nor `RGB10A2Unorm`, so storage read is off for all three and storage write is off for
+`BGRA8Unorm` and `RGB10A2Unorm`; `RG16Float` keeps storage write, which chapter 15 guarantees at
+the floor. `R32Float` filtering and resolve follow `supports32BitFloatFiltering`. Linear filtering
+of depth formats needs Apple9. Each line carries its source in a comment.
+
+## Residency
+
+One `MTL::ResidencySet`, labelled `rojorhi.residency`, belongs to the device and is attached to the
+three queues and to the internal upload queue. Allocations join it from any thread under its
+mutex and mark it dirty, through an atomic flag: every dedicated buffer and texture, every heap, every frame-arena
+page and the two ID tables. A placed buffer or texture never joins, because its heap did. An
+allocation leaves the set when its retire hook runs.
+
+The set is committed when it is dirty and something needs it: `Queue::submit` commits before it
+encodes its waits and signals, and the stager commits before a copy. A commit counts one
+`nativeHostCalls`. A submission reads the flag with one atomic load and takes the set's mutex only
+when it is dirty, so it pays for residency, lock included, only when an allocation joined or left
+since the last commit. The commit opens an autorelease pool, since a submission holds none.
+
+## Native payloads and the native table
+
+Every record ends in `void* native`. `HandlePool` publishes it into a lock-free native table when
+`allocate` stores the record, and `HandlePool::native(handle)` reads it with one acquire load,
+taking no lock and checking nothing, so an entry that recorded under no lock can reach an object
+without touching a pool. The table holds 2^22 slots; a creation that finds it full returns
+`OutOfMemory` through `core::tableFull`, and the backend releases the object it made.
+
+A pool clears a slot's table entry before the retire hook runs, so a racing misuse reads null and
+never a dangling pointer, and the hook then releases the object and sets the record's field to null.
+A hook opens an autorelease pool, tolerates a null payload and releases in reverse order of
+creation. The backend registers hooks for buffers, heaps, textures, fences, views and samplers, a
+`frameSlot` hook that returns a slot's lists to their pool and releases the fence events the queues
+have passed and a `waitFrame` hook; the others are null because nothing native backs pipelines,
+libraries or upscalers yet.
+
+## Addresses and the address map
+
+`Device::address` returns `MTL::Buffer::gpuAddress` plus the offset, split into `lo` and `hi`.
+`operator+` checks the offset against `maxAddrOffset` (`maxBufferSize` less one, since no byte of
+a buffer lies further from its start, and at least 2^32 − 1 by the floor check; read from a
+process-wide value `createDevice` stores) and adds in 64 bits. Decoding an address back to
+a buffer slot feeds only Debug checks, so the map exists in Debug builds only: `AddressMap` orders
+buffers by base address under its own mutex, `decodeAddr` finds the holder, and a destroyed buffer
+still decodes until its slot retires. Placed buffers may alias, so several entries can share a
+base; the lookup prefers one that is not destroyed. Release keeps no map, because a lookup that only
+feeds a Debug check is compiled out of Release (ADR 0020).
+
+## Initial data
+
+A buffer or texture in Private memory receives its initial data through the `Stager`. The stager
+owns a fourth `MTL4::CommandQueue`, `rojorhi.upload`, that no `QueueType` names, with one allocator,
+one command buffer and a residency set of its own for the staging buffers, committed, and counted
+as one `nativeHostCalls`, each time a staging buffer joins or leaves it. A copy makes a Shared
+staging buffer, copies the bytes into it, encodes the copy on a compute encoder, commits on the
+upload queue and waits. Creation waits and nothing is committed on a caller-visible queue, so the
+data is visible to every later submission.
+
+The wait uses the commit's feedback handler, not a shared event: the handler runs after Metal has
+finished the commit and dropped its references, so the stager may release its objects at any time
+between copies. A failure, at creation or in execution, is a `DriverFailure` naming
+`rojorhi.staging`. A texture's subresources go into one staging buffer at 256-byte aligned offsets
+and one encoder copies each into its mip and slice, a cube face counting as a slice. Upload and
+Readback memory is Shared and needs no staging. Copies run one at a time under the stager's mutex;
+tests read Private memory back through the same path.
+
+## Views, samplers and the ID tables
+
+The device owns two Shared buffers of `MTL::ResourceID`, `rojorhi.viewTable` with `maxViews`
+entries and `rojorhi.samplerTable` with `maxSamplers`, both resident through the device set. An
+index handed to a shader selects one entry. `createView` and `writeView` make the native view,
+read its resource ID, place the payload in the core's slot allocator and only then write the ID,
+so a slot that was refused holds no ID. The view is the texture itself, retained, when it has the
+texture's type, pixel format and whole range, and otherwise an `MTL::Texture` view labelled
+`<texture>.view`; stencil views use `X32_Stencil8`. A sampler is an `MTL::SamplerState` built from a
+descriptor.
+
+The slot allocator holds the payload (see [view and sampler slots](null-backend.md)). A write
+replaces a slot's payload, and the old one waits for the frame of the write; a release hands the
+payload to the `view` or `sampler` hook when its frame retires; `drain` hands over everything left
+at `destroyDevice`. A refused creation is a `DriverFailure` for `createView` and `createSampler`
+and fatal for `writeView` and `writeSampler`, as chapter 04 says.
+
+One reference rule: Metal has no mipmapped 1D textures and aborts when asked for one, so
+`VU-rojo-texture-0042` requires `mips` to be 1 for `Tex1D` and `Tex1DArray`. The core checks it,
+so every backend rejects the same descriptors.
+
+## Queues, fences and frame pacing
+
+A fence is an `MTL::SharedEvent` created at its initial value and labelled. `Queue::submit` runs
+the core's list checks, then under the tracker's lock checks the fences, replays the lists,
+commits the residency set when dirty, records the signals as completing later, calls
+`MTL4::CommandQueue::wait` for each wait and `signalEvent` for each signal. A list encodes no
+native command yet, so no command buffer is committed for the lists. `completedValue` reads the
+event and reports it to the core; `Device::wait` follows chapter 10: zero polls, an unlimited wait
+loops in 10 s slices that each log a warning with the fence's label, a finite one rounds up to
+milliseconds.
+
+A fence's native event must outlive every submission that waits on it or signals it, yet
+`Device::destroy` defers the release only to the frame slot's retirement and the caller never tracks
+GPU progress. Each queue therefore owns a progress event that only it signals: a submission that
+names a fence signals it with the next progress value, with no lock, allocation or native read.
+`Device::destroy(Fence)` snapshots each queue's last progress value and, unless every queue has
+already passed it, keeps the event retained, and in the same call it releases the kept events that
+every queue has passed, so they stay bounded even when no frame begins. The kept events are
+released, inside a pool, when every queue has passed its snapshot; the check runs at each frame-slot
+reuse, reading a queue's progress only when a kept event waits for it, and at `destroyDevice`, after
+the drain.
+
+Frames pace on the graphics queue. `endFrame` signals the frame event, `rojorhi.frame`, with the
+frame number; `beginFrame` reaches the `waitFrame` hook before it retires the slot it reuses and
+waits for the frame that used the slot, so a slot is never reused while the GPU may still read it.
+The wait is one `nativeHostCalls` and `endFrame` is one `nativeSubmitCalls`.
+
+## Counting
+
+The core counts what it can see; a backend counts at its native call sites. In the core:
+creation, allocation and descriptor counts, `completedValue`, one `nativeSubmitCalls` for each
+fence wait and signal a submission carries, frame data and arena growth. In this backend:
+`nativeSubmitCalls` counts native queue calls only, so Metal 4 counts its own commits and signals
+(the stager's upload, `endFrame`'s frame-event signal and a submission's progress signal) and the
+Null backend counts its one per `Queue::submit`; a submission that names a fence therefore counts
+its waits, its signals and one progress signal, and an empty submission counts none.
+`nativeHostCalls` counts residency commits, of the device set and of the stager's own, frame waits,
+a native `Device::wait` and the progress reads of a frame-slot reuse and of `Device::destroy(Fence)`; the stager counts its staging buffer in `nativeCreateCalls`.
+`nativeRecordCalls`, `nativeBarriers` and `encodersOpened` are noted by the backend on the list at
+each recording site and folded into the device by the core at submission; they are zero until
+recording arrives; the tracker numbers commands itself and
+counts nothing.
+
+## Threading and locks
+
+[ADR 0013](../decisions/0013-threading.md) and
+[ADR 0020](../decisions/0020-recording-locks-scope-labels.md) apply. Release recording takes no lock
+but the frame arena's, to claim a page. Reading a native payload is lock-free.
+
+The backend's mutexes nest in one order, outermost first:
+
+1. the frame arena's, the validation tracker's or the stager's, which never nest in one another;
+2. a `HandlePool`'s, such as the buffer pool's;
+3. the residency set's or the Debug address map's, which are leaves: nothing is taken while either
+   is held, and neither is taken inside the other.
+
+A thread may skip a level but never takes a lock of an earlier level while it holds one of a later
+level. Claiming an arena page holds the arena's mutex while it adds the page to the residency set,
+then to the buffer pool, then in Debug to the address map, one after another. A retire hook runs
+under its pool's mutex and takes the residency set's and, for a buffer, the address map's; it calls
+neither a pool nor the arena. `Queue::submit` takes the residency set's mutex inside the tracker's
+lock, and a copy takes it inside the stager's. Creating a buffer or texture takes no two of them at
+once: it adds the object to the residency set, then to its pool, then to the address map, releasing
+each before the next.
+
+`Queue::submit` holds the tracker's lock, which only a validating device takes, from the check to
+its last native call. Inside it, it takes the fence pool's mutex once for each fence it checks and
+once for each signal it records, in the shared core code, as on Null, in Debug the pool mutexes of the lookups its checks and the replay
+make, each released before the next, and the residency set's mutex only when the set is dirty. A
+clean set costs one atomic load, so residency adds no lock to a submission once the set is
+committed.
+
+Two more mutexes are taken alone, never with another held: each frame slot's list pool's, taken by
+`acquireCommandList` and by the frame-slot reuse (acquisition is free-threaded and is not recording
+under ADR 0020, as on Null), and the kept fence events', taken by `Device::destroy(Fence)` after the
+core's destroy has released the fence pool's and by the frame-slot reuse after it has released the
+list pool's. The view and sampler hooks run under their slot allocator's mutex and take none.
+
+## Autorelease pools
+
+Every entry that calls an autoreleasing factory opens an `NS::AutoreleasePool` and retains what it
+keeps; every retire hook and every destructor of an object that holds Metal references does the
+same and releases in reverse order of creation. Objects from `new*` factories are +1 and released
+once. An `NS::Error*` is reset to null before each call that takes it. RojoRHI reads and sets no
+environment variable; whoever runs the tests sets `MTL_DEBUG_LAYER`.
+
+## The shared metal-cpp unit
+
+`Backends/Metal4/MetalCpp/MetalCppImpl.cpp` is the one unit that defines metal-cpp's class and
+selector tables. The `RojoRHIMetalCpp` target compiles it on macOS for any backend option; the
+`RojoRHI` target with `metal4` and `RojoRHILegacy` both link it, so a host that links both gets one
+definition of each table.
+
+## Tests
+
+The Metal 4 test binary builds `Tests/Contract/` minus the files named in `metal4_pending` in
+`xmake/targets.lua`, `Tests/Metal4/` (the `[metal4]` cases), `Tests/Conformance/` (the
+`[conformance]` cases), `Tests/Support/` and `Tests/Support/Metal4/` (the surface, a readback
+helper and `runsOnGpu`). `Tests/Core/` and `Tests/Null/` build with the Null backend only.
+`metal4_pending` lists the contract files of chapters the backend does not implement yet; a file
+leaves it when it passes whole, the build fails on a name matching no file, and the list ends
+empty. The entries `contract`, `death`, `abi` and `conformance` run under `MTL_DEBUG_LAYER=1`.
+By hand, in Debug, from `build/macosx/arm64/debug/rojorhi-test`:
+
+```
+MTL_DEBUG_LAYER=1 ./RojoRHITests "[contract]~[death],[metal4]~[death]"
+```
+
+A validation-layer message is a failure, and so is an `autoreleased with no pool` line under
+`OBJC_DEBUG_MISSING_POOLS=YES`. A death test needs no GPU path of its own: the checks live in the
+core, so the same cases run on both backends. [Testing](../conventions/testing.md) owns the tiers.

@@ -140,3 +140,36 @@
   API reference holds the documentation. The v1 headers under `Legacy/` keep their own layout.
 - ADR 0022 supersedes ADR 0015: the version macros are defined in `<rojoRHI/RHI.h>`, and the
   rest of the versioning decision is unchanged.
+- The Metal 4 backend begins (`xmake f --rojorhi_backend=metal4`, macOS only; `null` stays the
+  default): `createDevice` with its floor check, capabilities and limits, format capabilities, the
+  three queues, `beginFrame` and `endFrame`; buffers, heaps, placement, `address` and `Addr`
+  arithmetic; textures, views, samplers and the view and sampler ID tables; fences, `Queue::submit`
+  with fence waits and signals, `completedValue` and `Device::wait`; and command lists as far as
+  `acquireCommandList`, `end` and `uploadFrameData` over real frame-arena pages. The recording,
+  pipeline, presentation, upscaling and sparse entries are not implemented yet
+  ([architecture](docs/architecture/metal4-backend.md)).
+- The native table and slot payloads in the core: `HandlePool::native` reads a record's backend
+  payload with one lock-free load, a pool clears the entry before the retire hook runs, the slot
+  allocators carry a view or sampler payload through `replace`, `retire` and `drain`, and a
+  `waitFrame` hook lets a native backend wait for a frame's work before its slot is reused. The
+  entries that create views and samplers are split into a check and a placement.
+- Counting is the backend's: `nativeRecordCalls`, `nativeBarriers` and `encodersOpened` are
+  noted on the list by the backend at each recording site and folded in by the core at submission,
+  and `nativeSubmitCalls` counts native queue
+  calls only, so Metal 4 counts its own commits and the Null backend its one per submission. The
+  `Counters` table of chapter 14 changes its `Source` row to say so.
+- API reference changes for the Metal 4 backend: `VU-rojo-texture-0042` is added (`Tex1D` and
+  `Tex1DArray` take exactly one mip level, because Metal has no mipmapped 1D textures); the Metal 4
+  format capabilities narrow what the class ceiling allows (`BGRA8Unorm` and `RGB10A2Unorm` report
+  no storage read or write, `R32Float` filtering and resolve follow 32-bit float filtering, and
+  depth formats filter linearly from Apple9); the Metal 4 floor check in chapter 02 names the
+  argument-buffer sampler count, `maxBufferLength`, the threadgroup size and memory limits and BC
+  texture compression, every floor item of chapters 02 and 15 that Metal reports; chapter 15's
+  Metal 4 `maxAddrOffset` is `maxBufferLength` − 1, the furthest byte of the largest buffer, not
+  2^64 − 1.
+- The first conformance cases: `[conformance]` cases in `Tests/Conformance/` that check fence values
+  and CPU-visible buffer memory on a GPU, compiled on every backend and skipped where no GPU runs, and `[metal4]` cases for what only the Metal 4
+  backend makes ([testing](docs/conventions/testing.md)).
+- `RojoRHILegacy` and the Metal 4 backend link one metal-cpp implementation unit,
+  `RojoRHIMetalCpp`, so a host that links both has one definition of metal-cpp's tables. A
+  `metal4` CI job builds the backend on hosted macOS.
