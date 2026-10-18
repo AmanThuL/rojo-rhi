@@ -23,29 +23,50 @@ Metal 4 under the validation layer. The test tree is split by backend. `Tests/Co
 backend-neutral reference rules, one file per area, tagged `[contract]`: every expectation there
 must hold for any backend, so it states only what the reference states, and it includes no backend
 header. One file is a known exception: `PipelineTests.cpp`, pending on Metal 4, includes
-`Support/NullLibrary.h` for its Null-format library blobs (issue #48). `Tests/Null/` holds what only the Null backend promises (the values it reports for limits
-and formats), tagged `[null]`. `Tests/Metal4/` holds what only the Metal 4 backend makes (native
-call counts, residency commits, the descriptors it builds), tagged `[metal4]`; it may include
-`Backends/Metal4/Source` headers and metal-cpp. `Tests/Core/` holds the core's internals, such as
-the handle pool, tagged `[core]`, and may include private headers; it builds with Null only, as
-`Tests/Null/` does. `Tests/Support/` holds shared helpers, and `Tests/Support/Null/` and
-`Tests/Support/Metal4/` the helpers of each backend (the Metal 4 ones create a surface, read Private
-memory back and report `runsOnGpu`): `Death.h`, `NullLibrary.h` (builds Null shader library blobs,
-including ones the backend must refuse), `PassKit.h` (a device with an open frame, a library, a
-list, attachment textures and pipelines for recording tests; it loads its library on first use) and
-`GpuKit.h` (a device with an open frame that runs lists to completion on the GPU and reads buffers
-and textures back through public entries, for conformance cases). On Null the `contract` entry runs
-`[contract]`, `[core]` and `[null]` and excludes `[death]`; on Metal 4 it runs `[contract]` and
-`[metal4]`, with the Metal 4 entries running from the test directory under `MTL_DEBUG_LAYER=1`.
-Release CI runs it too. A failing validation-layer message is a failure.
+`Support/NullLibrary.h` for its Null-format library blobs (issue #48). `Tests/Null/` holds what only
+the Null backend promises (the values it reports for limits and formats), tagged `[null]`.
+`Tests/Metal4/` holds what only the Metal 4 backend makes (native call counts, residency commits,
+the descriptors it builds), tagged `[metal4]`; it may include `Backends/Metal4/Source` headers and
+metal-cpp. `Tests/Core/` holds the core's internals, such as the handle pool, tagged `[core]`, and
+may include private headers; it builds with Null only, as `Tests/Null/` does. `Tests/Support/` holds
+shared helpers, and `Tests/Support/Null/` and `Tests/Support/Metal4/` the helpers of each backend
+(the Metal 4 ones create a surface, read Private memory back and report `runsOnGpu`): `Death.h`,
+`NullLibrary.h` (builds Null shader library blobs, including ones the backend must refuse),
+`PassKit.h` (a device with an open frame, a library, a list, attachment textures and pipelines for
+recording tests; it loads its library on first use) and `GpuKit.h` (a device with an open frame
+that runs lists to completion on the GPU and reads buffers and textures back through public
+entries, for conformance cases). On Null the `contract` entry runs `[contract]`, `[core]` and
+`[null]` and excludes `[death]`; on Metal 4 it runs `[contract]` and `[metal4]`, with the Metal 4
+entries running from the test directory under `MTL_DEBUG_LAYER=1`. Release CI runs it too. A
+failing validation-layer message is a failure.
+
+The Metal 4 surfaces (`test::surface`) are `CAMetalLayer`s outside any window, created on first
+use and shared by the process; each starts with a drawable size of 256 x 256, as a Null surface
+has an extent from the start, and a case that resizes a shared surface leaves it resized for the
+rest of the process, so a case that changes the size either uses a layer of its own or restores it.
+The `[capture]` cases of `Tests/Metal4/Metal4CaptureTests.cpp` depend on the launch environment:
+the case that expects `Unsupported` runs only without `MTL_CAPTURE_ENABLED`, and the three that
+write a `.gputrace` document, refuse a second capture and refuse a path below a regular file run
+only with `MTL_CAPTURE_ENABLED=1`. Each skips itself otherwise, so a default run passes one and
+skips three, and a run with the variable set passes three and skips one.
+
+A Metal 4 run is also checked for `autoreleased with no pool` lines under
+`OBJC_DEBUG_MISSING_POOLS=YES`, and the check is judged by their stacks: a line with a RojoRHI frame
+is a failure. Presenting a drawable makes Apple's FramePacing and submission threads print such
+lines with no RojoRHI frame, and a run with `MTL_CAPTURE_ENABLED=1` prints more from the capture
+tool's XPC code; neither counts, so a count of zero holds only for a run that presents nothing and
+captures nothing ([the Metal 4
+edges](../architecture/metal4-backend-edges.md#presenting-under-objc_debug_missing_pools) lists the
+sources).
 
 Metal 4 builds `Tests/Contract/` minus the files named in `metal4_pending` in `xmake/targets.lua`,
 the contract files of chapters the backend does not implement yet. A file leaves the list when it
 passes whole on Metal 4, a name that matches no file fails the configuration, and the list ends
 empty. The files it holds today cover recording (passes, draws, copies, barriers), pipelines,
-presentation, upscaling, sparse resources, and the counters, diagnostics, lifetime, hazard,
-handoff, aliasing and validation-tracker cases that need recording the backend does not implement
-yet; the frame-join and queue-hazard files run on Metal 4.
+upscaling, and the counters, diagnostics, lifetime, hazard, handoff, aliasing, validation-tracker
+and swapchain cases that need recording the backend does not implement yet; the frame-join,
+queue-hazard, sparse and sparse-order files and the swapchain death tests run on Metal 4. The
+swapchain entries themselves exist, and their remaining cases wait only for render passes.
 
 **Death tests** pin each Debug-tier valid-usage rule (ADR 0009). A death test is a `TEST_CASE` named
 `"<identifier> <behaviour>"`, such as `"VU-rojo-device-0003 beginFrame runs while a frame is open"`,
@@ -77,9 +98,10 @@ names an unknown identifier or part. A part removes its lines in the change that
 
 **Conformance tests** (`[conformance]`, `Tests/Conformance/`) are the v2 interface's T1 cases
 (ADR 0009): cases that observe on a GPU what the API reference promises. They check fence
-values and CPU-visible buffer memory, and readback oracles of GPU-written data: `Copy` (every copy
-path), `InitialData`, `Barrier` (each barrier kind, and that a consumer barrier holds back every
-later encoder), `Fill`, `Clear` (render targets, depth and Storage-only textures of every type) and
+values, CPU-visible buffer memory, acquiring and presenting images across image counts, latency
+limits and frame counts, and readback oracles of GPU-written data: `Copy` (every copy path),
+`InitialData`, `Barrier` (each barrier kind, and that a consumer barrier holds back every later
+encoder), `Fill`, `Clear` (render targets, depth and Storage-only textures of every type) and
 `Handoff` (work chained through the three queues by fences), over `Tests/Support/GpuKit`, which
 runs lists and reads results back through public entries and waits on the host after each run.
 They compile on every backend and each starts with `test::requireGpu()` from

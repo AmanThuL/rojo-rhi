@@ -37,7 +37,8 @@ Images are fresh texture records per acquire. A Null swapchain holds no standing
 `acquire` allocates a `TextureRecord` marked `swapchainImage` with the usage and format chapter 11
 gives it, and `present` releases it through the deferred path. `core::acquireImage` takes the
 image's native payload and publishes it before the handle exists; the Null backend passes a null
-one. The handle an earlier acquire
+one. A backend whose native acquire can fail calls `core::checkAcquireImage`, which changes nothing,
+before its native acquire and then `acquireImage(swapchain, native)`. The handle an earlier acquire
 returned is therefore stale once the image is presented, as chapter 11 says, and `resize` has
 nothing to retire because it requires that no image is held (`VU-rojo-present-0008`). A Presented
 state collapses into Available, since a Null present completes inside the call, as a submit signals
@@ -142,7 +143,9 @@ The backend counts each native call it makes: the recording counts below are inc
 backend's own recording entries (`noteNativeCall` and the barrier and encoder counts), which on Null
 sit in `NullCommandList.cpp`, and the validation tracker numbers its commands itself and counts
 nothing. The core counts creation, fence and frame-data counts, and one
-`nativeSubmitCalls` for each fence wait and signal a submission carries. Each field counts what the
+`nativeSubmitCalls` for each fence wait and signal a submission carries; `core::presentImage` and
+`core::mapTiles` count no native call, so each backend counts the calls its present and its
+mapping make (Null: one `nativeSubmitCalls` for each). Each field counts what the
 Metal 4 mapping row of the entry does: one native call for each entry whose row names a call.
 
 | Field | What increments it |

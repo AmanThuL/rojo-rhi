@@ -5,7 +5,7 @@
 This page describes how the Metal 4 backend records a command list into native command buffers:
 the objects a list owns, the one open encoder, copies, fills, clears, barriers, scopes, the counts
 and the commit-timing seam. [The Metal 4 backend](metal4-backend.md) describes the device around
-it. Render passes, pipelines, dispatches, draws, timestamps and presentation are not recorded yet;
+it. Render passes, pipelines, dispatches, draws and timestamps are not recorded yet;
 their entries log `<entry> is not implemented by the Metal 4 backend` and abort. Chapters 07, 09 and
 10 of the API reference stay the authority on semantics and on each entry's Metal 4 mapping; every
 check lives in `Source/Core`, so no `ROJORHI_VU` appears under `Backends/Metal4/`.

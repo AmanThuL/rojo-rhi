@@ -198,3 +198,13 @@
 - API reference changes in chapters 05 and 06: `Device::loadShaderLibrary` returns
   `ErrorCategory::ShaderAbiMismatch` for another ABI version and `ErrorCategory::DriverFailure` for
   a blob built for another backend or carrying no stamp.
+- The Metal 4 backend implements swapchains and presentation on a `CAMetalLayer` (acquire with a
+  one-second deadline and a latency limit kept by presented handlers, present, resize, deferred
+  destruction, the layer's residency set on the graphics queue), placement sparse resources
+  (formats and tile shapes measured from the device, `Queue::mapTiles` over the native mapping
+  updates, with a work-around for a driver fault) and programmatic capture through the capture
+  manager. Chapters 11, 13 and 15 gain their Metal 4 mapping rows, chapter 03's `Sparse` row names
+  the page size and length of a sparse buffer, and `Swapchain::acquire` returns a null texture for
+  a zero-extent swapchain. On Metal 4, `Queue::mapTiles` and `Swapchain::acquire` move from `native`
+  to `cheap` in chapters 11 and 13 and in appendix A
+  ([architecture](docs/architecture/metal4-backend.md)).
