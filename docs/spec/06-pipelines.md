@@ -61,9 +61,10 @@ Result<ShaderLibrary> Device::loadShaderLibrary(std::span<const std::byte> blob,
 Loads a precompiled shader library: a metallib on Metal 4, a DXIL container on D3D12, produced by
 the xmake shader rule and stamped with `ROJORHI_SHADER_ABI_VERSION`
 ([shader ABI](05-shader-abi.md)).
-A blob whose stamp differs from the library's ABI version, or which is not built for the active
-backend, returns an error instead of loading a stale shader. RojoRHI never compiles shader source
-at run time. The bytes are consumed before return. Free-threaded. Destroyed through
+A blob whose stamp differs from the library's ABI version returns
+`ErrorCategory::ShaderAbiMismatch`, and one not built for the active backend or malformed returns
+`ErrorCategory::DriverFailure`, instead of loading a stale shader. RojoRHI never compiles shader
+source at run time. The bytes are consumed before return. Free-threaded. Destroyed through
 `Device::destroy` ([device](02-device.md)).
 
 #### Valid usage
@@ -87,18 +88,19 @@ enum class BlendFactor : uint8_t {
 enum class BlendOp : uint8_t { Add, Subtract, ReverseSubtract, Min, Max };
 struct BlendState {
     bool enable = false;
-    BlendFactor srcColor = BlendFactor::One, dstColor = BlendFactor::Zero;
-    BlendOp colorOp = BlendOp::Add;
-    BlendFactor srcAlpha = BlendFactor::One, dstAlpha = BlendFactor::Zero;
-    BlendOp alphaOp = BlendOp::Add;
+    BlendFactor srcColor = BlendFactor::One, dstColor = BlendFactor::Zero;   // fragment, attachment
+    BlendOp colorOp = BlendOp::Add;                                          // color terms
+    BlendFactor srcAlpha = BlendFactor::One, dstAlpha = BlendFactor::Zero;   // fragment, attachment
+    BlendOp alphaOp = BlendOp::Add;                                          // alpha terms
 };
 ```
 
 Fixed-function blending for one color target, baked into the pipeline. With `enable` false the
-fragment output is written unchanged. `Subtract` is source minus destination; `ReverseSubtract` is
-destination minus source; `Min` and `Max` ignore the factors. `Constant` and `OneMinusConstant` read
-the values of `CommandList::setBlendConstants`. Dual-source blending and logic operations are not
-part of 0.1.0.
+fragment output is written unchanged. A `Src` factor reads the fragment's color or alpha and a `Dst`
+factor the attachment's; `SrcAlphaSaturate` is the smaller of the fragment's alpha and 1 minus the
+attachment's alpha. `Subtract` is source minus destination; `ReverseSubtract` is destination minus
+source; `Min` and `Max` ignore the factors. `Constant` and `OneMinusConstant` read the values of
+`CommandList::setBlendConstants`. Dual-source blending and logic operations are not part of 0.1.0.
 
 #### Valid usage
 
@@ -143,9 +145,9 @@ when blending is enabled, as `VU-rojo-format-0003` requires.
 ### `RasterState`
 
 ```cpp
-enum class CullMode : uint8_t { None, Front, Back };
-enum class FrontFace : uint8_t { CounterClockwise, Clockwise };
-enum class FillMode : uint8_t { Solid, Wireframe };
+enum class CullMode : uint8_t { None, Front, Back };               // the faces discarded
+enum class FrontFace : uint8_t { CounterClockwise, Clockwise };   // the winding of a front face
+enum class FillMode : uint8_t { Solid, Wireframe };               // filled triangles, or edges only
 struct RasterState {
     CullMode cull = CullMode::None;
     FrontFace frontFace = FrontFace::CounterClockwise;
@@ -203,19 +205,23 @@ enum class StencilOp : uint8_t {
 };
 struct StencilFaceState {
     StencilOp fail = StencilOp::Keep, depthFail = StencilOp::Keep, pass = StencilOp::Keep;
-    CompareOp compare = CompareOp::Always;
+    CompareOp compare = CompareOp::Always;   // the stencil comparison
 };
 struct DepthStencilState {
     bool depthTest = false, depthWrite = false;
     CompareOp depthCompare = CompareOp::GreaterOrEqual;   // reverse Z, matching clear depth 0
     bool stencilTest = false;
-    uint8_t stencilReadMask = 0xFF, stencilWriteMask = 0xFF;
-    StencilFaceState front, back;
+    uint8_t stencilReadMask = 0xFF, stencilWriteMask = 0xFF;   // compared bits, written bits
+    StencilFaceState front, back;                              // operations per face orientation
 };
 ```
 
-Depth test, depth write, compare and stencil operations, baked into the pipeline. `Replace` writes
-the reference set by `CommandList::setStencilReference`. Depth bounds testing is not part of 0.1.0.
+Depth test, depth write, compare and stencil operations, baked into the pipeline. A face applies
+`fail` when its stencil test fails, `depthFail` when the stencil test passes and the depth test
+fails, and `pass` when both pass. `Replace` writes the reference set by
+`CommandList::setStencilReference`; `IncrementClamp` and `DecrementClamp` saturate at the maximum
+and at 0, `IncrementWrap` and `DecrementWrap` wrap around, and `Invert` inverts the bits. Depth
+bounds testing is not part of 0.1.0.
 
 #### Valid usage
 
@@ -262,7 +268,7 @@ struct GraphicsPipelineDesc {
     DepthStencilState depthStencil;
     std::span<const ColorTarget> colors;
     Format depthFormat = Format::Undefined;   // Undefined: no depth attachment
-    uint32_t samples = 1;
+    uint32_t samples = 1;                     // of every attachment
     std::string_view label;
 };
 ```

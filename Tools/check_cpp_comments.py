@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import subprocess
 import sys
 from bisect import bisect_right
@@ -22,6 +23,14 @@ FILE_RULER = "//" + "-" * 118
 # The ImGui adapter compiles only against a host's ImGui target, so a standalone compilation
 # database never holds it. Its public headers are compiled whenever the database covers it.
 ADAPTER_DIR = "Legacy/Backends/Metal4/ImGui"
+# The v2 public tree is a declaration list whose documentation is the API reference, so its
+# declarations carry no doc comment and its comments carry no reference into that documentation.
+MINIMAL_ROOT = "Include"
+FORBIDDEN_COMMENT_TEXT = re.compile(r"VU-rojo-|docs/|ADR \d|http")
+# String and character literals are matched first so that their contents are never read as comments.
+CPP_LEXEME = re.compile(
+    r'"(?:\\.|[^"\\\n])*"|\'(?:\\.|[^\'\\\n])*\'|//[^\n]*|/\*.*?\*/', re.S
+)
 
 
 def project_cpp_files(root: Path) -> list[Path]:
@@ -53,6 +62,25 @@ def public_header_files(root: Path) -> list[Path]:
         if include_root.is_dir():
             public.extend(include_root.rglob("*.h"))
     return sorted(public)
+
+
+def follows_minimal_style(relative: Path) -> bool:
+    """Return whether a header belongs to the v2 public tree, which needs no per-declaration docs."""
+    return relative.parts[:1] == (MINIMAL_ROOT,)
+
+
+def check_minimal_comments(path: Path, text: str) -> list[str]:
+    """Reject comments that name a valid-usage identifier, a document path, an ADR or a link."""
+    errors: list[str] = []
+    for match in CPP_LEXEME.finditer(text):
+        lexeme = match.group()
+        if not lexeme.startswith(("//", "/*")):
+            continue
+        found = FORBIDDEN_COMMENT_TEXT.search(lexeme)
+        if found:
+            line = text.count("\n", 0, match.start()) + 1
+            errors.append(f"{path}:{line}: comment names `{found.group()}`; the API reference holds it")
+    return errors
 
 
 def check_file_header(path: Path, text: str) -> list[str]:
@@ -325,6 +353,8 @@ def compiler_public_api_findings(root: Path, compile_commands: Path) -> tuple[li
         if error:
             findings.append(f"{relative}: public-header documentation compile failed:\n{error}")
             continue
+        if follows_minimal_style(relative):
+            continue
         text = header.read_text(encoding="utf-8")
         findings.extend(public_api_findings_from_ast(relative, text, ast, spelled))
     return findings, notices
@@ -363,6 +393,8 @@ def main() -> int:
             errors.append(f"{relative}: cannot read source: {exc}")
             continue
         errors.extend(check_file_header(relative, text))
+        if follows_minimal_style(relative):
+            errors.extend(check_minimal_comments(relative, text))
 
     if args.public_api_docs != "off":
         compile_commands = (args.compile_commands or root / "compile_commands.json").resolve()

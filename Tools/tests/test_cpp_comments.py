@@ -209,6 +209,69 @@ class CppCommentTests(unittest.TestCase):
             ["Include/rojoRHI/Example.h:10: public API declaration has no Doxygen comment"],
         )
 
+    def test_minimal_header_rejects_a_valid_usage_identifier_in_a_comment(self) -> None:
+        text = source("RHI.h") + "    void end(); ///< The list is recording (VU-rojo-cmd-0002).\n"
+        errors = comments.check_minimal_comments(Path("Include/rojoRHI/RHI.h"), text)
+        self.assertEqual(len(errors), 1)
+        self.assertIn("RHI.h:5:", errors[0])
+        self.assertIn("VU-rojo-", errors[0])
+
+    def test_minimal_header_rejects_document_paths_adrs_and_links(self) -> None:
+        for comment in (
+            "// See docs/spec/07-command-recording.md.",
+            "// ADR 0020 allows the lock.",
+            "/* https://example.com */",
+        ):
+            with self.subTest(comment=comment):
+                text = source("RHI.h") + comment + "\n"
+                self.assertEqual(len(comments.check_minimal_comments(Path("Include/rojoRHI/RHI.h"), text)), 1)
+
+    def test_minimal_header_accepts_short_notes_and_ignores_string_literals(self) -> None:
+        text = source("RHI.h") + "\n".join(
+            [
+                "// Frame thread class.",
+                "void beginFrame();",
+                'static_assert(true, "see docs/ and http");',
+                "uint64_t bits = 0; ///< Opaque.",
+                "",
+            ]
+        )
+        self.assertEqual(comments.check_minimal_comments(Path("Include/rojoRHI/RHI.h"), text), [])
+
+    def test_only_the_v2_public_tree_follows_the_minimal_style(self) -> None:
+        self.assertTrue(comments.follows_minimal_style(Path("Include/rojoRHI/RHI.h")))
+        self.assertFalse(comments.follows_minimal_style(Path("Legacy/Include/rojoRHI/Device.h")))
+        self.assertFalse(comments.follows_minimal_style(Path("Source/Core/DeviceCore.h")))
+
+    def test_undocumented_declaration_passes_in_the_public_header_but_not_in_legacy(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            for relative in ("Include/rojoRHI/RHI.h", "Legacy/Include/rojoRHI/Device.h"):
+                path = root / relative
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_text(source(path.name) + "void undocumented();\n", encoding="utf-8")
+            database = root / "compile_commands.json"
+            database.write_text(
+                '[{"directory": "%s", "file": "Tests/A.cpp"}, {"directory": "%s", "file": "Legacy/Source/B.cpp"}]'
+                % (root, root),
+                encoding="utf-8",
+            )
+
+            def undocumented_ast(header: Path, entries: list, component: Path) -> tuple:
+                spelled = header.relative_to(component).as_posix()
+                ast = [{
+                    "kind": "NamespaceDecl", "loc": {"file": spelled, "line": 5},
+                    "inner": [{"kind": "FunctionDecl", "name": "undocumented", "loc": {"line": 6}}],
+                }]
+                return ast, spelled, None
+
+            with mock.patch.object(comments, "_ast_for_header", undocumented_ast):
+                findings, _ = comments.compiler_public_api_findings(root, database)
+            self.assertEqual(
+                findings,
+                ["Legacy/Include/rojoRHI/Device.h:6: public API declaration has no Doxygen comment"],
+            )
+
 
 if __name__ == "__main__":
     unittest.main()

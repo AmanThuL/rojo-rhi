@@ -83,7 +83,8 @@ void CommandList::declareAccess(std::span<const ResourceAccess> accesses);
 Declares shader accesses for the next draw, indexed draw, mesh-task draw or dispatch recorded on
 the list, including their indirect forms; several calls before one command accumulate. The tracker
 then checks those accesses like any observable access. With validation off the call returns at
-once, and in a Release build it is an empty inline function, so declarations cost nothing there.
+once, and in a Release build it is an empty inline function, so declarations cost nothing there;
+the consumer and the library are therefore built with the same `NDEBUG` setting.
 
 #### Valid usage
 - `VU-rojo-diag-0004` The command list is recording: acquired and not yet ended.
@@ -155,8 +156,9 @@ Counters Device::counters() const;
 ```
 Returns a snapshot of the counters by value. Recording counters accumulate in each command list and
 fold into the device when the list is submitted, so recording stays lock-free; creation counters
-increment on the creating thread. The call is free-threaded; a snapshot taken while other threads
-create objects or submit may miss their latest increments.
+increment on the creating thread, and a list acquired and never submitted contributes none. The call
+is free-threaded; a snapshot taken while other threads create objects or submit may miss their
+latest increments.
 
 #### Valid usage
 - None.
@@ -177,11 +179,11 @@ struct ScopeTiming {
 };
 ```
 The GPU duration of one debug scope, measured by timestamps the backend writes at the scope's
-boundaries; every render pass forms its own scope.
+boundaries; every render pass and every upscale forms its own scope.
 
 | Field | Meaning |
 |---|---|
-| `label` | The scope's label, or the render pass's, with the default label substituted for an empty one |
+| `label` | The scope's label, or the render pass's or upscale's, with the default label substituted for an empty one |
 | `frame` | Number of the frame the scope was recorded in, counting `Device::beginFrame` calls from one |
 | `queue` | Queue type of the command list that recorded the scope |
 | `depth` | Nesting depth; zero for an outermost scope |
@@ -208,7 +210,7 @@ Returns the scopes of the frame the most recent `Device::beginFrame` waited for,
 retires, and that wait is the one point where retirement is already proven, so reading them never
 stalls. Records are in submission order per queue, and within a command list in the order the
 scopes began, a parent before its children. The span is empty until a frame has retired, and empty
-for a frame with no scopes. It is owned by the device and invalidated by the next
+for a frame with no scopes. It is owned by the device, labels included, and invalidated by the next
 `Device::beginFrame`.
 
 #### Valid usage
@@ -232,7 +234,8 @@ process: on Metal 4 when capture is not enabled, or when the process-global `MTL
 already capturing for another device or tool; on the planned D3D12 backend when the device was
 created without `DeviceDesc::enableCapture` ([device](02-device.md)), which loads the PIX GPU
 capturer before the native device exists. It also returns an error when the destination cannot be
-written. RenderDoc is the Vulkan counterpart and is reserved.
+written. After an error no capture is in progress. RenderDoc is the Vulkan counterpart and is
+reserved.
 
 #### Valid usage
 - `VU-rojo-diag-0008` No capture started by this device's `Device::beginCapture` is in progress.
