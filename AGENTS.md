@@ -59,7 +59,8 @@ Metal 4 backend, the optional ImGui adapter, tests and shaders — alongside its
   docs/architecture/null-backend-edges.md),
   [the validation tracker](docs/architecture/validation-tracker.md),
   [the tracker across queues](docs/architecture/validation-tracker-queues.md),
-  [the Metal 4 backend](docs/architecture/metal4-backend.md)
+  [the Metal 4 backend](docs/architecture/metal4-backend.md),
+  [the benchmark harness](docs/architecture/benchmarks.md)
 
 ## Commands
 
@@ -110,6 +111,24 @@ xmake test RojoRHITests/death -P .
 ```
 
 On a Metal 4 configure the same `-P .` applies to its entries, `conformance` included.
+
+The benchmark harness (macOS only, [architecture](docs/architecture/benchmarks.md)):
+
+```
+xmake build RojoRHIBench              # builds the harness for the configured backend
+xmake test RojoRHIBench/null          # runs the [null] and [host] cases, no GPU
+xmake test RojoRHIBench/native        # runs the [native] cases, local Metal 4 Apple Silicon only
+python3 Tools/bench.py build          # builds Release and Debug, copies the binaries, lists configurations
+python3 Tools/bench.py correctness    # runs the correctness gate, R against N, in both builds
+python3 Tools/bench.py timing         # runs the timed processes, local hardware only (ADR 0014)
+python3 Tools/bench.py analyze        # writes summary.json and analysis.txt from the results
+```
+
+`bench.py build` takes `--backend null` until the `metal4` backend implements the entries the
+RojoRHI arm calls and its private `CommitTiming.h`; on `metal4` the harness compiles but does not
+link yet, and no CI job builds it there. `correctness --arms N` then smoke-runs the native arm
+alone. Timing follows ADR 0014: Release,
+validation off, on AC power, never on hosted runners.
 
 `python3 Tools/check_lto_inline.py`, after `xmake build RojoRHILtoProbe` in a Release configure,
 fails unless link-time optimization inlined `Device::capabilities` into its caller in the probe

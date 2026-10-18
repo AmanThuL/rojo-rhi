@@ -173,3 +173,7 @@
 - `RojoRHILegacy` and the Metal 4 backend link one metal-cpp implementation unit,
   `RojoRHIMetalCpp`, so a host that links both has one definition of metal-cpp's tables. A
   `metal4` CI job builds the backend on hosted macOS.
+- The benchmark harness `RojoRHIBench` (`Benchmarks/`, `Shaders/Bench/`) with a native Metal 4 arm
+  and a RojoRHI arm of every workload of the overhead round, its Null-backend checks, and the
+  driver `Tools/bench.py` with its statistics and decision rules
+  ([architecture](docs/architecture/benchmarks.md)).

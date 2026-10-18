@@ -26,11 +26,14 @@ rojo-rhi/
   Tests/Metal4/  Tests/Conformance/           Metal 4 expectations; T1 readback oracles
   Tests/Support/                              the death-test harness; per-backend helpers
   Shaders/RojoRHI/  Shaders/Tests/            the shader ABI module; its conformance shaders
+  Shaders/Bench/                              the Slang sources of the benchmark workloads
+  Benchmarks/                                 the RojoRHIBench harness: both arms, host code, checks
   Legacy/Include/rojoRHI/                     v1 public headers, dependency-free
   Legacy/Source/  Legacy/Source/Base/         v1 shared implementation; private base
   Legacy/Backends/Metal4/Source/  Legacy/Backends/Metal4/ImGui/
   Legacy/Tests/  Legacy/Shaders/Tests/        v1 contract, validation and GPU conformance
   Tools/                                      checks, Patches/, ImGuiBufferProbe/
+  Tools/bench.py  Tools/bench_analysis.py     the benchmark driver and its statistics
   Tools/shader_layout.py                      generates the layout checks from Slang reflection
   Tools/Rename/  Tools/Extract/               the Luminex rename table and the extraction scripts
   docs/conventions/  docs/decisions/  docs/architecture/  docs/guides/
@@ -41,9 +44,9 @@ rojo-rhi/
 
 `xmake.lua` at the root declares project settings, requires and the language level once; it is never
 included directly by a host project. `xmake/` holds `targets.lua` (the includable target
-declarations; the v1 targets are macOS only), a minimal `setup.lua` (metal-cpp and Slang pins,
-fetched on macOS; Windows fetches Slang alone), and a test-only copy of the shader-to-metallib rule,
-so RojoRHI configures, builds and tests standalone.
+declarations; the v1 targets and `RojoRHIBench` are macOS only), a minimal `setup.lua` (metal-cpp
+and Slang pins, fetched on macOS; Windows fetches Slang alone), and a test-only copy of the
+shader-to-metallib rule, so RojoRHI configures, builds and tests standalone.
 
 `Include/`, `Source/`, `Backends/`, `Tests/` and `Shaders/` are the permanent tree of the v2
 interface. `RojoRHI` is a static library of `Source/**/*.cpp` and the selected backend's sources;
@@ -52,13 +55,14 @@ and `metal4`, which builds on macOS only. `Source/Base/` is the private base (th
 `ROJORHI_VU` check and the message sink) and `Source/Core/` the backend-neutral core every backend
 embeds; `Backends/Null/Source/` and `Backends/Metal4/Source/` implement the public entries over it,
 each one backend per build. `Backends/Metal4/MetalCpp/` holds the one metal-cpp implementation unit,
-the `RojoRHIMetalCpp` target, which the Metal 4 backend and `RojoRHILegacy` both link, so a host
-that links both has one definition of metal-cpp's tables. [The Null backend](null-backend.md)
-describes both layers and what is implemented, [command recording](null-backend-recording.md) the
-recording chapters, and [the edges](null-backend-edges.md) presentation, upscaling, sparse
-resources, diagnostics and counters, and [the validation tracker](validation-tracker.md) the checks
-that follow a resource across commands, lists, submissions and queues. `Include/rojoRHI/RHI.h` is
-the whole v2 public interface, one header in sections by API-reference chapter.
+the `RojoRHIMetalCpp` target, which the Metal 4 backend, `RojoRHILegacy` and `RojoRHIBench` link,
+so a host that links more than one has one definition of metal-cpp's tables.
+[The Null backend](null-backend.md) describes both layers and what is implemented,
+[command recording](null-backend-recording.md) the recording chapters, and
+[the edges](null-backend-edges.md) presentation, upscaling, sparse resources, diagnostics and
+counters, and [the validation tracker](validation-tracker.md) the checks that follow a resource
+across commands, lists, submissions and queues. `Include/rojoRHI/RHI.h` is the whole v2 public
+interface, one header in sections by API-reference chapter.
 
 `Tests/` builds as the `RojoRHITests` binary, whose file set depends on the backend. With `null`,
 `contract` runs the T0 cases of `Tests/Contract/`, `Tests/Core/` and `Tests/Null/` except the death
@@ -79,6 +83,13 @@ shader to MSL, SPIR-V and HLSL on every host, to a metallib when the Metal toolc
 and to DXIL when a DXC is reachable; `rojorhi.shader_layout` runs `Tools/shader_layout.py`, which
 reads the probe's reflection on each target and generates `static_assert`s compiled into
 `RojoRHITests`. The tests tagged `[abi]` run both.
+
+`Benchmarks/` builds as the macOS executable `RojoRHIBench`, which runs a native Metal 4 arm and a
+RojoRHI arm of the same workloads in one process and takes the measurements of the overhead
+round. `Shaders/Bench/` holds the workloads' Slang sources beside `Shaders/Tests/`, and the
+hand-written MSL lives with the native arm. Its RojoRHI arm runs on the Null backend until the
+Metal 4 backend implements the entries it calls. [The benchmark harness](benchmarks.md) describes
+the arms, the command line, the Null mode and the driver `Tools/bench.py`.
 
 `Legacy/Include/rojoRHI/` is the v1 public surface: dependency-free headers naming no backend,
 windowing, ImGui or third-party type, rooted at the `rojoRHI/` include spelling ADR 0001 fixes.

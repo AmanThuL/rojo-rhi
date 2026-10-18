@@ -28,8 +28,8 @@ topic and date and quotes the `SHA256SUMS` line of the log it relies on.
 `Tools/gpu_evidence.py` runs one command, saves its combined output as `<label>.txt` with the
 command line at the top and the exit code at the bottom, and rewrites `environment.json` (machine,
 OS build, Xcode, Metal and clang versions, the metal-cpp and repository commits, and whether the
-checkout had changes) and `SHA256SUMS` over every file of the directory. It exits with the
-command's code, so a failing run still leaves its log.
+checkout had changes) and `SHA256SUMS` over every file of the directory at any depth, named by
+relative path. It exits with the command's code, so a failing run still leaves its log.
 
 ```
 xmake f -m debug -y && xmake build RojoRHILegacyTests
@@ -39,7 +39,9 @@ python3 Tools/gpu_evidence.py --topic v1-gpu-conformance --label gpu \
 ```
 
 `--root` names another evidence root and `--date` another date directory. A rerun with the same
-label replaces that log and refreshes the checksums of the whole directory.
+label replaces that log and refreshes the checksums of the whole directory. `Tools/bench.py` writes
+its runs under topic `t2`, checksummed the same way
+([the benchmark harness](../architecture/benchmarks.md)).
 
 ## Rules
 
@@ -58,5 +60,6 @@ label replaces that log and refreshes the checksums of the whole directory.
 | `v1-gpu-conformance` | 2026-10-18 | the frozen v1 suite on an Apple M3 Max, macOS 27.0.1: 58 `[gpu]` cases, the 16 `[checkpoint-a]` cases and 143 CPU cases pass under the validation layer, the first run since v1 moved under `Legacy/` |
 | `t1` | 2026-10-18 | the first Metal 4 runs of the v2 interface under the validation layer, one log per `contract`, `death` and `conformance` entry; the results are in the log summaries |
 | `v1-gpu-conformance` (`gpu-shared-metalcpp`) | 2026-10-18 | the frozen v1 suite rerun after `RojoRHILegacy` linked the shared metal-cpp unit: 58 `[gpu]` cases, 7416 assertions, all passed |
+| `t2-native-smoke` | 2026-10-18 | the three runs `native-check`, `native-build` and `native-gate` of the benchmark harness native arm on an Apple M3 Max, macOS 27.0.1: the 21 `[native]` cases pass under the validation layer, and the N-only correctness pass runs all 63 configurations clean in Release and in Debug |
 | `spike-2-texture-indexing` | 2026-10-12 | [spike 2](../research/2026-10-12-spike-2-texture-indexing.md) |
 | `spike-3-multi-draw-indirect` | 2026-10-12 | [spike 3](../research/2026-10-12-spike-3-multi-draw-indirect.md) |

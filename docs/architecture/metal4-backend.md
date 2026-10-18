@@ -242,8 +242,8 @@ environment variable; whoever runs the tests sets `MTL_DEBUG_LAYER`.
 
 `Backends/Metal4/MetalCpp/MetalCppImpl.cpp` is the one unit that defines metal-cpp's class and
 selector tables. The `RojoRHIMetalCpp` target compiles it on macOS for any backend option; the
-`RojoRHI` target with `metal4` and `RojoRHILegacy` both link it, so a host that links both gets one
-definition of each table.
+`RojoRHI` target with `metal4`, `RojoRHILegacy` and the benchmark harness `RojoRHIBench` link it,
+so a host that links more than one gets one definition of each table.
 
 ## Tests
 
