@@ -10,11 +10,11 @@ namespace contents. This file covers what a formatter cannot. Names are owned by
 - **C++23.** Prefer `std::expected`, `std::span`, `std::string_view`, `std::format` and ranges. No
   RTTI-dependent design. Exceptions only cross third-party boundaries and never leave the public
   interface.
-- **Files.** The v2 public interface is the single header `Include/rojoRHI/RHI.h`, in sections by
-  API-reference chapter. Private headers (`Source/`, `Backends/`, `Tests/`) keep one primary type
-  per header, and v1 under `Legacy/` keeps its own layout. Every header has `#pragma once`, and
-  every hand-written `.h` and `.cpp` the repository owns has the file envelope below at its first
-  physical line.
+- **Files.** The v2 public interface is the single header `Include/rojoRHI/RHI.h`, in labelled
+  sections that follow the API-reference chapters. Private headers (`Source/`, `Backends/`,
+  `Tests/`) keep one primary type per header, and v1 under `Legacy/` keeps its own layout. Every
+  header has `#pragma once`, and every hand-written `.h` and `.cpp` the repository owns has the
+  file envelope below at its first physical line.
 - **Includes.** Own header first, then RojoRHI headers, then third-party, then standard library,
   with a blank line between groups. Public headers use `<rojoRHI/...>`; a private header inside the
   library is included by the path its owner uses.
@@ -104,10 +104,8 @@ separator whose physical line is exactly 120 characters; at column 0 that is `//
 - Do not add separators to declarations, explicit instantiations, lambdas, control-flow blocks or
   function-like macro definitions. Catch2 `TEST_CASE` and related macros are test-unit boundaries
   and take the canonical separator.
-- The `=` ruler belongs only to function and test-unit boundaries and to the chapter sections of
-  `RHI.h`, the `-` ruler only to the file envelope. Do not invent titled or alternate ruler styles.
-  In `RHI.h` each section opens with the separator at column 0, then a plain `//` line naming the
-  chapter and its spec file, and a line saying why when the section sits out of chapter order.
+- The `=` ruler belongs only to function and test-unit boundaries, the `-` ruler only to the file
+  envelope. Do not invent titled or alternate ruler styles.
 
 A Clang-based check rejects missing, duplicate, malformed and orphan separators using the
 compilation database rather than a regular expression guessing at C++ definitions:
@@ -115,11 +113,20 @@ compilation database rather than a regular expression guessing at C++ definition
 
 ## Comments
 
-- Public and protected declarations in public headers use Doxygen `///`. Begin with a concise
-  summary and document ownership, lifetime, threading, valid ranges, units, coordinate and colour
-  spaces, failure behaviour and externally visible side effects when relevant. Use `///<` for a
-  short field or enumerator contract and `@copydoc`/`@inheritdoc` when an override inherits its
-  base contract. Backend and implementation headers are not public API.
+- `RHI.h`, the v2 public header, is a declaration list in the No Graphics API style, because the
+  API reference under `docs/spec/` holds its documentation. It opens `namespace rojoRHI` once, and
+  a blank line and a one- or two-word label comment such as `// Synchronization` separate its
+  sections. No comment sits above a type or member, except a one- or two-line `//` note above a
+  function whose signature hides a wait, a thread class other than its class's, or an unexpected
+  fatal or error path. A field or enumerator takes a short trailing `///<` note only where its name
+  is not enough. No comment names a valid-usage identifier, a document path, an ADR or a link.
+  `Tools/check_cpp_comments.py` requires no doc comment there and rejects those references.
+- Public and protected declarations in the v1 public headers under `Legacy/` and in the ImGui
+  adapter use Doxygen `///`. Begin with a concise summary and document ownership, lifetime,
+  threading, valid ranges, units, coordinate and colour spaces, failure behaviour and externally
+  visible side effects when relevant. Use `///<` for a short field or enumerator contract and
+  `@copydoc`/`@inheritdoc` when an override inherits its base contract. Backend and implementation
+  headers are not public API.
 - Private declarations need no Doxygen and should not carry comments restating their names.
 - Implementation comments are sparse: GPU state and synchronization invariants, cross-frame
   ownership, non-obvious math or space conventions, documented driver workarounds, performance
