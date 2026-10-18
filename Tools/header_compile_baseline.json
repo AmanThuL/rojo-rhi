@@ -1,0 +1,18 @@
+{
+  "macos": {
+    "headerBytes": 1649968,
+    "headerMs": 508.6,
+    "ownBytes": 28164,
+    "ownMs": 40.2,
+    "repetitions": 15,
+    "standardMs": 468.4
+  },
+  "windows": {
+    "headerBytes": 2126700,
+    "headerMs": 553.2,
+    "ownBytes": 28536,
+    "ownMs": 116.7,
+    "repetitions": 15,
+    "standardMs": 436.5
+  }
+}

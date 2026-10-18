@@ -96,6 +96,16 @@ jobs:
       # Release links with LTO (ADR 0012); the probe shows a library entry inlined into its caller.
       - run: xmake build RojoRHILtoProbe && xmake run RojoRHILtoProbe
       - run: python3 Tools/check_lto_inline.py
+  # ADR 0012: what including the public header costs a translation unit, against a stored baseline.
+  header-cost:
+    strategy: {fail-fast: false, matrix: {os: [macos-26, windows-latest]}}
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v5
+      - if: runner.os == 'Windows'
+        uses: ilammy/msvc-dev-cmd@v1
+      - run: python3 Tools/header_compile_time.py
+        shell: bash
   format:
     runs-on: macos-26
     steps:
