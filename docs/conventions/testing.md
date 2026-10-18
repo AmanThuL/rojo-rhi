@@ -31,8 +31,10 @@ the handle pool, tagged `[core]`, and may include private headers; it builds wit
 `Tests/Null/` does. `Tests/Support/` holds shared helpers, and `Tests/Support/Null/` and
 `Tests/Support/Metal4/` the helpers of each backend (the Metal 4 ones create a surface, read Private
 memory back and report `runsOnGpu`): `Death.h`, `NullLibrary.h` (builds Null shader library blobs,
-including ones the backend must refuse) and `PassKit.h` (a device with an open frame, a library, a
-list, attachment textures and pipelines for recording tests). On Null the `contract` entry runs
+including ones the backend must refuse), `PassKit.h` (a device with an open frame, a library, a
+list, attachment textures and pipelines for recording tests; it loads its library on first use) and
+`GpuKit.h` (a device with an open frame that runs lists to completion on the GPU and reads buffers
+and textures back through public entries, for conformance cases). On Null the `contract` entry runs
 `[contract]`, `[core]` and `[null]` and excludes `[death]`; on Metal 4 it runs `[contract]` and
 `[metal4]`, with the Metal 4 entries running from the test directory under `MTL_DEBUG_LAYER=1`.
 Release CI runs it too. A failing validation-layer message is a failure.
@@ -42,8 +44,8 @@ the contract files of chapters the backend does not implement yet. A file leaves
 passes whole on Metal 4, a name that matches no file fails the configuration, and the list ends
 empty. The files it holds today cover recording (passes, draws, copies, barriers), pipelines,
 presentation, upscaling, sparse resources, and the counters, diagnostics, lifetime, hazard,
-handoff, frame-join, aliasing and validation-tracker cases that need recording; the Metal 4
-backend does not implement these yet.
+handoff, aliasing and validation-tracker cases that need recording the backend does not implement
+yet; the frame-join and queue-hazard files run on Metal 4.
 
 **Death tests** pin each Debug-tier valid-usage rule (ADR 0009). A death test is a `TEST_CASE` named
 `"<identifier> <behaviour>"`, such as `"VU-rojo-device-0003 beginFrame runs while a frame is open"`,
@@ -74,8 +76,12 @@ The tool also fails when a listed identifier has a death test, so the list only 
 names an unknown identifier or part. A part removes its lines in the change that adds the tests.
 
 **Conformance tests** (`[conformance]`, `Tests/Conformance/`) are the v2 interface's T1 cases
-(ADR 0009): cases that observe on a GPU what the API reference promises. Today they check fence
-values and CPU-visible buffer memory; readback oracles of GPU-written data arrive with recording.
+(ADR 0009): cases that observe on a GPU what the API reference promises. They check fence
+values and CPU-visible buffer memory, and readback oracles of GPU-written data: `Copy` (every copy
+path), `InitialData`, `Barrier` (each barrier kind, and that a consumer barrier holds back every
+later encoder), `Fill`, `Clear` (render targets, depth and Storage-only textures of every type) and
+`Handoff` (work chained through the three queues by fences), over `Tests/Support/GpuKit`, which
+runs lists and reads results back through public entries and waits on the host after each run.
 They compile on every backend and each starts with `test::requireGpu()` from
 `Tests/Support/Conformance.h`, which skips the case where `test::runsOnGpu()` is false: always on
 Null, never on Metal 4, whose devices need a GPU; Catch2 exits non-zero when every case

@@ -10,10 +10,10 @@ recording, queues and fences, swapchains, upscalers, sparse tiles, diagnostics a
 the validation tracker (ADR 0021): every valid-usage identifier of the API reference is checked and
 has a death test. The Metal 4 backend of v2 is partial and not the default: it implements the
 device, capabilities, formats, buffers, heaps, textures, views, samplers, queues, fences and frames,
-and command lists as far as `acquireCommandList`, `end` and `uploadFrameData`; the other recording
-entries and those of presentation and sparse resources abort, and shader libraries, pipelines,
-swapchains and upscalers are refused with `Unsupported`. ADR 0001 owns the identity spelling every document
-here applies.
+and command lists as far as copies, fills, clears, barriers and scopes; the pass, pipeline,
+dispatch and draw entries and those of presentation and sparse resources abort, and shader
+libraries, pipelines, swapchains and upscalers are refused with `Unsupported`. ADR 0001 owns the
+identity spelling every document here applies.
 Luminex is its required consumer: it will mount the library as a submodule at `RojoRHI/` and drive
 every change through a RojoRHI branch and pull request first ([commits](docs/conventions/commits.md)
 owns that workflow). The repository is public and licensed under the Apache License, Version 2.0
@@ -60,6 +60,7 @@ Metal 4 backend, the optional ImGui adapter, tests and shaders — alongside its
   [the validation tracker](docs/architecture/validation-tracker.md),
   [the tracker across queues](docs/architecture/validation-tracker-queues.md),
   [the Metal 4 backend](docs/architecture/metal4-backend.md),
+  [command recording on it](docs/architecture/metal4-recording.md),
   [the benchmark harness](docs/architecture/benchmarks.md)
 
 ## Commands
@@ -76,8 +77,10 @@ xmake test RojoRHITests/abi          # compiles the ABI conformance shaders, che
 xmake f --rojorhi_backend=null       # selects the v2 backend: null (the default) or metal4
 ```
 
-The Metal 4 backend builds on macOS only. After `xmake f -m debug -y --rojorhi_backend=metal4`, the
-entries run under `MTL_DEBUG_LAYER=1` and need a real device:
+The Metal 4 backend builds on macOS only and needs the Metal toolchain for its kernels
+(`xcrun metal --version`; `xcodebuild -downloadComponent MetalToolchain` installs it, as
+CI does). After `xmake f -m debug -y --rojorhi_backend=metal4`, the entries run under
+`MTL_DEBUG_LAYER=1` and need a real device:
 
 ```
 xmake build RojoRHITests

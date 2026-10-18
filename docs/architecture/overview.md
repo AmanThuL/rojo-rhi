@@ -7,8 +7,10 @@ Luminex, implemented by the Metal 4 backend and frozen under `Legacy/` (ADR 0017
 `Include/`, `Source/`, `Backends/`, `Tests/` and `Shaders/` are the permanent names, reserved for
 the v2 interface, which is specified in the ADRs and the API reference under `docs/spec/`. The
 test-only Null backend implements all of it and its validation tracker is complete; the Metal 4
-backend implements the device, its resources, queues, fences and frames and is described in [its
-page](metal4-backend.md). The shader ABI module and its hosted checks exist.
+backend implements the device, its resources, queues, fences and frames, and records command lists
+as far as copies, fills, clears, barriers and scopes ([its page](metal4-backend.md) and
+[command recording on it](metal4-recording.md)); render passes, pipelines and presentation are not
+implemented yet. The shader ABI module and its hosted checks exist.
 
 ```
 rojo-rhi/
@@ -16,10 +18,12 @@ rojo-rhi/
   .github/workflows/                          CI: policy; legacy, metal4, format, interface
   xmake/targets.lua  setup.lua  shaders.lua   targets are includable by a host project
   xmake/slang.lua                             the Slang compile and layout-check rules
+  xmake/kernels.lua                           the Metal 4 backend's kernel build rule
   Include/rojoRHI/                            v2 public headers, dependency-free
   Source/Base/  Source/Core/                  v2 private base; the backend-neutral core
   Backends/Null/Source/                       the Null backend (no GPU)
   Backends/Metal4/Source/                     the Metal 4 backend
+    Backends/Metal4/Kernels/                    the Metal 4 backend's own MSL kernels
   Backends/Metal4/MetalCpp/                   the one metal-cpp unit, shared with Legacy
   Tests/Contract/                             backend-neutral contract cases
   Tests/Core/  Tests/Null/                    core internals; Null expectations (Null builds)
@@ -57,8 +61,10 @@ embeds; `Backends/Null/Source/` and `Backends/Metal4/Source/` implement the publ
 each one backend per build. `Backends/Metal4/MetalCpp/` holds the one metal-cpp implementation unit,
 the `RojoRHIMetalCpp` target, which the Metal 4 backend, `RojoRHILegacy` and `RojoRHIBench` link,
 so a host that links more than one has one definition of metal-cpp's tables.
-[The Null backend](null-backend.md) describes both layers and what is implemented,
-[command recording](null-backend-recording.md) the recording chapters, and
+`Backends/Metal4/Kernels/` holds the MSL files of the backend's fill and clear kernels, which
+`xmake/kernels.lua` compiles on a `metal4` build into a library embedded in the binary; that build
+needs the Metal toolchain. [The Null backend](null-backend.md) describes both layers and what is
+implemented, [command recording](null-backend-recording.md) the recording chapters, and
 [the edges](null-backend-edges.md) presentation, upscaling, sparse resources, diagnostics and
 counters, and [the validation tracker](validation-tracker.md) the checks that follow a resource
 across commands, lists, submissions and queues. `Include/rojoRHI/RHI.h` is the whole v2 public

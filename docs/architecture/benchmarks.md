@@ -132,9 +132,11 @@ The Metal 4 backend implements `Backends/Metal4/Source/CommitTiming.h`, a privat
 public header names. `rojoRHI::metal4::setCommitTiming(queue, callback, user)` makes every later
 commit of that queue carry `MTL4::CommitOptions` feedback that calls `callback` from Metal's
 completion thread with a `CommitTime` (queue, a per-queue serial counted from 1, start and end in
-seconds, and a failure flag); a null callback detaches. Those calls are not counted in the device's
-counters. The harness calls it from one file, `Benchmarks/Rojo/RojoGpuTiming.cpp`, under
-`ROJORHI_BENCH_BACKEND_METAL4`; on Null the R arm reports no GPU time.
+seconds, and a failure flag); a null callback detaches, which does not cancel the reports of commits
+made before the detach, so the caller keeps `user` alive until that work completes. Those calls are
+not counted in the device's counters. The harness calls it from one file,
+`Benchmarks/Rojo/RojoGpuTiming.cpp`, under `ROJORHI_BENCH_BACKEND_METAL4`; on Null the R arm reports
+no GPU time.
 
 ## The driver
 
@@ -177,17 +179,16 @@ under the output directory, recursively.
 
 ## State and what remains
 
-The R arm runs on Null only. The [Metal 4 backend](metal4-backend.md) implements the device and
-its resources but not yet the recording, pipeline and presentation entries the workloads call, nor
-`CommitTiming.h`: on `metal4` the harness compiles, and its link lacks
-`rojoRHI::metal4::setCommitTiming`. The native arm runs on this Mac, and its correctness smoke
-(`--arms N`) is recorded as `t2-native-smoke` evidence, the three runs `native-check`,
-`native-build` and `native-gate`
+The R arm runs on Null only. The [Metal 4 backend](metal4-backend.md) implements the device, its
+resources, copies, fills, clears, barriers and `CommitTiming.h`, but not yet the pass, pipeline,
+dispatch, draw and presentation entries the workloads call. The native arm runs on this Mac, and its
+correctness smoke (`--arms N`) is recorded as `t2-native-smoke` evidence, the three runs
+`native-check`, `native-build` and `native-gate`
 ([recording GPU evidence](../guides/gpu-evidence.md)). Before a timed round:
 
 - keep the obligations the N arm encodes (next section) in view when the backend lowers the R arm;
-- implement `CommitTiming.h` and the entries the R arm calls in the Metal 4 backend, build
-  `RojoRHIBench` on `metal4`, and run `RojoRHIBench/metal4` and the driver's full correctness gate;
+- implement the entries the R arm calls in the Metal 4 backend, build `RojoRHIBench` on `metal4`,
+  and run `RojoRHIBench/metal4` and the driver's full correctness gate;
 - run `build`, `correctness`, `timing` and `analyze` and record the results in the note's Results
   section.
 
