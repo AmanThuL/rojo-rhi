@@ -225,5 +225,6 @@ textures and pipelines.
 ## What remains
 
 - A native backend: the use of the retire and `frameSlot` hooks for native command lists. The
-  [Metal 4 backend](metal4-backend.md) acquires, ends and submits lists and serves frame-arena
-  pages from Shared buffers, but encodes no native command yet.
+  [Metal 4 backend](metal4-backend.md) acquires, records, ends and submits lists
+  ([recording](metal4-recording.md)) and serves frame-arena pages from Shared buffers; its
+  pass, pipeline, dispatch and draw entries are not implemented yet.

@@ -4,8 +4,9 @@
 
 This page describes the Metal 4 backend of the v2 interface as it stands: the part that creates a
 device, reports its capabilities, owns buffers, heaps, textures, views and samplers, and runs
-queues, fences and frames. Command recording, pipelines, presentation, upscaling and sparse
-resources arrive with later work. The API reference under `docs/spec/` stays the authority on every
+queues, fences and frames, and records command lists as far as copies, fills, clears, barriers and
+scopes. Render passes, pipelines, dispatches, draws, presentation, upscaling and sparse resources
+arrive with later work. The API reference under `docs/spec/` stays the authority on every
 entry's semantics and Metal 4 mapping; [the Null backend](null-backend.md) describes the shared core
 this backend translates to. The backend builds with `xmake f --rojorhi_backend=metal4`, on macOS
 only, and `null` stays the default.
@@ -22,22 +23,24 @@ only, and `null` stays the default.
 | Textures and views | `Metal4Textures.*`, `Metal4TextureDescriptor.*`, `Metal4Views.*` | textures, views, samplers, reserved ranges and the two ID tables |
 | Residency | `Metal4Residency.*` | the device's one residency set |
 | Queues and fences | `Metal4Queue.cpp`, `Metal4Fences.*` | `Queue::submit`, `createFence`, `completedValue`, `wait` |
-| Lists | `Metal4CommandList.cpp` | `acquireCommandList`, `end`, `uploadFrameData` and the frame-arena pages |
+| Lists | `Metal4CommandList.cpp`, `Metal4ListState.*`, `Metal4Scopes.cpp` | `acquireCommandList`, `end`, `uploadFrameData`, the frame-arena pages, scopes |
+| Recording | `Metal4Encoders.*`, `Metal4Copies.cpp`, `Metal4Clears.cpp`, `Metal4Barriers.*` | the open encoder, copies and fills, clears, barrier lowering |
+| Kernels | `Metal4Kernels.*`, `Backends/Metal4/Kernels/`, `xmake/kernels.lua` | the embedded library, the fill and clear pipelines |
+| Commit timing | `CommitTiming.h`, `Metal4CommitTiming.cpp` | the test-only seam that reports each commit's GPU time |
 | Helpers | `Metal4Common.*` | autorelease pools, string conversion, bounded event waits |
 
-A command list is acquired, given frame data from real arena pages, ended and submitted, but it
-encodes no native command yet. Every other recording entry, and everything below, arrives with the
-work that adds it. Until then an entry takes one of two forms:
+[Command recording](metal4-recording.md) describes the lists. Every entry not implemented yet takes
+one of two forms:
 
 - `Device::loadShaderLibrary`, both `createPipeline` overloads, `pipelineCacheData`,
   `createSwapchain` and `createUpscaler` return `ErrorCategory::Unsupported`, naming the entry.
-- The recording entries of `CommandList`, `Queue::present`, `Queue::mapTiles` and the swapchain
-  entries log `<entry> is not implemented by the Metal 4 backend` and abort in every build, after
-  the core's handle check, so a default-constructed object still fails `VU-rojo-core-0004` first.
-  The core serves the destroys of pipelines, shader libraries and upscalers and `tileShape`. The
-  device reports no sparse placement, no upscaler and no conservative rasterisation. Capture has
-  no tool yet and reports `Unsupported`, and `scopeTimings` reports no durations; both arrive with
-  recording.
+- The pass, pipeline, dispatch and draw entries of `CommandList`, `Queue::present`,
+  `Queue::mapTiles` and the swapchain entries log `<entry> is not implemented by the Metal 4
+  backend` and abort in every build, after the core's handle check, so a default-constructed
+  object still fails `VU-rojo-core-0004` first. The core serves the destroys of pipelines, shader
+  libraries and upscalers and `tileShape`. The device reports no sparse placement, no upscaler and
+  no conservative rasterisation. Capture has no tool yet and reports `Unsupported`, and
+  `scopeTimings` reports no durations; both arrive with timestamps and passes.
 
 ## Device objects and teardown
 
@@ -48,11 +51,13 @@ samplers, a `maxBufferLength` of 2^32 bytes (so `maxAddrOffset` reaches its floo
 compression: every floor item of chapters 02 and 15 that Metal reports. The first missing one is
 named in an `Unsupported` result. It then creates, in this
 order: the three `MTL4::CommandQueue`s (graphics, compute, copy), one `MTL4::Compiler`, the
-residency set, the stager and its internal queue, the frame event, and the two ID tables. Each of
+residency set, the stager and its internal queue, the frame event, the two ID tables and the
+backend's kernel library with its pipelines. Each of
 the three queues also owns a progress event, described under fences. Any
 failure releases what exists in reverse and returns the error. `destroyDevice` drains every queue,
-the internal upload queue included, by signalling a throwaway event and waiting for it (Metal making no event is
-fatal, since nothing could be released safely), so the
+the internal upload queue included, by signalling a throwaway event and waiting for it, then
+committing an empty command buffer with a feedback handler and waiting for the handler (Metal
+making no event or buffer is fatal, since nothing could be released safely), so the
 retire hooks that `beginDestroy` runs find idle queues; `VU-rojo-device-0002` therefore fires after
 the drain. It then releases the native objects in reverse order of creation. The device's own
 objects and the calls that create, drain and release them are not counted.
@@ -157,8 +162,8 @@ so every backend rejects the same descriptors.
 A fence is an `MTL::SharedEvent` created at its initial value and labelled. `Queue::submit` runs
 the core's list checks, then under the tracker's lock checks the fences, replays the lists,
 commits the residency set when dirty, records the signals as completing later, calls
-`MTL4::CommandQueue::wait` for each wait and `signalEvent` for each signal. A list encodes no
-native command yet, so no command buffer is committed for the lists. `completedValue` reads the
+`MTL4::CommandQueue::wait` for each wait, commits the lists' command buffers in one `commit` and
+calls `signalEvent` for each signal. `completedValue` reads the
 event and reports it to the core; `Device::wait` follows chapter 10: zero polls, an unlimited wait
 loops in 10 s slices that each log a warning with the fence's label, a finite one rounds up to
 milliseconds.
@@ -185,21 +190,24 @@ The core counts what it can see; a backend counts at its native call sites. In t
 creation, allocation and descriptor counts, `completedValue`, one `nativeSubmitCalls` for each
 fence wait and signal a submission carries, frame data and arena growth. In this backend:
 `nativeSubmitCalls` counts native queue calls only, so Metal 4 counts its own commits and signals
-(the stager's upload, `endFrame`'s frame-event signal and a submission's progress signal) and the
+(the stager's upload, a submission's commit, `endFrame`'s frame-event signal and a submission's
+progress signal) and the
 Null backend counts its one per `Queue::submit`; a submission that names a fence therefore counts
-its waits, its signals and one progress signal, and an empty submission counts none.
+its waits, its signals, one commit when it has lists and one progress signal, and an empty
+submission counts none.
 `nativeHostCalls` counts residency commits, of the device set and of the stager's own, frame waits,
-a native `Device::wait` and the progress reads of a frame-slot reuse and of `Device::destroy(Fence)`; the stager counts its staging buffer in `nativeCreateCalls`.
+allocator resets, a native `Device::wait` and the progress reads of a frame-slot reuse and of
+`Device::destroy(Fence)`; the stager counts its staging buffer in `nativeCreateCalls`.
 `nativeRecordCalls`, `nativeBarriers` and `encodersOpened` are noted by the backend on the list at
-each recording site and folded into the device by the core at submission; they are zero until
-recording arrives; the tracker numbers commands itself and
-counts nothing.
+each recording site and folded into the device by the core at submission; the tracker numbers
+commands itself and counts nothing. [Command recording](metal4-recording.md) lists the sites.
 
 ## Threading and locks
 
 [ADR 0013](../decisions/0013-threading.md) and
 [ADR 0020](../decisions/0020-recording-locks-scope-labels.md) apply. Release recording takes no lock
-but the frame arena's, to claim a page. Reading a native payload is lock-free.
+but the frame arena's, to claim a page. Reading a native payload is lock-free, and a list's own
+objects need none because only its recording thread touches them.
 
 The backend's mutexes nest in one order, outermost first:
 
@@ -233,10 +241,11 @@ list pool's. The view and sampler hooks run under their slot allocator's mutex a
 ## Autorelease pools
 
 Every entry that calls an autoreleasing factory opens an `NS::AutoreleasePool` and retains what it
-keeps; every retire hook and every destructor of an object that holds Metal references does the
-same and releases in reverse order of creation. Objects from `new*` factories are +1 and released
-once. An `NS::Error*` is reset to null before each call that takes it. RojoRHI reads and sets no
-environment variable; whoever runs the tests sets `MTL_DEBUG_LAYER`.
+keeps, as do the copies, the native fill and each kernel dispatch, where the driver or the
+validation layer autoreleases; every retire hook and every destructor of an object that holds Metal
+references does the same and releases in reverse order of creation. Objects from `new*` factories
+are +1 and released once. An `NS::Error*` is reset to null before each call that takes it. RojoRHI
+reads and sets no environment variable; whoever runs the tests sets `MTL_DEBUG_LAYER`.
 
 ## The shared metal-cpp unit
 
@@ -249,8 +258,9 @@ so a host that links more than one gets one definition of each table.
 
 The Metal 4 test binary builds `Tests/Contract/` minus the files named in `metal4_pending` in
 `xmake/targets.lua`, `Tests/Metal4/` (the `[metal4]` cases), `Tests/Conformance/` (the
-`[conformance]` cases), `Tests/Support/` and `Tests/Support/Metal4/` (the surface, a readback
-helper and `runsOnGpu`). `Tests/Core/` and `Tests/Null/` build with the Null backend only.
+`[conformance]` cases), `Tests/Support/` (`GpuKit` among them) and `Tests/Support/Metal4/` (the
+surface, a readback helper and `runsOnGpu`). A metal4 build needs the Metal toolchain for the
+kernels. `Tests/Core/` and `Tests/Null/` build with the Null backend only.
 `metal4_pending` lists the contract files of chapters the backend does not implement yet; a file
 leaves it when it passes whole, the build fails on a name matching no file, and the list ends
 empty. The entries `contract`, `death`, `abi` and `conformance` run under `MTL_DEBUG_LAYER=1`.

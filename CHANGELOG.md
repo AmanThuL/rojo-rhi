@@ -170,6 +170,21 @@
 - The first conformance cases: `[conformance]` cases in `Tests/Conformance/` that check fence values
   and CPU-visible buffer memory on a GPU, compiled on every backend and skipped where no GPU runs, and `[metal4]` cases for what only the Metal 4
   backend makes ([testing](docs/conventions/testing.md)).
+- Metal 4 command recording: command lists record into their own `MTL4::CommandAllocator`, command
+  buffer and argument tables, committed in one `commit` per submission; a lazily opened compute
+  encoder records every copy path, equal-byte fills and the backend's kernels; unequal fills and
+  `Storage`-only clears run backend kernels written in MSL under `Backends/Metal4/Kernels/`,
+  compiled by the build (`xmake/kernels.lua`) into a library embedded in the binary, so a `metal4`
+  build needs the Metal toolchain; render targets and depth-stencil textures clear through load
+  actions; barrier batches lower to Metal 4 stage barriers, with the trailing barrier at `end` and
+  the queue masks of chapter 09; scopes are debug groups; native calls, barriers and encoders are
+  counted at every site; a private, test-only seam reports each commit's GPU time. Passes,
+  pipelines, dispatches, draws, timestamps and presentation are not implemented
+  ([architecture](docs/architecture/metal4-recording.md)). The `acquireCommandList`, `end`,
+  `beginScope`, `endScope`, `clearTexture`, fill and copy rows of chapter 07, the Batch, Cost and
+  `Copy` stage rows of chapter 09 and the `Counters` row of chapter 14 describe the mapping. The
+  conformance cases read copies, initial data, barriers, fills, clears and queue handoff back from
+  the GPU.
 - `RojoRHILegacy` and the Metal 4 backend link one metal-cpp implementation unit,
   `RojoRHIMetalCpp`, so a host that links both has one definition of metal-cpp's tables. A
   `metal4` CI job builds the backend on hosted macOS.
