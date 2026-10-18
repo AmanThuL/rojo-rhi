@@ -294,9 +294,10 @@ namespace rojoRHI {
         const PlacementRequirements requirements = placement.heap.bits != 0 ? nullBufferRequirements(desc) : PlacementRequirements{};
         core::BufferRecord record = core::prepareBuffer(impl.core, desc, initial, placement, requirements);
         // Only Upload and Readback buffers get host memory; a Gpu buffer keeps its record and drops its initial data.
+        std::byte* host = nullptr;
         if (desc.memory != Memory::Gpu)
         {
-            auto* host = static_cast<std::byte*>(std::calloc(desc.size, 1));
+            host = static_cast<std::byte*>(std::calloc(desc.size, 1));
             if (host == nullptr)
             {
                 return std::unexpected(
@@ -308,9 +309,18 @@ namespace rojoRHI {
                 std::memcpy(host, initial.data(), initial.size());
             }
             record.native = host;
+        }
+        Result<Buffer> buffer = core::addBuffer(impl.core, std::move(record));
+        if (!buffer)
+        {
+            std::free(host);
+            return buffer;
+        }
+        if (host != nullptr)
+        {
             core::DeviceCounts::add(impl.core.counts().cpuAllocations);
         }
-        return core::addBuffer(impl.core, std::move(record));
+        return buffer;
     }
 
     //==================================================================================================================
@@ -318,7 +328,12 @@ namespace rojoRHI {
     {
         DeviceImpl& impl = DeviceImpl::of(*this);
         // A Null heap owns no memory beyond its record.
-        return impl.core.pool<Heap>().allocate(core::prepareHeap(desc));
+        const Heap heap = impl.core.pool<Heap>().allocate(core::prepareHeap(desc));
+        if (heap.bits == 0)
+        {
+            return std::unexpected(core::tableFull("heap", impl.core.pool<Heap>().capacity()));
+        }
+        return heap;
     }
 
     //==================================================================================================================
@@ -349,13 +364,19 @@ namespace rojoRHI {
     //==================================================================================================================
     Result<ViewIndex> Device::createView(Texture texture, const TextureViewDesc& desc)
     {
-        return core::createView(DeviceImpl::of(*this).core, texture, desc);
+        DeviceImpl& impl = DeviceImpl::of(*this);
+        // A Null view has no native object, so its slot holds a null payload.
+        (void)core::checkView(impl.core, texture, desc);
+        return core::addView(impl.core, texture, nullptr);
     }
 
     //==================================================================================================================
     Result<SamplerIndex> Device::createSampler(const SamplerDesc& desc)
     {
-        return core::createSampler(DeviceImpl::of(*this).core, desc);
+        DeviceImpl& impl = DeviceImpl::of(*this);
+        // A Null sampler has no native object, so its slot holds a null payload.
+        core::checkSampler(impl.core, desc);
+        return core::addSampler(impl.core, nullptr);
     }
 
     //==================================================================================================================
@@ -367,7 +388,10 @@ namespace rojoRHI {
     //==================================================================================================================
     void Device::writeView(IndexRange range, uint32_t index, Texture texture, const TextureViewDesc& desc)
     {
-        core::writeView(DeviceImpl::of(*this).core, range, index, texture, desc);
+        DeviceImpl& impl = DeviceImpl::of(*this);
+        (void)core::checkViewWrite(impl.core, range, index, texture, desc);
+        // A racing release of the range leaves nothing to release: the payload is null.
+        (void)core::placeView(impl.core, range, index, texture, nullptr);
     }
 
     //==================================================================================================================
@@ -379,7 +403,10 @@ namespace rojoRHI {
     //==================================================================================================================
     void Device::writeSampler(IndexRange range, uint32_t index, const SamplerDesc& desc)
     {
-        core::checkSamplerWrite(DeviceImpl::of(*this).core, range, index, desc);
+        DeviceImpl& impl = DeviceImpl::of(*this);
+        core::checkSamplerWrite(impl.core, range, index, desc);
+        // A racing release of the range leaves nothing to release: the payload is null.
+        (void)core::placeSampler(impl.core, range, index, nullptr);
     }
 
     //==================================================================================================================
@@ -468,7 +495,12 @@ namespace rojoRHI {
             return std::unexpected(std::move(entries.error()));
         }
         record.entries = std::move(*entries);
-        return impl.core.pool<ShaderLibrary>().allocate(std::move(record));
+        const ShaderLibrary library = impl.core.pool<ShaderLibrary>().allocate(std::move(record));
+        if (library.bits == 0)
+        {
+            return std::unexpected(core::tableFull("shader library", impl.core.pool<ShaderLibrary>().capacity()));
+        }
+        return library;
     }
 
     //==================================================================================================================
@@ -477,6 +509,10 @@ namespace rojoRHI {
         DeviceImpl& impl = DeviceImpl::of(*this);
         // A Null pipeline owns no native object beyond its record.
         const Pipeline pipeline = impl.core.pool<Pipeline>().allocate(core::prepareGraphicsPipeline(impl.core, desc));
+        if (pipeline.bits == 0)
+        {
+            return std::unexpected(core::tableFull("pipeline", impl.core.pool<Pipeline>().capacity()));
+        }
         ++impl.cachedPipelines;
         return pipeline;
     }
@@ -486,6 +522,10 @@ namespace rojoRHI {
     {
         DeviceImpl& impl = DeviceImpl::of(*this);
         const Pipeline pipeline = impl.core.pool<Pipeline>().allocate(core::prepareComputePipeline(impl.core, desc));
+        if (pipeline.bits == 0)
+        {
+            return std::unexpected(core::tableFull("pipeline", impl.core.pool<Pipeline>().capacity()));
+        }
         ++impl.cachedPipelines;
         return pipeline;
     }
@@ -501,7 +541,12 @@ namespace rojoRHI {
     {
         DeviceImpl& impl = DeviceImpl::of(*this);
         // A Null fence owns no native object beyond its record.
-        return impl.core.pool<Fence>().allocate(core::prepareFence(initial, label));
+        const Fence fence = impl.core.pool<Fence>().allocate(core::prepareFence(initial, label));
+        if (fence.bits == 0)
+        {
+            return std::unexpected(core::tableFull("fence", impl.core.pool<Fence>().capacity()));
+        }
+        return fence;
     }
 
     //==================================================================================================================

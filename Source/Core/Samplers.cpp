@@ -36,7 +36,7 @@ namespace rojoRHI::core {
     } // namespace
 
     //==================================================================================================================
-    Result<SamplerIndex> createSampler(DeviceCore& core, const SamplerDesc& desc)
+    void checkSampler([[maybe_unused]] DeviceCore& core, const SamplerDesc& desc)
     {
         ROJORHI_VU(anisotropyInRange(core, desc), "VU-rojo-texture-0029", "maxAnisotropy {} is not in 1 to {}", desc.maxAnisotropy, anisotropyBound(core));
         ROJORHI_VU(
@@ -46,7 +46,12 @@ namespace rojoRHI::core {
             desc.maxAnisotropy
         );
         (void)resolveLabel(desc.label, "rojorhi.sampler.unnamed");
-        const std::optional<uint32_t> slot = core.samplers().allocate(core.capabilities().maxSamplers, 0);
+    }
+
+    //==================================================================================================================
+    Result<SamplerIndex> addSampler(DeviceCore& core, void* native)
+    {
+        const std::optional<uint32_t> slot = core.samplers().allocate(core.capabilities().maxSamplers, 0, native);
         if (!slot)
         {
             return std::unexpected(Error{ ErrorCategory::OutOfMemory, std::format("the sampler heap of {} slots is full", core.capabilities().maxSamplers) });
@@ -69,7 +74,7 @@ namespace rojoRHI::core {
     }
 
     //==================================================================================================================
-    void checkSamplerWrite(DeviceCore& core, [[maybe_unused]] IndexRange range, [[maybe_unused]] uint32_t index, const SamplerDesc& desc)
+    void checkSamplerWrite([[maybe_unused]] DeviceCore& core, [[maybe_unused]] IndexRange range, [[maybe_unused]] uint32_t index, const SamplerDesc& desc)
     {
         ROJORHI_VU(
             range.kind == IndexRange::Kind::Samplers && index < range.count,
@@ -94,6 +99,16 @@ namespace rojoRHI::core {
             range.base
         );
         (void)resolveLabel(desc.label, "rojorhi.sampler.unnamed");
+    }
+
+    //==================================================================================================================
+    bool placeSampler(DeviceCore& core, IndexRange range, uint32_t index, void* native)
+    {
+        if (!core.samplers().replace(range.base + index, 0, native, [&core] { return core.releaseFrame(); }))
+        {
+            return false;
+        }
         DeviceCounts::add(core.counts().descriptorWrites);
+        return true;
     }
 } // namespace rojoRHI::core

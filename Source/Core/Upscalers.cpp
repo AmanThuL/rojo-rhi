@@ -113,14 +113,19 @@ namespace rojoRHI::core {
         record.motion = desc.motion;
         record.outputFormat = desc.outputFormat;
         record.flags = desc.flags;
-        return core.pool<Upscaler>().allocate(std::move(record));
+        const Upscaler upscaler = core.pool<Upscaler>().allocate(std::move(record));
+        if (upscaler.bits == 0)
+        {
+            return std::unexpected(tableFull("upscaler", core.pool<Upscaler>().capacity()));
+        }
+        return upscaler;
     }
 
     //==================================================================================================================
     void upscale(CommandListCore& list, [[maybe_unused]] Upscaler upscaler, const UpscaleParams& params)
     {
         checkRecording(list);
-        noteNativeCall(list);
+        noteCommand(list);
         ROJORHI_VU(list.type == QueueType::Graphics, "VU-rojo-upscale-0006", "upscale was recorded on the non-Graphics list \"{}\"", list.label);
         ROJORHI_VU(!list.passOpen, "VU-rojo-upscale-0007", "upscale was recorded on the list \"{}\" with a render pass open", list.label);
 #ifndef NDEBUG

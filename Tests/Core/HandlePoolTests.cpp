@@ -6,8 +6,12 @@
 
 #include <catch2/catch_test_macros.hpp>
 
+#include <atomic>
+#include <cstdint>
 #include <set>
+#include <string>
 #include <thread>
+#include <utility>
 #include <vector>
 
 using rojoRHI::Buffer;
@@ -19,6 +23,8 @@ namespace {
     struct Rec
     {
         int value = 0;
+        void* native = nullptr;
+        std::string label = {};
     };
 
     using BufferPool = HandlePool<Buffer, Rec>;
@@ -259,4 +265,106 @@ TEST_CASE("no slot is reused after drain", "[core]")
     pool.retire(1); // The slot is now free for reuse.
     pool.drain([](Rec&) {});
     CHECK(static_cast<uint32_t>(pool.allocate({ 2 }).bits) != static_cast<uint32_t>(buffer.bits));
+}
+
+//======================================================================================================================
+TEST_CASE("a handle's native payload is readable without a lookup", "[core]")
+{
+    BufferPool pool;
+    int payload = 0;
+    const Buffer buffer = pool.allocate({ .value = 1, .native = &payload });
+    CHECK(pool.native(buffer) == &payload);
+    CHECK(pool.native(Buffer{}) == nullptr);
+}
+
+//======================================================================================================================
+TEST_CASE("a retired slot's native payload reads null and a reused slot reads the new payload", "[core]")
+{
+    BufferPool pool;
+    int first = 0;
+    int second = 0;
+    const Buffer buffer = pool.allocate({ .value = 1, .native = &first });
+    pool.release(buffer, 1);
+    CHECK(pool.native(buffer) == &first);
+    void* seenInHook = nullptr;
+    pool.retire(1, [&](Rec& record) { seenInHook = record.native; });
+    CHECK(seenInHook == &first);
+    CHECK(pool.native(buffer) == nullptr);
+    const Buffer reused = pool.allocate({ .value = 2, .native = &second });
+    REQUIRE(BufferPool::slotIndex(reused) == BufferPool::slotIndex(buffer));
+    CHECK(pool.native(reused) == &second);
+}
+
+//======================================================================================================================
+TEST_CASE("a pool at its capacity issues the null handle and leaves the record untouched", "[core]")
+{
+    HandlePool<Buffer, Rec> pool(BufferPool::kMaxGeneration, 3);
+    std::atomic<uint64_t> creates{ 0 };
+    std::atomic<uint64_t> allocations{ 0 };
+    pool.countInto(&creates, &allocations);
+    CHECK(pool.allocate({ 1 }).bits != 0);
+    CHECK(pool.allocate({ 2 }).bits != 0);
+    int payload = 0;
+    Rec record{ .value = 3, .native = &payload, .label = "test.full" };
+    CHECK(pool.allocate(std::move(record)).bits == 0);
+    CHECK(record.native == &payload);
+    CHECK(record.label == "test.full");
+    CHECK(pool.liveCount() == 2);
+    CHECK(creates.load() == 2);
+    CHECK(allocations.load() == 2);
+}
+
+//======================================================================================================================
+TEST_CASE("a full pool still reuses a retired slot", "[core]")
+{
+    HandlePool<Buffer, Rec> pool(BufferPool::kMaxGeneration, 3);
+    const Buffer first = pool.allocate({ 1 });
+    pool.allocate({ 2 });
+    CHECK(pool.allocate({ 3 }).bits == 0);
+    pool.release(first, 1);
+    pool.retire(1);
+    int payload = 0;
+    const Buffer reused = pool.allocate({ .value = 4, .native = &payload });
+    CHECK(reused.bits != 0);
+    CHECK(BufferPool::slotIndex(reused) == BufferPool::slotIndex(first));
+    CHECK(pool.native(reused) == &payload);
+}
+
+//======================================================================================================================
+TEST_CASE("drain clears every native payload", "[core]")
+{
+    BufferPool pool;
+    int pendingPayload = 0;
+    int livePayload = 0;
+    const Buffer pending = pool.allocate({ .value = 1, .native = &pendingPayload });
+    const Buffer live = pool.allocate({ .value = 2, .native = &livePayload });
+    pool.release(pending, 1);
+    int handed = 0;
+    pool.drain([&](Rec& record) { handed += record.native != nullptr ? 1 : 0; });
+    CHECK(handed == 2);
+    CHECK(pool.native(pending) == nullptr);
+    CHECK(pool.native(live) == nullptr);
+}
+
+//======================================================================================================================
+TEST_CASE("a retiring slot's native payload reads null before its hook runs", "[core]")
+{
+    BufferPool pool;
+    int payload = 0;
+    const Buffer buffer = pool.allocate({ .value = 1, .native = &payload });
+    pool.release(buffer, 1);
+    void* readInHook = &payload;
+    pool.retire(1, [&](Rec&) { readInHook = pool.native(buffer); });
+    CHECK(readInHook == nullptr);
+}
+
+//======================================================================================================================
+TEST_CASE("a draining slot's native payload reads null before its record is handed over", "[core]")
+{
+    BufferPool pool;
+    int payload = 0;
+    const Buffer buffer = pool.allocate({ .value = 1, .native = &payload });
+    void* readInHook = &payload;
+    pool.drain([&](Rec&) { readInHook = pool.native(buffer); });
+    CHECK(readInHook == nullptr);
 }

@@ -76,8 +76,18 @@ namespace rojoRHI::core {
         RecordCounts counts;                         ///< What the list recorded for `Device::counters`; folded into the device at submission.
     };
 
-    /// Counts one recording entry whose Metal 4 mapping row names a native call, on the list's own plain counter: no lock and
-    /// no atomic operation. Every such entry calls it right after `checkRecording`.
+    /// Counts one recorded command for the validation tracker, which names each event's command by it. Every recording entry
+    /// whose command the tracker may see calls it right after `checkRecording`. Compiles to nothing in Release.
+    inline void noteCommand([[maybe_unused]] CommandListCore& list)
+    {
+#ifndef NDEBUG
+        ++list.trackerLog.command;
+#endif
+    }
+
+    /// Counts one native call a backend records, on the list's own plain counter: no lock and no atomic operation. A backend
+    /// calls it at each native call it records into the command buffer; the core never calls it, and backends count their own
+    /// native calls.
     inline void noteNativeCall(CommandListCore& list)
     {
         ++list.counts.nativeRecordCalls;

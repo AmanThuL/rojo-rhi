@@ -147,7 +147,7 @@ the Metal-specific frame-data counter the v1 conformance checkpoint flags as non
 #### Mapping
 | | Metal 4 | D3D12 | Vulkan |
 |---|---|---|---|
-| Source | increments in shared backend code | increments in shared backend code | increments in shared backend code |
+| Source | increments in shared code, except the native-work counters (`nativeRecordCalls`, `nativeBarriers`, and `encodersOpened`), which the backend increments at each native call site | increments in shared code, except the native-work counters (`nativeRecordCalls`, `nativeBarriers`, `encodersOpened`, and the other `native*` fields), which the backend increments at each native call site | increments in shared code, except the native-work counters (`nativeRecordCalls`, `nativeBarriers`, `encodersOpened`, and the other `native*` fields), which the backend increments at each native call site |
 | Cost | cheap: one CPU increment per event, no native call | cheap: one CPU increment per event, no native call | cheap: one CPU increment per event, no native call |
 
 ### `Device::counters`

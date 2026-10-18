@@ -110,14 +110,17 @@ backend fills it between `prepareBuffer` (which checks and returns a record with
 `addBuffer` (which stores it), and likewise for textures.
 
 A backend frees its payload through `RetireHooks`: one function pointer per handle type plus a
-`context`, set once with `DeviceCore::setRetireHooks`, and a `frameSlot` function the core calls
+`context`, set once with `DeviceCore::setRetireHooks`; a `frameSlot` function the core calls
 when `beginFrame` reuses a slot, after the pools retired (the Null backend returns that slot's
-command lists to their pool there). The table is on the cold path. A null entry
-means the backend holds nothing for that type. The core calls a hook with the record when the
-record's frame retires and, for every live and pending record, once in `beginDestroy`. A hook runs
-under its pool's lock and must not call a pool. The `DeviceCore` destructor calls no hook, because
-the backend's state is gone by then; it asserts that every pool is drained. The Null backend
-registers one hook, which frees the host memory of a buffer.
+command lists to their pool there); `view` and `sampler`, which release the payload of a view or
+sampler slot; and `waitFrame`, which `beginFrame` calls before it retires anything, with the frame
+whose slot it reuses, so a native backend blocks there until that frame's work is complete. The
+table is on the cold path. A null entry means the backend holds nothing for that type. The core
+calls a hook with the record when the record's frame retires and, for every live and pending
+record, once in `beginDestroy`. A hook runs under its pool's lock and must not call a pool. The
+`DeviceCore` destructor calls no hook, because the backend's state is gone by then; it asserts that
+every pool is drained. The Null backend registers one hook, which frees the host memory of a
+buffer, and no `waitFrame`: its work is complete at submission.
 
 ## Frames and deferred destruction
 
@@ -197,10 +200,11 @@ counts itself in its heap's `placedResources`, and `destroyHeap` refuses a heap 
 
 A texture is a record and nothing else: it stores no texels, so initial data is checked
 (`checkTextureDesc`, the stride and size rules, `VU-rojo-texture-0040` for `D32FloatS8`) and
-dropped. A view is only a slot. `createView` checks the descriptor against the texture's record,
-takes a slot of the view heap and counts the view in the texture's `views`; `destroyTexture`
-refuses a texture whose count is not zero. The format arms of `VU-rojo-format-0003` and `0004` for
-textures and views are checked in the same functions, against the core's format table.
+dropped. A view is only a slot. `createView` checks the descriptor against the texture's record
+(`checkView`), then takes a slot of the view heap and counts the view in the texture's `views`
+(`addView`); `destroyTexture` refuses a texture whose count is not zero. The format arms of
+`VU-rojo-format-0003` and `0004` for textures and views are checked in the same functions, against
+the core's format table.
 
 ## View and sampler slots
 
@@ -210,6 +214,18 @@ that is open (or the next one), and `beginFrame` calls `retire`, which returns a
 list only when its frame has retired, so a slot is never handed out again while unretired work may
 read it. Each slot keeps an `owner` word; for views it is the texture the slot describes, so
 releasing a view slot or range lowers that texture's count.
+
+Each slot also keeps a `native` payload, the backend's view or sampler, which the core never reads;
+the Null backend stores null. The view and sampler entries are two core calls each, so a backend
+creates its native object between them: `checkView` and `addView`, `checkViewWrite` and
+`placeView`, `checkSampler` and `addSampler`, `checkSamplerWrite` and `placeSampler`. The checks
+come first and hold every rule; the second call places the payload, and returns `OutOfMemory` or,
+for a write that lost its range to a racing release, false, leaving the payload with the caller. A
+payload leaves its slot when the slot or its range is released or a write replaces it, and waits
+for the frame of that release or write: `retire` hands it to the `view` or `sampler` hook when the frame retires, never at
+the call, and `beginDestroy` drains every payload still held or waiting through the same hooks,
+once. The counters count only single slot releases; a payload from a range or a replaced write is
+released uncounted.
 
 `reserveViews` and `reserveSamplers` take a contiguous run of free slots, retired or never used,
 as one range that belongs to the caller until `releaseRange`. `writeView` and `writeSampler` write
@@ -265,9 +281,7 @@ flag is thread-local.
 These arrive with the work that adds them; this page then describes them. What recording still
 lacks is on the [command recording](null-backend-recording.md) page.
 
-- Native payloads for views and samplers: their slots carry no backend payload, retire hook, drain
-  or label yet. They arrive with a native backend, which must release native views and samplers at
-  retirement and at `destroyDevice`.
+- Labels for views and samplers: their slots carry a native payload but no label yet.
 - A Metal 4 v2 backend and T1 GPU conformance
   ([ADR 0009](../decisions/0009-conformance-and-valid-usage.md)).
 

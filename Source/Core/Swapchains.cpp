@@ -6,12 +6,14 @@
 #include "Core/Swapchains.h"
 
 #include "Base/Assert.h"
+#include "Base/Log.h"
 #include "Core/CommandLists.h"
 #include "Core/DeviceCore.h"
 #include "Core/Label.h"
 #include "Core/Records.h"
 #include "Core/Tracker/Tracker.h"
 
+#include <cstdlib>
 #include <utility>
 
 namespace rojoRHI::core {
@@ -110,6 +112,14 @@ namespace rojoRHI::core {
         record.swapchainImage = true;
         // The image is a native memory object for the counters but no native creation, so the pool does not count it itself.
         image.texture = core.pool<Texture>().allocate(std::move(record), false);
+        if (image.texture.bits == 0)
+        {
+            // Acquire cannot fail by the reference, so an image that finds the texture table full ends the process in every build.
+            ROJORHI_LOG_ERROR(
+                "the swapchain \"{}\" cannot acquire an image: the texture table of {} objects is full", swapchain.label, core.pool<Texture>().capacity() - 1
+            );
+            std::abort();
+        }
         // Every acquire hands out an image with undefined contents, whose first barrier starts from Undefined (chapter 11).
         trackTexture(core, image.texture, swapchain.label, 1, 1, Layout::Undefined, true, Heap{}, 0, 0, false);
         DeviceCounts::add(core.counts().gpuAllocations);

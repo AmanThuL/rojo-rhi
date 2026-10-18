@@ -242,8 +242,7 @@ namespace rojoRHI::core {
             list.counts.globalBarriers += globals.size();
             list.counts.bufferBarriers += buffers.size();
             list.counts.textureBarriers += textures.size();
-            ++list.counts.nativeBarriers;
-            noteNativeCall(list);
+            noteCommand(list);
         }
         ROJORHI_VU(!list.passOpen, "VU-rojo-sync-0019", "a barrier was recorded on the list \"{}\" inside a render pass", list.label);
 #ifndef NDEBUG

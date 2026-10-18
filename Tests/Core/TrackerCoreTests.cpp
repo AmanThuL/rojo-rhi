@@ -600,3 +600,22 @@ TEST_CASE("every logging entry gives its events one command ordinal, distinct fr
     kit.finish();
 #endif
 }
+
+//======================================================================================================================
+TEST_CASE("the tracker numbers commands whatever the backend counts as native calls", "[core]")
+{
+#ifndef NDEBUG
+    PassKit kit(QueueType::Graphics, true);
+    const Buffer source = kit.buffer(BufferUsage::None);
+    const Buffer destination = kit.buffer(BufferUsage::ShaderWrite);
+    const core::TrackerLog& log = core::coreOf(kit.list).trackerLog;
+    kit.list.copyBuffer(source, 0, destination, 0, 16);
+    core::coreOf(kit.list).counts.nativeRecordCalls = 1000;
+    kit.list.copyBuffer(source, 16, destination, 16, 16);
+    REQUIRE(log.commands.size() == 4);
+    CHECK(log.commands[0] == log.commands[1]);
+    CHECK(log.commands[2] == log.commands[3]);
+    CHECK(log.commands[2] == log.commands[0] + 1);
+    kit.finish();
+#endif
+}

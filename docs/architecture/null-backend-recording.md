@@ -96,12 +96,15 @@ copies take `Buffer` handles and look them up instead. It returns the buffer han
 byte offset, or a null result for the null address; the caller decides whether null is allowed. It
 reads the buffer pool under its lock, so its callers call it in Debug builds only.
 
-The backend supplies `decodeAddr`, defined next to `coreOf`. The Null decode is the encoding of
-the buffers section: the slot index in `lo`, the byte offset in `hi`. It ignores the generation,
-because an `Addr` carries none. A destroyed buffer whose slot was reused resolves to the new
-buffer; `VU-rojo-buffer-0009` catches an address into a slot that is free or whose record is
-smaller than the offset, and nothing catches the reuse. That is the limit of the Debug tier here;
-the tracker cannot recover it either, since the address holds no generation.
+The backend supplies `decodeAddr`, defined next to `coreOf`. It takes the device core, so a
+backend can decode through per-device state, and a backend whose encoding is not the slot index
+decodes an address outside every live buffer to slot 0, which names no buffer. The Null decode
+ignores the core and is the encoding of the buffers section: the slot index in `lo`, the byte
+offset in `hi`. It ignores the generation, because an `Addr` carries none. A destroyed buffer
+whose slot was reused resolves to the new buffer; `VU-rojo-buffer-0009` catches an address into
+a slot that is free or whose record is smaller than the offset, and nothing catches the reuse. That
+is the limit of the Debug tier here; the tracker cannot recover it either, since the address holds
+no generation.
 
 ## Shader libraries
 
@@ -215,5 +218,5 @@ textures and pipelines.
 
 ## What remains
 
-- A native backend: slot payloads for views and samplers, and the use of the retire and
-  `frameSlot` hooks for native command lists and arena pages.
+- A native backend: the use of the retire and `frameSlot` hooks for native command lists and
+  arena pages.

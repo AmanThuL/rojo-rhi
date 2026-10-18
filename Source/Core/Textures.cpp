@@ -230,7 +230,7 @@ namespace rojoRHI::core {
 
         //==============================================================================================================
         /// Returns true when `desc` obeys every rule of a `TextureViewDesc` for `texture`; the same rules `checkViewDesc`
-        /// reports one by one, asked as one question by `writeView`.
+        /// reports one by one, asked as one question by `checkViewWrite`.
         [[maybe_unused]] bool viewDescFits(const DeviceCore& core, const TextureRecord& texture, const TextureViewDesc& desc)
         {
             return rangeNonEmpty(desc.range) && rangeInside(texture, desc.range) && rangeStartsInside(texture, desc.range) && usageFits(texture, desc) &&
@@ -436,11 +436,12 @@ namespace rojoRHI::core {
     }
 
     //==================================================================================================================
-    Texture addTexture(DeviceCore& core, TextureRecord record)
+    Result<Texture> addTexture(DeviceCore& core, TextureRecord record)
     {
-        if (record.heap.bits != 0)
+        const Heap heap = record.heap;
+        if (heap.bits != 0)
         {
-            addPlacedResource(core, record.heap);
+            addPlacedResource(core, heap);
         }
 #ifndef NDEBUG
         // The tracker copies what it follows before the record moves into the pool.
@@ -448,16 +449,23 @@ namespace rojoRHI::core {
         const uint32_t mips = record.mips;
         const uint32_t layers = record.layers;
         const Layout initial = record.initialData ? Layout::ShaderRead : Layout::Undefined;
-        const Heap heap = record.heap;
         const uint64_t heapOffset = record.heapOffset;
         const uint64_t heapSize = record.heapSize;
         const bool sparse = hasUsage(record.usage, TextureUsage::Sparse);
-        const Texture texture = core.pool<Texture>().allocate(std::move(record));
-        trackTexture(core, texture, label, mips, layers, initial, false, heap, heapOffset, heapSize, sparse);
-        return texture;
-#else
-        return core.pool<Texture>().allocate(std::move(record));
 #endif
+        const Texture texture = core.pool<Texture>().allocate(std::move(record));
+        if (texture.bits == 0)
+        {
+            if (heap.bits != 0)
+            {
+                removePlacedResource(core, heap);
+            }
+            return std::unexpected(tableFull("texture", core.pool<Texture>().capacity()));
+        }
+#ifndef NDEBUG
+        trackTexture(core, texture, label, mips, layers, initial, false, heap, heapOffset, heapSize, sparse);
+#endif
+        return texture;
     }
 
     //==================================================================================================================
@@ -536,14 +544,20 @@ namespace rojoRHI::core {
     }
 
     //==================================================================================================================
-    Result<ViewIndex> createView(DeviceCore& core, Texture texture, const TextureViewDesc& desc)
+    const TextureRecord& checkView(DeviceCore& core, Texture texture, const TextureViewDesc& desc)
     {
         TextureRecord* record = core.pool<Texture>().checked(texture, false);
         ROJORHI_INTERNAL_ASSERT(record != nullptr, "a checked lookup that does not allow null returned null");
         // The record's address is stable while the texture lives, and its description never changes.
         checkNotSwapchainImage(*record, "createView");
         checkViewDesc(core, *record, desc);
-        const std::optional<uint32_t> slot = core.views().allocate(core.capabilities().maxViews, texture.bits);
+        return *record;
+    }
+
+    //==================================================================================================================
+    Result<ViewIndex> addView(DeviceCore& core, Texture texture, void* native)
+    {
+        const std::optional<uint32_t> slot = core.views().allocate(core.capabilities().maxViews, texture.bits, native);
         if (!slot)
         {
             return std::unexpected(Error{ ErrorCategory::OutOfMemory, std::format("the view heap of {} slots is full", core.capabilities().maxViews) });
@@ -555,7 +569,9 @@ namespace rojoRHI::core {
     }
 
     //==================================================================================================================
-    void writeView(DeviceCore& core, IndexRange range, uint32_t index, Texture texture, [[maybe_unused]] const TextureViewDesc& desc)
+    const TextureRecord& checkViewWrite(
+        DeviceCore& core, [[maybe_unused]] IndexRange range, [[maybe_unused]] uint32_t index, Texture texture, [[maybe_unused]] const TextureViewDesc& desc
+    )
     {
         ROJORHI_VU(
             range.kind == IndexRange::Kind::Views && index < range.count,
@@ -565,7 +581,7 @@ namespace rojoRHI::core {
             range.count,
             range.kind == IndexRange::Kind::Views ? "view" : "sampler"
         );
-        [[maybe_unused]] TextureRecord* record = core.pool<Texture>().checked(texture, false);
+        TextureRecord* record = core.pool<Texture>().checked(texture, false);
         ROJORHI_INTERNAL_ASSERT(record != nullptr, "a checked lookup that does not allow null returned null");
         checkNotSwapchainImage(*record, "writeView");
         ROJORHI_VU(
@@ -581,14 +597,20 @@ namespace rojoRHI::core {
             range.count,
             range.base
         );
+        return *record;
+    }
+
+    //==================================================================================================================
+    bool placeView(DeviceCore& core, IndexRange range, uint32_t index, Texture texture, void* native)
+    {
         // Count the new view first, so the texture never reads as unviewed while a slot is about to hold it. A range released
-        // by a racing call after the check above leaves the slot unwritten and the count restored.
+        // by a racing call after the checks leaves the slot unwritten and the count restored.
         core.pool<Texture>().update(texture, [](TextureRecord& held) { ++held.views; });
-        const std::optional<uint64_t> previous = core.views().replaceOwner(range.base + index, texture.bits);
+        const std::optional<uint64_t> previous = core.views().replace(range.base + index, texture.bits, native, [&core] { return core.releaseFrame(); });
         if (!previous)
         {
             core.pool<Texture>().update(texture, [](TextureRecord& held) { --held.views; });
-            return;
+            return false;
         }
         DeviceCounts::add(core.counts().descriptorWrites);
         if (*previous != 0)
@@ -598,6 +620,7 @@ namespace rojoRHI::core {
                 --held.views;
             });
         }
+        return true;
     }
 
     //==================================================================================================================

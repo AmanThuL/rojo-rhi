@@ -158,7 +158,9 @@ TEST_CASE("host memory is freed when the frame that released the buffer retires"
 //======================================================================================================================
 TEST_CASE("the Null decode of an address is its buffer's slot index and its byte offset", "[null]")
 {
-    const core::DecodedAddr decoded = core::decodeAddr(Addr{ 7, 4096 });
+    Device device = *createDevice();
+    const core::DecodedAddr decoded = core::decodeAddr(core::coreOf(device), Addr{ 7, 4096 });
     CHECK(decoded.slot == 7);
     CHECK(decoded.offset == 4096);
+    destroyDevice(device);
 }
