@@ -99,7 +99,8 @@ itself belongs to [textures and heaps](04-textures-and-heaps.md). The caller see
 **Block-compressed formats.** BC1 stores 4x4 texel blocks of 8 bytes. Metal's `BC1_RGBA` covers
 both the opaque and the one-bit-alpha encodings, selected per block by endpoint order; Vulkan's
 `BC1_RGBA` forms match it. BC formats need `supportsBCTextureCompression` on Metal 4, which every
-Apple silicon Mac reports (*unverified* on Apple7 hardware by this project), are required at
+Apple silicon Mac reports (*unverified* on Apple7 hardware by this project) and `createDevice`
+([device](02-device.md)) requires, are required at
 the D3D12 floor, and need the `textureCompressionBC` feature on Vulkan. Upload and copy
 row pitches count rows of blocks, `((width + 3) / 4) * 8` bytes per row; see
 [command recording](07-command-recording.md). A copy region in a block-compressed texture starts on
@@ -191,7 +192,7 @@ capability in the `Format` entry above. Capabilities are fixed for the lifetime 
 #### Mapping
 | | Metal 4 | D3D12 | Vulkan |
 |---|---|---|---|
-| Source | Apple7+ feature set tables keyed by `supportsFamily`, refined by `supportsBCTextureCompression`, `supports32BitFloatFiltering`, `supportsTextureSampleCount` | `D3D12_FEATURE_FORMAT_SUPPORT` (`Support1`, `Support2`) | `VkFormatProperties3` optimal tiling features |
+| Source | Apple7+ feature set tables keyed by `supportsFamily`, refined by `supports32BitFloatFiltering` and `supportsTextureSampleCount`; `supportsBCTextureCompression` is part of the floor `createDevice` checks | `D3D12_FEATURE_FORMAT_SUPPORT` (`Support1`, `Support2`) | `VkFormatProperties3` optimal tiling features |
 | Sample counts | `supportsTextureSampleCount` per count | `D3D12_FEATURE_MULTISAMPLE_QUALITY_LEVELS` per count | `vkGetPhysicalDeviceImageFormatProperties2` |
 | Sparse | `supportsPlacementSparse` with the family table | `D3D12_FORMAT_SUPPORT2_TILED` | `vkGetPhysicalDeviceSparseImageFormatProperties2` |
 | Cost | cheap: backend-owned table, no per-format native query | native | native |

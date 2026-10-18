@@ -118,7 +118,7 @@ class CppLayoutTests(unittest.TestCase):
             database = root / "compile_commands.json"
             database.write_text(json.dumps([]), encoding="utf-8")
             with self.assertRaisesRegex(layout.LayoutSetupError, "rerun.*compile_commands"):
-                layout.ensure_database_covers([source], database, root)
+                layout.ensure_database_covers([source], [database], root)
 
     def test_adapter_is_skipped_with_a_notice_when_the_database_lacks_it(self) -> None:
         root = Path("/component")
@@ -156,7 +156,103 @@ class CppLayoutTests(unittest.TestCase):
                 [covered, missing], layout.compilation_database_files(database), root
             )
             with self.assertRaisesRegex(layout.LayoutSetupError, "Metal4Device.cpp"):
-                layout.ensure_database_covers(files, database, root)
+                layout.ensure_database_covers(files, [database], root)
+
+    def write_database(self, root: Path, name: str, files: list[Path]) -> Path:
+        database = root / name / "compile_commands.json"
+        database.parent.mkdir(parents=True, exist_ok=True)
+        entries = [{"directory": str(root), "file": str(path)} for path in files]
+        database.write_text(json.dumps(entries), encoding="utf-8")
+        return database
+
+    def test_file_listed_only_by_the_second_database_is_assigned_to_it(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory).resolve()
+            core, backend = root / "Source/Core.cpp", root / "Backends/Metal4/Source/Device.cpp"
+            first = self.write_database(root, "null", [core])
+            second = self.write_database(root, "metal4", [backend])
+            assigned = layout.assign_databases([core, backend], [first, second])
+            self.assertEqual(assigned[second], [backend])
+
+    def test_file_listed_by_both_databases_is_assigned_to_the_first(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory).resolve()
+            core = root / "Source/Core.cpp"
+            first = self.write_database(root, "null", [core])
+            second = self.write_database(root, "metal4", [core])
+            assigned = layout.assign_databases([core], [first, second])
+            self.assertEqual(assigned[first], [core])
+            self.assertEqual(assigned[second], [])
+
+    def test_union_of_two_databases_covers_every_file(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory).resolve()
+            core, backend = root / "Source/Core.cpp", root / "Backends/Metal4/Source/Device.cpp"
+            first = self.write_database(root, "null", [core])
+            second = self.write_database(root, "metal4", [backend])
+            layout.ensure_database_covers([core, backend], [first, second], root)
+
+    def test_file_listed_by_neither_database_is_named(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory).resolve()
+            core, lost = root / "Source/Core.cpp", root / "Tests/Lost.cpp"
+            first = self.write_database(root, "null", [core])
+            second = self.write_database(root, "metal4", [core])
+            with self.assertRaisesRegex(layout.LayoutSetupError, "Lost.cpp.*per backend"):
+                layout.ensure_database_covers([core, lost], [first, second], root)
+
+    def test_adapter_is_skipped_only_when_no_database_lists_it(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory).resolve()
+            core = root / "Source/Core.cpp"
+            adapter = root / layout.ADAPTER_DIR / "Source/Metal4ImGui.cpp"
+            first = self.write_database(root, "null", [core])
+            second = self.write_database(root, "metal4", [adapter])
+            union = layout.databases_files([first, second])
+            self.assertEqual(layout.select_checked_files([core, adapter], union, root)[0], [core, adapter])
+            union = layout.databases_files([first])
+            self.assertEqual(layout.select_checked_files([core, adapter], union, root)[0], [core])
+
+    def test_relative_entries_with_differing_directories_resolve_to_one_path(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory).resolve()
+            core = root / "Source/Core.cpp"
+            build_a, build_b = root / "a", root / "b"
+            databases = []
+            for build, relative in ((build_a, "../Source/Core.cpp"), (build_b, "../Source/Core.cpp")):
+                database = build / "compile_commands.json"
+                database.parent.mkdir(parents=True)
+                database.write_text(
+                    json.dumps([{"directory": str(build), "file": relative}]), encoding="utf-8"
+                )
+                databases.append(database)
+            assigned = layout.assign_databases([core], databases)
+            self.assertEqual(assigned[databases[0]], [core])
+            self.assertEqual(assigned[databases[1]], [])
+
+    def test_symlinked_root_resolves_to_the_real_path(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            real = Path(directory).resolve() / "real"
+            real.mkdir()
+            link = Path(directory).resolve() / "link"
+            link.symlink_to(real)
+            database = self.write_database(real, "null", [link / "Source/Core.cpp"])
+            self.assertEqual(
+                layout.compilation_database_files(database), {real / "Source/Core.cpp"}
+            )
+
+    def test_the_same_database_twice_assigns_every_file_once(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory).resolve()
+            core, other = root / "Source/Core.cpp", root / "Source/Other.cpp"
+            database = self.write_database(root, "null", [core, other])
+            assigned = layout.assign_databases([core, other], [database, database])
+            self.assertEqual(assigned, {database: [core, other]})
+
+    def test_a_missing_database_is_named(self) -> None:
+        missing = Path("/nonexistent/metal4/compile_commands.json")
+        with self.assertRaisesRegex(layout.LayoutSetupError, "metal4/compile_commands.json is missing"):
+            layout.compilation_database_files(missing)
 
     def test_an_empty_root_fails(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

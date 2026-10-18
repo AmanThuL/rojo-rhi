@@ -147,7 +147,7 @@ the Metal-specific frame-data counter the v1 conformance checkpoint flags as non
 #### Mapping
 | | Metal 4 | D3D12 | Vulkan |
 |---|---|---|---|
-| Source | increments in shared code, except the native-work counters (`nativeRecordCalls`, `nativeBarriers`, and `encodersOpened`), which the backend increments at each native call site | increments in shared code, except the native-work counters (`nativeRecordCalls`, `nativeBarriers`, `encodersOpened`, and the other `native*` fields), which the backend increments at each native call site | increments in shared code, except the native-work counters (`nativeRecordCalls`, `nativeBarriers`, `encodersOpened`, and the other `native*` fields), which the backend increments at each native call site |
+| Source | shared code increments each counter at its cause: object and heap-slot creation and release, a submission's fence waits and signals, presentation, tile mapping, fence queries and timestamp reads; it also folds in, at submission, the record, barrier and encoder counts a backend notes on a list, none yet because Metal 4 records no native command. The backend adds staging buffers, the staged upload's commit, frame-event and queue-progress signals, frame-event and fence waits, queue-progress reads and residency commits | increments in shared code, except the native calls only the backend makes, which it counts at each native call site | increments in shared code, except the native calls only the backend makes, which it counts at each native call site |
 | Cost | cheap: one CPU increment per event, no native call | cheap: one CPU increment per event, no native call | cheap: one CPU increment per event, no native call |
 
 ### `Device::counters`

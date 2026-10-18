@@ -111,6 +111,28 @@ TEST_CASE("VU-rojo-texture-0006 a texture has more mips than its extent allows",
 }
 
 //======================================================================================================================
+TEST_CASE("VU-rojo-texture-0042 a Tex1D texture has two mips", "[contract][death]")
+{
+    ROJORHI_EXPECT_DEATH("VU-rojo-texture-0042", [] {
+        Device device = *createDevice();
+        (void)device.createTexture(
+            { .type = TextureType::Tex1D, .format = Format::RGBA8Unorm, .extent = { 16, 1, 1 }, .mips = 2, .usage = TextureUsage::Sampled }
+        );
+    });
+}
+
+//======================================================================================================================
+TEST_CASE("VU-rojo-texture-0042 a Tex1DArray texture has two mips", "[contract][death]")
+{
+    ROJORHI_EXPECT_DEATH("VU-rojo-texture-0042", [] {
+        Device device = *createDevice();
+        (void)device.createTexture(
+            { .type = TextureType::Tex1DArray, .format = Format::RGBA8Unorm, .extent = { 16, 1, 1 }, .mips = 2, .layers = 2, .usage = TextureUsage::Sampled }
+        );
+    });
+}
+
+//======================================================================================================================
 TEST_CASE("VU-rojo-texture-0007 a texture has three samples", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-texture-0007", [] {

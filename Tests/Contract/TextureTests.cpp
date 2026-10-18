@@ -76,6 +76,20 @@ TEST_CASE("a texture is created in every type", "[contract]")
 }
 
 //======================================================================================================================
+TEST_CASE("a one-dimensional texture is created with one mip", "[contract]")
+{
+    Device device = makeDevice();
+    const Texture line =
+        makeTexture(device, { .type = TextureType::Tex1D, .format = Format::RGBA8Unorm, .extent = { 64, 1, 1 }, .usage = TextureUsage::Sampled });
+    const Texture lines = makeTexture(
+        device,
+        { .type = TextureType::Tex1DArray, .format = Format::RGBA8Unorm, .extent = { 64, 1, 1 }, .mips = 1, .layers = 4, .usage = TextureUsage::Sampled }
+    );
+    CHECK(line != lines);
+    destroyDevice(device);
+}
+
+//======================================================================================================================
 TEST_CASE("two textures have different handles", "[contract]")
 {
     Device device = makeDevice();

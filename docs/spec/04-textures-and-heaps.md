@@ -41,7 +41,7 @@ For `Cube` and `CubeArray`, array layers count faces, six per cube, in the order
 #### Mapping
 | | Metal 4 | D3D12 | Vulkan |
 |---|---|---|---|
-| Type | `MTL::TextureType1D`, `MTL::TextureType1DArray`, `MTL::TextureType2D`, `MTL::TextureType2DArray`, `MTL::TextureType2DMultisample`, `MTL::TextureType2DMultisampleArray`, `MTL::TextureType3D`, `MTL::TextureTypeCube`, `MTL::TextureTypeCubeArray`; array length counts cubes | `D3D12_RESOURCE_DIMENSION_TEXTURE1D`, `TEXTURE2D`, `TEXTURE3D`; a cube is a 2D array of 6n layers | `VK_IMAGE_TYPE_1D`, `2D`, `3D`; cubes with `VK_IMAGE_CREATE_CUBE_COMPATIBLE_BIT` |
+| Type | `MTL::TextureType1D`, `MTL::TextureType1DArray`, `MTL::TextureType2D`, `MTL::TextureType2DArray`, `MTL::TextureType2DMultisample`, `MTL::TextureType2DMultisampleArray`, `MTL::TextureType3D`, `MTL::TextureTypeCube`, `MTL::TextureTypeCubeArray`; array length counts cubes; a 1D type has one mip | `D3D12_RESOURCE_DIMENSION_TEXTURE1D`, `TEXTURE2D`, `TEXTURE3D`; a cube is a 2D array of 6n layers | `VK_IMAGE_TYPE_1D`, `2D`, `3D`; cubes with `VK_IMAGE_CREATE_CUBE_COMPATIBLE_BIT` |
 | Cost | native | native | native |
 
 ### `TextureUsage`
@@ -95,6 +95,8 @@ faces.
   multiple of 6 for `CubeArray`, and at least 1 for the other array types.
 - `VU-rojo-texture-0006` `mips` is at least 1 and at most
   floor(log2(max(width, height, depth))) + 1.
+- `VU-rojo-texture-0042` `mips` is 1 for `Tex1D` and `Tex1DArray`, because Metal has no mipmapped
+  one-dimensional textures.
 - `VU-rojo-texture-0007` `samples` is 1, 2, 4 or 8 and is supported for `format`.
 - `VU-rojo-texture-0008` When `samples` is greater than 1, `type` is `Tex2D` or `Tex2DArray`, `mips`
   is 1, and `usage` contains neither `Storage` nor `Sparse`.
