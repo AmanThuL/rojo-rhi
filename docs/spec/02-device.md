@@ -248,9 +248,10 @@ Destroys an object or releases a heap slot, deferred. What becomes invalid at on
 kind: a resource handle's slot generation advances, so any later use of the handle is a detectable
 misuse; a `ViewIndex` or `SamplerIndex` is released into the deferred path and is not handed out
 again until that path completes, so no unretired work can read a reused slot; a `Swapchain` is a
-pointer wrapper, and using it after the call is undefined behaviour. The native object or
-descriptor slot is released when the frame slot that was open at the call, or the next one opened
-if none is, retires; the caller never waits and never tracks GPU progress for destruction.
+pointer wrapper, and using it after the call is undefined behaviour; an image it holds acquired is
+released with it. The native object or descriptor slot is released when the frame slot that was
+open at the call, or the next one opened if none is, retires; the caller never waits and never
+tracks GPU progress for destruction.
 Destroying a `Buffer` invalidates every `Addr` derived from it ([memory](03-memory-and-buffers.md)).
 Destroying a sparse `Texture` or `Buffer` unmaps all its tiles at the call
 ([sparse resources](13-sparse.md)).

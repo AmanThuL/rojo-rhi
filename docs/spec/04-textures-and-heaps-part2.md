@@ -134,7 +134,9 @@ void Device::writeView(IndexRange range, uint32_t index, Texture texture,
 ```
 Writes a view of `texture` into slot `range.base + index`, replacing any view there. The write
 takes effect for work submitted after the call. A native refusal to create the view is fatal. The
-call is free-threaded; writes to distinct slots may run concurrently.
+call is free-threaded; writes to distinct slots may run concurrently. A format the device does not
+support for `desc.usage` is reported as `VU-rojo-texture-0034` here, where `Device::createView`
+reports it as `VU-rojo-format-0003`.
 
 No submitted, unretired work reads the slot being written, and no other `Device::writeView` call
 writes the same slot concurrently. Both are data races no tier diagnoses: bindless reads are

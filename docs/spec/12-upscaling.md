@@ -117,9 +117,10 @@ one upscaler serves dynamic resolution without re-creation.
 ```cpp
 Result<Upscaler> Device::createUpscaler(const UpscalerDesc& desc);
 ```
-Creates the implementation `desc.kind` selects, with its private history. Creation returns an error
-when the kind is unavailable on this device, when the implementation rejects the extent ratio or
-a format, or when the platform refuses the object. Creation is free-threaded and synchronous.
+Creates the implementation `desc.kind` selects, with its private history; `Auto` selects the first
+kind `Capabilities::upscalers` lists. Creation returns an error when the kind is unavailable on
+this device, when the implementation rejects the extent ratio or a format, or when the platform
+refuses the object. Creation is free-threaded and synchronous.
 
 #### Valid usage
 - None.

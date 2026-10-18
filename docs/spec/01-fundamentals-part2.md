@@ -68,7 +68,9 @@ frames and is undefined behaviour. It may run on any thread, so it must be threa
 void setMessageCallback(MessageCallback callback, void* user);
 ```
 Installs the process-wide message sink. `nullptr` restores the default, which writes each message
-to stderr. The new callback receives every message emitted after the call returns. Free-threaded.
+to stderr. The new callback receives every message emitted after the call returns. A callback it
+replaces may still be running on another thread when the call returns, so that callback's `user`
+stays valid until the running call ends. Free-threaded.
 
 #### Valid usage
 - None.
