@@ -4,6 +4,7 @@
 //----------------------------------------------------------------------------------------------------------------------
 #include <rojoRHI/RHI.h>
 
+#include "Support/Backend.h"
 #include "Support/Death.h"
 #include "Support/PassKit.h"
 
@@ -18,9 +19,6 @@ using namespace rojoRHI;
 using test::PassKit;
 
 namespace {
-    /// A stand-in for a native surface: the Null backend never dereferences it.
-    int g_surface = 0;
-
     /// The first row of a `PassKit::kSize` square texture, which every copy names.
     constexpr TextureRegion kRow{ .extent = { PassKit::kSize, 1, 1 } };
 
@@ -117,7 +115,7 @@ TEST_CASE("VU-rojo-sync-0025 Compute's first barrier on a swapchain image handed
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-sync-0025", [] {
         Device device = *createDevice(DeviceDesc{ .validation = true });
-        Swapchain swapchain = *device.createSwapchain(SwapchainDesc{ .nativeSurface = &g_surface, .label = "test.swapchain" });
+        Swapchain swapchain = *device.createSwapchain(SwapchainDesc{ .nativeSurface = test::surface(), .label = "test.swapchain" });
         const Fence fence = *device.createFence(0, "test.fence");
         const std::array<FenceValue, 1> drawn{ FenceValue{ fence, 1 } };
         device.beginFrame();
@@ -183,7 +181,7 @@ TEST_CASE("VU-rojo-present-0018 an image moved to Present on Copy is presented o
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-present-0018", [] {
         Device device = *createDevice(DeviceDesc{ .validation = true });
-        Swapchain swapchain = *device.createSwapchain(SwapchainDesc{ .nativeSurface = &g_surface, .label = "test.swapchain" });
+        Swapchain swapchain = *device.createSwapchain(SwapchainDesc{ .nativeSurface = test::surface(), .label = "test.swapchain" });
         const Fence fence = *device.createFence(0, "test.fence");
         const std::array<FenceValue, 1> drawn{ FenceValue{ fence, 1 } };
         device.beginFrame();

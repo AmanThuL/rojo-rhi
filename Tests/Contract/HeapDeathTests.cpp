@@ -4,6 +4,7 @@
 //----------------------------------------------------------------------------------------------------------------------
 #include <rojoRHI/RHI.h>
 
+#include "Core/DeviceCore.h"
 #include "Support/Death.h"
 
 #include <catch2/catch_test_macros.hpp>
@@ -24,6 +25,7 @@ TEST_CASE("VU-rojo-heap-0002 placement requirements are requested for a Sparse b
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-heap-0002", [] {
         Device device = *createDevice();
+        core::coreOf(device).capabilities().placementSparse = true;
         (void)device.placementRequirements(BufferDesc{ .size = 64, .usage = BufferUsage::Sparse });
     });
 }
@@ -33,6 +35,12 @@ TEST_CASE("VU-rojo-heap-0002 placement requirements are requested for a Sparse t
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-heap-0002", [] {
         Device device = *createDevice();
+        core::DeviceCore& core = core::coreOf(device);
+        core.capabilities().placementSparse = true;
+        // The format must report sparse residency too, or VU-rojo-format-0003 fires first.
+        FormatCapabilities rgba = core.formatCapabilities(Format::RGBA8Unorm);
+        rgba.sparse = true;
+        core.setFormatCapabilities(Format::RGBA8Unorm, rgba);
         (void)device.placementRequirements(
             TextureDesc{ .format = Format::RGBA8Unorm, .extent = { 4, 4, 1 }, .usage = TextureUsage::Sampled | TextureUsage::Sparse }
         );
@@ -47,7 +55,8 @@ TEST_CASE("VU-rojo-heap-0003 a buffer extends past the end of its heap", "[contr
         const BufferDesc desc{ .size = 512 };
         const PlacementRequirements requirements = device.placementRequirements(desc);
         const Heap heap = *device.createHeap({ .size = requirements.size });
-        (void)device.createBuffer(desc, {}, { heap, requirements.alignment });
+        // A backend may round the heap up, so the offset is an aligned one far past any rounding.
+        (void)device.createBuffer(desc, {}, { heap, 1ull << 40 });
     });
 }
 
@@ -88,6 +97,7 @@ TEST_CASE("VU-rojo-heap-0006 a Sparse buffer is placed in a heap", "[contract][d
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-heap-0006", [] {
         Device device = *createDevice();
+        core::coreOf(device).capabilities().placementSparse = true;
         const Heap heap = *device.createHeap({ .size = 4096 });
         (void)device.createBuffer({ .size = 64, .usage = BufferUsage::Sparse }, {}, { heap, 0 });
     });

@@ -5,14 +5,11 @@
 
 #include "Support/UpscaleKit.h"
 
+#include "Support/Backend.h"
+
 #include <array>
 
 namespace rojoRHI::test {
-    namespace {
-        /// Stand-in for a native surface: the Null backend never dereferences it.
-        int g_surface = 0;
-    } // namespace
-
     //==================================================================================================================
     UpscalerDesc UpscaleKit::defaultDesc()
     {
@@ -50,7 +47,7 @@ namespace rojoRHI::test {
     //==================================================================================================================
     Texture UpscaleKit::swapchainImage()
     {
-        Swapchain swapchain = *kit.device.createSwapchain(SwapchainDesc{ .nativeSurface = &g_surface, .label = "kit.swapchain" });
+        Swapchain swapchain = *kit.device.createSwapchain(SwapchainDesc{ .nativeSurface = surface(), .label = "kit.swapchain" });
         return swapchain.acquire();
     }
 

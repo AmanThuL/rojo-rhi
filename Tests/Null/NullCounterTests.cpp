@@ -4,7 +4,7 @@
 //----------------------------------------------------------------------------------------------------------------------
 #include <rojoRHI/RHI.h>
 
-#include "Support/NullLibrary.h"
+#include "Support/Backend.h"
 #include "Support/PassKit.h"
 #include "Support/UpscaleKit.h"
 

@@ -40,10 +40,12 @@ TEST_CASE("Device::queue returns the same queue for a type on every call", "[con
     const std::array<FenceValue, 1> signal{ FenceValue{ fence, 1 } };
     Queue copy = first;
     copy.submit({}, {}, signal);
+    CHECK(device.wait({ fence, 1 }, UINT64_MAX));
     CHECK(device.completedValue(fence) == 1);
     Queue other = second;
     const std::array<FenceValue, 1> next{ FenceValue{ fence, 2 } };
     other.submit({}, {}, next);
+    CHECK(device.wait({ fence, 2 }, UINT64_MAX));
     CHECK(device.completedValue(fence) == 2);
     destroyDevice(device);
 }
@@ -74,6 +76,8 @@ TEST_CASE("a submission with no lists signals its fences", "[contract]")
     const std::array<FenceValue, 2> signal{ FenceValue{ a, 3 }, FenceValue{ b, 9 } };
     Queue queue = device.queue(QueueType::Graphics);
     queue.submit({}, {}, signal);
+    CHECK(device.wait({ a, 3 }, UINT64_MAX));
+    CHECK(device.wait({ b, 9 }, UINT64_MAX));
     CHECK(device.completedValue(a) == 3);
     CHECK(device.completedValue(b) == 9);
     destroyDevice(device);
@@ -100,6 +104,7 @@ TEST_CASE("a submission may wait for a value an earlier submission signals", "[c
     const std::array<FenceValue, 1> wait{ FenceValue{ fence, 7 } };
     device.queue(QueueType::Compute).submit({}, {}, signal);
     device.queue(QueueType::Graphics).submit({}, wait);
+    CHECK(device.wait({ fence, 7 }, UINT64_MAX));
     CHECK(device.completedValue(fence) == 7);
     destroyDevice(device);
 }
@@ -114,6 +119,7 @@ TEST_CASE("a fence value may be signalled again with a greater value", "[contrac
     {
         const std::array<FenceValue, 1> signal{ FenceValue{ fence, value } };
         queue.submit({}, {}, signal);
+        CHECK(device.wait({ fence, value }, UINT64_MAX));
         CHECK(device.completedValue(fence) == value);
     }
     destroyDevice(device);

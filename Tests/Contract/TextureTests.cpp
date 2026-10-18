@@ -99,7 +99,12 @@ TEST_CASE("a texture takes a full mip chain and every attachment usage", "[contr
         device.createTexture({ .format = Format::D32FloatS8, .extent = { 64, 64, 1 }, .usage = TextureUsage::DepthStencil | TextureUsage::Sampled }).has_value()
     );
     CHECK(device.createTexture({ .format = Format::BC1Unorm, .extent = { 64, 64, 1 }, .mips = 7, .usage = TextureUsage::Sampled }).has_value());
-    CHECK(device.createTexture({ .format = Format::RGBA8Unorm, .extent = { 64, 64, 1 }, .usage = TextureUsage::Sampled | TextureUsage::Sparse }).has_value());
+    if (device.capabilities().placementSparse)
+    {
+        CHECK(
+            device.createTexture({ .format = Format::RGBA8Unorm, .extent = { 64, 64, 1 }, .usage = TextureUsage::Sampled | TextureUsage::Sparse }).has_value()
+        );
+    }
     destroyDevice(device);
 }
 

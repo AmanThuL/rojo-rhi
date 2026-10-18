@@ -20,6 +20,22 @@ TEST_CASE("a Null submission completes its signals before submit returns", "[nul
     device.queue(QueueType::Copy).submit({}, {}, signal);
     CHECK(device.completedValue(fence) == 100);
     CHECK(device.wait({ fence, 100 }, 0));
+    Queue queue = device.queue(QueueType::Graphics);
+    const Fence a = *device.createFence(0, "null.fence.a");
+    const Fence b = *device.createFence(5, "null.fence.b");
+    for (const uint64_t value : { 1, 2, 3, 7, 9 })
+    {
+        const std::array<FenceValue, 2> both{ FenceValue{ a, value }, FenceValue{ b, value + 5 } };
+        queue.submit({}, {}, both);
+        CHECK(device.completedValue(a) == value);
+        CHECK(device.completedValue(b) == value + 5);
+    }
+    const Fence c = *device.createFence(0, "null.fence.c");
+    const Fence d = *device.createFence(5, "null.fence.d");
+    const std::array<FenceValue, 2> noLists{ FenceValue{ c, 3 }, FenceValue{ d, 9 } };
+    queue.submit({}, {}, noLists);
+    CHECK(device.completedValue(c) == 3);
+    CHECK(device.completedValue(d) == 9);
     destroyDevice(device);
 }
 

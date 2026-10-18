@@ -143,7 +143,18 @@ target("RojoRHITests")
     set_default(false)
     set_targetdir("$(builddir)/$(plat)/$(arch)/$(mode)/rojorhi-test")
     add_files(path.join(component, "Tests/*.cpp"))
-    add_files(path.join(component, "Tests/**/*.cpp"))
+    add_files(path.join(component, "Tests/Contract/*.cpp"))
+    add_files(path.join(component, "Tests/Support/*.cpp"))
+    -- The conformance directory holds no source until a part adds one, and xmake warns on an empty glob.
+    if #os.files(path.join(component_dir, "Tests/Conformance/*.cpp")) > 0 then
+        add_files(path.join(component, "Tests/Conformance/*.cpp"))
+    end
+    -- Core and Null cases test the core through the Null backend, which never ships, so they build only with it.
+    if not is_config("rojorhi_backend", "metal4") then
+        add_files(path.join(component, "Tests/Core/*.cpp"))
+        add_files(path.join(component, "Tests/Null/*.cpp"))
+        add_files(path.join(component, "Tests/Support/Null/*.cpp"))
+    end
     add_includedirs(path.join(component, "Source"))
     add_includedirs(path.join(component, "Tests"))
     add_deps("RojoRHI")

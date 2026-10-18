@@ -4,6 +4,7 @@
 //----------------------------------------------------------------------------------------------------------------------
 #include <rojoRHI/RHI.h>
 
+#include "Support/Backend.h"
 #include "Support/Death.h"
 
 #include <catch2/catch_test_macros.hpp>
@@ -14,17 +15,14 @@
 using namespace rojoRHI;
 
 namespace {
-    /// Stand-ins for native surfaces: the tests never dereference them.
-    std::array<int, 2> g_surfaces = {};
-
     //==================================================================================================================
-    SwapchainDesc described(size_t surface = 0)
+    SwapchainDesc described(uint32_t surface = 0)
     {
-        return SwapchainDesc{ .nativeSurface = &g_surfaces[surface], .label = "test.swapchain" };
+        return SwapchainDesc{ .nativeSurface = test::surface(surface), .label = "test.swapchain" };
     }
 
     //==================================================================================================================
-    Swapchain makeSwapchain(Device device, size_t surface = 0)
+    Swapchain makeSwapchain(Device device, uint32_t surface = 0)
     {
         return *device.createSwapchain(described(surface));
     }

@@ -7,6 +7,7 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include <cstddef>
+#include <cstdint>
 
 using namespace rojoRHI;
 
@@ -76,9 +77,11 @@ TEST_CASE("a buffer is placed at an aligned offset inside a heap", "[contract]")
     Device device = makeDevice();
     const BufferDesc desc{ .size = 1000 };
     const PlacementRequirements requirements = device.placementRequirements(desc);
-    const Heap heap = makeHeap(device, { .size = requirements.size * 2 });
+    // The size need not be a multiple of the alignment, so the second offset rounds it up.
+    const uint64_t second = (requirements.size + requirements.alignment - 1) / requirements.alignment * requirements.alignment;
+    const Heap heap = makeHeap(device, { .size = second + requirements.size });
     CHECK(device.createBuffer(desc, {}, { heap, 0 }).has_value());
-    CHECK(device.createBuffer(desc, {}, { heap, requirements.size }).has_value());
+    CHECK(device.createBuffer(desc, {}, { heap, second }).has_value());
     destroyDevice(device);
 }
 

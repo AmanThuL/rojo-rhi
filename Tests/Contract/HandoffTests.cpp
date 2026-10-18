@@ -4,6 +4,7 @@
 //----------------------------------------------------------------------------------------------------------------------
 #include <rojoRHI/RHI.h>
 
+#include "Support/Backend.h"
 #include "Support/PassKit.h"
 
 #include <catch2/catch_test_macros.hpp>
@@ -17,9 +18,6 @@ using namespace rojoRHI;
 using test::PassKit;
 
 namespace {
-    /// A stand-in for a native surface: the Null backend never dereferences it.
-    [[maybe_unused]] int g_surface = 0;
-
     /// The first row of a `PassKit::kSize` square texture, which every copy names.
     [[maybe_unused]] constexpr TextureRegion kRow{ .extent = { PassKit::kSize, 1, 1 } };
 
@@ -195,7 +193,7 @@ TEST_CASE("a swapchain image handed to Compute in General and back is presented"
 {
 #ifndef NDEBUG
     Device device = *createDevice(DeviceDesc{ .validation = true });
-    Swapchain swapchain = *device.createSwapchain(SwapchainDesc{ .nativeSurface = &g_surface, .label = "test.swapchain" });
+    Swapchain swapchain = *device.createSwapchain(SwapchainDesc{ .nativeSurface = test::surface(), .label = "test.swapchain" });
     const Fence fence = *device.createFence(0, "test.fence");
     const std::array<FenceValue, 1> drawn{ FenceValue{ fence, 1 } };
     const std::array<FenceValue, 1> handled{ FenceValue{ fence, 2 } };

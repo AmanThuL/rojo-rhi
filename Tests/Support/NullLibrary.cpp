@@ -19,10 +19,4 @@ namespace rojoRHI::test {
         const auto* bytes = reinterpret_cast<const std::byte*>(text.data());
         return { bytes, bytes + text.size() };
     }
-
-    //==================================================================================================================
-    std::vector<std::byte> standardLibrary()
-    {
-        return nullLibrary({ { "vsMain", "vertex" }, { "fsMain", "fragment" }, { "msMain", "mesh" }, { "tsMain", "task" }, { "csMain", "compute" } });
-    }
 } // namespace rojoRHI::test

@@ -6,7 +6,7 @@
 
 #include "Core/DeviceCore.h"
 #include "Core/Pipelines.h"
-#include "Support/NullLibrary.h"
+#include "Support/Backend.h"
 
 #include <catch2/catch_test_macros.hpp>
 

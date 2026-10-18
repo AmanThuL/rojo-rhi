@@ -77,6 +77,7 @@ TEST_CASE("one submission takes several lists and signals its fence", "[contract
     const std::array<FenceValue, 1> signal{ FenceValue{ fence, 1 } };
     device.queue(QueueType::Graphics).submit(lists, {}, signal);
     device.endFrame();
+    CHECK(device.wait({ fence, 1 }, UINT64_MAX));
     CHECK(device.completedValue(fence) == 1);
     destroyDevice(device);
 }

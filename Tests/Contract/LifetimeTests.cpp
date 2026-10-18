@@ -4,6 +4,7 @@
 //----------------------------------------------------------------------------------------------------------------------
 #include <rojoRHI/RHI.h>
 
+#include "Support/Backend.h"
 #include "Support/PassKit.h"
 
 #include <catch2/catch_test_macros.hpp>
@@ -15,9 +16,6 @@ using namespace rojoRHI;
 using test::PassKit;
 
 namespace {
-    /// A stand-in for a native surface: the Null backend never dereferences it.
-    [[maybe_unused]] int g_surface = 0;
-
     //==================================================================================================================
     /// Records, on `list`, one command of each kind that references an object: a root, an address, a handle and a pipeline.
     [[maybe_unused]] void referenceEverything(PassKit& kit, Buffer root, Buffer args, Buffer source, Buffer target)
@@ -157,7 +155,7 @@ TEST_CASE("a recycled list does not keep the swapchain images of its earlier fra
     SKIP("validation exists only in a Debug build");
 #else
     Device device = *createDevice(DeviceDesc{ .validation = true });
-    Swapchain swapchain = *device.createSwapchain(SwapchainDesc{ .nativeSurface = &g_surface, .label = "test.swapchain" });
+    Swapchain swapchain = *device.createSwapchain(SwapchainDesc{ .nativeSurface = test::surface(), .label = "test.swapchain" });
     // Each frame's list reuses the slot of the list `framesInFlight` frames before it: the first presented an image, and every
     // later one names none.
     for (uint32_t frame = 0; frame < 2 * DeviceDesc{}.framesInFlight + 1; ++frame)
