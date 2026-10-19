@@ -164,14 +164,12 @@ TEST_CASE("the format table narrows storage, R32Float resolve and depth filterin
 {
     Device device = *createDevice();
     MTL::Device* native = nativeOf(device);
-    for (const Format format : { Format::BGRA8Unorm, Format::RGB10A2Unorm })
+    for (const Format format : { Format::BGRA8Unorm, Format::RGB10A2Unorm, Format::RG16Float })
     {
         CAPTURE(static_cast<uint32_t>(format));
         CHECK_FALSE(device.formatCapabilities(format).storageRead);
-        CHECK_FALSE(device.formatCapabilities(format).storageWrite);
+        CHECK(device.formatCapabilities(format).storageWrite);
     }
-    CHECK_FALSE(device.formatCapabilities(Format::RG16Float).storageRead);
-    CHECK(device.formatCapabilities(Format::RG16Float).storageWrite);
     const FormatCapabilities r32 = device.formatCapabilities(Format::R32Float);
     CHECK(r32.resolve == native->supports32BitFloatFiltering());
     CHECK(r32.blend);

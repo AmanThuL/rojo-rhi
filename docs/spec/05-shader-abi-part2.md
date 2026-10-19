@@ -27,7 +27,8 @@ Addr nonUniform(Addr base);
 ```
 
 Returns its argument unchanged, marked as possibly different between the threads of a wave, for
-passing to `rojoRHI::load`, `rojoRHI::store`, `rojoRHI::texture` and `rojoRHI::sampler`.
+passing to `rojoRHI::load`, `rojoRHI::store`, `rojoRHI::texture`, `rojoRHI::wTexture` and
+`rojoRHI::sampler`.
 
 Requirements: the result is passed directly to a `rojoRHI` fetch or dereference, not stored in
 memory or a shader output first.
@@ -153,8 +154,9 @@ objects: combined texture-sampler types are not part of the ABI.
 
 Requirements: `view` is a slot filled by `Device::createView` or `Device::writeView` that is not
 destroyed or released before the access executes; the view in the slot is a sampled view for a
-`texture*` form and a storage view for an `rwTexture*` form; the view's texture type, array form
-and sample count match the function; `T` matches the numeric class of the view's format (see
+`texture*` form and a storage view for an `rwTexture*` form, whose format reports both
+`storageRead` and `storageWrite`; the view's texture type, array form and sample count match the
+function; `T` matches the numeric class of the view's format (see
 [formats and limits](15-formats-and-limits.md)); and `view` is dynamically uniform across the wave
 or marked with `rojoRHI::nonUniform`.
 
@@ -168,6 +170,38 @@ or marked with `rojoRHI::nonUniform`.
 |---|---|---|---|
 | Lowering | 8-byte resource ID read from the ID table at `buffer(1)`, through a Slang `__intrinsic_asm` over an argument-buffer table; `texture2DMS` and `texture2DMSArray` compile, but reading them miscompiles under the pinned Slang, which emits invalid MSL for `Load` and `GetDimensions`, and stays unverified until compile-and-run; the conformance multisample kernels read only the dimensions on Metal, through an `__intrinsic_asm` helper, so `Load` on a multisample texture is not exercised there | `ResourceDescriptorHeap[view]`; unverified | resource descriptor heap, Slang's `__slang_resource_heap` runtime arrays, each fetch marked `NonUniform` |
 | Cost | cheap: one extra 8-byte load, measured at about 3% for `read` and 7.5% for `sample` in a fetch-only kernel | native | cheap: every fetch is marked `NonUniform`, since the `uint` marker cannot reach the handle; correct for a uniform index too |
+
+### `rojoRHI::wTexture`
+
+```slang
+// T : ITexelElement, defaulting to float4; `view` is a ViewIndex.
+WTexture1D<T>         wTexture1D<T = float4>(uint view);
+WTexture1DArray<T>    wTexture1DArray<T = float4>(uint view);
+WTexture2D<T>         wTexture2D<T = float4>(uint view);
+WTexture2DArray<T>    wTexture2DArray<T = float4>(uint view);
+WTexture3D<T>         wTexture3D<T = float4>(uint view);
+```
+
+Returns the storage view stored in slot `view` of the global view heap as a write-only texture,
+one form beside each `rwTexture*` form. A write-only texture is written with `Store(coord, value)`
+and cannot be read: a subscript, `Load` or any other read of it is a compile error. Use it for a
+format whose `FormatCapabilities` report `storageWrite` without `storageRead`, such as `RG16Float`
+on the hardware floor (see [formats and limits](15-formats-and-limits.md)); a format with both may
+use either form.
+
+Requirements: as for `rojoRHI::texture`, with the view in the slot a storage view whose texture
+type and array form match the function, and whose format reports `storageWrite`.
+
+#### Valid usage
+
+- None.
+
+#### Mapping
+
+| | Metal 4 | D3D12 | Vulkan |
+|---|---|---|---|
+| Lowering | an `access::write` texture of the matching shape, read from the ID table at `buffer(1)` as for `rojoRHI::texture`; `Store` is `write` | `RWTexture*` of the matching shape from `ResourceDescriptorHeap[view]`, written by subscript and never read; unverified | storage image of `Unknown` format from `__slang_resource_heap`, `NonUniform` on every fetch, written with `OpImageWrite`; it needs `StorageImageWriteWithoutFormat` alone, and Slang emits no `NonReadable` decoration |
+| Cost | cheap: one extra 8-byte load, as for `rojoRHI::texture` | native | cheap: `NonUniform` on every fetch, as for `rojoRHI::texture` |
 
 ### `rojoRHI::sampler`
 

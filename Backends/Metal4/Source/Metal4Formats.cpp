@@ -92,14 +92,13 @@ namespace rojoRHI::metal4 {
         // ordinary 32-bit pixel formats). Blend stays at the ceiling.
         entry(table, Format::R32Float).filterLinear = device->supports32BitFloatFiltering();
         entry(table, Format::R32Float).resolve = device->supports32BitFloatFiltering();
-        // A Storage view is read and written: the shader ABI's rwTexture accessors are read_write, and read-write texture tier 2
-        // lists neither BGRA8Unorm, RG16Float nor RGB10A2Unorm, so a shader can neither read nor write them through one.
+        // Storage reads go through the shader ABI's rwTexture accessors, which are read_write, and read-write texture tier 2
+        // lists neither BGRA8Unorm, RG16Float nor RGB10A2Unorm (Metal Feature Set Tables, May 2026, read-write texture
+        // tiers). The Apple7 and later columns list Write for all three (same tables, ordinary and packed 32-bit pixel
+        // formats), and a shader writes them through the write-only wTexture accessors (access::write): the write-only
+        // conformance cases read every texel back bit-exact under the validation layer, so they keep storageWrite.
         entry(table, Format::BGRA8Unorm).storageRead = false;
-        entry(table, Format::BGRA8Unorm).storageWrite = false;
         entry(table, Format::RGB10A2Unorm).storageRead = false;
-        entry(table, Format::RGB10A2Unorm).storageWrite = false;
-        // Chapter 15 guarantees RG16Float storage writes at the floor, and the Apple family tables list Write for it, so it keeps
-        // storageWrite; a shader writes it through a write-only accessor, which the shader ABI does not provide yet.
         entry(table, Format::RG16Float).storageRead = false;
         // Depth32Float and Depth32Float_Stencil8: the Apple7 and Apple8 columns list MSAA and Resolve, and Apple9 and later add
         // Filter (Metal Feature Set Tables, May 2026, depth and stencil pixel formats).

@@ -135,9 +135,12 @@ depth formats follows the device family (*unverified*). The storage reads of `RG
 `TypedUAVLoadAdditionalFormats` capability, which loads that set together, and Metal 4 read-write
 texture tier 2; `createDevice` ([device](02-device.md)) checks both. Without them only `R32Float`
 loads would be unconditional. `RG16Float` and `RGB10A2Unorm` are outside both sets and are queried
-on their own, so their storage access is reported. On Vulkan `R16Float`, `RG16Float` and `R8Unorm`
-storage needs `shaderStorageImageExtendedFormats`. Multisampling, resolve and sparse residency are
-reported per device and are not part of the floor.
+on their own, so their storage reads are reported. Storage writes of `RG16Float` are guaranteed
+while its reads are reported; a format that reports `storageWrite` without `storageRead` is written
+through the write-only accessors (`rojoRHI::wTexture*`, [shader ABI](05-shader-abi-part2.md)).
+Metal 4 reports exactly that for `BGRA8Unorm`, `RGB10A2Unorm` and `RG16Float`. On Vulkan
+`R16Float`, `RG16Float` and `R8Unorm` storage needs `shaderStorageImageExtendedFormats`.
+Multisampling, resolve and sparse residency are reported per device and are not part of the floor.
 
 #### Valid usage
 - `VU-rojo-format-0001` Every `Format` value passed to RojoRHI is one of the enumerators above.

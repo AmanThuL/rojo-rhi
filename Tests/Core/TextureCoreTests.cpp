@@ -86,6 +86,19 @@ TEST_CASE("a texture counts its live views and stops counting a destroyed one at
 }
 
 //======================================================================================================================
+TEST_CASE("a format with storage writes alone takes Storage usage and a Storage view", "[core]")
+{
+    Device device = *createDevice();
+    // RG16Float on the Metal 4 floor: written through the write-only accessors, never read through a Storage view.
+    core::coreOf(device).setFormatCapabilities(
+        Format::RG16Float, FormatCapabilities{ .sampled = true, .filterLinear = true, .storageWrite = true, .colorAttachment = true }
+    );
+    const Texture texture = *device.createTexture({ .format = Format::RG16Float, .extent = { 4, 4, 1 }, .usage = TextureUsage::Storage });
+    CHECK(device.createView(texture, TextureViewDesc{ .usage = TextureUsage::Storage }).has_value());
+    destroyDevice(device);
+}
+
+//======================================================================================================================
 TEST_CASE("a full view heap is an out-of-memory error result and a retired slot frees room", "[core]")
 {
     Device device = *createDevice();

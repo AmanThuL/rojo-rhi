@@ -73,10 +73,10 @@ reports the floor. The floor name is the highest Apple family the device support
 a format the device does not tile ([sparse resources](metal4-backend-edges.md#sparse-resources)) and
 sample counts without `supportsTextureSampleCount`. BC formats keep their ceiling, because
 `createDevice` requires `supportsBCTextureCompression`. Three narrowings follow the Metal Feature
-Set Tables. A storage view is read-write in the shader ABI, and read-write texture tier 2 lists
-neither `BGRA8Unorm`, `RG16Float` nor `RGB10A2Unorm`, so storage read is off for all three and
-storage write is off for `BGRA8Unorm` and `RGB10A2Unorm`; `RG16Float` keeps storage write, which
-chapter 15 guarantees at the floor. `R32Float` filtering and resolve follow
+Set Tables. The shader ABI reads a storage view through `read_write` textures, and read-write
+texture tier 2 lists neither `BGRA8Unorm`, `RG16Float` nor `RGB10A2Unorm`, so storage read is off
+for all three; they keep storage write, which the write-only accessors reach through
+`access::write` textures. `R32Float` filtering and resolve follow
 `supports32BitFloatFiltering`. Linear filtering of depth formats needs Apple9. Each line carries its
 source in a comment.
 
