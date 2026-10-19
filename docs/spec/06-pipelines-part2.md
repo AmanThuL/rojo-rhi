@@ -99,7 +99,7 @@ error.
 | | Metal 4 | D3D12 | Vulkan |
 |---|---|---|---|
 | Call | The `MTL4::PipelineDataSetSerializer` (`CaptureBinaries`) set on the compiler descriptor records every pipeline compiled, hits included; `serializeAsArchiveAndFlushToURL` writes it to a temporary file, read back and removed; flushing empties the serializer, so the device keeps every archive it wrote and the blob is the header and all of them, the newest last | `ID3D12PipelineLibrary::GetSerializedSize` and `Serialize` | `vkGetPipelineCacheData`, or pipeline binaries |
-| Cost | cheap: one file written and read under the cache's lock; the blob also carries the backend's own kernels, about 170 KB | native | native |
+| Cost | cheap: one file written and read under the cache's lock, held exclusively, so it waits for the compilations in flight and holds back those that start, because Metal's serializer crashes when flushed while a compilation records into it; the blob also carries the backend's own kernels, about 170 KB | native | native |
 
 ## Dynamic state
 

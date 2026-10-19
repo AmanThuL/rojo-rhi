@@ -13,6 +13,7 @@
 #include "Metal4Encoders.h"
 #include "Metal4PipelineState.h"
 #include "Support/Backend.h"
+#include "Support/Metal4/Metal4Timing.h"
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -49,10 +50,11 @@ namespace {
     }
 
     //==================================================================================================================
-    /// What `list` has counted so far.
+    /// What `list` has counted so far; fails the case when a scope it recorded holds no timestamp pair, since the pinned
+    /// counts include both timestamp writes.
     const core::RecordCounts& countsOf(CommandList list)
     {
-        return core::coreOf(list).counts;
+        return test::timedCounts(list);
     }
 
     //==================================================================================================================
@@ -201,9 +203,9 @@ TEST_CASE("state recorded before the first draw waits in the prefix and replays 
     list.setViewport(Viewport{ .width = 8.0f, .height = 8.0f });
     CHECK(prefixKinds(list) == std::vector{ Kind::Pipeline, Kind::Viewport });
     const uint64_t before = callsOf(list);
-    // The open, the pipeline with its winding and the viewport, then endEncoding and the pass's group.
+    // The open, the pipeline with its winding and the viewport, then endEncoding, the pass's end timestamp and its group.
     list.endRenderPass();
-    CHECK(callsOf(list) == before + kOpenCalls + 3 + 2);
+    CHECK(callsOf(list) == before + kOpenCalls + 3 + 3);
     finish(device, list);
     destroyDevice(device);
 }
@@ -486,9 +488,9 @@ TEST_CASE("setRoot outside a pass writes the table at once and an unchanged root
     list.setRoot(first);
     CHECK(callsOf(list) == before);
     CHECK(drawOf(list).tableRoot == gpuAddressOf(second));
-    // The open, the root, endEncoding and the pass's group.
+    // The open, the root, endEncoding, the pass's end timestamp and its group.
     list.endRenderPass();
-    CHECK(callsOf(list) - before == kOpenCalls + 1 + 2);
+    CHECK(callsOf(list) - before == kOpenCalls + 1 + 3);
     CHECK(drawOf(list).tableRoot == gpuAddressOf(first));
     finish(device, list);
     destroyDevice(device);
@@ -701,12 +703,13 @@ TEST_CASE("C8's sequence makes the calls the overhead note registers", "[metal4]
         list.setScissor(kScissor);
         list.draw(3);
         list.endRenderPass();
-        // pushDebugGroup; renderCommandEncoder, setLabel, setArgumentTable; the consumer barrier after the first pass;
-        // setRenderPipelineState, setFrontFacingWinding, setViewport, setScissorRect, drawPrimitives; endEncoding,
-        // popDebugGroup. The winding call, one per encoder, is beyond the registered sequence: the pipeline has a fragment
-        // entry, which may read the front face, and its counter-clockwise winding is not Metal's default.
+        // pushDebugGroup, writeTimestampIntoHeap; renderCommandEncoder, setLabel, setArgumentTable; the consumer barrier
+        // after the first pass; setRenderPipelineState, setFrontFacingWinding, setViewport, setScissorRect, drawPrimitives;
+        // endEncoding, writeTimestampIntoHeap, popDebugGroup. The winding call, one per encoder, is beyond the registered
+        // sequence: the pipeline has a fragment entry, which may read the front face, and its counter-clockwise winding is not
+        // Metal's default.
         const uint64_t barrier = repetition > 0 ? 1 : 0;
-        CHECK(callsOf(list) - before == 1 + 3 + barrier + 5 + 2);
+        CHECK(callsOf(list) - before == 2 + 3 + barrier + 5 + 3);
         CHECK(countsOf(list).nativeBarriers - barriers == barrier);
     }
     finish(device, list);

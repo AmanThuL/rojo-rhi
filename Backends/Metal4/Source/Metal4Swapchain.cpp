@@ -248,6 +248,9 @@ namespace rojoRHI {
         SwapchainImpl& impl = SwapchainImpl::of(*this);
         core::resizeSwapchain(impl.core, extent);
         DeviceImpl& device = deviceOf(impl);
+        // Freeing the layer's queued drawables of the old size inside `setDrawableSize` leaves an autoreleased device behind,
+        // which this pool collects on the caller's thread.
+        const metal4::AutoreleasePool pool;
         // Every list that used the images was submitted before the last ended frame's event was signalled on the graphics
         // queue, so once the event reaches that frame no work references them. Before the first frame there is none.
         if (const uint64_t frame = device.core.frameNumber(); frame != 0)

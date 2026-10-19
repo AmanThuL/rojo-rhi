@@ -12,7 +12,7 @@
 #include <cstddef>
 #include <expected>
 #include <filesystem>
-#include <mutex>
+#include <shared_mutex>
 #include <span>
 #include <string>
 #include <string_view>
@@ -106,9 +106,14 @@ namespace rojoRHI::metal4 {
         /// True when an archive holds the compute pipeline `descriptor`, under the same conditions as the render form.
         bool probe(const MTL4::ComputePipelineDescriptor* descriptor) const;
 
-        /// Serializes every pipeline the device's compiler made so far, as a blob for `device`, under the cache's own lock; a
-        /// failure is `DriverFailure`. Serializing empties the serializer, so the cache keeps each archive it wrote and the blob
-        /// holds them all, the new one last. Free-threaded: it may run beside compilation, whose pipelines may then be missing.
+        /// Returns the cache's lock held shared, which a creation holds while the device's compiler makes a pipeline: Metal's
+        /// serializer crashes when it is flushed while a compilation records into it. Compilations still run beside one another.
+        [[nodiscard]] std::shared_lock<std::shared_mutex> compiling();
+
+        /// Serializes every pipeline the device's compiler made so far, as a blob for `device`, under the cache's own lock held
+        /// exclusively; a failure is `DriverFailure`. Serializing empties the serializer, so the cache keeps each archive it
+        /// wrote and the blob holds them all, the new one last. Free-threaded: it waits for the compilations in flight, which
+        /// the blob then covers, and a compilation that starts meanwhile waits for it.
         Result<std::vector<std::byte>> data(MTL::Device* device);
 
         /// Releases the serializer, the archives and the task options. The caller holds an autorelease pool.
@@ -125,6 +130,6 @@ namespace rojoRHI::metal4 {
         std::vector<TemporaryFile> m_files;                      ///< The files `m_archives` were loaded from, removed after them.
         MTL4::CompilerTaskOptions* m_options = nullptr;          ///< Look-ups in `m_archives` (+1), or null without one.
         std::vector<std::vector<std::byte>> m_written;           ///< The archives `data` wrote so far, in order.
-        std::mutex m_mutex;                                      ///< Serializes `data`, guards `m_written`; its temporary files are its own.
+        std::shared_mutex m_mutex;                               ///< Held by `data` exclusively, guarding `m_written`, and shared by `compiling`'s holders.
     };
 } // namespace rojoRHI::metal4

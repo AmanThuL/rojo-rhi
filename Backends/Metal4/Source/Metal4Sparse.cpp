@@ -100,6 +100,18 @@ namespace rojoRHI::metal4 {
                 MTL4::UpdateSparseBufferMappingOperation{ mode, range, static_cast<NS::UInteger>(mapping.heapOffset / core::kTileBytes) }
             );
         }
+
+        //==============================================================================================================
+        /// Signals the progress event of `queue` with its next value and waits on the queue for that value: the queue's later
+        /// work, a native mapping update included, starts only once all its earlier work, a mapping update included, completes.
+        void orderOnQueue(QueueImpl& queue, core::DeviceCore& core)
+        {
+            const uint64_t progress = queue.progressValue.load(std::memory_order_relaxed) + 1;
+            queue.progressValue.store(progress, std::memory_order_relaxed);
+            queue.native->signalEvent(queue.progress, progress);
+            queue.native->wait(queue.progress, progress);
+            core::DeviceCounts::add(core.counts().nativeSubmitCalls, 2);
+        }
     } // namespace
 
     //==================================================================================================================
@@ -201,7 +213,16 @@ namespace rojoRHI::metal4 {
         }
         const std::vector<MappingTarget> targets = resolveMappings(core, mappings);
         const std::vector<MappingGroup> groups = groupMappings(mappings, targets);
+        if (groups.empty())
+        {
+            return;
+        }
         const AutoreleasePool pool;
+        // A native mapping update is not ordered against the command buffers around it on its queue: it may apply while work
+        // submitted before it still reads the old tiles, and work submitted after it may run before it applies. The queue's
+        // own event orders both sides. The signal and wait after the updates also keep a texture update that follows a buffer
+        // update on the queue from faulting in Metal's driver, which any queue operation between the two avoids.
+        orderOnQueue(queue, core);
         for (const MappingGroup& group : groups)
         {
             if (group.texture != nullptr)
@@ -214,13 +235,6 @@ namespace rojoRHI::metal4 {
             }
             core::DeviceCounts::add(core.counts().nativeSubmitCalls);
         }
-        // Metal's driver faults on a texture mapping that follows a buffer mapping on a queue unless another queue operation
-        // lies between them, so a call that maps a buffer, last, ends with a signal of the queue's progress event at the value
-        // it already has: an ordered no-op for every fence that reads it.
-        if (!groups.empty() && groups.back().buffer != nullptr)
-        {
-            queue.native->signalEvent(queue.progress, queue.progressValue.load(std::memory_order_relaxed));
-            core::DeviceCounts::add(core.counts().nativeSubmitCalls);
-        }
+        orderOnQueue(queue, core);
     }
 } // namespace rojoRHI::metal4

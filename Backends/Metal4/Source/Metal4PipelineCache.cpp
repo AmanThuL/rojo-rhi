@@ -27,6 +27,7 @@
 #include <format>
 #include <fstream>
 #include <mutex>
+#include <shared_mutex>
 #include <span>
 #include <string>
 #include <string_view>
@@ -412,10 +413,17 @@ namespace rojoRHI::metal4 {
     }
 
     //==================================================================================================================
+    std::shared_lock<std::shared_mutex> PipelineCache::compiling()
+    {
+        return std::shared_lock(m_mutex);
+    }
+
+    //==================================================================================================================
     Result<std::vector<std::byte>> PipelineCache::data(MTL::Device* device)
     {
         const AutoreleasePool pool;
-        const std::lock_guard lock(m_mutex);
+        // Exclusive: flushing the serializer while the compiler records a pipeline into it crashes inside Metal.
+        const std::unique_lock lock(m_mutex);
         Result<TemporaryFile> file = TemporaryFile::create();
         if (!file)
         {

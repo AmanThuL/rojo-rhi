@@ -27,7 +27,8 @@ namespace rojoRHI::core {
     };
 
     /// Fills the durations of one queue's retired scopes: `records` are the scopes recorded for the queue in frame slot
-    /// `slot`, and `report[i]` is the entry made for `records[i]`, with a duration of zero. Runs at the frame wait under
+    /// `slot`, and `report[i]` is the entry made for `records[i]`, with a duration of zero. The queue is
+    /// `report[0].queue`. Runs at the frame wait under
     /// the scope log's lock, so it must not call the core; both spans are valid only during the call. `context` is the
     /// backend's.
     using ScopeTimesFn = void (*)(void* context, uint32_t slot, std::span<const ScopeRecord> records, std::span<ScopeTiming> report);

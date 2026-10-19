@@ -394,26 +394,26 @@ TEST_CASE("elements group by resource, heap and mode, texture groups first, each
 }
 
 //======================================================================================================================
-TEST_CASE("mapTiles counts each native update and the signal after a buffer update, and nothing for an empty span", "[metal4]")
+TEST_CASE("mapTiles counts each native update and the signals and waits around them, and nothing for an empty span", "[metal4]")
 {
     SparseKit kit;
     const Heap other = *kit.device.createHeap(HeapDesc{ .size = 4 * kTile, .memory = Memory::Gpu, .label = "sparse.other" });
     const Counters start = kit.device.counters();
     kit.queue.mapTiles({});
     CHECK(kit.device.counters().nativeSubmitCalls == start.nativeSubmitCalls);
-    // Two tiles of one texture from one heap: one update.
+    // Two tiles of one texture from one heap: one update between a signal and a wait before it and a signal and a wait after.
     TileMapping second = kit.firstTile();
     second.region.offset.x = kit.shape.width;
     second.heapOffset = kTile;
     kit.queue.mapTiles(std::array{ kit.firstTile(), second });
-    CHECK(kit.device.counters().nativeSubmitCalls == start.nativeSubmitCalls + 1);
-    // A buffer, a texture from another heap and a texture unmap: three updates and the signal that ends a buffer update.
+    CHECK(kit.device.counters().nativeSubmitCalls == start.nativeSubmitCalls + 5);
+    // A buffer, a texture from another heap and a texture unmap: three updates and the same two signals and two waits.
     TileMapping third = kit.firstTile();
     third.region.offset.y = kit.shape.height;
     third.heap = other;
     third.heapOffset = 0;
     kit.queue.mapTiles(std::array{ kit.bufferTiles(1, 10 * kTile), third, SparseKit::removal(kit.firstTile()) });
-    CHECK(kit.device.counters().nativeSubmitCalls == start.nativeSubmitCalls + 5);
+    CHECK(kit.device.counters().nativeSubmitCalls == start.nativeSubmitCalls + 12);
     destroyDevice(kit.device);
 }
 

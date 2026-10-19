@@ -94,10 +94,16 @@ every pipeline; so is a blob of the Null backend, garbage, or an archive Metal r
   with `MTL4::CompilerTaskOptions::setLookupArchives`, which serves it from the archive on a hit.
   The serializer therefore sees every pipeline. `counters()` reports misses as the pipelines
   created minus the hits.
-- `pipelineCacheData` serializes under the cache's own mutex and opens its own pool. A device that
-  created no pipeline returns a blob a later device accepts, about 170 KB, since the backend's own
-  kernel pipelines are compiled on the same compiler. Those kernels use no archive lookup and count
-  no hit.
+- `pipelineCacheData` serializes under the cache's own lock, a `std::shared_mutex` it holds
+  exclusively, and opens its own pool. Every compilation through the device's compiler after
+  `createDevice`, a pipeline's or a MetalFX scaler's, holds the lock shared, so compilations still
+  overlap one another but never a flush: Metal crashes in
+  `-[_MTLBinaryArchive newArchiverIdWithBinaryKey:...]` when the serializer is flushed while a
+  compilation records into it. A pipeline is therefore in the archive of one harvest or the next,
+  never lost between them. A device that created no pipeline returns a blob a later device
+  accepts, about 170 KB, since the backend's own kernel pipelines are compiled on the same
+  compiler, inside `createDevice`, before any harvest can run. Those kernels use no archive lookup
+  and count no hit.
 
 The Null backend never counts a hit. A hit costs about 0.5 ms and a miss about 8 ms with the
 validation layer off; under `MTL_DEBUG_LAYER=1` the debug compiler serves repeat compiles itself
@@ -122,12 +128,17 @@ the list allocates at its first pass and reuses.
 - The encoder is labelled after the innermost open scope, binds the list's argument table to the
   vertex, fragment, object and mesh stages (ADR 0018), emits the render part of the pending
   barrier, and replays the prefix (next section).
-- `endRenderPass` opens the encoder when nothing did, sets the deferred store actions, ends it and
-  pops the pass's debug group. `end` clears the descriptor's texture references, so an idle list
-  keeps no destroyed target alive. Descriptor setters are not native messages and are not counted.
+- `beginRenderPass` writes the pass's begin timestamp on the command buffer right after its debug
+  group, before any encoder of the pass; `endRenderPass` opens the encoder when nothing did, sets
+  the deferred store actions, ends it, writes the end timestamp and pops the pass's debug group. The
+  kernels of counted draws and the encoders splits resume fall between the two. `end` clears the
+  descriptor's texture references, so an idle list keeps no destroyed target alive. Descriptor
+  setters are not native messages and are not counted.
 - A scope that begins or ends inside a pass opens the render encoder and pushes or pops a debug
   group on it. A split pops the open groups first and the resumed encoder pushes them again,
-  outermost first. The scope's timings stay the core's and report no durations.
+  outermost first. Such a scope writes its timestamps on the render encoder after the fragment
+  stage, at `TimestampGranularityPrecise`; a split writes none
+  ([command recording](metal4-recording.md)).
 - Ending a render encoder opens an autorelease pool, once per encoder and never per command,
   because the validation layer autoreleases when a stencil attachment ends.
 
@@ -253,11 +264,6 @@ draw.
 Slang drops the user semantic of mesh vertex outputs when it compiles to MSL, so Metal refuses a
 mesh pipeline whose fragment entry reads a vertex varying; a mesh shader passes its values per
 primitive until the toolchain keeps the semantic.
-
-## Not implemented
-
-Upscaling (`createUpscaler` returns `Unsupported`, `CommandList::upscale` aborts) and timestamps
-are not implemented, and `scopeTimings` reports no durations.
 
 ## Tests
 

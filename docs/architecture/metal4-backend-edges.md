@@ -75,7 +75,9 @@ the swapchain is freed.
 **Resize.** After `core::resizeSwapchain`, `Swapchain::resize` waits, when a frame has been
 numbered, for the frame event to reach `frameNumber()`, one `nativeHostCalls`: the graphics queue
 signals it after every list of the ended frame, so no work still references the old images. Then
-it calls `setDrawableSize`. Before the first frame there is nothing to wait for.
+it calls `setDrawableSize`. Before the first frame there is nothing to wait for. Both run in a
+pool: when the layer frees a queued drawable of the old size, its texture's `dealloc` leaves an
+autoreleased device on the caller's thread.
 
 **Destruction.** `Device::destroy(Swapchain)` runs `core::destroySwapchain` and
 `metal4::retireSwapchain`, which moves the swapchain to the list of the frame slot the core
@@ -143,12 +145,28 @@ textures and buffers alike, as is unmapping a tile that was never mapped.
 
 **Grouping.** `groupMappings` makes one group for each resource, heap and mode in the order
 elements first name them, and issues all texture groups before the buffer groups. Each group is
-one native `updateTextureMappings` or `updateBufferMappings` call and one `nativeSubmitCalls`; an
-empty span issues and counts nothing. `Queue::mapTiles` runs the core's checks first, then
-`resolveMappings` reads the pools and `groupMappings` builds the groups without touching the
-native queue, which is why the grouping is a pure function the tests call. Destroying a mapped
-resource issues no unmap; the tiles leave when the resource retires. `mapTiles` does not call
-`flushPresentation`, so a mapping on the graphics queue issues no pending drawable waits.
+one native `updateTextureMappings` or `updateBufferMappings` call and one `nativeSubmitCalls`; a
+call with no group, such as an empty span, issues and counts nothing. `Queue::mapTiles` runs the
+core's checks first, then `resolveMappings` reads the pools and `groupMappings` builds the groups
+without touching the native queue, which is why the grouping is a pure function the tests call.
+Destroying a mapped resource issues no unmap; the tiles leave when the resource retires. `mapTiles`
+does not call `flushPresentation`, so a mapping on the graphics queue issues no pending drawable
+waits.
+
+**Ordering.** Metal orders a mapping update against no command buffer on its queue: the
+`updateTextureMappings` documentation leaves a barrier against `MTL::StageResourceState` to the
+caller, and RojoRHI's barriers never name that stage. Measured on the M3 Max, without that ordering
+an update overtook every read of the old tiles that a long copy held back (all rounds, textures and
+buffers), and a copy submitted right after an update of a texture wrote before the update applied in
+about 0.2% of rounds (not seen in 300 buffer rounds). Chapter 13 orders a call after the queue's
+earlier work and before its later work, which a barrier inside the lists cannot give, since they are
+recorded before the call is known. So `orderOnQueue` brackets the updates: before them and after
+them it signals `QueueImpl::progress` with the next progress value and waits on the queue for that
+value. A call counts its groups plus four `nativeSubmitCalls`, and `progressValue` is written by
+`mapTiles` as well as by `submit`. The cases "a mapping applies after the work submitted before it
+on its queue" and "work submitted after a mapping on its queue writes the mapped tiles" hold the two
+sides. The ordering is verified on this one GPU and is re-checked with the work-around under issue
+#58.
 
 **Driver fault and its work-around.** On an Apple M3 Max (Apple9, driver bundle
 `AGXMetalG15X_M1`, macOS 27, SDK 26.5) a texture mapping update that follows a buffer mapping
@@ -168,13 +186,11 @@ called from `-[AGXG15XFamilyCommandQueue_mtlnext updateTextureMappings:heap:oper
   crash in the same run.
 
 Hence two rules in `metal4::mapTiles`: texture groups come before buffer groups within a call, and
-a call whose last group is a buffer group ends with
-`signalEvent(queue.progress, queue.progressValue)` at the value the progress event already has, an
-ordered no-op for every fence that reads it. It is counted as one more `nativeSubmitCalls`, so a
-call counts groups, plus one when it maps a buffer. `QueueImpl::progress` is therefore signalled
-by `mapTiles` as well as by `submit`. The regression cases are "a texture mapping that follows a
-buffer mapping on the same queue runs" (it crashes with the signal removed) and "texture and buffer
-mappings that alternate across queues run". The work-around is verified on this one GPU.
+the signal and wait that follow a call's updates put a queue operation between a buffer update and
+any texture update a later call makes. The regression cases are "a texture mapping that follows a
+buffer mapping on the same queue runs" (it crashes when no queue operation lies between the calls)
+and "texture and buffer mappings that alternate across queues run". The work-around is verified on
+this one GPU.
 
 ## Capture
 

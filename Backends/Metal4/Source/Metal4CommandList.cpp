@@ -118,7 +118,7 @@ namespace rojoRHI {
         core::beginList(list->core, impl.core, type, label);
         metal4::ListState& state = list->state;
         // A list that never ended, which only a Release build lets through, leaves its encoder behind; one that ended with
-        // scopes open leaves their strings.
+        // scopes open leaves their strings and timestamp pairs.
         list->encoders.release();
         list->draw.reset();
         for (NS::String* scopeLabel : state.scopeLabels)
@@ -126,6 +126,7 @@ namespace rojoRHI {
             scopeLabel->release();
         }
         state.scopeLabels.clear();
+        state.scopeTimestamps.clear();
         if (state.label != nullptr)
         {
             state.label->release();
@@ -171,13 +172,6 @@ namespace rojoRHI {
         const auto* page = static_cast<const MTL::Buffer*>(list.device->pool<Buffer>().native(place.page));
         const uint64_t value = page->gpuAddress() + place.offset;
         return Addr{ static_cast<uint32_t>(value), static_cast<uint32_t>(value >> 32) };
-    }
-
-    //==================================================================================================================
-    void CommandList::upscale([[maybe_unused]] Upscaler upscaler, [[maybe_unused]] const UpscaleParams& params)
-    {
-        CommandListImpl::of(*this);
-        metal4::notImplemented("CommandList::upscale");
     }
 
     //==================================================================================================================

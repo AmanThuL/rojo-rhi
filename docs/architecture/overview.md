@@ -8,10 +8,11 @@ Luminex, implemented by the Metal 4 backend and frozen under `Legacy/` (ADR 0017
 the v2 interface, which is specified in the ADRs and the API reference under `docs/spec/`. The
 test-only Null backend implements all of it and its validation tracker is complete; the Metal 4
 backend implements the device, its resources, queues, fences and frames, shader libraries, pipelines
-and their cache, and records command lists, render passes, dispatches and draws included, presents
-swapchains, maps sparse resources and captures ([its page](metal4-backend.md), [command recording on
-it](metal4-recording.md) and [drawing](metal4-drawing.md)); upscaling and timestamps are not
-implemented yet. The shader ABI module and its hosted checks exist.
+and their cache, and records command lists, render passes, dispatches, draws, timed scopes and
+MetalFX upscales included, presents swapchains, maps sparse resources and captures ([its
+page](metal4-backend.md), [command recording on it](metal4-recording.md) and
+[drawing](metal4-drawing.md)), with every scope, render pass and upscale timed. The shader ABI
+module and its hosted checks exist.
 
 ```
 rojo-rhi/

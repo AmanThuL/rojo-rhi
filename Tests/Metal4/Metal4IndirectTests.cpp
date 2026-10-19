@@ -14,6 +14,7 @@
 #include "Metal4Kernels.h"
 #include "Support/Backend.h"
 #include "Support/GpuKit.h"
+#include "Support/Metal4/Metal4Timing.h"
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -66,10 +67,11 @@ namespace {
     }
 
     //==================================================================================================================
-    /// What `list` has counted so far.
+    /// What `list` has counted so far; fails the case when a scope it recorded holds no timestamp pair, since the pinned
+    /// counts include both timestamp writes.
     const core::RecordCounts& countsOf(CommandList list)
     {
-        return core::coreOf(list).counts;
+        return test::timedCounts(list);
     }
 
     //==================================================================================================================
@@ -417,10 +419,10 @@ TEST_CASE("a kernel makes four calls on a new encoder, two once the encoder hold
     fixture.drawIndexedIndirect(list);
     CHECK(callsOf(list) - before == 2);
     // The kernels' encoder ends; the render encoder's open with its barrier, the state, one execute per counted draw,
-    // endEncoding and the pass's group.
+    // endEncoding, the pass's end timestamp and its group.
     before = callsOf(list);
     list.endRenderPass();
-    CHECK(callsOf(list) - before == 1 + kOpenCalls + 1 + kStateCalls + 4 + 1 + 1);
+    CHECK(callsOf(list) - before == 1 + kOpenCalls + 1 + kStateCalls + 4 + 1 + 2);
     kit.run(std::array{ list });
 }
 
@@ -449,10 +451,10 @@ TEST_CASE("maxCount 1 runs the writer kernel and one native indirect draw", "[me
     CHECK(indexed.indices == gpuAddressOf(kit.device.address(fixture.indices)));
     CHECK(indexed.indexLength == 3 * sizeof(uint32_t));
     // The kernels' encoder ends; the render encoder's open with its barrier, the state, two native indirect draws,
-    // endEncoding and the pass's group.
+    // endEncoding, the pass's end timestamp and its group.
     before = callsOf(list);
     list.endRenderPass();
-    CHECK(callsOf(list) - before == 1 + kOpenCalls + 1 + kStateCalls + 2 + 1 + 1);
+    CHECK(callsOf(list) - before == 1 + kOpenCalls + 1 + kStateCalls + 2 + 1 + 2);
     kit.run(std::array{ list });
 }
 
@@ -505,10 +507,11 @@ TEST_CASE("a counted draw after a scope opened in the pass splits it and the res
     CHECK(drawOf(list).passGroups == 1);
     before = callsOf(list);
     // The scope's end ends the kernels' encoder and opens the resumed encoder with its barrier, which sets the held state
-    // again and pushes the group, then replays the execute, then pops the group.
+    // again and pushes the group, then replays the execute, then writes the scope's end timestamp and pops the group. The
+    // split wrote no timestamp.
     list.endScope();
     CHECK(encodersOf(list).kind() == metal4::EncoderKind::Render);
-    CHECK(callsOf(list) - before == 1 + kOpenCalls + 1 + kStateCalls + 1 + 1 + 1);
+    CHECK(callsOf(list) - before == 1 + kOpenCalls + 1 + kStateCalls + 1 + 1 + 2);
     CHECK(drawOf(list).passGroups == 0);
     list.endRenderPass();
     CHECK(countsOf(list).encodersOpened == 3);
@@ -532,10 +535,12 @@ TEST_CASE("ICBs are made once per list and reused when its slot comes round; a l
         fixture.drawIndirect(list);
         fixture.drawIndexedIndirect(list);
         list.endRenderPass();
+        // The pinned creations include the counter heap the pass's timestamps need.
+        test::requireTimed(list);
         const Counters after = device.counters();
-        // A new list makes its four objects, its first frame-arena page, its residency set and three indirect command buffers;
-        // a reused one makes none.
-        CHECK(after.nativeCreateCalls - before.nativeCreateCalls == (frame < slots ? 4 + 1 + 1 + 3 : 0));
+        // A new list makes its four objects, its first frame-arena page, its residency set and three indirect command buffers,
+        // and the pass's timestamps the frame slot's first counter heap; a reused list and slot make none.
+        CHECK(after.nativeCreateCalls - before.nativeCreateCalls == (frame < slots ? 4 + 1 + 1 + 3 + 1 : 0));
         const metal4::IcbPool& icbs = drawOf(list).icbs;
         REQUIRE(icbs.slots(metal4::IcbKind::Draw) == 2);
         REQUIRE(icbs.slots(metal4::IcbKind::Indexed) == 1);

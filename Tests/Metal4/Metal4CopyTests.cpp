@@ -9,6 +9,7 @@
 #include "Metal4Common.h"
 #include "Metal4Device.h"
 #include "Metal4Encoders.h"
+#include "Support/Metal4/Metal4Timing.h"
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -31,10 +32,11 @@ namespace {
     }
 
     //==================================================================================================================
-    /// What `list` has counted so far.
+    /// What `list` has counted so far; fails the case when a scope it recorded holds no timestamp pair, since the pinned
+    /// counts include both timestamp writes.
     const core::RecordCounts& countsOf(CommandList list)
     {
-        return core::coreOf(list).counts;
+        return test::timedCounts(list);
     }
 
     //==================================================================================================================
@@ -109,20 +111,20 @@ TEST_CASE("copies share one encoder until a scope boundary closes it, and the ne
     list.copyBuffer(a, 64, b, 64, 64);
     CHECK(countsOf(list).encodersOpened == 1);
     CHECK(countsOf(list).nativeRecordCalls == 2 + 3 + 2);
-    // The scope closes the encoder (endEncoding) before its debug group.
+    // The scope closes the encoder (endEncoding) before its debug group and its begin timestamp.
     list.beginScope("test.scope");
     CHECK(encodersOf(list).kind() == metal4::EncoderKind::None);
     CHECK_FALSE(encodersOf(list).holdsWork());
-    CHECK(countsOf(list).nativeRecordCalls == 7 + 2);
+    CHECK(countsOf(list).nativeRecordCalls == 7 + 3);
     list.copyBuffer(a, 128, b, 128, 64);
     CHECK(countsOf(list).encodersOpened == 2);
     CHECK(encoderLabel(list) == "test.scope");
     list.copyBuffer(a, 192, b, 192, 64);
     CHECK(countsOf(list).encodersOpened == 2);
-    CHECK(countsOf(list).nativeRecordCalls == 9 + 3 + 2);
+    CHECK(countsOf(list).nativeRecordCalls == 10 + 3 + 2);
     list.endScope();
     CHECK(encodersOf(list).kind() == metal4::EncoderKind::None);
-    CHECK(countsOf(list).nativeRecordCalls == 14 + 2);
+    CHECK(countsOf(list).nativeRecordCalls == 15 + 3);
     list.copyBuffer(a, 0, b, 0, 64);
     CHECK(countsOf(list).encodersOpened == 3);
     CHECK(encoderLabel(list) == "test.list");

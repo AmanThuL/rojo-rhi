@@ -38,6 +38,12 @@ namespace rojoRHI::metal4 {
         MTL::Stages deferredSource = 0;                 ///< The source stages of the encoder-level barrier held back until a command in one of its stages.
         MTL::Stages deferredDestination = 0;            ///< Its destination stages not yet emitted, all of the open encoder's; empty when none is held back.
         MTL4::VisibilityOptions deferredVisibility = 0; ///< Its visibility.
+        /// The fence of the list's last upscale, which MetalFX's encoders update when they finish; the first compute encoder
+        /// and the first render encoder the list opens after it each wait on it, before their opening barrier, and the trailing
+        /// encoder waits on it at `CommandList::end`. Null when the list has not upscaled.
+        MTL::Fence* owedFence = nullptr;
+        /// The stages of the encoder kinds that still owe a wait on `owedFence`: `kComputeStages`, `kRenderStages` or both.
+        MTL::Stages owedFenceStages = 0;
 
         /// Adds a barrier from `source` to `destination` with `visibility` to the pending barrier.
         void merge(MTL::Stages source, MTL::Stages destination, MTL4::VisibilityOptions visibility)
@@ -96,9 +102,11 @@ namespace rojoRHI::metal4 {
         }
     };
 
-    /// Emits, on `encoder`, which has just opened with `stages`, the part of the pending barrier of `barriers` that falls on
-    /// those stages as a queue-level barrier, and records what it covered; counts the barrier on `list`. Records that the
-    /// encoder's opening covered nothing when no part falls on its stages.
+    /// Emits, on `encoder`, which has just opened with `stages`, first the wait on the fence an upscale left owed when the
+    /// encoder's kind still owes it, for every stage of that kind (a render encoder's `stages` may be its fragment stage
+    /// alone), then the part of the pending barrier of `barriers` that falls on those stages as a queue-level barrier, and
+    /// records what it covered; counts the wait and the barrier on `list`. Records that the encoder's opening covered nothing
+    /// when no part falls on its stages.
     void emitAtOpen(core::CommandListCore& list, BarrierState& barriers, MTL4::CommandEncoder* encoder, MTL::Stages stages);
 
     /// Emits on `encoder`, open with `stages`, the part of the encoder-level barrier held back that holds back stage
@@ -109,7 +117,9 @@ namespace rojoRHI::metal4 {
 
     /// Emits the barrier still pending at `CommandList::end` on a compute encoder that holds no command: a queue-level barrier
     /// from the pending source stages to its own, then one from its own stages to the destination stages still owed, which
-    /// holds back every later encoder on the queue, in this list or a later one. Counts the encoder, its five native calls
-    /// and two barriers on `list`; does nothing when no barrier is pending.
+    /// holds back every later encoder on the queue, in this list or a later one. When the list upscaled, the encoder first
+    /// waits on the last upscale's fence and holds back every stage of every later encoder, with or without a barrier
+    /// pending, so the work held back follows MetalFX's. Counts the encoder, its native calls, the wait and its one or two
+    /// barriers on `list`; does nothing when no barrier is pending and the list did not upscale.
     void emitTrailing(core::CommandListCore& list, ListState& state, BarrierState& barriers);
 } // namespace rojoRHI::metal4
