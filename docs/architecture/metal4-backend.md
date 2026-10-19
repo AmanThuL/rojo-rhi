@@ -10,7 +10,8 @@ draws, MetalFX upscales), presents swapchains on a Metal layer, maps placement s
 captures programmatically ([drawing](metal4-drawing.md), [the edges](metal4-backend-edges.md)). The
 API reference under `docs/spec/` stays the authority on every entry's semantics and Metal 4 mapping;
 [the Null backend](null-backend.md) describes the shared core this backend translates to. The
-backend builds with `xmake f --rojorhi_backend=metal4`, on macOS only, and `null` stays the default.
+backend builds on macOS only and is the default backend there; `--rojorhi_backend=null` selects the
+Null backend, and `null` is the default elsewhere.
 
 ## What exists
 
@@ -39,7 +40,7 @@ backend builds with `xmake f --rojorhi_backend=metal4`, on macOS only, and `null
 
 [Command recording](metal4-recording.md) describes the lists, scopes and upscales, and
 [drawing](metal4-drawing.md) passes, pipelines and draws. Every entry of the interface is
-implemented and none aborts as unimplemented. The device reports no conservative rasterisation.
+implemented. The device reports no conservative rasterisation.
 `scopeTimings` reports the duration of every scope, render pass and upscale.
 
 ## Device objects and teardown

@@ -57,17 +57,17 @@ shader-to-metallib rule, so RojoRHI configures, builds and tests standalone.
 
 `Include/`, `Source/`, `Backends/`, `Tests/` and `Shaders/` are the permanent tree of the v2
 interface. `RojoRHI` is a static library of `Source/**/*.cpp` and the selected backend's sources;
-the `rojorhi_backend` configure option accepts `null`, the GPU-free Null backend and the default,
-and `metal4`, which builds on macOS only. `Source/Base/` is the private base (the Debug-tier
-`ROJORHI_VU` check and the message sink) and `Source/Core/` the backend-neutral core every backend
-embeds; `Backends/Null/Source/` and `Backends/Metal4/Source/` implement the public entries over it,
-each one backend per build. `Backends/Metal4/MetalCpp/` holds the one metal-cpp implementation unit,
-the `RojoRHIMetalCpp` target, which the Metal 4 backend, `RojoRHILegacy` and `RojoRHIBench` link,
-so a host that links more than one has one definition of metal-cpp's tables.
-`Backends/Metal4/Kernels/` holds the MSL files of the backend's fill, clear and counted-draw
-kernels, which `xmake/kernels.lua` compiles on a `metal4` build into a library embedded in the
-binary; that build needs the Metal toolchain. [The Null backend](null-backend.md) describes both
-layers and what is implemented, [command recording](null-backend-recording.md) the recording
+the `rojorhi_backend` configure option accepts `metal4`, which builds on macOS only and is the
+default there, and `null`, the GPU-free Null backend and the default elsewhere. `Source/Base/` is
+the private base (the Debug-tier `ROJORHI_VU` check and the message sink) and `Source/Core/` the
+backend-neutral core every backend embeds; `Backends/Null/Source/` and `Backends/Metal4/Source/`
+implement the public entries over it, each one backend per build. `Backends/Metal4/MetalCpp/` holds
+the one metal-cpp implementation unit, the `RojoRHIMetalCpp` target, which the Metal 4 backend,
+`RojoRHILegacy` and `RojoRHIBench` link, so a host that links more than one has one definition of
+metal-cpp's tables. `Backends/Metal4/Kernels/` holds the MSL files of the backend's fill, clear and
+counted-draw kernels, which `xmake/kernels.lua` compiles on a `metal4` build into a library embedded
+in the binary; that build needs the Metal toolchain. [The Null backend](null-backend.md) describes
+both layers and what is implemented, [command recording](null-backend-recording.md) the recording
 chapters, and [the edges](null-backend-edges.md) presentation, upscaling, sparse resources,
 diagnostics and counters, and [the validation tracker](validation-tracker.md) the checks that follow
 a resource across commands, lists, submissions and queues. `Include/rojoRHI/RHI.h` is the whole v2
@@ -76,12 +76,13 @@ public interface, one header in sections by API-reference chapter.
 `Tests/` builds as the `RojoRHITests` binary, whose file set depends on the backend. With `null`,
 `contract` runs the T0 cases of `Tests/Contract/`, `Tests/Core/` and `Tests/Null/` except the death
 tests, `death` runs the `[death]` cases and `abi` the shader ABI cases. With `metal4`, `contract`
-runs `Tests/Contract/` and `Tests/Metal4/`, `death` and `abi` run as on Null, and `conformance`
-runs the `[conformance]` cases of `Tests/Conformance/`, which observe GPU results; every Metal 4
-entry runs under `MTL_DEBUG_LAYER=1`. `Tests/Core/` and `Tests/Null/` build with Null only. `Tests/Support/` holds the death-test harness and the helpers
-of each backend. [Testing](../conventions/testing.md) owns the tiers.
-v1 lives frozen beside them under `Legacy/` and is deleted with the consumer port; ADR 0017 owns
-the layout, the freeze and the consumer's dependency rename.
+runs `Tests/Contract/` and `Tests/Metal4/`, `death` and `abi` run as on Null, and `conformance` runs
+the `[conformance]` cases of `Tests/Conformance/`, which observe GPU results; every Metal 4 entry
+runs under `MTL_DEBUG_LAYER=1`. `Tests/Core/` and `Tests/Null/` build with Null only.
+`Tests/Support/` holds the death-test harness and the helpers of each backend.
+[Testing](../conventions/testing.md) owns the tiers. v1 lives frozen beside them under `Legacy/` and
+is deleted with the consumer port; ADR 0017 owns the layout, the freeze and the consumer's
+dependency rename.
 
 `Shaders/RojoRHI/RojoRHI.slang` is the module every v2 shader imports: it owns every binding and
 lowers the entries of chapter 05 per target, selected by one `ROJORHI_TARGET_*` macro (ADR 0018).

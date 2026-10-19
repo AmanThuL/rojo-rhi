@@ -140,14 +140,13 @@
   API reference holds the documentation. The v1 headers under `Legacy/` keep their own layout.
 - ADR 0022 supersedes ADR 0015: the version macros are defined in `<rojoRHI/RHI.h>`, and the
   rest of the versioning decision is unchanged.
-- The Metal 4 backend begins (`xmake f --rojorhi_backend=metal4`, macOS only; `null` stays the
-  default): `createDevice` with its floor check, capabilities and limits, format capabilities, the
-  three queues, `beginFrame` and `endFrame`; buffers, heaps, placement, `address` and `Addr`
-  arithmetic; textures, views, samplers and the view and sampler ID tables; fences, `Queue::submit`
-  with fence waits and signals, `completedValue` and `Device::wait`; and command lists as far as
-  `acquireCommandList`, `end` and `uploadFrameData` over real frame-arena pages. The recording,
-  pipeline, presentation, upscaling and sparse entries are not implemented yet
-  ([architecture](docs/architecture/metal4-backend.md)).
+- The Metal 4 backend begins (`xmake f --rojorhi_backend=metal4`, macOS only): `createDevice` with
+  its floor check, capabilities and limits, format capabilities, the three queues, `beginFrame` and
+  `endFrame`; buffers, heaps, placement, `address` and `Addr` arithmetic; textures, views, samplers
+  and the view and sampler ID tables; fences, `Queue::submit` with fence waits and signals,
+  `completedValue` and `Device::wait`; and command lists as far as `acquireCommandList`, `end` and
+  `uploadFrameData` over real frame-arena pages. The recording, pipeline, presentation, upscaling
+  and sparse entries are not implemented yet ([architecture](docs/architecture/metal4-backend.md)).
 - The native table and slot payloads in the core: `HandlePool::native` reads a record's backend
   payload with one lock-free load, a pool clears the entry before the retire hook runs, the slot
   allocators carry a view or sampler payload through `replace`, `retire` and `drain`, and a
@@ -217,8 +216,7 @@
   indirect command buffers, at `maxCount` 1 a native record) and mesh tasks record on Metal 4.
   The `[conformance]` cases run the ABI shaders, render passes, draws, dispatches, mesh tasks,
   indirect and counted draws and the graphics barrier kinds on the GPU under API validation, and
-  the contract files of passes, pipelines, draws and dispatches now run on Metal 4 (six files that
-  need upscaling stay pending)
+  the contract files of passes, pipelines, draws and dispatches now run on Metal 4
   ([architecture](docs/architecture/metal4-drawing.md)). Follow-ups: issues #60 to #63.
 - API reference changes for Metal 4 drawing: the Metal 4 mapping rows of chapters 02, 05, 06, 07
   and 08 say that no render encoder opens until a draw, that a counted draw's kernel runs ahead of
@@ -231,3 +229,26 @@
 - Test support: `Tests/Support/Backend.h` supplies a standard library, a re-stamped one and a
   foreign one for every backend, so the pipeline contract cases run on Metal 4; the Null library
   builder moved to `Tests/Support/Null/`.
+- Metal 4 scope timings: every scope, render pass and upscale is timed with per-slot counter heaps,
+  claimed without a lock while recording and resolved at the frame wait, so `scopeTimings` reports
+  durations ([architecture](docs/architecture/metal4-recording.md#scopes)).
+- The Metal 4 upscaler: `createUpscaler` and `upscale` through MetalFX, with a cleared reactive
+  mask and a fence owed to the encoder kind that follows
+  ([architecture](docs/architecture/metal4-recording.md#upscalers)).
+- Write-only storage accessors in the shader ABI module, so a Metal 4 shader writes a storage
+  texture without a read access.
+- The Metal 4 backend implements every entry of chapters 01 to 15; it refuses with `Unsupported`
+  only what the reference lets it refuse. New conformance files cover sparse tiles, scope timings,
+  upscaling, formats and write-only accessors, and every contract file runs on Metal 4. Oracles
+  for formats, sparse tiles, scopes and upscales compare exact values or reference bounds on the
+  GPU.
+- The default backend is `metal4` on macOS and `null` elsewhere (`xmake/targets.lua`). Hosted CI
+  names its backend in every configure, and the `metal4` and Windows `interface` jobs check the
+  default. A consumer's hosted macOS CI passes `--rojorhi_backend=null`. The chapter 05, 07, 12, 14
+  and 15 mapping text describes the Metal 4 upscaler, timings, write-only accessors and formats.
+- Metal 4 fixes found by the new cases: `pipelineCacheData` holds the pipeline cache's lock
+  exclusively while pipeline compiles and MetalFX scaler creation hold it shared, which ends a
+  crash in the serializer; scalers are created one at a time under a process-wide mutex, because
+  MetalFX fills an unsynchronized table of Metal's; `Queue::mapTiles` orders its updates against
+  the queue's earlier and later work (chapter 13 states the order); and `Swapchain::resize` runs
+  inside an autorelease pool.

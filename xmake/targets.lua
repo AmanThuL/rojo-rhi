@@ -102,11 +102,17 @@ if is_plat("macosx") then
 end
 
 -- The backend compiled into RojoRHI (ADR 0012); one backend per build.
+-- The default is metal4 on a macOS host and null elsewhere. Option scope runs before the platform is
+-- resolved, so is_plat answers nothing there; is_host does.
 option("rojorhi_backend")
-    set_default("null")
+    if is_host("macosx") then
+        set_default("metal4")
+    else
+        set_default("null")
+    end
     set_values("null", "metal4")
     set_showmenu(true)
-    set_description("Backend for RojoRHI: null, the GPU-free test backend, or metal4, which builds on macOS only")
+    set_description("Backend for RojoRHI: metal4 (builds on macOS only, the default there) or null (the GPU-free test backend, the default elsewhere; pass it on a Mac host for another platform)")
 option_end()
 
 -- Release builds use link-time optimization, so a call into the library inlines into its caller
