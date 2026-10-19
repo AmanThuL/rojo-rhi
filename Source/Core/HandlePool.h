@@ -117,10 +117,10 @@ namespace rojoRHI::core {
         /// Creates an empty pool of at most `capacity` slots, slot zero included. `maxGeneration` and `capacity` exist so a test
         /// can reach either limit without 2^24 reuses or 2^22 objects.
         explicit HandlePool(uint32_t maxGeneration = kMaxGeneration, uint32_t capacity = NativeTable::kCapacity)
-            : maxGeneration_(maxGeneration), m_table(capacity)
+            : m_maxGeneration(maxGeneration), m_table(capacity)
         {
             ROJORHI_INTERNAL_ASSERT(maxGeneration <= kMaxGeneration, "a generation wider than 24 bits would corrupt the type tag");
-            slots_.emplace_back(); // Slot zero is never issued.
+            m_slots.emplace_back(); // Slot zero is never issued.
         }
 
         /// Creates an empty pool of `capacity` slots with the default generation limit.
@@ -146,26 +146,26 @@ namespace rojoRHI::core {
         /// unmoved, so the caller still owns its payload.
         Handle allocate(Record&& record, bool counted = true)
         {
-            std::lock_guard lock(mutex_);
+            std::lock_guard lock(m_mutex);
             uint32_t index = 0;
-            if (!free_.empty())
+            if (!m_free.empty())
             {
-                index = free_.back();
-                free_.pop_back();
+                index = m_free.back();
+                m_free.pop_back();
             }
-            else if (slots_.size() >= m_table.capacity())
+            else if (m_slots.size() >= m_table.capacity())
             {
                 return Handle{};
             }
             else
             {
-                index = static_cast<uint32_t>(slots_.size());
-                slots_.emplace_back();
+                index = static_cast<uint32_t>(m_slots.size());
+                m_slots.emplace_back();
             }
-            Slot& slot = slots_[index];
+            Slot& slot = m_slots[index];
             slot.record = std::move(record);
             slot.live = true;
-            for (std::atomic<uint64_t>* counter : counted_)
+            for (std::atomic<uint64_t>* counter : m_counted)
             {
                 if (counted && counter != nullptr)
                 {
@@ -180,15 +180,15 @@ namespace rojoRHI::core {
         /// must outlive the pool. The device core wires them once, before the pool is used.
         void countInto(std::atomic<uint64_t>* first, std::atomic<uint64_t>* second = nullptr)
         {
-            std::lock_guard lock(mutex_);
-            counted_ = { first, second };
+            std::lock_guard lock(m_mutex);
+            m_counted = { first, second };
         }
 
         /// Destroys the slot `handle` names: its generation advances now, and the slot becomes reusable once
         /// `retire` is called with a frame at or past `frame`. Returns the lookup status; anything but Ok released nothing.
         LookupStatus release(Handle handle, uint64_t frame)
         {
-            std::lock_guard lock(mutex_);
+            std::lock_guard lock(m_mutex);
             return releaseLocked(handle, frame);
         }
 
@@ -199,7 +199,7 @@ namespace rojoRHI::core {
         {
             [[maybe_unused]] LookupStatus status = LookupStatus::Ok;
             {
-                std::lock_guard lock(mutex_);
+                std::lock_guard lock(m_mutex);
                 status = releaseLocked(handle, frameOf());
             }
             ROJORHI_VU(status != LookupStatus::Null, "VU-rojo-core-0001", "a null handle was passed where a live one is required");
@@ -212,19 +212,19 @@ namespace rojoRHI::core {
         /// generation reached the limit. `onRetire` runs under the pool's lock and must not call the pool.
         template<typename OnRetire> void retire(uint64_t upToFrame, OnRetire&& onRetire)
         {
-            std::lock_guard lock(mutex_);
-            std::erase_if(pending_, [&](const Pending& entry) {
+            std::lock_guard lock(m_mutex);
+            std::erase_if(m_pending, [&](const Pending& entry) {
                 if (entry.frame > upToFrame)
                 {
                     return false;
                 }
-                Slot& slot = slots_[entry.index];
+                Slot& slot = m_slots[entry.index];
                 clearNative(entry.index, slot);
                 onRetire(slot.record);
                 slot.record = Record{};
                 if (entry.reusable)
                 {
-                    free_.push_back(entry.index);
+                    m_free.push_back(entry.index);
                 }
                 return true;
             });
@@ -236,19 +236,19 @@ namespace rojoRHI::core {
         /// `onRecord` runs under the pool's lock and must not call the pool.
         template<typename OnRecord> void drain(OnRecord&& onRecord)
         {
-            std::lock_guard lock(mutex_);
-            for (const Pending& entry : pending_)
+            std::lock_guard lock(m_mutex);
+            for (const Pending& entry : m_pending)
             {
-                Slot& slot = slots_[entry.index];
+                Slot& slot = m_slots[entry.index];
                 clearNative(entry.index, slot);
                 onRecord(slot.record);
                 slot.record = Record{};
             }
-            pending_.clear();
-            free_.clear();
-            for (uint32_t index = 1; index < slots_.size(); ++index)
+            m_pending.clear();
+            m_free.clear();
+            for (uint32_t index = 1; index < m_slots.size(); ++index)
             {
-                Slot& slot = slots_[index];
+                Slot& slot = m_slots[index];
                 if (slot.live)
                 {
                     clearNative(index, slot);
@@ -277,7 +277,7 @@ namespace rojoRHI::core {
         /// Finds the record `handle` names, or reports which rule it breaks.
         LookupResult<Record> lookup(Handle handle)
         {
-            std::lock_guard lock(mutex_);
+            std::lock_guard lock(m_mutex);
             return find(handle);
         }
 
@@ -285,12 +285,12 @@ namespace rojoRHI::core {
         /// generation; empty for slot zero, an index past the pool and a slot that is not live.
         std::optional<LiveSlot<Handle, Record>> liveAt(uint32_t index)
         {
-            std::lock_guard lock(mutex_);
-            if (index == 0 || index >= slots_.size() || !slots_[index].live)
+            std::lock_guard lock(m_mutex);
+            if (index == 0 || index >= m_slots.size() || !m_slots[index].live)
             {
                 return std::nullopt;
             }
-            return LiveSlot<Handle, Record>{ Handle{ pack(index, slots_[index].generation) }, &slots_[index].record };
+            return LiveSlot<Handle, Record>{ Handle{ pack(index, m_slots[index].generation) }, &m_slots[index].record };
         }
 
         /// Looks `handle` up and issues VU-rojo-core-0001, 0002 or 0003 when it breaks a rule; a null handle passes when
@@ -308,7 +308,7 @@ namespace rojoRHI::core {
         /// runs only for Ok and must not call the pool. It is how a record's counters change without a race.
         template<typename Change> LookupStatus update(Handle handle, Change&& change)
         {
-            std::lock_guard lock(mutex_);
+            std::lock_guard lock(m_mutex);
             const LookupResult<Record> result = find(handle);
             if (result.status == LookupStatus::Ok)
             {
@@ -320,8 +320,8 @@ namespace rojoRHI::core {
         /// Calls `visit` with the record of every live slot while holding the pool's lock; `visit` must not call the pool.
         template<typename Visitor> void forEachLive(Visitor&& visit)
         {
-            std::lock_guard lock(mutex_);
-            for (Slot& slot : slots_)
+            std::lock_guard lock(m_mutex);
+            for (Slot& slot : m_slots)
             {
                 if (slot.live)
                 {
@@ -333,16 +333,16 @@ namespace rojoRHI::core {
         /// Returns true when no slot is live and none is released but not yet retired.
         bool empty()
         {
-            std::lock_guard lock(mutex_);
-            return pending_.empty() && std::none_of(slots_.begin(), slots_.end(), [](const Slot& slot) { return slot.live; });
+            std::lock_guard lock(m_mutex);
+            return m_pending.empty() && std::none_of(m_slots.begin(), m_slots.end(), [](const Slot& slot) { return slot.live; });
         }
 
         /// Returns the number of live slots.
         size_t liveCount()
         {
-            std::lock_guard lock(mutex_);
+            std::lock_guard lock(m_mutex);
             size_t count = 0;
-            for (const Slot& slot : slots_)
+            for (const Slot& slot : m_slots)
             {
                 count += slot.live ? 1 : 0;
             }
@@ -358,16 +358,16 @@ namespace rojoRHI::core {
                 return status;
             }
             const uint32_t index = indexOf(handle.bits);
-            Slot& slot = slots_[index];
+            Slot& slot = m_slots[index];
             slot.live = false;
             // The record stays until retire: a backend releases the native object it describes only then.
-            if (slot.generation >= maxGeneration_)
+            if (slot.generation >= m_maxGeneration)
             {
-                pending_.push_back(Pending{ frame, index, false }); // The generation cannot advance, so the slot is never reused.
+                m_pending.push_back(Pending{ frame, index, false }); // The generation cannot advance, so the slot is never reused.
                 return status;
             }
             ++slot.generation;
-            pending_.push_back(Pending{ frame, index, true });
+            m_pending.push_back(Pending{ frame, index, true });
             return status;
         }
 
@@ -414,19 +414,19 @@ namespace rojoRHI::core {
             }
             const uint32_t index = indexOf(handle.bits);
             const uint32_t generation = static_cast<uint32_t>(handle.bits >> 32) & kMaxGeneration;
-            if (index == 0 || index >= slots_.size() || !slots_[index].live || slots_[index].generation != generation)
+            if (index == 0 || index >= m_slots.size() || !m_slots[index].live || m_slots[index].generation != generation)
             {
                 return { LookupStatus::StaleGeneration, nullptr };
             }
-            return { LookupStatus::Ok, &slots_[index].record };
+            return { LookupStatus::Ok, &m_slots[index].record };
         }
 
-        std::mutex mutex_;
-        std::array<std::atomic<uint64_t>*, 2> counted_ = {};
-        uint32_t maxGeneration_;
-        std::deque<Slot> slots_;
-        std::vector<uint32_t> free_;
-        std::vector<Pending> pending_;
+        std::mutex m_mutex;
+        std::array<std::atomic<uint64_t>*, 2> m_counted = {};
+        uint32_t m_maxGeneration;
+        std::deque<Slot> m_slots;
+        std::vector<uint32_t> m_free;
+        std::vector<Pending> m_pending;
         NativeTable m_table;
     };
 } // namespace rojoRHI::core
