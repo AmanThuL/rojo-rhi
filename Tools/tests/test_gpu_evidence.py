@@ -72,7 +72,8 @@ class GpuEvidenceTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as name:
             main = Path(name).resolve() / "main"
             main.mkdir()
-            git = ["git", "-c", "user.name=t", "-c", "user.email=t@t"]
+            git = ["git", "-c", "user.name=t", "-c", "user.email=t@t", "-c", "gc.auto=0",
+                   "-c", "maintenance.auto=false", "-c", "gc.autoDetach=false"]
             subprocess.run([*git, "init", "-q"], cwd=main, check=True)
             subprocess.run([*git, "commit", "-q", "--allow-empty", "-m", "x"], cwd=main, check=True)
             work = Path(name).resolve() / "trees" / "w"
