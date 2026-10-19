@@ -17,6 +17,7 @@
 #include "Metal4Common.h"
 #include "Metal4Device.h"
 #include "Metal4Formats.h"
+#include "Metal4PipelineState.h"
 #include "Metal4TextureDescriptor.h"
 
 #include <Metal/Metal.hpp>
@@ -111,24 +112,6 @@ namespace rojoRHI {
             case SamplerAddress::ClampToEdge: return MTL::SamplerAddressModeClampToEdge;
             }
             return MTL::SamplerAddressModeRepeat;
-        }
-
-        //==============================================================================================================
-        /// Returns the Metal compare function of `compare`.
-        MTL::CompareFunction compareFunction(CompareOp compare)
-        {
-            switch (compare)
-            {
-            case CompareOp::Never: return MTL::CompareFunctionNever;
-            case CompareOp::Less: return MTL::CompareFunctionLess;
-            case CompareOp::Equal: return MTL::CompareFunctionEqual;
-            case CompareOp::LessOrEqual: return MTL::CompareFunctionLessEqual;
-            case CompareOp::Greater: return MTL::CompareFunctionGreater;
-            case CompareOp::NotEqual: return MTL::CompareFunctionNotEqual;
-            case CompareOp::GreaterOrEqual: return MTL::CompareFunctionGreaterEqual;
-            case CompareOp::Always: return MTL::CompareFunctionAlways;
-            }
-            return MTL::CompareFunctionNever;
         }
     } // namespace
 

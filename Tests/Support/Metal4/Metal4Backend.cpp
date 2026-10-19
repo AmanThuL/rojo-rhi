@@ -90,6 +90,25 @@ namespace rojoRHI::test {
 
     //==================================================================================================================
     // Fails the running case through Catch2, so it is called from a test thread.
+    std::vector<std::byte> shaderLibraryFile(std::string_view name)
+    {
+        const std::filesystem::path path = std::filesystem::path("Shaders") / (std::string(name) + ".metal4lib");
+        std::ifstream file(path, std::ios::binary);
+        if (!file)
+        {
+            FAIL("the shader library " << std::filesystem::absolute(path) << " is missing");
+        }
+        const std::string text((std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>());
+        if (text.empty())
+        {
+            FAIL("the shader library " << std::filesystem::absolute(path) << " is empty");
+        }
+        const auto* begin = reinterpret_cast<const std::byte*>(text.data());
+        return { begin, begin + text.size() };
+    }
+
+    //==================================================================================================================
+    // Fails the running case through Catch2, so it is called from a test thread.
     void* surface(uint32_t index)
     {
         if (index >= g_layers.size())

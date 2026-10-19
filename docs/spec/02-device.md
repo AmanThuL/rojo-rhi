@@ -62,7 +62,7 @@ struct DeviceDesc {
 |---|---|---|---|
 | `validation` | backend-neutral tracker; independent of `MTL_DEBUG_LAYER` | backend-neutral tracker; independent of `ID3D12Debug::EnableDebugLayer` | backend-neutral tracker; independent of the validation layers |
 | `enableCapture` | no effect: capture availability is fixed at launch by `MTL_CAPTURE_ENABLED` and read through `MTL::CaptureManager::supportsDestination` | `PIXLoadLatestWinPixGpuCapturerLibrary` before `D3D12CreateDevice` | RenderDoc in-application API loaded before `vkCreateInstance` (reserved) |
-| `pipelineCache` | `MTL::Device::newArchive` from an `NS::URL`, set through `MTL4::CompilerDescriptor::setLookupArchives`; saved with `MTL4::PipelineDataSetSerializer::serializeAsArchiveAndFlushToURL`. Both are URL-based, so a caller blob takes a temporary-file round trip | `ID3D12Device1::CreatePipelineLibrary` on the blob in memory | `VkPipelineCacheCreateInfo::pInitialData`, or `VK_KHR_pipeline_binary` data |
+| `pipelineCache` | a RojoRHI header around a Metal 4 archive: `MTL::Device::newArchive` from an `NS::URL`, looked up through `MTL4::CompilerTaskOptions::setLookupArchives`; saved with `MTL4::PipelineDataSetSerializer::serializeAsArchiveAndFlushToURL`. Both are URL-based, so a caller blob takes a temporary file, kept while the device lives | `ID3D12Device1::CreatePipelineLibrary` on the blob in memory | `VkPipelineCacheCreateInfo::pInitialData`, or `VK_KHR_pipeline_binary` data |
 | Cost | costly: tracking when `validation` is set; native otherwise | costly: same | costly: same |
 
 ### `createDevice`

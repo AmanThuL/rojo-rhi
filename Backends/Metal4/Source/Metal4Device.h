@@ -14,6 +14,8 @@
 #include "Metal4Encoders.h"
 #include "Metal4Kernels.h"
 #include "Metal4ListState.h"
+#include "Metal4PipelineCache.h"
+#include "Metal4PipelineState.h"
 #include "Metal4Presentation.h"
 #include "Metal4Residency.h"
 #include "Metal4Stager.h"
@@ -132,9 +134,12 @@ namespace rojoRHI {
         std::array<QueueImpl, 3> queues = {}; ///< One queue per `QueueType`, indexed by its value.
         std::array<ListPool, 3> listPools;    ///< One list pool per frame slot; a device uses its first `framesInFlight`.
         MTL::Device* device = nullptr;        ///< The system default device.
-        MTL4::Compiler* compiler = nullptr;   ///< The device's one compiler.
-        metal4::Kernels kernels;              ///< The backend's own kernels, made with `compiler`.
-        metal4::Residency residency;          ///< The residency set every queue of the device keeps attached.
+        /// The serializer `compiler` records every pipeline into, and the archive of `DeviceDesc::pipelineCache`.
+        metal4::PipelineCache pipelineCache;
+        MTL4::Compiler* compiler = nullptr;      ///< The device's one compiler.
+        metal4::Kernels kernels;                 ///< The backend's own kernels, made with `compiler`.
+        metal4::DepthStencilCache depthStencils; ///< The depth-stencil states pipelines share, one per distinct state.
+        metal4::Residency residency;             ///< The residency set every queue of the device keeps attached.
         /// Copies initial data into Private memory on the internal upload queue, which also keeps `residency` attached.
         metal4::Stager stager;
         bool residencyAttached = false; ///< True while every queue, the upload queue included, holds `residency`.

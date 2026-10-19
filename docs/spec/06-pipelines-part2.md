@@ -23,7 +23,7 @@ it is not part of the descriptor or of `dispatch`.
 
 | | Metal 4 | D3D12 | Vulkan |
 |---|---|---|---|
-| Call | `MTL4::ComputePipelineDescriptor` | `D3D12_COMPUTE_PIPELINE_STATE_DESC` with the global root signature | `VkComputePipelineCreateInfo` |
+| Call | `MTL4::ComputePipelineDescriptor`, `setRequiredThreadsPerThreadgroup` with the threadgroup size the library declares for the entry | `D3D12_COMPUTE_PIPELINE_STATE_DESC` with the global root signature | `VkComputePipelineCreateInfo` |
 | Cost | native | native | native |
 
 ### `Device::createPipeline`
@@ -75,8 +75,8 @@ of this entry and not a rule.
 
 | | Metal 4 | D3D12 | Vulkan |
 |---|---|---|---|
-| Call | `MTL::Device::newArchive(NS::URL*)` and `MTL4::CompilerDescriptor::setLookupArchives`; archives load from a URL, so the blob round-trips through a file | `ID3D12Device1::CreatePipelineLibrary` from the blob | `vkCreatePipelineCache` with initial data, or `VK_KHR_pipeline_binary` |
-| Cost | cheap: one file written and loaded at device creation; unverified | native | native |
+| Call | The blob is a RojoRHI header (blob format, RojoRHI version, device name, OS version), then one `archive <bytes>` section per archive written, each a Metal 4 archive; any mismatch is the warning and a miss. Each archive is written to its own temporary file, checked with `MTL::Device::newBinaryArchive` and loaded with `MTL::Device::newArchive(NS::URL*)`; the compiler reads them at each look-up, so the files stay until the device is destroyed. Each creation probes each with `MTL4::Archive::newRenderPipelineState` or `newComputePipelineState`, a hit when it returns a state, and compiles with `MTL4::CompilerTaskOptions::setLookupArchives`, which serves a hit from the archive | `ID3D12Device1::CreatePipelineLibrary` from the blob | `vkCreatePipelineCache` with initial data, or `VK_KHR_pipeline_binary` |
+| Cost | cheap: one file written at device creation; a hit took 0.46 ms against 7.6 ms for a miss (one render pipeline, Apple M3 Max, validation layer off) | native | native |
 
 ### `Device::pipelineCacheData`
 
@@ -98,8 +98,8 @@ error.
 
 | | Metal 4 | D3D12 | Vulkan |
 |---|---|---|---|
-| Call | `MTL4::PipelineDataSetSerializer` harvest serialized as an archive to a file, then read back | `ID3D12PipelineLibrary::GetSerializedSize` and `Serialize` | `vkGetPipelineCacheData`, or pipeline binaries |
-| Cost | cheap: one file written and read; unverified | native | native |
+| Call | The `MTL4::PipelineDataSetSerializer` (`CaptureBinaries`) set on the compiler descriptor records every pipeline compiled, hits included; `serializeAsArchiveAndFlushToURL` writes it to a temporary file, read back and removed; flushing empties the serializer, so the device keeps every archive it wrote and the blob is the header and all of them, the newest last | `ID3D12PipelineLibrary::GetSerializedSize` and `Serialize` | `vkGetPipelineCacheData`, or pipeline binaries |
+| Cost | cheap: one file written and read under the cache's lock; the blob also carries the backend's own kernels, about 170 KB | native | native |
 
 ## Dynamic state
 

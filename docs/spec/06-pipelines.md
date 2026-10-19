@@ -74,7 +74,7 @@ Free-threaded. Destroyed through `Device::destroy` ([device](02-device.md)).
 
 | | Metal 4 | D3D12 | Vulkan |
 |---|---|---|---|
-| Call | `MTL::Device::newLibrary` from the metallib bytes after the header | no native object: the backend keeps one DXIL shader per entry point | `vkCreateShaderModule` (SPIR-V) |
+| Call | `MTL::Device::newLibrary` from the metallib bytes after the header, each entry checked with `MTL::Library::newFunction` | no native object: the backend keeps one DXIL shader per entry point | `vkCreateShaderModule` (SPIR-V) |
 | Cost | native | cheap: blob parsed and copied | native |
 
 ### `BlendState`
@@ -230,7 +230,7 @@ bounds testing is not part of 0.1.0.
 
 | | Metal 4 | D3D12 | Vulkan |
 |---|---|---|---|
-| Call | `MTL::DepthStencilDescriptor`, made into an `MTL::DepthStencilState` by `MTL::Device::newDepthStencilState` at pipeline creation and set by `MTL4::RenderCommandEncoder::setDepthStencilState` at `setPipeline` | `D3D12_DEPTH_STENCIL_DESC2` in the PSO | `VkPipelineDepthStencilStateCreateInfo` |
+| Call | `MTL::DepthStencilDescriptor`, made into an `MTL::DepthStencilState` by `MTL::Device::newDepthStencilState` at pipeline creation, equal states sharing one object and a state testing neither depth nor stencil none, and set by `MTL4::RenderCommandEncoder::setDepthStencilState` at `setPipeline` | `D3D12_DEPTH_STENCIL_DESC2` in the PSO | `VkPipelineDepthStencilStateCreateInfo` |
 | Made dynamic | native: a separate object | costly: hidden PSO variants and a hash lookup per draw | native: core dynamic state |
 | Cost | cheap: one extra object set per `setPipeline` | native | native |
 
@@ -293,5 +293,5 @@ and `depthFormat` report `samples` among their sample counts, and `depthFormat` 
 
 | | Metal 4 | D3D12 | Vulkan |
 |---|---|---|---|
-| Call | `MTL4::RenderPipelineDescriptor` or `MTL4::MeshRenderPipelineDescriptor` | pipeline state stream: empty input layout, the global root signature | `VkGraphicsPipelineCreateInfo` with `VkPipelineRenderingCreateInfo`, no vertex input, descriptor-heap flag |
+| Call | `MTL4::RenderPipelineDescriptor` or `MTL4::MeshRenderPipelineDescriptor`, rasterization disabled when there is neither a fragment entry nor a depth format; Metal runs a vertex entry without rasterization only when it returns nothing, so a vertex pipeline without a fragment entry that Metal refuses is compiled once more with the other setting; a mesh pipeline with color targets and a depth format and no fragment entry returns `ErrorCategory::DriverFailure` | pipeline state stream: empty input layout, the global root signature | `VkGraphicsPipelineCreateInfo` with `VkPipelineRenderingCreateInfo`, no vertex input, descriptor-heap flag |
 | Cost | native | native | native |

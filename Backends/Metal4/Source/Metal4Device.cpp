@@ -20,6 +20,8 @@
 #include "Metal4Common.h"
 #include "Metal4Fences.h"
 #include "Metal4Formats.h"
+#include "Metal4PipelineState.h"
+#include "Metal4ShaderLibrary.h"
 #include "Metal4Stager.h"
 #include "Metal4Textures.h"
 #include "Metal4Views.h"
@@ -161,12 +163,14 @@ namespace rojoRHI {
             }
             impl.stager.release();
             impl.residency.release();
+            impl.depthStencils.release(impl.core.counts());
             impl.kernels.release();
             if (impl.compiler != nullptr)
             {
                 impl.compiler->release();
                 impl.compiler = nullptr;
             }
+            impl.pipelineCache.release();
             for (size_t i = impl.queues.size(); i-- > 0;)
             {
                 QueueImpl& queue = impl.queues[i];
@@ -216,8 +220,13 @@ namespace rojoRHI {
                 }
                 impl.queues[i].progress->setLabel(metal4::makeString(std::format("{}.progress", kQueueLabels[i])));
             }
+            if (Result<void> created = impl.pipelineCache.create(impl.device); !created)
+            {
+                return created;
+            }
             MTL4::CompilerDescriptor* compilerDescriptor = MTL4::CompilerDescriptor::alloc()->init();
             compilerDescriptor->setLabel(metal4::makeString("rojorhi.compiler"));
+            compilerDescriptor->setPipelineDataSetSerializer(impl.pipelineCache.serializer());
             error = nullptr;
             impl.compiler = impl.device->newCompiler(compilerDescriptor, &error);
             compilerDescriptor->release();
@@ -331,7 +340,7 @@ namespace rojoRHI {
             return std::unexpected(std::move(valid.error()));
         }
         const metal4::AutoreleasePool pool;
-        // DeviceDesc::pipelineCache and enableCapture have no effect on this backend.
+        // DeviceDesc::enableCapture has no effect on this backend.
         MTL::Device* device = MTL::CreateSystemDefaultDevice();
         if (device == nullptr)
         {
@@ -351,6 +360,8 @@ namespace rojoRHI {
             releaseNative(*impl);
             return std::unexpected(std::move(created.error()));
         }
+        // The archive is loaded once the compiler exists and before any pipeline is compiled; a refused blob is a warning.
+        impl->pipelineCache.load(impl->device, desc.pipelineCache);
         core::RetireHooks hooks;
         hooks.context = impl.get();
         hooks.frameSlot = reuseSlot;
@@ -361,6 +372,8 @@ namespace rojoRHI {
         hooks.view = metal4::retireView;
         hooks.sampler = metal4::retireSampler;
         hooks.fence = metal4::retireFence;
+        hooks.pipeline = metal4::retirePipeline;
+        hooks.shaderLibrary = metal4::retireShaderLibrary;
         impl->core.setRetireHooks(hooks);
         impl->core.setArenaSource(metal4::createArenaPage);
         metal4::setMaxAddrOffset(impl->core.capabilities().limits.maxAddrOffset);

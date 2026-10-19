@@ -6,6 +6,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <string_view>
 #include <vector>
 
 namespace rojoRHI::test {
@@ -18,6 +19,11 @@ namespace rojoRHI::test {
 
     /// A well-formed library of another backend, which the compiled backend must refuse with `DriverFailure`.
     std::vector<std::byte> foreignLibrary();
+
+    /// The conformance shader library `name` (a file of `Shaders/Tests/` without its extension) in the compiled backend's
+    /// format, read from the `Shaders/` directory beside the test binary. Fails the running case when the backend packages no
+    /// such file: the Null backend never does, so a case calls it only after `requireGpu()` has passed.
+    std::vector<std::byte> shaderLibraryFile(std::string_view name);
 
     /// A native surface of the compiled backend's type, distinct for each `index` below 8 and alive for the process.
     void* surface(uint32_t index = 0);
