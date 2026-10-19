@@ -46,12 +46,7 @@ namespace rojoRHI {
                 const auto* page = static_cast<const MTL::Buffer*>(device.pool<Buffer>().native(place.page));
                 draw.zeroRecord = page->gpuAddress() + place.offset;
             }
-            if (draw.tableDrawRecord != draw.zeroRecord)
-            {
-                list.state.table->setAddress(draw.zeroRecord, 3);
-                core::noteNativeCall(list.core);
-                draw.tableDrawRecord = draw.zeroRecord;
-            }
+            metal4::applyDrawRecord(list, draw.zeroRecord);
         }
     } // namespace
 
@@ -61,6 +56,8 @@ namespace rojoRHI {
         CommandListImpl& list = CommandListImpl::of(*this);
         core::setRoot(list.core, root);
         const uint64_t address = uint64_t{ root.lo } | uint64_t{ root.hi } << 32;
+        // A counted mesh draw's commands bind the root recorded before the draw themselves.
+        list.draw.root = address;
         if (list.draw.passOpen && list.encoders.renderEncoder() == nullptr)
         {
             // Inside a pass whose encoder is closed the root waits in the prefix, so a command replayed there sees the root

@@ -288,6 +288,11 @@ namespace rojoRHI {
                 case PrefixKind::BlendColor: applyBlendColor(list, command.color); break;
                 case PrefixKind::DepthBias: applyBiasValues(list, DepthBias{ command.bias[0], command.bias[1], command.bias[2] }); break;
                 case PrefixKind::Root: applyRoot(list, command.root); break;
+                case PrefixKind::Execute:
+                case PrefixKind::DrawIndirect:
+                case PrefixKind::IndexedIndirect:
+                case PrefixKind::MeshExecute:
+                case PrefixKind::MeshIndirect: replayCounted(list, command); break;
                 }
             }
             list.draw.clearPrefix();

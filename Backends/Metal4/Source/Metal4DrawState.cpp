@@ -17,9 +17,16 @@ namespace rojoRHI::metal4 {
     void DrawState::reset()
     {
         endPass();
+        root = 0;
         tableRoot = 0;
         tableDrawRecord = 0;
         zeroRecord = 0;
+        icbs.reset();
+        arenaPage = {};
+        arenaPageAddress = 0;
+        indexBuffer = {};
+        indexAddress = 0;
+        indexLength = 0;
     }
 
     //==================================================================================================================
@@ -76,6 +83,7 @@ namespace rojoRHI::metal4 {
         }
         descriptorColors = 0;
         descriptorDepth = false;
+        icbs.release();
     }
 
     //==================================================================================================================

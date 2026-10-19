@@ -31,9 +31,11 @@ namespace rojoRHI::metal4 {
         /// the encoder-level barrier held back for that stage (and, while it holds no work, the part of the pending barrier on
         /// its stages, which a barrier recorded after it opened left there), or opens one when none is open: the factory runs
         /// inside an autorelease pool and the encoder is retained; it takes the innermost open scope's label, else the list's,
-        /// and the list's argument table, then emits the pending barrier's part on its stages. The opening counts its native
-        /// calls, its barrier and one encoder on `list`. The new encoder holds no work.
-        MTL4::ComputeCommandEncoder* compute(core::CommandListCore& list, ListState& state, MTL::Stages command);
+        /// and the list's argument table, unless `kernelsOnly`, then emits the pending barrier's part on its stages. The opening
+        /// counts its native calls, its barrier and one encoder on `list`. The new encoder holds no work. An encoder opened
+        /// `kernelsOnly` runs only backend kernels, which bind the kernel table (`bindKernelBatch`): a render pass's counted draws
+        /// open it ahead of the render encoder, and nothing else records on a compute encoder inside a pass (chapter 07).
+        MTL4::ComputeCommandEncoder* compute(core::CommandListCore& list, ListState& state, MTL::Stages command, bool kernelsOnly = false);
 
         /// Opens a render encoder from `descriptor` when no encoder is open: the factory runs inside an autorelease pool and the
         /// encoder is retained; it takes the innermost open scope's label, else the list's, and binds no table, because no

@@ -6,6 +6,8 @@
 
 #include <rojoRHI/RHI.h>
 
+#include "Metal4Icb.h"
+
 #include <Metal/Metal.hpp>
 
 #include <array>
@@ -59,10 +61,42 @@ namespace rojoRHI::metal4 {
         BlendColor,       ///< `setBlendConstants`.
         DepthBias,        ///< `setDepthBias`.
         Root,             ///< `setRoot`, which writes the table's `buffer(0)`.
+        Execute,          ///< A counted draw's indirect command buffer, run over the range its kernel wrote.
+        DrawIndirect,     ///< A counted draw of one record: one native indirect draw of the record its kernel wrote.
+        IndexedIndirect,  ///< A counted indexed draw of one record: one native indirect indexed draw.
+        MeshExecute,      ///< A counted mesh draw's indirect command buffer, run over the range its kernel wrote.
+        MeshIndirect,     ///< A counted mesh draw of one record: its record bound at `buffer(3)`, one native indirect mesh draw.
     };
 
     /// How many kinds of prefix command there are.
-    inline constexpr size_t kPrefixKinds = 7;
+    inline constexpr size_t kPrefixKinds = 12;
+
+    /// What an `Execute` or `MeshExecute` entry runs: an indirect command buffer and the address of the range a kernel writes for it.
+    struct PrefixExecute
+    {
+        const MTL::IndirectCommandBuffer* buffer; ///< The indirect command buffer.
+        uint64_t range;                           ///< The GPU address of its `MTL::IndirectCommandBufferExecutionRange`.
+    };
+
+    /// What a `DrawIndirect` or `IndexedIndirect` entry draws: the native record a kernel writes, the primitive type in force
+    /// when the draw was recorded and, for an indexed draw, the index buffer.
+    struct PrefixIndirect
+    {
+        uint64_t record;              ///< The GPU address of the `MTL::Draw*IndirectArguments` record.
+        MTL::PrimitiveType primitive; ///< The primitive type.
+        MTL::IndexType indexType;     ///< `IndexedIndirect`: the index type.
+        uint64_t indices;             ///< `IndexedIndirect`: the GPU address of the index buffer.
+        uint64_t indexLength;         ///< `IndexedIndirect`: the bytes of the index buffer.
+    };
+
+    /// What a `MeshIndirect` entry draws: the caller's record, which the draw binds at `buffer(3)`, the native record a
+    /// kernel writes, and the pipeline bound when the draw was recorded, whose threadgroup sizes the draw takes.
+    struct PrefixMesh
+    {
+        uint64_t record;               ///< The GPU address of the `DrawMeshTasksIndirectArgs` record.
+        uint64_t native;               ///< The GPU address of the `MTL::DispatchThreadgroupsIndirectArguments` record.
+        const PipelineState* pipeline; ///< The mesh pipeline.
+    };
 
     /// One command of the prefix: its kind and the value the kind names.
     struct PrefixCommand
@@ -76,6 +110,9 @@ namespace rojoRHI::metal4 {
             std::array<float, 4> color;    ///< `BlendColor`.
             std::array<float, 3> bias;     ///< `DepthBias`: constant, slope-scaled and clamp.
             uint64_t root;                 ///< `Root`: the GPU address.
+            PrefixExecute execute;         ///< `Execute` and `MeshExecute`.
+            PrefixIndirect indirect;       ///< `DrawIndirect` and `IndexedIndirect`.
+            PrefixMesh mesh;               ///< `MeshIndirect`.
         };
     };
 
@@ -142,6 +179,7 @@ namespace rojoRHI::metal4 {
         /// observes the state, such as an execute.
         std::array<uint32_t, kPrefixKinds> prefixLatest = {};
 
+        uint64_t root = 0;            ///< The root recorded last, whether the table holds it yet or it waits in the prefix; 0 for none.
         uint64_t tableRoot = 0;       ///< The address the list's table holds at `buffer(0)`, as this recording wrote it; 0 for none.
         uint64_t tableDrawRecord = 0; ///< The address the list's table holds at `buffer(3)`, as this recording wrote it; 0 for none.
         /// The four zero bytes a direct mesh draw binds at `buffer(3)`, reserved in the list's frame-arena page at the
@@ -150,9 +188,22 @@ namespace rojoRHI::metal4 {
         /// The compute pipeline the caller bound, which a dispatch sets again when the open compute encoder holds another;
         /// null when none is bound.
         const PipelineState* compute = nullptr;
+        /// The indirect command buffers of the list's counted draws and the residency set that keeps them resident.
+        IcbPool icbs;
+        Buffer arenaPage;              ///< The frame-arena page a counted draw last reserved in; null before the first.
+        uint64_t arenaPageAddress = 0; ///< The GPU address of `arenaPage`, so a counted draw sends the page no message.
+        Buffer indexBuffer;            ///< The index buffer a counted indexed draw last named; null before the first.
+        uint64_t indexAddress = 0;     ///< The GPU address of `indexBuffer`.
+        uint64_t indexLength = 0;      ///< The bytes of `indexBuffer`.
+        /// The GPU addresses of the device's view and sampler tables, which a counted mesh draw's commands bind themselves:
+        /// fixed from the device's creation, so read once per list and kept across recordings; 0 before the first.
+        uint64_t viewTableAddress = 0;
+        uint64_t samplerTableAddress = 0; ///< See `viewTableAddress`.
 
-        /// Forgets everything the list recorded, as when the list is acquired again: the pass, the graphics state, the table's
-        /// addresses, the zero record and the compute pipeline. Keeps the containers' capacity and the descriptor.
+        /// Forgets everything the list recorded, as when the list is acquired again: the pass, the graphics state, the root and
+        /// the addresses the list's table holds, the zero record and the compute pipeline, and frees every indirect command
+        /// buffer slot for the new recording. Keeps the containers' capacity, the descriptor, the indirect command buffers and
+        /// the view and sampler table addresses.
         void reset();
 
         /// Forgets the pass and the graphics state recorded in it, as `endRenderPass` does, which also unbinds the pipeline.
@@ -169,7 +220,8 @@ namespace rojoRHI::metal4 {
         /// Empties the prefix after its replay, keeping its capacity.
         void clearPrefix();
 
-        /// Releases the descriptor. The caller holds an autorelease pool.
+        /// Releases the descriptor, the indirect command buffers and the list's residency set. The caller holds an autorelease
+        /// pool.
         void release();
 
         /// Empties the descriptor's attachments, which hold strong references to the last pass's textures, so a list waiting
@@ -210,12 +262,22 @@ namespace rojoRHI::metal4 {
     /// Writes `address` to the list's table at `buffer(0)` unless the table holds it; counts the call.
     void applyRoot(CommandListImpl& list, uint64_t address);
 
+    /// Writes `address`, a draw record or the zero record, to the list's table at `buffer(3)` unless the table holds it, for
+    /// the task and mesh entries of the next mesh draw; counts the call.
+    void applyDrawRecord(CommandListImpl& list, uint64_t address);
+
     /// Sets on a render encoder that has just opened the state `previous`, which the encoder a split ended held, where it
     /// differs from Metal's defaults; counts each call.
     void restoreHeld(CommandListImpl& list, const RenderHeld& previous);
 
     /// Replays the prefix in order on the render encoder that has just opened, through the filtered setters, then empties it.
     void replayPrefix(CommandListImpl& list);
+
+    /// Runs on the open render encoder the counted draw `command`, an `Execute`, `DrawIndirect`, `IndexedIndirect`,
+    /// `MeshExecute` or `MeshIndirect` entry of the prefix, inside an autorelease pool, because the validation layer
+    /// autoreleases in a draw it checks; a `MeshIndirect` entry binds its record at `buffer(3)` first. Counts each call and
+    /// marks the encoder's work in the stages the draw runs in: vertex and fragment, or object, mesh and fragment.
+    void replayCounted(CommandListImpl& list, const PrefixCommand& command);
 
     /// Returns the compute encoder for a dispatch, opening it when none is open and emitting a barrier owed to the dispatch
     /// stage, with the caller's compute pipeline set: a pipeline is set only when the encoder holds another, as after a
