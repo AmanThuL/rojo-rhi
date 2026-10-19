@@ -30,6 +30,7 @@ namespace rojoRHI::core {
         std::atomic<uint64_t> nativeCreateCalls = 0; ///< Native objects created or released: pool records, swapchains, releases.
         std::atomic<uint64_t> gpuAllocations = 0;    ///< Buffers, textures (swapchain images included), heaps; arena pages are buffers.
         std::atomic<uint64_t> pipelinesCreated = 0;  ///< Pipelines created.
+        std::atomic<uint64_t> pipelineCacheHits = 0; ///< Pipelines created that the backend's pipeline cache served; never on Null.
         std::atomic<uint64_t> deferredRetired = 0;   ///< Deferred destructions that ran.
         std::atomic<uint64_t> nativeSubmitCalls = 0; ///< Submissions, presents, tile mappings, fence signals and waits.
         std::atomic<uint64_t> nativeHostCalls = 0;   ///< Fence queries and timestamp reads.

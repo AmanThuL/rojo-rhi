@@ -38,6 +38,15 @@ namespace rojoRHI::test {
     }
 
     //==================================================================================================================
+    // Returns no bytes and marks the running case failed: the Null backend packages no conformance shader, and its
+    // conformance cases skip before they read one.
+    std::vector<std::byte> shaderLibraryFile(std::string_view name)
+    {
+        FAIL_CHECK("the Null backend has no shader library file for " << name);
+        return {};
+    }
+
+    //==================================================================================================================
     // Fails the running case through Catch2, so it is called from a test thread.
     void* surface(uint32_t index)
     {

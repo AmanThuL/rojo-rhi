@@ -318,7 +318,8 @@ namespace rojoRHI::core {
     Counters DeviceCore::counters() const
     {
         Counters counters;
-        // Every creation count is its own atomic, so a snapshot is plain relaxed loads: no lock and no difference of two reads.
+        // Every count is its own atomic, so a snapshot is plain relaxed loads and takes no lock; only the misses are a
+        // difference of two reads.
         counters.nativeCreateCalls = DeviceCounts::read(m_counts.nativeCreateCalls);
         counters.nativeRecordCalls = DeviceCounts::read(m_counts.nativeRecordCalls);
         counters.nativeSubmitCalls = DeviceCounts::read(m_counts.nativeSubmitCalls);
@@ -335,9 +336,12 @@ namespace rojoRHI::core {
         counters.textureBarriers = DeviceCounts::read(m_counts.textureBarriers);
         counters.nativeBarriers = DeviceCounts::read(m_counts.nativeBarriers);
         counters.pipelinesCreated = DeviceCounts::read(m_counts.pipelinesCreated);
-        // No backend has a pipeline cache of its own yet, so every creation is a miss.
-        counters.pipelineCacheHits = 0;
-        counters.pipelineCacheMisses = counters.pipelinesCreated;
+        // A creation the backend's cache did not serve is a miss; the Null backend never counts a hit. The two counts are read
+        // apart: a hit whose creation lands after the creations are read but before the hits are shows, in that one
+        // snapshot, as an earlier miss turned into a hit (or, with no earlier miss, would wrap, hence the clamp at zero).
+        // The next snapshot after the creation returns is exact.
+        counters.pipelineCacheHits = DeviceCounts::read(m_counts.pipelineCacheHits);
+        counters.pipelineCacheMisses = counters.pipelinesCreated - std::min(counters.pipelineCacheHits, counters.pipelinesCreated);
         counters.pipelineCompileNanoseconds = DeviceCounts::read(m_counts.pipelineCompileNanoseconds);
         counters.encodersOpened = DeviceCounts::read(m_counts.encodersOpened);
         counters.deferredDestructionsRetired = DeviceCounts::read(m_counts.deferredRetired);
