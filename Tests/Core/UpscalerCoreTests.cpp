@@ -101,6 +101,28 @@ TEST_CASE("Auto on a device that lists no kind is an error", "[core]")
 }
 
 //======================================================================================================================
+TEST_CASE("prepareUpscaler resolves Auto and rejects an unlisted kind without allocating", "[core]")
+{
+    Device device = *createDevice();
+    core::DeviceCore& core = core::coreOf(device);
+    core.capabilities().upscalers = kShortList;
+    const Result<core::UpscalerRecord> resolved =
+        core::prepareUpscaler(core, UpscalerDesc{ .kind = UpscalerKind::Auto, .input = { 8, 8 }, .output = { 16, 16 }, .label = "core.prepared" });
+    REQUIRE(resolved.has_value());
+    CHECK(resolved->kind == UpscalerKind::FSR);
+    CHECK(resolved->label == "core.prepared");
+    CHECK(resolved->output.width == 16);
+    CHECK(resolved->native == nullptr);
+    CHECK(core.pool<Upscaler>().liveCount() == 0);
+    const Result<core::UpscalerRecord> missing =
+        core::prepareUpscaler(core, UpscalerDesc{ .kind = UpscalerKind::MetalFX, .input = { 8, 8 }, .output = { 8, 8 } });
+    REQUIRE_FALSE(missing.has_value());
+    CHECK(missing.error().category == ErrorCategory::Unsupported);
+    CHECK(core.pool<Upscaler>().liveCount() == 0);
+    destroyDevice(device);
+}
+
+//======================================================================================================================
 TEST_CASE("an upscale stores the frame it was recorded in", "[core]")
 {
 #ifdef NDEBUG

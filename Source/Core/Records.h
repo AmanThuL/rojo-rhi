@@ -6,6 +6,8 @@
 
 #include <rojoRHI/RHI.h>
 
+#include "Core/ScopeRecord.h"
+
 #include <atomic>
 #include <compare>
 #include <cstdint>
@@ -270,6 +272,11 @@ namespace rojoRHI::core {
         /// Blocks until the work of frame `frame` is complete. `beginFrame` calls it before it retires anything, with the frame
         /// whose slot it reuses; null when the backend completes work at submission.
         void (*waitFrame)(void* context, uint64_t frame) = nullptr;
+        /// Fills the durations of the scopes of the frame `beginFrame` retires, once per queue type that has scopes, with that
+        /// queue's records and the report entries just made for them (`ScopeTimesFn`). It runs after the frame wait, under the
+        /// scope log's lock, before the slot's arena is rewound and before `frameSlot`; it must not call the core, and its spans
+        /// are valid only during the call. Null leaves every duration zero.
+        ScopeTimesFn scopeTimes = nullptr;
 
         /// Returns the hook for `Handle`, which may be null.
         template<typename Handle> RetireFn<RecordFor<Handle>> forType() const

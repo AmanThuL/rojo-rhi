@@ -20,7 +20,7 @@ itself.
 | Upscalers | `Upscalers.*` | `NullDevice.cpp`, `NullCommandList.cpp` |
 | Sparse tiles | `Sparse.*`, `Formats.cpp` | `NullDevice.cpp`, `NullQueue.cpp` |
 | Access declarations | `Accesses.*` | `NullCommandList.cpp` |
-| Scope timings | `Scopes.*`, `ScopeLog.*` | `NullDevice.cpp` |
+| Scope timings | `Scopes.*`, `ScopeLog.*`, `ScopeRecord.h` | `NullDevice.cpp` |
 | Capture | `Captures.*` | `NullDevice.cpp` |
 | Counters | `Counters.h`, `DeviceCore.*`, `HandlePool.h` | the sites named below |
 | Validation tracker | `Tracker/*` | `NullQueue.cpp` |
@@ -64,12 +64,15 @@ and it is the frame of the acquire". A destroyed swapchain waits in a per-frame-
 
 Every upscaler kind the Null device reports can be created. `Auto` resolves to the first kind of
 the capabilities list, which is MetalFX on Null, and the `UpscalerRecord` keeps the resolved
-kind. `upscale` checks its arguments and records nothing: it calls `checkNotSwapchainImage` on
-each of its textures and the format, extent, aliasing and once-per-frame rules
-(chapter 12). The once-per-frame rule (`0008`) compares the frame stamp of
-the record with an atomic exchange that runs last, so a rejected call does not count, and exists in
-Debug builds only. An upscale also records a scope named by `UpscaleParams::label`, or
-`rojorhi.upscale.unnamed`.
+kind. `core::prepareUpscaler` holds the creation checks and the kind resolution and allocates
+nothing: a backend creates its native object, stores it in the record's `native` and only then
+allocates the handle, so the payload is in place before the handle exists. Null has no native
+object and allocates the prepared record at once. `upscale` checks its arguments and records
+nothing: it calls `checkNotSwapchainImage` on each of its textures and the format, extent,
+aliasing and once-per-frame rules (chapter 12). The once-per-frame rule (`0008`) compares the
+frame stamp of the record with an atomic exchange that runs last, so a rejected call does not
+count, and exists in Debug builds only. An upscale also records a scope named by
+`UpscaleParams::label`, or `rojorhi.upscale.unnamed`.
 
 ## Sparse resources
 
@@ -123,7 +126,13 @@ Scopes come from `beginScope`, render passes (default label `rojorhi.pass.unname
 - **Retire.** The arena rewinds a slot at `beginFrame`, and the lists of the new frame then
   overwrite those pages, so views into them do not live as long as the report. Before the rewind,
   `ScopeLog::retire` copies each label into a string the log owns and builds the report from them.
-  The report stays valid until the next `beginFrame`, which clears it.
+  It then calls the `scopeTimes` retire hook once per queue type that has scopes, with that
+  queue's records and the report entries just made for them, still before the rewind; a backend
+  that times scopes stores the index of each scope's timestamp pair in `ScopeRecord::timestamp`
+  while recording and fills the durations there. Null registers no hook, so every duration stays
+  zero. The report stays valid until the next `beginFrame`, which clears it.
+- **Read.** The core counts nothing for `scopeTimings`; the backend counts its own timestamp
+  reads. Null counts one `nativeHostCalls` when the report is not empty, as a native read would.
 
 ## Capture
 
@@ -187,7 +196,8 @@ lists, and the order of the queues, frames and sparse mapping. Its pages,
 
 ## What remains
 - A native backend registers its own surface predicate, capture hook and tile table, and measures
-  scope durations (the Null report has none). It reads native objects while recording without
-  a lock ([ADR 0020](../decisions/0020-recording-locks-scope-labels.md)), counts each native call
-  at the call and may count cache hits. It must release swapchain images, upscalers and tile
+  scope durations through the `scopeTimes` hook (the Null report has none). It reads native
+  objects while recording without a lock
+  ([ADR 0020](../decisions/0020-recording-locks-scope-labels.md)), counts each native call at the
+  call and may count cache hits. It must release swapchain images, upscalers and tile
   mappings at retirement and at `destroyDevice`.

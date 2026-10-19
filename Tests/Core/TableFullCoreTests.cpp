@@ -14,6 +14,7 @@
 #include <array>
 #include <cstdint>
 #include <optional>
+#include <utility>
 
 using namespace rojoRHI;
 
@@ -40,6 +41,23 @@ namespace {
     uint64_t placedIn(core::DeviceCore& core, Heap heap)
     {
         return core.pool<Heap>().lookup(heap).record->placedResources;
+    }
+
+    //==================================================================================================================
+    /// Creates an upscaler as a backend with no native object does: prepares the record, then allocates it.
+    Result<Upscaler> createUpscaler(core::DeviceCore& core, const UpscalerDesc& desc)
+    {
+        Result<core::UpscalerRecord> record = core::prepareUpscaler(core, desc);
+        if (!record)
+        {
+            return std::unexpected(std::move(record.error()));
+        }
+        const Upscaler upscaler = core.pool<Upscaler>().allocate(std::move(*record));
+        if (upscaler.bits == 0)
+        {
+            return std::unexpected(core::tableFull("upscaler", core.pool<Upscaler>().capacity()));
+        }
+        return upscaler;
     }
 
     //==================================================================================================================
@@ -139,11 +157,11 @@ TEST_CASE("an upscaler that finds its table full is OutOfMemory and counts nothi
                              .motion = Format::RG16Float,
                              .outputFormat = Format::BGRA8Unorm,
                              .label = "full.upscaler" };
-    REQUIRE(core::createUpscaler(core, desc).has_value());
-    REQUIRE(core::createUpscaler(core, desc).has_value());
+    REQUIRE(createUpscaler(core, desc).has_value());
+    REQUIRE(createUpscaler(core, desc).has_value());
     const CreationCounts before = creationCounts(core);
 
-    const Result<Upscaler> full = core::createUpscaler(core, desc);
+    const Result<Upscaler> full = createUpscaler(core, desc);
     REQUIRE_FALSE(full.has_value());
     CHECK(full.error().category == ErrorCategory::OutOfMemory);
     CHECK(full.error().message == "the upscaler table of 2 objects is full");

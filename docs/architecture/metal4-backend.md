@@ -39,7 +39,8 @@ only, and `null` stays the default.
 [Command recording](metal4-recording.md) describes the lists and [drawing](metal4-drawing.md)
 passes, pipelines and draws. Every entry not implemented yet takes one of two forms:
 
-- `Device::createUpscaler` returns `ErrorCategory::Unsupported`, naming the entry.
+- `Device::createUpscaler` runs `core::prepareUpscaler`, whose kind check returns
+  `ErrorCategory::Unsupported` because the device lists no upscaler kind.
 - `CommandList::upscale` logs `<entry> is not implemented by the Metal 4 backend` and aborts in
   every build, after the core's handle check, so a default-constructed object still fails
   `VU-rojo-core-0004` first. The core serves the destroy of upscalers and `tileShape`. The device

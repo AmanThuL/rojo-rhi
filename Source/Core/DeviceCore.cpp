@@ -126,8 +126,9 @@ namespace rojoRHI::core {
             DeviceCounts::add(m_counts.deferredRetired, heapReleases);
             DeviceCounts::add(m_counts.nativeCreateCalls, heapReleases);
             const uint32_t slot = static_cast<uint32_t>(frame % m_framesInFlight);
-            // The slot's scopes leave the arena pages their labels live in before the rewind makes the pages claimable.
-            m_scopes.retire(slot, retired);
+            // The slot's scopes leave the arena pages their labels live in before the rewind makes the pages claimable, and the
+            // backend reads their timestamps while the labels are still valid.
+            m_scopes.retire(slot, retired, m_hooks.scopeTimes, m_hooks.context);
             m_arena.rewind(slot);
             if (m_hooks.frameSlot != nullptr)
             {
@@ -299,13 +300,7 @@ namespace rojoRHI::core {
     //==================================================================================================================
     std::span<const ScopeTiming> DeviceCore::scopeTimings() const
     {
-        const std::span<const ScopeTiming> report = m_scopes.report();
-        if (!report.empty())
-        {
-            // The backend reads the timestamps of the retired frame's scopes from its counter heap.
-            DeviceCounts::add(m_counts.nativeHostCalls);
-        }
-        return report;
+        return m_scopes.report();
     }
 
     //==================================================================================================================
