@@ -10,10 +10,11 @@ recording, queues and fences, swapchains, upscalers, sparse tiles, diagnostics a
 the validation tracker (ADR 0021): every valid-usage identifier of the API reference is checked and
 has a death test. The Metal 4 backend of v2 is partial and not the default: it implements the
 device, capabilities, formats, buffers, heaps, textures, views, samplers, queues, fences and frames,
-command lists as far as copies, fills, clears, barriers and scopes, swapchains and presentation on
-a Metal layer, sparse tiles and capture; the pass, pipeline, dispatch and draw entries abort, and
-shader libraries, pipelines and upscalers are refused with `Unsupported`. ADR 0001 owns the
-identity spelling every document here applies.
+shader libraries and pipelines with an archive cache, command lists (copies, fills, clears,
+barriers, scopes, render passes, dynamic state, dispatches, direct, indirect and counted draws and
+mesh tasks), swapchains and presentation on a Metal layer, sparse tiles and capture; the upscale
+entry aborts and upscalers are refused with `Unsupported`. ADR 0001 owns the identity spelling every
+document here applies.
 Luminex is its required consumer: it will mount the library as a submodule at `RojoRHI/` and drive
 every change through a RojoRHI branch and pull request first ([commits](docs/conventions/commits.md)
 owns that workflow). The repository is public and licensed under the Apache License, Version 2.0
@@ -61,6 +62,7 @@ Metal 4 backend, the optional ImGui adapter, tests and shaders — alongside its
   [the tracker across queues](docs/architecture/validation-tracker-queues.md),
   [the Metal 4 backend](docs/architecture/metal4-backend.md),
   [command recording on it](docs/architecture/metal4-recording.md),
+  [drawing on it: libraries, pipelines, passes, draws](docs/architecture/metal4-drawing.md),
   [its edges: presentation, sparse, capture](docs/architecture/metal4-backend-edges.md),
   [the benchmark harness](docs/architecture/benchmarks.md)
 
@@ -129,10 +131,9 @@ python3 Tools/bench.py timing         # runs the timed processes, local hardware
 python3 Tools/bench.py analyze        # writes summary.json and analysis.txt from the results
 ```
 
-`bench.py build` takes `--backend null` until the `metal4` backend implements the entries the
-RojoRHI arm calls and its private `CommitTiming.h`; on `metal4` the harness compiles but does not
-link yet, and no CI job builds it there. `correctness --arms N` then smoke-runs the native arm
-alone. Timing follows ADR 0014: Release,
+`bench.py build` takes `--backend metal4` (the default) or `null`; on `metal4` the harness
+compiles and links (`xmake build RojoRHIBench` on a Debug configure), and no CI job builds it there. `correctness
+--arms N` with the native arm alone smoke-runs it. Timing follows ADR 0014: Release,
 validation off, on AC power, never on hosted runners.
 
 `python3 Tools/check_lto_inline.py`, after `xmake build RojoRHILtoProbe` in a Release configure,
@@ -154,10 +155,11 @@ The shader ABI module `Shaders/RojoRHI/RojoRHI.slang` and its hosted checks exis
 shaders under `Shaders/Tests/` compile to MSL, SPIR-V and HLSL on every host, and the build checks
 the layout of the shared structs against Slang reflection. That is the hosted half of the T3 tier
 (ADR 0009). DXIL compiles wherever a DXC loads, as on hosted Windows CI. On Metal the rule writes
-the ABI stamp into each shader library (`.metal4lib`); loading on Metal and compile-and-run are not
-implemented yet. `Device::loadShaderLibrary` loads a library on the Null backend only (a text
-format, see [command recording](docs/architecture/null-backend-recording.md)); on Metal 4 it
-returns `Unsupported`.
+the ABI stamp into each shader library (`.metal4lib`), and the Metal 4 backend's
+`Device::loadShaderLibrary` reads that container, refuses another ABI version with
+`ShaderAbiMismatch` and compiles pipelines from it; the `[conformance]` cases run the ABI
+shaders on the GPU, the T3 tier's other half. The Null backend loads a text format (see [command
+recording](docs/architecture/null-backend-recording.md)).
 
 ## Hard rules
 
@@ -169,11 +171,12 @@ returns `Unsupported`.
 - Every GPU object is created with a label, defaulted to the `rojorhi.` prefix when the caller
   supplies none.
 - Metal 4 is the only native backend implemented today, and the v2 one is partial: device,
-  resources, queues, fences and frames, command lists as far as copies, fills, clears and barriers,
-  presentation, sparse resources and capture, with passes, draws, pipelines and upscaling still to
-  come. It is not the default (`rojorhi_backend` stays `null`). D3D12 is
-  planned and Vulkan is a design oracle with no code; no document claims either as a capability
-  until it is real. The Null backend is test-only and implements every chapter (ADR 0008).
+  resources, queues, fences and frames, shader libraries, pipelines, command lists (copies, fills,
+  clears, barriers, render passes, dispatches and draws), presentation, sparse resources and
+  capture, with upscaling and timestamps still to come. It is not the default (`rojorhi_backend`
+  stays `null`). D3D12 is planned and Vulkan is a design oracle with no code; no document claims
+  either as a capability until it is real. The Null backend is test-only and implements every
+  chapter (ADR 0008).
 - Every check lives in `Source/Core`; a backend entry calls the core's check first, then
   translates, and holds no `ROJORHI_VU`. A Metal 4 entry that calls an autoreleasing factory opens
   an `NS::AutoreleasePool`, and so does every retire hook ([Metal 4 backend](

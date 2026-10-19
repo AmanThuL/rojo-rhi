@@ -7,9 +7,10 @@ Luminex, implemented by the Metal 4 backend and frozen under `Legacy/` (ADR 0017
 `Include/`, `Source/`, `Backends/`, `Tests/` and `Shaders/` are the permanent names, reserved for
 the v2 interface, which is specified in the ADRs and the API reference under `docs/spec/`. The
 test-only Null backend implements all of it and its validation tracker is complete; the Metal 4
-backend implements the device, its resources, queues, fences and frames, and records command lists
-as far as copies, fills, clears, barriers and scopes ([its page](metal4-backend.md) and
-[command recording on it](metal4-recording.md)); render passes, pipelines and presentation are not
+backend implements the device, its resources, queues, fences and frames, shader libraries, pipelines
+and their cache, and records command lists, render passes, dispatches and draws included, presents
+swapchains, maps sparse resources and captures ([its page](metal4-backend.md), [command recording on
+it](metal4-recording.md) and [drawing](metal4-drawing.md)); upscaling and timestamps are not
 implemented yet. The shader ABI module and its hosted checks exist.
 
 ```
@@ -62,14 +63,14 @@ embeds; `Backends/Null/Source/` and `Backends/Metal4/Source/` implement the publ
 each one backend per build. `Backends/Metal4/MetalCpp/` holds the one metal-cpp implementation unit,
 the `RojoRHIMetalCpp` target, which the Metal 4 backend, `RojoRHILegacy` and `RojoRHIBench` link,
 so a host that links more than one has one definition of metal-cpp's tables.
-`Backends/Metal4/Kernels/` holds the MSL files of the backend's fill and clear kernels, which
-`xmake/kernels.lua` compiles on a `metal4` build into a library embedded in the binary; that build
-needs the Metal toolchain. [The Null backend](null-backend.md) describes both layers and what is
-implemented, [command recording](null-backend-recording.md) the recording chapters, and
-[the edges](null-backend-edges.md) presentation, upscaling, sparse resources, diagnostics and
-counters, and [the validation tracker](validation-tracker.md) the checks that follow a resource
-across commands, lists, submissions and queues. `Include/rojoRHI/RHI.h` is the whole v2 public
-interface, one header in sections by API-reference chapter.
+`Backends/Metal4/Kernels/` holds the MSL files of the backend's fill, clear and counted-draw
+kernels, which `xmake/kernels.lua` compiles on a `metal4` build into a library embedded in the
+binary; that build needs the Metal toolchain. [The Null backend](null-backend.md) describes both
+layers and what is implemented, [command recording](null-backend-recording.md) the recording
+chapters, and [the edges](null-backend-edges.md) presentation, upscaling, sparse resources,
+diagnostics and counters, and [the validation tracker](validation-tracker.md) the checks that follow
+a resource across commands, lists, submissions and queues. `Include/rojoRHI/RHI.h` is the whole v2
+public interface, one header in sections by API-reference chapter.
 
 `Tests/` builds as the `RojoRHITests` binary, whose file set depends on the backend. With `null`,
 `contract` runs the T0 cases of `Tests/Contract/`, `Tests/Core/` and `Tests/Null/` except the death

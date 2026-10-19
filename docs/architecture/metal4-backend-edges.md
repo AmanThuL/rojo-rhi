@@ -91,7 +91,12 @@ for detachment and the layer is released.
 Presenting a drawable makes Apple's own threads print `autoreleased with no pool` lines:
 `com.apple.FramePacing.LayerStateSyncQueue` (FramePacing's layer-state tracking) and
 `com.Metal4.SubmissionQueue`, where the last release of a `CAMetalDrawable` runs its `dealloc`.
-None of them has a RojoRHI frame on its stack, and a standalone program that keeps pools
+The IOGPU completion threads print them too: `IOGPUMetal4CommandQueue commandBufferComplete:`
+returns the command buffer's storage, and the driver drops the last reference to a buffer in its
+resource list with no pool; more indirect command buffers mean more such lines. None of them has a
+RojoRHI frame on its stack, except that a completion handler's own pool push may be the call that
+reports an earlier driver autorelease on the same thread. A RojoRHI frame that only pushes a pool
+does not count, since the push autoreleases nothing. A standalone program that keeps pools
 throughout prints the same classes. The check is judged by the stack, not by the count (see
 [testing](../conventions/testing.md)).
 
