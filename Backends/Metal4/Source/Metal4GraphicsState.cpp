@@ -1,0 +1,433 @@
+//----------------------------------------------------------------------------------------------------------------------
+/// @file Metal4GraphicsState.cpp
+/// @brief Implements the pipeline binding and dynamic-state entries for the Metal 4 backend: the prefix, the filtered encoder setters and compute binding.
+//----------------------------------------------------------------------------------------------------------------------
+
+#include "Metal4Device.h"
+
+#include <rojoRHI/RHI.h>
+
+#include "Base/Assert.h"
+#include "Core/CommandLists.h"
+#include "Core/DeviceCore.h"
+#include "Core/HandlePool.h"
+#include "Core/Records.h"
+#include "Core/RenderPasses.h"
+#include "Metal4DrawState.h"
+#include "Metal4Encoders.h"
+#include "Metal4ListState.h"
+#include "Metal4PipelineState.h"
+
+#include <Metal/Metal.hpp>
+
+#include <array>
+#include <cstdint>
+
+namespace rojoRHI {
+    namespace {
+        //==============================================================================================================
+        /// Returns the open render encoder of `list`; one must be open.
+        MTL4::RenderCommandEncoder* openEncoder(CommandListImpl& list)
+        {
+            MTL4::RenderCommandEncoder* encoder = list.encoders.renderEncoder();
+            ROJORHI_INTERNAL_ASSERT(encoder != nullptr, "graphics state is applied with no render encoder open");
+            return encoder;
+        }
+
+        //==============================================================================================================
+        /// Sets the render pipeline state of `pipeline` unless the encoder holds it.
+        void setRenderState(CommandListImpl& list, const metal4::PipelineState* pipeline)
+        {
+            metal4::RenderHeld& held = list.draw.held;
+            if (held.pipeline != nullptr && held.pipeline->render == pipeline->render)
+            {
+                held.pipeline = pipeline;
+                return;
+            }
+            openEncoder(list)->setRenderPipelineState(pipeline->render);
+            core::noteNativeCall(list.core);
+            held.pipeline = pipeline;
+        }
+
+        //==============================================================================================================
+        /// Sets `state` unless the encoder holds it; equal states share one object, so a pointer compares them.
+        void setDepthStencil(CommandListImpl& list, const MTL::DepthStencilState* state)
+        {
+            metal4::RenderHeld& held = list.draw.held;
+            if (held.depthStencil == state)
+            {
+                return;
+            }
+            openEncoder(list)->setDepthStencilState(state);
+            core::noteNativeCall(list.core);
+            held.depthStencil = state;
+        }
+
+        //==============================================================================================================
+        /// Sets `cull` unless the encoder holds it.
+        void setCull(CommandListImpl& list, MTL::CullMode cull)
+        {
+            metal4::RenderHeld& held = list.draw.held;
+            if (held.cull == cull)
+            {
+                return;
+            }
+            openEncoder(list)->setCullMode(cull);
+            core::noteNativeCall(list.core);
+            held.cull = cull;
+        }
+
+        //==============================================================================================================
+        /// Sets `winding` unless the encoder holds it.
+        void setWinding(CommandListImpl& list, MTL::Winding winding)
+        {
+            metal4::RenderHeld& held = list.draw.held;
+            if (held.winding == winding)
+            {
+                return;
+            }
+            openEncoder(list)->setFrontFacingWinding(winding);
+            core::noteNativeCall(list.core);
+            held.winding = winding;
+        }
+
+        //==============================================================================================================
+        /// Sets `fill` unless the encoder holds it.
+        void setFill(CommandListImpl& list, MTL::TriangleFillMode fill)
+        {
+            metal4::RenderHeld& held = list.draw.held;
+            if (held.fill == fill)
+            {
+                return;
+            }
+            openEncoder(list)->setTriangleFillMode(fill);
+            core::noteNativeCall(list.core);
+            held.fill = fill;
+        }
+
+        //==============================================================================================================
+        /// Sets `clip` unless the encoder holds it.
+        void setDepthClip(CommandListImpl& list, MTL::DepthClipMode clip)
+        {
+            metal4::RenderHeld& held = list.draw.held;
+            if (held.depthClip == clip)
+            {
+                return;
+            }
+            openEncoder(list)->setDepthClipMode(clip);
+            core::noteNativeCall(list.core);
+            held.depthClip = clip;
+        }
+
+        //==============================================================================================================
+        /// True when `a` and `b` are the same viewport.
+        bool sameViewport(const MTL::Viewport& a, const MTL::Viewport& b)
+        {
+            return a.originX == b.originX && a.originY == b.originY && a.width == b.width && a.height == b.height && a.znear == b.znear && a.zfar == b.zfar;
+        }
+
+        //==============================================================================================================
+        /// Sets `viewport` unless the encoder holds it.
+        void applyViewport(CommandListImpl& list, const MTL::Viewport& viewport)
+        {
+            metal4::RenderHeld& held = list.draw.held;
+            if (held.viewportKnown && sameViewport(held.viewport, viewport))
+            {
+                return;
+            }
+            openEncoder(list)->setViewport(viewport);
+            core::noteNativeCall(list.core);
+            held.viewportKnown = true;
+            held.viewport = viewport;
+        }
+
+        //==============================================================================================================
+        /// Sets `scissor` unless the encoder holds it.
+        void applyScissor(CommandListImpl& list, const MTL::ScissorRect& scissor)
+        {
+            metal4::RenderHeld& held = list.draw.held;
+            if (held.scissorKnown && held.scissor.x == scissor.x && held.scissor.y == scissor.y && held.scissor.width == scissor.width &&
+                held.scissor.height == scissor.height)
+            {
+                return;
+            }
+            openEncoder(list)->setScissorRect(scissor);
+            core::noteNativeCall(list.core);
+            held.scissorKnown = true;
+            held.scissor = scissor;
+        }
+
+        //==============================================================================================================
+        /// Sets `reference` for both faces unless the encoder holds it.
+        void applyStencilReference(CommandListImpl& list, uint32_t reference)
+        {
+            metal4::RenderHeld& held = list.draw.held;
+            if (held.stencilReference == reference)
+            {
+                return;
+            }
+            openEncoder(list)->setStencilReferenceValue(reference);
+            core::noteNativeCall(list.core);
+            held.stencilReference = reference;
+        }
+
+        //==============================================================================================================
+        /// Sets the blend color `color` unless the encoder holds it.
+        void applyBlendColor(CommandListImpl& list, const std::array<float, 4>& color)
+        {
+            metal4::RenderHeld& held = list.draw.held;
+            if (held.blendColor == color)
+            {
+                return;
+            }
+            openEncoder(list)->setBlendColor(color[0], color[1], color[2], color[3]);
+            core::noteNativeCall(list.core);
+            held.blendColor = color;
+        }
+
+        //==============================================================================================================
+        /// Records the depth-bias values `bias`, as the encoder sees them now, and applies them when the pipeline it holds
+        /// has `RasterState::depthBias`.
+        void applyBiasValues(CommandListImpl& list, const metal4::DepthBias& bias)
+        {
+            list.draw.bias = bias;
+            const metal4::PipelineState* pipeline = list.draw.held.pipeline;
+            if (pipeline != nullptr && pipeline->depthBias)
+            {
+                metal4::applyDepthBias(list, bias);
+            }
+        }
+
+        //==============================================================================================================
+        /// True when the render encoder of the open pass is open, so a state command applies now; otherwise it joins the
+        /// prefix.
+        bool appliesNow(const CommandListImpl& list)
+        {
+            return list.encoders.renderEncoder() != nullptr;
+        }
+    } // namespace
+
+    namespace metal4 {
+        //==============================================================================================================
+        void applyPipeline(CommandListImpl& list, const PipelineState& pipeline)
+        {
+            setRenderState(list, &pipeline);
+            setDepthStencil(list, pipeline.depthStencil);
+            setCull(list, pipeline.cull);
+            if (pipeline.setsWinding)
+            {
+                setWinding(list, pipeline.winding);
+            }
+            setFill(list, pipeline.fill);
+            setDepthClip(list, pipeline.depthClip);
+            applyDepthBias(list, pipeline.depthBias ? list.draw.bias : DepthBias{});
+        }
+
+        //==============================================================================================================
+        void applyDepthBias(CommandListImpl& list, const DepthBias& bias)
+        {
+            RenderHeld& held = list.draw.held;
+            if (held.bias == bias)
+            {
+                return;
+            }
+            openEncoder(list)->setDepthBias(bias.constant, bias.slopeScaled, bias.clamp);
+            core::noteNativeCall(list.core);
+            held.bias = bias;
+        }
+
+        //==============================================================================================================
+        void applyRoot(CommandListImpl& list, uint64_t address)
+        {
+            if (list.draw.tableRoot == address)
+            {
+                return;
+            }
+            // The encoders take the table's bindings as they stand at each draw or dispatch, so the write needs no encoder.
+            list.state.table->setAddress(address, 0);
+            core::noteNativeCall(list.core);
+            list.draw.tableRoot = address;
+        }
+
+        //==============================================================================================================
+        void restoreHeld(CommandListImpl& list, const RenderHeld& previous)
+        {
+            if (previous.pipeline != nullptr)
+            {
+                setRenderState(list, previous.pipeline);
+            }
+            setDepthStencil(list, previous.depthStencil);
+            setCull(list, previous.cull);
+            setWinding(list, previous.winding);
+            setFill(list, previous.fill);
+            setDepthClip(list, previous.depthClip);
+            applyDepthBias(list, previous.bias);
+            if (previous.viewportKnown)
+            {
+                applyViewport(list, previous.viewport);
+            }
+            if (previous.scissorKnown)
+            {
+                applyScissor(list, previous.scissor);
+            }
+            applyStencilReference(list, previous.stencilReference);
+            applyBlendColor(list, previous.blendColor);
+        }
+
+        //==============================================================================================================
+        void replayPrefix(CommandListImpl& list)
+        {
+            for (const PrefixCommand& command : list.draw.prefix)
+            {
+                switch (command.kind)
+                {
+                case PrefixKind::Pipeline: applyPipeline(list, *command.pipeline); break;
+                case PrefixKind::Viewport: applyViewport(list, command.viewport); break;
+                case PrefixKind::Scissor: applyScissor(list, command.scissor); break;
+                case PrefixKind::StencilReference: applyStencilReference(list, command.stencilReference); break;
+                case PrefixKind::BlendColor: applyBlendColor(list, command.color); break;
+                case PrefixKind::DepthBias: applyBiasValues(list, DepthBias{ command.bias[0], command.bias[1], command.bias[2] }); break;
+                case PrefixKind::Root: applyRoot(list, command.root); break;
+                }
+            }
+            list.draw.clearPrefix();
+        }
+
+        //==============================================================================================================
+        MTL4::ComputeCommandEncoder* applyComputePipeline(CommandListImpl& list)
+        {
+            ROJORHI_INTERNAL_ASSERT(list.draw.compute != nullptr, "a dispatch is recorded with no compute pipeline bound");
+            Encoders& encoders = list.encoders;
+            MTL4::ComputeCommandEncoder* encoder = encoders.compute(list.core, list.state, MTL::StageDispatch);
+            const MTL::ComputePipelineState* pipeline = list.draw.compute->compute;
+            if (encoders.kernelPipeline() != pipeline)
+            {
+                encoder->setComputePipelineState(pipeline);
+                core::noteNativeCall(list.core);
+                encoders.setKernelPipeline(pipeline);
+            }
+            return encoder;
+        }
+    } // namespace metal4
+
+    //==================================================================================================================
+    void CommandList::setPipeline(Pipeline pipeline)
+    {
+        CommandListImpl& list = CommandListImpl::of(*this);
+        core::bindPipeline(list.core, pipeline);
+        // A record's payload is fixed from creation to retirement, so it is read with one load and no lock (ADR 0020).
+        const auto* state = static_cast<const metal4::PipelineState*>(list.core.device->pool<Pipeline>().native(pipeline));
+        metal4::DrawState& draw = list.draw;
+        if (state->kind == core::PipelineKind::Compute)
+        {
+            // Binding opens the lazy compute encoder. Stage 0 emits no held-back barrier: no command follows yet.
+            metal4::Encoders& encoders = list.encoders;
+            MTL4::ComputeCommandEncoder* encoder = encoders.compute(list.core, list.state, 0);
+            if (encoders.kernelPipeline() != state->compute)
+            {
+                encoder->setComputePipelineState(state->compute);
+                core::noteNativeCall(list.core);
+                encoders.setKernelPipeline(state->compute);
+            }
+            draw.compute = state;
+            return;
+        }
+        draw.pipeline = state;
+        draw.topology = state->listType;
+        if (appliesNow(list))
+        {
+            metal4::applyPipeline(list, *state);
+            return;
+        }
+        metal4::PrefixCommand command{ .kind = metal4::PrefixKind::Pipeline };
+        command.pipeline = state;
+        draw.record(command);
+    }
+
+    //==================================================================================================================
+    void CommandList::setViewport(const Viewport& viewport)
+    {
+        CommandListImpl& list = CommandListImpl::of(*this);
+        core::setViewport(list.core, viewport);
+        const MTL::Viewport native{ viewport.x, viewport.y, viewport.width, viewport.height, viewport.minDepth, viewport.maxDepth };
+        if (appliesNow(list))
+        {
+            applyViewport(list, native);
+            return;
+        }
+        metal4::PrefixCommand command{ .kind = metal4::PrefixKind::Viewport };
+        command.viewport = native;
+        list.draw.record(command);
+    }
+
+    //==================================================================================================================
+    void CommandList::setScissor(const Rect2D& rect)
+    {
+        CommandListImpl& list = CommandListImpl::of(*this);
+        core::setScissor(list.core, rect);
+        const MTL::ScissorRect native{ rect.x, rect.y, rect.width, rect.height };
+        if (appliesNow(list))
+        {
+            applyScissor(list, native);
+            return;
+        }
+        metal4::PrefixCommand command{ .kind = metal4::PrefixKind::Scissor };
+        command.scissor = native;
+        list.draw.record(command);
+    }
+
+    //==================================================================================================================
+    void CommandList::setStencilReference(uint8_t reference)
+    {
+        CommandListImpl& list = CommandListImpl::of(*this);
+        core::setStencilReference(list.core);
+        if (appliesNow(list))
+        {
+            applyStencilReference(list, reference);
+            return;
+        }
+        metal4::PrefixCommand command{ .kind = metal4::PrefixKind::StencilReference };
+        command.stencilReference = reference;
+        list.draw.record(command);
+    }
+
+    //==================================================================================================================
+    void CommandList::setBlendConstants(float r, float g, float b, float a)
+    {
+        CommandListImpl& list = CommandListImpl::of(*this);
+        core::setBlendConstants(list.core);
+        const std::array<float, 4> color{ r, g, b, a };
+        if (appliesNow(list))
+        {
+            applyBlendColor(list, color);
+            return;
+        }
+        metal4::PrefixCommand command{ .kind = metal4::PrefixKind::BlendColor };
+        command.color = color;
+        list.draw.record(command);
+    }
+
+    //==================================================================================================================
+    void CommandList::setPrimitiveTopology(PrimitiveTopology topology)
+    {
+        CommandListImpl& list = CommandListImpl::of(*this);
+        core::setPrimitiveTopology(list.core, topology);
+        // Metal takes the primitive type with each draw, so the topology is list state alone.
+        list.draw.topology = metal4::primitiveType(topology);
+    }
+
+    //==================================================================================================================
+    void CommandList::setDepthBias(float constant, float slopeScaled, float clamp)
+    {
+        CommandListImpl& list = CommandListImpl::of(*this);
+        core::setDepthBias(list.core);
+        if (appliesNow(list))
+        {
+            applyBiasValues(list, metal4::DepthBias{ constant, slopeScaled, clamp });
+            return;
+        }
+        metal4::PrefixCommand command{ .kind = metal4::PrefixKind::DepthBias };
+        command.bias = { constant, slopeScaled, clamp };
+        list.draw.record(command);
+    }
+} // namespace rojoRHI

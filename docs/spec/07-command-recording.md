@@ -4,14 +4,13 @@
 **API version**: 0.1.0
 
 A command list comes from a per-frame pool and returns to it when its frame retires. One thread
-records one list at a time; many lists record in parallel and are submitted in order
-([queues and frames](10-queues-and-frames.md)). In Release builds recording takes no locks, except
-when a list claims a new frame-arena page, for `uploadFrameData` or for the label of a debug scope
-(including those of render passes and upscales); a Debug-tier check may take the lock of the pool
-whose record it reads ([ADR 0020](../decisions/0020-recording-locks-scope-labels.md)). Metal 4
-columns describe the implemented backend; D3D12 columns describe the planned backend; Vulkan
-columns are the design oracle. This chapter continues in
-[draws, dispatches and scopes](07-command-recording-part2.md) and
+records one list at a time; many lists record in parallel and are submitted in order ([queues and
+frames](10-queues-and-frames.md)). In Release builds recording takes no locks, except when a list
+claims a new frame-arena page, for `uploadFrameData` or for the label of a debug scope (including
+those of render passes and upscales); a Debug-tier check may take the lock of the pool whose record
+it reads ([ADR 0020](../decisions/0020-recording-locks-scope-labels.md)). Metal 4 columns describe
+the implemented backend; D3D12 columns describe the planned backend; Vulkan columns are the design
+oracle. This chapter continues in [draws, dispatches and scopes](07-command-recording-part2.md) and
 [copies and clears](07-command-recording-part3.md).
 
 **Only render passes have scope.** Compute and copy commands are valid anywhere outside a render
@@ -260,22 +259,23 @@ void CommandList::beginRenderPass(const RenderPassDesc& desc);
 
 Begins a render pass. It performs the load operations and no layout transition. The pass forms its
 own scope, a debug group and a timestamp pair labeled `desc.label` (see `CommandList::beginScope`).
-On Metal 4 it closes the lazily opened compute encoder and opens a render encoder. Dynamic state
-starts as listed in [dynamic state](06-pipelines-part2.md), and no pipeline is bound.
+Dynamic state starts as listed in [dynamic state](06-pipelines-part2.md), and no pipeline is bound.
+On Metal 4 it closes the lazily opened compute encoder and opens no encoder: the render encoder
+opens at the pass's first draw that needs no kernel, at a scope boundary inside the pass, or at
+`endRenderPass` ([GPU-driven](08-gpu-driven.md) gives counted draws).
 
 #### Valid usage
 
 - `VU-rojo-cmd-0016` Recorded on a `Graphics` command list with no render pass open.
-- `VU-rojo-cmd-0017` Retired in 0.1.0: Until `endRenderPass`, the list records no barrier,
-  dispatch, copy, fill or clear. Each of those commands states it: `VU-rojo-sync-0019`,
-  `VU-rojo-cmd-0029`, `VU-rojo-indirect-0018`, `VU-rojo-cmd-0042`, `0046`, `0049`, `0052`, `0056`
-  and `0060`.
+- `VU-rojo-cmd-0017` Retired in 0.1.0: Until `endRenderPass`, the list records no barrier, dispatch,
+  copy, fill or clear. Each of those commands states it: `VU-rojo-sync-0019`, `VU-rojo-cmd-0029`,
+  `VU-rojo-indirect-0018`, `VU-rojo-cmd-0042`, `0046`, `0049`, `0052`, `0056` and `0060`.
 
 #### Mapping
 
 | | Metal 4 | D3D12 | Vulkan |
 |---|---|---|---|
-| Call | `MTL4::CommandBuffer::renderCommandEncoder` | `BeginRenderPass` (`ID3D12GraphicsCommandList4`) | `vkCmdBeginRendering` |
+| Call | `MTL4::CommandBuffer::pushDebugGroup` for the pass's scope; `MTL4::CommandBuffer::renderCommandEncoder` deferred to the pass's first draw that needs no kernel, scope boundary inside it, or `endRenderPass`, with the caller's load actions, and `Load` when a split resumes the pass | `BeginRenderPass` (`ID3D12GraphicsCommandList4`) | `vkCmdBeginRendering` |
 | Cost | native | cheap: starting dynamic state written | native |
 
 ### `CommandList::endRenderPass`
@@ -296,5 +296,5 @@ unbinds the pipeline. The next compute or copy command opens a new Metal 4 compu
 
 | | Metal 4 | D3D12 | Vulkan |
 |---|---|---|---|
-| Call | `MTL4::RenderCommandEncoder::endEncoding` | `EndRenderPass` | `vkCmdEndRendering` |
+| Call | `MTL4::CommandBuffer::renderCommandEncoder` first when nothing opened it; `MTL4::RenderCommandEncoder::setColorStoreAction`, `setDepthStoreAction` or `setStencilStoreAction` for an attachment that is not `Store` without a resolve; `MTL4::RenderCommandEncoder::endEncoding`; `MTL4::CommandBuffer::popDebugGroup` | `EndRenderPass` | `vkCmdEndRendering` |
 | Cost | native | native | native |

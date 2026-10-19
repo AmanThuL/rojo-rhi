@@ -11,6 +11,7 @@
 
 #include <cstdint>
 #include <string>
+#include <string_view>
 #include <vector>
 
 namespace rojoRHI::metal4 {
@@ -37,5 +38,11 @@ namespace rojoRHI::metal4 {
         /// Releases every object that exists, in reverse order of creation, and clears each pointer. The caller holds an
         /// autorelease pool and no queue holds work that uses them.
         void release();
+
+        /// Returns a new string holding `label`, for a debug group and the labels of the encoders it encloses: it is made with
+        /// alloc and init, so it is not autoreleased and needs no pool, and the caller owns its one reference. The label is not
+        /// NUL-terminated, so it is copied into `scratch` first. A label that is not valid UTF-8 makes no string, and a debug
+        /// group needs one, so the string then holds `fallback`.
+        NS::String* makeGroupLabel(std::string_view label, const char* fallback);
     };
 } // namespace rojoRHI::metal4
