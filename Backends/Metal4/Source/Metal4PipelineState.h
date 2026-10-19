@@ -29,6 +29,7 @@ namespace rojoRHI::metal4 {
         MTL::DepthStencilState* depthStencil = nullptr;           ///< Shared through the device cache, not owned; null when nothing is tested.
         MTL::CullMode cull = MTL::CullModeNone;                   ///< `RasterState::cull`.
         MTL::Winding winding = MTL::WindingCounterClockwise;      ///< `RasterState::frontFace`.
+        bool setsWinding = false;                                 ///< A bind sets the winding: the pipeline culls, tests stencil or has a fragment entry.
         MTL::TriangleFillMode fill = MTL::TriangleFillModeFill;   ///< `RasterState::fill`.
         MTL::DepthClipMode depthClip = MTL::DepthClipModeClip;    ///< `RasterState::depthClip`; false clamps.
         bool depthBias = false;                                   ///< `RasterState::depthBias`: the recorded bias applies.

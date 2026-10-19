@@ -202,8 +202,8 @@ namespace rojoRHI::metal4 {
             encoder->dispatchThreadgroups(groups, threads);
         }
         core::noteNativeCall(list);
-        // The caller's root and tables are bound again for its next dispatch. Its compute pipeline is not, because a list
-        // binds none yet.
+        // The caller's root and tables are bound again for its next dispatch. Its compute pipeline is set again at that
+        // dispatch, which finds the kernel's set on the encoder.
         encoder->setArgumentTable(state.table);
         core::noteNativeCall(list);
     }

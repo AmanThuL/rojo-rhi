@@ -11,6 +11,7 @@
 #include "Core/FrameArena.h"
 #include "Core/Swapchains.h"
 #include "Metal4AddressMap.h"
+#include "Metal4DrawState.h"
 #include "Metal4Encoders.h"
 #include "Metal4Kernels.h"
 #include "Metal4ListState.h"
@@ -67,13 +68,14 @@ namespace rojoRHI {
         static Queue wrap(QueueImpl* impl);
     };
 
-    /// The Metal 4 backend's command list: the core's recording state and the device that acquired it, and the native objects
-    /// the list records into.
+    /// The Metal 4 backend's command list: the core's recording state and the device that acquired it, the native objects the
+    /// list records into, and what it keeps of its open render pass.
     struct CommandListImpl
     {
         core::CommandListCore core; ///< The state machine the recording rules read, and the device that acquired the list.
         metal4::ListState state;    ///< The list's allocator, command buffer and argument table, and its debug-group labels.
         metal4::Encoders encoders;  ///< The encoder the list has open, if any.
+        metal4::DrawState draw;     ///< The open render pass's attachments and the list's render pass descriptor.
 
         /// Returns the state `list` wraps; checks VU-rojo-core-0004.
         static CommandListImpl& of(CommandList list);

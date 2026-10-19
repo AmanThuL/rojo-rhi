@@ -120,6 +120,7 @@ namespace rojoRHI {
         // A list that never ended, which only a Release build lets through, leaves its encoder behind; one that ended with
         // scopes open leaves their strings.
         list->encoders.release();
+        list->draw.reset();
         for (NS::String* scopeLabel : state.scopeLabels)
         {
             scopeLabel->release();
@@ -145,6 +146,8 @@ namespace rojoRHI {
         // The core's checks run before any native call.
         core::endList(list.core);
         list.encoders.close(list.core);
+        // The list may wait in its pool long after its textures are destroyed; its descriptor must not keep them alive.
+        list.draw.forgetTextures();
         // A barrier still pending orders the work of later lists on the queue.
         metal4::emitTrailing(list.core, list.state, list.encoders.barriers());
         list.state.commandBuffer->endCommandBuffer();
@@ -162,148 +165,6 @@ namespace rojoRHI {
         const auto* page = static_cast<const MTL::Buffer*>(list.device->pool<Buffer>().native(place.page));
         const uint64_t value = page->gpuAddress() + place.offset;
         return Addr{ static_cast<uint32_t>(value), static_cast<uint32_t>(value >> 32) };
-    }
-
-    //==================================================================================================================
-    void CommandList::beginRenderPass([[maybe_unused]] const RenderPassDesc& desc)
-    {
-        CommandListImpl::of(*this);
-        metal4::notImplemented("CommandList::beginRenderPass");
-    }
-
-    //==================================================================================================================
-    void CommandList::endRenderPass()
-    {
-        CommandListImpl::of(*this);
-        metal4::notImplemented("CommandList::endRenderPass");
-    }
-
-    //==================================================================================================================
-    void CommandList::setPipeline([[maybe_unused]] Pipeline pipeline)
-    {
-        CommandListImpl::of(*this);
-        metal4::notImplemented("CommandList::setPipeline");
-    }
-
-    //==================================================================================================================
-    void CommandList::setViewport([[maybe_unused]] const Viewport& viewport)
-    {
-        CommandListImpl::of(*this);
-        metal4::notImplemented("CommandList::setViewport");
-    }
-
-    //==================================================================================================================
-    void CommandList::setScissor([[maybe_unused]] const Rect2D& rect)
-    {
-        CommandListImpl::of(*this);
-        metal4::notImplemented("CommandList::setScissor");
-    }
-
-    //==================================================================================================================
-    void CommandList::setStencilReference([[maybe_unused]] uint8_t reference)
-    {
-        CommandListImpl::of(*this);
-        metal4::notImplemented("CommandList::setStencilReference");
-    }
-
-    //==================================================================================================================
-    void CommandList::setBlendConstants([[maybe_unused]] float r, [[maybe_unused]] float g, [[maybe_unused]] float b, [[maybe_unused]] float a)
-    {
-        CommandListImpl::of(*this);
-        metal4::notImplemented("CommandList::setBlendConstants");
-    }
-
-    //==================================================================================================================
-    void CommandList::setPrimitiveTopology([[maybe_unused]] PrimitiveTopology topology)
-    {
-        CommandListImpl::of(*this);
-        metal4::notImplemented("CommandList::setPrimitiveTopology");
-    }
-
-    //==================================================================================================================
-    void CommandList::setDepthBias([[maybe_unused]] float constant, [[maybe_unused]] float slopeScaled, [[maybe_unused]] float clamp)
-    {
-        CommandListImpl::of(*this);
-        metal4::notImplemented("CommandList::setDepthBias");
-    }
-
-    //==================================================================================================================
-    void CommandList::setRoot([[maybe_unused]] Addr root)
-    {
-        CommandListImpl::of(*this);
-        metal4::notImplemented("CommandList::setRoot");
-    }
-
-    //==================================================================================================================
-    void CommandList::draw(
-        [[maybe_unused]] uint32_t vertices, [[maybe_unused]] uint32_t instances, [[maybe_unused]] uint32_t firstVertex, [[maybe_unused]] uint32_t firstInstance
-    )
-    {
-        CommandListImpl::of(*this);
-        metal4::notImplemented("CommandList::draw");
-    }
-
-    //==================================================================================================================
-    void CommandList::drawIndexed(
-        [[maybe_unused]] Buffer indices,
-        [[maybe_unused]] IndexType type,
-        [[maybe_unused]] uint32_t count,
-        [[maybe_unused]] uint32_t instances,
-        [[maybe_unused]] uint32_t firstIndex,
-        [[maybe_unused]] int32_t baseVertex,
-        [[maybe_unused]] uint32_t firstInstance
-    )
-    {
-        CommandListImpl::of(*this);
-        metal4::notImplemented("CommandList::drawIndexed");
-    }
-
-    //==================================================================================================================
-    void CommandList::drawMeshTasks([[maybe_unused]] uint32_t x, [[maybe_unused]] uint32_t y, [[maybe_unused]] uint32_t z)
-    {
-        CommandListImpl::of(*this);
-        metal4::notImplemented("CommandList::drawMeshTasks");
-    }
-
-    //==================================================================================================================
-    void CommandList::dispatch([[maybe_unused]] uint32_t x, [[maybe_unused]] uint32_t y, [[maybe_unused]] uint32_t z)
-    {
-        CommandListImpl::of(*this);
-        metal4::notImplemented("CommandList::dispatch");
-    }
-
-    //==================================================================================================================
-    void CommandList::drawIndirect([[maybe_unused]] Addr args, [[maybe_unused]] uint32_t maxCount, [[maybe_unused]] Addr count)
-    {
-        CommandListImpl::of(*this);
-        metal4::notImplemented("CommandList::drawIndirect");
-    }
-
-    //==================================================================================================================
-    void CommandList::drawIndexedIndirect(
-        [[maybe_unused]] Buffer indices,
-        [[maybe_unused]] IndexType type,
-        [[maybe_unused]] Addr args,
-        [[maybe_unused]] uint32_t maxCount,
-        [[maybe_unused]] Addr count
-    )
-    {
-        CommandListImpl::of(*this);
-        metal4::notImplemented("CommandList::drawIndexedIndirect");
-    }
-
-    //==================================================================================================================
-    void CommandList::drawMeshTasksIndirect([[maybe_unused]] Addr args, [[maybe_unused]] uint32_t maxCount, [[maybe_unused]] Addr count)
-    {
-        CommandListImpl::of(*this);
-        metal4::notImplemented("CommandList::drawMeshTasksIndirect");
-    }
-
-    //==================================================================================================================
-    void CommandList::dispatchIndirect([[maybe_unused]] Addr args)
-    {
-        CommandListImpl::of(*this);
-        metal4::notImplemented("CommandList::dispatchIndirect");
     }
 
     //==================================================================================================================

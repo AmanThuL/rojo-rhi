@@ -15,6 +15,7 @@
 #include <cstdint>
 #include <format>
 #include <string>
+#include <string_view>
 
 namespace rojoRHI::metal4 {
     namespace {
@@ -115,5 +116,17 @@ namespace rojoRHI::metal4 {
             allocator->release();
             allocator = nullptr;
         }
+    }
+
+    //==================================================================================================================
+    NS::String* ListState::makeGroupLabel(std::string_view label, const char* fallback)
+    {
+        scratch.assign(label);
+        NS::String* string = NS::String::alloc()->init(scratch.c_str(), NS::UTF8StringEncoding);
+        if (string == nullptr)
+        {
+            string = NS::String::alloc()->init(fallback, NS::UTF8StringEncoding);
+        }
+        return string;
     }
 } // namespace rojoRHI::metal4

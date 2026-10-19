@@ -1,6 +1,6 @@
 //----------------------------------------------------------------------------------------------------------------------
 /// @file Metal4Encoders.cpp
-/// @brief Implements the encoder a Metal 4 command list keeps open: the lazy compute encoder and a clear's render encoders, their opening and closing.
+/// @brief Implements the encoder a Metal 4 command list keeps open: the lazy compute encoder and the render encoders, their opening and closing.
 //----------------------------------------------------------------------------------------------------------------------
 
 #include "Metal4Encoders.h"
@@ -21,6 +21,19 @@ namespace rojoRHI::metal4 {
         ROJORHI_INTERNAL_ASSERT(m_kind != EncoderKind::Render, "a compute command is recorded while a render encoder is open");
         if (m_compute != nullptr)
         {
+            if (!m_holdsWork && (m_barriers.pendingDestination & kComputeStages) != 0)
+            {
+                // An encoder opened with no command, as binding a compute pipeline opens it, may meet a barrier before its
+                // first command: the barrier merged into the pending one, which this encoder owes before any command. It
+                // waits at queue level like the opening barrier, and what it covers joins what the opening covered.
+                const MTL::Stages source = m_barriers.openSource;
+                const MTL::Stages destination = m_barriers.openDestination;
+                const MTL4::VisibilityOptions visibility = m_barriers.openVisibility;
+                emitAtOpen(list, m_barriers, m_compute, kComputeStages);
+                m_barriers.openSource |= source;
+                m_barriers.openDestination |= destination;
+                m_barriers.openVisibility |= visibility;
+            }
             // A command follows: the encoder-level barrier held back goes before it when it holds the command's stage back.
             emitDeferred(list, m_barriers, m_compute, kComputeStages, command);
             return m_compute;
@@ -65,6 +78,32 @@ namespace rojoRHI::metal4 {
         emitAtOpen(list, m_barriers, m_render, MTL::StageFragment);
         m_kind = EncoderKind::Render;
         m_holdsWork = false;
+        m_ran = MTL::StageFragment;
+        return m_render;
+    }
+
+    //==================================================================================================================
+    MTL4::RenderCommandEncoder* Encoders::openPass(core::CommandListCore& list, ListState& state, const MTL4::RenderPassDescriptor* descriptor)
+    {
+        ROJORHI_INTERNAL_ASSERT(m_kind == EncoderKind::None, "a render pass's encoder opens while another encoder is open");
+        {
+            // The factory autoreleases its encoder; the list keeps it past the pool, so it retains it.
+            const AutoreleasePool pool;
+            m_render = state.commandBuffer->renderCommandEncoder(descriptor);
+            m_render->retain();
+        }
+        core::noteNativeCall(list);
+        ++list.counts.encodersOpened;
+        m_render->setLabel(state.scopeLabels.empty() ? state.label : state.scopeLabels.back());
+        core::noteNativeCall(list);
+        // Every shader of a draw reads the reserved bindings through the list's table (ADR 0018).
+        m_render->setArgumentTable(state.table, MTL::RenderStageVertex | MTL::RenderStageFragment | MTL::RenderStageObject | MTL::RenderStageMesh);
+        core::noteNativeCall(list);
+        // The pending barrier's part on every render stage waits at queue level before the pass's load actions and draws.
+        emitAtOpen(list, m_barriers, m_render, kRenderStages);
+        m_kind = EncoderKind::Render;
+        m_holdsWork = false;
+        m_ran = MTL::StageFragment;
         return m_render;
     }
 
@@ -88,9 +127,12 @@ namespace rojoRHI::metal4 {
         }
         else
         {
-            // A render encoder has no stages getter. A clear's render encoder runs only its load and store actions, which are
-            // fragment-stage work.
-            m_barriers.returnUnrun(MTL::StageFragment);
+            // A render encoder has no stages getter, so it keeps those it ran in: its load and store actions are fragment-stage
+            // work, and a pass's commands add theirs.
+            m_barriers.returnUnrun(m_ran);
+            // The validation layer autoreleases in endEncoding of a render encoder with a stencil attachment. A render encoder
+            // ends once per pass or clear, so the pool costs nothing per command.
+            const AutoreleasePool pool;
             m_render->endEncoding();
             core::noteNativeCall(list);
             m_render->release();
@@ -98,6 +140,7 @@ namespace rojoRHI::metal4 {
         }
         m_kind = EncoderKind::None;
         m_holdsWork = false;
+        m_ran = 0;
         m_kernelPipeline = nullptr;
         m_barriers.clearOpen();
     }
@@ -121,6 +164,7 @@ namespace rojoRHI::metal4 {
         m_render = nullptr;
         m_kind = EncoderKind::None;
         m_holdsWork = false;
+        m_ran = 0;
         m_kernelPipeline = nullptr;
         m_barriers.reset();
     }

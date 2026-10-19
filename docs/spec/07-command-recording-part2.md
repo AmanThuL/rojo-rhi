@@ -38,8 +38,8 @@ render pass opens only on a `Graphics` list (`VU-rojo-cmd-0016`), so the list cl
 
 | | Metal 4 | D3D12 | Vulkan |
 |---|---|---|---|
-| Call | `MTL4::RenderCommandEncoder::setRenderPipelineState` with the pipeline's depth-stencil and raster state, or `MTL4::ComputeCommandEncoder::setComputePipelineState` | `SetPipelineState`, `IASetPrimitiveTopology` | `vkCmdBindPipeline` |
-| Cost | cheap: depth-stencil object and raster state replayed | native | native |
+| Call | `MTL4::RenderCommandEncoder::setRenderPipelineState` with the pipeline's depth-stencil and raster state, each set only where it differs from what the encoder holds (the winding only for a pipeline that culls, tests stencil or has a fragment entry); before the pass's render encoder opens, the binding and the dynamic state wait in the list and are set when it opens. Or `MTL4::ComputeCommandEncoder::setComputePipelineState`, set again at a dispatch when the encoder holds another | `SetPipelineState`, `IASetPrimitiveTopology` | `vkCmdBindPipeline` |
+| Cost | cheap: depth-stencil object and raster state set where they differ | native | native |
 
 ### `CommandList::draw`
 
