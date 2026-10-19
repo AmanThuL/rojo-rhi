@@ -2,13 +2,13 @@
 
 **Status**: Accepted
 
-This page describes how the Metal 4 backend records a command list into native command buffers:
-the objects a list owns, the one open encoder, copies, fills, clears, barriers, scopes, the counts
-and the commit-timing seam. [The Metal 4 backend](metal4-backend.md) describes the device around
-it, and [drawing](metal4-drawing.md) the render passes, pipelines, dispatches and draws a list
-also records. Timestamps are not recorded yet. Chapters 07, 09 and
-10 of the API reference stay the authority on semantics and on each entry's Metal 4 mapping; every
-check lives in `Source/Core`, so no `ROJORHI_VU` appears under `Backends/Metal4/`.
+This page describes how the Metal 4 backend records a command list into native command buffers: the
+objects a list owns, the one open encoder, copies, fills, clears, barriers, scopes, upscalers and
+their upscales, the counts and the commit-timing seam. [The Metal 4 backend](metal4-backend.md)
+describes the device around it, and [drawing](metal4-drawing.md) the render passes, pipelines,
+dispatches and draws a list also records. Every scope, render pass and upscale is timed. Chapters
+07, 09 and 10 of the API reference stay the authority on semantics and on each entry's Metal 4
+mapping; every check lives in `Source/Core`, so no `ROJORHI_VU` appears under `Backends/Metal4/`.
 
 ## What a list owns
 
@@ -171,15 +171,83 @@ Outside a pass, `beginScope` runs the core's `beginScope`, closes the open encod
 `pushDebugGroup` on the command buffer with an `NS::String` from `alloc()->init` over the scope's
 label, copied to a NUL-terminated scratch string first. A label that is not valid UTF-8 names its
 group `rojorhi.scope.unnamed`. The list keeps the string on a stack that names the encoders opened
-inside the scope; `endScope` closes the encoder, calls `popDebugGroup` and releases the string.
-`scopeTimings` stays the core's: it reports no durations and counts no native read.
+inside the scope. It then claims a timestamp pair for the list's frame slot from the device's
+`metal4::Timestamps` (`Metal4Timestamps.*`), stores the pair's index in the core's scope record and
+on a second stack, and writes the begin timestamp with `writeTimestampIntoHeap` on the command
+buffer. `endScope` closes the encoder, writes the end timestamp, calls `popDebugGroup` and releases
+the string. Inside a pass a scope is a debug group on the render encoder
+([drawing](metal4-drawing.md)) and claims a pair the same way; the encoder writes it with
+`writeTimestamp` at `TimestampGranularityPrecise` after `RenderStageFragment`, which adds no
+encoder and measured no change in a pass's duration against `Relaxed`. A split pushes the open
+groups again on the resumed encoder but writes no timestamp, so the end timestamp may sit on a
+later encoder than the begin. A render pass claims its pair at `beginRenderPass` and writes it on
+the command buffer right after its debug group, before any encoder of the pass, and after its last
+`endEncoding`, before the pop: its counted draws' kernels and its splits fall inside it. An upscale
+writes its pair around its carrier and MetalFX's encoders (below).
+
+A claim is one relaxed `fetch_add(2)` on the slot's cursor. A slot has up to eight
+`MTL4::CounterHeap`s of 4,096 timestamps, each created on the first claim that needs it and
+published with a compare-exchange (a thread that loses releases its own heap), so recording takes
+no lock and a device that records no scope holds no heap. A scope past the slot's 16,384 pairs, or
+whose heap Metal refuses (Metal allows 32 counter heaps per process or on the system), writes no
+timestamp. A refusal holds until the slot's reuse, so while Metal keeps refusing, a frame makes one
+failed `newCounterHeap` per refused heap it needs (more only when threads race to create it). Metal
+autoreleases objects inside `writeTimestampIntoHeap` (an array, and strings under the validation
+layer), so each write runs inside an autorelease pool of its own; the render encoder's
+`writeTimestamp` autoreleases nothing and opens none.
+
+At the frame wait the core calls the scope-time hook once per queue with records. The first call of
+the frame resolves each heap the slot used, once, with `resolveCounterRange` inside a pool, and
+keeps the data; every call converts each record's pair through `queryTimestampFrequency`, read at
+device creation. An entry Metal resolves as unwritten (zero in a new or invalidated heap, or
+`MTL::CounterErrorValue`) and an end before its begin give 0. The slot's reuse then invalidates
+the used ranges, resets the cursor and logs one warning naming the frame when any scope it reported
+went untimed. `destroyDevice` releases the heaps after the queues drain. `Device::scopeTimings`
+returns the core's report and counts nothing.
+
+## Upscalers
+
+The device lists `MetalFX` when `MTLFX::TemporalScalerDescriptor::supportsMetal4FX` holds.
+`createUpscaler` runs `core::prepareUpscaler`, then refuses with `Unsupported` an extent ratio above
+`supportedInputContentMaxScale` (3 on an M3 Max) or an output under 4 texels in an axis, on which
+MetalFX's creation aborts. It makes an `MTL4FX::TemporalScaler` with the device's compiler, the
+four formats, the reactive mask enabled as `R8Unorm`, content properties enabled with a scale range
+from the whole input's scale to the device's maximum, auto exposure from `AutoExposure` and
+synchronous initialisation; `ReversedDepth` sets `depthReversed`. A nil scaler is `Unsupported`
+naming the extents and formats. The payload also holds an `MTL::Fence` set on the scaler and the
+cleared mask, an `R8Unorm` Private texture of the input extent zeroed through the stager and kept
+in the device set. The pool counts the scaler; the fence and the mask count one `nativeCreateCalls`
+each when made and when the retire hook releases them, inside a pool.
+
+`upscale` runs the core's `upscale`, closes the open encoder and pushes a debug group named after
+the upscale's scope, whose string also labels the carrier: a compute encoder opened only to wait on
+a fence an earlier upscale still owes, then `barrierAfterQueueStages(StageAll, StageDispatch |
+StageBlit, pending visibility | Device)`, which also covers the pending barrier's dispatch and blit
+part, then `updateFence(fence, StageDispatch | StageBlit)` and `endEncoding`; it binds no table. The
+barrier after every stage keeps MetalFX after all earlier work on the queue, an earlier frame's
+MetalFX writes to its history included, which no barrier of the caller names. The upscale's
+begin timestamp precedes the carrier and its end timestamp follows `encodeToCommandBuffer`.
+MetalFX's encoders wait on that fence and update it when they finish. The scaler then takes its six
+textures through `HandlePool::native`, the cleared mask for a null `reactive` and nil for a null
+`exposure`, the content extent (the whole input when zero, raised to the smallest the scaler's scale
+range takes), jitter, motion scale, `preExposure` and `reset`; `encodeToCommandBuffer` and
+`popDebugGroup` follow. The list then owes the fence once to each encoder kind: the first compute
+encoder and the first render encoder it opens each call `waitForFence` for every stage of their kind
+before the opening barrier. At `end` a list that upscaled always emits the trailing encoder, barrier
+pending or not: it waits on the last upscale's fence, then `barrierAfterStages(StageDispatch |
+StageBlit, StageAll)` holds back every stage of every later encoder on the queue, so a later list's
+reads of the output follow MetalFX's writes whatever stages MetalFX runs. A later upscale's carrier
+takes a wait still owed, so its fence, which replaces the earlier one, follows the earlier upscale's
+work. `sharpness` has no effect. An upscale with no encoder open and nothing pending sends 24 native
+calls and one native barrier: the push and a timestamp, five on the carrier, fourteen setters, the
+encode, a timestamp and the pop.
 
 ## Counts
 
 `nativeRecordCalls` counts every message a list sends after `beginList` to its command buffer, an
 encoder or an argument table: `beginCommandBuffer`, `setLabel`, the encoder factories,
 `setArgumentTable`, `setAddress`, `setTexture`, the pipeline, state and store-action setters,
-debug groups, copies, fills, dispatches, draws, executes, `useResidencySet`, barriers,
+debug groups, timestamps, copies, fills, dispatches, draws, executes, `useResidencySet`, barriers,
 `endEncoding` and `endCommandBuffer`; a command deferred to the render encoder's open counts when
 it is replayed. Getters and the setters of a pass descriptor count nothing. A render encoder
 counts in `encodersOpened` like any other, those of a split and the compute encoder of a counted
@@ -193,7 +261,11 @@ three. The core folds a list's counts into the device at submission. Operation c
 open encoder: `uploadFrameData` makes no native call; a buffer copy is one; an equal-byte fill is
 one and an unequal one five (kernel table, two addresses, dispatch, list table; six for the first
 kernel an encoder runs, which also sets the pipeline); a barrier between copies is one native call
-and one native barrier at its emission.
+and one native barrier at its emission; a scope outside a pass is four (the push, two timestamps
+and the pop) beyond the `endEncoding` of each boundary that closes an encoder. A counter heap
+counts one `nativeCreateCalls`, and each resolve and each invalidation of a used heap one
+`nativeHostCalls`. Messages to an upscaler's scaler count as record calls, and the carrier counts
+as an encoder; MetalFX's own encoders are not counted.
 
 ## Commit timing
 
@@ -212,7 +284,11 @@ as are the `[metal4]` tests.
 
 `Tests/Metal4/` holds the `[metal4]` cases of this page: lists and their counts, the encoder,
 copies, barrier forms by native counts, kernels and the fill, clears, per-operation counts and
-commit timing. `Tests/Conformance/` holds T1 cases that read results back through
-`Tests/Support/GpuKit`: copies, initial data, barriers, fills, clears and queue handoff
+commit timing, and upscales. `Metal4TimestampTests.cpp` holds the scope, pass and upscale timestamp
+cases and `Metal4UpscalerTests.cpp` those of the upscaler. `Tests/Conformance/` holds T1 cases that
+read results back through `Tests/Support/GpuKit`: copies, initial data, barriers, fills, clears,
+queue handoff, scope timings (`ScopeConformanceTests.cpp`), upscales
+(`UpscaleConformanceTests.cpp`), every format class (`FormatConformanceTests.cpp`), sparse tiles
+(`SparseConformanceTests.cpp`) and write-only storage accessors (`WriteOnlyConformanceTests.cpp`)
 ([testing](../conventions/testing.md)); the cases of passes, draws and dispatches are listed in
 [drawing](metal4-drawing.md#tests).

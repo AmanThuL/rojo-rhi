@@ -24,6 +24,8 @@
 #include "Metal4ShaderLibrary.h"
 #include "Metal4Stager.h"
 #include "Metal4Textures.h"
+#include "Metal4Timestamps.h"
+#include "Metal4Upscaler.h"
 #include "Metal4Views.h"
 
 #include <Metal/Metal.hpp>
@@ -96,9 +98,9 @@ namespace rojoRHI {
 
         //==============================================================================================================
         /// Returns the command lists of a reused frame slot to its pool, each list's allocator reset, frees the swapchains
-        /// destroyed in the slot's frames, and releases the events of destroyed fences every queue has passed. The frame wait
-        /// before it has proven the slot's work complete, the compute and copy work included, which the frame's graphics work
-        /// joins.
+        /// destroyed in the slot's frames, readies the slot's timestamps, which the scope-time hook has read, and releases the
+        /// events of destroyed fences every queue has passed. The frame wait before it has proven the slot's work complete, the
+        /// compute and copy work included, which the frame's graphics work joins.
         void reuseSlot(void* context, uint32_t slot)
         {
             DeviceImpl& impl = *static_cast<DeviceImpl*>(context);
@@ -113,6 +115,7 @@ namespace rojoRHI {
                 pool.used = 0;
             }
             metal4::freeSlotSwapchains(impl, slot);
+            impl.timestamps.reuse(slot, impl.core.counts());
             metal4::releasePassedFences(impl);
         }
 
@@ -298,7 +301,7 @@ namespace rojoRHI {
             capabilities.placementSparse = impl.device->supportsPlacementSparse();
             capabilities.meshTasksIndirect = impl.device->supportsFamily(MTL::GPUFamilyApple9);
             capabilities.conservativeRaster = false; // Metal 4 has no conservative rasterization.
-            capabilities.upscalers = {};             // No upscaler is created yet.
+            capabilities.upscalers = metal4::metalUpscalers(impl.device);
             impl.core.setFormatTable(metal4::metalFormatTable(impl.device));
         }
     } // namespace
@@ -353,6 +356,7 @@ namespace rojoRHI {
         }
         auto impl = std::make_unique<DeviceImpl>(desc);
         impl->device = device;
+        impl->timestamps.create(device);
         reportCapabilities(*impl);
         impl->core.setSurfaceCheck(metal4::isMetalLayer);
         if (Result<void> created = createNative(*impl); !created)
@@ -374,6 +378,8 @@ namespace rojoRHI {
         hooks.fence = metal4::retireFence;
         hooks.pipeline = metal4::retirePipeline;
         hooks.shaderLibrary = metal4::retireShaderLibrary;
+        hooks.scopeTimes = metal4::scopeTimes;
+        hooks.upscaler = metal4::retireUpscaler;
         impl->core.setRetireHooks(hooks);
         impl->core.setArenaSource(metal4::createArenaPage);
         metal4::setMaxAddrOffset(impl->core.capabilities().limits.maxAddrOffset);
@@ -406,6 +412,8 @@ namespace rojoRHI {
                 }
             }
             metal4::releaseSwapchains(impl);
+            // The heaps go once no queue can still write a timestamp into them.
+            impl.timestamps.release();
             releaseNative(impl);
         }
         delete &impl;

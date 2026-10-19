@@ -111,6 +111,44 @@ namespace rojoRHI::metal4 {
     }
 
     //==================================================================================================================
+    void Encoders::carry(core::CommandListCore& list, ListState& state, MTL::Fence* fence)
+    {
+        ROJORHI_INTERNAL_ASSERT(m_kind == EncoderKind::None, "an upscale's carrier opens while another encoder is open");
+        // The factory autoreleases its encoder, which is used and ended inside the pool.
+        const AutoreleasePool pool;
+        MTL4::ComputeCommandEncoder* carrier = state.commandBuffer->computeCommandEncoder();
+        core::noteNativeCall(list);
+        ++list.counts.encodersOpened;
+        carrier->setLabel(state.scopeLabels.empty() ? state.label : state.scopeLabels.back());
+        core::noteNativeCall(list);
+        if (m_barriers.owedFenceStages != 0)
+        {
+            // An earlier upscale's fence still owed is waited on here too, so this upscale's fence, which replaces it, passes
+            // only after that upscale's work.
+            carrier->waitForFence(m_barriers.owedFence, kComputeStages);
+            core::noteNativeCall(list);
+        }
+        // MetalFX reads its history and scratch resources, which an earlier upscale wrote, in this list or an earlier command
+        // buffer, at stages no barrier of the caller names: the carrier waits for every stage of all earlier work on the
+        // queue, which also covers the pending barrier's part on its own stages, with the pending visibility.
+        carrier->barrierAfterQueueStages(MTL::StageAll, kComputeStages, m_barriers.pendingVisibility | MTL4::VisibilityOptionDevice);
+        core::noteNativeCall(list);
+        ++list.counts.nativeBarriers;
+        m_barriers.pendingDestination &= ~kComputeStages;
+        if (m_barriers.pendingDestination == 0)
+        {
+            m_barriers.pendingSource = 0;
+            m_barriers.pendingVisibility = 0;
+        }
+        // The carrier runs no command, so the fence passes once its stages have waited for all earlier work.
+        carrier->updateFence(fence, kComputeStages);
+        core::noteNativeCall(list);
+        carrier->endEncoding();
+        core::noteNativeCall(list);
+        m_barriers.clearOpen();
+    }
+
+    //==================================================================================================================
     void Encoders::close(core::CommandListCore& list)
     {
         if (m_kind == EncoderKind::None)

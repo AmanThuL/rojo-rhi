@@ -26,6 +26,7 @@
 #include <format>
 #include <initializer_list>
 #include <memory>
+#include <shared_mutex>
 #include <span>
 #include <string>
 #include <string_view>
@@ -97,6 +98,7 @@ namespace rojoRHI {
             const MTL4::CompilerTaskOptions* options = impl.pipelineCache.options();
             hit = options != nullptr && impl.pipelineCache.probe(descriptor);
             *error = nullptr;
+            const std::shared_lock compiling = impl.pipelineCache.compiling();
             return impl.compiler->newRenderPipelineState(descriptor, options, error);
         }
 
@@ -108,6 +110,7 @@ namespace rojoRHI {
             const MTL4::CompilerTaskOptions* options = impl.pipelineCache.options();
             hit = options != nullptr && impl.pipelineCache.probe(descriptor);
             *error = nullptr;
+            const std::shared_lock compiling = impl.pipelineCache.compiling();
             return impl.compiler->newRenderPipelineState(descriptor, options, error);
         }
 
@@ -119,6 +122,7 @@ namespace rojoRHI {
             const MTL4::CompilerTaskOptions* options = impl.pipelineCache.options();
             hit = options != nullptr && impl.pipelineCache.probe(descriptor);
             *error = nullptr;
+            const std::shared_lock compiling = impl.pipelineCache.compiling();
             return impl.compiler->newComputePipelineState(descriptor, options, error);
         }
 

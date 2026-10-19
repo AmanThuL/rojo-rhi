@@ -67,9 +67,10 @@ namespace rojoRHI::metal4 {
     std::vector<MappingGroup> groupMappings(std::span<const TileMapping> mappings, std::span<const MappingTarget> targets);
 
     /// Applies `mappings` on `queue`: the core checks and records them, then each group of `groupMappings` is one
-    /// `updateTextureMappings` or `updateBufferMappings` on the native queue, and a call that maps a buffer ends with a signal
-    /// of the queue's progress event at its current value, which keeps a later texture mapping on the queue from faulting in
-    /// Metal's driver. Each native call counts in `nativeSubmitCalls`; an empty span issues nothing. The caller serialises the
-    /// call with the queue's submissions.
+    /// `updateTextureMappings` or `updateBufferMappings` on the native queue, between two signals of the queue's progress event,
+    /// each with its next value and followed by a wait on the queue for it. The first pair holds the updates until the queue's
+    /// earlier work completes, the second holds its later work until the updates complete, and that one also keeps a later
+    /// texture mapping on the queue from faulting in Metal's driver. Each native call counts in `nativeSubmitCalls`; a call that
+    /// issues no update, such as an empty span, issues nothing. The caller serialises the call with the queue's submissions.
     void mapTiles(QueueImpl& queue, std::span<const TileMapping> mappings);
 } // namespace rojoRHI::metal4

@@ -28,7 +28,9 @@ namespace rojoRHI::metal4 {
         MTL4::ArgumentTable* kernelTable = nullptr;
         NS::String* label = nullptr;          ///< The list's label as the command buffer carries it; replaced at each acquisition.
         std::vector<NS::String*> scopeLabels; ///< The label of each open scope's debug group, innermost last.
-        std::string scratch;                  ///< A NUL-terminated copy of a scope label, made before its string is.
+        /// The timestamp pair each open scope claimed, innermost last: the index of its begin entry, or `core::kNoTimestamp`.
+        std::vector<uint32_t> scopeTimestamps;
+        std::string scratch; ///< A NUL-terminated copy of a scope label, made before its string is.
 
         /// Creates the allocator, the command buffer, the argument table and the kernel table on `device`, binding the view
         /// table at `viewTableAddress` to `buffer(1)` and the sampler table at `samplerTableAddress` to `buffer(2)` (ADR 0018).

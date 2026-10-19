@@ -17,6 +17,7 @@
 #include "Metal4PipelineState.h"
 #include "Support/Backend.h"
 #include "Support/GpuKit.h"
+#include "Support/Metal4/Metal4Timing.h"
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -67,10 +68,11 @@ namespace {
     }
 
     //==================================================================================================================
-    /// What `list` has counted so far.
+    /// What `list` has counted so far; fails the case when a scope it recorded holds no timestamp pair, since the pinned
+    /// counts include both timestamp writes.
     const core::RecordCounts& countsOf(CommandList list)
     {
-        return core::coreOf(list).counts;
+        return test::timedCounts(list);
     }
 
     //==================================================================================================================
@@ -271,10 +273,10 @@ TEST_CASE("a mesh draw with a count runs the writer kernel and one native indire
     CHECK((encodersOf(list).barriers().pendingSource & MTL::StageDispatch) != 0);
     CHECK((encodersOf(list).barriers().pendingDestination & meshStages) == meshStages);
     // The kernels' encoder ends; the render encoder's open with its barrier, the state, the record's binding, the native
-    // indirect draw, endEncoding and the pass's group.
+    // indirect draw, endEncoding, the pass's end timestamp and its group.
     before = callsOf(list);
     list.endRenderPass();
-    CHECK(callsOf(list) - before == 1 + kOpenCalls + 1 + kStateCalls + 2 + 1 + 1);
+    CHECK(callsOf(list) - before == 1 + kOpenCalls + 1 + kStateCalls + 2 + 1 + 2);
     CHECK(drawOf(list).tableDrawRecord == gpuAddressOf(fixture.record(5)));
     // The draw ran in the stages its barrier covered, so nothing is owed after the pass.
     CHECK(encodersOf(list).barriers().pendingDestination == 0);
@@ -325,10 +327,10 @@ TEST_CASE("a mesh batch encodes an ICB whose commands bind the reserved buffers 
     list.drawMeshTasksIndirect(fixture.record(), 4);
     CHECK(paramsOf(kit.device, list, drawOf(list).prefix.back()).objectThreads[0] == 0);
     // The kernels' encoder ends; the render encoder's open with its barrier, the state, the root, each execute, the second
-    // pipeline, endEncoding and the pass's group.
+    // pipeline, endEncoding, the pass's end timestamp and its group.
     before = callsOf(list);
     list.endRenderPass();
-    CHECK(callsOf(list) - before == 1 + kOpenCalls + 1 + kStateCalls + 1 + 3 + 1 + 1 + 1);
+    CHECK(callsOf(list) - before == 1 + kOpenCalls + 1 + kStateCalls + 1 + 3 + 1 + 1 + 2);
     CHECK(encodersOf(list).barriers().pendingDestination == 0);
     kit.run(std::array{ list });
 }
@@ -349,10 +351,12 @@ TEST_CASE("mesh ICBs are reused across frames like the others", "[metal4]")
         list.drawMeshTasksIndirect(fixture.record(), kRecords);
         list.drawMeshTasksIndirect(fixture.record(), kRecords, fixture.counted());
         list.endRenderPass();
+        // The pinned creations include the counter heap the pass's timestamps need.
+        test::requireTimed(list);
         const Counters after = device.counters();
-        // A new list makes its four objects, its first frame-arena page, its residency set and two indirect command buffers; a
-        // reused one makes none.
-        CHECK(after.nativeCreateCalls - before.nativeCreateCalls == (frame < slots ? 4 + 1 + 1 + 2 : 0));
+        // A new list makes its four objects, its first frame-arena page, its residency set and two indirect command buffers,
+        // and the pass's timestamps the frame slot's first counter heap; a reused list and slot make none.
+        CHECK(after.nativeCreateCalls - before.nativeCreateCalls == (frame < slots ? 4 + 1 + 1 + 2 + 1 : 0));
         const metal4::IcbPool& icbs = drawOf(list).icbs;
         REQUIRE(icbs.slots(metal4::IcbKind::Mesh) == 2);
         CHECK(icbs.slots(metal4::IcbKind::Draw) == 0);

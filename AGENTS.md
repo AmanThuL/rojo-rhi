@@ -11,10 +11,10 @@ the validation tracker (ADR 0021): every valid-usage identifier of the API refer
 has a death test. The Metal 4 backend of v2 is partial and not the default: it implements the
 device, capabilities, formats, buffers, heaps, textures, views, samplers, queues, fences and frames,
 shader libraries and pipelines with an archive cache, command lists (copies, fills, clears,
-barriers, scopes, render passes, dynamic state, dispatches, direct, indirect and counted draws and
-mesh tasks), swapchains and presentation on a Metal layer, sparse tiles and capture; the upscale
-entry aborts and upscalers are refused with `Unsupported`. ADR 0001 owns the identity spelling every
-document here applies.
+barriers, timed scopes, render passes, dynamic state, dispatches, direct, indirect and counted
+draws, mesh tasks and MetalFX upscales), swapchains and presentation on a Metal layer, sparse tiles
+and capture, with every scope, render pass and upscale timed. ADR 0001 owns the identity spelling
+every document here applies.
 Luminex is its required consumer: it will mount the library as a submodule at `RojoRHI/` and drive
 every change through a RojoRHI branch and pull request first ([commits](docs/conventions/commits.md)
 owns that workflow). The repository is public and licensed under the Apache License, Version 2.0
@@ -172,11 +172,11 @@ recording](docs/architecture/null-backend-recording.md)).
   supplies none.
 - Metal 4 is the only native backend implemented today, and the v2 one is partial: device,
   resources, queues, fences and frames, shader libraries, pipelines, command lists (copies, fills,
-  clears, barriers, render passes, dispatches and draws), presentation, sparse resources and
-  capture, with upscaling and timestamps still to come. It is not the default (`rojorhi_backend`
-  stays `null`). D3D12 is planned and Vulkan is a design oracle with no code; no document claims
-  either as a capability until it is real. The Null backend is test-only and implements every
-  chapter (ADR 0008).
+  clears, barriers, timed scopes, render passes, dispatches, draws and MetalFX upscales),
+  presentation, sparse resources and capture.
+  It is not the default (`rojorhi_backend` stays `null`). D3D12 is planned and Vulkan is a design
+  oracle with no code; no document claims either as a capability until it is real. The Null
+  backend is test-only and implements every chapter (ADR 0008).
 - Every check lives in `Source/Core`; a backend entry calls the core's check first, then
   translates, and holds no `ROJORHI_VU`. A Metal 4 entry that calls an autoreleasing factory opens
   an `NS::AutoreleasePool`, and so does every retire hook ([Metal 4 backend](

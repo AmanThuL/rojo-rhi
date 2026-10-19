@@ -275,7 +275,7 @@ opens at the pass's first draw that needs no kernel, at a scope boundary inside 
 
 | | Metal 4 | D3D12 | Vulkan |
 |---|---|---|---|
-| Call | `MTL4::CommandBuffer::pushDebugGroup` for the pass's scope; `MTL4::CommandBuffer::renderCommandEncoder` deferred to the pass's first draw that needs no kernel, scope boundary inside it, or `endRenderPass`, with the caller's load actions, and `Load` when a split resumes the pass | `BeginRenderPass` (`ID3D12GraphicsCommandList4`) | `vkCmdBeginRendering` |
+| Call | `MTL4::CommandBuffer::pushDebugGroup` and `MTL4::CommandBuffer::writeTimestampIntoHeap` for the pass's scope; `MTL4::CommandBuffer::renderCommandEncoder` deferred to the pass's first draw that needs no kernel, scope boundary inside it, or `endRenderPass`, with the caller's load actions, and `Load` when a split resumes the pass | `BeginRenderPass` (`ID3D12GraphicsCommandList4`) | `vkCmdBeginRendering` |
 | Cost | native | cheap: starting dynamic state written | native |
 
 ### `CommandList::endRenderPass`
@@ -296,5 +296,5 @@ unbinds the pipeline. The next compute or copy command opens a new Metal 4 compu
 
 | | Metal 4 | D3D12 | Vulkan |
 |---|---|---|---|
-| Call | `MTL4::CommandBuffer::renderCommandEncoder` first when nothing opened it; `MTL4::RenderCommandEncoder::setColorStoreAction`, `setDepthStoreAction` or `setStencilStoreAction` for an attachment that is not `Store` without a resolve; `MTL4::RenderCommandEncoder::endEncoding`; `MTL4::CommandBuffer::popDebugGroup` | `EndRenderPass` | `vkCmdEndRendering` |
+| Call | `MTL4::CommandBuffer::renderCommandEncoder` first when nothing opened it; `MTL4::RenderCommandEncoder::setColorStoreAction`, `setDepthStoreAction` or `setStencilStoreAction` for an attachment that is not `Store` without a resolve; `MTL4::RenderCommandEncoder::endEncoding`; `MTL4::CommandBuffer::writeTimestampIntoHeap` and `MTL4::CommandBuffer::popDebugGroup` | `EndRenderPass` | `vkCmdEndRendering` |
 | Cost | native | native | native |

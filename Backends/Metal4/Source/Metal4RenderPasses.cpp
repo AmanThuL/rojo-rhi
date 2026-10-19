@@ -1,6 +1,6 @@
 //----------------------------------------------------------------------------------------------------------------------
 /// @file Metal4RenderPasses.cpp
-/// @brief Implements render passes for the Metal 4 backend: the pass is recorded, its render encoder opens lazily, splits and ends.
+/// @brief Implements Metal 4 render passes: the pass is recorded and timed, and its render encoder opens lazily, splits and ends.
 //----------------------------------------------------------------------------------------------------------------------
 
 #include "Metal4Device.h"
@@ -18,6 +18,7 @@
 #include "Metal4Encoders.h"
 #include "Metal4Formats.h"
 #include "Metal4ListState.h"
+#include "Metal4Timestamps.h"
 
 #include <Foundation/Foundation.hpp>
 #include <Metal/Metal.hpp>
@@ -296,6 +297,9 @@ namespace rojoRHI {
         state.commandBuffer->pushDebugGroup(string);
         core::noteNativeCall(list.core);
         state.scopeLabels.push_back(string);
+        // The begin timestamp goes before any encoder of the pass, so the pass's duration takes in the kernels of its counted
+        // draws and the encoders its splits resume.
+        metal4::writeBetweenEncoders(list, metal4::claimPair(list));
         // A record's payload is fixed from creation to retirement, so each texture is read with one load and no lock (ADR 0020).
         const auto& textures = list.core.device->pool<Texture>();
         metal4::DrawState& draw = list.draw;
@@ -343,6 +347,8 @@ namespace rojoRHI {
         metal4::ensureRender(list);
         metal4::finishPass(list, false);
         list.encoders.close(list.core);
+        // The end timestamp follows the pass's last encoder.
+        metal4::writeBetweenEncoders(list, metal4::popPairEnd(list));
         metal4::ListState& state = list.state;
         state.commandBuffer->popDebugGroup();
         core::noteNativeCall(list.core);

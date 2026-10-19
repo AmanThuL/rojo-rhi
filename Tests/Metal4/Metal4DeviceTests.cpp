@@ -182,12 +182,11 @@ TEST_CASE("the format table narrows storage, R32Float resolve and depth filterin
 }
 
 //======================================================================================================================
-TEST_CASE("the device reports no upscaler or conservative raster, upload in device memory and mesh tasks on Apple9", "[metal4]")
+TEST_CASE("the device reports no conservative raster, upload in device memory and mesh tasks on Apple9", "[metal4]")
 {
     Device device = *createDevice();
     MTL::Device* native = nativeOf(device);
     const Capabilities& caps = device.capabilities();
-    CHECK(caps.upscalers.empty());
     CHECK_FALSE(caps.conservativeRaster);
     CHECK(caps.uploadInDeviceMemory);
     CHECK(caps.meshTasksIndirect == native->supportsFamily(MTL::GPUFamilyApple9));

@@ -5,13 +5,12 @@
 This page describes the Metal 4 backend of the v2 interface as it stands: the part that creates a
 device, reports its capabilities, owns buffers, heaps, textures, views and samplers, and runs
 queues, fences and frames, loads shader libraries, creates and caches pipelines, records command
-lists (copies, fills, clears, barriers, scopes, render passes, dispatches, direct and counted
-draws), presents swapchains on a Metal layer, maps placement sparse resources and captures
-programmatically ([drawing](metal4-drawing.md), [the edges](metal4-backend-edges.md)). Upscaling and
-timestamps arrive with later work. The API reference under `docs/spec/` stays the authority on every
-entry's semantics and Metal 4 mapping; [the Null backend](null-backend.md) describes the shared core
-this backend translates to. The backend builds with `xmake f --rojorhi_backend=metal4`, on macOS
-only, and `null` stays the default.
+lists (copies, fills, clears, barriers, timed scopes, render passes, dispatches, direct and counted
+draws, MetalFX upscales), presents swapchains on a Metal layer, maps placement sparse resources and
+captures programmatically ([drawing](metal4-drawing.md), [the edges](metal4-backend-edges.md)). The
+API reference under `docs/spec/` stays the authority on every entry's semantics and Metal 4 mapping;
+[the Null backend](null-backend.md) describes the shared core this backend translates to. The
+backend builds with `xmake f --rojorhi_backend=metal4`, on macOS only, and `null` stays the default.
 
 ## What exists
 
@@ -29,23 +28,19 @@ only, and `null` stays the default.
 | Sparse | `Metal4Sparse.*` | the format probe, measured tile shapes, `Queue::mapTiles` |
 | Capture | `Metal4Capture.*` | `beginCapture`, `endCapture` |
 | Lists | `Metal4CommandList.cpp`, `Metal4ListState.*`, `Metal4Scopes.cpp` | `acquireCommandList`, `end`, `uploadFrameData`, the frame-arena pages, scopes |
+| Timestamps | `Metal4Timestamps.*` | the counter heaps of each frame slot, the timestamp writes of scopes, passes and upscales, the scope-time hook, `scopeTimings`' durations |
 | Recording | `Metal4Encoders.*`, `Metal4Copies.cpp`, `Metal4Clears.cpp`, `Metal4Barriers.*` | the open encoder, copies and fills, clears, barrier lowering |
 | Kernels | `Metal4Kernels.*`, `Backends/Metal4/Kernels/`, `xmake/kernels.lua` | the embedded library, the fill, clear and counted-draw pipelines |
 | Libraries and pipelines | `Metal4ShaderLibrary.*`, `Metal4Pipelines.cpp`, `Metal4PipelineState.*`, `Metal4PipelineCache.*` | `loadShaderLibrary`, `createPipeline`, the depth-stencil cache, the archive cache |
 | Drawing | `Metal4RenderPasses.cpp`, `Metal4DrawState.*`, `Metal4GraphicsState.cpp`, `Metal4Draws.cpp`, `Metal4Dispatches.cpp`, `Metal4Indirect.cpp`, `Metal4Icb.*` | passes, the prefix, state, draws, dispatches, counted draws |
+| Upscalers | `Metal4Upscaler.*` | `createUpscaler`, `upscale`, the scaler's fence and cleared reactive mask |
 | Commit timing | `CommitTiming.h`, `Metal4CommitTiming.cpp` | the test-only seam that reports each commit's GPU time |
 | Helpers | `Metal4Common.*` | autorelease pools, string conversion, bounded event waits |
 
-[Command recording](metal4-recording.md) describes the lists and [drawing](metal4-drawing.md)
-passes, pipelines and draws. Every entry not implemented yet takes one of two forms:
-
-- `Device::createUpscaler` runs `core::prepareUpscaler`, whose kind check returns
-  `ErrorCategory::Unsupported` because the device lists no upscaler kind.
-- `CommandList::upscale` logs `<entry> is not implemented by the Metal 4 backend` and aborts in
-  every build, after the core's handle check, so a default-constructed object still fails
-  `VU-rojo-core-0004` first. The core serves the destroy of upscalers and `tileShape`. The device
-  reports no upscaler and no conservative rasterisation, and `scopeTimings` reports no durations;
-  that arrives with timestamps.
+[Command recording](metal4-recording.md) describes the lists, scopes and upscales, and
+[drawing](metal4-drawing.md) passes, pipelines and draws. Every entry of the interface is
+implemented and none aborts as unimplemented. The device reports no conservative rasterisation.
+`scopeTimings` reports the duration of every scope, render pass and upscale.
 
 ## Device objects and teardown
 
@@ -64,8 +59,10 @@ event, described under fences. Any failure releases what exists in reverse and r
 event and waiting for it, then committing an empty command buffer with a feedback handler and
 waiting for the handler (Metal making no event or buffer is fatal, since nothing could be released
 safely), so the retire hooks that `beginDestroy` runs find idle queues; `VU-rojo-device-0002`
-therefore fires after the drain. It then releases the native objects in reverse order of creation.
-The device's own objects and the calls that create, drain and release them are not counted.
+therefore fires after the drain. It then releases the lists' objects, the swapchains still held,
+the counter heaps scopes created on first need ([command recording](metal4-recording.md)) and the
+native objects in reverse order of creation. The device's own objects and the calls that create,
+drain and release them are not counted.
 
 `createDevice` leaves the residency set dirty: the first submission, or the first staged upload,
 commits it. Capabilities come from the device and from the Metal 4 column of the limits table of
@@ -109,9 +106,10 @@ A pool clears a slot's table entry before the retire hook runs, so a racing misu
 never a dangling pointer, and the hook then releases the object and sets the record's field to null.
 A hook opens an autorelease pool, tolerates a null payload and releases in reverse order of
 creation. The backend registers hooks for buffers, heaps, textures, fences, views, samplers,
-shader libraries and pipelines, a `frameSlot` hook that returns a slot's lists to their pool and
-releases the fence events the queues have passed and a `waitFrame` hook; the upscaler hook is null
-because nothing native backs upscalers yet.
+shader libraries, pipelines and upscalers ([command recording](metal4-recording.md#upscalers)), a
+`frameSlot` hook that returns a slot's lists to their pool, frees the swapchains destroyed in the
+slot's frames, readies the slot's timestamps and releases the fence events the queues have passed,
+a `scopeTimes` hook that converts the slot's timestamps and a `waitFrame` hook.
 
 ## Addresses and the address map
 
@@ -145,14 +143,13 @@ tests read Private memory back through the same path.
 
 ## Views, samplers and the ID tables
 
-The device owns two Shared buffers of `MTL::ResourceID`, `rojorhi.viewTable` with `maxViews`
-entries and `rojorhi.samplerTable` with `maxSamplers`, both resident through the device set. An
-index handed to a shader selects one entry. `createView` and `writeView` make the native view,
-read its resource ID, place the payload in the core's slot allocator and only then write the ID,
-so a slot that was refused holds no ID. The view is the texture itself, retained, when it has the
-texture's type, pixel format and whole range, and otherwise an `MTL::Texture` view labelled
-`<texture>.view`; stencil views use `X32_Stencil8`. A sampler is an `MTL::SamplerState` built from a
-descriptor.
+The device owns two Shared buffers of `MTL::ResourceID`, `rojorhi.viewTable` with `maxViews` entries
+and `rojorhi.samplerTable` with `maxSamplers`, both resident through the device set. An index handed
+to a shader selects one entry. `createView` and `writeView` make the native view, read its resource
+ID, place the payload in the core's slot allocator and only then write the ID, so a slot that was
+refused holds no ID. The view is the texture itself, retained, when it has the texture's type, pixel
+format and whole range, and otherwise an `MTL::Texture` view labelled `<texture>.view`; stencil
+views use `X32_Stencil8`. A sampler is an `MTL::SamplerState` built from a descriptor.
 
 The slot allocator holds the payload (see [view and sampler slots](null-backend.md)). A write
 replaces a slot's payload, and the old one waits for the frame of the write; a release hands the
@@ -166,25 +163,25 @@ so every backend rejects the same descriptors.
 
 ## Queues, fences and frame pacing
 
-A fence is an `MTL::SharedEvent` created at its initial value and labelled. `Queue::submit` runs
-the core's list checks, then under the tracker's lock checks the fences, replays the lists,
-commits the residency set when dirty, records the signals as completing later, calls
-`MTL4::CommandQueue::wait` for each wait, commits the lists' command buffers in one `commit` and
-calls `signalEvent` for each signal. `completedValue` reads the
-event and reports it to the core; `Device::wait` follows chapter 10: zero polls, an unlimited wait
-loops in 10 s slices that each log a warning with the fence's label, a finite one rounds up to
-milliseconds.
+A fence is an `MTL::SharedEvent` created at its initial value and labelled. `Queue::submit` runs the
+core's list checks, then under the tracker's lock checks the fences, replays the lists, commits the
+residency set when dirty, records the signals as completing later, calls `MTL4::CommandQueue::wait`
+for each wait, commits the lists' command buffers in one `commit` and calls `signalEvent` for each
+signal. `completedValue` reads the event and reports it to the core; `Device::wait` follows chapter
+10: zero polls, an unlimited wait loops in 10 s slices that each log a warning with the fence's
+label, a finite one rounds up to milliseconds.
 
 A fence's native event must outlive every submission that waits on it or signals it, yet
 `Device::destroy` defers the release only to the frame slot's retirement and the caller never tracks
 GPU progress. Each queue therefore owns a progress event that only it signals: a submission that
-names a fence signals it with the next progress value, with no lock, allocation or native read.
+names a fence signals it with the next progress value, with no lock, allocation or native read, and
+`mapTiles` signals and waits on it around its updates
+([sparse resources](metal4-backend-edges.md#sparse-resources)).
 `Device::destroy(Fence)` snapshots each queue's last progress value and, unless every queue has
-already passed it, keeps the event retained, and in the same call it releases the kept events that
-every queue has passed, so they stay bounded even when no frame begins. The kept events are
-released, inside a pool, when every queue has passed its snapshot; the check runs at each frame-slot
-reuse, reading a queue's progress only when a kept event waits for it, and at `destroyDevice`, after
-the drain.
+already passed it, keeps the event retained; the same call releases the kept events that every queue
+has passed, so they stay bounded even when no frame begins. The kept events are released, inside a
+pool, when every queue has passed its snapshot; the check runs at each frame-slot reuse, reading a
+queue's progress only when a kept event waits for it, and at `destroyDevice`, after the drain.
 
 Frames pace on the graphics queue. `endFrame` signals the frame event, `rojorhi.frame`, with the
 frame number; `beginFrame` reaches the `waitFrame` hook before it retires the slot it reuses and
@@ -222,23 +219,28 @@ The backend's mutexes nest in one order, outermost first:
 
 1. the frame arena's, the validation tracker's or the stager's, which never nest in one another;
 2. a `HandlePool`'s, such as the buffer pool's;
-3. the residency set's, the Debug address map's, `Presentation::mutex`, the depth-stencil cache's
-   or the pipeline cache's, which are leaves: nothing is taken while any of them is held, and none
-   is taken inside another.
+3. the residency set's, the Debug address map's, `Presentation::mutex`, the depth-stencil cache's,
+   the pipeline cache's or the scope log's, which are leaves: nothing is taken while any of them is
+   held, and none is taken inside another.
 
 A thread may skip a level but never takes a lock of an earlier level while it holds one of a later
 level. Claiming an arena page holds the arena's mutex while it adds the page to the residency set,
-then to the buffer pool, then in Debug to the address map, one after another. A retire hook runs
-under its pool's mutex and takes the residency set's and, for a buffer, the address map's; it calls
-neither a pool nor the arena. A pipeline creation takes the depth-stencil cache's mutex, and
-`pipelineCacheData` the pipeline cache's, each alone and only at creation, never while recording.
-`Queue::submit` takes the residency set's mutex and, through
-`flushPresentation`, the presentation mutex inside the tracker's lock (the tracker's lock is held
-only on a validating device), and a copy takes the residency set's inside the stager's. The
-presentation mutex is never held across `nextDrawable` or the latency wait; `acquire` waits on the
-latency state's own mutex and condition variable, which are leaves and are never taken with another
-lock held. Creating a buffer or texture takes no two of them at once: it adds the object to the
-residency set, then to its pool, then to the address map, releasing each before the next.
+then to the buffer pool, then in Debug to the address map. A retire hook runs under its pool's mutex
+and takes the residency set's and, for a buffer, the address map's; it calls neither a pool nor the
+arena. A pipeline creation takes the depth-stencil cache's mutex, and `pipelineCacheData` the
+pipeline cache's, each alone and only at creation, never while recording; a creation also holds the
+pipeline cache's lock shared across its native compile, alone, so it stays a leaf. `createUpscaler`
+takes a process-wide mutex of `Metal4Upscaler.cpp` around `newTemporalScaler` with no other lock
+held, and inside it the pipeline cache's lock shared (MetalFX fills a process-wide table of Metal's
+without a lock, so scalers are created one at a time on every device). Nothing else takes that mutex
+and nothing is taken while the cache's lock is held, so the two never nest the other way. The scope
+log's mutex is taken alone, by a submission and by `beginFrame`'s retire; the `scopeTimes` hook that
+runs under it takes no lock. `Queue::submit` takes the residency set's mutex and, through
+`flushPresentation`, the presentation mutex inside the tracker's lock, and a copy takes the
+residency set's inside the stager's. The presentation mutex is never held across `nextDrawable` or
+the latency wait; `acquire` waits on the latency state's own mutex and condition variable, which are
+leaves taken with no other lock held. Creating a buffer or texture takes no two of them at once: the
+residency set, then its pool, then the address map, each released before the next.
 
 `Queue::submit` holds the tracker's lock, which only a validating device takes, from the check to
 its last native call. Inside it, it takes the fence pool's mutex once for each fence it checks and
@@ -247,11 +249,12 @@ the lookups its checks and the replay make, each released before the next, and t
 mutex only when the set is dirty. A clean set costs one atomic load, so residency adds no lock to a
 submission once the set is committed.
 
-Two more mutexes are taken alone, never with another held: each frame slot's list pool's, taken by
-`acquireCommandList` and by the frame-slot reuse (acquisition is free-threaded and is not recording
-under ADR 0020, as on Null), and the kept fence events', taken by `Device::destroy(Fence)` after the
-core's destroy has released the fence pool's and by the frame-slot reuse after it has released the
-list pool's. The view and sampler hooks run under their slot allocator's mutex and take none.
+Two more mutexes are taken alone: each frame slot's list pool's, taken by `acquireCommandList` and
+by the frame-slot reuse (acquisition is free-threaded and is not recording under ADR 0020, as on
+Null), and the kept fence events', taken by `Device::destroy(Fence)` after the core's destroy has
+released the fence pool's and by the frame-slot reuse after it has released the list pool's. The
+view and sampler hooks run under their slot allocator's mutex and take none. The timestamp heaps
+take no lock: a claim is an atomic add and a heap is published by a compare-exchange.
 
 ## Autorelease pools
 

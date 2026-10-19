@@ -11,6 +11,7 @@
 #include "Metal4Device.h"
 #include "Metal4Encoders.h"
 #include "Metal4Kernels.h"
+#include "Support/Metal4/Metal4Timing.h"
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -34,10 +35,11 @@ namespace {
     }
 
     //==================================================================================================================
-    /// What `list` has counted so far.
+    /// What `list` has counted so far; fails the case when a scope it recorded holds no timestamp pair, since the pinned
+    /// counts include both timestamp writes.
     const core::RecordCounts& countsOf(CommandList list)
     {
-        return core::coreOf(list).counts;
+        return test::timedCounts(list);
     }
 
     //==================================================================================================================

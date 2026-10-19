@@ -34,15 +34,15 @@ commits, the descriptors it builds), tagged `[metal4]`; it may include `Backends
 headers and metal-cpp. `Tests/Core/` holds the core's internals, such as the handle pool, tagged
 `[core]`, and may include private headers; it builds with Null only, as `Tests/Null/` does.
 `Tests/Support/` holds shared helpers, and `Tests/Support/Null/` and `Tests/Support/Metal4/` the
-helpers of each backend (the Metal 4 ones create a surface, read Private memory back and report
-`runsOnGpu`): `Death.h`, `Null/NullLibrary.h` (builds Null shader library blobs, including ones the
-backend must refuse), `PassKit.h` (a device with an open frame, a library, a list, attachment
-textures and pipelines for recording tests; it loads its library on first use) and `GpuKit.h` (a
-device with an open frame that runs lists to completion on the GPU and reads buffers and textures
-back through public entries, for conformance cases). On Null the `contract` entry runs `[contract]`,
-`[core]` and `[null]` and excludes `[death]`; on Metal 4 it runs `[contract]` and `[metal4]`, with
-the Metal 4 entries running from the test directory under `MTL_DEBUG_LAYER=1`. Release CI runs it
-too. A failing validation-layer message is a failure.
+helpers of each backend (the Metal 4 ones create a surface, read Private memory back, report
+`runsOnGpu` and guard counts that include timestamp writes): `Death.h`, `Null/NullLibrary.h` (builds
+Null shader library blobs, including ones the backend must refuse), `PassKit.h` (a device with an
+open frame, a library, a list, attachment textures and pipelines for recording tests; it loads its
+library on first use) and `GpuKit.h` (a device with an open frame that runs lists to completion on
+the GPU and reads buffers and textures back through public entries, for conformance cases). On Null
+the `contract` entry runs `[contract]`, `[core]` and `[null]` and excludes `[death]`; on Metal 4 it
+runs `[contract]` and `[metal4]`, with the Metal 4 entries running from the test directory under
+`MTL_DEBUG_LAYER=1`. Release CI runs it too. A failing validation-layer message is a failure.
 
 The Metal 4 surfaces (`test::surface`) are `CAMetalLayer`s outside any window, created on first
 use and shared by the process; each starts with a drawable size of 256 x 256, as a Null surface
@@ -67,13 +67,12 @@ edges](../architecture/metal4-backend-edges.md#presenting-under-objc_debug_missi
 sources).
 
 Metal 4 builds `Tests/Contract/` minus the files named in `metal4_pending` in `xmake/targets.lua`,
-the contract files of chapters the backend does not implement yet. A file leaves the list when it
-passes whole on Metal 4, a name that matches no file fails the configuration, and the list ends
-empty. Today it holds six files, each with cases that need `Device::createUpscaler` or
-`CommandList::upscale`, which the backend does not implement: `DiagnosticsTests.cpp`,
-`LifetimeDeathTests.cpp`, `TrackerDeathTests.cpp`, `TrackerTests.cpp`, `UpscaleDeathTests.cpp`
-and `UpscalerTests.cpp`. The contract files of passes, pipelines, draws and dispatches run on
-Metal 4.
+contract files that have not yet passed whole on the backend. A file leaves the list when it passes
+whole on Metal 4, a name that matches no file fails the configuration, and the list ends empty.
+Today it holds six files, each with cases that need `Device::createUpscaler` or
+`CommandList::upscale`: `DiagnosticsTests.cpp`, `LifetimeDeathTests.cpp`, `TrackerDeathTests.cpp`,
+`TrackerTests.cpp`, `UpscaleDeathTests.cpp` and `UpscalerTests.cpp`. The contract files of passes,
+pipelines, draws and dispatches run on Metal 4.
 
 **Death tests** pin each Debug-tier valid-usage rule (ADR 0009). A death test is a `TEST_CASE` named
 `"<identifier> <behaviour>"`, such as `"VU-rojo-device-0003 beginFrame runs while a frame is open"`,
@@ -117,7 +116,14 @@ skips the case where `test::runsOnGpu()` is false: always on Null, never on Meta
 need a GPU; Catch2 exits non-zero when every case skips, which is why Null has no `conformance`
 entry. They use public entries only and run on Metal 4 under `MTL_DEBUG_LAYER=1`. A case whose
 commands a kernel encodes into an indirect command buffer runs under API validation only:
-`MTL_SHADER_VALIDATION` silently drops such commands, so a run under it proves nothing.
+`MTL_SHADER_VALIDATION` silently drops such commands, so a run under it proves nothing. On Metal 4
+a case that leaks a device keeps its counter heaps, and Metal allows 32 per process or on the
+system, so timed cases after it may report 0; a case destroys its devices on every path, as the
+fixtures do. For the same reason no other GPU test process may run while timed cases, or the
+`[metal4]` count pins that include timestamp writes, are checked. Those pins read a list's counts
+through `test::timedCounts` or call `test::requireTimed` (`Tests/Support/Metal4/Metal4Timing.h`)
+first, which fails the case, naming the refusal, when a scope the list recorded holds no timestamp
+pair, rather than reporting a count two calls short.
 
 **Validation tests (v1)** pin what the interface rejects. The predicates behind each
 `ROJORHI_ASSERT` precondition are testable functions, so a case asserts that an invalid range, an

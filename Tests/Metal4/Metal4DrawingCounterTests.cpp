@@ -5,6 +5,7 @@
 #include <rojoRHI/RHI.h>
 
 #include "Support/Backend.h"
+#include "Support/Metal4/Metal4Timing.h"
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -149,6 +150,8 @@ namespace {
                 each(list, index);
             }
             close(list);
+            // The pinned counts include the timestamp writes of each pass and scope.
+            test::requireTimed(list);
             list.end();
             const Fence fence = *device.createFence(0, "test.done");
             const std::array<FenceValue, 1> signal{ FenceValue{ fence, 1 } };
@@ -299,18 +302,18 @@ TEST_CASE("C8: a pass from barrier to endRenderPass costs the registered native 
         },
         nothing
     );
-    // The registered 13 less the two timestamps that scope timings write, 11: the pass's debug group pushed and popped, the
+    // The registered 13: the pass's debug group pushed and popped and its two timestamps on the command buffer, the
     // encoder's open, label, table and consumer barrier, the pipeline, viewport, scissor, the draw and endEncoding. The
-    // pipeline's winding adds one call per encoder, so the pin is 12. N's 12 already leaves out the argument table and
-    // includes both timestamps, so the like-for-like budget is N's 10 without them plus c (7), 17, a margin of 5.
-    CHECK(per.calls == 12);
-    CHECK(per.calls <= 10 + 7);
+    // pipeline's winding adds one call per encoder, so the pin is 14. N's 12 leaves out the argument table, so the budget is
+    // N's 12 plus c (7), 19, a margin of 5.
+    CHECK(per.calls == 14);
+    CHECK(per.calls <= 12 + 7);
     CHECK(per.encoders == 1);
     CHECK(per.barriers == 1);
 }
 
 //======================================================================================================================
-TEST_CASE("C10: a counted drawIndirect of 256 records is three native calls per draw and sixteen per pass", "[metal4]")
+TEST_CASE("C10: a counted drawIndirect of 256 records is three native calls per draw and eighteen per pass", "[metal4]")
 {
     Fixture fixture;
     const Addr records = fixture.device.address(fixture.records);
@@ -342,9 +345,10 @@ TEST_CASE("C10: a counted drawIndirect of 256 records is three native calls per 
         nothing
     );
     INFO("the per-pass total with one draw: calls " << pass.calls << ", barriers " << pass.barriers << ", encoders " << pass.encoders);
-    // Sixteen beyond the draw's three: both encoders' opens and ends, the pass's debug group, the kernels' pipeline, table
-    // and residency set, the barrier that orders the kernels before the vertex stage and the render encoder's state.
-    CHECK(pass.calls == slope.calls + 16);
+    // Eighteen beyond the draw's three: both encoders' opens and ends, the pass's debug group and its two timestamps, the
+    // kernels' pipeline, table and residency set, the barrier that orders the kernels before the vertex stage and the render
+    // encoder's state.
+    CHECK(pass.calls == slope.calls + 18);
     CHECK(pass.barriers == 1);
     CHECK(pass.encoders == 2);
 }
@@ -380,7 +384,7 @@ TEST_CASE("C10 at maxCount 1 with a null count is the writer path", "[metal4]")
         nothing
     );
     INFO("the per-pass total with one draw: calls " << pass.calls << ", barriers " << pass.barriers << ", encoders " << pass.encoders);
-    CHECK(pass.calls == slope.calls + 16);
+    CHECK(pass.calls == slope.calls + 18);
     CHECK(pass.barriers == 1);
     CHECK(pass.encoders == 2);
 }

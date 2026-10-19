@@ -503,6 +503,60 @@ TEST_CASE("pipelineCacheData runs beside createPipeline on other threads", "[met
 }
 
 //======================================================================================================================
+TEST_CASE("pipelineCacheData beside the compilation of distinct pipelines loses none of them", "[metal4]")
+{
+    // Distinct pipelines, so each creation compiles and records into the serializer while the harvests flush it; with
+    // repeated descriptors the debug compiler serves most creations itself and the two rarely overlap.
+    static constexpr std::array<Format, 8> kFormats = { Format::BGRA8Unorm, Format::RGBA8Unorm, Format::RGBA8Unorm_sRGB, Format::RGBA16Float,
+                                                        Format::RG16Float,  Format::R8Unorm,    Format::R16Float,        Format::R32Float };
+    static constexpr std::array<Format, 3> kDepths = { Format::Undefined, Format::D32Float, Format::D32FloatS8 };
+    const auto desc = [](ShaderLibrary library, std::span<const ColorTarget> color, int n) {
+        return GraphicsPipelineDesc{
+            .vertex = { library, "vsMain" }, .fragment = { library, "fsMain" }, .colors = color, .depthFormat = kDepths[n / 8], .label = "test.render"
+        };
+    };
+    Device device = *createDevice();
+    const ShaderLibrary library = loadStandard(device);
+    std::atomic<int> running = 4;
+    std::atomic<int> failures = 0;
+    std::vector<std::thread> creators;
+    for (int t = 0; t < 4; ++t)
+    {
+        creators.emplace_back([&, t] {
+            for (int i = 0; i < 6; ++i)
+            {
+                const int n = t * 6 + i;
+                const std::array<ColorTarget, 1> color = { ColorTarget{ .format = kFormats[n % 8] } };
+                failures += device.createPipeline(desc(library, color, n)).has_value() ? 0 : 1;
+            }
+            --running;
+        });
+    }
+    int harvestFailures = 0;
+    do
+    {
+        harvestFailures += device.pipelineCacheData().has_value() ? 0 : 1;
+    } while (running.load() > 0);
+    for (std::thread& creator : creators)
+    {
+        creator.join();
+    }
+    CHECK(failures.load() == 0);
+    CHECK(harvestFailures == 0);
+    CHECK(device.counters().pipelinesCreated == 24);
+    const std::vector<std::byte> blob = harvest(device);
+    destroyDevice(device);
+
+    // Each pipeline was recorded before or after a harvest, never across one, so the final blob holds each; one is checked.
+    Device later = deviceWith(blob);
+    const ShaderLibrary again = loadStandard(later);
+    const std::array<ColorTarget, 1> color = { ColorTarget{ .format = kFormats[23 % 8] } };
+    REQUIRE(later.createPipeline(desc(again, color, 23)).has_value());
+    CHECK(later.counters().pipelineCacheHits == 1);
+    destroyDevice(later);
+}
+
+//======================================================================================================================
 TEST_CASE("a device that created no pipeline returns a blob a later device accepts", "[metal4]")
 {
     Device first = *createDevice();

@@ -21,6 +21,7 @@
 #include "Metal4Residency.h"
 #include "Metal4Stager.h"
 #include "Metal4Swapchain.h"
+#include "Metal4Timestamps.h"
 
 #include "CommitTiming.h"
 
@@ -40,18 +41,20 @@ namespace rojoRHI {
 
     /// The Metal 4 backend's queue: its type, the device that owns it, which is how a queue used with another device is told
     /// apart, the native queue it submits to, and a progress event only it signals: after each submission that names a fence,
-    /// and after each tile mapping call that maps a buffer. A native queue does not retain the events it waits on or signals, so a destroyed fence's event is
-    /// kept until every queue's progress passes the value it had at the destruction (`metal4::releasePassedFences`).
+    /// and before and after the native updates of each tile mapping call. A native queue does not retain the events it waits
+    /// on or signals, so a destroyed fence's event is kept until every queue's progress passes the value it had at the
+    /// destruction (`metal4::releasePassedFences`).
     struct QueueImpl
     {
         DeviceImpl* device = nullptr;         ///< The device that owns the queue.
         QueueType type = QueueType::Graphics; ///< The queue's type.
         MTL4::CommandQueue* native = nullptr; ///< The native queue, owned by the device.
-        /// Signalled by this queue alone: after each submission that names a fence, with the next progress value, and after each
-        /// `mapTiles` call that maps a buffer, with the current value, so a later texture mapping does not fault in the driver.
+        /// Signalled by this queue alone, each time with the next progress value: after each submission that names a fence, and
+        /// before and after the native updates of each `mapTiles` call, each of those two signals followed by a wait on the
+        /// queue for it, which orders the updates against the queue's other work.
         MTL::SharedEvent* progress = nullptr;
-        /// The last value submitted for signal on `progress`. Only `submit`, which the caller serialises per queue, writes it;
-        /// a fence's destruction reads it, after the submissions that named the fence.
+        /// The last value submitted for signal on `progress`. Only `submit` and `mapTiles`, which the caller serialises per
+        /// queue, write it; a fence's destruction reads it, after the submissions that named the fence.
         std::atomic<uint64_t> progressValue = 0;
         /// The command buffers of the submission being committed, kept for its capacity. Only `submit` touches it.
         std::vector<MTL4::CommandBuffer*> commitBuffers;
@@ -146,6 +149,7 @@ namespace rojoRHI {
         metal4::Stager stager;
         bool residencyAttached = false; ///< True while every queue, the upload queue included, holds `residency`.
         metal4::AddressMap addresses;   ///< Buffers by GPU address for `core::decodeAddr`; Debug builds only.
+        metal4::Timestamps timestamps;  ///< The counter heaps of each frame slot, which time the scopes.
         /// Signalled on the graphics queue with each frame's number when the frame ends; `beginFrame` waits on it.
         MTL::SharedEvent* frameEvent = nullptr;
         std::mutex retiringMutex;                          ///< Guards `retiringEvents` and `progressSeen`.

@@ -110,7 +110,7 @@ one upscaler serves dynamic resolution without re-creation.
 | | Metal 4 | D3D12 | Vulkan |
 |---|---|---|---|
 | Descriptor | `MTLFX::TemporalScalerDescriptor` | unverified: FSR `ffxCreateContextDescUpscale`; DLSS `NVSDK_NGX_DLSS_Create_Params`; XeSS `xess_d3d12_init_params_t` | unverified: FSR `ffxCreateContextDescUpscale`; DLSS `NVSDK_NGX_DLSS_Create_Params`; XeSS `xess_vk_init_params_t` |
-| Dynamic content | `inputContentPropertiesEnabled`, with the scale range derived from `input`, `output` and device support | unverified: FSR `FFX_UPSCALE_ENABLE_DYNAMIC_RESOLUTION`; DLSS and XeSS take a per-frame input size | the same as D3D12 |
+| Dynamic content | `inputContentPropertiesEnabled`, with the scale range derived from `input`, `output` and device support; a content extent whose scale passes `supportedInputContentMaxScale` is raised to the smallest the range takes | unverified: FSR `FFX_UPSCALE_ENABLE_DYNAMIC_RESOLUTION`; DLSS and XeSS take a per-frame input size | the same as D3D12 |
 | Cost | native | native | native |
 
 ### `Device::createUpscaler`
@@ -127,7 +127,7 @@ refuses the object. Creation is free-threaded and synchronous.
 #### Mapping
 | | Metal 4 | D3D12 | Vulkan |
 |---|---|---|---|
-| Call | `MTLFX::TemporalScalerDescriptor::newTemporalScaler(device, compiler)` | unverified: FSR `ffxCreateContext`; DLSS `NVSDK_NGX_D3D12_CreateFeature`; XeSS `xessD3D12CreateContext` and `xessD3D12Init` | unverified: FSR `ffxCreateContext`; DLSS `NVSDK_NGX_VULKAN_CreateFeature`; XeSS `xessVKCreateContext` and `xessVKInit` |
+| Call | `MTLFX::TemporalScalerDescriptor::newTemporalScaler(device, compiler)`, one at a time in the process under a backend mutex, because MetalFX creation fills a table of Metal's without a lock; an extent ratio above `supportedInputContentMaxScale` or an output under 4 texels in an axis is refused first | unverified: FSR `ffxCreateContext`; DLSS `NVSDK_NGX_D3D12_CreateFeature`; XeSS `xessD3D12CreateContext` and `xessD3D12Init` | unverified: FSR `ffxCreateContext`; DLSS `NVSDK_NGX_VULKAN_CreateFeature`; XeSS `xessVKCreateContext` and `xessVKInit` |
 | Cost | native | cheap: DLSS feature creation records into a backend-owned command list | cheap: DLSS feature creation records into a backend-owned command buffer |
 
 ### `UpscaleParams`
@@ -207,4 +207,4 @@ operation forms its own debug group named `params.label`, defaulted to `rojorhi.
 | | Metal 4 | D3D12 | Vulkan |
 |---|---|---|---|
 | Call | set the scaler's inputs, then `MTL4FX::TemporalScaler::encodeToCommandBuffer` between encoders | unverified: FSR `ffxDispatch`; DLSS `NGX_D3D12_EVALUATE_DLSS_EXT`; XeSS `xessD3D12Execute` | unverified: FSR `ffxDispatch`; DLSS `NGX_VULKAN_EVALUATE_DLSS_EXT`; XeSS `xessVKExecute` |
-| Cost | cheap: ends the open compute encoder, and an `MTL::Fence` carries barrier visibility into MetalFX's own encoders | cheap: the backend rebinds its global root signature and descriptor heaps after the vendor call | cheap: the backend rebinds its descriptor heap and push data after the vendor call |
+| Cost | cheap: ends the open compute encoder; a carrier encoder waits at queue level for every earlier stage and an `MTL::Fence` carries that into MetalFX's own encoders, and the list's end waits on the fence and holds back every later stage | cheap: the backend rebinds its global root signature and descriptor heaps after the vendor call | cheap: the backend rebinds its descriptor heap and push data after the vendor call |

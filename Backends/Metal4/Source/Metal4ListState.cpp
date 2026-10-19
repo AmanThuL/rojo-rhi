@@ -91,6 +91,7 @@ namespace rojoRHI::metal4 {
             (*it)->release();
         }
         scopeLabels.clear();
+        scopeTimestamps.clear();
         if (label != nullptr)
         {
             label->release();

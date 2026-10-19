@@ -147,7 +147,7 @@ the Metal-specific frame-data counter the v1 conformance checkpoint flags as non
 #### Mapping
 | | Metal 4 | D3D12 | Vulkan |
 |---|---|---|---|
-| Source | shared code increments each counter at its cause: object and heap-slot creation and release, a submission's fence waits and signals, presentation, tile mapping and fence queries; it also folds in, at submission, the record, barrier and encoder counts a backend notes on a list. The backend adds each list's allocator, command buffer and argument tables, staging buffers, the commit of a submission's lists, the staged upload's commit, frame-event and queue-progress signals, frame-event and fence waits, allocator resets, queue-progress reads, residency commits, timestamp reads and pipeline-cache hits | increments in shared code, except the native calls only the backend makes, which it counts at each native call site | increments in shared code, except the native calls only the backend makes, which it counts at each native call site |
+| Source | shared code increments each counter at its cause: object and heap-slot creation and release, a submission's fence waits and signals, presentation, tile mapping and fence queries; it also folds in, at submission, the record, barrier and encoder counts a backend notes on a list. The backend adds each list's allocator, command buffer and argument tables, staging buffers, the commit of a submission's lists, the staged upload's commit, frame-event and queue-progress signals, frame-event and fence waits, allocator resets, queue-progress reads, residency commits, counter heaps, timestamp reads and invalidations, and pipeline-cache hits | increments in shared code, except the native calls only the backend makes, which it counts at each native call site | increments in shared code, except the native calls only the backend makes, which it counts at each native call site |
 | Cost | cheap: one CPU increment per event, no native call | cheap: one CPU increment per event, no native call | cheap: one CPU increment per event, no native call |
 
 ### `Device::counters`
@@ -190,16 +190,18 @@ boundaries; every render pass and every upscale forms its own scope.
 | `gpuMilliseconds` | GPU wall time between the scope's two timestamps |
 
 Durations are wall time, not a sum of shader costs: nested scopes overlap their parent, and scopes
-on different queues overlap each other.
+on different queues overlap each other. On a tile-based GPU a scope inside a render pass brackets
+the fragment work finished at its boundaries, not its draws' share of the pass, and may report a
+few microseconds inside a much longer pass.
 
 #### Valid usage
 - None.
 #### Mapping
 | | Metal 4 | D3D12 | Vulkan |
 |---|---|---|---|
-| Timestamps | `MTL4::CounterHeap` of timestamps, at encoder boundaries | `D3D12_QUERY_TYPE_TIMESTAMP` queries | `VK_QUERY_TYPE_TIMESTAMP` queries |
-| Conversion | GPU ticks, converted through `MTL::Device::queryTimestampFrequency` | `GetTimestampFrequency` | `timestampPeriod` |
-| Cost | cheap: a scope boundary inside an open encoder may force an encoder split | native | native |
+| Timestamps | `MTL4::CounterHeap`s of timestamps the device owns per frame slot: up to eight of 4,096 timestamps, each created when a scope first needs it, so 16,384 scopes a frame. `MTL4::CommandBuffer::writeTimestampIntoHeap` between encoders writes the pair of a scope outside a render pass, of a render pass (after its debug group and before its first encoder, so its counted draws' kernels and the encoders its splits resume fall inside; after its last encoder ends) and of an upscale (around its carrier encoder and MetalFX's encoders); a scope inside a pass writes its pair on the render encoder with `MTL4::RenderCommandEncoder::writeTimestamp` at `MTL4::TimestampGranularityPrecise` after `MTL::RenderStageFragment`, and a split writes none. A scope past that capacity, or whose heap Metal refuses (Metal allows 32 counter heaps per process or on the system; a refused heap is requested again after its frame slot's reuse), reports `gpuMilliseconds` 0, and `Device::beginFrame` logs one warning naming the frame | `D3D12_QUERY_TYPE_TIMESTAMP` queries | `VK_QUERY_TYPE_TIMESTAMP` queries |
+| Conversion | GPU ticks, converted through `MTL::Device::queryTimestampFrequency`, read once at device creation; an entry Metal resolves as unwritten gives 0 | `GetTimestampFrequency` | `timestampPeriod` |
+| Cost | cheap: a pair claimed with one atomic add and two timestamp writes; while Metal refuses a heap, one failed `MTL::Device::newCounterHeap` per frame for each refused heap the frame needs (more only when threads race to create it); outside a pass a scope boundary ends the open encoder; inside one the precise writes add no encoder, and made no measurable change in a pass's duration on an Apple M3 Max (a pass of 64 draws with 0, 16 or 64 scopes inside it, two runs per case; the GPU clock varies between runs) | native | native |
 
 ### `Device::scopeTimings`
 ```cpp
@@ -218,7 +220,7 @@ for a frame with no scopes. It is owned by the device, labels included, and inva
 #### Mapping
 | | Metal 4 | D3D12 | Vulkan |
 |---|---|---|---|
-| Call | `MTL4::CounterHeap::resolveCounterRange` at `beginFrame` | `ResolveQueryData` into a readback buffer, read at `beginFrame` | `vkGetQueryPoolResults` at `beginFrame` |
+| Call | `MTL4::CounterHeap::resolveCounterRange` once per heap the retired frame used, at `beginFrame`, then `invalidateCounterRange` over the used range | `ResolveQueryData` into a readback buffer, read at `beginFrame` | `vkGetQueryPoolResults` at `beginFrame` |
 | Cost | native: timestamps resolved at the frame wait | native: timestamps resolved at the frame wait | native: timestamps resolved at the frame wait |
 
 ## Programmatic capture

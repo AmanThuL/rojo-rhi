@@ -57,6 +57,15 @@ namespace rojoRHI::metal4 {
             m_ran |= stages;
         }
 
+        /// Records the carrier of an upscale when no encoder is open: a compute encoder that waits on the fence an earlier
+        /// upscale left owed to either encoder kind and then for every stage of all earlier work on the queue, which covers the
+        /// pending barrier's part on its stages, then updates `fence`
+        /// after those stages and ends. MetalFX's encoders wait on `fence`, so the barriers before the upscale reach them
+        /// through it. The encoder takes the innermost open scope's label, else the list's, binds no table, because no shader
+        /// runs on it, and is used and ended inside the autorelease pool its factory needs. Counts its native calls, its
+        /// barrier and one encoder on `list`.
+        void carry(core::CommandListCore& list, ListState& state, MTL::Fence* fence);
+
         /// Notes that the open encoder holds work.
         void markWork()
         {

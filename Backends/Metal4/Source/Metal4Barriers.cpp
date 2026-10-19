@@ -95,6 +95,17 @@ namespace rojoRHI {
         //==============================================================================================================
         void emitAtOpen(core::CommandListCore& list, BarrierState& barriers, MTL4::CommandEncoder* encoder, MTL::Stages stages)
         {
+            // A render encoder emits for its fragment stage alone, a compute encoder for its own stages; the wait names every
+            // stage of the encoder's kind.
+            const MTL::Stages kind = (stages & kRenderStages) != 0 ? kRenderStages : kComputeStages;
+            if ((barriers.owedFenceStages & kind) != 0)
+            {
+                // MetalFX's own encoders are ordered only through the fence: the barriers before an upscale reach the work of
+                // either kind after it, and a barrier after it reaches MetalFX's writes, through this wait. Each kind waits once.
+                encoder->waitForFence(barriers.owedFence, kind);
+                core::noteNativeCall(list);
+                barriers.owedFenceStages &= ~kind;
+            }
             const MTL::Stages owed = barriers.pendingDestination & stages;
             if (owed == 0)
             {
@@ -143,26 +154,44 @@ namespace rojoRHI {
         //==============================================================================================================
         void emitTrailing(core::CommandListCore& list, ListState& state, BarrierState& barriers)
         {
-            if (barriers.pendingDestination == 0)
+            // A list that upscaled ends with a wait on the last upscale's fence even when no barrier is pending: later lists see
+            // MetalFX's writes only through the encoder that waits on it.
+            const bool fenced = barriers.owedFence != nullptr;
+            if (barriers.pendingDestination == 0 && !fenced)
             {
                 return;
             }
             {
                 // The factory autoreleases its encoder, which is used and ended inside the pool. It binds no table: it runs no
-                // command, only the two halves of the barrier.
+                // command, only the wait and the two halves of the barrier.
                 const AutoreleasePool pool;
                 MTL4::ComputeCommandEncoder* encoder = state.commandBuffer->computeCommandEncoder();
                 core::noteNativeCall(list);
                 ++list.counts.encodersOpened;
                 encoder->setLabel(state.label);
                 core::noteNativeCall(list);
-                // The consumer half: the encoder's stages wait for every earlier source on the queue.
-                encoder->barrierAfterQueueStages(barriers.pendingSource, kComputeStages, barriers.pendingVisibility);
-                core::noteNativeCall(list);
+                MTL::Stages destination = barriers.pendingDestination;
+                MTL4::VisibilityOptions visibility = barriers.pendingVisibility;
+                if (fenced)
+                {
+                    // The work held back follows MetalFX's encoders of the list's last upscale, which only the fence orders;
+                    // MetalFX's stages are its own, so every later stage waits.
+                    encoder->waitForFence(barriers.owedFence, kComputeStages);
+                    core::noteNativeCall(list);
+                    destination = MTL::StageAll;
+                    visibility |= MTL4::VisibilityOptionDevice;
+                }
+                if (barriers.pendingDestination != 0)
+                {
+                    // The consumer half: the encoder's stages wait for every earlier source on the queue.
+                    encoder->barrierAfterQueueStages(barriers.pendingSource, kComputeStages, barriers.pendingVisibility);
+                    core::noteNativeCall(list);
+                    ++list.counts.nativeBarriers;
+                }
                 // The producer half: every later encoder on the queue, in this list or a later one, waits for the encoder.
-                encoder->barrierAfterStages(kComputeStages, barriers.pendingDestination, barriers.pendingVisibility);
+                encoder->barrierAfterStages(kComputeStages, destination, visibility);
                 core::noteNativeCall(list);
-                list.counts.nativeBarriers += 2;
+                ++list.counts.nativeBarriers;
                 encoder->endEncoding();
                 core::noteNativeCall(list);
             }

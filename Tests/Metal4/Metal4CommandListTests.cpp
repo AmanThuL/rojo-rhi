@@ -8,6 +8,7 @@
 #include "Core/DeviceCore.h"
 #include "Metal4Common.h"
 #include "Metal4Device.h"
+#include "Support/Metal4/Metal4Timing.h"
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -200,7 +201,7 @@ TEST_CASE("nested scopes push and pop debug groups on the command buffer", "[met
     REQUIRE(state.scopeLabels.size() == 2);
     // An empty label takes the core's default.
     CHECK(textOf(state.scopeLabels.back()) == "rojorhi.scope.unnamed");
-    CHECK(core::coreOf(list).counts.nativeRecordCalls == 2 + 2);
+    CHECK(test::timedCounts(list).nativeRecordCalls == 2 + 2 * 2);
     list.endScope();
     REQUIRE(state.scopeLabels.size() == 1);
     CHECK(textOf(state.scopeLabels.back()) == "test.outer");
@@ -208,7 +209,7 @@ TEST_CASE("nested scopes push and pop debug groups on the command buffer", "[met
     CHECK(state.scopeLabels.empty());
     list.end();
     CHECK(state.scopeLabels.empty());
-    CHECK(core::coreOf(list).counts.nativeRecordCalls == 2 + 4 + 1);
+    CHECK(test::timedCounts(list).nativeRecordCalls == 2 + 2 * 4 + 1);
     const Fence fence = *device.createFence(0, "test.fence");
     const std::array<CommandList, 1> lists{ list };
     const std::array<FenceValue, 1> signal{ FenceValue{ fence, 1 } };
@@ -287,7 +288,7 @@ TEST_CASE("four threads record lists of one frame at once", "[metal4]")
         {
             CHECK(stateOf(lists[i]).commandBuffer != stateOf(lists[j]).commandBuffer);
         }
-        CHECK(core::coreOf(lists[i]).counts.nativeRecordCalls == 2 + 16 * 4 + 1);
+        CHECK(test::timedCounts(lists[i]).nativeRecordCalls == 2 + 16 * 8 + 1);
     }
     const std::array<FenceValue, 1> signal{ FenceValue{ fence, 1 } };
     device.queue(QueueType::Graphics).submit(lists, {}, signal);
