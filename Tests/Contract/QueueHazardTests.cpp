@@ -10,6 +10,7 @@
 
 #include <array>
 #include <atomic>
+#include <chrono>
 #include <cstdint>
 #include <span>
 #include <thread>
@@ -182,6 +183,12 @@ TEST_CASE("a completed value the CPU read orders the work before it ahead of a s
     const std::array<FenceValue, 1> written{ FenceValue{ fence, 1 } };
     kit.list.fillBuffer(buffer, 0, kBytes, 0);
     submitTo(kit.device, kit.list, QueueType::Graphics, {}, written);
+    // completedValue never blocks, so the read repeats until the submission reaches its value or a bounded time passes.
+    const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(10);
+    while (kit.device.completedValue(fence) < 1 && std::chrono::steady_clock::now() < deadline)
+    {
+        std::this_thread::yield();
+    }
     REQUIRE(kit.device.completedValue(fence) >= 1);
     CommandList compute = kit.device.acquireCommandList(QueueType::Compute, "test.compute");
     compute.copyBuffer(buffer, 0, other, 0, kBytes);
@@ -350,6 +357,7 @@ TEST_CASE("three queues submit while another thread waits on and reads their fen
     observer.join();
     for (const Fence fence : fences)
     {
+        REQUIRE(device.wait(FenceValue{ fence, kRounds }, 10'000'000'000));
         CHECK(device.completedValue(fence) == kRounds);
     }
     // The frame's graphics work joins the compute and copy work before it ends.
