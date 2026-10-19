@@ -10,6 +10,10 @@ from unittest import mock
 from Tools import check_project_policy as policy
 
 
+# A detached `git gc --auto` can write into objects/ while the temporary repository is removed.
+QUIET_GIT = ["-c", "gc.auto=0", "-c", "maintenance.auto=false", "-c", "gc.autoDetach=false"]
+
+
 class ProjectPolicyTests(unittest.TestCase):
     def test_read_text_accepts_utf8_without_extension_allowlist(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -140,7 +144,7 @@ class ProjectPolicyTests(unittest.TestCase):
     def test_an_empty_root_fails(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
-            subprocess.run(["git", "init", "-q", str(root)], check=True)
+            subprocess.run(["git", *QUIET_GIT, "init", "-q", str(root)], check=True)
             with (
                 mock.patch.object(policy, "ROOT", root),
                 mock.patch.object(sys, "argv", ["check_project_policy.py"]),
@@ -186,11 +190,16 @@ class ProjectPolicyTests(unittest.TestCase):
             root = Path(directory)
 
             def run(*args: str) -> None:
-                subprocess.run(["git", "-C", directory, *args], check=True, capture_output=True)
+                subprocess.run(
+                    ["git", *QUIET_GIT, "-C", directory, *args], check=True, capture_output=True
+                )
 
             run("init", "-q")
             run("config", "user.email", "t@example.com")
             run("config", "user.name", "t")
+            run("config", "gc.auto", "0")
+            run("config", "maintenance.auto", "false")
+            run("config", "gc.autoDetach", "false")
             (root / "Source").mkdir()
             (root / "Source/X.cpp").write_text("1\n")
             run("add", "-A")
@@ -211,7 +220,9 @@ class ProjectPolicyTests(unittest.TestCase):
             root = Path(directory)
 
             def run(*args: str) -> None:
-                subprocess.run(["git", "-C", directory, *args], check=True, capture_output=True)
+                subprocess.run(
+                    ["git", *QUIET_GIT, "-C", directory, *args], check=True, capture_output=True
+                )
 
             run("init", "-q")
             run("config", "user.email", "t@example.com")
