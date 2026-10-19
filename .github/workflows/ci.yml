@@ -31,7 +31,7 @@ jobs:
       - run: xmake setup
       # Some hosted images ship Xcode without the Metal toolchain the v1 shaders compile with.
       - run: xcrun metal --version >/dev/null 2>&1 || xcodebuild -downloadComponent MetalToolchain
-      - run: xmake f -m release -y --ccache=n
+      - run: xmake f -m release -y --rojorhi_backend=null --ccache=n
       - run: xmake -y && xmake test RojoRHILegacyTests/unit
       # Hosted macOS has no Metal 4: compile and count the GPU cases; run them on hardware.
       - run: |
@@ -51,14 +51,21 @@ jobs:
       - run: xmake setup
       # The metal4 backend compiles its own kernels, so its build needs the Metal toolchain some hosted images lack.
       - run: xcrun metal --version >/dev/null 2>&1 || xcodebuild -downloadComponent MetalToolchain
+      # A configure with no backend flag selects metal4 on macOS; the configuration file records the resolved value.
+      - run: |
+          xmake f -c -m debug -y --ccache=n
+          grep -q '^ *rojorhi_backend = "metal4"' .xmake/*/*/xmake.conf
       - run: xmake f -m debug -y --rojorhi_backend=metal4 --ccache=n
       - run: xmake build RojoRHITests
-      # Lists the cases of each tag and requires a non-zero count; no GPU case runs in this job.
+      # Lists the cases of each tag and requires a floor, 162 for conformance so a dropped file fails;
+      # no GPU case runs in this job.
       - run: |
           for tag in conformance contract metal4; do
+            floor=1
+            if test "$tag" = conformance; then floor=162; fi
             n=$(./build/macosx/arm64/debug/rojorhi-test/RojoRHITests --list-tests "[$tag]" | \
               sed -n 's/^\([0-9][0-9]*\) matching test cases$/\1/p')
-            test -n "$n" && test "$n" -gt 0
+            test -n "$n" && test "$n" -ge "$floor"
           done
       # Release must build warning-free.
       - run: xmake f -m release -y --rojorhi_backend=metal4 --ccache=n && xmake build RojoRHITests
@@ -111,6 +118,12 @@ jobs:
       # Some hosted images ship Xcode without the Metal toolchain the metallibs and shader libraries need.
       - if: runner.os == 'macOS'
         run: xcrun metal --version >/dev/null 2>&1 || xcodebuild -downloadComponent MetalToolchain
+      # A configure with no backend flag selects null off macOS (is_host in xmake/targets.lua).
+      - if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          xmake f -c -m debug -y
+          if (-not (Select-String -Path '.xmake/*/*/xmake.conf' -Pattern '^\s*rojorhi_backend = "null"')) { throw 'the default backend is not null' }
       - run: xmake f -m debug -y --rojorhi_backend=null
       - run: xmake build RojoRHITests
       # Without the Metal toolchain the build skips packaging and the shader library cases skip too,

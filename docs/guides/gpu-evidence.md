@@ -61,5 +61,6 @@ its runs under topic `t2`, checksummed the same way
 | `t1` | 2026-10-18 | the first Metal 4 runs of the v2 interface under the validation layer, one log per `contract`, `death` and `conformance` entry; the results are in the log summaries |
 | `v1-gpu-conformance` (`gpu-shared-metalcpp`) | 2026-10-18 | the frozen v1 suite rerun after `RojoRHILegacy` linked the shared metal-cpp unit: 58 `[gpu]` cases, 7416 assertions, all passed |
 | `t2-native-smoke` | 2026-10-18 | the three runs `native-check`, `native-build` and `native-gate` of the benchmark harness native arm on an Apple M3 Max, macOS 27.0.1: the 21 `[native]` cases pass under the validation layer, and the N-only correctness pass runs all 63 configurations clean in Release and in Debug |
+| `t1` (`finish-*`) | 2026-10-19 | the complete Metal 4 backend on an Apple M3 Max, macOS 27, under the validation layer: `contract`, `death`, `abi`, `conformance` (163 cases), `capture`, `nopool`, Release `contract`, the default backend and `RojoRHIBench/metal4`; the results are in the log summaries |
 | `spike-2-texture-indexing` | 2026-10-12 | [spike 2](../research/2026-10-12-spike-2-texture-indexing.md) |
 | `spike-3-multi-draw-indirect` | 2026-10-12 | [spike 3](../research/2026-10-12-spike-3-multi-draw-indirect.md) |

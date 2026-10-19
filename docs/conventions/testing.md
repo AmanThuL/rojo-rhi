@@ -7,8 +7,8 @@ owned by [naming.md](naming.md). Today the v1 suite, including the `[checkpoint-
 under `Legacy/Tests/` and builds as `RojoRHILegacyTests`. The top-level `Tests/` holds the v2
 interface's cases and builds as `RojoRHITests`; its T0 (CPU contract) cases run as
 `xmake test RojoRHITests/contract` (ADR 0017), its death tests as `xmake test RojoRHITests/death`
-and its shader ABI cases, tagged `[abi]`, as `xmake test RojoRHITests/abi`. Built with
-`--rojorhi_backend=metal4`, the same binary also runs the `[conformance]` cases as
+and its shader ABI cases, tagged `[abi]`, as `xmake test RojoRHITests/abi`. Built with the
+default backend on macOS (`metal4`), the same binary also runs the `[conformance]` cases as
 `xmake test RojoRHITests/conformance`.
 
 ## Tiers
@@ -105,7 +105,10 @@ frame counts, and readback oracles of GPU-written data: `Copy` (every copy path)
 `Barrier` (each barrier kind, and that a consumer barrier holds back every later encoder), `Fill`,
 `Clear` (render targets, depth and Storage-only textures of every type), `Handoff` (work chained
 through the three queues by fences), render passes with their load and store actions, direct,
-indirect and counted draws, mesh tasks and dispatches, over `Tests/Support/GpuKit`, which runs lists
+indirect and counted draws, mesh tasks and dispatches, `Sparse` (tile mapping and the measured
+tile shapes), `Scope` (scope, pass and upscale timings against fixed bounds), `Upscale` (the MetalFX
+upscaler and its mask), `Format` (every format class on the GPU) and `WriteOnly` (storage textures
+written through write-only accessors), over `Tests/Support/GpuKit`, which runs lists
 and reads results back through public entries and waits on the host after each run. They compile on
 every backend and each starts with `test::requireGpu()` from `Tests/Support/Conformance.h`, which
 skips the case where `test::runsOnGpu()` is false: always on Null, never on Metal 4, whose devices

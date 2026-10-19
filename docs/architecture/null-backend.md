@@ -8,8 +8,8 @@ Null backend of [ADR 0008](../decisions/0008-backends-and-vulkan-oracle.md) rend
 needs no GPU; it exists so the contract of
 [ADR 0009](../decisions/0009-conformance-and-valid-usage.md) can be tested on any machine. The API
 reference under `docs/spec/` stays the authority on every entry's semantics; this page records how
-the code realises it. [The Metal 4 backend](metal4-backend.md) is the native backend over the same
-core.
+the code realises it. [The Metal 4 backend](metal4-backend.md), the default on macOS, is the
+native backend over the same core; this one is the default elsewhere (`--rojorhi_backend=null`).
 
 ## What exists
 
@@ -293,8 +293,8 @@ flag is thread-local.
 These arrive with the work that adds them; this page then describes them. What recording still
 lacks is on the [command recording](null-backend-recording.md) page.
 
-- The rest of the native backend, which [its page](metal4-backend.md) lists, and the remaining T1
-  GPU conformance ([ADR 0009](../decisions/0009-conformance-and-valid-usage.md)).
+- The D3D12 backend and the T2 and T3 tiers
+  ([ADR 0009](../decisions/0009-conformance-and-valid-usage.md)).
 
 `Tools/vu_pending.txt` lists each identifier whose death test is still to come, with the part that
 will add it; it is empty today ([testing](../conventions/testing.md)).
