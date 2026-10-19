@@ -131,10 +131,10 @@ python3 Tools/bench.py timing         # runs the timed processes, local hardware
 python3 Tools/bench.py analyze        # writes summary.json and analysis.txt from the results
 ```
 
-`bench.py build` takes `--backend metal4` (the default) or `null`; on `metal4` the harness
-compiles and links (`xmake build RojoRHIBench` on a Debug configure), and no CI job builds it there. `correctness
---arms N` with the native arm alone smoke-runs it. Timing follows ADR 0014: Release,
-validation off, on AC power, never on hosted runners.
+`bench.py build` takes `--backend metal4` (the default) or `null`; on `metal4` the harness links,
+`xmake test RojoRHIBench/metal4` passes and `correctness` (R against N, both builds, untimed)
+passes; no CI job builds it there. `correctness --arms N` with the native arm alone smoke-runs it.
+Timing follows ADR 0014: Release, validation off, on AC power, never on hosted runners.
 
 `python3 Tools/check_lto_inline.py`, after `xmake build RojoRHILtoProbe` in a Release configure,
 fails unless link-time optimization inlined `Device::capabilities` into its caller in the probe

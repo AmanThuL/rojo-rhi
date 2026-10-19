@@ -170,36 +170,7 @@ target("RojoRHITests")
     set_default(false)
     set_targetdir("$(builddir)/$(plat)/$(arch)/$(mode)/rojorhi-test")
     add_files(path.join(component, "Tests/*.cpp"))
-    if is_config("rojorhi_backend", "metal4") then
-        -- The contract files whose chapters the Metal 4 backend does not implement yet. A file leaves the list when it
-        -- passes whole, and the list ends empty.
-        local metal4_pending = {
-            "DiagnosticsTests.cpp", "LifetimeDeathTests.cpp", "TrackerDeathTests.cpp", "TrackerTests.cpp",
-            "UpscaleDeathTests.cpp", "UpscalerTests.cpp",
-        }
-        local pending = {}
-        for _, name in ipairs(metal4_pending) do
-            pending[name] = true
-        end
-        -- A renamed or deleted contract file must leave the list too, so on_config fails on a name that matches no file.
-        -- The check runs in script scope, the only scope that can fail a configuration, so the values travel absolute.
-        set_values("rojorhi.metal4_pending", metal4_pending)
-        set_values("rojorhi.contract_dir", path.join(component_dir, "Tests/Contract"))
-        on_config(function (target)
-            local contract_dir = target:values("rojorhi.contract_dir")
-            for _, name in ipairs(table.wrap(target:values("rojorhi.metal4_pending"))) do
-                assert(os.isfile(path.join(contract_dir, name)),
-                       format("metal4_pending names Tests/Contract/%s, which does not exist; remove or rename the entry", name))
-            end
-        end)
-        for _, file in ipairs(os.files(path.join(component_dir, "Tests/Contract/*.cpp"))) do
-            if not pending[path.filename(file)] then
-                add_files(path.join(component, "Tests/Contract", path.filename(file)))
-            end
-        end
-    else
-        add_files(path.join(component, "Tests/Contract/*.cpp"))
-    end
+    add_files(path.join(component, "Tests/Contract/*.cpp"))
     add_files(path.join(component, "Tests/Support/*.cpp"))
     -- The conformance directory holds no source until a part adds one, and xmake warns on an empty glob.
     if #os.files(path.join(component_dir, "Tests/Conformance/*.cpp")) > 0 then

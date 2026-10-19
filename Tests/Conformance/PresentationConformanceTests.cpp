@@ -5,11 +5,13 @@
 #include <rojoRHI/RHI.h>
 
 #include "Support/Conformance.h"
+#include "Support/PassKit.h"
 
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/generators/catch_generators.hpp>
 #include <catch2/generators/catch_generators_range.hpp>
 
+#include <array>
 #include <cstdint>
 
 using namespace rojoRHI;
@@ -94,5 +96,44 @@ TEST_CASE("two swapchains acquire and present in the same frames", "[conformance
     }
     device.destroy(first);
     device.destroy(second);
+    destroyDevice(device);
+}
+
+//======================================================================================================================
+TEST_CASE("an image cleared by a pass and moved to Present by a barrier presents in every frame", "[conformance]")
+{
+    test::requireGpu();
+    // Outside Release the validation tracker checks the frame's barriers, among them VU-rojo-present-0018 (the last barrier
+    // before the present moves the image to Present), so a missing barrier fails the case; a Release build, which refuses
+    // validation, runs it as a smoke case.
+#ifdef NDEBUG
+    constexpr bool kValidation = false;
+#else
+    constexpr bool kValidation = true;
+#endif
+    Device device = *createDevice({ .validation = kValidation, .framesInFlight = 2 });
+    Queue graphics = device.queue(QueueType::Graphics);
+    // The test surfaces start at 256 by 256, the extent a new swapchain takes (chapter 11).
+    constexpr uint32_t kExtent = 256;
+    Swapchain swapchain = *device.createSwapchain(SwapchainDesc{ .nativeSurface = test::surface(4) });
+    for (uint32_t frame = 1; frame <= 6; ++frame)
+    {
+        CAPTURE(frame);
+        device.beginFrame();
+        const Texture image = swapchain.acquire();
+        REQUIRE(image != Texture{});
+        // Chapter 11's frame: from Undefined to ColorAttachment, render, then to Present before the present.
+        CommandList list = device.acquireCommandList(QueueType::Graphics, "test.present");
+        test::transition(list, image, Layout::Undefined, Layout::ColorAttachment);
+        const std::array colors{ ColorAttachment{ .texture = image, .load = LoadOp::Clear } };
+        list.beginRenderPass(RenderPassDesc{ .colors = colors, .area = { 0, 0, kExtent, kExtent }, .label = "test.presentPass" });
+        list.endRenderPass();
+        test::transition(list, image, Layout::ColorAttachment, Layout::Present);
+        list.end();
+        graphics.submit(std::array{ list });
+        graphics.present(swapchain);
+        device.endFrame();
+    }
+    device.destroy(swapchain);
     destroyDevice(device);
 }

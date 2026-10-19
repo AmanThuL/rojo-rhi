@@ -385,6 +385,39 @@ TEST_CASE("a viewport and a scissor limit what a full-target draw writes", "[con
 }
 
 //======================================================================================================================
+TEST_CASE("a pass with a DontCare load stores what a draw over every pixel writes", "[conformance]")
+{
+    test::requireGpu();
+    test::GpuKit kit;
+    const Oracle oracle(kit.device);
+    const Pipeline solid = pipelineOf(
+        kit.device, GraphicsPipelineDesc{ .vertex = { oracle.library, "fullscreenVertexMain" }, .fragment = { oracle.library, "solidFragmentMain" } }
+    );
+    const Texture target = targetOf(kit.device);
+    CommandList list = kit.list(QueueType::Graphics, "test.draw");
+    // Chapter 07: DontCare leaves the attachment undefined at the start of the pass, which the draw then overwrites.
+    const std::array colors{ ColorAttachment{ .texture = target, .load = LoadOp::DontCare, .store = StoreOp::Store } };
+    list.beginRenderPass(passOf(colors));
+    list.setPipeline(solid);
+    list.setViewport(kFull);
+    list.setScissor(kFullRect);
+    list.draw(3);
+    list.endRenderPass();
+    kit.run(std::array{ list });
+    Image expected;
+    for (uint32_t y = 0; y < kEdge; ++y)
+    {
+        for (uint32_t x = 0; x < kEdge; ++x)
+        {
+            expected.set(x, y, kSolid);
+        }
+    }
+    const std::string difference = differences(readImage(kit, target), expected);
+    INFO(difference);
+    CHECK(difference.empty());
+}
+
+//======================================================================================================================
 TEST_CASE("the stencil reference and a Replace operation mark exactly the drawn pixels", "[conformance]")
 {
     test::requireGpu();

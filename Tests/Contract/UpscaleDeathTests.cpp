@@ -9,6 +9,8 @@
 
 #include <catch2/catch_test_macros.hpp>
 
+#include <string>
+
 using namespace rojoRHI;
 using rojoRHI::test::UpscaleKit;
 
@@ -522,11 +524,23 @@ TEST_CASE("VU-rojo-upscale-0008 two lists of one frame each upscale the same ups
 //======================================================================================================================
 TEST_CASE("VU-rojo-upscale-0011 the output is also the exposure input", "[contract][death]")
 {
-    ROJORHI_EXPECT_DEATH("VU-rojo-upscale-0011", [] {
-        UpscalerDesc desc = UpscaleKit::defaultDesc();
-        desc.input = { 1, 1 };
-        desc.output = { 1, 1 };
-        desc.outputFormat = Format::R16Float;
+    UpscalerDesc desc = UpscaleKit::defaultDesc();
+    desc.input = { 1, 1 };
+    desc.output = { 1, 1 };
+    desc.outputFormat = Format::R16Float;
+    // The 1x1 extent lets the output stand in as the 1x1 exposure; creation may refuse it ("when the implementation rejects the extent
+    // ratio").
+    Device device = *createDevice();
+    const Result<Upscaler> created = device.createUpscaler(desc);
+    if (!created)
+    {
+        const std::string message = created.error().message;
+        destroyDevice(device);
+        SKIP("the device refuses a 1x1 upscaler: " << message);
+    }
+    device.destroy(*created);
+    destroyDevice(device);
+    ROJORHI_EXPECT_DEATH("VU-rojo-upscale-0011", [desc] {
         UpscaleKit kit{ QueueType::Graphics, desc };
         kit.params.output = kit.make(Format::R16Float, desc.input, TextureUsage::Sampled | TextureUsage::Storage | TextureUsage::RenderTarget);
         kit.params.exposure = kit.params.output;

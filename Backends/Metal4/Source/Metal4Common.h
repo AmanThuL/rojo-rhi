@@ -1,6 +1,6 @@
 //----------------------------------------------------------------------------------------------------------------------
 /// @file Metal4Common.h
-/// @brief Declares the helpers every Metal 4 backend file shares: aborts, autorelease pools, strings and event waits.
+/// @brief Declares the helpers every Metal 4 backend file shares: autorelease pools, strings and event waits.
 //----------------------------------------------------------------------------------------------------------------------
 #pragma once
 
@@ -12,9 +12,6 @@
 #include <string_view>
 
 namespace rojoRHI::metal4 {
-    /// Logs that the Metal 4 backend does not implement `entry` and aborts, in every build: an entry is never silently empty.
-    [[noreturn]] void notImplemented(std::string_view entry);
-
     /// An autorelease pool for the scope that holds it. Every entry that calls an autoreleasing factory opens one for its body,
     /// and every function that releases Metal objects opens one before it releases them.
     class AutoreleasePool
