@@ -91,6 +91,20 @@ TEST_CASE("SPIR-V heap fetches carry the NonUniform capability", "[abi]")
 }
 
 //======================================================================================================================
+TEST_CASE("write-only accessors lower to write-only storage textures", "[abi]")
+{
+    std::ifstream file("Shaders/AbiWriteOnly.metal");
+    const std::string msl((std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>());
+    CHECK(msl.find("access::write>") != std::string::npos);
+    CHECK(msl.find("access::read_write>") == std::string::npos);
+
+    constexpr std::uint32_t kStorageImageReadWithoutFormat = 55;
+    constexpr std::uint32_t kStorageImageWriteWithoutFormat = 56;
+    CHECK(declaresCapability("Shaders/AbiWriteOnly.spv", kStorageImageWriteWithoutFormat));
+    CHECK_FALSE(declaresCapability("Shaders/AbiWriteOnly.spv", kStorageImageReadWithoutFormat));
+}
+
+//======================================================================================================================
 TEST_CASE("every SPIR-V heap fetch is decorated NonUniform", "[abi]")
 {
     constexpr std::uint32_t kOpName = 5;
@@ -164,11 +178,11 @@ TEST_CASE("every SPIR-V heap fetch is decorated NonUniform", "[abi]")
             CHECK(decorated.contains(id));
         }
         // The files that fetch from the heap must show a fetch, so a stripped name cannot pass vacuously.
-        if (name == "AbiTextures" || name == "AbiFragment")
+        if (name == "AbiTextures" || name == "AbiFragment" || name == "AbiWriteOnly")
         {
             CHECK(!loads.empty());
         }
-        if (name == "AbiTextures")
+        if (name == "AbiTextures" || name == "AbiWriteOnly")
         {
             CHECK(!entryFunctions.empty());
             for (const std::uint32_t entry : entryFunctions)

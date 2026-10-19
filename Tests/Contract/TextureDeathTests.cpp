@@ -180,6 +180,16 @@ TEST_CASE("VU-rojo-texture-0010 DepthStencil is set on a color format", "[contra
 }
 
 //======================================================================================================================
+TEST_CASE("VU-rojo-texture-0010 Storage is set on a format with no storage access", "[contract][death]")
+{
+    ROJORHI_EXPECT_DEATH("VU-rojo-texture-0010", [] {
+        Device device = *createDevice();
+        // Chapter 15 gives RGBA8Unorm_sRGB neither storage read nor storage write on any backend.
+        (void)device.createTexture({ .format = Format::RGBA8Unorm_sRGB, .extent = { 4, 4, 1 }, .usage = TextureUsage::Storage });
+    });
+}
+
+//======================================================================================================================
 TEST_CASE("VU-rojo-texture-0011 a Tex3D texture has DepthStencil usage", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-texture-0011", [] {

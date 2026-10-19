@@ -271,13 +271,14 @@ static const uint ROJORHI_SHADER_ABI_VERSION = 1;   // RojoRHI.slang
 
 A positive integer naming the ABI contract this chapter defines: the root binding, the `Addr`
 encoding, the hidden heap tables and the lowering of every built-in. It increases whenever any of
-them changes. `RojoRHI.slang` declares it as a constant rather than a macro, because macros do not
-cross a Slang `import`. The shader rule reads the value from that file and stamps it into every
-compiled Metal library, and `Device::loadShaderLibrary` returns
-`ErrorCategory::ShaderAbiMismatch` for a library stamped with another version and
-`ErrorCategory::DriverFailure` for a blob that carries no stamp for the active backend, instead of
-running a stale shader. The value is independent of the `ROJORHI_VERSION_*` macros (see
-[fundamentals](01-fundamentals.md)).
+them changes; a new built-in that leaves the bindings, the encoding and every existing lowering as
+they were does not change it, because a library compiled before it binds the same entries.
+`RojoRHI.slang` declares it as a constant rather than a macro, because macros do not cross a Slang
+`import`. The shader rule reads the value from that file and stamps it into every compiled Metal
+library, and `Device::loadShaderLibrary` returns `ErrorCategory::ShaderAbiMismatch` for a library
+stamped with another version and `ErrorCategory::DriverFailure` for a blob that carries no stamp for
+the active backend, instead of running a stale shader. The value is independent of the
+`ROJORHI_VERSION_*` macros (see [fundamentals](01-fundamentals.md)).
 
 #### Valid usage
 

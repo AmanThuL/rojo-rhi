@@ -30,12 +30,16 @@
 //                  and the `+ 1` is to be verified with the D3D12 backend, by inspecting the DXIL handle flags
 //                  for each fetch kind
 //   texture*,      Metal   `((device T*)gViewIds)[view]`, T the MSL texture type, from the ID table at
-//   rwTexture*             `[[buffer(1)]]`; written as `__intrinsic_asm` because Slang's `Load<Texture>` emits an
-//                          `as_type` from `ulong` that the Metal compiler rejects
+//   rwTexture*,            `[[buffer(1)]]`; written as `__intrinsic_asm` because Slang's `Load<Texture>` emits an
+//   wTexture*              `as_type` from `ulong` that the Metal compiler rejects
 //                  HLSL    `ResourceDescriptorHeap[view]`
 //                  SPIR-V  the runtime descriptor arrays Slang names `__slang_resource_heap`
 //                          (`DescriptorHandle`); `-capability spvDescriptorHeapEXT` is not used. Layout Slang
 //                          picked: samplers at set 1 binding 0; sampled and storage images at set 1 binding 2
+//                  write-only: `wTexture*` returns Slang's write-only `WTexture*`, which has `Store` and no
+//                          read: an `access::write` texture on Metal, the `RWTexture*` of the same shape on HLSL,
+//                          and on SPIR-V a storage image of `Unknown` format written with `OpImageWrite`, needing
+//                          only `StorageImageWriteWithoutFormat` (Slang emits no `NonReadable` decoration)
 //   sampler,       Metal   the same read from the sampler ID table at `[[buffer(2)]]`
 //   comparisonSampler HLSL `SamplerDescriptorHeap[index]`; SPIR-V as for textures
 //   VertexIds      the vertex entry point's parameter, its fields internal to the module (a consumer's entry
@@ -278,6 +282,31 @@ namespace rojoRHI
     public RWTexture3D<T> rwTexture3D<T : ITexelElement = float4>(uint view)
     {
         return viewAt<RWTexture3D<T>>(view);
+    }
+
+    public WTexture1D<T> wTexture1D<T : ITexelElement = float4>(uint view)
+    {
+        return viewAt<WTexture1D<T>>(view);
+    }
+
+    public WTexture1DArray<T> wTexture1DArray<T : ITexelElement = float4>(uint view)
+    {
+        return viewAt<WTexture1DArray<T>>(view);
+    }
+
+    public WTexture2D<T> wTexture2D<T : ITexelElement = float4>(uint view)
+    {
+        return viewAt<WTexture2D<T>>(view);
+    }
+
+    public WTexture2DArray<T> wTexture2DArray<T : ITexelElement = float4>(uint view)
+    {
+        return viewAt<WTexture2DArray<T>>(view);
+    }
+
+    public WTexture3D<T> wTexture3D<T : ITexelElement = float4>(uint view)
+    {
+        return viewAt<WTexture3D<T>>(view);
     }
 
     public SamplerState sampler(uint index)

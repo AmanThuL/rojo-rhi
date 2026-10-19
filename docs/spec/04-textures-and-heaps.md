@@ -49,7 +49,7 @@ For `Cube` and `CubeArray`, array layers count faces, six per cube, in the order
 enum class TextureUsage : uint32_t {
     None         = 0,
     Sampled      = 1u << 0,   // read through a sampled view
-    Storage      = 1u << 1,   // read and written through a storage view
+    Storage      = 1u << 1,   // read or written through a storage view
     RenderTarget = 1u << 2,   // color attachment
     DepthStencil = 1u << 3,   // depth-stencil attachment
     Sparse       = 1u << 4,   // reserved: no backing memory until tiles are mapped
@@ -103,7 +103,8 @@ faces.
 - `VU-rojo-texture-0009` `usage` is not `None` and does not contain both `RenderTarget` and
   `DepthStencil`.
 - `VU-rojo-texture-0010` Each usage bit is supported for `format`: `DepthStencil` only for a
-  depth or stencil format, `RenderTarget` and `Storage` only where the format capabilities allow.
+  depth or stencil format, `RenderTarget` only where the format capabilities report
+  `colorAttachment`, and `Storage` only where they report `storageRead` or `storageWrite`.
 - `VU-rojo-texture-0011` `type` is not `Tex3D` when `usage` contains `DepthStencil`.
 - `VU-rojo-texture-0012` `usage` contains `Sparse` only when `Device::capabilities` reports sparse
   resources.

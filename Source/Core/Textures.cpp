@@ -225,7 +225,8 @@ namespace rojoRHI::core {
         [[maybe_unused]] bool capabilityFits(const DeviceCore& core, const TextureRecord& texture, const TextureViewDesc& desc)
         {
             const FormatCapabilities capabilities = core.formatCapabilities(desc.format == Format::Undefined ? texture.format : desc.format);
-            return desc.usage == TextureUsage::Sampled ? capabilities.sampled : (capabilities.storageRead && capabilities.storageWrite);
+            // A Storage view needs some storage access; whether a shader reads it is the shader's requirement (chapter 05).
+            return desc.usage == TextureUsage::Sampled ? capabilities.sampled : (capabilities.storageRead || capabilities.storageWrite);
         }
 
         //==============================================================================================================
@@ -357,7 +358,7 @@ namespace rojoRHI::core {
         ROJORHI_VU(
             (!hasUsage(desc.usage, TextureUsage::DepthStencil) || formatCaps.depthAttachment) &&
                 (!hasUsage(desc.usage, TextureUsage::RenderTarget) || formatCaps.colorAttachment) &&
-                (!hasUsage(desc.usage, TextureUsage::Storage) || (formatCaps.storageRead && formatCaps.storageWrite)),
+                (!hasUsage(desc.usage, TextureUsage::Storage) || (formatCaps.storageRead || formatCaps.storageWrite)),
             "VU-rojo-texture-0010",
             "a usage bit is not supported for the format"
         );
