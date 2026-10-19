@@ -4,11 +4,12 @@
 //----------------------------------------------------------------------------------------------------------------------
 
 #include "Support/Backend.h"
-#include "Support/NullLibrary.h"
+#include "Support/Null/NullLibrary.h"
 
 #include <catch2/catch_test_macros.hpp>
 
 #include <array>
+#include <string_view>
 
 namespace rojoRHI::test {
     namespace {
@@ -19,7 +20,21 @@ namespace rojoRHI::test {
     //==================================================================================================================
     std::vector<std::byte> standardLibrary()
     {
-        return nullLibrary({ { "vsMain", "vertex" }, { "fsMain", "fragment" }, { "msMain", "mesh" }, { "tsMain", "task" }, { "csMain", "compute" } });
+        return libraryStampedWith(1);
+    }
+
+    //==================================================================================================================
+    std::vector<std::byte> libraryStampedWith(uint32_t abi)
+    {
+        return nullLibrary({ { "vsMain", "vertex" }, { "fsMain", "fragment" }, { "msMain", "mesh" }, { "tsMain", "task" }, { "csMain", "compute" } }, abi);
+    }
+
+    //==================================================================================================================
+    std::vector<std::byte> foreignLibrary()
+    {
+        const std::string_view text = "rojorhi.metal4.shaderlibrary\nabi 1\nentry vsMain vertex 0 0 0\nmetallib 0\n";
+        const auto* bytes = reinterpret_cast<const std::byte*>(text.data());
+        return { bytes, bytes + text.size() };
     }
 
     //==================================================================================================================
