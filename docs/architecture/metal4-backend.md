@@ -4,12 +4,13 @@
 
 This page describes the Metal 4 backend of the v2 interface as it stands: the part that creates a
 device, reports its capabilities, owns buffers, heaps, textures, views and samplers, and runs
-queues, fences and frames, records command lists as far as copies, fills, clears, barriers and
-scopes, presents swapchains on a Metal layer, maps placement sparse resources and captures
-programmatically ([the edges](metal4-backend-edges.md)). Render passes, pipelines, dispatches,
-draws and upscaling arrive with later work. The API reference under `docs/spec/` stays the
-authority on every entry's semantics and Metal 4 mapping; [the Null backend](null-backend.md)
-describes the shared core this backend translates to. The backend builds with `xmake f --rojorhi_backend=metal4`, on macOS
+queues, fences and frames, loads shader libraries, creates and caches pipelines, records command
+lists (copies, fills, clears, barriers, scopes, render passes, dispatches, direct and counted
+draws), presents swapchains on a Metal layer, maps placement sparse resources and captures
+programmatically ([drawing](metal4-drawing.md), [the edges](metal4-backend-edges.md)). Upscaling and
+timestamps arrive with later work. The API reference under `docs/spec/` stays the authority on every
+entry's semantics and Metal 4 mapping; [the Null backend](null-backend.md) describes the shared core
+this backend translates to. The backend builds with `xmake f --rojorhi_backend=metal4`, on macOS
 only, and `null` stays the default.
 
 ## What exists
@@ -29,21 +30,21 @@ only, and `null` stays the default.
 | Capture | `Metal4Capture.*` | `beginCapture`, `endCapture` |
 | Lists | `Metal4CommandList.cpp`, `Metal4ListState.*`, `Metal4Scopes.cpp` | `acquireCommandList`, `end`, `uploadFrameData`, the frame-arena pages, scopes |
 | Recording | `Metal4Encoders.*`, `Metal4Copies.cpp`, `Metal4Clears.cpp`, `Metal4Barriers.*` | the open encoder, copies and fills, clears, barrier lowering |
-| Kernels | `Metal4Kernels.*`, `Backends/Metal4/Kernels/`, `xmake/kernels.lua` | the embedded library, the fill and clear pipelines |
+| Kernels | `Metal4Kernels.*`, `Backends/Metal4/Kernels/`, `xmake/kernels.lua` | the embedded library, the fill, clear and counted-draw pipelines |
+| Libraries and pipelines | `Metal4ShaderLibrary.*`, `Metal4Pipelines.cpp`, `Metal4PipelineState.*`, `Metal4PipelineCache.*` | `loadShaderLibrary`, `createPipeline`, the depth-stencil cache, the archive cache |
+| Drawing | `Metal4RenderPasses.cpp`, `Metal4DrawState.*`, `Metal4GraphicsState.cpp`, `Metal4Draws.cpp`, `Metal4Dispatches.cpp`, `Metal4Indirect.cpp`, `Metal4Icb.*` | passes, the prefix, state, draws, dispatches, counted draws |
 | Commit timing | `CommitTiming.h`, `Metal4CommitTiming.cpp` | the test-only seam that reports each commit's GPU time |
 | Helpers | `Metal4Common.*` | autorelease pools, string conversion, bounded event waits |
 
-[Command recording](metal4-recording.md) describes the lists. Every entry not implemented yet takes
-one of two forms:
+[Command recording](metal4-recording.md) describes the lists and [drawing](metal4-drawing.md)
+passes, pipelines and draws. Every entry not implemented yet takes one of two forms:
 
-- `Device::loadShaderLibrary`, both `createPipeline` overloads, `pipelineCacheData` and
-  `createUpscaler` return `ErrorCategory::Unsupported`, naming the entry.
-- The pass, pipeline, dispatch and draw entries of `CommandList` log `<entry> is not implemented by
-  the Metal 4 backend` and abort in every build, after the core's handle check, so a
-  default-constructed object still fails `VU-rojo-core-0004` first. The core serves the destroys of
-  pipelines, shader libraries and upscalers and `tileShape`. The device reports no upscaler and no
-  conservative rasterisation, and `scopeTimings` reports no durations; that arrives with timestamps
-  and passes.
+- `Device::createUpscaler` returns `ErrorCategory::Unsupported`, naming the entry.
+- `CommandList::upscale` logs `<entry> is not implemented by the Metal 4 backend` and aborts in
+  every build, after the core's handle check, so a default-constructed object still fails
+  `VU-rojo-core-0004` first. The core serves the destroy of upscalers and `tileShape`. The device
+  reports no upscaler and no conservative rasterisation, and `scopeTimings` reports no durations;
+  that arrives with timestamps.
 
 ## Device objects and teardown
 
@@ -52,18 +53,18 @@ requires the Metal 4 family, the Apple7 family, read-write texture tier 2, 996 a
 samplers, a `maxBufferLength` of 2^32 bytes (so `maxAddrOffset` reaches its floor of 2^32 − 1),
 1,024 x 1,024 x 64 threads per threadgroup, 32,768 bytes of threadgroup memory and BC texture
 compression: every floor item of chapters 02 and 15 that Metal reports. The first missing one is
-named in an `Unsupported` result. It then creates, in this
-order: the three `MTL4::CommandQueue`s (graphics, compute, copy), one `MTL4::Compiler`, the
-residency set, the stager and its internal queue, the frame event, the two ID tables and the
-backend's kernel library with its pipelines. Each of
-the three queues also owns a progress event, described under fences. Any
-failure releases what exists in reverse and returns the error. `destroyDevice` drains every queue,
-the internal upload queue included, by signalling a throwaway event and waiting for it, then
-committing an empty command buffer with a feedback handler and waiting for the handler (Metal
-making no event or buffer is fatal, since nothing could be released safely), so the
-retire hooks that `beginDestroy` runs find idle queues; `VU-rojo-device-0002` therefore fires after
-the drain. It then releases the native objects in reverse order of creation. The device's own
-objects and the calls that create, drain and release them are not counted.
+named in an `Unsupported` result. It then creates, in this order: the three `MTL4::CommandQueue`s
+(graphics, compute, copy), one `MTL4::Compiler` with its pipeline data set serializer, the residency
+set, the stager and its internal queue, the frame event, the two ID tables and the backend's kernel
+library with its pipelines, then loads `DeviceDesc::pipelineCache`
+([drawing](metal4-drawing.md#the-pipeline-cache)). Each of the three queues also owns a progress
+event, described under fences. Any failure releases what exists in reverse and returns the error.
+`destroyDevice` drains every queue, the internal upload queue included, by signalling a throwaway
+event and waiting for it, then committing an empty command buffer with a feedback handler and
+waiting for the handler (Metal making no event or buffer is fatal, since nothing could be released
+safely), so the retire hooks that `beginDestroy` runs find idle queues; `VU-rojo-device-0002`
+therefore fires after the drain. It then releases the native objects in reverse order of creation.
+The device's own objects and the calls that create, drain and release them are not counted.
 
 `createDevice` leaves the residency set dirty: the first submission, or the first staged upload,
 commits it. Capabilities come from the device and from the Metal 4 column of the limits table of
@@ -106,10 +107,10 @@ without touching a pool. The table holds 2^22 slots; a creation that finds it fu
 A pool clears a slot's table entry before the retire hook runs, so a racing misuse reads null and
 never a dangling pointer, and the hook then releases the object and sets the record's field to null.
 A hook opens an autorelease pool, tolerates a null payload and releases in reverse order of
-creation. The backend registers hooks for buffers, heaps, textures, fences, views and samplers, a
-`frameSlot` hook that returns a slot's lists to their pool and releases the fence events the queues
-have passed and a `waitFrame` hook; the others are null because nothing native backs pipelines,
-libraries or upscalers yet.
+creation. The backend registers hooks for buffers, heaps, textures, fences, views, samplers,
+shader libraries and pipelines, a `frameSlot` hook that returns a slot's lists to their pool and
+releases the fence events the queues have passed and a `waitFrame` hook; the upscaler hook is null
+because nothing native backs upscalers yet.
 
 ## Addresses and the address map
 
@@ -220,14 +221,17 @@ The backend's mutexes nest in one order, outermost first:
 
 1. the frame arena's, the validation tracker's or the stager's, which never nest in one another;
 2. a `HandlePool`'s, such as the buffer pool's;
-3. the residency set's, the Debug address map's or `Presentation::mutex`, which are leaves: nothing
-   is taken while any of them is held, and none is taken inside another.
+3. the residency set's, the Debug address map's, `Presentation::mutex`, the depth-stencil cache's
+   or the pipeline cache's, which are leaves: nothing is taken while any of them is held, and none
+   is taken inside another.
 
 A thread may skip a level but never takes a lock of an earlier level while it holds one of a later
 level. Claiming an arena page holds the arena's mutex while it adds the page to the residency set,
 then to the buffer pool, then in Debug to the address map, one after another. A retire hook runs
 under its pool's mutex and takes the residency set's and, for a buffer, the address map's; it calls
-neither a pool nor the arena. `Queue::submit` takes the residency set's mutex and, through
+neither a pool nor the arena. A pipeline creation takes the depth-stencil cache's mutex, and
+`pipelineCacheData` the pipeline cache's, each alone and only at creation, never while recording.
+`Queue::submit` takes the residency set's mutex and, through
 `flushPresentation`, the presentation mutex inside the tracker's lock (the tracker's lock is held
 only on a validating device), and a copy takes the residency set's inside the stager's. The
 presentation mutex is never held across `nextDrawable` or the latency wait; `acquire` waits on the
@@ -251,11 +255,12 @@ list pool's. The view and sampler hooks run under their slot allocator's mutex a
 ## Autorelease pools
 
 Every entry that calls an autoreleasing factory opens an `NS::AutoreleasePool` and retains what it
-keeps, as do the copies, the native fill and each kernel dispatch, where the driver or the
-validation layer autoreleases; every retire hook and every destructor of an object that holds Metal
-references does the same and releases in reverse order of creation. Objects from `new*` factories
-are +1 and released once. An `NS::Error*` is reset to null before each call that takes it. RojoRHI
-reads and sets no environment variable; whoever runs the tests sets `MTL_DEBUG_LAYER`.
+keeps, as do the copies, the native fill, each kernel dispatch, dispatch and draw, and the end of a
+render encoder, where the driver or the validation layer autoreleases; every retire hook and every
+destructor of an object that holds Metal references does the same and releases in reverse order of
+creation. Objects from `new*` factories are +1 and released once. An `NS::Error*` is reset to null
+before each call that takes it. RojoRHI reads and sets no environment variable; whoever runs the
+tests sets `MTL_DEBUG_LAYER`.
 
 ## The shared metal-cpp unit
 
@@ -271,9 +276,10 @@ The Metal 4 test binary builds `Tests/Contract/` minus the files named in `metal
 `[conformance]` cases), `Tests/Support/` (`GpuKit` among them) and `Tests/Support/Metal4/` (the
 surface, a readback helper and `runsOnGpu`). A metal4 build needs the Metal toolchain for the
 kernels. `Tests/Core/` and `Tests/Null/` build with the Null backend only.
-`metal4_pending` lists the contract files of chapters the backend does not implement yet; a file
-leaves it when it passes whole, the build fails on a name matching no file, and the list ends
-empty. The entries `contract`, `death`, `abi` and `conformance` run under `MTL_DEBUG_LAYER=1`.
+`metal4_pending` lists the contract files whose cases need an entry the backend does not
+implement yet; a file leaves it when it passes whole, the build fails on a name matching no file,
+and the list ends empty. [Drawing](metal4-drawing.md#tests) lists the cases of passes, pipelines
+and draws. The entries `contract`, `death`, `abi` and `conformance` run under `MTL_DEBUG_LAYER=1`.
 By hand, in Debug, from `build/macosx/arm64/debug/rojorhi-test`:
 
 ```

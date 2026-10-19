@@ -5,8 +5,8 @@
 This page describes how the Metal 4 backend records a command list into native command buffers:
 the objects a list owns, the one open encoder, copies, fills, clears, barriers, scopes, the counts
 and the commit-timing seam. [The Metal 4 backend](metal4-backend.md) describes the device around
-it. Render passes, pipelines, dispatches, draws and timestamps are not recorded yet;
-their entries log `<entry> is not implemented by the Metal 4 backend` and abort. Chapters 07, 09 and
+it, and [drawing](metal4-drawing.md) the render passes, pipelines, dispatches and draws a list
+also records. Timestamps are not recorded yet. Chapters 07, 09 and
 10 of the API reference stay the authority on semantics and on each entry's Metal 4 mapping; every
 check lives in `Source/Core`, so no `ROJORHI_VU` appears under `Backends/Metal4/`.
 
@@ -50,8 +50,9 @@ autoreleasing factory, except where the next paragraph says.
 
 The Metal validation layer and the driver autorelease on some native calls: the layer on every
 dispatch it checks, the driver the first time it builds an internal blit pipeline for a copy shape.
-The copy entries, the native `fillBuffer` and every backend kernel dispatch therefore open an
-`AutoreleasePool` around their native call, as does the render path of a clear. Barriers and debug
+The copy entries, the native `fillBuffer`, every backend kernel dispatch, dispatch and draw
+therefore open an `AutoreleasePool` around their native call, as does the render path of a clear
+and the end of a render encoder. Barriers and debug
 groups open none. This is a runtime effect of the layer, so Release builds pay it too.
 
 ## Copies
@@ -87,10 +88,14 @@ device's other objects. A failure is a `DriverFailure` naming the library or the
 
 A kernel run is `bindKernel` (set the pipeline unless the open encoder already has it, then the
 kernel table), the caller's bindings, and `dispatchKernel` (dispatch inside a pool, then set the
-list's table again). The state that remembers the encoder's pipeline lives in `Encoders`, is reset
-when an encoder opens or closes, and must be cleared by any entry that sets a pipeline itself.
-Parameters come from the frame arena through `core::bumpArenaPage`, which locks only to claim a
-page, and count as no frame data upload.
+list's table again). `Encoders::kernelPipeline` remembers the encoder's pipeline, whether a kernel's
+or the caller's compute pipeline, and is reset when an encoder opens or closes. A kernel leaves its
+own pipeline on the encoder, and the next `dispatch` sets the caller's again when it differs
+([drawing](metal4-drawing.md#compute-binding-and-dispatches)). The counted-draw kernels of a render
+pass run on a compute encoder that holds only kernels, through the batch form (`bindKernelBatch`,
+`dispatchKernelBatch`), which sets the kernel table once and does not set the list's table back
+([counted draws](metal4-drawing.md#counted-draws)). Parameters come from the frame arena through
+`core::bumpArenaPage`, which locks only to claim a page, and count as no frame data upload.
 
 The fill kernel writes one 32-bit word per thread, 64 threads per group, at most 2^31 words per
 dispatch. The pattern's bytes land in little-endian order.
@@ -173,8 +178,12 @@ inside the scope; `endScope` closes the encoder, calls `popDebugGroup` and relea
 
 `nativeRecordCalls` counts every message a list sends after `beginList` to its command buffer, an
 encoder or an argument table: `beginCommandBuffer`, `setLabel`, the encoder factories,
-`setArgumentTable`, `setAddress`, `setTexture`, `setComputePipelineState`, debug groups, copies,
-fills, dispatches, barriers, `endEncoding` and `endCommandBuffer`. Getters count nothing.
+`setArgumentTable`, `setAddress`, `setTexture`, the pipeline, state and store-action setters,
+debug groups, copies, fills, dispatches, draws, executes, `useResidencySet`, barriers,
+`endEncoding` and `endCommandBuffer`; a command deferred to the render encoder's open counts when
+it is replayed. Getters and the setters of a pass descriptor count nothing. A render encoder
+counts in `encodersOpened` like any other, those of a split and the compute encoder of a counted
+draw's kernels included; the pass and draw sites are in [drawing](metal4-drawing.md).
 `nativeBarriers` counts each native barrier command, so one batch may count several.
 `encodersOpened` counts every native encoder, the trailing one and a clear's render encoders
 included. An allocator reset counts one `nativeHostCalls`. `nativeSubmitCalls` counts native queue
@@ -205,4 +214,5 @@ as are the `[metal4]` tests.
 copies, barrier forms by native counts, kernels and the fill, clears, per-operation counts and
 commit timing. `Tests/Conformance/` holds T1 cases that read results back through
 `Tests/Support/GpuKit`: copies, initial data, barriers, fills, clears and queue handoff
-([testing](../conventions/testing.md)).
+([testing](../conventions/testing.md)); the cases of passes, draws and dispatches are listed in
+[drawing](metal4-drawing.md#tests).

@@ -208,3 +208,26 @@
   a zero-extent swapchain. On Metal 4, `Queue::mapTiles` and `Swapchain::acquire` move from `native`
   to `cheap` in chapters 11 and 13 and in appendix A
   ([architecture](docs/architecture/metal4-backend.md)).
+- Metal 4 drawing: `Device::loadShaderLibrary` reads the RojoRHI shader library container and
+  checks the ABI stamp and each entry's stage; `createPipeline` makes render, mesh and compute
+  pipelines with shared depth-stencil states; `pipelineCacheData` and `DeviceDesc::pipelineCache`
+  round-trip a Metal 4 archive, and `Counters` reports `pipelineCacheHits`; render passes open
+  their encoder at the first draw that needs one; dynamic state is set only where it differs; and
+  the direct draws, dispatches, indirect dispatch and counted indirect draws (kernels that encode
+  indirect command buffers, at `maxCount` 1 a native record) and mesh tasks record on Metal 4.
+  The `[conformance]` cases run the ABI shaders, render passes, draws, dispatches, mesh tasks,
+  indirect and counted draws and the graphics barrier kinds on the GPU under API validation, and
+  the contract files of passes, pipelines, draws and dispatches now run on Metal 4 (six files that
+  need upscaling stay pending)
+  ([architecture](docs/architecture/metal4-drawing.md)). Follow-ups: issues #60 to #63.
+- API reference changes for Metal 4 drawing: the Metal 4 mapping rows of chapters 02, 05, 06, 07
+  and 08 say that no render encoder opens until a draw, that a counted draw's kernel runs ahead of
+  the encoder and a split pays a store and a load, that a graphics pipeline with neither a fragment
+  entry nor a depth format is created with rasterization off, that a mesh pipeline with color
+  targets, a depth format and no fragment entry is `DriverFailure`, that the pipeline cache blob is
+  a RojoRHI header around a Metal 4 archive, and that a direct mesh draw reads a zero `drawId`
+  record; chapter 08's mesh indirect row names `buffer(3)` and 1,536 bytes per command; chapter
+  14's `Counters` row lists pipeline-cache hits.
+- Test support: `Tests/Support/Backend.h` supplies a standard library, a re-stamped one and a
+  foreign one for every backend, so the pipeline contract cases run on Metal 4; the Null library
+  builder moved to `Tests/Support/Null/`.
