@@ -3,7 +3,7 @@
 /// @brief Implements the helper that builds Null shader library blobs for the tests.
 //----------------------------------------------------------------------------------------------------------------------
 
-#include "Support/NullLibrary.h"
+#include "Support/Null/NullLibrary.h"
 
 #include <format>
 

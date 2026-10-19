@@ -135,7 +135,7 @@ results, never violations:
   name: `DriverFailure` with the line number.
 
 The entries go into the `ShaderLibraryRecord`, which pipeline creation checks against. Tests build
-blobs in code with `Tests/Support/NullLibrary.h`.
+blobs in code with `Tests/Support/Null/NullLibrary.h`.
 
 ## Pipelines and the pipeline cache
 
@@ -218,7 +218,7 @@ barriers.
 `Tests/Contract/` has a `*Tests.cpp` and a `*DeathTests.cpp` for each of command lists, pipelines,
 render passes, draws, copies and barriers. `Tests/Core/` pins the list state machine, the address
 decode and the pipeline records through `core::coreOf`; `Tests/Null/` the library and cache
-formats and the list pools. `Tests/Support/NullLibrary.*` builds library blobs and
+formats and the list pools. `Tests/Support/Null/NullLibrary.*` builds library blobs and
 `Tests/Support/PassKit.*` builds a device with an open frame, a library, a list, attachment
 textures and pipelines.
 

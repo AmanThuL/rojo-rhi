@@ -287,6 +287,13 @@ TEST_CASE("the Metal shader libraries carry each entry's stage and threadgroup s
     CHECK(readLibrary("AbiVertex").entries == Entries{ { "vertexMain", "vertex", { 0, 0, 0 } } });
     CHECK(readLibrary("AbiFragment").entries == Entries{ { "fragmentMain", "fragment", { 0, 0, 0 } } });
     CHECK(readLibrary("AbiCompute").entries == Entries{ { "computeMain", "compute", { 1, 1, 1 } } });
+    CHECK(
+        readLibrary("Standard").entries == Entries{ { "vsMain", "vertex", { 0, 0, 0 } },
+                                                    { "fsMain", "fragment", { 0, 0, 0 } },
+                                                    { "tsMain", "task", { 1, 1, 1 } },
+                                                    { "msMain", "mesh", { 1, 1, 1 } },
+                                                    { "csMain", "compute", { 1, 1, 1 } } }
+    );
 
     // One kernel per texture type: seven sampled, the comparison sample, two multisample and five storage.
     const Entries textures = readLibrary("AbiTextures").entries;
