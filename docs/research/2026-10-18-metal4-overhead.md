@@ -243,6 +243,47 @@ stated with its sequence. Both were found while implementing the harness, before
 passes test and write depth, which chapter 09 counts as both accesses; stages and layouts are
 unchanged. The change adds no native call, since Metal 4 barriers are stage-based.
 
+2026-10-19, before any timed run, after checking every registered sequence and workload against
+the backend and the harness. Nothing here changes a budget, a workload, a `K` or a rule:
+
+- C8: R makes 14 native calls per repetition (13 in the first pass), the registered sequence with
+  `setFrontFacingWinding` between `setRenderPipelineState` and `setViewport`: the backend sets the
+  winding once per encoder it opens for a pipeline that culls, tests stencil or has a fragment
+  entry. The budget stays N's 12 plus `c` of 7. R takes its timestamps from heaps the device owns
+  per frame slot, at most 8 of 4,096 entries, so at `K` 10,000 each arm holds 15 heaps and the two
+  arms of a process never hold them at once; the sweep limit stands for N's heaps and the encoder
+  abort, and R would leave passes past 16,384 a frame untimed rather than exceed the limit.
+- C9: R makes 3 native calls per submit, the `commit`, the fence's `signalEvent` and a
+  `signalEvent` of the queue's progress event, against N's 2 and the budget of 3.
+- R departures that cost CPU time and no counted call: an autorelease pool around every native
+  draw, dispatch, copy and fill, around each encoder's open and end and around each timestamp
+  written on a command buffer (issue #60); a label string made per list and per pass; the pass
+  descriptor configured for each encoder; a label on every command buffer and encoder. Every render
+  pass of R is a timed scope, so C1 to C3 and C10 pay a debug group and two timestamps per frame
+  that their N arms, as registered, do not write.
+- R departures per frame, which change no per-operation count: C6 splits its compute encoder at the
+  fill's barrier and closes the list with a trailing encoder for the last held barrier; C10 closes
+  with a trailing encoder for the stages its target barrier leaves pending; in the composed frame R
+  closes the `gbuffer`, `ao` and `lighting` lists with trailing encoders, splits the `ao` encoder at
+  its closing batch, lowers the readback copy to `Blit | Dispatch | Fragment`, binds residency and
+  sets the winding per encoder, and signals the queue's progress and frame events. The untimed
+  gate counted 1,293 native calls a frame for R and 1,254 for N.
+- N departures from the reference's mappings, where native code does less: C6's global barrier
+  makes its visibility `Device`, where chapter 09 lowers it with `Device | ResourceAlias`, since
+  nothing in C6 aliases; the encoding kernels of the counted draws in C10 and the composed frame are
+  hand-written MSL copies of the backend's kernel, not Slang output, and N sizes its indirect
+  command buffers to `maxCount`; C10's target, records and count are `Shared` in N and `Gpu` in R.
+  C10 is judged on CPU time, so none of these reaches a judged GPU number. In G1 and G2, both
+  report-only, R writes its output to one of three regions by frame slot and N rewrites one.
+- Instrumentation: the commit-timing seam passes Metal a block, as N does, instead of metal-cpp's
+  `std::function` overload, whose wrapper and `__block` copy made about three allocations per commit
+  in R only; and N's handler opens the same autorelease pool as the seam's. A timed process that
+  prints any line on standard error stops the round, so a refused counter heap, which leaves a scope
+  untimed and R with less work, cannot pass for a faster R.
+- Analysis, as the harness has implemented it since the note was accepted: the allocation rule is
+  applied per configuration, so a workload misses when any of its configurations does; and a count
+  that differs between frames or processes is reported unstable and judged on its maximum.
+
 ## Results
 
 Not yet run.
