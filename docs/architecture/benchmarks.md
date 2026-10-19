@@ -179,16 +179,16 @@ under the output directory, recursively.
 
 ## State and what remains
 
-The R arm runs on Null only. The [Metal 4 backend](metal4-backend.md) implements the device, its
-resources, copies, fills, clears, barriers and `CommitTiming.h`, but not yet the pass, pipeline,
-dispatch, draw and presentation entries the workloads call. The native arm runs on this Mac, and its
-correctness smoke (`--arms N`) is recorded as `t2-native-smoke` evidence, the three runs
-`native-check`, `native-build` and `native-gate`
-([recording GPU evidence](../guides/gpu-evidence.md)). Before a timed round:
+The R arm runs on Null and on Metal 4. On `metal4` it loads each `Shaders/<name>.metal4lib` that
+the Slang rule builds beside the executable, `RojoRHIBench/metal4` passes, and the driver's
+untimed correctness gate (`bench.py build --backend metal4`, then `correctness`, R against N in
+Release and Debug) passes every configuration, kept under the `t2-gate` topic so that its logs stay
+out of the timed round's `t2` directory. The native arm runs on this Mac, and its correctness smoke
+(`--arms N`) is recorded as `t2-native-smoke` evidence, the three runs `native-check`,
+`native-build` and `native-gate` ([recording GPU evidence](../guides/gpu-evidence.md)). Before a
+timed round:
 
-- keep the obligations the N arm encodes (next section) in view when the backend lowers the R arm;
-- implement the entries the R arm calls in the Metal 4 backend, build `RojoRHIBench` on `metal4`,
-  and run `RojoRHIBench/metal4` and the driver's full correctness gate;
+- keep the obligations the N arm encodes (next section) in view;
 - run `build`, `correctness`, `timing` and `analyze` and record the results in the note's Results
   section.
 
@@ -201,9 +201,14 @@ overhead and not a defect of the harness. In particular:
   to no native barrier in N.
 - N closes the compute encoder at a scope's end, while the design's M7 keeps it open until a render
   pass, an upscale or `end`; R may therefore emit an encoder barrier at the ao closing batch that N
-  does not.
-- `Copy` lowers to `StageBlit` only.
-- Allocator resets are not native-call targets.
+  does not, and the trailing barrier a list emits at its end is R's own native call. Both are
+  measured overhead; they appear in the composed frame, where R makes 1293 native calls to N's 1254
+  (39 more) in the gate run, and in none of C1 to C10.
+- `Copy` on a Graphics list lowers to `Blit | Dispatch | Fragment` on Metal 4, so that a copy waits
+  and signals for every stage that may touch its buffers; N's copy is a blit alone. The wider stage
+  set is measured overhead.
+- Allocator resets count in `nativeHostCalls`, outside every timed window and outside every
+  per-operation count; they are not native-call targets.
 - C9's count window spans the same `K` submit calls as its timed span, but in R it sums only the
   deltas of `nativeSubmitCalls` and `nativeHostCalls`: the lists' record calls and barriers, which
   fold into the counters at submission, are left out. Any submit-time encoding the backend does
@@ -212,3 +217,24 @@ overhead and not a defect of the harness. In particular:
   a queue while timing is attached to it: `RojoGpuTiming` fails a frame on a stray or
   non-contiguous serial. The seam's feedback must also coexist with a commit feedback handler the
   backend sets for its own waits.
+
+Where the Metal 4 backend departs from N today, each difference is measured overhead and not a
+defect:
+
+- Every native draw and dispatch runs in its own autorelease pool, which keeps a recording thread's
+  pool depth flat but costs a pool push and pop per command (issue #60 tracks the cost). A pool is
+  not a message to a command buffer, encoder, argument table or scaler, so it is no native call and
+  changes no count above; it shows only in CPU time.
+- A pipeline that culls, tests stencil or has a fragment entry makes the backend set the winding
+  once per encoder it opens, one native call more than N's sequence. C8 therefore makes 14 native
+  calls per repetition, the registered 13 plus that call, against N's 12 and the budget of 12 plus
+  `c` of 7.
+- The correctness gate of 2026-10-19 (Release and Debug, validation on in Debug) measured, as
+  calls per repetition, R and N, and the budget N plus `c`: C1 2 and 2 (5), C2 2 and 2 (5), C3 4
+  and 4 (6), C4 2 and 2 (5), C5 0 and 0 (1), C6 2 and 2 (4), C7 1 and 1 (2), C8 14 and 12 (19),
+  C9 3 and 2 (3), C10 3 and 3 (4). C10 at `maxCount` 1 (R 3, N 1) is outside the pre-registered
+  budget table; the gate passes it and it is reported only.
+- C9's margin is zero: R makes three native calls per submit, the commit, the fence's `signalEvent`
+  and the queue's own progress `signalEvent` that keeps a destroyed fence's event alive (N makes
+  two), against a budget of 3. Any native call the backend adds at submit time fails the gate in
+  the timed round, so a change to `Queue::submit` must rerun C9 first.

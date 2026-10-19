@@ -11,19 +11,11 @@
 #include <Metal/Metal.hpp>
 
 #include <cstdint>
-#include <cstdlib>
 #include <format>
 #include <string>
 #include <string_view>
 
 namespace rojoRHI::metal4 {
-    //==================================================================================================================
-    void notImplemented(std::string_view entry)
-    {
-        ROJORHI_LOG_ERROR("{} is not implemented by the Metal 4 backend", entry);
-        std::abort();
-    }
-
     //==================================================================================================================
     AutoreleasePool::AutoreleasePool() : m_pool(NS::AutoreleasePool::alloc()->init())
     {

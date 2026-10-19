@@ -76,10 +76,9 @@ public interface, one header in sections by API-reference chapter.
 `Tests/` builds as the `RojoRHITests` binary, whose file set depends on the backend. With `null`,
 `contract` runs the T0 cases of `Tests/Contract/`, `Tests/Core/` and `Tests/Null/` except the death
 tests, `death` runs the `[death]` cases and `abi` the shader ABI cases. With `metal4`, `contract`
-runs `Tests/Contract/` (minus the files `metal4_pending` names) and `Tests/Metal4/`, `death` and
-`abi` run as on Null, and `conformance` runs the `[conformance]` cases of `Tests/Conformance/`,
-which observe GPU results; every Metal 4 entry runs under `MTL_DEBUG_LAYER=1`. `Tests/Core/` and
-`Tests/Null/` build with Null only. `Tests/Support/` holds the death-test harness and the helpers
+runs `Tests/Contract/` and `Tests/Metal4/`, `death` and `abi` run as on Null, and `conformance`
+runs the `[conformance]` cases of `Tests/Conformance/`, which observe GPU results; every Metal 4
+entry runs under `MTL_DEBUG_LAYER=1`. `Tests/Core/` and `Tests/Null/` build with Null only. `Tests/Support/` holds the death-test harness and the helpers
 of each backend. [Testing](../conventions/testing.md) owns the tiers.
 v1 lives frozen beside them under `Legacy/` and is deleted with the consumer port; ADR 0017 owns
 the layout, the freeze and the consumer's dependency rename.

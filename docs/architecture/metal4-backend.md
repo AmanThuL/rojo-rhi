@@ -275,15 +275,12 @@ so a host that links more than one gets one definition of each table.
 
 ## Tests
 
-The Metal 4 test binary builds `Tests/Contract/` minus the files named in `metal4_pending` in
-`xmake/targets.lua`, `Tests/Metal4/` (the `[metal4]` cases), `Tests/Conformance/` (the
-`[conformance]` cases), `Tests/Support/` (`GpuKit` among them) and `Tests/Support/Metal4/` (the
-surface, a readback helper and `runsOnGpu`). A metal4 build needs the Metal toolchain for the
-kernels. `Tests/Core/` and `Tests/Null/` build with the Null backend only.
-`metal4_pending` lists the contract files whose cases need an entry the backend does not
-implement yet; a file leaves it when it passes whole, the build fails on a name matching no file,
-and the list ends empty. [Drawing](metal4-drawing.md#tests) lists the cases of passes, pipelines
-and draws. The entries `contract`, `death`, `abi` and `conformance` run under `MTL_DEBUG_LAYER=1`.
+The Metal 4 test binary builds `Tests/Contract/` whole, `Tests/Metal4/` (the `[metal4]` cases),
+`Tests/Conformance/` (the `[conformance]` cases), `Tests/Support/` (`GpuKit` among them) and
+`Tests/Support/Metal4/` (the surface, a readback helper and `runsOnGpu`). A metal4 build needs the
+Metal toolchain for the kernels. `Tests/Core/` and `Tests/Null/` build with the Null backend only.
+[Drawing](metal4-drawing.md#tests) lists the cases of passes, pipelines and draws. The entries
+`contract`, `death`, `abi` and `conformance` run under `MTL_DEBUG_LAYER=1`.
 By hand, in Debug, from `build/macosx/arm64/debug/rojorhi-test`:
 
 ```

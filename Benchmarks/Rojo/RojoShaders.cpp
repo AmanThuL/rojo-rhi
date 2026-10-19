@@ -17,7 +17,7 @@ namespace rojoRHI::bench {
     namespace {
         //==============================================================================================================
         // Null: the backend's text format, a magic line, the shader ABI version, then one line per entry point. Metal 4:
-        // the metallib the Slang rule built beside the executable.
+        // the .metal4lib the Slang rule built beside the executable.
         std::expected<std::vector<std::byte>, std::string> libraryBytes(std::string_view name, std::span<const ShaderEntryName> entries)
         {
 #if defined(ROJORHI_BENCH_BACKEND_NULL)
@@ -36,7 +36,7 @@ namespace rojoRHI::bench {
             {
                 return std::unexpected(directory.error());
             }
-            const std::filesystem::path path = *directory / "Shaders" / (std::string(name) + ".metallib");
+            const std::filesystem::path path = *directory / "Shaders" / (std::string(name) + ".metal4lib");
             std::FILE* file = std::fopen(path.c_str(), "rb");
             if (file == nullptr)
             {

@@ -66,13 +66,9 @@ captures nothing ([the Metal 4
 edges](../architecture/metal4-backend-edges.md#presenting-under-objc_debug_missing_pools) lists the
 sources).
 
-Metal 4 builds `Tests/Contract/` minus the files named in `metal4_pending` in `xmake/targets.lua`,
-contract files that have not yet passed whole on the backend. A file leaves the list when it passes
-whole on Metal 4, a name that matches no file fails the configuration, and the list ends empty.
-Today it holds six files, each with cases that need `Device::createUpscaler` or
-`CommandList::upscale`: `DiagnosticsTests.cpp`, `LifetimeDeathTests.cpp`, `TrackerDeathTests.cpp`,
-`TrackerTests.cpp`, `UpscaleDeathTests.cpp` and `UpscalerTests.cpp`. The contract files of passes,
-pipelines, draws and dispatches run on Metal 4.
+Metal 4 builds every file of `Tests/Contract/`, as Null does. A contract case whose setup the
+reference lets an implementation refuse, such as an upscaler extent, skips where creation returns
+an error.
 
 **Death tests** pin each Debug-tier valid-usage rule (ADR 0009). A death test is a `TEST_CASE` named
 `"<identifier> <behaviour>"`, such as `"VU-rojo-device-0003 beginFrame runs while a frame is open"`,
@@ -191,14 +187,16 @@ GPU case is RojoRHI's, while a fixture that builds a consumer's scene is not.
   deliberate: it buys independence, and a later divergence between the two copies is then a
   decision someone makes rather than a break someone suffers.
 - Oracles compare exact values: integers held in floats that represent them exactly (`Format` has no
-  integer format) or `k / 255` values. They fail if a command, a state or an execute were skipped.
-  `DrawOracle` (draws, state and indirect draws), `MeshOracle` (task and mesh entries),
-  `MeshRootOracle` (a mesh entry that reads the root), `PullOracle` (vertex pulling through the
-  root) and `DispatchOracle` (the compute grid) hold the entries those
-  cases use. A vertex entry reads no reserved binding unless it must pull its vertices: the pinned
-  Slang lowers every reserved binding to a writable `device` pointer, and Metal warns "writable
-  resources in non-void vertex function" on such an entry, which `PullOracle` and the benchmark's
-  vertex shaders accept as chapter 05 documents.
+  integer format) or `k / 255` values. They fail if a command, a state or an execute were skipped. A
+  value a shader reads from a normalized format is compared within half a step of its channel, which
+  identifies the stored code; what a format stores is compared byte for byte. `DrawOracle` (draws,
+  state and indirect draws), `MeshOracle` (task and mesh entries), `MeshRootOracle` (a mesh entry
+  that reads the root), `PullOracle` (vertex pulling through the root), `DispatchOracle` (the
+  compute grid) and `FormatOracle` (sampling, loading, storing and reading the samples of every
+  format) hold the entries those cases use. A vertex entry reads no reserved binding unless it must
+  pull its vertices: the pinned Slang lowers every reserved binding to a writable `device` pointer,
+  and Metal warns "writable resources in non-void vertex function" on such an entry, which
+  `PullOracle` and the benchmark's vertex shaders accept as chapter 05 documents.
 - Shader basenames must be unique, including case, within a test target. The build rule rejects a
   collision. Uniqueness is scoped per target, so a copied smoke shader keeping its original
   basename in the consumer's target is not a collision.
