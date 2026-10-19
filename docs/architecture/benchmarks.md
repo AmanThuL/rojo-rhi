@@ -91,8 +91,10 @@ Each measurement has one definition for both arms.
 - **GPU span.** Every commit of both arms carries commit feedback, in every run. A frame's span is
   the earliest `GPUStartTime` to the latest `GPUEndTime` over its commits. A `FeedbackCollector`
   with preallocated slots receives them, and a frame is complete when every commit has reported.
-  Neither arm adds a fence or an event the note does not register. On Null a submission completes
-  inside the call and no GPU time exists.
+  The harness adds no fence or event the note does not register to either arm; the backend's own
+  events (a queue's progress signal and the frame event) are R's measured overhead. Both arms attach
+  the same handler, a block that opens an autorelease pool, so their feedback allocates alike. On
+  Null a submission completes inside the call and no GPU time exists.
 - **Native calls.** R: the per-frame delta of `nativeRecordCalls + nativeSubmitCalls +
   nativeHostCalls`, with `nativeBarriers` reported beside it and not added. N: a plain increment
   beside each call on a Metal device, queue, command buffer, encoder, argument table, residency set,
@@ -164,8 +166,10 @@ python3 Tools/bench.py analyze                         writes summary.json and a
 - **Timing** refuses a Null build and battery power, removes `MTL_*`, `METAL_*` and `Malloc*`
   variables from the children's environment, skips results that exist (resume), renames a process
   whose thermal state was not nominal to `.discarded<k>.json`, rests 120 s before a retry, and marks
-  the configuration not run after the fourth attempt. It follows ADR 0014 and runs on local hardware
-  only.
+  the configuration not run after the fourth attempt. A timed process that prints any line on
+  standard error stops the round with its result renamed `.failed.json`: RojoRHI's warning that a
+  counter heap was refused means a scope went untimed and R did less work than the gate measured
+  (issue #64). It follows ADR 0014 and runs on local hardware only.
 - **Analysis** takes a process value as the median of its measured frames and the reported value as
   the median of the process values. The delta is the median of the paired per-process deltas R
   minus N, with a bootstrap interval of 10,000 resamples from a fresh `random.Random(20261018)` per
@@ -203,12 +207,15 @@ overhead and not a defect of the harness. In particular:
   pass, an upscale or `end`; R may therefore emit an encoder barrier at the ao closing batch that N
   does not, and the trailing barrier a list emits at its end is R's own native call. Both are
   measured overhead; they appear in the composed frame, where R makes 1293 native calls to N's 1254
-  (39 more) in the gate run, and in none of C1 to C10.
+  (39 more) in the gate run, in C6, whose fill barrier splits the compute encoder and whose last
+  barrier closes the list with a trailing encoder, and in C10, whose per-frame target barrier leaves
+  stages pending at `end`. They are per frame, so they change no per-operation count.
 - `Copy` on a Graphics list lowers to `Blit | Dispatch | Fragment` on Metal 4, so that a copy waits
   and signals for every stage that may touch its buffers; N's copy is a blit alone. The wider stage
   set is measured overhead.
 - Allocator resets count in `nativeHostCalls`, outside every timed window and outside every
-  per-operation count; they are not native-call targets.
+  per-operation count, though inside the composed frame's per-frame count; they are not native-call
+  targets.
 - C9's count window spans the same `K` submit calls as its timed span, but in R it sums only the
   deltas of `nativeSubmitCalls` and `nativeHostCalls`: the lists' record calls and barriers, which
   fold into the counters at submission, are left out. Any submit-time encoding the backend does
@@ -221,10 +228,15 @@ overhead and not a defect of the harness. In particular:
 Where the Metal 4 backend departs from N today, each difference is measured overhead and not a
 defect:
 
-- Every native draw and dispatch runs in its own autorelease pool, which keeps a recording thread's
-  pool depth flat but costs a pool push and pop per command (issue #60 tracks the cost). A pool is
-  not a message to a command buffer, encoder, argument table or scaler, so it is no native call and
-  changes no count above; it shows only in CPU time.
+- Every native draw, dispatch, copy and fill runs in its own autorelease pool, and so do an
+  encoder's open and end and each timestamp written on a command buffer, which keeps a recording
+  thread's pool depth flat but costs a pool push and pop per command (issue #60 tracks the cost). A
+  pool is not a message to a command buffer, encoder, argument table or scaler, so it is no native
+  call and changes no count above; it shows only in CPU time, as do a new label string per list and
+  per pass and the pass descriptor configured for each encoder.
+- Every render pass of R is a timed scope, so C1 to C3 and C10 pay a debug group and two
+  timestamps per frame that their N arms do not write; N mirrors them in C8 and the composed frame
+  only, as the note registers.
 - A pipeline that culls, tests stencil or has a fragment entry makes the backend set the winding
   once per encoder it opens, one native call more than N's sequence. C8 therefore makes 14 native
   calls per repetition, the registered 13 plus that call, against N's 12 and the budget of 12 plus

@@ -447,8 +447,12 @@ namespace rojoRHI::bench {
         MTL4::CommitOptions* options = MTL4::CommitOptions::alloc()->init();
         FeedbackCollector* collector = m_collector.get();
         const uint64_t frame = m_collector->frame();
+        // The same handler as the RojoRHI arm's commit timing seam, its autorelease pool included, so both arms' feedback
+        // allocates alike.
         options->addFeedbackHandler(^(MTL4::CommitFeedback* feedback) {
+          NS::AutoreleasePool* pool = NS::AutoreleasePool::alloc()->init();
           collector->report(frame, feedback->GPUStartTime(), feedback->GPUEndTime(), feedback->error() != nullptr);
+          pool->release();
         });
         m_pendingOptions.push_back(options);
         queue->commit(buffers.data(), buffers.size(), options);
