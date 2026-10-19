@@ -231,6 +231,15 @@ class TimingTests(DriverCase):
         self.assertEqual(len(fake.calls), 1)
         self.assertFalse((self.out / "timing" / "C1-k100-p00.json").exists())
 
+    def test_a_standard_error_line_stops_and_keeps_no_result(self) -> None:
+        self.passing("C1")
+        fake = FakeBench(stderr="rojoRHI warning: a counter heap was refused\n")
+        with self.assertRaisesRegex(bench.BenchError, r"counter heap was refused.*C1-k100-p00\.log"):
+            self.driver(fake).timing(only=None)
+        self.assertEqual(len(fake.calls), 1)
+        self.assertFalse((self.out / "timing" / "C1-k100-p00.json").exists())
+        self.assertTrue((self.out / "timing" / "C1-k100-p00.failed.json").exists())
+
     def test_a_non_zero_exit_stops_and_leaves_no_result(self) -> None:
         self.passing("C1")
         fake = FakeBench(exit_code=3, stderr="boom\n")

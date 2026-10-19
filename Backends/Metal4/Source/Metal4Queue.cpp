@@ -38,11 +38,13 @@ namespace rojoRHI {
             const QueueType type = queue.type;
             const uint64_t serial = ++queue.commitSerial;
             MTL4::CommitOptions* options = MTL4::CommitOptions::alloc()->init();
-            options->addFeedbackHandler([callback, user, type, serial](MTL4::CommitFeedback* feedback) {
-                // Metal's notification thread holds no autorelease pool.
-                const metal4::AutoreleasePool handlerPool;
-                const metal4::CommitTime time{ type, serial, feedback->GPUStartTime(), feedback->GPUEndTime(), feedback->error() != nullptr };
-                callback(user, time);
+            // A block literal, not metal-cpp's std::function overload, whose wrapper and __block copy allocate on every commit:
+            // the overhead harness gives its native arm the same handler, so the seam adds no allocation that arm lacks.
+            options->addFeedbackHandler(^(MTL4::CommitFeedback* feedback) {
+              // Metal's notification thread holds no autorelease pool.
+              const metal4::AutoreleasePool handlerPool;
+              const metal4::CommitTime time{ type, serial, feedback->GPUStartTime(), feedback->GPUEndTime(), feedback->error() != nullptr };
+              callback(user, time);
             });
             queue.native->commit(queue.commitBuffers.data(), queue.commitBuffers.size(), options);
             options->release();

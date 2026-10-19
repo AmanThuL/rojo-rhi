@@ -400,6 +400,12 @@ class Driver:
         if result.returncode or not partial.exists():
             raise BenchError(f"{config['id']} process {process}: harness exit "
                              f"{result.returncode}, see {log}")
+        # A timed process prints nothing: a line on standard error, such as RojoRHI's warning that a counter heap was
+        # refused and a scope went untimed, means the process did different work from the gate's (issue #64).
+        stray = stray_lines(result.stderr or "")
+        if stray:
+            partial.rename(timing / f"{stem}.failed.json")
+            raise BenchError(f"{config['id']} process {process}: standard error: {stray[0]}, see {log}")
         data = read_json(partial)
         failed = [name for name, arm in data["arms"].items() if arm["status"] != "ok"]
         if failed:
