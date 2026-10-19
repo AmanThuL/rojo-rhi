@@ -225,6 +225,59 @@ namespace rojoRHI {
             finishPass(list, true);
             list.encoders.close(list.core);
         }
+
+        //==============================================================================================================
+        void applyDrawRecord(CommandListImpl& list, uint64_t address)
+        {
+            DrawState& draw = list.draw;
+            if (draw.tableDrawRecord == address)
+            {
+                return;
+            }
+            // The encoders take the table's bindings as they stand at each draw, so the write needs no encoder.
+            list.state.table->setAddress(address, 3);
+            core::noteNativeCall(list.core);
+            draw.tableDrawRecord = address;
+        }
+
+        //==============================================================================================================
+        void replayCounted(CommandListImpl& list, const PrefixCommand& command)
+        {
+            MTL4::RenderCommandEncoder* encoder = list.encoders.renderEncoder();
+            const bool mesh = command.kind == PrefixKind::MeshExecute || command.kind == PrefixKind::MeshIndirect;
+            if (command.kind == PrefixKind::MeshIndirect)
+            {
+                // The task and mesh entries read the drawId from the caller's record; the native record holds no drawId.
+                applyDrawRecord(list, command.mesh.record);
+            }
+            {
+                // The validation layer autoreleases in a draw it checks, so each counted draw holds a pool, as a direct draw does.
+                const AutoreleasePool pool;
+                switch (command.kind)
+                {
+                case PrefixKind::Execute:
+                case PrefixKind::MeshExecute:
+                    // The kernel wrote the range: the records below the count, which the opening barrier made visible.
+                    encoder->executeCommandsInBuffer(command.execute.buffer, command.execute.range);
+                    break;
+                case PrefixKind::MeshIndirect:
+                    encoder->drawMeshThreadgroups(command.mesh.native, command.mesh.pipeline->objectThreads, command.mesh.pipeline->meshThreads);
+                    break;
+                case PrefixKind::DrawIndirect: encoder->drawPrimitives(command.indirect.primitive, command.indirect.record); break;
+                case PrefixKind::IndexedIndirect:
+                    encoder->drawIndexedPrimitives(
+                        command.indirect.primitive, command.indirect.indexType, command.indirect.indices, command.indirect.indexLength, command.indirect.record
+                    );
+                    break;
+                default: ROJORHI_INTERNAL_ASSERT(false, "a prefix entry that is no counted draw is replayed as one"); break;
+                }
+            }
+            core::noteNativeCall(list.core);
+            list.encoders.markWork();
+            // A mesh draw's barrier held back the object and mesh stages, which the draw spends whether or not its pipeline has
+            // a task entry.
+            list.encoders.markRan(mesh ? MTL::StageObject | MTL::StageMesh | MTL::StageFragment : MTL::StageVertex | MTL::StageFragment);
+        }
     } // namespace metal4
 
     //==================================================================================================================

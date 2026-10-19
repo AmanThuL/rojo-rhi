@@ -174,14 +174,8 @@ target("RojoRHITests")
         -- The contract files whose chapters the Metal 4 backend does not implement yet. A file leaves the list when it
         -- passes whole, and the list ends empty.
         local metal4_pending = {
-            "AliasingDeathTests.cpp", "AliasingTests.cpp", "BarrierDeathTests.cpp", "BarrierTests.cpp",
-            "CopyDeathTests.cpp", "CopyTests.cpp", "CounterTests.cpp", "DiagnosticsDeathTests.cpp",
-            "DiagnosticsTests.cpp", "DrawDeathTests.cpp", "DrawTests.cpp", "HandoffDeathTests.cpp",
-            "HandoffTests.cpp", "HazardDeathTests.cpp", "HazardTests.cpp", "IndirectHazardDeathTests.cpp",
-            "IndirectHazardTests.cpp", "LifetimeDeathTests.cpp", "LifetimeTests.cpp", "PipelineDeathTests.cpp",
-            "PipelineTests.cpp", "RenderPassDeathTests.cpp", "RenderPassTests.cpp",
-            "SwapchainTests.cpp", "TrackerDeathTests.cpp", "TrackerTests.cpp", "UpscaleDeathTests.cpp",
-            "UpscalerTests.cpp",
+            "DiagnosticsTests.cpp", "LifetimeDeathTests.cpp", "TrackerDeathTests.cpp", "TrackerTests.cpp",
+            "UpscaleDeathTests.cpp", "UpscalerTests.cpp",
         }
         local pending = {}
         for _, name in ipairs(metal4_pending) do
@@ -238,12 +232,12 @@ target("RojoRHITests")
     if is_config("rojorhi_backend", "metal4") then
         -- Every Metal 4 entry runs under the Metal validation layer, from the test directory.
         local layer = {MTL_DEBUG_LAYER = "1"}
-        add_tests("contract", {runargs = {"[contract]~[death],[metal4]~[death]"}, runenvs = layer})
+        add_tests("contract", {runargs = {"[contract]~[death],[metal4]~[death]"}, runenvs = layer, realtime_output = true})
         -- Each case spawns this executable again, so keep Catch2's summary in the log and bound a hang.
         add_tests("death", {runargs = {"[death]"}, runenvs = layer, realtime_output = true, run_timeout = 300000})
-        add_tests("conformance", {runargs = {"[conformance]"}, runenvs = layer})
+        add_tests("conformance", {runargs = {"[conformance]"}, runenvs = layer, realtime_output = true})
     else
-        add_tests("contract", {runargs = {"[contract]~[death],[core]~[death],[null]~[death]"}})
+        add_tests("contract", {runargs = {"[contract]~[death],[core]~[death],[null]~[death]"}, realtime_output = true})
         -- Each case spawns this executable again, so keep Catch2's summary in the log and bound a hang.
         add_tests("death", {runargs = {"[death]"}, realtime_output = true, run_timeout = 300000})
     end
@@ -261,9 +255,9 @@ target("RojoRHITests")
     set_values("slang.layout_map", "DrawRoot=rojoRHI::test::DrawRoot")
     set_values("slang.layout_include", "rojoRHI/RHI.h")
     if is_config("rojorhi_backend", "metal4") then
-        add_tests("abi", {runargs = {"[abi]"}, runenvs = {MTL_DEBUG_LAYER = "1"}})
+        add_tests("abi", {runargs = {"[abi]"}, runenvs = {MTL_DEBUG_LAYER = "1"}, realtime_output = true})
     else
-        add_tests("abi", {runargs = {"[abi]"}})
+        add_tests("abi", {runargs = {"[abi]"}, realtime_output = true})
     end
 
 -- A Release probe that Tools/check_lto_inline.py disassembles to show a library entry inlined into

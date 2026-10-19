@@ -9,6 +9,7 @@
 #include "Metal4Barriers.h"
 #include "Metal4Device.h"
 #include "Metal4Encoders.h"
+#include "Support/PassKit.h"
 
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/generators/catch_generators.hpp>
@@ -16,6 +17,7 @@
 #include <Metal/Metal.hpp>
 
 #include <array>
+#include <cstddef>
 #include <cstdint>
 #include <vector>
 
@@ -559,4 +561,142 @@ TEST_CASE("an encoder-level barrier keeps the destination stages no command has 
     list.end();
     submitAndWait(device, std::array{ list }, QueueType::Compute);
     destroyDevice(device);
+}
+
+//======================================================================================================================
+TEST_CASE("an IndirectArgs barrier is emitted in its dispatch part by a counted draw's kernel and the rest by the pass", "[metal4]")
+{
+    test::PassKit kit;
+    CommandList list = kit.list;
+    const std::vector<std::byte> zeroes(16 * sizeof(DrawIndirectArgs), std::byte{ 0 });
+    const Buffer args = *kit.device.createBuffer(
+        BufferDesc{ .size = zeroes.size(), .usage = BufferUsage::IndirectArgs | BufferUsage::ShaderWrite, .label = "test.args" }, zeroes
+    );
+    list.barrier(
+        {},
+        std::array{ BufferBarrier{ .buffer = args,
+                                   .srcStage = Stage::ComputeShader,
+                                   .srcAccess = Access::ShaderWrite,
+                                   .dstStage = Stage::IndirectArgs,
+                                   .dstAccess = Access::IndirectArgs } }
+    );
+    // IndirectArgs names every stage that consumes arguments.
+    constexpr MTL::Stages kArgumentStages = MTL::StageDispatch | MTL::StageVertex | MTL::StageObject | MTL::StageMesh;
+    CHECK(barriersOf(list).pendingSource == MTL::StageDispatch);
+    CHECK(barriersOf(list).pendingDestination == kArgumentStages);
+    CHECK(barriersOf(list).pendingVisibility == MTL4::VisibilityOptionDevice);
+    kit.readyToDraw();
+    SECTION("the counted draw before the pass's first draw")
+    {
+        list.drawIndirect(kit.device.address(args), 16);
+        // The kernel's compute encoder emits the dispatch part at its opening; the render stages stay pending, joined by the
+        // backend barrier from the kernel to the vertex stage, where the execute reads what it wrote.
+        CHECK(encodersOf(list).kind() == metal4::EncoderKind::Compute);
+        CHECK(countsOf(list).nativeBarriers == 1);
+        CHECK(barriersOf(list).openSource == MTL::StageDispatch);
+        CHECK(barriersOf(list).openDestination == MTL::StageDispatch);
+        CHECK(barriersOf(list).pendingSource == MTL::StageDispatch);
+        CHECK(barriersOf(list).pendingDestination == (MTL::StageVertex | MTL::StageObject | MTL::StageMesh));
+        CHECK(barriersOf(list).pendingVisibility == MTL4::VisibilityOptionDevice);
+        // The pass's render encoder emits the rest at its opening.
+        list.draw(3);
+        CHECK(encodersOf(list).kind() == metal4::EncoderKind::Render);
+        CHECK(countsOf(list).nativeBarriers == 2);
+        CHECK(barriersOf(list).openSource == MTL::StageDispatch);
+        CHECK(barriersOf(list).openDestination == (MTL::StageVertex | MTL::StageObject | MTL::StageMesh));
+        CHECK(barriersOf(list).openVisibility == MTL4::VisibilityOptionDevice);
+        CHECK(barriersOf(list).pendingDestination == 0);
+        list.endRenderPass();
+        // The pass ran no object or mesh work, so those stages are owed again.
+        CHECK(barriersOf(list).pendingSource == MTL::StageDispatch);
+        CHECK(barriersOf(list).pendingDestination == (MTL::StageObject | MTL::StageMesh));
+        CHECK(barriersOf(list).pendingVisibility == MTL4::VisibilityOptionDevice);
+        CHECK(countsOf(list).encodersOpened == 2);
+    }
+    SECTION("the counted draw after a direct draw, which splits the pass")
+    {
+        // The direct draw opens the render encoder, which emits the render part; the dispatch part stays pending.
+        list.draw(3);
+        CHECK(countsOf(list).nativeBarriers == 1);
+        CHECK(barriersOf(list).openSource == MTL::StageDispatch);
+        CHECK(barriersOf(list).openDestination == (MTL::StageVertex | MTL::StageObject | MTL::StageMesh));
+        CHECK(barriersOf(list).pendingDestination == MTL::StageDispatch);
+        list.drawIndirect(kit.device.address(args), 16);
+        // The split returns the object and mesh stages the ended encoder never ran; the kernel's encoder emits the dispatch
+        // part; the kernel's barrier to the vertex stage and the split's from the stores to the resumed loads join them.
+        CHECK(encodersOf(list).kind() == metal4::EncoderKind::Compute);
+        CHECK(countsOf(list).nativeBarriers == 2);
+        CHECK(barriersOf(list).openSource == MTL::StageDispatch);
+        CHECK(barriersOf(list).openDestination == MTL::StageDispatch);
+        CHECK(barriersOf(list).pendingSource == (MTL::StageDispatch | MTL::StageFragment));
+        CHECK(barriersOf(list).pendingDestination == metal4::kRenderStages);
+        CHECK(barriersOf(list).pendingVisibility == MTL4::VisibilityOptionDevice);
+        // The resumed encoder emits it all at its opening.
+        list.draw(3);
+        CHECK(countsOf(list).nativeBarriers == 3);
+        CHECK(barriersOf(list).openSource == (MTL::StageDispatch | MTL::StageFragment));
+        CHECK(barriersOf(list).openDestination == metal4::kRenderStages);
+        CHECK(barriersOf(list).pendingDestination == 0);
+        list.endRenderPass();
+        CHECK(barriersOf(list).pendingSource == (MTL::StageDispatch | MTL::StageFragment));
+        CHECK(barriersOf(list).pendingDestination == (MTL::StageObject | MTL::StageMesh));
+        CHECK(countsOf(list).encodersOpened == 3);
+    }
+    const core::RecordCounts before = countsOf(list);
+    list.end();
+    // The trailing encoder: computeCommandEncoder, setLabel, two barriers and endEncoding; then endCommandBuffer.
+    CHECK(countsOf(list).encodersOpened == before.encodersOpened + 1);
+    CHECK(countsOf(list).nativeBarriers == before.nativeBarriers + 2);
+    CHECK(countsOf(list).nativeRecordCalls == before.nativeRecordCalls + 5 + 1);
+    CHECK(barriersOf(list).pendingDestination == 0);
+    submitAndWait(kit.device, std::array{ list });
+    destroyDevice(kit.device);
+}
+
+//======================================================================================================================
+TEST_CASE("a barrier from a pass into Copy followed only by copies owes its fragment part until end", "[metal4]")
+{
+    test::PassKit kit;
+    CommandList list = kit.list;
+    const Texture target = kit.target();
+    const std::array colors{ ColorAttachment{ .texture = target, .load = LoadOp::Clear } };
+    list.beginRenderPass(test::fullPass(colors));
+    list.endRenderPass();
+    CHECK(countsOf(list).encodersOpened == 1);
+    CHECK(countsOf(list).nativeBarriers == 0);
+    list.barrier(
+        {},
+        {},
+        std::array{ TextureBarrier{ .texture = target,
+                                    .srcStage = Stage::ColorAttachment,
+                                    .srcAccess = Access::ColorAttachmentWrite,
+                                    .dstStage = Stage::Copy,
+                                    .dstAccess = Access::CopyRead,
+                                    .oldLayout = Layout::ColorAttachment,
+                                    .newLayout = Layout::CopySrc } }
+    );
+    CHECK(barriersOf(list).pendingSource == MTL::StageFragment);
+    CHECK(barriersOf(list).pendingDestination == kCopyStages);
+    CHECK(barriersOf(list).pendingVisibility == MTL4::VisibilityOptionDevice);
+    const Buffer readback = kit.buffer(BufferUsage::None, uint64_t{ test::PassKit::kSize } * test::PassKit::kSize * 4, Memory::Readback);
+    list.copyTextureToBuffer(
+        target, TextureRegion{ .extent = { test::PassKit::kSize, test::PassKit::kSize, 1 } }, readback, BufferTextureLayout{ .rowPitch = 256 }
+    );
+    // The compute encoder emits the blit and dispatch part; the fragment part, for a clear's load action, stays owed.
+    CHECK(countsOf(list).encodersOpened == 2);
+    CHECK(countsOf(list).nativeBarriers == 1);
+    CHECK(barriersOf(list).openSource == MTL::StageFragment);
+    CHECK(barriersOf(list).openDestination == metal4::kComputeStages);
+    CHECK(barriersOf(list).pendingSource == MTL::StageFragment);
+    CHECK(barriersOf(list).pendingDestination == MTL::StageFragment);
+    const core::RecordCounts before = countsOf(list);
+    list.end();
+    // endEncoding; then the trailing encoder: computeCommandEncoder, setLabel, two barriers and endEncoding; then
+    // endCommandBuffer.
+    CHECK(countsOf(list).encodersOpened == before.encodersOpened + 1);
+    CHECK(countsOf(list).nativeBarriers == before.nativeBarriers + 2);
+    CHECK(countsOf(list).nativeRecordCalls == before.nativeRecordCalls + 1 + 5 + 1);
+    CHECK(barriersOf(list).pendingDestination == 0);
+    submitAndWait(kit.device, std::array{ list });
+    destroyDevice(kit.device);
 }

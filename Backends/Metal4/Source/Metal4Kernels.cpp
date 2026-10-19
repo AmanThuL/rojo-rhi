@@ -79,6 +79,14 @@ namespace rojoRHI::metal4 {
             ClearPipeline{ "rojorhi_clear_3d", "rojorhi.kernel.clear.3D" },        ClearPipeline{ "rojorhi_clear_2d", "rojorhi.kernel.clear.Cube" },
             ClearPipeline{ "rojorhi_clear_2d", "rojorhi.kernel.clear.CubeArray" },
         };
+
+        /// Where a counted draw's kernel pipeline goes, its function and its label.
+        struct DrawPipeline
+        {
+            MTL::ComputePipelineState** pipeline; ///< The member of `Kernels` that keeps it.
+            std::string_view function;            ///< The kernel function.
+            std::string_view label;               ///< The pipeline's label.
+        };
     } // namespace
 
     //==================================================================================================================
@@ -126,12 +134,39 @@ namespace rojoRHI::metal4 {
                 );
             }
         }
+        // The kernels of counted draws, which take every varying value as a parameter.
+        const std::array<DrawPipeline, 6> drawPipelines{
+            DrawPipeline{ &encodeDraw, "rojorhi_encode_draw", "rojorhi.kernel.encodeDraw" },
+            DrawPipeline{ &encodeIndexed, "rojorhi_encode_indexed", "rojorhi.kernel.encodeIndexed" },
+            DrawPipeline{ &writeDraw, "rojorhi_write_draw", "rojorhi.kernel.writeDraw" },
+            DrawPipeline{ &writeIndexed, "rojorhi_write_indexed", "rojorhi.kernel.writeIndexed" },
+            DrawPipeline{ &encodeMesh, "rojorhi_encode_mesh", "rojorhi.kernel.encodeMesh" },
+            DrawPipeline{ &writeMesh, "rojorhi_write_mesh", "rojorhi.kernel.writeMesh" },
+        };
+        for (const DrawPipeline& made : drawPipelines)
+        {
+            *made.pipeline = newKernelPipeline(compiler, library, made.function, nullptr, made.label, &error);
+            if (*made.pipeline == nullptr)
+            {
+                return std::unexpected(
+                    Error{ ErrorCategory::DriverFailure, std::format("the kernel pipeline {} was not created: {}", made.label, describe(error)) }
+                );
+            }
+        }
         return {};
     }
 
     //==================================================================================================================
     void Kernels::release()
     {
+        for (MTL::ComputePipelineState** pipeline : std::array{ &encodeDraw, &encodeIndexed, &writeDraw, &writeIndexed, &encodeMesh, &writeMesh })
+        {
+            if (*pipeline != nullptr)
+            {
+                (*pipeline)->release();
+                *pipeline = nullptr;
+            }
+        }
         for (MTL::ComputePipelineState*& pipeline : clear)
         {
             if (pipeline != nullptr)
@@ -171,6 +206,38 @@ namespace rojoRHI::metal4 {
             encoders.setKernelPipeline(pipeline);
         }
         encoder->setArgumentTable(state.kernelTable);
+        core::noteNativeCall(list);
+    }
+
+    //==================================================================================================================
+    void bindKernelBatch(core::CommandListCore& list, const ListState& state, Encoders& encoders, const MTL::ComputePipelineState* pipeline)
+    {
+        MTL4::ComputeCommandEncoder* encoder = encoders.computeEncoder();
+        // A batch encoder is opened kernels-only inside a render pass, where chapter 07 records no copy, fill, clear, compute
+        // pipeline or dispatch (VU-rojo-cmd-0022, VU-rojo-cmd-0029 and the copy, fill and clear rules); so it holds a kernel only after its first
+        // kernel bound the kernel table, which no later kernel unbinds.
+        const bool tableBound = encoders.kernelPipeline() != nullptr;
+        if (encoders.kernelPipeline() != pipeline)
+        {
+            encoder->setComputePipelineState(pipeline);
+            core::noteNativeCall(list);
+            encoders.setKernelPipeline(pipeline);
+        }
+        if (!tableBound)
+        {
+            encoder->setArgumentTable(state.kernelTable);
+            core::noteNativeCall(list);
+        }
+    }
+
+    //==================================================================================================================
+    void dispatchKernelBatch(core::CommandListCore& list, MTL4::ComputeCommandEncoder* encoder, MTL::Size groups, MTL::Size threads)
+    {
+        {
+            // The validation layer autoreleases in each dispatch it checks, as for dispatchKernel.
+            const AutoreleasePool pool;
+            encoder->dispatchThreadgroups(groups, threads);
+        }
         core::noteNativeCall(list);
     }
 

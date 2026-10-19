@@ -150,6 +150,12 @@ namespace rojoRHI {
         list.draw.forgetTextures();
         // A barrier still pending orders the work of later lists on the queue.
         metal4::emitTrailing(list.core, list.state, list.encoders.barriers());
+        // An indirect command buffer made or replaced while recording joins the list's residency set before the command buffer
+        // that uses the set is committed; a list recording the same counted draws again changes nothing.
+        if (list.draw.icbs.commit())
+        {
+            core::DeviceCounts::add(list.core.device->counts().nativeHostCalls);
+        }
         list.state.commandBuffer->endCommandBuffer();
         core::noteNativeCall(list.core);
     }

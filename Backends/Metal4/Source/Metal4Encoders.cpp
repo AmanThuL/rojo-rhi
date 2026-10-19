@@ -16,7 +16,7 @@
 
 namespace rojoRHI::metal4 {
     //==================================================================================================================
-    MTL4::ComputeCommandEncoder* Encoders::compute(core::CommandListCore& list, ListState& state, MTL::Stages command)
+    MTL4::ComputeCommandEncoder* Encoders::compute(core::CommandListCore& list, ListState& state, MTL::Stages command, bool kernelsOnly)
     {
         ROJORHI_INTERNAL_ASSERT(m_kind != EncoderKind::Render, "a compute command is recorded while a render encoder is open");
         if (m_compute != nullptr)
@@ -48,8 +48,11 @@ namespace rojoRHI::metal4 {
         ++list.counts.encodersOpened;
         m_compute->setLabel(state.scopeLabels.empty() ? state.label : state.scopeLabels.back());
         core::noteNativeCall(list);
-        m_compute->setArgumentTable(state.table);
-        core::noteNativeCall(list);
+        if (!kernelsOnly)
+        {
+            m_compute->setArgumentTable(state.table);
+            core::noteNativeCall(list);
+        }
         // The pending barrier's part on the encoder's stages waits at queue level before any of its commands.
         emitAtOpen(list, m_barriers, m_compute, kComputeStages);
         m_kind = EncoderKind::Compute;
