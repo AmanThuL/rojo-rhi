@@ -172,7 +172,7 @@ Outside a pass, `beginScope` runs the core's `beginScope`, closes the open encod
 label, copied to a NUL-terminated scratch string first. A label that is not valid UTF-8 names its
 group `rojorhi.scope.unnamed`. The list keeps the string on a stack that names the encoders opened
 inside the scope; `endScope` closes the encoder, calls `popDebugGroup` and releases the string.
-`scopeTimings` stays the core's, and reports no durations.
+`scopeTimings` stays the core's: it reports no durations and counts no native read.
 
 ## Counts
 

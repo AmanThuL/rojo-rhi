@@ -13,8 +13,10 @@
 
 #include <array>
 #include <cstdint>
+#include <span>
 #include <string>
 #include <string_view>
+#include <utility>
 #include <vector>
 
 using namespace rojoRHI;
@@ -34,11 +36,90 @@ namespace {
     }
 
     //==================================================================================================================
-    void submit(Device device, CommandList list)
+    void submit(Device device, CommandList list, QueueType type = QueueType::Graphics)
     {
         list.end();
         const std::array<CommandList, 1> lists{ list };
-        device.queue(QueueType::Graphics).submit(lists);
+        device.queue(type).submit(lists);
+    }
+
+    /// One call of a scope-time hook: the slot, and the labels and timestamps of the records and the report entries it saw.
+    struct ScopeTimesCall
+    {
+        uint32_t slot = 0;
+        std::vector<std::string> recordLabels;
+        std::vector<uint32_t> timestamps;
+        std::vector<std::string> reportLabels;
+        std::vector<QueueType> reportQueues;
+    };
+
+    /// The calls the hook below saw, held by the live `ScopeTimesRecorder`; null when none is live.
+    std::vector<ScopeTimesCall>* scopeTimesCalls = nullptr;
+
+    /// Collects the calls of `recordScopeTimes` for its lifetime, so a case that ends early leaves no dangling pointer.
+    struct ScopeTimesRecorder
+    {
+        std::vector<ScopeTimesCall> calls; ///< The calls seen, in order.
+
+        /// Points `scopeTimesCalls` at `calls`.
+        ScopeTimesRecorder();
+        /// Resets `scopeTimesCalls` to null.
+        ~ScopeTimesRecorder();
+    };
+
+    //==================================================================================================================
+    ScopeTimesRecorder::ScopeTimesRecorder()
+    {
+        scopeTimesCalls = &calls;
+    }
+
+    //==================================================================================================================
+    ScopeTimesRecorder::~ScopeTimesRecorder()
+    {
+        scopeTimesCalls = nullptr;
+    }
+
+    //==================================================================================================================
+    /// Records the call and writes each record's timestamp plus a half as its duration, so each duration is distinct.
+    void recordScopeTimes(void*, uint32_t slot, std::span<const core::ScopeRecord> records, std::span<ScopeTiming> report)
+    {
+        ScopeTimesCall call{ .slot = slot };
+        for (size_t index = 0; index < records.size(); ++index)
+        {
+            call.recordLabels.emplace_back(records[index].label);
+            call.timestamps.push_back(records[index].timestamp);
+            call.reportLabels.emplace_back(report[index].label);
+            call.reportQueues.push_back(report[index].queue);
+            report[index].gpuMilliseconds = static_cast<double>(records[index].timestamp) + 0.5;
+        }
+        scopeTimesCalls->push_back(std::move(call));
+    }
+
+    //==================================================================================================================
+    /// Adds `recordScopeTimes` to the hooks the backend registered on `device`; the backend's context stays.
+    void hookScopeTimes(Device device)
+    {
+        core::RetireHooks hooks = core::coreOf(device).retireHooks();
+        hooks.scopeTimes = recordScopeTimes;
+        core::coreOf(device).setRetireHooks(hooks);
+    }
+
+    //==================================================================================================================
+    /// Opens and closes a scope named `label` on `list` and gives its record `timestamp`, as a backend that times it does.
+    void timedScope(CommandList list, std::string_view label, uint32_t timestamp)
+    {
+        list.beginScope(label);
+        core::coreOf(list).scopeLog.back().timestamp = timestamp;
+        list.endScope();
+    }
+
+    //==================================================================================================================
+    /// Retires frame 1 of a two-slot device: runs frame 2 and begins frame 3.
+    void retireFirstFrame(Device device)
+    {
+        device.beginFrame();
+        device.endFrame();
+        device.beginFrame();
     }
 } // namespace
 
@@ -166,6 +247,123 @@ TEST_CASE("a scope recorded on a list of each queue type is reported with that q
     CHECK(timings[0].queue == QueueType::Graphics);
     CHECK(timings[1].queue == QueueType::Compute);
     CHECK(timings[2].queue == QueueType::Copy);
+    device.endFrame();
+    destroyDevice(device);
+}
+
+//======================================================================================================================
+TEST_CASE("a scope record carries no timestamp until a backend sets one", "[core]")
+{
+    CHECK(core::ScopeRecord{}.timestamp == core::kNoTimestamp);
+    CHECK(core::kNoTimestamp == UINT32_MAX);
+    Device device = *createDevice();
+    device.beginFrame();
+    CommandList list = device.acquireCommandList(QueueType::Graphics, "core.list");
+    list.beginScope("scope");
+    list.endScope();
+    REQUIRE(core::coreOf(list).scopeLog.size() == 1);
+    CHECK(core::coreOf(list).scopeLog[0].timestamp == core::kNoTimestamp);
+    submit(device, list);
+    device.endFrame();
+    destroyDevice(device);
+}
+
+//======================================================================================================================
+TEST_CASE("the scope-time hook sees each queue's records with the report entries made for them, in order", "[core]")
+{
+    const ScopeTimesRecorder recorder;
+    const std::vector<ScopeTimesCall>& calls = recorder.calls;
+    Device device = *createDevice(DeviceDesc{ .framesInFlight = 2 });
+    hookScopeTimes(device);
+    device.beginFrame();
+    // The compute list is submitted first; the report still puts Graphics first.
+    CommandList compute = device.acquireCommandList(QueueType::Compute, "core.compute");
+    timedScope(compute, "compute.only", 4);
+    submit(device, compute, QueueType::Compute);
+    CommandList graphics = device.acquireCommandList(QueueType::Graphics, "core.graphics");
+    graphics.beginScope("graphics.outer");
+    core::coreOf(graphics).scopeLog.back().timestamp = 0;
+    timedScope(graphics, "graphics.inner", 2);
+    graphics.endScope();
+    submit(device, graphics);
+    device.endFrame();
+    retireFirstFrame(device);
+
+    REQUIRE(calls.size() == 2);
+    CHECK(calls[0].slot == 1);
+    CHECK(calls[0].recordLabels == std::vector<std::string>{ "graphics.outer", "graphics.inner" });
+    CHECK(calls[0].timestamps == std::vector<uint32_t>{ 0, 2 });
+    CHECK(calls[0].reportLabels == calls[0].recordLabels);
+    CHECK(calls[0].reportQueues == std::vector<QueueType>{ QueueType::Graphics, QueueType::Graphics });
+    CHECK(calls[1].slot == 1);
+    CHECK(calls[1].recordLabels == std::vector<std::string>{ "compute.only" });
+    CHECK(calls[1].reportLabels == calls[1].recordLabels);
+    CHECK(calls[1].reportQueues == std::vector<QueueType>{ QueueType::Compute });
+
+    const std::span<const ScopeTiming> timings = device.scopeTimings();
+    REQUIRE(timings.size() == 3);
+    CHECK(timings[0].label == "graphics.outer");
+    CHECK(timings[0].gpuMilliseconds == 0.5);
+    CHECK(timings[1].label == "graphics.inner");
+    CHECK(timings[1].depth == 1);
+    CHECK(timings[1].gpuMilliseconds == 2.5);
+    CHECK(timings[2].label == "compute.only");
+    CHECK(timings[2].gpuMilliseconds == 4.5);
+    device.endFrame();
+    destroyDevice(device);
+}
+
+//======================================================================================================================
+TEST_CASE("without a scope-time hook every duration is zero", "[core]")
+{
+    core::ScopeLog log(2);
+    const std::array<core::ScopeRecord, 2> records{ core::ScopeRecord{ .label = "first", .depth = 0, .timestamp = 0 },
+                                                    core::ScopeRecord{ .label = "second", .depth = 1, .timestamp = 2 } };
+    log.submit(1, QueueType::Graphics, records);
+    log.retire(1, 7, nullptr, nullptr);
+    const std::span<const ScopeTiming> report = log.report();
+    REQUIRE(report.size() == 2);
+    CHECK(report[0].gpuMilliseconds == 0.0);
+    CHECK(report[1].gpuMilliseconds == 0.0);
+    CHECK(report[1].frame == 7);
+}
+
+//======================================================================================================================
+TEST_CASE("a frame with scopes on no queue calls no scope-time hook", "[core]")
+{
+    const ScopeTimesRecorder recorder;
+    const std::vector<ScopeTimesCall>& calls = recorder.calls;
+    core::ScopeLog log(2);
+    log.retire(0, 3, recordScopeTimes, nullptr);
+    CHECK(calls.empty());
+    const std::array<core::ScopeRecord, 1> records{ core::ScopeRecord{ .label = "copy.only", .timestamp = 6 } };
+    log.submit(0, QueueType::Copy, records);
+    log.clearReport();
+    log.retire(0, 5, recordScopeTimes, nullptr);
+    REQUIRE(calls.size() == 1);
+    CHECK(calls[0].reportQueues == std::vector<QueueType>{ QueueType::Copy });
+    REQUIRE(log.report().size() == 1);
+    CHECK(log.report()[0].gpuMilliseconds == 6.5);
+}
+
+//======================================================================================================================
+TEST_CASE("the hook runs before the slot's arena is rewound", "[core]")
+{
+    const ScopeTimesRecorder recorder;
+    const std::vector<ScopeTimesCall>& calls = recorder.calls;
+    Device device = *createDevice(DeviceDesc{ .framesInFlight = 2 });
+    hookScopeTimes(device);
+    device.beginFrame();
+    CommandList list = device.acquireCommandList(QueueType::Graphics, "core.list");
+    timedScope(list, "label.in.the.arena", 0);
+    // The label's view points into the slot's arena page, which the rewind of frame 3 makes claimable again.
+    const char* const kept = core::coreOf(list).scopeLog.back().label.data();
+    CHECK(kept != std::string_view("label.in.the.arena").data());
+    submit(device, list);
+    device.endFrame();
+    retireFirstFrame(device);
+    REQUIRE(calls.size() == 1);
+    CHECK(calls[0].recordLabels == std::vector<std::string>{ "label.in.the.arena" });
     device.endFrame();
     destroyDevice(device);
 }

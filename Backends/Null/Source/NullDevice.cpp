@@ -31,6 +31,7 @@
 #include <format>
 #include <memory>
 #include <optional>
+#include <utility>
 
 namespace rojoRHI {
     namespace {
@@ -266,7 +267,14 @@ namespace rojoRHI {
     //==================================================================================================================
     std::span<const ScopeTiming> Device::scopeTimings()
     {
-        return DeviceImpl::of(*this).core.scopeTimings();
+        core::DeviceCore& core = DeviceImpl::of(*this).core;
+        const std::span<const ScopeTiming> report = core.scopeTimings();
+        if (!report.empty())
+        {
+            // Null keeps no timestamps; it counts the one native read of the retired frame's timestamps a native backend makes.
+            core::DeviceCounts::add(core.counts().nativeHostCalls);
+        }
+        return report;
     }
 
     //==================================================================================================================
@@ -552,7 +560,19 @@ namespace rojoRHI {
     //==================================================================================================================
     Result<Upscaler> Device::createUpscaler(const UpscalerDesc& desc)
     {
-        return core::createUpscaler(DeviceImpl::of(*this).core, desc);
+        DeviceImpl& impl = DeviceImpl::of(*this);
+        Result<core::UpscalerRecord> record = core::prepareUpscaler(impl.core, desc);
+        if (!record)
+        {
+            return std::unexpected(std::move(record.error()));
+        }
+        // A Null upscaler owns no native object beyond its record.
+        const Upscaler upscaler = impl.core.pool<Upscaler>().allocate(std::move(*record));
+        if (upscaler.bits == 0)
+        {
+            return std::unexpected(core::tableFull("upscaler", impl.core.pool<Upscaler>().capacity()));
+        }
+        return upscaler;
     }
 
     //==================================================================================================================

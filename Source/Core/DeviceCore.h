@@ -105,7 +105,8 @@ namespace rojoRHI::core {
         /// Adds the scopes of the submitted `list` to the record of its frame slot. Free-threaded.
         void submitScopes(const CommandListCore& list);
 
-        /// Returns the scopes of the frame the latest `beginFrame` waited for; the next `beginFrame` invalidates the span.
+        /// Returns the scopes of the frame the latest `beginFrame` waited for; the next `beginFrame` invalidates the span. Counts
+        /// nothing: the backend counts the native reads its timings take.
         std::span<const ScopeTiming> scopeTimings() const;
 
         /// Returns a snapshot of the device's counters, built from relaxed loads and the pools' and arena's own tallies.

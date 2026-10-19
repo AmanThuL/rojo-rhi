@@ -1,6 +1,6 @@
 //----------------------------------------------------------------------------------------------------------------------
 /// @file Upscalers.cpp
-/// @brief Implements the creation of an upscaler and the checks of the upscaling rules.
+/// @brief Implements the preparation of an upscaler's record and the checks of the upscaling rules.
 //----------------------------------------------------------------------------------------------------------------------
 
 #include "Core/Upscalers.h"
@@ -63,7 +63,7 @@ namespace rojoRHI::core {
     } // namespace
 
     //==================================================================================================================
-    Result<Upscaler> createUpscaler(DeviceCore& core, const UpscalerDesc& desc)
+    Result<UpscalerRecord> prepareUpscaler(DeviceCore& core, const UpscalerDesc& desc)
     {
         ROJORHI_VU(
             desc.input.width > 0 && desc.input.height > 0, "VU-rojo-upscale-0001", "the input extent {}x{} has a zero axis", desc.input.width, desc.input.height
@@ -113,12 +113,7 @@ namespace rojoRHI::core {
         record.motion = desc.motion;
         record.outputFormat = desc.outputFormat;
         record.flags = desc.flags;
-        const Upscaler upscaler = core.pool<Upscaler>().allocate(std::move(record));
-        if (upscaler.bits == 0)
-        {
-            return std::unexpected(tableFull("upscaler", core.pool<Upscaler>().capacity()));
-        }
-        return upscaler;
+        return record;
     }
 
     //==================================================================================================================

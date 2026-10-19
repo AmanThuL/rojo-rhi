@@ -36,7 +36,7 @@ namespace rojoRHI::core {
     }
 
     //==================================================================================================================
-    void ScopeLog::retire(uint32_t slot, uint64_t frame)
+    void ScopeLog::retire(uint32_t slot, uint64_t frame, ScopeTimesFn scopeTimes, void* context)
     {
         std::lock_guard lock(m_mutex);
         ROJORHI_INTERNAL_ASSERT(slot < m_slots.size(), "a slot the log does not have was retired");
@@ -49,6 +49,7 @@ namespace rojoRHI::core {
                 m_labels.emplace_back(scope.label);
             }
         }
+        const size_t first = m_report.size();
         size_t next = 0;
         for (size_t queue = 0; queue < record.size(); ++queue)
         {
@@ -56,7 +57,18 @@ namespace rojoRHI::core {
             {
                 m_report.push_back(ScopeTiming{ .label = m_labels[next++], .frame = frame, .queue = static_cast<QueueType>(queue), .depth = scope.depth });
             }
-            record[queue].clear();
+        }
+        // The report no longer grows, so each queue's entries are handed over as a span; the records' labels still view the
+        // slot's arena, which the caller rewinds after this returns.
+        size_t at = first;
+        for (std::vector<ScopeRecord>& queue : record)
+        {
+            if (scopeTimes != nullptr && !queue.empty())
+            {
+                scopeTimes(context, slot, queue, std::span(m_report).subspan(at, queue.size()));
+            }
+            at += queue.size();
+            queue.clear();
         }
     }
 
