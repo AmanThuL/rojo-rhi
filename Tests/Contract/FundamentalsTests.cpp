@@ -201,7 +201,10 @@ TEST_CASE("the inside-callback flag is set only while a callback runs", "[contra
 //======================================================================================================================
 TEST_CASE("a satisfied ROJORHI_VU does not terminate", "[contract]")
 {
-    ROJORHI_VU(1 + 1 == 2, "VU-rojo-test-0000", "arithmetic holds {}", 2);
+    // A volatile operand keeps the condition from folding to a constant, which would make the macro's failure path
+    // statically dead and the code after it unreachable to the compiler.
+    volatile int one = 1;
+    ROJORHI_VU(one + one == 2, "VU-rojo-test-0000", "arithmetic holds {}", 2);
     SUCCEED();
 }
 
