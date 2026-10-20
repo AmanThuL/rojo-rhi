@@ -100,7 +100,7 @@ jobs:
           }
           python3 --version
       # DXIL needs dxcompiler.dll and dxil.dll on the loader path; the Windows SDK ships both.
-      # Without them the shader rule skips DXIL and says so, so a miss is a notice, not a failure.
+      # Without them the shader rule skips DXIL and says so, and the check_dxil step below fails the job.
       - if: runner.os == 'Windows'
         shell: pwsh
         run: |
@@ -141,6 +141,10 @@ jobs:
       - run: xmake test RojoRHITests/contract
       - run: xmake test RojoRHITests/death
       - run: xmake test RojoRHITests/abi
+      # The DXIL of the module's heap fetches and raw accesses; the check fails, rather than skips,
+      # when the build compiled no DXIL.
+      - if: runner.os == 'Windows'
+        run: python3 Tools/check_dxil.py
       # The benchmark harness builds on macOS only; hosted runners have no Metal 4, so its GPU cases are counted.
       - if: runner.os == 'macOS'
         run: xmake build RojoRHIBench && xmake test RojoRHIBench/null
@@ -371,6 +375,8 @@ jobs:
             if (-not (Test-Path (Join-Path $dir $dll))) { throw "$dll is missing from $dir" }
           }
       - run: xmake test RojoRHITests/abi
+      # The pinned DXC's disassembly of the module's heap fetches and raw accesses.
+      - run: python3 Tools/check_dxil.py
       - run: xmake test RojoRHITests/contract
       # The toolchain record: the cl command lines xmake writes for the c++23 language level, the MSVC version, and
       # whether this MSVC accepts each spelling of that level (a D9002 warning means it does not).
