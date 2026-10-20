@@ -4,15 +4,15 @@
 
 This page describes the D3D12 backend as it stands. `createDevice` opens a device on the Agility
 runtime and the backend owns the device-wide native state: queues, fences and frames, shader-visible
-descriptor heaps, root and command signatures, memory, buffers, heaps, textures, views and
-samplers, and the debug layer. Command lists record copies, fills, clears, barriers and timed
-scopes ([recording](d3d12-recording.md)); draws and passes do not yet. Everything below is
-"implemented, verified on WARP only, not on hardware": the backend is not a capability until a
-hardware run says so ([ADR 0009](../decisions/0009-conformance-and-valid-usage.md),
-[documentation](../conventions/documentation.md)). The API reference under `docs/spec/` stays the
-authority on every entry's semantics; [the Null backend](null-backend.md) describes the shared core
-this backend translates to. The pins, the runtime layout, the floor probe and the toolchain record
-are in [the build record](d3d12-build.md).
+descriptor heaps, root and command signatures, memory, buffers, heaps, textures, views, samplers and
+the debug layer. Command lists record copies, fills, clears, barriers and timed scopes
+([recording](d3d12-recording.md)), passes, dispatches and draws ([drawing](d3d12-drawing.md)).
+Everything below is "implemented, verified on WARP only, not on hardware": the backend is not a
+capability until a hardware run says so ([ADR 0009](
+../decisions/0009-conformance-and-valid-usage.md), [documentation](
+../conventions/documentation.md)). `docs/spec/` stays the authority on every entry's semantics;
+[the Null backend](null-backend.md) describes the shared core this backend translates to. [The build record](d3d12-build.md) holds the pins, the runtime layout, the
+floor probe and the toolchain record.
 
 | Chapter | State |
 |---|---|
@@ -20,9 +20,9 @@ are in [the build record](d3d12-build.md).
 | 03 memory and buffers, 04 textures and heaps | implemented, with views and samplers |
 | 15 formats and limits | implemented: the format table and the limits |
 | 10 queues and frames (with the fences of 09) | implemented: fences, `submit`, frames; `Queue::present` and `Queue::mapTiles` abort |
-| 07 command recording | lists, `setRoot`, copies, fills, clears, scopes and barriers (09) record ([recording](d3d12-recording.md)); render passes, draws and dispatches abort |
+| 07 command recording, 08 GPU-driven work | lists, `setRoot`, copies, fills, clears, scopes, barriers (09), passes, dispatches, direct and indirect draws record ([recording](d3d12-recording.md), [drawing](d3d12-drawing.md)); `upscale` and `declareAccess` abort |
 | 06 pipelines | implemented: shader libraries, graphics, mesh and compute pipelines and the pipeline cache ([drawing](d3d12-drawing.md)) |
-| 08 GPU-driven work, 11 presentation, 12 upscaling, 13 sparse | not implemented: entries return `Unsupported` or abort, and `createSwapchain` is `Unsupported` |
+| 11 presentation, 12 upscaling, 13 sparse | not implemented: entries return `Unsupported` or abort, and `createSwapchain` is `Unsupported` |
 | 14 diagnostics | the core's counters and checks; no capture hook, so `beginCapture` is `Unsupported` |
 
 An entry the backend does not implement logs its name and aborts in every build, or returns
@@ -241,8 +241,8 @@ around `Serialize`; no pool lock is held when it is taken, and recording never t
 
 ## Shader libraries and pipelines
 
-[Drawing on the D3D12 backend](d3d12-drawing.md) describes the container, the loader, the
-pipelines and the cache. The files are:
+[Drawing on the D3D12 backend](d3d12-drawing.md) describes the container, the loader,
+pipelines and the cache; [its file list](d3d12-drawing.md#files) adds the recording files. Here:
 
 - `D3D12ShaderLibrary.{h,cpp}`: the `.d3d12lib` parser, the library payload and its retire hook.
 - `D3D12PipelineState.{h,cpp}`: the pipeline payload, the state conversions and the state stream.
