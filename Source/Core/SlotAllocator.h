@@ -20,7 +20,8 @@ namespace rojoRHI::core {
     {
         Free,     ///< Never handed out, or retired and waiting in the free list.
         Assigned, ///< Handed out by `allocate` and not released.
-        Released  ///< Released at a frame that has not retired; not handed out again yet.
+        Released, ///< Released at a frame that has not retired; not handed out again yet.
+        Reserved  ///< Set aside by `reserveLeading` for the backend; never handed out.
     };
 
     /// Hands out the indices of one global heap. A slot released at frame F returns to the free list only when `retire` is
@@ -28,12 +29,20 @@ namespace rojoRHI::core {
     /// word its allocator stored, which the caller uses to find what the slot describes, and a `native` payload, the backend's
     /// object for the slot or null. A payload leaves its slot when the slot is released or a write replaces it, waits for the
     /// frame of that release or write, and is handed to the caller exactly once: by `retire` when that frame retires, or by
-    /// `drain`. All operations take one mutex.
+    /// `drain`. A backend may set aside a leading block of slots for its own descriptors with `reserveLeading`; the
+    /// `capacity` the allocating calls take then counts the slots after that block. All operations take one mutex.
     class SlotAllocator
     {
       public:
+        /// Sets aside slots [0, `count`) for the backend, on an allocator that has handed out nothing: they are never handed
+        /// out, are Reserved rather than Assigned, so `assignedCount` does not count them, and cannot be released, written or
+        /// retired. A later `capacity` counts the slots from `count` on, so the highest index handed out stays below
+        /// `count + capacity`. `drain` ends the reservation with everything else.
+        void reserveLeading(uint32_t count);
+
         /// Takes a free slot, preferring a retired one over a fresh one, and records `owner` and `native` in it. `capacity` is
-        /// the number of slots the heap has; returns nothing when every slot is assigned or waiting to retire.
+        /// the number of slots the heap has after the reserved block; returns nothing when every slot is assigned or waiting to
+        /// retire.
         std::optional<uint32_t> allocate(uint32_t capacity, uint64_t owner, void* native = nullptr);
 
         /// Takes `count` contiguous free slots, retired or never handed out, and records `owner` and a null payload in each;
@@ -138,7 +147,7 @@ namespace rojoRHI::core {
         uint64_t retire(uint64_t upToFrame);
 
         /// Calls `onNative` once with every non-null payload a slot holds or a release or write left waiting, then empties
-        /// the allocator, so every slot is Free and fresh slots start from zero again. `onNative` runs under the allocator's
+        /// the allocator and ends any reservation, so every slot is Free and fresh slots start from zero again. `onNative` runs under the allocator's
         /// lock and must not call the allocator.
         template<typename OnNative> void drain(OnNative&& onNative)
         {
@@ -159,6 +168,7 @@ namespace rojoRHI::core {
             m_slots.clear();
             m_free.clear();
             m_pending.clear();
+            m_reserved = 0;
         }
 
         /// Returns the state of slot `index`; a slot never handed out is Free.
@@ -167,7 +177,8 @@ namespace rojoRHI::core {
         /// Returns the number of slots in state Assigned.
         size_t assignedCount();
 
-        /// Returns true when no slot was handed out since the allocator was created or drained and nothing waits to retire.
+        /// Returns true when no slot was handed out since the allocator was created or drained and nothing waits to retire; a
+        /// reserved block alone leaves it empty.
         bool empty();
 
       private:
@@ -215,5 +226,6 @@ namespace rojoRHI::core {
         std::vector<Slot> m_slots;      ///< Slots handed out at least once; the index is the position.
         std::vector<uint32_t> m_free;   ///< Retired slots, reused before a fresh one.
         std::vector<Pending> m_pending; ///< Released slots, ranges and replaced payloads in release order.
+        uint32_t m_reserved = 0;        ///< Leading slots set aside by `reserveLeading`.
     };
 } // namespace rojoRHI::core
