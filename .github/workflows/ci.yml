@@ -360,19 +360,26 @@ jobs:
       - run: xmake build RojoRHITests
       # Every conformance shader has DXIL (the layout probe is no conformance shader: xmake/slang.lua
       # leaves slang.layout_probe files out of the shaders it compiles). The check is per source file, best effort for
-      # shaders with several entries: <name>.dxil, or <name>.<entry>.dxil for each entry of several.
+      # shaders with several entries: <name>.dxil, or <name>.<entry>.dxil for each entry of several. Each shader
+      # also has its <name>.d3d12lib.
       - shell: pwsh
         run: |
           $out = 'build/windows/x64/debug/rojorhi-test/Shaders'
           $missing = @()
+          $nolib = @()
           foreach ($src in Get-ChildItem 'Shaders/Tests' -Filter '*.slang' | Where-Object BaseName -ne 'LayoutProbe') {
             $name = $src.BaseName
             if (-not ((Test-Path (Join-Path $out "$name.dxil")) -or (Get-ChildItem $out -Filter "$name.*.dxil" -ErrorAction SilentlyContinue))) {
               $missing += $name
             }
+            if (-not (Test-Path (Join-Path $out "$name.d3d12lib"))) {
+              $nolib += $name
+            }
           }
           if ($missing) { throw "no DXIL for: $($missing -join ', ')" }
           Write-Host "DXIL present for every Shaders/Tests shader"
+          if ($nolib) { throw "no .d3d12lib for: $($nolib -join ', ')" }
+          Write-Host ".d3d12lib present for every Shaders/Tests shader"
       # The runtime rule copies the app-local Agility SDK and WARP beside the test executable.
       - shell: pwsh
         run: |

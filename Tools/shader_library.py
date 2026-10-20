@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""Package one shader's Metal compile outputs into a RojoRHI shader library.
+"""Package one shader's compile outputs into a RojoRHI shader library, for Metal 4 or D3D12.
 
-The library is a text header followed by the raw metallib:
+The Metal 4 library (--format metal4, the default) is a text header followed by the raw metallib:
 
   rojorhi.metal4.shaderlibrary
   abi <N>
@@ -13,6 +13,19 @@ Entry names and stages come from the Slang reflection of the MSL compile. Thread
 the SPIR-V module of the same shader, whose `LocalSize` execution mode the compiler has resolved; a
 compute entry must agree with the size the reflection reports. The ABI number comes from the shader
 ABI module.
+
+The D3D12 library (--format d3d12) has the same header with a seventh field on each entry line, the
+byte count of that entry's DXIL, and a closing `dxil` line:
+
+  rojorhi.d3d12.shaderlibrary
+  abi <N>
+  entry <name> <stage> <x> <y> <z> <bytes>     one line per entry point, in reflection order
+  dxil <total>
+  <total raw bytes: each entry's DXIL container in entry order, then end of file>
+
+<total> is the sum of the entries' byte counts. Each DXIL container is the signed output of the
+compiler (--dxil NAME=PATH, one for each entry): it starts with `DXBC`, its size field at byte 24
+equals the file's length and its digest at bytes 4 to 19 is not all zero.
 """
 
 from __future__ import annotations
@@ -30,6 +43,10 @@ from typing import NamedTuple
 
 MAGIC_LINE = "rojorhi.metal4.shaderlibrary"
 METALLIB_MAGIC = b"MTLB"
+D3D12_MAGIC_LINE = "rojorhi.d3d12.shaderlibrary"
+DXIL_MAGIC = b"DXBC"
+DXIL_DIGEST = slice(4, 20)
+DXIL_SIZE_FIELD = 24
 NAME_PATTERN = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
 ABI_PATTERN = re.compile(r"\bpublic\s+static\s+const\s+uint\s+ROJORHI_SHADER_ABI_VERSION\s*=\s*([0-9]+)\s*;")
 COMMENT_PATTERN = re.compile(r"//[^\n]*|/\*.*?\*/", re.DOTALL)
@@ -208,6 +225,38 @@ def package(abi: int, entries: list[Entry], metallib: bytes) -> bytes:
     return ("\n".join(lines) + "\n").encode("ascii") + metallib
 
 
+def check_dxil(name: str, data: bytes) -> None:
+    if not data.startswith(DXIL_MAGIC):
+        raise LibraryError(f"the DXIL of entry '{name}' is not a DXIL container: it does not start with DXBC")
+    if len(data) < DXIL_SIZE_FIELD + 4:
+        raise LibraryError(f"the DXIL of entry '{name}' is truncated: {len(data)} bytes")
+    declared = struct.unpack_from("<I", data, DXIL_SIZE_FIELD)[0]
+    if declared != len(data):
+        raise LibraryError(
+            f"the DXIL of entry '{name}' declares {declared} bytes in its container but the file has {len(data)}"
+        )
+    if not any(data[DXIL_DIGEST]):
+        raise LibraryError(f"the DXIL of entry '{name}' is unsigned: its container digest is all zero")
+
+
+def package_d3d12(abi: int, entries: list[Entry], dxil: dict[str, bytes]) -> bytes:
+    names = [e.name for e in entries]
+    missing = [n for n in names if n not in dxil]
+    if missing:
+        raise LibraryError(f"no DXIL for entry '{missing[0]}'")
+    extra = sorted(n for n in dxil if n not in names)
+    if extra:
+        raise LibraryError(f"DXIL given for '{extra[0]}', which is not an entry of the shader")
+    for name in names:
+        check_dxil(name, dxil[name])
+    lines = [D3D12_MAGIC_LINE, f"abi {abi}"]
+    lines += [
+        f"entry {e.name} {e.stage} {e.size[0]} {e.size[1]} {e.size[2]} {len(dxil[e.name])}" for e in entries
+    ]
+    lines.append(f"dxil {sum(len(dxil[n]) for n in names)}")
+    return ("\n".join(lines) + "\n").encode("ascii") + b"".join(dxil[n] for n in names)
+
+
 def read_input(path: Path, binary: bool) -> bytes | str:
     try:
         return path.read_bytes() if binary else path.read_text(encoding="utf-8")
@@ -237,6 +286,39 @@ def build(module: Path, reflection: Path, spirv: Path, metallib: Path) -> bytes:
         raise LibraryError(f"{metallib}: {error}") from error
 
 
+def build_d3d12(module: Path, reflection: Path, spirv: Path, dxil: dict[str, Path]) -> bytes:
+    try:
+        abi = abi_version(read_input(module, False))
+    except LibraryError as error:
+        raise LibraryError(f"{module}: {error}") from error
+    try:
+        reflected = reflected_entries(json.loads(read_input(reflection, False)))
+    except (ValueError, LibraryError) as error:
+        raise LibraryError(f"{reflection}: {error}") from error
+    try:
+        entries = library_entries(reflected, spirv_entries(read_input(spirv, True)))
+    except LibraryError as error:
+        raise LibraryError(f"{spirv}: {error}") from error
+    contents: dict[str, bytes] = {}
+    for name, path in dxil.items():
+        try:
+            contents[name] = read_input(path, True)
+            check_dxil(name, contents[name])
+        except LibraryError as error:
+            raise LibraryError(f"{path}: {error}") from error
+    try:
+        return package_d3d12(abi, entries, contents)
+    except LibraryError as error:
+        raise LibraryError(f"{spirv}: {error}") from error
+
+
+def dxil_argument(text: str) -> tuple[str, Path]:
+    name, separator, path = text.partition("=")
+    if not separator or not NAME_PATTERN.fullmatch(name) or not path:
+        raise argparse.ArgumentTypeError(f"'{text}' is not NAME=PATH")
+    return name, Path(path)
+
+
 def write_atomically(path: Path, data: bytes) -> None:
     descriptor, temporary = tempfile.mkstemp(dir=path.parent, prefix=f".{path.name}.")
     try:
@@ -253,11 +335,26 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--module", required=True, type=Path, help="Slang module holding the ABI version")
     parser.add_argument("--reflection", required=True, type=Path, help="-reflection-json of the MSL compile")
     parser.add_argument("--spirv", required=True, type=Path, help="SPIR-V compile of the same shader")
-    parser.add_argument("--metallib", required=True, type=Path, help="metallib of the same shader")
+    parser.add_argument("--format", choices=("metal4", "d3d12"), default="metal4", help="library to write")
+    parser.add_argument("--metallib", type=Path, help="metallib of the same shader (metal4)")
+    parser.add_argument(
+        "--dxil", action="append", default=[], type=dxil_argument, metavar="NAME=PATH",
+        help="signed DXIL of the entry NAME, once for each entry (d3d12)",
+    )  # fmt: skip
     parser.add_argument("--out", required=True, type=Path, help="library to write")
     args = parser.parse_args(argv)
+    if args.format == "metal4" and (args.metallib is None or args.dxil):
+        parser.error("--format metal4 takes --metallib and no --dxil")
+    if args.format == "d3d12" and (args.metallib is not None or not args.dxil):
+        parser.error("--format d3d12 takes --dxil NAME=PATH and no --metallib")
     try:
-        data = build(args.module, args.reflection, args.spirv, args.metallib)
+        if args.format == "d3d12":
+            dxil = dict(args.dxil)
+            if len(dxil) != len(args.dxil):
+                raise LibraryError("--dxil names an entry twice")
+            data = build_d3d12(args.module, args.reflection, args.spirv, dxil)
+        else:
+            data = build(args.module, args.reflection, args.spirv, args.metallib)
         write_atomically(args.out, data)
     except (LibraryError, OSError) as error:
         print(f"shader_library: {error}", file=sys.stderr)

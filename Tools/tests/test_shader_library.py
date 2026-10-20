@@ -275,5 +275,115 @@ class MainTest(unittest.TestCase):
             self.assertIn("shader_library:", err.getvalue())
 
 
+def dxbc(payload: bytes, digest: bytes = b"\x01" * 16) -> bytes:
+    return b"DXBC" + digest + b"\x01\x00\x00\x00" + struct.pack("<I", 32 + len(payload)) + b"\x00\x00\x00\x00" + payload
+
+
+class D3D12PackageTest(unittest.TestCase):
+    MODULE = "public static const uint ROJORHI_SHADER_ABI_VERSION = 1;\n"
+
+    def entries(self) -> list[library.Entry]:
+        return library.library_entries(
+            library.reflected_entries(mesh_pair_reflection()), library.spirv_entries(mesh_pair_spirv())
+        )
+
+    def test_mesh_pair_bytes(self) -> None:
+        a, b = dxbc(b"task"), dxbc(b"mesh!")
+        expected = (
+            b"rojorhi.d3d12.shaderlibrary\nabi 1\n"
+            + f"entry taskMain task 1 1 1 {len(a)}\nentry meshMain mesh 3 1 1 {len(b)}\n".encode()
+            + f"dxil {len(a) + len(b)}\n".encode()
+            + a
+            + b
+        )
+        self.assertEqual(library.package_d3d12(1, self.entries(), {"taskMain": a, "meshMain": b}), expected)
+
+    def test_vertex_and_fragment_pack_zero_size(self) -> None:
+        entries = [library.Entry("vsMain", "vertex", (0, 0, 0)), library.Entry("fsMain", "fragment", (0, 0, 0))]
+        v, f = dxbc(b"v"), dxbc(b"ff")
+        data = library.package_d3d12(1, entries, {"vsMain": v, "fsMain": f})
+        self.assertIn(f"entry vsMain vertex 0 0 0 {len(v)}\n".encode(), data)
+        self.assertIn(f"entry fsMain fragment 0 0 0 {len(f)}\n".encode(), data)
+
+    def test_missing_dxil_for_an_entry_fails(self) -> None:
+        with self.assertRaisesRegex(library.LibraryError, "meshMain"):
+            library.package_d3d12(1, self.entries(), {"taskMain": dxbc(b"t")})
+
+    def test_extra_dxil_fails(self) -> None:
+        both = {"taskMain": dxbc(b"t"), "meshMain": dxbc(b"m"), "stray": dxbc(b"s")}
+        with self.assertRaisesRegex(library.LibraryError, "stray"):
+            library.package_d3d12(1, self.entries(), both)
+
+    def test_dxil_without_dxbc_fails(self) -> None:
+        with self.assertRaisesRegex(library.LibraryError, "taskMain"):
+            library.check_dxil("taskMain", b"MTLB" + bytes(40))
+
+    def test_dxil_size_field_mismatch_fails(self) -> None:
+        with self.assertRaisesRegex(library.LibraryError, "meshMain"):
+            library.check_dxil("meshMain", dxbc(b"abc") + b"x")
+
+    def test_unsigned_dxil_fails(self) -> None:
+        with self.assertRaisesRegex(library.LibraryError, "unsigned"):
+            library.check_dxil("taskMain", dxbc(b"abc", digest=bytes(16)))
+
+    def test_main_d3d12_writes_the_library(self) -> None:
+        with tempfile.TemporaryDirectory() as name:
+            d = Path(name)
+            (d / "m.slang").write_text(self.MODULE)
+            (d / "r.json").write_text(json.dumps(mesh_pair_reflection()))
+            (d / "s.spv").write_bytes(mesh_pair_spirv())
+            a, b = dxbc(b"task"), dxbc(b"mesh")
+            (d / "a.dxil").write_bytes(a)
+            (d / "b.dxil").write_bytes(b)
+            argv = [
+                "--format", "d3d12", "--module", str(d / "m.slang"), "--reflection", str(d / "r.json"),
+                "--spirv", str(d / "s.spv"), "--dxil", f"taskMain={d / 'a.dxil'}",
+                "--dxil", f"meshMain={d / 'b.dxil'}", "--out", str(d / "o.d3d12lib"),
+            ]  # fmt: skip
+            self.assertEqual(library.main(argv), 0)
+            data = (d / "o.d3d12lib").read_bytes()
+            self.assertTrue(data.startswith(b"rojorhi.d3d12.shaderlibrary\nabi 1\n"))
+            self.assertTrue(data.endswith(a + b))
+
+    def test_main_d3d12_failure_names_the_file_and_removes_output(self) -> None:
+        with tempfile.TemporaryDirectory() as name:
+            d = Path(name)
+            (d / "m.slang").write_text(self.MODULE)
+            (d / "r.json").write_text(json.dumps(mesh_pair_reflection()))
+            (d / "s.spv").write_bytes(mesh_pair_spirv())
+            (d / "a.dxil").write_bytes(dxbc(b"t", digest=bytes(16)))
+            out = d / "o.d3d12lib"
+            out.write_bytes(b"stale")
+            argv = [
+                "--format", "d3d12", "--module", str(d / "m.slang"), "--reflection", str(d / "r.json"),
+                "--spirv", str(d / "s.spv"), "--dxil", f"taskMain={d / 'a.dxil'}",
+                "--dxil", f"meshMain={d / 'a.dxil'}", "--out", str(out),
+            ]  # fmt: skip
+            err = io.StringIO()
+            with redirect_stderr(err):
+                self.assertEqual(library.main(argv), 1)
+            self.assertIn("a.dxil", err.getvalue())
+            self.assertFalse(out.exists())
+
+    def test_main_metal4_unchanged_without_format(self) -> None:
+        with tempfile.TemporaryDirectory() as name:
+            d = Path(name)
+            (d / "m.slang").write_text(self.MODULE)
+            (d / "r.json").write_text(json.dumps(mesh_pair_reflection()))
+            (d / "s.spv").write_bytes(mesh_pair_spirv())
+            (d / "l.metallib").write_bytes(METALLIB)
+            argv = [
+                "--module", str(d / "m.slang"), "--reflection", str(d / "r.json"), "--spirv", str(d / "s.spv"),
+                "--metallib", str(d / "l.metallib"), "--out", str(d / "o.metal4lib"),
+            ]  # fmt: skip
+            self.assertEqual(library.main(argv), 0)
+            self.assertTrue((d / "o.metal4lib").read_bytes().startswith(b"rojorhi.metal4.shaderlibrary\n"))
+
+    def test_main_requires_the_inputs_of_its_format(self) -> None:
+        err = io.StringIO()
+        with redirect_stderr(err), self.assertRaises(SystemExit):
+            library.main(["--format", "d3d12", "--module", "m", "--reflection", "r", "--spirv", "s", "--out", "o"])
+
+
 if __name__ == "__main__":
     unittest.main()

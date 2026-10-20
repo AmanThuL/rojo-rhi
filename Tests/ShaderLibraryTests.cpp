@@ -1,12 +1,13 @@
 //----------------------------------------------------------------------------------------------------------------------
 /// @file ShaderLibraryTests.cpp
-/// @brief Tests the header of the RojoRHI shader library the shader build writes around each conformance metallib.
+/// @brief Tests the header of the RojoRHI shader library written around each conformance metallib and DXIL.
 //----------------------------------------------------------------------------------------------------------------------
 #include "Core/Pipelines.h"
 #include "ShaderList.h"
 
 #include <catch2/catch_test_macros.hpp>
 
+#include <algorithm>
 #include <array>
 #include <charconv>
 #include <cstddef>
@@ -26,7 +27,20 @@
 using namespace rojoRHI;
 
 namespace {
-    constexpr std::string_view kMagicLine = "rojorhi.metal4.shaderlibrary";
+    // A production reader lives in each backend; the readers here only check what the build wrote.
+
+    /// What distinguishes the two library formats.
+    struct LibraryFormat
+    {
+        std::string_view magic;        ///< The first line.
+        std::string_view extension;    ///< The file extension.
+        std::string_view closing;      ///< The first word of the last header line, a payload byte count follows it.
+        std::size_t entryTokens;       ///< The fields of an `entry` line, the word included.
+        std::string_view payloadMagic; ///< The four bytes that start the metallib, or each entry's DXIL.
+    };
+
+    constexpr LibraryFormat kMetal = { "rojorhi.metal4.shaderlibrary", ".metal4lib", "metallib", 6, "MTLB" };
+    constexpr LibraryFormat kD3D12 = { "rojorhi.d3d12.shaderlibrary", ".d3d12lib", "dxil", 7, "DXBC" };
 
     /// One `entry` line of a library header.
     struct LibraryEntry
@@ -34,18 +48,22 @@ namespace {
         std::string name;                  ///< The entry point's name.
         std::string stage;                 ///< The stage word, as `core::stageName` spells it.
         std::array<uint64_t, 3> size = {}; ///< The threadgroup size; zero for vertex and fragment.
+        uint64_t bytes = 0;                ///< The DXIL byte count of a D3D12 entry line; zero for Metal, which has none.
 
-        /// Compares two entries.
-        friend bool operator==(const LibraryEntry&, const LibraryEntry&) = default;
+        /// Compares two entries by name, stage and size; the byte count is read, not compared.
+        friend bool operator==(const LibraryEntry& left, const LibraryEntry& right)
+        {
+            return left.name == right.name && left.stage == right.stage && left.size == right.size;
+        }
     };
 
-    /// What the header of a library declares, read up to and including its `metallib` line.
+    /// What the header of a library declares, read up to and including its closing line.
     struct LibraryHeader
     {
         uint64_t abi = 0;                  ///< The value of the `abi` line.
         std::vector<LibraryEntry> entries; ///< The `entry` lines, in file order.
-        uint64_t declaredBytes = 0;        ///< The count of the `metallib` line.
-        std::vector<char> payload;         ///< The bytes after the `metallib` line, to the end of the file.
+        uint64_t declaredBytes = 0;        ///< The count of the closing line.
+        std::vector<char> payload;         ///< The bytes after the closing line, to the end of the file.
         std::string error;                 ///< "line <n>: <breach>" for the first breach; empty when there is none.
     };
 
@@ -109,13 +127,14 @@ namespace {
     }
 
     //==================================================================================================================
-    // Reads an `entry <name> <stage> <x> <y> <z>` line into `header`, or returns the breach.
-    std::string readEntry(std::string_view line, LibraryHeader& header, std::set<std::string, std::less<>>& names)
+    // Reads an `entry <name> <stage> <x> <y> <z>` line, with a trailing byte count in a D3D12 library, into `header`, or
+    // returns the breach.
+    std::string readEntry(const LibraryFormat& format, std::string_view line, LibraryHeader& header, std::set<std::string, std::less<>>& names)
     {
         const std::vector<std::string_view> tokens = splitSpaces(line);
-        if (tokens.size() != 6)
+        if (tokens.size() != format.entryTokens)
         {
-            return std::format("an entry line holds {} tokens, not 6", tokens.size());
+            return std::format("an entry line holds {} tokens, not {}", tokens.size(), format.entryTokens);
         }
         LibraryEntry entry;
         entry.name = tokens[1];
@@ -155,13 +174,22 @@ namespace {
                 return std::format("{} entry '{}' size {} {} {} breaks the size rule", entry.stage, entry.name, entry.size[0], entry.size[1], entry.size[2]);
             }
         }
+        if (format.entryTokens == 7)
+        {
+            const std::optional<uint64_t> bytes = canonicalNumber(tokens[6]);
+            if (!bytes || *bytes == 0)
+            {
+                return std::format("entry '{}' byte count '{}' is not a canonical nonzero number", entry.name, tokens[6]);
+            }
+            entry.bytes = *bytes;
+        }
         header.entries.push_back(std::move(entry));
         return {};
     }
 
     //==================================================================================================================
-    // Reads LF-ended header lines up to and including `metallib <n>`, never the payload as text.
-    LibraryHeader readHeader(std::span<const char> bytes)
+    // Reads LF-ended header lines up to and including the closing `metallib <n>` or `dxil <n>`, never the payload as text.
+    LibraryHeader readHeader(const LibraryFormat& format, std::span<const char> bytes)
     {
         LibraryHeader header;
         std::set<std::string, std::less<>> names;
@@ -176,7 +204,7 @@ namespace {
             const std::size_t end = rest.find('\n');
             if (end == std::string_view::npos)
             {
-                return fail("the header ends before a metallib line");
+                return fail(std::format("the header ends before the {} line", format.closing));
             }
             const std::string_view line = rest.substr(0, end);
             at += end + 1;
@@ -186,9 +214,9 @@ namespace {
             }
             if (number == 1)
             {
-                if (line != kMagicLine)
+                if (line != format.magic)
                 {
-                    return fail(std::format("the first line is not '{}'", kMagicLine));
+                    return fail(std::format("the first line is not '{}'", format.magic));
                 }
                 continue;
             }
@@ -204,31 +232,32 @@ namespace {
             }
             if (line.starts_with("entry "))
             {
-                std::string breach = readEntry(line, header, names);
+                std::string breach = readEntry(format, line, header, names);
                 if (!breach.empty())
                 {
                     return fail(std::move(breach));
                 }
                 continue;
             }
-            if (!line.starts_with("metallib "))
+            const std::string closing = std::format("{} ", format.closing);
+            if (!line.starts_with(closing))
             {
-                return fail(std::format("'{}' is neither an entry line nor the metallib line", line));
+                return fail(std::format("'{}' is neither an entry line nor the {} line", line, format.closing));
             }
             if (header.entries.empty())
             {
-                return fail("the metallib line follows no entry line");
+                return fail(std::format("the {} line follows no entry line", format.closing));
             }
-            const std::optional<uint64_t> count = canonicalNumber(line.substr(9));
+            const std::optional<uint64_t> count = canonicalNumber(line.substr(closing.size()));
             if (!count)
             {
-                return fail("the metallib line holds no canonical byte count");
+                return fail(std::format("the {} line holds no canonical byte count", format.closing));
             }
             header.declaredBytes = *count;
             header.payload.assign(bytes.begin() + static_cast<std::ptrdiff_t>(at), bytes.end());
             if (header.declaredBytes != header.payload.size())
             {
-                return fail(std::format("the metallib line declares {} bytes but {} follow", header.declaredBytes, header.payload.size()));
+                return fail(std::format("the {} line declares {} bytes but {} follow", format.closing, header.declaredBytes, header.payload.size()));
             }
             return header;
         }
@@ -244,15 +273,44 @@ namespace {
     //==================================================================================================================
     // Reads the header of a conformance shader's library and fails the case on a breach. xmake runs a test from its target
     // directory, which is where the build wrote Shaders/.
-    LibraryHeader readLibrary(std::string_view shader)
+    LibraryHeader readLibrary(const LibraryFormat& format, std::string_view shader)
     {
-        const auto file = std::filesystem::path("Shaders") / (std::string(shader) + ".metal4lib");
+        const auto file = std::filesystem::path("Shaders") / (std::string(shader) + std::string(format.extension));
         INFO(file.string());
         REQUIRE(std::filesystem::exists(file));
-        LibraryHeader header = readHeader(readFile(file));
+        LibraryHeader header = readHeader(format, readFile(file));
         INFO(header.error);
         REQUIRE(header.error.empty());
         return header;
+    }
+
+    using Entries = std::vector<LibraryEntry>;
+
+    //==================================================================================================================
+    // Checks the entry lists of every conformance shader's library in `format`; both formats carry the same ones.
+    void checkEntryLists(const LibraryFormat& format)
+    {
+        CHECK(readLibrary(format, "AbiMesh").entries == Entries{ { "taskMain", "task", { 1, 1, 1 } }, { "meshMain", "mesh", { 3, 1, 1 } } });
+        CHECK(readLibrary(format, "AbiVertex").entries == Entries{ { "vertexMain", "vertex", { 0, 0, 0 } } });
+        CHECK(readLibrary(format, "AbiFragment").entries == Entries{ { "fragmentMain", "fragment", { 0, 0, 0 } } });
+        CHECK(readLibrary(format, "AbiCompute").entries == Entries{ { "computeMain", "compute", { 1, 1, 1 } } });
+        CHECK(
+            readLibrary(format, "Standard").entries == Entries{ { "vsMain", "vertex", { 0, 0, 0 } },
+                                                                { "fsMain", "fragment", { 0, 0, 0 } },
+                                                                { "tsMain", "task", { 1, 1, 1 } },
+                                                                { "msMain", "mesh", { 1, 1, 1 } },
+                                                                { "csMain", "compute", { 1, 1, 1 } } }
+        );
+
+        // One kernel per texture type: seven sampled, the comparison sample, two multisample and five storage.
+        const Entries textures = readLibrary(format, "AbiTextures").entries;
+        CHECK(textures.size() == 15);
+        for (const LibraryEntry& entry : textures)
+        {
+            INFO(entry.name);
+            CHECK(entry.stage == "compute");
+            CHECK(entry.size == std::array<uint64_t, 3>{ 1, 1, 1 });
+        }
     }
 } // namespace
 
@@ -266,12 +324,12 @@ TEST_CASE("every conformance shader packages a Metal shader library", "[abi]")
     for (const std::string_view name : kConformanceShaders)
     {
         INFO(name);
-        const LibraryHeader header = readLibrary(name);
+        const LibraryHeader header = readLibrary(kMetal, name);
         CHECK(header.abi == core::kShaderAbiVersion);
         CHECK_FALSE(header.entries.empty());
         CHECK(header.declaredBytes == header.payload.size());
         REQUIRE(header.payload.size() >= 4);
-        CHECK(std::string_view(header.payload.data(), 4) == "MTLB");
+        CHECK(std::string_view(header.payload.data(), 4) == kMetal.payloadMagic);
     }
 }
 
@@ -282,26 +340,86 @@ TEST_CASE("the Metal shader libraries carry each entry's stage and threadgroup s
     {
         SKIP("the build had no Metal toolchain");
     }
-    using Entries = std::vector<LibraryEntry>;
-    CHECK(readLibrary("AbiMesh").entries == Entries{ { "taskMain", "task", { 1, 1, 1 } }, { "meshMain", "mesh", { 3, 1, 1 } } });
-    CHECK(readLibrary("AbiVertex").entries == Entries{ { "vertexMain", "vertex", { 0, 0, 0 } } });
-    CHECK(readLibrary("AbiFragment").entries == Entries{ { "fragmentMain", "fragment", { 0, 0, 0 } } });
-    CHECK(readLibrary("AbiCompute").entries == Entries{ { "computeMain", "compute", { 1, 1, 1 } } });
-    CHECK(
-        readLibrary("Standard").entries == Entries{ { "vsMain", "vertex", { 0, 0, 0 } },
-                                                    { "fsMain", "fragment", { 0, 0, 0 } },
-                                                    { "tsMain", "task", { 1, 1, 1 } },
-                                                    { "msMain", "mesh", { 1, 1, 1 } },
-                                                    { "csMain", "compute", { 1, 1, 1 } } }
-    );
+    checkEntryLists(kMetal);
+}
 
-    // One kernel per texture type: seven sampled, the comparison sample, two multisample and five storage.
-    const Entries textures = readLibrary("AbiTextures").entries;
-    CHECK(textures.size() == 15);
-    for (const LibraryEntry& entry : textures)
+//======================================================================================================================
+TEST_CASE("every conformance shader packages a D3D12 shader library", "[abi]")
+{
+    if (!kD3D12LibrariesBuilt)
     {
-        INFO(entry.name);
-        CHECK(entry.stage == "compute");
-        CHECK(entry.size == std::array<uint64_t, 3>{ 1, 1, 1 });
+        SKIP("the build had no DXC");
+    }
+    for (const std::string_view name : kConformanceShaders)
+    {
+        INFO(name);
+        const LibraryHeader header = readLibrary(kD3D12, name);
+        CHECK(header.abi == core::kShaderAbiVersion);
+        CHECK_FALSE(header.entries.empty());
+        CHECK(header.declaredBytes == header.payload.size());
+        uint64_t sum = 0;
+        std::size_t at = 0;
+        for (const LibraryEntry& entry : header.entries)
+        {
+            INFO(entry.name);
+            sum += entry.bytes;
+            REQUIRE(at + 4 <= header.payload.size());
+            CHECK(std::string_view(header.payload.data() + at, 4) == kD3D12.payloadMagic);
+            at += entry.bytes;
+        }
+        CHECK(sum == header.payload.size());
+    }
+}
+
+//======================================================================================================================
+TEST_CASE("the D3D12 shader libraries carry each entry's stage, threadgroup size and DXIL", "[abi]")
+{
+    if (!kD3D12LibrariesBuilt)
+    {
+        SKIP("the build had no DXC");
+    }
+    checkEntryLists(kD3D12);
+    for (const std::string_view name : kConformanceShaders)
+    {
+        INFO(name);
+        for (const LibraryEntry& entry : readLibrary(kD3D12, name).entries)
+        {
+            INFO(entry.name);
+            CHECK(entry.bytes > 0);
+        }
+    }
+}
+
+//======================================================================================================================
+TEST_CASE("each entry's DXIL in a D3D12 library is the rule's .dxil for that entry", "[abi]")
+{
+    if (!kD3D12LibrariesBuilt)
+    {
+        SKIP("the build had no DXC");
+    }
+    for (const std::string_view name : kConformanceShaders)
+    {
+        INFO(name);
+        const LibraryHeader header = readLibrary(kD3D12, name);
+        std::size_t at = 0;
+        for (const LibraryEntry& entry : header.entries)
+        {
+            INFO(entry.name);
+            const std::string base(name);
+            const auto single = std::filesystem::path("Shaders") / (base + ".dxil");
+            const auto file = header.entries.size() == 1 ? single : std::filesystem::path("Shaders") / (base + "." + entry.name + ".dxil");
+            REQUIRE(std::filesystem::exists(file));
+            const std::vector<char> expected = readFile(file);
+            REQUIRE(at + entry.bytes <= header.payload.size());
+            CHECK(
+                std::equal(
+                    expected.begin(),
+                    expected.end(),
+                    header.payload.begin() + static_cast<std::ptrdiff_t>(at),
+                    header.payload.begin() + static_cast<std::ptrdiff_t>(at + entry.bytes)
+                )
+            );
+            at += entry.bytes;
+        }
     }
 }
