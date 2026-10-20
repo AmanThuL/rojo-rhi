@@ -44,7 +44,8 @@ TEST_CASE("a paced frame with fence submissions counts the Metal 4 native calls"
     const std::array<FenceValue, 1> signal{ FenceValue{ b, 1 } };
     queue.submit({}, wait, signal);
     const Counters s3 = device.counters();
-    CHECK(s3.nativeSubmitCalls == s2.nativeSubmitCalls + 3);
+    // The wait and the signal: the graphics queue signals no progress, since a frame's retirement covers its submissions.
+    CHECK(s3.nativeSubmitCalls == s2.nativeSubmitCalls + 2);
     CHECK(s3.nativeHostCalls == s2.nativeHostCalls);
 
     // A creation dirties the residency set, and the next submission commits it once.

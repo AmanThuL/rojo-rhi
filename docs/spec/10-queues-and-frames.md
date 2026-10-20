@@ -145,8 +145,8 @@ same frame by a fence wait, as `VU-rojo-device-0006` of
 |---|---|---|---|
 | Wait | `MTL4::CommandQueue::wait` with the event and value | `ID3D12CommandQueue::Wait` | `pWaitSemaphoreInfos` of `VkSubmitInfo2` |
 | Execute | `MTL4::CommandQueue::commit` with the command buffers and count | `ExecuteCommandLists` | `pCommandBufferInfos` of `vkQueueSubmit2` |
-| Signal | `MTL4::CommandQueue::signalEvent` with the event and value | `ID3D12CommandQueue::Signal` | `pSignalSemaphoreInfos`, after a memory barrier to `VK_PIPELINE_STAGE_2_HOST` that makes writes host-visible |
-| Cost | native | native | native |
+| Signal | `MTL4::CommandQueue::signalEvent` with the event and value; a submission on the `Compute` or `Copy` queue that waits or signals with no lists, or signals more than one fence, then signals the queue's own progress event, which keeps a destroyed fence's event until the queue passes it, since no frame join orders all its signals | `ID3D12CommandQueue::Signal` | `pSignalSemaphoreInfos`, after a memory barrier to `VK_PIPELINE_STAGE_2_HOST` that makes writes host-visible |
+| Cost | native: one call per wait and signal and one commit; such a `Compute` or `Copy` submission adds one signal, measured on an Apple M3 Max at about 55 ns of CPU and two allocations | native | native |
 
 ### `Device::completedValue`
 

@@ -262,16 +262,16 @@ draw's kernels included; the pass and draw sites are in [drawing](metal4-drawing
 `encodersOpened` counts every native encoder, the trailing one and a clear's render encoders
 included. An allocator reset counts one `nativeHostCalls`. `nativeSubmitCalls` counts native queue
 calls: the commit of a submission's lists is one, each fence wait and signal the core sees is one,
-and the queue's progress signal is one, so a submission of one list signalling one fence counts
-three. The core folds a list's counts into the device at submission. Operation counts, inside one
-open encoder: `uploadFrameData` makes no native call; a buffer copy is one; an equal-byte fill is
-one and an unequal one five (kernel table, two addresses, dispatch, list table; six for the first
-kernel an encoder runs, which also sets the pipeline); a barrier between copies is one native call
-and one native barrier at its emission; a scope outside a pass is four (the push, two timestamps
-and the pop) beyond the `endEncoding` of each boundary that closes an encoder. A counter heap
-counts one `nativeCreateCalls`, and each resolve and each invalidation of a used heap one
-`nativeHostCalls`. Messages to an upscaler's scaler count as record calls, and the carrier counts
-as an encoder; MetalFX's own encoders are not counted.
+and so is the progress signal that a compute or copy submission with no lists or several signals
+makes, so a submission of one list signalling one fence counts two. The core folds a list's counts
+into the device at submission. Operation counts, inside one open encoder: `uploadFrameData` makes no
+native call; a buffer copy is one; an equal-byte fill is one and an unequal one five (kernel table,
+two addresses, dispatch, list table; six for the first kernel an encoder runs, which also sets the
+pipeline); a barrier between copies is one native call and one native barrier at its emission; a
+scope outside a pass is four (the push, two timestamps and the pop) beyond the `endEncoding` of each
+boundary that closes an encoder. A counter heap counts one `nativeCreateCalls`, and each resolve and
+each invalidation of a used heap one `nativeHostCalls`. Messages to an upscaler's scaler count as
+record calls, and the carrier counts as an encoder; MetalFX's own encoders are not counted.
 
 ## Commit timing
 

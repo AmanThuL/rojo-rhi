@@ -172,12 +172,13 @@ signal. `completedValue` reads the event and reports it to the core; `Device::wa
 10: zero polls, an unlimited wait loops in 10 s slices that each log a warning with the fence's
 label, a finite one rounds up to milliseconds.
 
-A fence's native event must outlive every submission that waits on it or signals it, yet
-`Device::destroy` defers the release only to the frame slot's retirement and the caller never tracks
-GPU progress. Each queue therefore owns a progress event that only it signals: a submission that
-names a fence signals it with the next progress value, with no lock, allocation or native read, and
-`mapTiles` signals and waits on it around its updates
-([sparse resources](metal4-backend-edges.md#sparse-resources)).
+A fence's native event must outlive every submission that names it. `Device::destroy` defers its
+release to a frame slot's retirement, whose wait covers each earlier graphics submission and each
+compute or copy one with lists and at most one signal, whose native calls the frame's join orders
+(`VU-rojo-device-0006`). A fence-only one joins no frame, and a join through one of several signals
+leaves the later ones unordered, so each queue owns a progress event only it signals: such a
+submission signals its next value, with no lock, allocation or native read; `mapTiles` signals and
+waits on it around its updates ([sparse resources](metal4-backend-edges.md#sparse-resources)).
 `Device::destroy(Fence)` snapshots each queue's last progress value and, unless every queue has
 already passed it, keeps the event retained; the same call releases the kept events that every queue
 has passed, so they stay bounded even when no frame begins. The kept events are released, inside a
@@ -185,9 +186,9 @@ pool, when every queue has passed its snapshot; the check runs at each frame-slo
 queue's progress only when a kept event waits for it, and at `destroyDevice`, after the drain.
 
 Frames pace on the graphics queue. `endFrame` signals the frame event, `rojorhi.frame`, with the
-frame number; `beginFrame` reaches the `waitFrame` hook before it retires the slot it reuses and
-waits for the frame that used the slot, so a slot is never reused while the GPU may still read it.
-The wait is one `nativeHostCalls` and `endFrame` is one `nativeSubmitCalls`.
+frame number (one `nativeSubmitCalls`); it stays, since a frame may end with no graphics signal and
+another queue may raise a fence first. `beginFrame`'s `waitFrame` hook (one `nativeHostCalls`) waits
+for the frame that used the slot it reuses before retiring it.
 
 ## Counting
 
@@ -195,19 +196,19 @@ The core counts what it can see; a backend counts at its native call sites. In t
 allocation and descriptor counts, `completedValue`, one `nativeSubmitCalls` for each fence wait and
 signal a submission carries, frame data and arena growth. In this backend: `nativeSubmitCalls`
 counts native queue calls only, so Metal 4 counts its own commits and signals (the stager's upload,
-a submission's commit, `endFrame`'s frame-event signal, a submission's progress signal, a
-drawable's wait and signal, a residency-set attach or detach, and each native mapping update) and
-the Null backend counts its one per `Queue::submit`; a submission that names a fence therefore
-counts its waits, its signals, one commit when it has lists and one progress signal, and an empty
-submission counts none. `nativeHostCalls` counts residency commits, of the device set and of the
-stager's own, frame waits, allocator resets, a native `Device::wait` and the progress reads of a
-frame-slot reuse and of `Device::destroy(Fence)`, each `nextDrawable` call, a `present` and the
-frame wait of a `resize`, and the start and stop of a capture; the stager counts its staging buffer
-in `nativeCreateCalls`. Presentation and sparse mapping add to `nativeSubmitCalls` as [their
-page](metal4-backend-edges.md) states. `nativeRecordCalls`, `nativeBarriers` and `encodersOpened`
-are noted by the backend on the list at each recording site and folded into the device by the core
-at submission; the tracker numbers commands itself and counts nothing. [Command
-recording](metal4-recording.md) lists the sites.
+a submission's commit, `endFrame`'s frame-event signal, the progress signal a compute or copy
+submission owes (above), a drawable's wait and signal, a residency-set attach or detach, and each
+native mapping update) and the Null backend counts its one per `Queue::submit`; a submission that
+names a fence therefore counts its waits, its signals, one commit when it has lists and its progress
+signal if it owes one, and an empty submission counts none. `nativeHostCalls` counts residency
+commits, of the device set and of the stager's own, frame waits, allocator resets, a native
+`Device::wait` and the progress reads of a frame-slot reuse and of `Device::destroy(Fence)`, each
+`nextDrawable` call, a `present` and the frame wait of a `resize`, and the start and stop of a
+capture; the stager counts its staging buffer in `nativeCreateCalls`. Presentation and sparse
+mapping add to `nativeSubmitCalls` as [their page](metal4-backend-edges.md) states.
+`nativeRecordCalls`, `nativeBarriers` and `encodersOpened` are noted by the backend on the list at
+each recording site and folded into the device by the core at submission; the tracker numbers
+commands itself and counts nothing. [Command recording](metal4-recording.md) lists the sites.
 
 ## Threading and locks
 

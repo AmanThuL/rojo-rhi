@@ -92,9 +92,10 @@ Each measurement has one definition for both arms.
   the earliest `GPUStartTime` to the latest `GPUEndTime` over its commits. A `FeedbackCollector`
   with preallocated slots receives them, and a frame is complete when every commit has reported.
   The harness adds no fence or event the note does not register to either arm; the backend's own
-  events (a queue's progress signal and the frame event) are R's measured overhead. Both arms attach
-  the same handler, a block that opens an autorelease pool, so their feedback allocates alike. On
-  Null a submission completes inside the call and no GPU time exists.
+  events (the frame event, and a queue's progress signal, which no registered workload makes) are
+  R's measured overhead. Both arms attach the same handler, a block that opens an autorelease pool,
+  so their feedback allocates alike. On Null a submission completes inside the call and no GPU time
+  exists.
 - **Native calls.** R: the per-frame delta of `nativeRecordCalls + nativeSubmitCalls +
   nativeHostCalls`, with `nativeBarriers` reported beside it and not added. N: a plain increment
   beside each call on a Metal device, queue, command buffer, encoder, argument table, residency set,
@@ -246,7 +247,10 @@ defect:
   and 4 (6), C4 2 and 2 (5), C5 0 and 0 (1), C6 2 and 2 (4), C7 1 and 1 (2), C8 14 and 12 (19),
   C9 3 and 2 (3), C10 3 and 3 (4). C10 at `maxCount` 1 (R 3, N 1) is outside the pre-registered
   budget table; the gate passes it and it is reported only.
-- C9's margin is zero: R makes three native calls per submit, the commit, the fence's `signalEvent`
-  and the queue's own progress `signalEvent` that keeps a destroyed fence's event alive (N makes
-  two), against a budget of 3. Any native call the backend adds at submit time fails the gate in
-  the timed round, so a change to `Queue::submit` must rerun C9 first.
+- C9 made three native calls per submit in that gate, the third the queue's own progress
+  `signalEvent`. A submission with lists and at most one signal no longer signals progress, since
+  the frame's retirement covers it, so R makes two per submit, the commit and the fence's
+  `signalEvent`, as N does, against a budget of 3. The composed frame loses the progress signals of
+  its `cull`, `gbuffer`, `ao` and `lighting` submissions, four native calls per frame. `endFrame`'s
+  frame-event signal remains, one native call per frame that N, which waits on its commits'
+  feedback, does not make. A change to `Queue::submit` reruns C9 first.
