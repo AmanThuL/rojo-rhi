@@ -6,10 +6,13 @@
 
 #include <rojoRHI/RHI.h>
 
+#include "Core/NativeTable.h"
 #include "D3D12Common.h"
 
 #include <cstddef>
 #include <cstdint>
+#include <memory>
+#include <mutex>
 
 namespace rojoRHI::d3d12 {
     /// The greatest byte offset one `Addr` reaches: a raw view holds at most 2^27 four-byte elements.
@@ -28,11 +31,14 @@ namespace rojoRHI::d3d12 {
         std::byte* host = nullptr;          ///< The mapped memory of an Upload or Readback buffer; null otherwise.
     };
 
-    /// Finds the buffer whose raw SRV sits at a view-heap index, so an address decodes without a lock.
+    /// Finds the buffer whose raw SRV sits at a view-heap index, so an address decodes without a lock. An entry is published
+    /// when its buffer is created, before the handle is returned, and cleared by the buffer's retire hook before the payload
+    /// is freed; `publish` and `clear` take the directory's own mutex, a leaf no other lock is taken under, and `find` is one
+    /// acquire load.
     class HeapDirectory
     {
       public:
-        /// Sizes the directory for a view heap of `capacity` descriptors.
+        /// Sizes the directory for a view heap of `capacity` descriptors, at most `core::NativeTable::kCapacity`.
         void create(uint32_t capacity);
 
         /// Records that the raw SRV at `index` belongs to `payload`.
@@ -41,7 +47,11 @@ namespace rojoRHI::d3d12 {
         /// Forgets the buffer at `index`.
         void clear(uint32_t index);
 
-        /// Returns the payload of the buffer whose raw SRV is at `index`, or null.
+        /// Returns the payload of the buffer whose raw SRV is at `index`, or null, also for an index past the view heap.
         const BufferPayload* find(uint32_t index) const;
+
+      private:
+        std::unique_ptr<core::NativeTable> m_table; ///< The payload of each view-heap index; null until `create`.
+        std::mutex m_mutex;                         ///< Serialises `publish` and `clear`.
     };
 } // namespace rojoRHI::d3d12
