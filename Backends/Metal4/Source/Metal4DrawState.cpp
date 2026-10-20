@@ -73,6 +73,21 @@ namespace rojoRHI::metal4 {
     void DrawState::release()
     {
         reset();
+        for (MTL::RenderPassColorAttachmentDescriptor* attachment : colorAttachments)
+        {
+            attachment->release();
+        }
+        colorAttachments.clear();
+        if (depthAttachment != nullptr)
+        {
+            depthAttachment->release();
+            depthAttachment = nullptr;
+        }
+        if (stencilAttachment != nullptr)
+        {
+            stencilAttachment->release();
+            stencilAttachment = nullptr;
+        }
         if (descriptor != nullptr)
         {
             descriptor->release();
@@ -90,17 +105,16 @@ namespace rojoRHI::metal4 {
         {
             return;
         }
-        // The attachment getters may autorelease.
-        const AutoreleasePool pool;
-        MTL::RenderPassColorAttachmentDescriptorArray* attachments = descriptor->colorAttachments();
+        // Every attachment the descriptor held a texture in was configured through a kept attachment descriptor. The setters
+        // only drop the descriptor's references: each texture's pool record keeps its own until the texture's deferred
+        // destruction, which retires after `end`, so no texture is freed here and nothing here needs an autorelease pool.
         for (uint32_t i = 0; i < descriptorColors; ++i)
         {
-            MTL::RenderPassColorAttachmentDescriptor* attachment = attachments->object(i);
-            attachment->setTexture(nullptr);
-            attachment->setResolveTexture(nullptr);
+            colorAttachments[i]->setTexture(nullptr);
+            colorAttachments[i]->setResolveTexture(nullptr);
         }
-        descriptor->depthAttachment()->setTexture(nullptr);
-        descriptor->stencilAttachment()->setTexture(nullptr);
+        depthAttachment->setTexture(nullptr);
+        stencilAttachment->setTexture(nullptr);
         descriptorColors = 0;
         descriptorDepth = false;
     }

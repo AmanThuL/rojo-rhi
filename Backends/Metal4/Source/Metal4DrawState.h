@@ -167,6 +167,11 @@ namespace rojoRHI::metal4 {
         MTL4::RenderPassDescriptor* descriptor = nullptr;
         uint32_t descriptorColors = 0; ///< The color attachments `descriptor` last held a texture for.
         bool descriptorDepth = false;  ///< `descriptor` holds a depth texture, and a stencil one for a stencil format.
+        /// The color attachment descriptors of `descriptor`, each retained, by index, as passes first used them: configuring and
+        /// emptying them then calls none of the descriptor's getters, which may autorelease.
+        std::vector<MTL::RenderPassColorAttachmentDescriptor*> colorAttachments;
+        MTL::RenderPassDepthAttachmentDescriptor* depthAttachment = nullptr;     ///< Its depth attachment descriptor, retained.
+        MTL::RenderPassStencilAttachmentDescriptor* stencilAttachment = nullptr; ///< Its stencil attachment descriptor, retained.
 
         /// The graphics pipeline bound last, as recorded; null when none is bound.
         const PipelineState* pipeline = nullptr;
@@ -224,8 +229,9 @@ namespace rojoRHI::metal4 {
         void release();
 
         /// Empties the descriptor's attachments, which hold strong references to the last pass's textures, so a list waiting
-        /// in its pool keeps no destroyed texture's memory alive. Opens an autorelease pool only when the descriptor holds a
-        /// texture. The setters are no message to a command buffer, encoder or argument table, so they are not counted.
+        /// in its pool keeps no destroyed texture's memory alive. It sets them through the attachment descriptors the list
+        /// keeps, so it calls no getter and opens no autorelease pool. The setters are no message to a command buffer, encoder
+        /// or argument table, so they are not counted.
         void forgetTextures();
     };
 

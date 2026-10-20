@@ -53,7 +53,7 @@ factory, except where the next paragraph says.
 The Metal validation layer autoreleases inside the native commands it checks. The copy entries, the
 native `fillBuffer`, every backend kernel dispatch, dispatch and draw, a command buffer's timestamp
 write and the end of a render encoder therefore open a `CommandPool` around their native call, which
-opens an `NS::AutoreleasePool` only when the device is wrapped by the layer
+pushes an autorelease pool only when the device is wrapped by the layer
 (`DeviceImpl::commandPools`, found once at creation) and costs one untaken branch otherwise. The
 render path of a clear opens an `AutoreleasePool` always, since it calls the encoder factory.
 Barriers and debug groups open none. Without the layer the driver still autoreleases one object the

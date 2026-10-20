@@ -80,17 +80,22 @@ namespace rojoRHI {
         //==============================================================================================================
         /// Points the list's render pass descriptor at the open pass's attachments: the caller's load actions on the pass's
         /// first encoder, `Load` on one resuming it, and the store actions they are created with; it empties the attachments the
-        /// previous pass named that this one does not. The caller holds an autorelease pool, because the attachment getters may
-        /// autorelease.
+        /// previous pass named that this one does not. It sets them through the attachment descriptors the list keeps, taking
+        /// an index's from the descriptor the first time a pass uses it, so the caller holds an autorelease pool, because the
+        /// getters may autorelease.
         void configure(metal4::DrawState& draw)
         {
             MTL4::RenderPassDescriptor* descriptor = draw.descriptor;
-            MTL::RenderPassColorAttachmentDescriptorArray* attachments = descriptor->colorAttachments();
             const auto count = static_cast<uint32_t>(draw.colors.size());
+            while (draw.colorAttachments.size() < count)
+            {
+                const auto index = static_cast<NS::UInteger>(draw.colorAttachments.size());
+                draw.colorAttachments.push_back(descriptor->colorAttachments()->object(index)->retain());
+            }
             for (uint32_t i = 0; i < count; ++i)
             {
                 const metal4::PassColor& color = draw.colors[i];
-                MTL::RenderPassColorAttachmentDescriptor* attachment = attachments->object(i);
+                MTL::RenderPassColorAttachmentDescriptor* attachment = draw.colorAttachments[i];
                 attachment->setTexture(color.texture);
                 attachment->setLevel(color.mip);
                 // A cube face is a slice, as it is a RojoRHI layer.
@@ -102,14 +107,14 @@ namespace rojoRHI {
             }
             for (uint32_t i = count; i < draw.descriptorColors; ++i)
             {
-                MTL::RenderPassColorAttachmentDescriptor* attachment = attachments->object(i);
+                MTL::RenderPassColorAttachmentDescriptor* attachment = draw.colorAttachments[i];
                 attachment->setTexture(nullptr);
                 attachment->setResolveTexture(nullptr);
             }
             draw.descriptorColors = count;
             draw.descriptorDepth = draw.depth.texture != nullptr;
             const metal4::PassDepth& pass = draw.depth;
-            MTL::RenderPassDepthAttachmentDescriptor* depth = descriptor->depthAttachment();
+            MTL::RenderPassDepthAttachmentDescriptor* depth = draw.depthAttachment;
             depth->setTexture(pass.texture);
             if (pass.texture != nullptr)
             {
@@ -119,7 +124,7 @@ namespace rojoRHI {
                 depth->setClearDepth(pass.clearDepth);
                 depth->setStoreAction(createdStore(pass.store, false));
             }
-            MTL::RenderPassStencilAttachmentDescriptor* stencil = descriptor->stencilAttachment();
+            MTL::RenderPassStencilAttachmentDescriptor* stencil = draw.stencilAttachment;
             stencil->setTexture(pass.stencil ? pass.texture : nullptr);
             if (pass.stencil)
             {
@@ -148,6 +153,8 @@ namespace rojoRHI {
                 if (draw.descriptor == nullptr)
                 {
                     draw.descriptor = MTL4::RenderPassDescriptor::alloc()->init();
+                    draw.depthAttachment = draw.descriptor->depthAttachment()->retain();
+                    draw.stencilAttachment = draw.descriptor->stencilAttachment()->retain();
                 }
                 configure(draw);
                 encoder = list.encoders.openPass(list.core, state, draw.descriptor);

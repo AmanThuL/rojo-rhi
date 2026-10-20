@@ -6,6 +6,7 @@
 
 #include "Metal4Common.h"
 #include "Metal4Device.h"
+#include "Metal4DrawState.h"
 #include "Support/Backend.h"
 
 #include <catch2/catch_test_macros.hpp>
@@ -298,5 +299,35 @@ TEST_CASE("mesh draws open a command pool only under the validation layer", "[me
     // A direct mesh draw and a lone indirect record each send one native draw.
     checkPoolsPerCommand(device, inPass([](CommandList list) { list.drawMeshTasks(1, 1, 1); }), 1, Counting::CommandPools);
     checkPoolsPerCommand(device, inPass([&](CommandList list) { list.drawMeshTasksIndirect(device.address(records), 1); }), 1, Counting::CommandPools);
+    destroyDevice(device);
+}
+
+//======================================================================================================================
+TEST_CASE("a list empties its pass descriptor's attachments without an autorelease pool", "[metal4]")
+{
+    Device device = *createDevice();
+    const Texture target = *device.createTexture(
+        TextureDesc{ .format = Format::RGBA8Unorm, .extent = { kEdge, kEdge, 1 }, .usage = TextureUsage::RenderTarget, .label = "test.target" }
+    );
+    device.beginFrame();
+    CommandList list = device.acquireCommandList(QueueType::Graphics, "test.list");
+    const std::array attachments{ ColorAttachment{ .texture = target, .load = LoadOp::Clear } };
+    list.beginRenderPass(RenderPassDesc{ .colors = attachments, .area = { 0, 0, kEdge, kEdge }, .label = "test.pass" });
+    list.endRenderPass();
+    metal4::DrawState& draw = CommandListImpl::of(list).draw;
+    REQUIRE(draw.descriptorColors == 1);
+    // What end calls to let go of the pass's textures, alone: it sets them through the attachment descriptors it keeps.
+    const uint64_t before = metal4::poolsOpened();
+    draw.forgetTextures();
+    CHECK(metal4::poolsOpened() == before);
+    CHECK(draw.descriptorColors == 0);
+    {
+        const metal4::AutoreleasePool pool;
+        CHECK(draw.descriptor->colorAttachments()->object(0)->texture() == nullptr);
+        CHECK(draw.descriptor->depthAttachment()->texture() == nullptr);
+    }
+    list.end();
+    device.queue(QueueType::Graphics).submit(std::array{ list });
+    device.endFrame();
     destroyDevice(device);
 }

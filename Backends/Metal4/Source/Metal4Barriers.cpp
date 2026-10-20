@@ -225,9 +225,12 @@ namespace rojoRHI {
             return;
         }
         metal4::Lowered lowered;
+        // Whether a destination names IndirectArgs, read with the sides in the same pass over the records.
+        bool args = false;
         for (const GlobalBarrier& global : globals)
         {
             metal4::addSides(lowered, global.srcStage, global.srcAccess, global.dstStage, global.dstAccess);
+            args = args || metal4::any(global.dstStage, Stage::IndirectArgs);
         }
         const core::AliasTracker& aliasing = list.device->aliasing();
         if (!globals.empty() && aliasing.anyAliasing())
@@ -239,10 +242,12 @@ namespace rojoRHI {
         for (const BufferBarrier& buffer : buffers)
         {
             metal4::addSides(lowered, buffer.srcStage, buffer.srcAccess, buffer.dstStage, buffer.dstAccess);
+            args = args || metal4::any(buffer.dstStage, Stage::IndirectArgs);
         }
         for (const TextureBarrier& texture : textures)
         {
             metal4::addSides(lowered, texture.srcStage, texture.srcAccess, texture.dstStage, texture.dstAccess);
+            args = args || metal4::any(texture.dstStage, Stage::IndirectArgs);
             if (texture.oldLayout == Layout::Undefined && (lowered.visibility & MTL4::VisibilityOptionResourceAlias) == 0)
             {
                 // A discard of a placed texture may follow another resource in its memory. A texture whose range never overlapped
@@ -280,21 +285,7 @@ namespace rojoRHI {
         }
         metal4::Encoders& encoders = impl.encoders;
         metal4::BarrierState& barriers = encoders.barriers();
-        if (!barriers.argsNamed)
-        {
-            for (const GlobalBarrier& global : globals)
-            {
-                barriers.argsNamed = barriers.argsNamed || metal4::any(global.dstStage, Stage::IndirectArgs);
-            }
-            for (const BufferBarrier& buffer : buffers)
-            {
-                barriers.argsNamed = barriers.argsNamed || metal4::any(buffer.dstStage, Stage::IndirectArgs);
-            }
-            for (const TextureBarrier& texture : textures)
-            {
-                barriers.argsNamed = barriers.argsNamed || metal4::any(texture.dstStage, Stage::IndirectArgs);
-            }
-        }
+        barriers.argsNamed = barriers.argsNamed || args;
         if (encoders.lingering())
         {
             // The ended pass's encoder runs no further command, so the batch orders only later encoders: it joins the pending

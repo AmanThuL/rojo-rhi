@@ -40,7 +40,16 @@ namespace rojoRHI::metal4 {
         /// other encoder of a graphics list waits on the carry fence once, before its first command in the dispatch stage, so
         /// the dispatch part of a barrier an earlier list carried reaches it; a kernels-only encoder never waits. A lingering
         /// render encoder ends first.
-        MTL4::ComputeCommandEncoder* compute(core::CommandListCore& list, ListState& state, MTL::Stages command, bool kernelsOnly = false);
+        MTL4::ComputeCommandEncoder* compute(core::CommandListCore& list, ListState& state, MTL::Stages command, bool kernelsOnly = false)
+        {
+            // A command on an open compute encoder that holds work, with no barrier held back for its stage and no carry wait
+            // owed before it, needs nothing first: one test and no call.
+            if (m_compute != nullptr && m_holdsWork && (m_barriers.deferredDestination & command) == 0 && !owesCarryWait(command))
+            {
+                return m_compute;
+            }
+            return prepareCompute(list, state, command, kernelsOnly);
+        }
 
         /// Opens a render encoder from `descriptor` when no encoder is open: the factory runs inside an autorelease pool and the
         /// encoder is retained; it takes the innermost open scope's label, else the list's, and binds no table, because no
@@ -200,6 +209,16 @@ namespace rojoRHI::metal4 {
         void release();
 
       private:
+        /// `compute` for every case its inline test does not take: opens the encoder, or emits what is owed before the command.
+        MTL4::ComputeCommandEncoder* prepareCompute(core::CommandListCore& list, ListState& state, MTL::Stages command, bool kernelsOnly);
+
+        /// Returns true when the open compute encoder still owes the carry fence's wait before a command in stage `command`:
+        /// the conditions `waitCarry` skips the wait on.
+        bool owesCarryWait(MTL::Stages command) const
+        {
+            return !m_carryWaited && !m_kernelsOnly && m_carryFence != nullptr && (command & MTL::StageDispatch) != 0;
+        }
+
         /// Moves into the pending barrier what the open encoder leaves owed when it runs no further command: the
         /// encoder-level barrier held back and the stages its opening barrier held in which it ran no command.
         void settle();

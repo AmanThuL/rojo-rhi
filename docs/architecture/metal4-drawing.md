@@ -112,11 +112,12 @@ and a hit costs more than a miss.
 ## Render passes
 
 `beginRenderPass` runs the core's check, closes the open encoder, pushes the pass label as a debug
-group on the command buffer (the group joins the stack that names encoders), copies the
-attachments into list-owned storage, reading native textures through `pool<Texture>().native`,
-and opens no encoder. The render encoder opens at the first draw that is not a counted draw, at a
-scope boundary inside the pass or at `endRenderPass`, from one `MTL4::RenderPassDescriptor` that
-the list allocates at its first pass and reuses.
+group on the command buffer (the group joins the stack that names encoders), copies the attachments
+into list-owned storage, reading native textures through `pool<Texture>().native`, and opens no
+encoder. The render encoder opens at the first draw that is not a counted draw, at a scope boundary
+inside the pass or at `endRenderPass`, from one `MTL4::RenderPassDescriptor` that the list allocates
+at its first pass and reuses, with its attachment descriptors, which the list keeps retained, so
+configuring them and emptying them at `end` call no getter and need no pool.
 
 - The first encoder of a pass takes the caller's load actions and clear values; an encoder that
   resumes after a split takes `Load`. Slots beyond the pass's attachments are nulled.
