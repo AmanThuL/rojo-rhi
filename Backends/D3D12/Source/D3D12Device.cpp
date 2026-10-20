@@ -1,27 +1,156 @@
 //----------------------------------------------------------------------------------------------------------------------
 /// @file D3D12Device.cpp
-/// @brief Defines the device entries of the D3D12 backend, which creates no device, so only createDevice is reachable.
+/// @brief Implements D3D12 device creation and teardown, the handle seams and the device entries the core serves whole.
 //----------------------------------------------------------------------------------------------------------------------
 
-#include "D3D12Common.h"
+#include "D3D12Device.h"
 
 #include <rojoRHI/RHI.h>
 
+#include "Base/Assert.h"
+#include "Core/Captures.h"
 #include "Core/DeviceCore.h"
+#include "Core/Sparse.h"
+#include "D3D12Buffers.h"
+#include "D3D12Capabilities.h"
+#include "D3D12Common.h"
+#include "D3D12Fences.h"
+#include "D3D12Loader.h"
+#include "D3D12Textures.h"
+#include "D3D12Views.h"
 
 #include <cstddef>
 #include <cstdint>
+#include <memory>
 #include <span>
 #include <string_view>
 #include <utility>
 #include <vector>
 
 namespace rojoRHI {
+    namespace {
+        //==============================================================================================================
+        /// Returns true when `surface` is a window, the native surface of the D3D12 backend (VU-rojo-present-0002).
+        bool isWindow(const void* surface)
+        {
+            return IsWindow(static_cast<HWND>(const_cast<void*>(surface))) != FALSE;
+        }
+
+        //==============================================================================================================
+        /// Creates the device-wide native state of `impl` in declaration order, the order `teardown` destroys it in reverse.
+        Result<void> createState(DeviceImpl& impl)
+        {
+            impl.messages.attach(impl.device(), impl.loaded.layer);
+            if (Result<void> created = d3d12::createQueues(impl); !created)
+            {
+                return created;
+            }
+            if (Result<void> created = impl.frames.create(impl); !created)
+            {
+                return created;
+            }
+            if (Result<void> created = impl.descriptors.create(impl); !created)
+            {
+                return created;
+            }
+            impl.directory.create(impl.descriptors.viewCapacity());
+            if (Result<void> reported = d3d12::reportCapabilities(impl); !reported)
+            {
+                return reported;
+            }
+            if (Result<void> created = impl.roots.create(impl); !created)
+            {
+                return created;
+            }
+            return impl.stager.create(impl);
+        }
+
+        //==============================================================================================================
+        /// Tears down `impl`, made by `createDevice` whether or not all of its state was created: the queues finish their work,
+        /// the core passes every remaining record to the retire hooks, the kept fences go, and then every native object is
+        /// released in reverse order of creation, the device last. A Debug build checks that no reference to the device
+        /// outlives it.
+        void teardown(DeviceImpl* impl)
+        {
+            d3d12::idleQueues(*impl);
+            impl->stager.idle();
+            impl->core.beginDestroy();
+            impl->frames.releaseAll();
+            // The factory that made the device outlives it, and the device's reference is the last one released.
+            d3d12::Com<ID3D12DeviceFactory> factory = impl->loaded.factory;
+            ID3D12Device12* device = impl->loaded.device.detach();
+            delete impl;
+            [[maybe_unused]] const ULONG remaining = device->Release();
+            ROJORHI_INTERNAL_ASSERT(remaining == 0, "a reference to the D3D12 device outlived destroyDevice");
+            factory.reset();
+        }
+    } // namespace
+
+    //==================================================================================================================
+    DeviceImpl& DeviceImpl::of(Device device)
+    {
+        core::checkObject(device.m_impl, "Device");
+        return *device.m_impl;
+    }
+
+    //==================================================================================================================
+    Device DeviceImpl::wrap(DeviceImpl* impl)
+    {
+        Device device;
+        device.m_impl = impl;
+        return device;
+    }
+
+    //==================================================================================================================
+    QueueImpl& QueueImpl::of(Queue queue)
+    {
+        core::checkObject(queue.m_impl, "Queue");
+        return *queue.m_impl;
+    }
+
+    //==================================================================================================================
+    Queue QueueImpl::wrap(QueueImpl* impl)
+    {
+        Queue queue;
+        queue.m_impl = impl;
+        return queue;
+    }
+
+    //==================================================================================================================
+    CommandListImpl& CommandListImpl::of(CommandList list)
+    {
+        core::checkObject(list.m_impl, "CommandList");
+        return *list.m_impl;
+    }
+
+    //==================================================================================================================
+    CommandList CommandListImpl::wrap(CommandListImpl* impl)
+    {
+        CommandList list;
+        list.m_impl = impl;
+        return list;
+    }
+
+    //==================================================================================================================
+    SwapchainImpl& SwapchainImpl::of(Swapchain swapchain)
+    {
+        core::checkObject(swapchain.m_impl, "Swapchain");
+        return *swapchain.m_impl;
+    }
+
+    //==================================================================================================================
+    Swapchain SwapchainImpl::wrap(SwapchainImpl* impl)
+    {
+        Swapchain swapchain;
+        swapchain.m_impl = impl;
+        return swapchain;
+    }
+
     namespace core {
         //==============================================================================================================
-        DeviceCore& coreOf(Device)
+        DeviceCore& coreOf(Device device)
         {
-            d3d12::notImplemented("core::coreOf(Device)");
+            return DeviceImpl::of(device).core;
         }
     } // namespace core
 
@@ -32,115 +161,115 @@ namespace rojoRHI {
         {
             return std::unexpected(std::move(valid.error()));
         }
-        return std::unexpected(Error{ ErrorCategory::Unsupported, "createDevice is not supported by the D3D12 backend, which creates no device" });
+        // DeviceDesc::enableCapture and DeviceDesc::pipelineCache are not read: the backend has no capture tool and no
+        // pipeline library yet.
+        Result<d3d12::Loaded> loaded = d3d12::loadDevice();
+        if (!loaded)
+        {
+            return std::unexpected(std::move(loaded.error()));
+        }
+        auto impl = std::make_unique<DeviceImpl>(desc, std::move(*loaded));
+        d3d12::setName(impl->device(), impl->core.label());
+        core::RetireHooks hooks;
+        hooks.context = impl.get();
+        hooks.buffer = d3d12::retireBuffer;
+        hooks.heap = d3d12::retireHeap;
+        hooks.texture = d3d12::retireTexture;
+        hooks.view = d3d12::retireView;
+        hooks.fence = d3d12::retireFence;
+        hooks.frameSlot = d3d12::reuseSlot;
+        hooks.waitFrame = d3d12::waitFrame;
+        impl->core.setRetireHooks(hooks);
+        if (Result<void> created = createState(*impl); !created)
+        {
+            teardown(impl.release());
+            return std::unexpected(std::move(created.error()));
+        }
+        impl->core.setSurfaceCheck(isWindow);
+        impl->core.setArenaSource(d3d12::createArenaPage);
+        return DeviceImpl::wrap(impl.release());
     }
 
     //==================================================================================================================
-    void destroyDevice(Device)
+    void destroyDevice(Device device)
     {
-        d3d12::notImplemented("destroyDevice");
+        teardown(&DeviceImpl::of(device));
     }
 
     //==================================================================================================================
     const Capabilities& Device::capabilities() const
     {
-        d3d12::notImplemented("Device::capabilities");
+        return DeviceImpl::of(*this).core.capabilities();
     }
 
     //==================================================================================================================
-    FormatCapabilities Device::formatCapabilities(Format) const
+    FormatCapabilities Device::formatCapabilities(Format format) const
     {
-        d3d12::notImplemented("Device::formatCapabilities");
+        return DeviceImpl::of(*this).core.formatCapabilities(format);
     }
 
     //==================================================================================================================
-    void Device::beginFrame()
+    Queue Device::queue(QueueType type)
     {
-        d3d12::notImplemented("Device::beginFrame");
+        DeviceImpl& impl = DeviceImpl::of(*this);
+        const size_t index = static_cast<size_t>(type);
+        ROJORHI_INTERNAL_ASSERT(index < impl.queues.size(), "a QueueType outside the enumerators has no queue");
+        return QueueImpl::wrap(&impl.queues[index]);
     }
 
     //==================================================================================================================
-    void Device::endFrame()
+    Counters Device::counters() const
     {
-        d3d12::notImplemented("Device::endFrame");
+        return DeviceImpl::of(*this).core.counters();
     }
 
     //==================================================================================================================
-    Result<Buffer> Device::createBuffer(const BufferDesc&, std::span<const std::byte>, Placement)
+    std::span<const ScopeTiming> Device::scopeTimings()
     {
-        return d3d12::unsupported("Device::createBuffer");
+        return DeviceImpl::of(*this).core.scopeTimings();
     }
 
     //==================================================================================================================
-    Result<Heap> Device::createHeap(const HeapDesc&)
+    Result<void> Device::beginCapture(std::string_view path)
     {
-        return d3d12::unsupported("Device::createHeap");
+        // No capture hook is registered, so the core refuses with Unsupported after its checks.
+        return core::beginCapture(DeviceImpl::of(*this).core, path);
     }
 
     //==================================================================================================================
-    PlacementRequirements Device::placementRequirements(const BufferDesc&)
+    void Device::endCapture()
     {
-        d3d12::notImplemented("Device::placementRequirements(BufferDesc)");
+        core::endCapture(DeviceImpl::of(*this).core);
     }
 
     //==================================================================================================================
-    PlacementRequirements Device::placementRequirements(const TextureDesc&)
+    TileShape Device::tileShape(Texture texture)
     {
-        d3d12::notImplemented("Device::placementRequirements(TextureDesc)");
+        return core::tileShape(DeviceImpl::of(*this).core, texture);
     }
 
     //==================================================================================================================
-    Result<Texture> Device::createTexture(const TextureDesc&, std::span<const TextureData>, Placement)
+    TileShape Device::tileShape(Buffer buffer)
     {
-        return d3d12::unsupported("Device::createTexture");
+        return core::tileShape(DeviceImpl::of(*this).core, buffer);
     }
 
     //==================================================================================================================
-    Result<ViewIndex> Device::createView(Texture, const TextureViewDesc&)
+    void Device::destroy(Pipeline pipeline)
     {
-        return d3d12::unsupported("Device::createView");
+        DeviceImpl::of(*this).core.destroy(pipeline);
     }
 
     //==================================================================================================================
-    Result<SamplerIndex> Device::createSampler(const SamplerDesc&)
+    void Device::destroy(ShaderLibrary library)
     {
-        return d3d12::unsupported("Device::createSampler");
+        DeviceImpl::of(*this).core.destroy(library);
     }
 
     //==================================================================================================================
-    Result<IndexRange> Device::reserveViews(uint32_t)
+    void Device::destroy(Upscaler upscaler)
     {
-        return d3d12::unsupported("Device::reserveViews");
-    }
-
-    //==================================================================================================================
-    void Device::writeView(IndexRange, uint32_t, Texture, const TextureViewDesc&)
-    {
-        d3d12::notImplemented("Device::writeView");
-    }
-
-    //==================================================================================================================
-    Result<IndexRange> Device::reserveSamplers(uint32_t)
-    {
-        return d3d12::unsupported("Device::reserveSamplers");
-    }
-
-    //==================================================================================================================
-    void Device::writeSampler(IndexRange, uint32_t, const SamplerDesc&)
-    {
-        d3d12::notImplemented("Device::writeSampler");
-    }
-
-    //==================================================================================================================
-    void Device::release(IndexRange)
-    {
-        d3d12::notImplemented("Device::release");
-    }
-
-    //==================================================================================================================
-    Queue Device::queue(QueueType)
-    {
-        d3d12::notImplemented("Device::queue");
+        DeviceImpl::of(*this).core.destroy(upscaler);
     }
 
     //==================================================================================================================
@@ -168,128 +297,8 @@ namespace rojoRHI {
     }
 
     //==================================================================================================================
-    Result<Fence> Device::createFence(uint64_t, std::string_view)
-    {
-        return d3d12::unsupported("Device::createFence");
-    }
-
-    //==================================================================================================================
     Result<Upscaler> Device::createUpscaler(const UpscalerDesc&)
     {
         return d3d12::unsupported("Device::createUpscaler");
-    }
-
-    //==================================================================================================================
-    uint64_t Device::completedValue(Fence)
-    {
-        d3d12::notImplemented("Device::completedValue");
-    }
-
-    //==================================================================================================================
-    bool Device::wait(FenceValue, uint64_t)
-    {
-        d3d12::notImplemented("Device::wait");
-    }
-
-    //==================================================================================================================
-    Addr Device::address(Buffer, uint64_t)
-    {
-        d3d12::notImplemented("Device::address");
-    }
-
-    //==================================================================================================================
-    std::byte* Device::cpuPointer(Buffer)
-    {
-        d3d12::notImplemented("Device::cpuPointer");
-    }
-
-    //==================================================================================================================
-    TileShape Device::tileShape(Texture)
-    {
-        d3d12::notImplemented("Device::tileShape(Texture)");
-    }
-
-    //==================================================================================================================
-    TileShape Device::tileShape(Buffer)
-    {
-        d3d12::notImplemented("Device::tileShape(Buffer)");
-    }
-
-    //==================================================================================================================
-    std::span<const ScopeTiming> Device::scopeTimings()
-    {
-        d3d12::notImplemented("Device::scopeTimings");
-    }
-
-    //==================================================================================================================
-    Counters Device::counters() const
-    {
-        d3d12::notImplemented("Device::counters");
-    }
-
-    //==================================================================================================================
-    Result<void> Device::beginCapture(std::string_view)
-    {
-        return d3d12::unsupported("Device::beginCapture");
-    }
-
-    //==================================================================================================================
-    void Device::endCapture()
-    {
-        d3d12::notImplemented("Device::endCapture");
-    }
-
-    //==================================================================================================================
-    void Device::destroy(Buffer)
-    {
-        d3d12::notImplemented("Device::destroy(Buffer)");
-    }
-
-    //==================================================================================================================
-    void Device::destroy(Texture)
-    {
-        d3d12::notImplemented("Device::destroy(Texture)");
-    }
-
-    //==================================================================================================================
-    void Device::destroy(Pipeline)
-    {
-        d3d12::notImplemented("Device::destroy(Pipeline)");
-    }
-
-    //==================================================================================================================
-    void Device::destroy(ShaderLibrary)
-    {
-        d3d12::notImplemented("Device::destroy(ShaderLibrary)");
-    }
-
-    //==================================================================================================================
-    void Device::destroy(Heap)
-    {
-        d3d12::notImplemented("Device::destroy(Heap)");
-    }
-
-    //==================================================================================================================
-    void Device::destroy(Fence)
-    {
-        d3d12::notImplemented("Device::destroy(Fence)");
-    }
-
-    //==================================================================================================================
-    void Device::destroy(Upscaler)
-    {
-        d3d12::notImplemented("Device::destroy(Upscaler)");
-    }
-
-    //==================================================================================================================
-    void Device::destroy(ViewIndex)
-    {
-        d3d12::notImplemented("Device::destroy(ViewIndex)");
-    }
-
-    //==================================================================================================================
-    void Device::destroy(SamplerIndex)
-    {
-        d3d12::notImplemented("Device::destroy(SamplerIndex)");
     }
 } // namespace rojoRHI
