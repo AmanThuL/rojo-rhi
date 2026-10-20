@@ -244,6 +244,7 @@ namespace rojoRHI {
         }
         recorded = bias;
         const d3d12::PipelineState* bound = list.state.binding.pipeline;
+        // VU-rojo-pipeline-0025 makes this always true in Debug; Release does not check it, so the guard stays.
         if (bound != nullptr && bound->depthBias)
         {
             sendDepthBias(list);
