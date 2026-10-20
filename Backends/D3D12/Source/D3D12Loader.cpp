@@ -52,13 +52,6 @@ namespace rojoRHI::d3d12 {
         }
 
         //==============================================================================================================
-        /// Returns the 32 bits of `result`, which a message prints as eight hexadecimal digits.
-        uint32_t hresultBits(HRESULT result)
-        {
-            return static_cast<uint32_t>(result);
-        }
-
-        //==============================================================================================================
         /// Returns the full path of the running executable.
         std::wstring executablePath()
         {
@@ -77,36 +70,6 @@ namespace rojoRHI::d3d12 {
                 }
                 path.resize(path.size() * 2);
             }
-        }
-
-        //==============================================================================================================
-        /// Returns `text` in the process code page, the encoding `CreateDeviceFactory` reads its path in.
-        std::string narrow(std::wstring_view text)
-        {
-            if (text.empty())
-            {
-                return {};
-            }
-            const int wide = static_cast<int>(text.size());
-            const int size = WideCharToMultiByte(CP_ACP, 0, text.data(), wide, nullptr, 0, nullptr, nullptr);
-            std::string result(static_cast<size_t>(size > 0 ? size : 0), '\0');
-            WideCharToMultiByte(CP_ACP, 0, text.data(), wide, result.data(), size, nullptr, nullptr);
-            return result;
-        }
-
-        //==============================================================================================================
-        /// Returns `text` in UTF-8, for messages.
-        std::string utf8(std::wstring_view text)
-        {
-            if (text.empty())
-            {
-                return {};
-            }
-            const int wide = static_cast<int>(text.size());
-            const int size = WideCharToMultiByte(CP_UTF8, 0, text.data(), wide, nullptr, 0, nullptr, nullptr);
-            std::string result(static_cast<size_t>(size > 0 ? size : 0), '\0');
-            WideCharToMultiByte(CP_UTF8, 0, text.data(), wide, result.data(), size, nullptr, nullptr);
-            return result;
         }
 
         //==============================================================================================================
@@ -151,7 +114,8 @@ namespace rojoRHI::d3d12 {
                 return missing("the Agility SDK runtime is required beside the executable, whose path could not be read");
             }
             const std::wstring directory = executable.substr(0, slash) + L"\\D3D12\\";
-            const std::string path = narrow(directory);
+            // The runtime reads the path as UTF-8, as it reads the D3D12SDKPath export.
+            const std::string path = utf8(directory);
             Com<ID3D12DeviceFactory> factory;
             if (const HRESULT created = configuration->CreateDeviceFactory(D3D12_SDK_VERSION, path.c_str(), IID_PPV_ARGS(factory.put())); FAILED(created))
             {

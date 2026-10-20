@@ -51,7 +51,7 @@ namespace rojoRHI::d3d12 {
         }
         if (FAILED(result))
         {
-            return belowFloor(std::format("Shader Model 6.6 (D3D12_FEATURE_SHADER_MODEL failed with HRESULT 0x{:08X})", static_cast<uint32_t>(result)));
+            return belowFloor(std::format("Shader Model 6.6 (D3D12_FEATURE_SHADER_MODEL failed with HRESULT 0x{:08X})", hresultBits(result)));
         }
         if (model.HighestShaderModel < D3D_SHADER_MODEL_6_6)
         {
@@ -60,9 +60,7 @@ namespace rojoRHI::d3d12 {
         D3D12_FEATURE_DATA_D3D12_OPTIONS options = {};
         if (const HRESULT queried = query(device, D3D12_FEATURE_D3D12_OPTIONS, options); FAILED(queried))
         {
-            return belowFloor(
-                std::format("resource binding tier 3 (D3D12_FEATURE_D3D12_OPTIONS failed with HRESULT 0x{:08X})", static_cast<uint32_t>(queried))
-            );
+            return belowFloor(std::format("resource binding tier 3 (D3D12_FEATURE_D3D12_OPTIONS failed with HRESULT 0x{:08X})", hresultBits(queried)));
         }
         if (options.ResourceBindingTier < D3D12_RESOURCE_BINDING_TIER_3)
         {

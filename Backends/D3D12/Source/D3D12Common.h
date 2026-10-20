@@ -16,6 +16,7 @@
 
 #include <cstdint>
 #include <expected>
+#include <string>
 #include <string_view>
 #include <utility>
 
@@ -103,6 +104,12 @@ namespace rojoRHI::d3d12 {
     /// Returns the `Unsupported` error an entry that returns a `Result` gives, naming `entry` as `Class::member`.
     std::unexpected<Error> unsupported(std::string_view entry);
 
+    /// Returns the 32 bits of `result`, which a message prints as eight hexadecimal digits.
+    uint32_t hresultBits(HRESULT result);
+
+    /// Returns `text` converted from UTF-16 to UTF-8: for messages, and for the path the Agility device factory reads.
+    std::string utf8(std::wstring_view text);
+
     /// Returns the error of a failed native call: `OutOfMemory` for `E_OUTOFMEMORY`, `DriverFailure` for any other failure,
     /// with the message "<what> failed with HRESULT 0x<8 hex digits>".
     Error hresultError(HRESULT result, std::string_view what);
@@ -115,7 +122,8 @@ namespace rojoRHI::d3d12 {
     /// Blocks until `fence` reaches `value` or `timeoutNs` nanoseconds pass, and returns whether it reached the value. A
     /// completed value already at `value` returns at once; otherwise one event, closed before the return, waits in slices of
     /// at most ten seconds, the timeout rounded up to whole milliseconds. With `UINT64_MAX` it waits without end and logs a
-    /// warning naming `what` and the value after each full slice. Logs and aborts, in every build, when no event can be made
-    /// or armed.
+    /// warning naming `what` and the value after each full slice. On a removed device `GetCompletedValue` returns `UINT64_MAX`,
+    /// so the wait reports completion at once: a caller checks for removal before it passes a value to `core::completeFence`.
+    /// Logs and aborts, in every build, when no event can be made or armed.
     bool waitForFence(ID3D12Fence* fence, uint64_t value, uint64_t timeoutNs, std::string_view what);
 } // namespace rojoRHI::d3d12

@@ -18,14 +18,27 @@ namespace rojoRHI::d3d12 {
     namespace {
         /// The longest single wait on a fence event, in milliseconds; a longer wait runs in slices of this length.
         constexpr uint64_t kWaitSliceMs = 10'000;
-
-        //==============================================================================================================
-        /// Returns the 32 bits of `result`, which a message prints as eight hexadecimal digits.
-        uint32_t hresultBits(HRESULT result)
-        {
-            return static_cast<uint32_t>(result);
-        }
     } // namespace
+
+    //==================================================================================================================
+    uint32_t hresultBits(HRESULT result)
+    {
+        return static_cast<uint32_t>(result);
+    }
+
+    //==================================================================================================================
+    std::string utf8(std::wstring_view text)
+    {
+        if (text.empty())
+        {
+            return {};
+        }
+        const int wide = static_cast<int>(text.size());
+        const int size = WideCharToMultiByte(CP_UTF8, 0, text.data(), wide, nullptr, 0, nullptr, nullptr);
+        std::string result(static_cast<size_t>(size > 0 ? size : 0), '\0');
+        WideCharToMultiByte(CP_UTF8, 0, text.data(), wide, result.data(), size, nullptr, nullptr);
+        return result;
+    }
 
     //==================================================================================================================
     void notImplemented(std::string_view entry)

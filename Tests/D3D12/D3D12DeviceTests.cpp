@@ -43,21 +43,6 @@ namespace {
     }
 
     //==================================================================================================================
-    /// Returns `text` in UTF-8, so a failed check prints it.
-    std::string utf8(std::wstring_view text)
-    {
-        if (text.empty())
-        {
-            return {};
-        }
-        const int wide = static_cast<int>(text.size());
-        const int size = WideCharToMultiByte(CP_UTF8, 0, text.data(), wide, nullptr, 0, nullptr, nullptr);
-        std::string result(static_cast<size_t>(size > 0 ? size : 0), '\0');
-        WideCharToMultiByte(CP_UTF8, 0, text.data(), wide, result.data(), size, nullptr, nullptr);
-        return result;
-    }
-
-    //==================================================================================================================
     /// Returns true when `a` and `b` name the same path, ignoring case, as Windows compares file names.
     bool samePath(std::wstring_view a, std::wstring_view b)
     {
@@ -111,7 +96,7 @@ TEST_CASE("the Agility runtime loads from the D3D12 directory beside the executa
     REQUIRE(slash != std::wstring::npos);
     const std::wstring expected = executable.substr(0, slash) + L"\\D3D12\\D3D12Core.dll";
     const std::wstring loaded = modulePath(runtime);
-    INFO("loaded " << utf8(loaded) << ", expected " << utf8(expected));
+    INFO("loaded " << d3d12::utf8(loaded) << ", expected " << d3d12::utf8(expected));
     CHECK(samePath(loaded, expected));
     destroyDevice(*created);
 }
@@ -150,7 +135,7 @@ TEST_CASE("the device carries its label", "[d3d12]")
     {
         read.pop_back();
     }
-    INFO("read " << utf8(read));
+    INFO("read " << d3d12::utf8(read));
     CHECK(read == L"test.d3d12.device");
     destroyDevice(*created);
 }
