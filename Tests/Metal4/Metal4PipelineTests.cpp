@@ -169,9 +169,15 @@ TEST_CASE("pipelines with equal depth-stencil states share one native state, and
     GraphicsPipelineDesc untested = standardDesc(library);
     untested.depthFormat = Format::D32Float;
     CHECK(stateOf(device, create(device, untested)).depthStencil == nullptr);
+    // A bind of a pipeline that tests nothing sends the device's untested state, Metal's default as an object; one that tests
+    // something sends its own.
+    REQUIRE(impl.depthStencils.untested() != nullptr);
+    CHECK(stateOf(device, create(device, untested)).boundDepthStencil == impl.depthStencils.untested());
+    CHECK(stateOf(device, create(device, standardDesc(library, {}, depth))).boundDepthStencil == first);
     CHECK(impl.depthStencils.size() == 3);
-    // Six pipelines, and one native creation for each of the three distinct states the cache missed.
-    CHECK(device.counters().nativeCreateCalls == createsBefore + 6 + 3);
+    // Eight pipelines, and one native creation for each of the three distinct states the cache missed; the untested state was
+    // made with the device.
+    CHECK(device.counters().nativeCreateCalls == createsBefore + 8 + 3);
     destroyDevice(device);
 }
 
@@ -187,14 +193,18 @@ TEST_CASE("the depth-stencil cache counts each native creation and release", "[m
         CHECK(cache.get(DeviceImpl::of(device).device, depth, counts) == cache.get(DeviceImpl::of(device).device, depth, counts));
         CHECK(cache.get(DeviceImpl::of(device).device, { .depthTest = true, .depthCompare = CompareOp::Less }, counts) != nullptr);
         CHECK(cache.get(DeviceImpl::of(device).device, {}, counts) == nullptr);
+        CHECK(cache.untested() == nullptr);
+        CHECK(cache.create(DeviceImpl::of(device).device, counts).has_value());
+        CHECK(cache.untested() != nullptr);
     }
-    CHECK(core::DeviceCounts::read(counts.nativeCreateCalls) == 2);
+    CHECK(core::DeviceCounts::read(counts.nativeCreateCalls) == 3);
     {
         const metal4::AutoreleasePool pool;
         cache.release(counts);
     }
-    CHECK(core::DeviceCounts::read(counts.nativeCreateCalls) == 4);
+    CHECK(core::DeviceCounts::read(counts.nativeCreateCalls) == 6);
     CHECK(cache.size() == 0);
+    CHECK(cache.untested() == nullptr);
     destroyDevice(device);
 }
 

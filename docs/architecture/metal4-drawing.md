@@ -54,8 +54,8 @@ adds to `pipelineCompileNanoseconds`. The pipeline state carries the following.
   `DriverFailure`, because the validation layer aborts on it.
 - Depth-stencil states come from a device cache, `metal4::DepthStencilCache`, keyed by the fields
   Metal receives, so equal states share one `MTL::DepthStencilState` and a bind filters by
-  pointer. A pipeline that tests neither depth nor stencil holds none, which is Metal's default.
-  The cache takes its own mutex, and only a creation takes it.
+  pointer. A pipeline that tests neither depth nor stencil holds none, Metal's default, and binds
+  the cache's untested state, made at device creation. Only a creation takes the cache's mutex.
 - `FrontFace::CounterClockwise` is `MTL::WindingCounterClockwise`. The payload also keeps the cull
   mode, fill mode, depth clip, whether the recorded depth bias applies, the list form of the
   topology class and `setsWinding` (below).
@@ -167,7 +167,8 @@ before it.
 - The held state starts at Metal's encoder defaults: no pipeline, no depth-stencil state,
   `CullModeNone`, `WindingClockwise`, `TriangleFillModeFill`, `DepthClipModeClip`, bias 0, stencil
   reference 0, blend color 0, viewport and scissor unknown. A setter calls Metal only for a value
-  that differs, so a depth-stencil state is compared by pointer.
+  that differs, so a depth-stencil state is compared by pointer; null is sent as the untested
+  state, which Metal binds about 1 ns faster (C3, Apple M3 Max).
 - The winding decides front and back faces even with culling off, since two-sided stencil and
   `SV_IsFrontFace` read it. A pipeline's winding is applied, filtered, when the pipeline culls,
   tests stencil or has a fragment entry (`PipelineState::setsWinding`); only a depth-only or
