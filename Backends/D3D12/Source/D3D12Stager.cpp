@@ -98,7 +98,7 @@ namespace rojoRHI::d3d12 {
         //==============================================================================================================
         /// Records into `list` the copy of each non-empty entry of `subresources` from `staging`, laid out as `footprints`
         /// says, into the same subresource of `destination`, then the barrier that moves every subresource of `destination`
-        /// from COPY_DEST to SHADER_RESOURCE.
+        /// from COPY_DEST to SHADER_RESOURCE, after the copies when there are any.
         void recordTexture(
             ID3D12GraphicsCommandList9* list,
             ID3D12Resource* destination,
@@ -107,12 +107,14 @@ namespace rojoRHI::d3d12 {
             std::span<const D3D12_PLACED_SUBRESOURCE_FOOTPRINT> footprints
         )
         {
+            bool copied = false;
             for (size_t index = 0; index < subresources.size(); ++index)
             {
                 if (subresources[index].bytes.empty())
                 {
                     continue;
                 }
+                copied = true;
                 D3D12_TEXTURE_COPY_LOCATION target = {};
                 target.pResource = destination;
                 target.Type = D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX;
@@ -124,11 +126,13 @@ namespace rojoRHI::d3d12 {
                 list->CopyTextureRegion(&target, 0, 0, 0, &source, nullptr);
             }
             // One barrier over every subresource, empty ones included, so none is left in COPY_DEST: the texture starts in
-            // Layout::ShaderRead, which the generic SHADER_RESOURCE layout serves on direct and compute queues alike.
+            // Layout::ShaderRead, which the generic SHADER_RESOURCE layout serves on direct and compute queues alike. With no
+            // copy recorded there is nothing to wait for: the barrier changes the layout alone, in the NONE / NO_ACCESS form
+            // the debug layer asks of a list that holds only barriers.
             D3D12_TEXTURE_BARRIER barrier = {};
-            barrier.SyncBefore = D3D12_BARRIER_SYNC_COPY;
+            barrier.SyncBefore = copied ? D3D12_BARRIER_SYNC_COPY : D3D12_BARRIER_SYNC_NONE;
             barrier.SyncAfter = D3D12_BARRIER_SYNC_NONE;
-            barrier.AccessBefore = D3D12_BARRIER_ACCESS_COPY_DEST;
+            barrier.AccessBefore = copied ? D3D12_BARRIER_ACCESS_COPY_DEST : D3D12_BARRIER_ACCESS_NO_ACCESS;
             barrier.AccessAfter = D3D12_BARRIER_ACCESS_NO_ACCESS;
             barrier.LayoutBefore = D3D12_BARRIER_LAYOUT_COPY_DEST;
             barrier.LayoutAfter = D3D12_BARRIER_LAYOUT_SHADER_RESOURCE;

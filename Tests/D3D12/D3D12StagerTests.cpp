@@ -308,6 +308,34 @@ TEST_CASE("an empty subresource is skipped and the texture still leaves COPY_DES
 }
 
 //======================================================================================================================
+TEST_CASE("a texture whose entries are all empty leaves COPY_DEST without a staging buffer or a debug-layer message", "[d3d12]")
+{
+    const MessageCollection collecting;
+    Result<Device> created = createDevice();
+    REQUIRE(created.has_value());
+    DeviceImpl& impl = DeviceImpl::of(*created);
+    {
+        d3d12::Com<ID3D12Resource> texture = createTexture(impl, D3D12_RESOURCE_DIMENSION_TEXTURE2D, DXGI_FORMAT_R8G8B8A8_UNORM, 8, 8, 1, 2);
+        const std::array data{ d3d12::SubresourceData{}, d3d12::SubresourceData{} };
+        const Counters before = created->counters();
+        REQUIRE(impl.stager.uploadTexture(impl, texture.get(), data).has_value());
+        CHECK(created->counters().nativeCreateCalls == before.nativeCreateCalls);
+        // Both mips' contents are undefined; reading them from SHADER_RESOURCE shows the barrier moved them there.
+        CHECK(test::readNativeTexture(impl, texture.get(), 0, D3D12_BARRIER_LAYOUT_SHADER_RESOURCE).size() == 8 * 8 * 4);
+        CHECK(test::readNativeTexture(impl, texture.get(), 1, D3D12_BARRIER_LAYOUT_SHADER_RESOURCE).size() == 4 * 4 * 4);
+    }
+    destroyDevice(*created);
+    const std::lock_guard lock(g_messagesMutex);
+    std::string reported;
+    for (const std::string& message : g_messages)
+    {
+        reported += message + "\n";
+    }
+    INFO(reported);
+    CHECK(g_messages.empty());
+}
+
+//======================================================================================================================
 TEST_CASE("a staged upload counts one staging buffer, two queue calls and its host calls", "[d3d12]")
 {
     Result<Device> created = createDevice();

@@ -48,7 +48,7 @@ namespace rojoRHI::d3d12 {
         /// `D3D12_BARRIER_LAYOUT_COPY_DEST`; one staging buffer holds every entry with its rows repacked to the footprint's
         /// 256-byte pitch, and one texture barrier then moves every subresource, empty ones included, to the generic
         /// `D3D12_BARRIER_LAYOUT_SHADER_RESOURCE`, which direct and compute queues accept. With every entry empty it makes no
-        /// staging buffer and records the barrier alone.
+        /// staging buffer and records the barrier alone, which then waits for nothing and grants no access.
         Result<void> uploadTexture(DeviceImpl& impl, ID3D12Resource* destination, std::span<const SubresourceData> subresources);
 
         /// Blocks until the last upload has completed; returns at once when nothing was uploaded. Device teardown calls it, so
