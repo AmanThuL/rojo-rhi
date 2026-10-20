@@ -41,19 +41,25 @@ namespace {
     class Recorder
     {
       public:
+        //==============================================================================================================
         Recorder()
         {
             setMessageCallback(&Recorder::record, this);
         }
 
+        //==============================================================================================================
         Recorder(const Recorder&) = delete;
+
+        //==============================================================================================================
         Recorder& operator=(const Recorder&) = delete;
 
+        //==============================================================================================================
         ~Recorder()
         {
             setMessageCallback(nullptr, nullptr);
         }
 
+        //==============================================================================================================
         /// Returns how many messages of `severity` contain `needle`.
         size_t count(MessageSeverity severity, std::string_view needle)
         {
@@ -69,6 +75,7 @@ namespace {
             return found;
         }
 
+        //==============================================================================================================
         /// Returns every message seen, one per line, for a failure message.
         std::string dump()
         {
@@ -82,6 +89,7 @@ namespace {
         }
 
       private:
+        //==============================================================================================================
         static void record(MessageSeverity severity, std::string_view message, void* user)
         {
             auto& self = *static_cast<Recorder*>(user);
