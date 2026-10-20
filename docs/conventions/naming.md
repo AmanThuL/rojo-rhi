@@ -76,7 +76,8 @@ caller-supplied label is used verbatim and keeps the caller's own prefix; RojoRH
   the v1 CPU contract and validation cases, `[gpu]` for cases needing a real device,
   `[checkpoint-a]` for the frozen conformance set, `[host]`, `[native]` and `[metal4]` for the
   benchmark checks in `Benchmarks/Checks/` (`[null]` also tags the cases there that run every
-  RojoRHI workload on the Null backend), and `[.]` for a case hidden from the default run. A case
+  RojoRHI workload on the Null backend), `[stress]` for the long-running validation tracker cases in
+  `Tests/Core/`, always with `[.]`, and `[.]` for a case hidden from the default run. A case
   carries its own tags plus any set tag it belongs to.
 
 ## Benchmarks
