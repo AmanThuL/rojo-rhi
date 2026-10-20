@@ -309,12 +309,12 @@ TEST_CASE("a graphics list owes the fragment part of a Copy barrier and emits it
     CHECK(countsOf(list).nativeBarriers == 2);
     CHECK(countsOf(list).nativeRecordCalls == 8 + label);
     list.end();
-    // The encoder's opening barrier waited for every pending source, so the encoder carries what is owed: updateFence for
-    // the dispatch stage it gave back, barrierAfterStages for the fragment stage, then endEncoding; then endCommandBuffer.
-    // No memory aliases, so the global barriers carry no alias visibility that would keep the dispatch stage in the barrier.
+    // The encoder's opening barrier waited for every pending source, so the encoder carries what is owed: barrierAfterStages
+    // for the dispatch stage it gave back and the fragment stage, since no counted draw has run on the device and the list
+    // uses no carry fence, then endEncoding; then endCommandBuffer.
     CHECK(countsOf(list).encodersOpened == 1);
     CHECK(countsOf(list).nativeBarriers == 3);
-    CHECK(countsOf(list).nativeRecordCalls == 8 + label + 2 + 1 + 1);
+    CHECK(countsOf(list).nativeRecordCalls == 8 + label + 1 + 1 + 1);
     CHECK(barriersOf(list).pendingSource == 0);
     CHECK(barriersOf(list).pendingDestination == 0);
     CHECK(barriersOf(list).pendingVisibility == 0);
@@ -891,10 +891,11 @@ TEST_CASE("a barrier from a pass into Copy followed only by copies owes its frag
     const core::RecordCounts before = countsOf(list);
     list.end();
     // The copy's encoder waited for the fragment source at its opening and ran a blit, so it carries what is owed:
-    // updateFence for the dispatch stage, barrierAfterStages for the fragment stage, then endEncoding; then endCommandBuffer.
+    // barrierAfterStages for the dispatch and fragment stages (the list uses no carry fence), then endEncoding; then
+    // endCommandBuffer.
     CHECK(countsOf(list).encodersOpened == before.encodersOpened);
     CHECK(countsOf(list).nativeBarriers == before.nativeBarriers + 1);
-    CHECK(countsOf(list).nativeRecordCalls == before.nativeRecordCalls + 2 + 1 + 1);
+    CHECK(countsOf(list).nativeRecordCalls == before.nativeRecordCalls + 1 + 1 + 1);
     CHECK(barriersOf(list).pendingDestination == 0);
     submitAndWait(kit.device, std::array{ list });
     destroyDevice(kit.device);
@@ -924,10 +925,11 @@ TEST_CASE("a barrier after a fill stays on the open compute encoder for the disp
     CHECK(barriersOf(list).pendingDestination == 0);
     list.setPipeline(kit.compute());
     list.dispatch(1, 1, 1);
-    // setComputePipelineState, waitForFence, barrierAfterEncoderStages and the dispatch, on the same encoder.
+    // setComputePipelineState, barrierAfterEncoderStages and the dispatch, on the same encoder; no counted draw has run on
+    // the device, so the list uses no carry fence and the encoder waits on none.
     CHECK(countsOf(list).encodersOpened == 1);
     CHECK(countsOf(list).nativeBarriers == 2);
-    CHECK(countsOf(list).nativeRecordCalls - calls == 1 + 4);
+    CHECK(countsOf(list).nativeRecordCalls - calls == 1 + 3);
     CHECK(barriersOf(list).deferredDestination == 0);
     // A barrier between dispatches is covered by the encoder's barrier and stays in it.
     list.barrier(
@@ -939,8 +941,18 @@ TEST_CASE("a barrier after a fill stays on the open compute encoder for the disp
     list.dispatch(1, 1, 1);
     CHECK(countsOf(list).encodersOpened == 1);
     CHECK(countsOf(list).nativeBarriers == 3);
+    // A barrier after the last dispatch, as C6 records, is still held at end.
+    list.barrier(
+        std::array{ GlobalBarrier{
+            .srcStage = Stage::ComputeShader, .srcAccess = Access::ShaderWrite, .dstStage = Stage::ComputeShader, .dstAccess = Access::ShaderRead } }
+    );
+    const uint64_t ended = countsOf(list).nativeRecordCalls;
     list.end();
+    // The encoder carries it with barrierAfterStages, endEncoding, then endCommandBuffer: no updateFence, since no counted
+    // draw has run on the device, and so no waitForFence in a later list's dispatch encoder.
     CHECK(countsOf(list).encodersOpened == 1);
+    CHECK(countsOf(list).nativeBarriers == 4);
+    CHECK(countsOf(list).nativeRecordCalls - ended == 3);
     submitAndWait(kit.device, std::array{ list });
     destroyDevice(kit.device);
 }

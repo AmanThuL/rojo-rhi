@@ -14,6 +14,8 @@
 #include <Foundation/Foundation.hpp>
 #include <Metal/Metal.hpp>
 
+#include <atomic>
+
 namespace rojoRHI::metal4 {
     //==================================================================================================================
     MTL4::ComputeCommandEncoder* Encoders::prepareCompute(core::CommandListCore& list, ListState& state, MTL::Stages command, bool kernelsOnly)
@@ -67,6 +69,11 @@ namespace rojoRHI::metal4 {
         m_holdsWork = false;
         m_kernelPipeline = nullptr;
         m_kernelsOnly = kernelsOnly;
+        if (kernelsOnly && m_kernelsRan != nullptr && !m_kernelsRan->load(std::memory_order_relaxed))
+        {
+            // From the next frame on, the queue's lists spare these kernels a barrier to the dispatch stage.
+            m_kernelsRan->store(true, std::memory_order_relaxed);
+        }
         m_carryWaited = false;
         m_commandPools = state.commandPools;
         waitCarry(list, command);

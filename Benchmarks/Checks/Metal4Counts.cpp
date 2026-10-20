@@ -50,14 +50,23 @@ namespace {
     }
 
     //==================================================================================================================
-    // The result of one run of `workload` at `k` by `arm` with the count options.
-    ArmResult countRun(std::string_view workload, uint32_t k, Arm arm)
+    // Nine warm-up frames reuse each frame slot three times, past the first reuses' one-time allocations.
+    RunOptions steadyOptions()
+    {
+        RunOptions options = countOptions();
+        options.warmupFrames = 9;
+        return options;
+    }
+
+    //==================================================================================================================
+    // The result of one run of `workload` at `k` by `arm` with `options`, the count options by default.
+    ArmResult countRun(std::string_view workload, uint32_t k, Arm arm, const RunOptions& options = countOptions())
     {
         const std::string id = std::string(workload) + "-k" + std::to_string(k);
         const WorkloadEntry* entry = find(id);
         REQUIRE(entry != nullptr);
         REQUIRE(entry->runner(arm) != nullptr);
-        ArmResult result = entry->runner(arm)(entry->config, countOptions());
+        ArmResult result = entry->runner(arm)(entry->config, options);
         INFO(result.error);
         REQUIRE(result.ok);
         return result;
@@ -74,10 +83,10 @@ namespace {
     }
 
     //==================================================================================================================
-    // The allocations of every thread during the first measured frame.
-    uint64_t frameAllocations(std::string_view workload, uint32_t k, Arm arm)
+    // The allocations of every thread during the first measured frame, with `options`.
+    uint64_t frameAllocations(std::string_view workload, uint32_t k, Arm arm, const RunOptions& options = countOptions())
     {
-        const ArmResult result = countRun(workload, k, arm);
+        const ArmResult result = countRun(workload, k, arm, options);
         REQUIRE(!result.allocations.empty());
         return result.allocations[0];
     }
@@ -117,4 +126,22 @@ TEST_CASE("a C8 render pass allocates less on Metal 4 than the native arm's, whi
     const double native = perPass(Arm::Native);
     CAPTURE(rojo, native);
     CHECK(rojo <= native - 2.0);
+}
+
+//======================================================================================================================
+TEST_CASE("C4 to C7 allocate at most two blocks a frame more on Metal 4 than the native arm: the frame event's signal", "[metal4]")
+{
+    // From the first measured frame at K 100, after nine warm-up frames. Both arms' commits allocate alike; R adds the frame event's signalEvent, two
+    // blocks inside Metal (2026-10-20 probe), and nothing else: none of these workloads draws counted, so no list waits on or
+    // updates the carry fence, each of which would allocate one more.
+    for (const std::string_view workload : { "C4", "C5", "C6", "C7" })
+    {
+        DYNAMIC_SECTION(workload)
+        {
+            const uint64_t rojo = frameAllocations(workload, 100, Arm::Rojo, steadyOptions());
+            const uint64_t native = frameAllocations(workload, 100, Arm::Native, steadyOptions());
+            CAPTURE(rojo, native);
+            CHECK(rojo <= native + 2);
+        }
+    }
 }

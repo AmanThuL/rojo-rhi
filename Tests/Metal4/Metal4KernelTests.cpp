@@ -111,21 +111,21 @@ TEST_CASE("an unequal-pattern fill runs the fill kernel on the open encoder and 
     list.copyBuffer(a, 0, buffer, 0, 256);
     REQUIRE(countsOf(list).nativeRecordCalls == 2 + 2 + label + 1);
     list.fillBuffer(buffer, 4, 120, 0x01020304u);
-    // The encoder's first dispatch waits on the graphics queue's carry fence; then setComputePipelineState,
-    // setArgumentTable with the kernel table, two setAddress, dispatchThreadgroups, then setArgumentTable with the list's
-    // table.
-    CHECK(countsOf(list).nativeRecordCalls == 5 + label + 1 + 6);
+    // setComputePipelineState, setArgumentTable with the kernel table, two setAddress, dispatchThreadgroups, then
+    // setArgumentTable with the list's table. No counted draw has run on the device, so the list uses no carry fence and
+    // the encoder waits on none.
+    CHECK(countsOf(list).nativeRecordCalls == 5 + label + 6);
     CHECK(countsOf(list).encodersOpened == 1);
     CHECK(encodersOf(list).kind() == metal4::EncoderKind::Compute);
     CHECK(encodersOf(list).holdsWork());
     // The fill pipeline is still set on the encoder, so the next fill does not set it again.
     list.fillBuffer(buffer, 128, 64, 0x05060708u);
-    CHECK(countsOf(list).nativeRecordCalls == 12 + label + 5);
-    // A fill on a list with no open encoder opens one first, waits on the carry fence and sets the pipeline on it.
+    CHECK(countsOf(list).nativeRecordCalls == 11 + label + 5);
+    // A fill on a list with no open encoder opens one first and sets the pipeline on it.
     list.beginScope("test.scope");
     const uint64_t scoped = countsOf(list).nativeRecordCalls;
     list.fillBuffer(buffer, 0, 256, 0xDEADBEEFu);
-    CHECK(countsOf(list).nativeRecordCalls == scoped + 2 + label + 1 + 6);
+    CHECK(countsOf(list).nativeRecordCalls == scoped + 2 + label + 6);
     CHECK(countsOf(list).encodersOpened == 2);
     list.endScope();
     finish(device, list);
@@ -236,18 +236,18 @@ TEST_CASE("a kernel pipeline is set once per open encoder and forgotten when the
     device.beginFrame();
     CommandList list = device.acquireCommandList(QueueType::Graphics, "test.list");
     const uint64_t label = test::encoderLabel(list);
-    // Two fills on one encoder set the pipeline once: the encoder opens (3) and waits on the carry fence (1), the first fill
-    // counts six calls, the second five.
+    // Two fills on one encoder set the pipeline once: the encoder opens (3), the first fill counts six calls, the second
+    // five.
     list.fillBuffer(buffer, 0, 64, 0x01020304u);
     list.fillBuffer(buffer, 64, 64, 0x05060708u);
-    CHECK(countsOf(list).nativeRecordCalls == 2 + 2 + label + 1 + 6 + 5);
+    CHECK(countsOf(list).nativeRecordCalls == 2 + 2 + label + 6 + 5);
     CHECK(encodersOf(list).kernelPipeline() == kernels.fill);
     // A scope boundary closes the encoder, which forgets the pipeline; the next fill sets it on the new encoder.
     list.beginScope("test.scope");
     CHECK(encodersOf(list).kernelPipeline() == nullptr);
     const uint64_t scoped = countsOf(list).nativeRecordCalls;
     list.fillBuffer(buffer, 128, 64, 0x090A0B0Cu);
-    CHECK(countsOf(list).nativeRecordCalls == scoped + 2 + label + 1 + 6);
+    CHECK(countsOf(list).nativeRecordCalls == scoped + 2 + label + 6);
     // Another kernel sets its own pipeline, and the fill after it sets the fill pipeline again.
     list.clearTexture(texture, {}, ClearValue{});
     CHECK(encodersOf(list).kernelPipeline() == kernels.clear[static_cast<size_t>(metal4::ClearKernel::Tex2D)]);

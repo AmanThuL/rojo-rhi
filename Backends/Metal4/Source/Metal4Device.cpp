@@ -31,6 +31,7 @@
 #include <Metal/Metal.hpp>
 
 #include <array>
+#include <atomic>
 #include <cstddef>
 #include <cstdint>
 #include <cstdlib>
@@ -452,8 +453,17 @@ namespace rojoRHI {
     //==================================================================================================================
     void Device::beginFrame()
     {
+        DeviceImpl& impl = DeviceImpl::of(*this);
         // The core waits for the frame whose slot it reuses through the waitFrame hook, after its own checks.
-        DeviceImpl::of(*this).core.beginFrame();
+        impl.core.beginFrame();
+        // Once a counted draw's kernels have run, the lists of this frame on carry the dispatch stage of a barrier they owe at
+        // their end through the carry fence, which those kernels do not wait on; every list of the earlier frames, which used
+        // no fence, was submitted before them.
+        QueueImpl& graphics = impl.queues[static_cast<size_t>(QueueType::Graphics)];
+        if (!graphics.carryFenced.load(std::memory_order_relaxed) && graphics.kernelsRan.load(std::memory_order_relaxed))
+        {
+            graphics.carryFenced.store(true, std::memory_order_release);
+        }
     }
 
     //==================================================================================================================

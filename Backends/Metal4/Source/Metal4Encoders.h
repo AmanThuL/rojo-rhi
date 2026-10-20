@@ -10,6 +10,7 @@
 
 #include <Metal/Metal.hpp>
 
+#include <atomic>
 #include <cstdint>
 
 namespace rojoRHI::metal4 {
@@ -37,9 +38,9 @@ namespace rojoRHI::metal4 {
         /// counts its native calls, its barrier and one encoder on `list`. The new encoder holds no work. An encoder opened
         /// `kernelsOnly` runs only backend kernels, which bind the kernel table (`bindKernelBatch`): a render pass's counted draws
         /// open it ahead of the render encoder, and nothing else records on a compute encoder inside a pass (chapter 07). Any
-        /// other encoder of a graphics list waits on the carry fence once, before its first command in the dispatch stage, so
-        /// the dispatch part of a barrier an earlier list carried reaches it; a kernels-only encoder never waits. A lingering
-        /// render encoder ends first.
+        /// other encoder of a list that uses the carry fence waits on it once, before its first command in the dispatch stage,
+        /// so the dispatch part of a barrier an earlier list carried reaches it; a kernels-only encoder never waits. A
+        /// lingering render encoder ends first.
         MTL4::ComputeCommandEncoder* compute(core::CommandListCore& list, ListState& state, MTL::Stages command, bool kernelsOnly = false)
         {
             // A command on an open compute encoder that holds work, with no barrier held back for its stage and no carry wait
@@ -98,20 +99,23 @@ namespace rojoRHI::metal4 {
         /// Ends the open encoder at `CommandList::end`, first carrying on it the barrier the list still owes when the encoder
         /// covers that barrier's sources: every pending source stage lies among those its opening barrier waited for at queue
         /// level, and it ran a command in a stage that barrier held. The encoder then updates the carry fence after the stages
-        /// it ran, for the dispatch stage of a graphics list's destination, unless a barrier of the list named `IndirectArgs`,
+        /// it ran, for the dispatch stage of the destination of a list that uses the fence, unless a barrier of the list named `IndirectArgs`,
         /// and emits `barrierAfterStages` from those stages to the destination stages left, which holds them back in every
         /// later encoder on the queue. Counts its calls and barrier on `list`. A list that upscaled carries nothing here;
         /// `emitTrailing` emits what is owed. Does nothing when no encoder is open.
         void finish(core::CommandListCore& list);
 
-        /// Sets the fence later dispatches wait on and a closing encoder updates, the graphics queue's for a graphics list and
-        /// null for any other, at the list's acquisition.
-        void setCarryFence(MTL::Fence* fence)
+        /// Sets, at the list's acquisition, the fence later dispatches wait on and a closing encoder updates: the graphics
+        /// queue's for a graphics list acquired once a counted draw's kernels have run in an earlier frame, else null, so the
+        /// list carries the dispatch stage in a barrier and waits on no fence. `kernelsRan` is the graphics queue's flag a
+        /// kernels-only encoder sets when it opens, for a graphics list, and null for any other.
+        void setCarry(MTL::Fence* fence, std::atomic<bool>* kernelsRan)
         {
             m_carryFence = fence;
+            m_kernelsRan = kernelsRan;
         }
 
-        /// Returns the carry fence of the list's queue, or null when the queue has none.
+        /// Returns the carry fence the list updates and waits on, or null when it uses none.
         MTL::Fence* carryFence() const
         {
             return m_carryFence;
@@ -227,8 +231,8 @@ namespace rojoRHI::metal4 {
         MTL::Stages ranStages() const;
 
         /// Waits on the carry fence before a command in stage `command` on the open compute encoder, unless the encoder waited
-        /// already, runs only backend kernels, the command is not in the dispatch stage or the list's queue has no carry
-        /// fence; counts the wait on `list`.
+        /// already, runs only backend kernels, the command is not in the dispatch stage or the list uses no carry fence;
+        /// counts the wait on `list`.
         void waitCarry(core::CommandListCore& list, MTL::Stages command);
 
         MTL4::ComputeCommandEncoder* m_compute = nullptr; ///< The open compute encoder, retained; null when none is open.
@@ -241,7 +245,8 @@ namespace rojoRHI::metal4 {
         bool m_kernelsOnly = false;                       ///< The open compute encoder was opened to run only backend kernels.
         bool m_carryWaited = false;                       ///< The open compute encoder waited on the carry fence.
         bool m_syncsAtEnd = false;                        ///< The open encoder carried a barrier to later lists at `end`.
-        MTL::Fence* m_carryFence = nullptr;               ///< The carry fence of the list's queue; null but on the graphics queue.
+        MTL::Fence* m_carryFence = nullptr;               ///< The carry fence the list uses; null but on a fenced graphics list.
+        std::atomic<bool>* m_kernelsRan = nullptr;        ///< The graphics queue's flag a kernels-only encoder sets; null on other lists.
         BarrierState m_barriers;                          ///< The pending barrier and the open encoder's covered stages.
         /// The compute pipeline last set on the open compute encoder, a backend kernel's or the caller's, so neither is set
         /// again while the encoder holds it, which the validation layer reports as redundant. Reset when an encoder opens or

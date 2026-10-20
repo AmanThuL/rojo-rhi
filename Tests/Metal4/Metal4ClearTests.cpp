@@ -174,18 +174,17 @@ TEST_CASE("a Storage-only clear dispatches one kernel per mip on the compute enc
     CommandList list = device.acquireCommandList(type, "test.list");
     const uint64_t label = test::encoderLabel(list);
     list.clearTexture(array, {}, ClearValue{ .color = { 0.25f, 0.5f, 0.75f, 1.0f } });
-    // The encoder opens (3), on a graphics list waits on the carry fence before its first dispatch (1), and the texture is
-    // bound once (1); the first mip sets the pipeline, the kernel table, the parameters, dispatches and sets the list's
-    // table back (5); each later mip skips the pipeline (4).
-    const uint64_t wait = type == QueueType::Graphics ? 1 : 0;
-    CHECK(countsOf(list).nativeRecordCalls == 2 + 2 + label + wait + 1 + 5 + 4 + 4);
+    // The encoder opens (3), waits on no carry fence (no counted draw has run on the device), and the texture is bound
+    // once (1); the first mip sets the pipeline, the kernel table, the parameters, dispatches and sets the list's table
+    // back (5); each later mip skips the pipeline (4).
+    CHECK(countsOf(list).nativeRecordCalls == 2 + 2 + label + 1 + 5 + 4 + 4);
     CHECK(countsOf(list).encodersOpened == 1);
     CHECK(encodersOf(list).kind() == metal4::EncoderKind::Compute);
     CHECK(encodersOf(list).holdsWork());
     CHECK(encodersOf(list).kernelPipeline() == kernels.clear[static_cast<size_t>(metal4::ClearKernel::Tex2DArray)]);
     // Another texture type takes another pipeline, on the same encoder.
     list.clearTexture(volume, SubresourceRange{ .baseMip = 1 }, ClearValue{ .color = { 2.0f, 0.0f, 0.0f, 0.0f } });
-    CHECK(countsOf(list).nativeRecordCalls == 18 + label + wait + 1 + 5);
+    CHECK(countsOf(list).nativeRecordCalls == 18 + label + 1 + 5);
     CHECK(countsOf(list).encodersOpened == 1);
     CHECK(encodersOf(list).kernelPipeline() == kernels.clear[static_cast<size_t>(metal4::ClearKernel::Tex3D)]);
     list.end();

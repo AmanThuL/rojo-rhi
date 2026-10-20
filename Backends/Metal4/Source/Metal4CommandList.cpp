@@ -23,6 +23,7 @@
 
 #include <Metal/Metal.hpp>
 
+#include <atomic>
 #include <cstddef>
 #include <cstdint>
 #include <cstdlib>
@@ -128,7 +129,15 @@ namespace rojoRHI {
         // A list that never ended, which only a Release build lets through, leaves its encoder behind; one that ended with
         // scopes open leaves their strings and timestamp pairs.
         list->encoders.release();
-        list->encoders.setCarryFence(type == QueueType::Graphics ? impl.queues[static_cast<size_t>(QueueType::Graphics)].carry : nullptr);
+        if (type == QueueType::Graphics)
+        {
+            QueueImpl& graphics = impl.queues[static_cast<size_t>(QueueType::Graphics)];
+            list->encoders.setCarry(graphics.carryFenced.load(std::memory_order_acquire) ? graphics.carry : nullptr, &graphics.kernelsRan);
+        }
+        else
+        {
+            list->encoders.setCarry(nullptr, nullptr);
+        }
         list->draw.reset();
         for (NS::String* scopeLabel : state.scopeLabels)
         {

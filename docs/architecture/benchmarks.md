@@ -223,6 +223,10 @@ overhead and not a defect of the harness. In particular:
   encoder waited for every source, as gbuffer's geometry encoder, C6's dispatch encoder and C10's
   pass encoder do, and otherwise a trailing encoder emits it, as for the lighting and ao lists; each
   compute encoder of a graphics list that dispatches waits on the fence once, as lighting's does.
+  A graphics list uses the fence only once a counted draw's kernels have run in an earlier frame:
+  the composed frame's lists do from its second frame on, while C4, C6, G1 and G2, which draw no
+  counted draw, never do, so C6's dispatch encoder carries its last barrier with
+  `barrierAfterStages` alone and no encoder of C4, C6, G1 or G2 waits on the fence.
   Both are measured overhead; in the integrated gate R makes 1280 native calls per composed frame
   with the validation layer on (Debug) and 1259 without it (Release) to N's 1254; the figure depends
   on the layer because encoder labels are native calls. They are per frame, so they change no

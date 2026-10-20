@@ -84,7 +84,7 @@ namespace {
 } // namespace
 
 //======================================================================================================================
-TEST_CASE("a dispatch after setPipeline sends one call, after the encoder's wait on the carry fence; a second sends one more", "[metal4]")
+TEST_CASE("a dispatch after setPipeline sends one call, and a second one more", "[metal4]")
 {
     Device device = *createDevice();
     const Pipeline pipeline = standardCompute(device);
@@ -92,9 +92,10 @@ TEST_CASE("a dispatch after setPipeline sends one call, after the encoder's wait
     CommandList list = device.acquireCommandList(QueueType::Graphics, "test.list");
     list.setPipeline(pipeline);
     uint64_t before = callsOf(list);
-    // The encoder's first dispatch on a graphics list waits on the carry fence first.
+    // No counted draw has run on the device, so the list uses no carry fence and the dispatch waits on none
+    // (Metal4CarryTests.cpp covers the wait).
     list.dispatch(1, 1, 1);
-    CHECK(callsOf(list) - before == 1 + 1);
+    CHECK(callsOf(list) - before == 1);
     before = callsOf(list);
     list.dispatch(2, 1, 1);
     CHECK(callsOf(list) - before == 1);
@@ -142,8 +143,8 @@ TEST_CASE("a dispatch on an encoder opened after a scope boundary sets the calle
     REQUIRE(encodersOf(list).kind() == metal4::EncoderKind::None);
     const uint64_t before = callsOf(list);
     list.dispatch(1, 1, 1);
-    // The open, the wait on the carry fence, the pipeline, then the dispatch.
-    CHECK(callsOf(list) - before == openCalls(list) + 1 + 1 + 1);
+    // The open, the pipeline, then the dispatch.
+    CHECK(callsOf(list) - before == openCalls(list) + 1 + 1);
     CHECK(encodersOf(list).kernelPipeline() == stateOf(list, pipeline)->compute);
     list.endScope();
     finish(device, list);
@@ -211,10 +212,10 @@ TEST_CASE("a pending barrier waits through a zero-group dispatch and is emitted 
     list.dispatch(0, 1, 1);
     CHECK(counts.nativeBarriers == 0);
     CHECK(callsOf(list) == before);
-    // The real dispatch emits the barrier and waits on the carry fence, then dispatches.
+    // The real dispatch emits the barrier, then dispatches.
     list.dispatch(1, 1, 1);
     CHECK(counts.nativeBarriers == 1);
-    CHECK(callsOf(list) - before == 3);
+    CHECK(callsOf(list) - before == 2);
     before = callsOf(list);
     list.dispatch(1, 1, 1);
     CHECK(counts.nativeBarriers == 1);

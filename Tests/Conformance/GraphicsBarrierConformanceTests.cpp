@@ -498,6 +498,24 @@ namespace {
     }
 
     //==================================================================================================================
+    /// Runs a list whose counted draw over `records`, zeroed `IndirectArgs` records, draws nothing with `counted` into `target`,
+    /// then opens the next frame. A backend may lower the barrier a list owes at its end differently once a counted draw has
+    /// run in an earlier frame (chapter 09's Metal 4 row), so a carry case runs with and without this first.
+    void runCountedFrame(test::GpuKit& kit, Pipeline counted, Texture target, Buffer records)
+    {
+        CommandList list = kit.list(QueueType::Graphics, "test.counted");
+        const std::array colors{ ColorAttachment{ .texture = target, .load = LoadOp::Clear } };
+        list.beginRenderPass(RenderPassDesc{ .colors = colors, .area = kOracleRect, .label = "test.counted" });
+        list.setPipeline(counted);
+        list.setViewport(kOracleViewport);
+        list.setScissor(kOracleRect);
+        list.drawIndirect(kit.device.address(records), 64);
+        list.endRenderPass();
+        kit.run(std::array{ list });
+        kit.nextFrame();
+    }
+
+    //==================================================================================================================
     /// Checks that `actual`, an oracle target read back, equals `expected`.
     void checkImage(const std::vector<std::byte>& actual, const OracleImage& expected)
     {
@@ -938,13 +956,14 @@ TEST_CASE("a pass's closing batch orders the next list's dispatch on the queue, 
 {
     test::requireGpu();
     // Covered: a batch before the pass names its depth stage as a source, so the pass's encoder carries the closing batch.
-    // Otherwise a trailing encoder does. Either way the dispatch waits on the carry fence, and a counted draw's kernels
-    // before it do not.
+    // Otherwise a trailing encoder does. After a counted draw in an earlier frame (`fenced`) the dispatch waits on the
+    // carry fence, and a counted draw's kernels before it do not; before, the carried barrier holds the dispatch stage.
     const bool covered = GENERATE(false, true);
     const bool consumerFirst = GENERATE(false, true);
     const bool two = GENERATE(false, true);
     const bool kernels = GENERATE(false, true);
-    CAPTURE(covered, consumerFirst, two, kernels);
+    const bool fenced = GENERATE(false, true);
+    CAPTURE(covered, consumerFirst, two, kernels, fenced);
     test::GpuKit kit;
     const Oracles oracles(kit);
     const DepthStencilState write{ .depthTest = true, .depthWrite = true, .depthCompare = CompareOp::Always };
@@ -973,6 +992,10 @@ TEST_CASE("a pass's closing batch orders the next list's dispatch on the queue, 
     const std::vector<std::byte> empty(64 * sizeof(DrawIndirectArgs), std::byte{ 0 });
     const Buffer records = kit.buffer(empty.size(), Memory::Gpu, BufferUsage::IndirectArgs, empty);
     const Texture target = oracles.target();
+    if (fenced)
+    {
+        runCountedFrame(kit, counted, target, records);
+    }
     CommandList producer = kit.list(QueueType::Graphics, "test.producer");
     CommandList consumer = kit.list(QueueType::Graphics, "test.consumer");
     const auto recordProducer = [&] {
@@ -1206,11 +1229,18 @@ TEST_CASE("two lists that carry barriers in a row both order a later list's disp
 {
     test::requireGpu();
     // List A carries its depth batch on its pass's encoder; list B renders elsewhere and carries its own batch, on its
-    // encoder or a trailing one; list C's dispatch reads A's depth, so its wait must see A's update behind B's.
+    // encoder or a trailing one; list C's dispatch reads A's depth, so after a counted draw in an earlier frame (`fenced`)
+    // its wait must see A's update behind B's.
     const bool coveredB = GENERATE(false, true);
-    CAPTURE(coveredB);
+    const bool fenced = GENERATE(false, true);
+    CAPTURE(coveredB, fenced);
     test::GpuKit kit;
     const Oracles oracles(kit);
+    if (fenced)
+    {
+        const std::vector<std::byte> empty(64 * sizeof(DrawIndirectArgs), std::byte{ 0 });
+        runCountedFrame(kit, oracles.oracle(), oracles.target(), kit.buffer(empty.size(), Memory::Gpu, BufferUsage::IndirectArgs, empty));
+    }
     const DepthStencilState write{ .depthTest = true, .depthWrite = true, .depthCompare = CompareOp::Always };
     const Pipeline depthOnly = graphicsOf(
         kit.device, GraphicsPipelineDesc{ .vertex = { oracles.draw, "fullscreenVertexMain" }, .depthStencil = write, .depthFormat = Format::D32Float }, {}

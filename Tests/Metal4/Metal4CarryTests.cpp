@@ -83,7 +83,85 @@ namespace {
         list.beginRenderPass(test::fullPass(colors));
         list.endRenderPass();
     }
+
+    //==================================================================================================================
+    /// Ends and submits `kit.list`, waits for it, ends the frame, opens the next and acquires a new graphics list into
+    /// `kit.list`.
+    void nextFrame(test::PassKit& kit)
+    {
+        kit.list.end();
+        submitAndWait(kit.device, kit.list);
+        kit.device.beginFrame();
+        kit.list = kit.device.acquireCommandList(QueueType::Graphics, "test.next");
+    }
+
+    //==================================================================================================================
+    /// Records a counted draw on `kit.list`, which runs its kernels on a kernels-only encoder, then moves to the next frame:
+    /// from there on the device's graphics lists carry a closing batch's dispatch stage through the carry fence.
+    void runCountedDraw(test::PassKit& kit)
+    {
+        const std::vector<std::byte> zeroes(16 * sizeof(DrawIndirectArgs), std::byte{ 0 });
+        const Buffer args = *kit.device.createBuffer(
+            BufferDesc{ .size = zeroes.size(), .usage = BufferUsage::IndirectArgs | BufferUsage::ShaderWrite, .label = "test.args" }, zeroes
+        );
+        kit.readyToDraw();
+        kit.list.drawIndirect(kit.device.address(args), 16);
+        kit.list.endRenderPass();
+        nextFrame(kit);
+    }
 } // namespace
+
+//======================================================================================================================
+TEST_CASE("a graphics list carries the dispatch stage in a barrier until a counted draw has run in an earlier frame", "[metal4]")
+{
+    test::PassKit kit;
+    const Buffer ordered = kit.buffer(BufferUsage::ShaderWrite);
+    const Texture target = kit.target();
+    // A closing batch into a compute stage that the pass's encoder covers.
+    const auto recordCarried = [&](CommandList list) {
+        order(list, ordered, Stage::FragmentShader, Access::None, Stage::ColorAttachment, Access::None);
+        emptyPass(list, target);
+        order(list, ordered, Stage::ColorAttachment, Access::None, Stage::ComputeShader, Access::ShaderRead);
+    };
+    // No counted draw has run on the device: no later encoder skips a barrier to the dispatch stage, so the pass's encoder
+    // emits barrierAfterStages for it, and no compute encoder waits on the carry fence.
+    recordCarried(kit.list);
+    core::RecordCounts before = countsOf(kit.list);
+    kit.list.end();
+    // barrierAfterStages, endEncoding and endCommandBuffer: no updateFence.
+    CHECK(countsOf(kit.list).nativeBarriers == before.nativeBarriers + 1);
+    CHECK(countsOf(kit.list).nativeRecordCalls == before.nativeRecordCalls + 3);
+    submitAndWait(kit.device, kit.list);
+    kit.device.beginFrame();
+    kit.list = kit.device.acquireCommandList(QueueType::Graphics, "test.unfenced");
+    kit.list.setPipeline(kit.compute());
+    uint64_t calls = countsOf(kit.list).nativeRecordCalls;
+    kit.list.dispatch(1, 1, 1);
+    CHECK_FALSE(encodersOf(kit.list).carryWaited());
+    // The dispatch alone, on the encoder setPipeline opened: no waitForFence.
+    CHECK(countsOf(kit.list).nativeRecordCalls - calls == 1);
+    // A counted draw in this frame leaves this frame's lists as they are.
+    runCountedDraw(kit);
+    // From the next frame on, the closing batch's dispatch stage goes through the fence and a dispatch waits on it.
+    recordCarried(kit.list);
+    before = countsOf(kit.list);
+    kit.list.end();
+    // updateFence, endEncoding and endCommandBuffer: no barrier.
+    CHECK(countsOf(kit.list).nativeBarriers == before.nativeBarriers);
+    CHECK(countsOf(kit.list).nativeRecordCalls == before.nativeRecordCalls + 3);
+    submitAndWait(kit.device, kit.list);
+    kit.device.beginFrame();
+    kit.list = kit.device.acquireCommandList(QueueType::Graphics, "test.fenced");
+    kit.list.setPipeline(kit.compute());
+    calls = countsOf(kit.list).nativeRecordCalls;
+    kit.list.dispatch(1, 1, 1);
+    CHECK(encodersOf(kit.list).carryWaited());
+    // waitForFence, then the dispatch.
+    CHECK(countsOf(kit.list).nativeRecordCalls - calls == 2);
+    kit.list.end();
+    submitAndWait(kit.device, kit.list);
+    destroyDevice(kit.device);
+}
 
 //======================================================================================================================
 TEST_CASE("a pass's encoder stays open after endRenderPass and a barrier after it neither closes nor defers", "[metal4]")
@@ -115,6 +193,8 @@ TEST_CASE("a pass's encoder stays open after endRenderPass and a barrier after i
 TEST_CASE("a pass's closing batch whose sources its opening barrier waited for is carried by the pass's encoder", "[metal4]")
 {
     test::PassKit kit;
+    // A counted draw in an earlier frame makes the device's graphics lists use the carry fence.
+    runCountedDraw(kit);
     CommandList list = kit.list;
     const Buffer ordered = kit.buffer(BufferUsage::ShaderWrite);
     // The batch before the pass names the fragment stage as a source, so the pass's encoder waits for all earlier fragment work.
@@ -161,6 +241,8 @@ TEST_CASE("a pass's closing batch whose sources its opening barrier waited for i
 TEST_CASE("a closing batch whose sources may lie before the closing encoder takes the trailing encoder, with the carry fence", "[metal4]")
 {
     test::PassKit kit;
+    // A counted draw in an earlier frame makes the device's graphics lists use the carry fence.
+    runCountedDraw(kit);
     CommandList list = kit.list;
     const uint64_t label = test::encoderLabel(list);
     const Buffer ordered = kit.buffer(BufferUsage::ShaderWrite);
@@ -224,6 +306,8 @@ TEST_CASE("a closing batch into IndirectArgs is carried by a producer barrier th
     const bool arguments = GENERATE(false, true);
     CAPTURE(arguments);
     test::PassKit kit;
+    // A counted draw in an earlier frame makes the device's graphics lists use the carry fence.
+    runCountedDraw(kit);
     CommandList list = kit.list;
     const Buffer ordered = kit.buffer(BufferUsage::ShaderWrite);
     list.setPipeline(kit.compute());
@@ -254,6 +338,8 @@ TEST_CASE("a closing batch into IndirectArgs is carried by a producer barrier th
 TEST_CASE("a graphics compute encoder waits on the carry fence once, before its first dispatch", "[metal4]")
 {
     test::PassKit kit;
+    // A counted draw in an earlier frame makes the device's graphics lists use the carry fence.
+    runCountedDraw(kit);
     CommandList list = kit.list;
     const uint64_t label = test::encoderLabel(list);
     list.setPipeline(kit.compute());
@@ -327,6 +413,8 @@ TEST_CASE("a closing batch whose visibility includes ResourceAlias keeps the dis
     const bool covered = GENERATE(false, true);
     CAPTURE(covered);
     test::PassKit kit;
+    // A counted draw in an earlier frame makes the device's graphics lists use the carry fence.
+    runCountedDraw(kit);
     CommandList list = kit.list;
     const uint64_t label = test::encoderLabel(list);
     if (covered)

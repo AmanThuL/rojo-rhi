@@ -160,17 +160,18 @@ barrier orders.
 A barrier still pending at `end` is carried to later lists by the list's last encoder, still open
 then (a pass's lingers), when P lies inside `S_open` and it ran a command in a stage of `D_open`:
 all source work has completed once `(P | D_open) & R` completes, R the stages it ran. After those
-stages it emits `updateFence(carry, ...)` for D's dispatch stage on a graphics list and
+stages it emits `updateFence(carry, ...)` for D's dispatch stage on a fenced graphics list and
 `barrierAfterStages(..., D', V)` for the rest. Otherwise a trailing compute encoder with no command
 emits `barrierAfterQueueStages(P, Dispatch | Blit, V)` and the same two from `Dispatch | Blit`
 (Metal runs each stage of successive encoders on a queue in order, an assumption a conformance case
-is built to falsify); a list that upscaled keeps the upscale section's. The carry fence (the
-graphics queue's, uncounted) spares later counted-draw kernels, which a barrier to the dispatch
-stage would hold back: every other graphics compute encoder calls `waitForFence(carry, Dispatch)`
-before its first dispatch-stage command. Metal orders an update after its stages and a wait after
-every earlier update on the queue; that their stores are visible rests on the M3 Max conformance
-runs. A fence has no visibility option, so `IndirectArgs` or `All` destinations, or `ResourceAlias`
-visibility, keep the dispatch stage in the barrier.
+is built to falsify); a list that upscaled keeps the upscale section's. The graphics queue's
+uncounted carry fence spares later counted-draw kernels, which a barrier to the dispatch stage would
+hold back: every other compute encoder of a fenced list calls `waitForFence(carry, Dispatch)` before
+its first dispatch-stage command. Metal orders an update after its stages and a wait after every
+earlier update on the queue; that their stores are visible rests on the M3 Max conformance runs. A
+list is fenced once such kernels ran in an earlier frame (`carryFenced`); before, the dispatch stage
+stays in the barrier and nothing waits. A fence has no visibility option, so `IndirectArgs` or `All`
+destinations, or `ResourceAlias` visibility, keep the dispatch stage in the barrier.
 
 Worked sequence on a graphics list: copy A, buffer barrier (copy to copy), copy B, barrier, `end`.
 
@@ -180,7 +181,7 @@ Worked sequence on a graphics list: copy A, buffer barrier (copy to copy), copy 
 | barrier 1 | its sources are not covered by an opening barrier that emitted none: the encoder closes, the barrier is pending (P and D are blit, dispatch and fragment) |
 | copy B | a new compute encoder opens and emits `barrierAfterQueueStages` for blit and dispatch; fragment stays owed; `copyFromBuffer` |
 | barrier 2 | sources inside `S_open`, destinations inside `D_open`: held back as an encoder-level barrier; the fragment part joins the pending barrier |
-| `end` | the held barrier joins the pending one; P lies inside `S_open` and the encoder ran a blit, so it emits `updateFence` for the dispatch stage and `barrierAfterStages` for the blit and fragment stages, then `endEncoding`; `endCommandBuffer` |
+| `end` | the held barrier joins the pending one; P lies inside `S_open` and the encoder ran a blit, so it emits `updateFence` for the dispatch stage (on a fenced list; else that stage joins the barrier) and `barrierAfterStages` for the blit and fragment stages, then `endEncoding`; `endCommandBuffer` |
 
 ## Scopes
 

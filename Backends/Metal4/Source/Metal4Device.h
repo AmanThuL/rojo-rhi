@@ -58,8 +58,18 @@ namespace rojoRHI {
         MTL::SharedEvent* progress = nullptr;
         /// On the graphics queue only, the fence a list's last encoder updates after the work a barrier it still owes at its end
         /// names, for that barrier's dispatch stage, and each later encoder that dispatches waits on before its first dispatch,
-        /// except a counted draw's kernels. Null on the compute and copy queues, which run no such kernels.
+        /// except a counted draw's kernels, which a barrier to the dispatch stage would hold back. Only lists acquired while
+        /// `carryFenced` is set use it. Null on the compute and copy queues, which run no such kernels.
         MTL::Fence* carry = nullptr;
+        /// On the graphics queue only: set when a list opens the kernels-only encoder of a counted draw's kernels. Recording sets
+        /// it, at most once; `Device::beginFrame` reads it.
+        std::atomic<bool> kernelsRan = false;
+        /// On the graphics queue only: set by the first `Device::beginFrame` after `kernelsRan`, and never cleared. A list
+        /// acquired before it is set carries a barrier's dispatch stage in the barrier and waits on no fence. `beginFrame` is of
+        /// thread class frame, so it happens before every acquisition in its frame and each of them reads the value it set;
+        /// and every list acquired in an earlier frame was submitted before that frame ended (VU-rojo-device-0005). So every
+        /// list that waits on no fence precedes, on the queue, every list that updates `carry`, and none misses an update.
+        std::atomic<bool> carryFenced = false;
         /// The last value submitted for signal on `progress`. Only `submit` and `mapTiles`, which the caller serialises per
         /// queue, write it; a fence's destruction reads it, after the submissions that named the fence.
         std::atomic<uint64_t> progressValue = 0;
