@@ -6,6 +6,7 @@
 
 #include <rojoRHI/RHI.h>
 
+#include "Core/AliasTracker.h"
 #include "Core/Counters.h"
 #include "Core/Formats.h"
 #include "Core/FrameArena.h"
@@ -205,6 +206,13 @@ namespace rojoRHI::core {
         /// Returns the validation tracker's state; only a device created with validation fills it, and only in a Debug build.
         Tracker& tracker();
 
+        /// Returns which placed and sparse resources can share memory, which a backend reads to order the first use of aliased
+        /// memory.
+        AliasTracker& aliasing();
+
+        /// Returns which placed and sparse resources can share memory.
+        const AliasTracker& aliasing() const;
+
         /// Returns the device's label.
         std::string_view label() const;
 
@@ -246,6 +254,7 @@ namespace rojoRHI::core {
         ScopeLog m_scopes;
         FrameArena m_arena;
         Tracker m_tracker;
+        AliasTracker m_aliasing;
         /// Mutable because reading a retired frame's timings, a const call, counts a native read.
         mutable DeviceCounts m_counts;
         /// Frame number shifted left by one, with bit zero set while that frame is open; one word so the free-threaded

@@ -214,9 +214,11 @@ namespace rojoRHI {
         {
             metal4::addSides(lowered, global.srcStage, global.srcAccess, global.dstStage, global.dstAccess);
         }
-        if (!globals.empty())
+        const core::AliasTracker& aliasing = list.device->aliasing();
+        if (!globals.empty() && aliasing.anyAliasing())
         {
-            // A global barrier is how the first use of a placed buffer is ordered after the resource that held its memory.
+            // A global barrier is how the first use of a placed buffer is ordered after the resource that held its memory, which
+            // only matters while placed resources share memory or sparse tiles can name it.
             lowered.visibility |= MTL4::VisibilityOptionResourceAlias;
         }
         for (const BufferBarrier& buffer : buffers)
@@ -228,10 +230,16 @@ namespace rojoRHI {
             metal4::addSides(lowered, texture.srcStage, texture.srcAccess, texture.dstStage, texture.dstAccess);
             if (texture.oldLayout == Layout::Undefined && (lowered.visibility & MTL4::VisibilityOptionResourceAlias) == 0)
             {
-                // Only placed textures are untracked; a discard of one may follow another resource in its memory. The payload
-                // is read without a lock.
-                const auto* native = static_cast<const MTL::Texture*>(list.device->pool<Texture>().native(texture.texture));
-                if (native != nullptr && native->hazardTrackingMode() == MTL::HazardTrackingModeUntracked)
+                // A discard of a placed texture may follow another resource in its memory. A texture whose range never overlapped
+                // another's needs no alias unless sparse tiles are live, which can name any placed memory. The payload is read
+                // without a lock.
+                bool aliases = aliasing.textureAliases(texture.texture);
+                if (!aliases && aliasing.anySparse())
+                {
+                    const auto* native = static_cast<const MTL::Texture*>(list.device->pool<Texture>().native(texture.texture));
+                    aliases = native != nullptr && native->hazardTrackingMode() == MTL::HazardTrackingModeUntracked;
+                }
+                if (aliases)
                 {
                     lowered.visibility |= MTL4::VisibilityOptionResourceAlias;
                 }

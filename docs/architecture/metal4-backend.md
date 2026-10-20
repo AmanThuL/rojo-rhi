@@ -221,8 +221,11 @@ The backend's mutexes nest in one order, outermost first:
 1. the frame arena's, the validation tracker's or the stager's, which never nest in one another;
 2. a `HandlePool`'s, such as the buffer pool's;
 3. the residency set's, the Debug address map's, `Presentation::mutex`, the depth-stencil cache's,
-   the pipeline cache's or the scope log's, which are leaves: nothing is taken while any of them is
-   held, and none is taken inside another.
+   the pipeline cache's, the scope log's or the alias tracker's, which are leaves: nothing is taken
+   while any of them is held, and none is taken inside another.
+
+The alias tracker's is taken alone, only at placement, unplacement and heap destruction, never
+while recording and never inside a pool's mutex.
 
 A thread may skip a level but never takes a lock of an earlier level while it holds one of a later
 level. Claiming an arena page holds the arena's mutex while it adds the page to the residency set,

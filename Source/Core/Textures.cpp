@@ -450,15 +450,15 @@ namespace rojoRHI::core {
         {
             addPlacedResource(core, heap);
         }
+        // The alias tracker and the validation tracker copy what they follow before the record moves into the pool.
+        const uint64_t heapOffset = record.heapOffset;
+        const uint64_t heapSize = record.heapSize;
+        const bool sparse = hasUsage(record.usage, TextureUsage::Sparse);
 #ifndef NDEBUG
-        // The tracker copies what it follows before the record moves into the pool.
         const std::string label = record.label;
         const uint32_t mips = record.mips;
         const uint32_t layers = record.layers;
         const Layout initial = record.initialData ? Layout::ShaderRead : Layout::Undefined;
-        const uint64_t heapOffset = record.heapOffset;
-        const uint64_t heapSize = record.heapSize;
-        const bool sparse = hasUsage(record.usage, TextureUsage::Sparse);
 #endif
         const Texture texture = core.pool<Texture>().allocate(std::move(record));
         if (texture.bits == 0)
@@ -468,6 +468,14 @@ namespace rojoRHI::core {
                 removePlacedResource(core, heap);
             }
             return std::unexpected(tableFull("texture", core.pool<Texture>().capacity()));
+        }
+        if (heap.bits != 0)
+        {
+            core.aliasing().placeTexture(texture, heap, heapOffset, heapSize);
+        }
+        if (sparse)
+        {
+            core.aliasing().addSparse();
         }
 #ifndef NDEBUG
         trackTexture(core, texture, label, mips, layers, initial, false, heap, heapOffset, heapSize, sparse);
@@ -481,12 +489,14 @@ namespace rojoRHI::core {
         // A bad handle is left to the destroy below, which reports VU-rojo-core-0001 to 0003 and releases nothing. The view
         // count is read under the pool's lock, as it is written.
         Heap heap = {};
+        bool sparse = false;
         [[maybe_unused]] uint64_t views = 0;
         [[maybe_unused]] std::string label;
         [[maybe_unused]] bool swapchainImage = false;
         TileMap tiles;
         [[maybe_unused]] const LookupStatus status = core.pool<Texture>().update(texture, [&](TextureRecord& record) {
             heap = record.heap;
+            sparse = hasUsage(record.usage, TextureUsage::Sparse);
             views = record.views;
             label = record.label;
             swapchainImage = record.swapchainImage;
@@ -506,7 +516,12 @@ namespace rojoRHI::core {
         releaseTiles(core, tiles);
         if (heap.bits != 0)
         {
+            core.aliasing().unplace(heap, texture.bits);
             removePlacedResource(core, heap);
+        }
+        if (sparse)
+        {
+            core.aliasing().removeSparse();
         }
     }
 
