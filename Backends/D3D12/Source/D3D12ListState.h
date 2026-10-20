@@ -15,6 +15,7 @@
 #include <cstdint>
 #include <memory>
 #include <mutex>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -47,6 +48,32 @@ namespace rojoRHI::d3d12 {
         const PipelineState* pipeline = nullptr;         ///< The payload of the caller's bound pipeline; null for none.
     };
 
+    /// The dynamic state the native list of a Graphics list holds, so a pass's starting values and the setters send a native
+    /// call only for a change. Reset at each acquisition: the state a native list keeps across its `Reset` is unknown.
+    struct DynamicState
+    {
+        std::optional<uint8_t> stencilReference;         ///< The stencil reference `OMSetStencilRef` last set; empty while unknown.
+        std::optional<std::array<float, 4>> blendFactor; ///< The factors `OMSetBlendFactor` last set; empty while unknown.
+        std::array<float, 3> depthBias = {};             ///< The recorded constant, slope-scaled and clamp bias; zero at each pass.
+    };
+
+    /// The native description of the render pass a list began last, the list's own, so recording allocates nothing and the
+    /// resolve parameters `BeginRenderPass` points at stay where they are until `EndRenderPass`. Rewritten at each pass.
+    struct PassStorage
+    {
+        /// The pass's render targets, the first `targetCount` used.
+        std::array<D3D12_RENDER_PASS_RENDER_TARGET_DESC, D3D12_SIMULTANEOUS_RENDER_TARGET_COUNT> targets = {};
+        /// The resolve of each target that names a resolve target, the first `resolveCount` used, in target order.
+        std::array<D3D12_RENDER_PASS_ENDING_ACCESS_RESOLVE_SUBRESOURCE_PARAMETERS, D3D12_SIMULTANEOUS_RENDER_TARGET_COUNT> resolves = {};
+        /// The barrier of each resolve target, moving it to `LAYOUT_RESOLVE_DEST` before the pass; `EndRenderPass` reverses it
+        /// in place, so after the pass it holds the barrier back to `LAYOUT_RENDER_TARGET`.
+        std::array<D3D12_TEXTURE_BARRIER, D3D12_SIMULTANEOUS_RENDER_TARGET_COUNT> resolveBarriers = {};
+        D3D12_RENDER_PASS_DEPTH_STENCIL_DESC depth = {}; ///< The depth-stencil attachment, when `hasDepth`.
+        uint32_t targetCount = 0;                        ///< The render targets of the pass.
+        uint32_t resolveCount = 0;                       ///< The resolve targets of the pass.
+        bool hasDepth = false;                           ///< The pass has a depth-stencil attachment.
+    };
+
     /// The native objects and recording state of one command list, created when its frame slot's pool grows and kept while
     /// the pool hands the list out again. Everything recording touches is the list's own, so recording takes no lock.
     struct ListState
@@ -61,6 +88,8 @@ namespace rojoRHI::d3d12 {
         Binding binding;                       ///< The lazy root binding.
         BarrierScratch barriers;               ///< The scratch barrier batches are lowered into.
         ListTimestamps timestamps;             ///< The timestamps the list records.
+        DynamicState dynamic;                  ///< The dynamic state the native list holds.
+        PassStorage pass;                      ///< The native description of the list's last render pass.
     };
 
     /// The command lists of one frame slot: those taken since the slot was reused come first and the rest wait to be reused.

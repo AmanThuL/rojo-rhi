@@ -49,6 +49,8 @@ namespace rojoRHI {
         core::noteNativeCall(list.core);
         state.timestamps.reset();
         state.binding = {};
+        // Reset leaves the native list's dynamic state unknown, so the list's first pass writes every starting value.
+        state.dynamic = {};
         if (type != QueueType::Copy)
         {
             // Shaders index both heaps directly, so they are set once per recording, before any root signature.
@@ -95,18 +97,6 @@ namespace rojoRHI {
         // The page's payload is fixed while the page lives, so it is read with one acquire load and no lock.
         const auto* page = static_cast<const d3d12::BufferPayload*>(list.device->pool<Buffer>().native(place.page));
         return d3d12::encodeAddr(*page, place.offset);
-    }
-
-    //==================================================================================================================
-    void CommandList::beginRenderPass(const RenderPassDesc&)
-    {
-        d3d12::notImplemented("CommandList::beginRenderPass");
-    }
-
-    //==================================================================================================================
-    void CommandList::endRenderPass()
-    {
-        d3d12::notImplemented("CommandList::endRenderPass");
     }
 
     //==================================================================================================================
