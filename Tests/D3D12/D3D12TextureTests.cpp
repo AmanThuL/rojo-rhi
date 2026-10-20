@@ -5,10 +5,12 @@
 #include <rojoRHI/RHI.h>
 
 #include "Core/DeviceCore.h"
+#include "Core/Records.h"
 #include "D3D12Common.h"
 #include "D3D12Descriptors.h"
 #include "D3D12Device.h"
 #include "D3D12Textures.h"
+#include "D3D12Views.h"
 #include "Support/D3D12/D3D12Readback.h"
 
 #include <catch2/catch_test_macros.hpp>
@@ -302,6 +304,25 @@ TEST_CASE("a sampled depth texture is typeless and its views read depth and sten
     const D3D12_RESOURCE_DESC1 attachmentDesc = descOf(payloadOf(device, attachment).resource);
     CHECK(attachmentDesc.Format == DXGI_FORMAT_D32_FLOAT);
     CHECK((attachmentDesc.Flags & D3D12_RESOURCE_FLAG_DENY_SHADER_RESOURCE) != 0);
+    // The stencil view reads plane 1 and returns the stencil value in its first component.
+    core::TextureRecord record;
+    record.format = Format::D32FloatS8;
+    record.extent = { 8, 8, 1 };
+    record.usage = TextureUsage::Sampled | TextureUsage::DepthStencil;
+    const D3D12_SHADER_RESOURCE_VIEW_DESC stencilView = d3d12::shaderResourceDesc(record, { .aspect = TextureAspect::Stencil });
+    CHECK(stencilView.Format == DXGI_FORMAT_X32_TYPELESS_G8X24_UINT);
+    CHECK(stencilView.Texture2D.PlaneSlice == 1u);
+    CHECK(
+        stencilView.Shader4ComponentMapping == static_cast<UINT>(D3D12_ENCODE_SHADER_4_COMPONENT_MAPPING(
+                                                   D3D12_SHADER_COMPONENT_MAPPING_FROM_MEMORY_COMPONENT_1,
+                                                   D3D12_SHADER_COMPONENT_MAPPING_FORCE_VALUE_0,
+                                                   D3D12_SHADER_COMPONENT_MAPPING_FORCE_VALUE_0,
+                                                   D3D12_SHADER_COMPONENT_MAPPING_FORCE_VALUE_1
+                                               ))
+    );
+    const D3D12_SHADER_RESOURCE_VIEW_DESC depthView = d3d12::shaderResourceDesc(record, { .aspect = TextureAspect::Depth });
+    CHECK(depthView.Texture2D.PlaneSlice == 0u);
+    CHECK(depthView.Shader4ComponentMapping == static_cast<UINT>(D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING));
     CHECK(messages.count() == 0u);
     device.destroy(*depth);
     device.destroy(*stencil);
@@ -343,8 +364,111 @@ TEST_CASE("a render-target texture caches one RTV per mip and layer", "[d3d12]")
     CHECK(d3d12::targetView(volumePayload, 1, 1).ptr == d3d12::targetView(volumePayload, 0, 0).ptr + SIZE_T{ 5 } * increment);
 
     CHECK(messages.count() == 0u);
-    device.destroy(array);
     device.destroy(volume);
+
+    // A render-target texture's retirement releases its RTV heap too, one more native call than a sampled texture's.
+    const uint32_t retireFrames = DeviceImpl::of(device).core.framesInFlight() + 1;
+    const Texture plain = makeTexture(device, { .format = Format::RGBA8Unorm, .extent = { 16, 16, 1 }, .usage = TextureUsage::Sampled });
+    emptyFrames(device, retireFrames);
+    const uint64_t beforePlain = device.counters().nativeCreateCalls;
+    device.destroy(plain);
+    emptyFrames(device, retireFrames);
+    const uint64_t plainRelease = device.counters().nativeCreateCalls - beforePlain;
+    const uint64_t beforeTarget = device.counters().nativeCreateCalls;
+    device.destroy(array);
+    emptyFrames(device, retireFrames);
+    CHECK(device.counters().nativeCreateCalls - beforeTarget == plainRelease + 1u);
+    destroyDevice(device);
+}
+
+//======================================================================================================================
+TEST_CASE("a single-layer view of layer 0 takes the non-array dimension and a later layer the array one", "[d3d12]")
+{
+    core::TextureRecord array;
+    array.type = TextureType::Tex2DArray;
+    array.format = Format::RGBA8Unorm;
+    array.extent = { 8, 8, 1 };
+    array.layers = 4;
+    array.usage = TextureUsage::Sampled | TextureUsage::Storage;
+    const D3D12_SHADER_RESOURCE_VIEW_DESC first = d3d12::shaderResourceDesc(array, { .range = { .baseLayer = 0, .layerCount = 1 } });
+    CHECK(first.ViewDimension == D3D12_SRV_DIMENSION_TEXTURE2D);
+    const D3D12_SHADER_RESOURCE_VIEW_DESC third = d3d12::shaderResourceDesc(array, { .range = { .baseLayer = 2, .layerCount = 1 } });
+    CHECK(third.ViewDimension == D3D12_SRV_DIMENSION_TEXTURE2DARRAY);
+    CHECK(third.Texture2DArray.FirstArraySlice == 2u);
+    CHECK(third.Texture2DArray.ArraySize == 1u);
+    CHECK(
+        d3d12::unorderedAccessDesc(array, { .range = { .baseLayer = 0, .layerCount = 1 }, .usage = TextureUsage::Storage }).ViewDimension ==
+        D3D12_UAV_DIMENSION_TEXTURE2D
+    );
+    CHECK(
+        d3d12::unorderedAccessDesc(array, { .range = { .baseLayer = 2, .layerCount = 1 }, .usage = TextureUsage::Storage }).ViewDimension ==
+        D3D12_UAV_DIMENSION_TEXTURE2DARRAY
+    );
+
+    core::TextureRecord lines = array;
+    lines.type = TextureType::Tex1DArray;
+    lines.extent = { 8, 1, 1 };
+    CHECK(d3d12::shaderResourceDesc(lines, { .type = TextureType::Tex1D, .range = { .layerCount = 1 } }).ViewDimension == D3D12_SRV_DIMENSION_TEXTURE1D);
+    CHECK(
+        d3d12::shaderResourceDesc(lines, { .type = TextureType::Tex1D, .range = { .baseLayer = 1, .layerCount = 1 } }).ViewDimension ==
+        D3D12_SRV_DIMENSION_TEXTURE1DARRAY
+    );
+
+    core::TextureRecord multisampled = array;
+    multisampled.samples = 4;
+    multisampled.usage = TextureUsage::Sampled | TextureUsage::RenderTarget;
+    CHECK(d3d12::shaderResourceDesc(multisampled, { .range = { .layerCount = 1 } }).ViewDimension == D3D12_SRV_DIMENSION_TEXTURE2DMS);
+    CHECK(d3d12::shaderResourceDesc(multisampled, { .range = { .baseLayer = 1, .layerCount = 1 } }).ViewDimension == D3D12_SRV_DIMENSION_TEXTURE2DMSARRAY);
+
+    core::TextureRecord cubes = array;
+    cubes.type = TextureType::CubeArray;
+    cubes.layers = 12;
+    CHECK(d3d12::shaderResourceDesc(cubes, { .type = TextureType::Cube, .range = { .layerCount = 6 } }).ViewDimension == D3D12_SRV_DIMENSION_TEXTURECUBE);
+    const D3D12_SHADER_RESOURCE_VIEW_DESC second =
+        d3d12::shaderResourceDesc(cubes, { .type = TextureType::Cube, .range = { .baseLayer = 6, .layerCount = 6 } });
+    CHECK(second.ViewDimension == D3D12_SRV_DIMENSION_TEXTURECUBEARRAY);
+    CHECK(second.TextureCubeArray.First2DArrayFace == 6u);
+    CHECK(second.TextureCubeArray.NumCubes == 1u);
+
+    // The runtime accepts each form on real resources.
+    Device device = makeDevice();
+    const MessageCollection messages;
+    const Texture texture =
+        makeTexture(device, { .type = TextureType::Tex2DArray, .format = Format::RGBA8Unorm, .extent = { 8, 8, 1 }, .layers = 4, .usage = array.usage });
+    std::vector<ViewIndex> views;
+    for (const uint32_t layer : { 0u, 2u })
+    {
+        for (const TextureUsage usage : { TextureUsage::Sampled, TextureUsage::Storage })
+        {
+            Result<ViewIndex> view = device.createView(texture, { .range = { .baseLayer = layer, .layerCount = 1 }, .usage = usage });
+            REQUIRE(view.has_value());
+            views.push_back(*view);
+        }
+    }
+    std::vector<Texture> textures = { texture };
+    if ((device.formatCapabilities(Format::RGBA8Unorm).sampleCounts & 4u) != 0)
+    {
+        const Texture samples = makeTexture(
+            device,
+            { .type = TextureType::Tex2DArray, .format = Format::RGBA8Unorm, .extent = { 8, 8, 1 }, .layers = 2, .samples = 4, .usage = multisampled.usage }
+        );
+        textures.push_back(samples);
+        for (const uint32_t layer : { 0u, 1u })
+        {
+            Result<ViewIndex> view = device.createView(samples, { .range = { .baseLayer = layer, .layerCount = 1 } });
+            REQUIRE(view.has_value());
+            views.push_back(*view);
+        }
+    }
+    CHECK(messages.count() == 0u);
+    for (const ViewIndex view : views)
+    {
+        device.destroy(view);
+    }
+    for (const Texture made : textures)
+    {
+        device.destroy(made);
+    }
     destroyDevice(device);
 }
 

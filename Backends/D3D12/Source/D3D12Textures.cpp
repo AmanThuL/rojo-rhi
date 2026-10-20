@@ -324,6 +324,10 @@ namespace rojoRHI {
         //==============================================================================================================
         D3D12_CPU_DESCRIPTOR_HANDLE targetView(const TexturePayload& payload, uint32_t mip, uint32_t layer)
         {
+            ROJORHI_INTERNAL_ASSERT(
+                payload.targetCount > 0 && layer < payload.targetLayers * slicesOf(payload.targetDepth, mip),
+                "a target view of a layer or depth slice the mip does not have"
+            );
             uint32_t index = layer;
             for (uint32_t earlier = 0; earlier < mip; ++earlier)
             {
@@ -334,14 +338,19 @@ namespace rojoRHI {
         }
 
         //==============================================================================================================
-        void retireTexture([[maybe_unused]] void* context, core::TextureRecord& record)
+        void retireTexture(void* context, core::TextureRecord& record)
         {
             auto* payload = static_cast<TexturePayload*>(record.native);
             if (payload == nullptr)
             {
                 return;
             }
-            payload->targets.reset();
+            if (payload->targets)
+            {
+                // The target heap is an internal object, so its release counts as one native create or release call.
+                payload->targets.reset();
+                core::DeviceCounts::add(static_cast<DeviceImpl*>(context)->core.counts().nativeCreateCalls);
+            }
             payload->resource->Release();
             delete payload;
             record.native = nullptr;

@@ -48,161 +48,12 @@ namespace rojoRHI {
         }
 
         //==============================================================================================================
-        /// Returns true when the resource of `texture` has more than one array layer. A non-array view dimension names no
-        /// layer, so a single-layer view of such a resource takes the array dimension with one layer.
-        bool arrayed(const core::TextureRecord& texture)
+        /// Returns true when a single-layer view of `texture` at `extent` needs an array dimension. A non-array dimension names
+        /// no layer and views slice 0 of an array resource, so it serves a view of layer 0 of any texture; a later layer of a
+        /// multi-layer resource takes the array dimension with one layer.
+        bool needsArray(const core::TextureRecord& texture, const ViewExtent& extent)
         {
-            return texture.type != TextureType::Tex3D && texture.layers > 1;
-        }
-
-        //==============================================================================================================
-        /// Returns the shader-resource view of `texture` that `desc`, a `Sampled` view the core accepted, describes. Its
-        /// dimension follows the view's type; a stencil view reads plane 1 of a depth-stencil format.
-        D3D12_SHADER_RESOURCE_VIEW_DESC shaderResourceDesc(const core::TextureRecord& texture, const TextureViewDesc& desc)
-        {
-            const ViewExtent extent = extentOf(texture, desc.range);
-            const UINT plane = desc.aspect == TextureAspect::Stencil ? 1u : 0u;
-            D3D12_SHADER_RESOURCE_VIEW_DESC view = {};
-            view.Format = d3d12::viewFormat(texture.format, desc.format, desc.aspect, TextureUsage::Sampled);
-            view.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
-            switch (desc.type)
-            {
-            case TextureType::Tex1D:
-            case TextureType::Tex1DArray:
-                if (desc.type == TextureType::Tex1D && !arrayed(texture))
-                {
-                    view.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE1D;
-                    view.Texture1D.MostDetailedMip = extent.baseMip;
-                    view.Texture1D.MipLevels = extent.mips;
-                    view.Texture1D.ResourceMinLODClamp = 0.0f;
-                }
-                else
-                {
-                    view.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE1DARRAY;
-                    view.Texture1DArray.MostDetailedMip = extent.baseMip;
-                    view.Texture1DArray.MipLevels = extent.mips;
-                    view.Texture1DArray.FirstArraySlice = extent.baseLayer;
-                    view.Texture1DArray.ArraySize = extent.layers;
-                    view.Texture1DArray.ResourceMinLODClamp = 0.0f;
-                }
-                break;
-            case TextureType::Tex2D:
-            case TextureType::Tex2DArray:
-                if (texture.samples > 1)
-                {
-                    if (desc.type == TextureType::Tex2D && !arrayed(texture))
-                    {
-                        view.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2DMS;
-                    }
-                    else
-                    {
-                        view.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2DMSARRAY;
-                        view.Texture2DMSArray.FirstArraySlice = extent.baseLayer;
-                        view.Texture2DMSArray.ArraySize = extent.layers;
-                    }
-                }
-                else if (desc.type == TextureType::Tex2D && !arrayed(texture))
-                {
-                    view.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
-                    view.Texture2D.MostDetailedMip = extent.baseMip;
-                    view.Texture2D.MipLevels = extent.mips;
-                    view.Texture2D.PlaneSlice = plane;
-                    view.Texture2D.ResourceMinLODClamp = 0.0f;
-                }
-                else
-                {
-                    view.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2DARRAY;
-                    view.Texture2DArray.MostDetailedMip = extent.baseMip;
-                    view.Texture2DArray.MipLevels = extent.mips;
-                    view.Texture2DArray.FirstArraySlice = extent.baseLayer;
-                    view.Texture2DArray.ArraySize = extent.layers;
-                    view.Texture2DArray.PlaneSlice = plane;
-                    view.Texture2DArray.ResourceMinLODClamp = 0.0f;
-                }
-                break;
-            case TextureType::Tex3D:
-                view.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE3D;
-                view.Texture3D.MostDetailedMip = extent.baseMip;
-                view.Texture3D.MipLevels = extent.mips;
-                view.Texture3D.ResourceMinLODClamp = 0.0f;
-                break;
-            case TextureType::Cube:
-            case TextureType::CubeArray:
-                // A cube view names no first face, so a cube other than the first is a cube array of one cube.
-                if (desc.type == TextureType::Cube && extent.baseLayer == 0)
-                {
-                    view.ViewDimension = D3D12_SRV_DIMENSION_TEXTURECUBE;
-                    view.TextureCube.MostDetailedMip = extent.baseMip;
-                    view.TextureCube.MipLevels = extent.mips;
-                    view.TextureCube.ResourceMinLODClamp = 0.0f;
-                }
-                else
-                {
-                    view.ViewDimension = D3D12_SRV_DIMENSION_TEXTURECUBEARRAY;
-                    view.TextureCubeArray.MostDetailedMip = extent.baseMip;
-                    view.TextureCubeArray.MipLevels = extent.mips;
-                    view.TextureCubeArray.First2DArrayFace = extent.baseLayer;
-                    view.TextureCubeArray.NumCubes = extent.layers / kCubeFaces;
-                    view.TextureCubeArray.ResourceMinLODClamp = 0.0f;
-                }
-                break;
-            }
-            return view;
-        }
-
-        //==============================================================================================================
-        /// Returns the unordered-access view of `texture` that `desc`, a `Storage` view of one mip the core accepted,
-        /// describes. A UAV has no cube dimension, so a cube view is the 2D array of its faces; an sRGB format is written
-        /// through its linear partner.
-        D3D12_UNORDERED_ACCESS_VIEW_DESC unorderedAccessDesc(const core::TextureRecord& texture, const TextureViewDesc& desc)
-        {
-            const ViewExtent extent = extentOf(texture, desc.range);
-            D3D12_UNORDERED_ACCESS_VIEW_DESC view = {};
-            view.Format = d3d12::viewFormat(texture.format, desc.format, desc.aspect, TextureUsage::Storage);
-            switch (desc.type)
-            {
-            case TextureType::Tex1D:
-            case TextureType::Tex1DArray:
-                if (desc.type == TextureType::Tex1D && !arrayed(texture))
-                {
-                    view.ViewDimension = D3D12_UAV_DIMENSION_TEXTURE1D;
-                    view.Texture1D.MipSlice = extent.baseMip;
-                }
-                else
-                {
-                    view.ViewDimension = D3D12_UAV_DIMENSION_TEXTURE1DARRAY;
-                    view.Texture1DArray.MipSlice = extent.baseMip;
-                    view.Texture1DArray.FirstArraySlice = extent.baseLayer;
-                    view.Texture1DArray.ArraySize = extent.layers;
-                }
-                break;
-            case TextureType::Tex3D:
-                view.ViewDimension = D3D12_UAV_DIMENSION_TEXTURE3D;
-                view.Texture3D.MipSlice = extent.baseMip;
-                view.Texture3D.FirstWSlice = 0;
-                view.Texture3D.WSize = core::mipExtent(texture.extent, extent.baseMip).depth;
-                break;
-            case TextureType::Tex2D:
-            case TextureType::Tex2DArray:
-            case TextureType::Cube:
-            case TextureType::CubeArray:
-                if (desc.type == TextureType::Tex2D && !arrayed(texture))
-                {
-                    view.ViewDimension = D3D12_UAV_DIMENSION_TEXTURE2D;
-                    view.Texture2D.MipSlice = extent.baseMip;
-                    view.Texture2D.PlaneSlice = 0;
-                }
-                else
-                {
-                    view.ViewDimension = D3D12_UAV_DIMENSION_TEXTURE2DARRAY;
-                    view.Texture2DArray.MipSlice = extent.baseMip;
-                    view.Texture2DArray.FirstArraySlice = extent.baseLayer;
-                    view.Texture2DArray.ArraySize = extent.layers;
-                    view.Texture2DArray.PlaneSlice = 0;
-                }
-                break;
-            }
-            return view;
+            return texture.type != TextureType::Tex3D && texture.layers > 1 && extent.baseLayer != 0;
         }
 
         //==============================================================================================================
@@ -213,12 +64,12 @@ namespace rojoRHI {
             const D3D12_CPU_DESCRIPTOR_HANDLE handle = impl.descriptors.viewCpu(index);
             if (desc.usage == TextureUsage::Storage)
             {
-                const D3D12_UNORDERED_ACCESS_VIEW_DESC view = unorderedAccessDesc(texture, desc);
+                const D3D12_UNORDERED_ACCESS_VIEW_DESC view = d3d12::unorderedAccessDesc(texture, desc);
                 impl.device()->CreateUnorderedAccessView(resource, nullptr, &view, handle);
             }
             else
             {
-                const D3D12_SHADER_RESOURCE_VIEW_DESC view = shaderResourceDesc(texture, desc);
+                const D3D12_SHADER_RESOURCE_VIEW_DESC view = d3d12::shaderResourceDesc(texture, desc);
                 impl.device()->CreateShaderResourceView(resource, &view, handle);
             }
         }
@@ -297,6 +148,153 @@ namespace rojoRHI {
     } // namespace
 
     namespace d3d12 {
+        //==============================================================================================================
+        D3D12_SHADER_RESOURCE_VIEW_DESC shaderResourceDesc(const core::TextureRecord& texture, const TextureViewDesc& desc)
+        {
+            const ViewExtent extent = extentOf(texture, desc.range);
+            const UINT plane = desc.aspect == TextureAspect::Stencil ? 1u : 0u;
+            D3D12_SHADER_RESOURCE_VIEW_DESC view = {};
+            view.Format = viewFormat(texture.format, desc.format, desc.aspect, TextureUsage::Sampled);
+            // The stencil plane holds its value in the second component; it is read in the first, as on every backend.
+            view.Shader4ComponentMapping =
+                desc.aspect == TextureAspect::Stencil ? kStencilMapping : static_cast<UINT>(D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING);
+            switch (desc.type)
+            {
+            case TextureType::Tex1D:
+            case TextureType::Tex1DArray:
+                if (desc.type == TextureType::Tex1D && !needsArray(texture, extent))
+                {
+                    view.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE1D;
+                    view.Texture1D.MostDetailedMip = extent.baseMip;
+                    view.Texture1D.MipLevels = extent.mips;
+                    view.Texture1D.ResourceMinLODClamp = 0.0f;
+                }
+                else
+                {
+                    view.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE1DARRAY;
+                    view.Texture1DArray.MostDetailedMip = extent.baseMip;
+                    view.Texture1DArray.MipLevels = extent.mips;
+                    view.Texture1DArray.FirstArraySlice = extent.baseLayer;
+                    view.Texture1DArray.ArraySize = extent.layers;
+                    view.Texture1DArray.ResourceMinLODClamp = 0.0f;
+                }
+                break;
+            case TextureType::Tex2D:
+            case TextureType::Tex2DArray:
+                if (texture.samples > 1)
+                {
+                    if (desc.type == TextureType::Tex2D && !needsArray(texture, extent))
+                    {
+                        view.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2DMS;
+                    }
+                    else
+                    {
+                        view.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2DMSARRAY;
+                        view.Texture2DMSArray.FirstArraySlice = extent.baseLayer;
+                        view.Texture2DMSArray.ArraySize = extent.layers;
+                    }
+                }
+                else if (desc.type == TextureType::Tex2D && !needsArray(texture, extent))
+                {
+                    view.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
+                    view.Texture2D.MostDetailedMip = extent.baseMip;
+                    view.Texture2D.MipLevels = extent.mips;
+                    view.Texture2D.PlaneSlice = plane;
+                    view.Texture2D.ResourceMinLODClamp = 0.0f;
+                }
+                else
+                {
+                    view.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2DARRAY;
+                    view.Texture2DArray.MostDetailedMip = extent.baseMip;
+                    view.Texture2DArray.MipLevels = extent.mips;
+                    view.Texture2DArray.FirstArraySlice = extent.baseLayer;
+                    view.Texture2DArray.ArraySize = extent.layers;
+                    view.Texture2DArray.PlaneSlice = plane;
+                    view.Texture2DArray.ResourceMinLODClamp = 0.0f;
+                }
+                break;
+            case TextureType::Tex3D:
+                view.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE3D;
+                view.Texture3D.MostDetailedMip = extent.baseMip;
+                view.Texture3D.MipLevels = extent.mips;
+                view.Texture3D.ResourceMinLODClamp = 0.0f;
+                break;
+            case TextureType::Cube:
+            case TextureType::CubeArray:
+                // A cube view names no first face, so a cube other than the first is a cube array of one cube.
+                if (desc.type == TextureType::Cube && extent.baseLayer == 0)
+                {
+                    view.ViewDimension = D3D12_SRV_DIMENSION_TEXTURECUBE;
+                    view.TextureCube.MostDetailedMip = extent.baseMip;
+                    view.TextureCube.MipLevels = extent.mips;
+                    view.TextureCube.ResourceMinLODClamp = 0.0f;
+                }
+                else
+                {
+                    view.ViewDimension = D3D12_SRV_DIMENSION_TEXTURECUBEARRAY;
+                    view.TextureCubeArray.MostDetailedMip = extent.baseMip;
+                    view.TextureCubeArray.MipLevels = extent.mips;
+                    view.TextureCubeArray.First2DArrayFace = extent.baseLayer;
+                    view.TextureCubeArray.NumCubes = extent.layers / kCubeFaces;
+                    view.TextureCubeArray.ResourceMinLODClamp = 0.0f;
+                }
+                break;
+            }
+            return view;
+        }
+
+        //==============================================================================================================
+        D3D12_UNORDERED_ACCESS_VIEW_DESC unorderedAccessDesc(const core::TextureRecord& texture, const TextureViewDesc& desc)
+        {
+            const ViewExtent extent = extentOf(texture, desc.range);
+            D3D12_UNORDERED_ACCESS_VIEW_DESC view = {};
+            view.Format = viewFormat(texture.format, desc.format, desc.aspect, TextureUsage::Storage);
+            switch (desc.type)
+            {
+            case TextureType::Tex1D:
+            case TextureType::Tex1DArray:
+                if (desc.type == TextureType::Tex1D && !needsArray(texture, extent))
+                {
+                    view.ViewDimension = D3D12_UAV_DIMENSION_TEXTURE1D;
+                    view.Texture1D.MipSlice = extent.baseMip;
+                }
+                else
+                {
+                    view.ViewDimension = D3D12_UAV_DIMENSION_TEXTURE1DARRAY;
+                    view.Texture1DArray.MipSlice = extent.baseMip;
+                    view.Texture1DArray.FirstArraySlice = extent.baseLayer;
+                    view.Texture1DArray.ArraySize = extent.layers;
+                }
+                break;
+            case TextureType::Tex3D:
+                view.ViewDimension = D3D12_UAV_DIMENSION_TEXTURE3D;
+                view.Texture3D.MipSlice = extent.baseMip;
+                view.Texture3D.FirstWSlice = 0;
+                view.Texture3D.WSize = core::mipExtent(texture.extent, extent.baseMip).depth;
+                break;
+            case TextureType::Tex2D:
+            case TextureType::Tex2DArray:
+            case TextureType::Cube:
+            case TextureType::CubeArray:
+                if (desc.type == TextureType::Tex2D && !needsArray(texture, extent))
+                {
+                    view.ViewDimension = D3D12_UAV_DIMENSION_TEXTURE2D;
+                    view.Texture2D.MipSlice = extent.baseMip;
+                    view.Texture2D.PlaneSlice = 0;
+                }
+                else
+                {
+                    view.ViewDimension = D3D12_UAV_DIMENSION_TEXTURE2DARRAY;
+                    view.Texture2DArray.MipSlice = extent.baseMip;
+                    view.Texture2DArray.FirstArraySlice = extent.baseLayer;
+                    view.Texture2DArray.ArraySize = extent.layers;
+                    view.Texture2DArray.PlaneSlice = 0;
+                }
+                break;
+            }
+            return view;
+        }
+
         //==============================================================================================================
         void retireView([[maybe_unused]] void* context, void* native)
         {
