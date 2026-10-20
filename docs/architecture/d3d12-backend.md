@@ -91,7 +91,8 @@ after it.
 (`D3D12Capabilities.cpp`). The report is honest about what the backend does: `placementSparse` and
 `conservativeRaster` are false, `upscalers` is empty, `meshTasksIndirect` is true,
 `uploadInDeviceMemory` is `GPUUploadHeapSupported`, and `floorName` reads `FL 12_2, SM 6.<n>` with
-the highest shader model. `maxViews` is the view heap size, `maxSamplers` is 2,048,
+the highest shader model. `maxViews` is the view heap size less the
+reserved leading slots, `maxSamplers` is 2,048,
 `maxAddrOffset` is 2^29 − 1, and `maxBufferSize` is the adapter's dedicated video memory (shared
 system memory when that is 0), capped by one resource's virtual address bits.
 
@@ -127,7 +128,10 @@ allocator, unmaps, releases the resource and frees the payload.
 `DescriptorHeaps` (`D3D12Descriptors.cpp`) creates two shader-visible heaps, `rojorhi.views` and
 `rojorhi.samplers`, and one CPU-only heap of twins. The view heap holds
 `D3D12_FEATURE_D3D12_OPTIONS19`'s maximum capped at 2^21 descriptors, or 1,000,000 when the
-device does not report it; a smaller maximum is `Unsupported` naming `maxViews`. The sampler heap
+device does not report it. The core reserves the leading slots (0 and 1 and the transient ring,
+2 + `framesInFlight` × 1,024) so `maxViews` is the heap size less them; the floor refuses with
+`Unsupported` naming `maxViews` when that is below 1,000,000, so a device that does not report
+the maximum fails it. The sampler heap
 always holds 2,048. The core's view and sampler allocators hand out the slots, so a `ViewIndex` or
 `SamplerIndex` is the heap index a shader reads.
 
@@ -137,7 +141,7 @@ range of `framesInFlight` blocks of 1,024 slots, each with a twin in the CPU-onl
 slot claims its next transient with one atomic increment and no lock; claiming more than 1,024 in
 one frame slot logs "at most 1,024 storage-texture clears per frame slot" and aborts in every
 build, and the block is claimable again once the slot's frame has retired. The ring and the two
-held slots all count against `maxViews`.
+held slots are the reserved leading slots, so they do not count in `maxViews`.
 
 A texture with `RenderTarget` or `DepthStencil` usage gets, at creation, a CPU-only heap with one
 RTV or DSV per mip and layer (per mip and depth slice for a 3D texture), immutable for its life
@@ -210,8 +214,9 @@ resets its list pools and transient ring and releases the kept fences every queu
 When the build enables the layer, `MessageRouter` registers an `ID3D12InfoQueue1` callback that
 forwards each message with its severity (info and message as `Info`, warning as `Warning`, error
 and corruption as `Error`), on whatever thread the runtime raises it, and aborts after an error
-or corruption message. Messages are dropped only by the filter list in `D3D12Debug.cpp`, which is
-empty; each entry would carry a reason that holds on every use. On
+or corruption message. Messages are dropped only by the deny list `kFiltered` in `D3D12Debug.cpp`,
+which holds the runtime's per-object create and destroy notices at information severity; every
+error, warning and application message passes, and so does a live-object report. On
 `DXGI_ERROR_DEVICE_REMOVED`, `_RESET` or `_HUNG`, `d3d12::failure` reports the removal reason, the
 auto-breadcrumb nodes and the page-fault data as `Error` messages, then the entry fails as its
 contract says: a `Result` error, or a logged abort in an entry with no `Result`. Every native
