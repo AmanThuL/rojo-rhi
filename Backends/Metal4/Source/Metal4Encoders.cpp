@@ -44,14 +44,14 @@ namespace rojoRHI::metal4 {
             return m_compute;
         }
         {
-            // The factory autoreleases its encoder; the list keeps it past the pool, so it retains it.
+            // The factory autoreleases its encoder and the driver the label's text; the list keeps the encoder, so it retains it.
             const AutoreleasePool pool;
             m_compute = state.commandBuffer->computeCommandEncoder();
             m_compute->retain();
+            m_compute->setLabel(state.scopeLabels.empty() ? state.label : state.scopeLabels.back());
         }
         core::noteNativeCall(list);
         ++list.counts.encodersOpened;
-        m_compute->setLabel(state.scopeLabels.empty() ? state.label : state.scopeLabels.back());
         core::noteNativeCall(list);
         if (!kernelsOnly)
         {
@@ -94,15 +94,15 @@ namespace rojoRHI::metal4 {
         }
         ROJORHI_INTERNAL_ASSERT(m_kind == EncoderKind::None, "a render encoder opens while another encoder is open");
         {
-            // The factory autoreleases its encoder; the list keeps it past the pool, so it retains it.
+            // The factory autoreleases its encoder and the driver the label's text; the list keeps the encoder, so it retains it.
             const AutoreleasePool pool;
             m_render = state.commandBuffer->renderCommandEncoder(descriptor);
             m_render->retain();
+            m_render->setLabel(state.scopeLabels.empty() ? state.label : state.scopeLabels.back());
         }
         m_commandPools = state.commandPools;
         core::noteNativeCall(list);
         ++list.counts.encodersOpened;
-        m_render->setLabel(state.scopeLabels.empty() ? state.label : state.scopeLabels.back());
         core::noteNativeCall(list);
         // The pending barrier's part on the fragment stage, where the load and store actions run, waits at queue level before
         // them. The other render stages stay owed to the next encoder that runs them, so a clear of many subresources emits
@@ -123,15 +123,15 @@ namespace rojoRHI::metal4 {
         }
         ROJORHI_INTERNAL_ASSERT(m_kind == EncoderKind::None, "a render pass's encoder opens while another encoder is open");
         {
-            // The factory autoreleases its encoder; the list keeps it past the pool, so it retains it.
+            // The factory autoreleases its encoder and the driver the label's text; the list keeps the encoder, so it retains it.
             const AutoreleasePool pool;
             m_render = state.commandBuffer->renderCommandEncoder(descriptor);
             m_render->retain();
+            m_render->setLabel(state.scopeLabels.empty() ? state.label : state.scopeLabels.back());
         }
         m_commandPools = state.commandPools;
         core::noteNativeCall(list);
         ++list.counts.encodersOpened;
-        m_render->setLabel(state.scopeLabels.empty() ? state.label : state.scopeLabels.back());
         core::noteNativeCall(list);
         // Every shader of a draw reads the reserved bindings through the list's table (ADR 0018).
         m_render->setArgumentTable(state.table, MTL::RenderStageVertex | MTL::RenderStageFragment | MTL::RenderStageObject | MTL::RenderStageMesh);

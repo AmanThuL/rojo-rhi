@@ -142,7 +142,10 @@ namespace rojoRHI {
         state.label = NS::String::alloc()->init(list->core.label.c_str(), NS::UTF8StringEncoding);
         state.commandBuffer->beginCommandBuffer(state.allocator);
         core::noteNativeCall(list->core);
-        state.commandBuffer->setLabel(state.label);
+        {
+            const metal4::AutoreleasePool pool;
+            state.commandBuffer->setLabel(state.label);
+        }
         core::noteNativeCall(list->core);
         return CommandListImpl::wrap(list);
     }

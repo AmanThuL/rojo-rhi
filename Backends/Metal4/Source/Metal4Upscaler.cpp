@@ -289,14 +289,18 @@ namespace rojoRHI {
         impl.encoders.close(list);
         metal4::ListState& native = impl.state;
         // The core recorded the upscale's scope with its label, or the default. The string is made with alloc and init, so it
-        // is not autoreleased and no pool is opened; it labels the carrier while it is the innermost label.
+        // is not autoreleased; the group push opens a pool for the driver's reading of it, and it labels the carrier while it is
+        // the innermost label.
         native.scratch.assign(list.scopeLog.back().label);
         NS::String* label = NS::String::alloc()->init(native.scratch.c_str(), NS::UTF8StringEncoding);
         if (label == nullptr)
         {
             label = NS::String::alloc()->init("rojorhi.upscale.unnamed", NS::UTF8StringEncoding);
         }
-        native.commandBuffer->pushDebugGroup(label);
+        {
+            const metal4::AutoreleasePool pool;
+            native.commandBuffer->pushDebugGroup(label);
+        }
         core::noteNativeCall(list);
         native.scopeLabels.push_back(label);
         // The begin timestamp precedes the carrier, and the end one follows MetalFX's encoders, so the upscale's duration
