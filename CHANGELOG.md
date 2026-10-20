@@ -265,3 +265,7 @@
   caller holding a `General` texture records one barrier to `CopyDst` first. Chapter 09's
   table of accesses, its `General` layout and its `Copy` stage row say so; the Null and Metal 4
   backends are unchanged.
+- The HLSL lowering of `rojoRHI::load` and `rojoRHI::store` emits one raw access for a 2- or
+  4-component vector, alone or as a struct member at a multiple of its size, and `store` marks its
+  heap index non-uniform itself, because DXC drops the qualifier through the `+ 1`
+  ([ADR 0023](docs/decisions/0023-d3d12-store-marks-its-index.md)).
