@@ -26,6 +26,33 @@ local agility_pin    = "1.619.6"
 local agility_sha256 = "08f0489281401aa430fc37322d6c3fc98a8025175aacd714c10d562f4963f1e9"
 local warp_pin       = "1.0.21"
 local warp_sha256    = "ea44b77eb30eec14427193e20f40cdb2e4c31ed11ab39cb880538fdf4bac2681"
+-- The FidelityFX SDK's upscaler runtime a D3D12 executable loads from beside itself, and the API headers that declare
+-- it: raw files of the tag (commit 60f4ea81909200d8542eca14dccb2628b763a9a3), each checked by the SHA-256 of the file
+-- downloaded. The headers keep their layout under Kits/FidelityFX, which ffx_upscale.h's relative includes need; the
+-- DLLs are the AMD-signed ones of signedbin/, under the binary licence in license.md.
+local fidelityfx_pin = "v2.3.0"
+local fidelityfx_files = {
+    {from = "Kits/FidelityFX/api/include/ffx_api.h", to = "include/api/include/ffx_api.h",
+     sha256 = "e1a9d1b559eaf75f4cb401f1c43a66e2f3dc9621abfeb58b9c6fac56443177fd"},
+    {from = "Kits/FidelityFX/api/include/ffx_api.hpp", to = "include/api/include/ffx_api.hpp",
+     sha256 = "e1fab07fa9ab489db74813e6b754fc91dad6ded68870ab558002e92b6a32566a"},
+    {from = "Kits/FidelityFX/api/include/ffx_api_loader.h", to = "include/api/include/ffx_api_loader.h",
+     sha256 = "18d1901dbbc881e8131b91c65ad44bb3b4a1de6c31435d5b75236f16727ba80e"},
+    {from = "Kits/FidelityFX/api/include/ffx_api_types.h", to = "include/api/include/ffx_api_types.h",
+     sha256 = "cc0adc0ffc804dd7cd03c39c15581b575e416383177ffe95060201d52cc0fc49"},
+    {from = "Kits/FidelityFX/api/include/dx12/ffx_api_dx12.h", to = "include/api/include/dx12/ffx_api_dx12.h",
+     sha256 = "c9afbc3c4c673723e9e5369a666f0ff54560543b5a93537f8ff453bf1c3bf530"},
+    {from = "Kits/FidelityFX/api/include/dx12/ffx_api_dx12.hpp", to = "include/api/include/dx12/ffx_api_dx12.hpp",
+     sha256 = "31972deed9c5b94243eb72c97e24c1b4e1a0171ae0d0109f7fe842b6efdeddc7"},
+    {from = "Kits/FidelityFX/upscalers/include/ffx_upscale.h", to = "include/upscalers/include/ffx_upscale.h",
+     sha256 = "65be36d5653eb71c10379e0204f7bb7cd6a8aeec96e6f8cffc5f59ffeb1f89bf"},
+    {from = "Kits/FidelityFX/signedbin/amd_fidelityfx_loader_dx12.dll", to = "bin/amd_fidelityfx_loader_dx12.dll",
+     sha256 = "e2d85aa05a9bd9ed8b38935fdf5199372cca6f74c12015143bb6f945ee1608aa"},
+    {from = "Kits/FidelityFX/signedbin/amd_fidelityfx_upscaler_dx12.dll", to = "bin/amd_fidelityfx_upscaler_dx12.dll",
+     sha256 = "d0dcccc74a43c44ba435b7a369b456e0970d8a4464e4bd683119b374f2c9fb46"},
+    {from = "Kits/FidelityFX/docs/license.md", to = "license.md",
+     sha256 = "6757f2fec461238da6f84f83536ec195e8c036b1773a06f6f34301b9ed8c0963"},
+}
 
 task("setup")
     -- An explicit (even empty) options table is required for -P to work with this task: a
@@ -79,6 +106,44 @@ task("setup")
             io.writefile(path.join(thirdparty, name, ".archive-sha256"), sha256 .. "\n")
         end
 
+        -- Fetches a pin made of single files instead of one archive: each file is downloaded and checked by its own
+        -- SHA-256, and ThirdParty/<name> is replaced only once every file matched. The marker lists each file's hash and
+        -- kept path, so a changed list is fetched again, and it counts only while every file it lists still exists.
+        -- Returns the number of files fetched, 0 when ThirdParty/<name> already holds them.
+        local function fetch_files(name, base_url, files)
+            local dir = path.join(thirdparty, name)
+            local marker = path.join(dir, ".archive-sha256")
+            local lines = {}
+            for _, file in ipairs(files) do
+                table.insert(lines, file.sha256 .. "  " .. file.to)
+            end
+            local expected = table.concat(lines, "\n")
+            local kept = os.isfile(marker) and (io.readfile(marker):gsub("\r", "")):trim() == expected
+            for _, file in ipairs(files) do
+                kept = kept and os.isfile(path.join(dir, file.to))
+            end
+            if kept then
+                return 0
+            end
+            local fetch = path.join(thirdparty, ".fetch-" .. name)
+            os.tryrm(fetch)
+            for _, file in ipairs(files) do
+                local url = base_url .. "/" .. file.from
+                local download = path.join(fetch, file.to)
+                os.mkdir(path.directory(download))
+                http.download(url, download)
+                local actual = hash.sha256(download)
+                if actual ~= file.sha256 then
+                    os.tryrm(fetch)
+                    raise("%s checksum mismatch; expected %s, got %s", url, file.sha256, actual)
+                end
+            end
+            os.tryrm(dir)
+            os.mv(fetch, dir)
+            io.writefile(marker, expected .. "\n")
+            return #files
+        end
+
         if is_host("windows") then
             -- Slang and the D3D12 runtime are fetched on Windows: the shader checks need Slang and
             -- no Metal toolchain, and the D3D12 executables load the Agility SDK and WARP.
@@ -105,6 +170,12 @@ task("setup")
                 os.cp(path.join(warp_extract, "build", "native", "bin", "x64", "d3d10warp.dll"), path.join(warp, "bin"))
                 os.cp(path.join(warp_extract, "LICENSE.TXT"), warp)
                 finish_pin("warp", warp_sha256, warp_extract)
+            end
+            local fidelityfx_url = format("https://raw.githubusercontent.com/GPUOpen-LibrariesAndSDKs/FidelityFX-SDK/%s",
+                                          fidelityfx_pin)
+            local fidelityfx_fetched = fetch_files("fidelityfx", fidelityfx_url, fidelityfx_files)
+            if fidelityfx_fetched > 0 then
+                print("fidelityfx %s: %d files fetched, each matched its SHA-256", fidelityfx_pin, fidelityfx_fetched)
             end
 
             local slang = path.join(thirdparty, "slang")
@@ -157,7 +228,8 @@ task("setup")
                     os.cp(from, to)
                 end
             end
-            print("setup done: slang %s, agility %s, warp %s, dxc %s", slang_pin, agility_pin, warp_pin, dxc_pin)
+            print("setup done: slang %s, agility %s, warp %s, dxc %s, fidelityfx %s", slang_pin, agility_pin, warp_pin, dxc_pin,
+                  fidelityfx_pin)
             return
         end
         if not is_host("macosx") then
