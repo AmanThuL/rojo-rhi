@@ -40,9 +40,10 @@ namespace rojoRHI::metal4 {
             {
                 native |= MTL::TextureUsageRenderTarget;
             }
-            // An sRGB family member is viewed as its partner, and the stencil plane of a depth-stencil format through an
-            // X32_Stencil8 view; both reinterpret the pixel format.
-            if (core::srgbCounterpart(format) != Format::Undefined || core::hasStencilPlane(format))
+            // Metal accepts a view of the sRGB or linear partner without the flag, so only the stencil plane of a
+            // depth-stencil format, read through an X32_Stencil8 view of a Sampled texture, needs it. The flag costs
+            // bandwidth where it is set, so no other texture carries it.
+            if (core::hasStencilPlane(format) && hasUsage(usage, TextureUsage::Sampled))
             {
                 native |= MTL::TextureUsagePixelFormatView;
             }

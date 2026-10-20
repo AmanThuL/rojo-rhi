@@ -64,9 +64,12 @@ format has a native equivalent on all three APIs; none is emulated.
 **Families.** Two formats share a family when they hold the same bits and differ only in the
 transfer function applied on access. A view may reinterpret a texture only within its family; the
 rule and its identifier belong to `TextureViewDesc` in
-[textures and heaps](04-textures-and-heaps.md). Metal 4 needs `MTL::TextureUsagePixelFormatView` on
-such a texture, Vulkan needs `VK_IMAGE_CREATE_MUTABLE_FORMAT_BIT`, and the planned D3D12 backend
-creates the resource with a castable-format list or the family's typeless format
+[textures and heaps](04-textures-and-heaps.md). Metal 4 views an sRGB texture as its linear partner
+and the reverse without a creation flag, which saved 36 microseconds of one composed frame (median
+of eight paired processes, M3 Max); the backend sets `MTL::TextureUsagePixelFormatView` only for the
+stencil plane view of a `Sampled` `D32FloatS8` texture, the one reinterpretation Metal's validation
+layer rejects without it. Vulkan needs `VK_IMAGE_CREATE_MUTABLE_FORMAT_BIT`, and the planned D3D12
+backend creates the resource with a castable-format list or the family's typeless format
 (`R8G8B8A8_TYPELESS`, `BC1_TYPELESS`). The backend chooses this at creation; the caller states
 nothing extra.
 
@@ -157,7 +160,7 @@ Multisampling, resolve and sparse residency are reported per device and are not 
 | | Metal 4 | D3D12 | Vulkan |
 |---|---|---|---|
 | Type | `MTL::PixelFormat` | `DXGI_FORMAT` | `VkFormat` |
-| Family reinterpretation | `MTL::TextureUsagePixelFormatView` | castable-format list or typeless resource format | `VK_IMAGE_CREATE_MUTABLE_FORMAT_BIT` |
+| Family reinterpretation | none for the sRGB and linear partners; `MTL::TextureUsagePixelFormatView` for the stencil plane view | castable-format list or typeless resource format | `VK_IMAGE_CREATE_MUTABLE_FORMAT_BIT` |
 | Sampled depth | depth texture read directly; `X32_Stencil8` view for stencil | typeless resource with per-aspect views | depth image read directly; aspect view for stencil |
 | Block-size rule | not required by Metal | required for BC level 0 | not required by Vulkan |
 | Cost | native | native: typeless resources chosen at creation | native |

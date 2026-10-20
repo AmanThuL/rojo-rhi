@@ -13,6 +13,7 @@
 
 #include <array>
 #include <bit>
+#include <cmath>
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
@@ -287,6 +288,63 @@ TEST_CASE("AbiTextures texture2DMain samples a 2D texture", "[conformance]")
     test::requireGpu();
     test::GpuKit kit;
     CHECK(sampledFetch(kit, "texture2DMain", TextureType::Tex2D, 1, TextureType::Tex2D, 1) == centerValue(0, true, false));
+}
+
+//======================================================================================================================
+TEST_CASE("AbiTextures texture2DMain samples a linear texture through its sRGB view and the reverse", "[conformance]")
+{
+    test::requireGpu();
+    test::GpuKit kit;
+    // Every texel holds the code 128 in its color channels: 128/255 read as linear, and its sRGB decode (IEC 61966-2-1)
+    // read through the partner view.
+    const std::vector<std::byte> texels(kEdge * kEdge * 4, std::byte{ 128 });
+    const float linear = 128.0f / 255.0f;
+    const float decoded = std::pow((linear + 0.055f) / 1.055f, 2.4f);
+    const auto sampledAs = [&](Format format, Format viewFormat) {
+        const Texture texture = *kit.device.createTexture(
+            TextureDesc{ .format = format, .extent = { kEdge, kEdge, 1 }, .usage = TextureUsage::Sampled, .label = "test.family" },
+            std::array{ TextureData{ texels, kEdge * 4, 0 } }
+        );
+        const ViewIndex view = *kit.device.createView(texture, TextureViewDesc{ .format = viewFormat });
+        return fetch(kit, "texture2DMain", FetchRoot{ .view = static_cast<uint32_t>(view), .sampler = linearClamp(kit.device) });
+    };
+    const Float4 toLinear = sampledAs(Format::RGBA8Unorm_sRGB, Format::RGBA8Unorm);
+    const Float4 toSrgb = sampledAs(Format::RGBA8Unorm, Format::RGBA8Unorm_sRGB);
+    for (size_t channel = 0; channel < 3; ++channel)
+    {
+        CHECK(std::abs(toLinear[channel] - linear) < 1e-6f);
+        CHECK(std::abs(toSrgb[channel] - decoded) < 1e-4f);
+    }
+}
+
+//======================================================================================================================
+TEST_CASE("AbiTextures texture2DMain samples a BC1 texture through its sRGB view and the reverse", "[conformance]")
+{
+    test::requireGpu();
+    test::GpuKit kit;
+    // One block whose four-color palette index is 0 everywhere: every texel is color0 = RGB565 (r 17, g 34, b 9).
+    const std::vector<std::byte> block{ std::byte{ 0x49 }, std::byte{ 0x8C }, std::byte{ 0 }, std::byte{ 0 },
+                                        std::byte{ 0 },    std::byte{ 0 },    std::byte{ 0 }, std::byte{ 0 } };
+    const std::array<float, 3> linear{ static_cast<float>((17 << 3) | (17 >> 2)) / 255.0f,
+                                       static_cast<float>((34 << 2) | (34 >> 4)) / 255.0f,
+                                       static_cast<float>((9 << 3) | (9 >> 2)) / 255.0f };
+    const auto sampledAs = [&](Format format, Format viewFormat) {
+        const Texture texture = *kit.device.createTexture(
+            TextureDesc{ .format = format, .extent = { kEdge, kEdge, 1 }, .usage = TextureUsage::Sampled, .label = "test.bc1" },
+            std::array{ TextureData{ block, 8, 0 } }
+        );
+        const ViewIndex view = *kit.device.createView(texture, TextureViewDesc{ .format = viewFormat });
+        return fetch(kit, "texture2DMain", FetchRoot{ .view = static_cast<uint32_t>(view), .sampler = linearClamp(kit.device) });
+    };
+    // The same bits through each view: the sRGB texture read as linear returns the code, the linear texture read as sRGB
+    // returns its decode (IEC 61966-2-1).
+    const Float4 toLinear = sampledAs(Format::BC1Unorm_sRGB, Format::BC1Unorm);
+    const Float4 toSrgb = sampledAs(Format::BC1Unorm, Format::BC1Unorm_sRGB);
+    for (size_t channel = 0; channel < 3; ++channel)
+    {
+        CHECK(std::abs(toLinear[channel] - linear[channel]) < 2e-3f);
+        CHECK(std::abs(toSrgb[channel] - std::pow((linear[channel] + 0.055f) / 1.055f, 2.4f)) < 2e-3f);
+    }
 }
 
 //======================================================================================================================
