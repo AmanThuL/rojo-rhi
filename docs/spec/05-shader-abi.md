@@ -164,6 +164,12 @@ task mesh compute`; a name that is not `[A-Za-z_][A-Za-z0-9_]*` or repeats; a nu
 canonical unsigned decimal; a size of 0 for compute, task or mesh, or nonzero for vertex or
 fragment; a byte count other than the bytes that remain (the payload has no trailing newline).
 
+On D3D12 the rule writes `<name>.d3d12lib` in the same form: the magic
+`rojorhi.d3d12.shaderlibrary`, a seventh field on each entry line holding that entry's DXIL byte
+count, and `dxil <total>` in place of the `metallib` line, then each entry's signed DXIL container
+in entry order. A reader also checks that the counts sum to `<total>`, that exactly `<total>` bytes
+remain and that each entry's slice starts with `DXBC`; the writer refuses an unsigned container.
+
 A vertex entry point that returns non-void and reaches the root or a table draws the Metal
 compiler's warning "writable resources in non-void vertex function". The pinned Slang lowers every
 reserved binding to a writable `device` pointer and has no `const` form, the compiler offers no
@@ -289,6 +295,6 @@ the active backend, instead of running a stale shader. The value is independent 
 
 | | Metal 4 | D3D12 | Vulkan |
 |---|---|---|---|
-| Stamp | the `abi` line of the RojoRHI shader library the rule writes around the metallib | carried in the DXIL container by the shader rule; mechanism unverified | none: SPIR-V is a compile-time check |
+| Stamp | the `abi` line of the RojoRHI shader library the rule writes around the metallib | the `abi` line of the RojoRHI shader library the rule writes around each entry's DXIL | none: SPIR-V is a compile-time check |
 | Check | one integer compare in `loadShaderLibrary` | one integer compare in `loadShaderLibrary` | the shader rule's SPIR-V compile |
 | Cost | native | native | native |
