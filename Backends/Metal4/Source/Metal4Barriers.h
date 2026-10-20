@@ -11,6 +11,8 @@
 
 #include <Metal/Metal.hpp>
 
+#include <cstring>
+
 namespace rojoRHI::metal4 {
     /// The stages of a compute encoder, which records dispatches, copies and fills.
     inline constexpr MTL::Stages kComputeStages = MTL::StageDispatch | MTL::StageBlit;
@@ -21,6 +23,33 @@ namespace rojoRHI::metal4 {
     /// Returns the Metal stages `stages` lowers to: the union of chapter 09's row for each bit, with `Copy` as blit, dispatch
     /// and fragment work and `All` as every Metal stage.
     MTL::Stages metalStages(Stage stages);
+
+    /// The lowering of a barrier batch's records: the Metal stages of their sides, their visibility and whether a destination
+    /// names `Stage::IndirectArgs`.
+    struct BatchLowering
+    {
+        MTL::Stages source = 0;                 ///< The union of the source stages.
+        MTL::Stages destination = 0;            ///< The union of the destination stages.
+        MTL4::VisibilityOptions visibility = 0; ///< `Device` when any access is named, `ResourceAlias` for an alias.
+        bool args = false;                      ///< A destination names `Stage::IndirectArgs`.
+    };
+
+    /// The last batch of one global barrier a list lowered, with its lowering without the alias visibility, which depends on
+    /// the device's memory rather than on the record; the next such batch reuses it when it names the same record, as a
+    /// list's batches mostly do (a dispatch-to-dispatch barrier, for one). The initial record, with no stage and no access,
+    /// lowers to nothing, which the initial lowering holds.
+    struct LastGlobal
+    {
+        GlobalBarrier record;   ///< The record last lowered.
+        BatchLowering lowering; ///< Its lowering.
+
+        /// Returns true when `global` is the record last lowered.
+        bool holds(const GlobalBarrier& global) const
+        {
+            // The record is four 32-bit fields with no padding, so its bytes compare as its fields do.
+            return std::memcmp(&global, &record, sizeof(GlobalBarrier)) == 0;
+        }
+    };
 
     /// What a list still owes of its barriers, and what the open encoder's opening barrier covered. A pending barrier waits at
     /// queue level for its source stages before the destination stages it still names; each encoder that opens emits the part

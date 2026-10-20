@@ -68,13 +68,19 @@ namespace rojoRHI::core {
             std::unordered_map<uint64_t, Placed> live; ///< The live resources by handle bits.
         };
 
+        /// One aliased resource in `m_counts`.
+        static constexpr uint64_t kAliasedOne = 1;
+        /// One Sparse resource in `m_counts`.
+        static constexpr uint64_t kSparseOne = uint64_t{ 1 } << 32;
+
         void place(uint64_t bits, uint32_t slot, Heap heap, uint64_t offset, uint64_t size);
         void markAliased(Placed& placed);
 
         std::mutex m_mutex;
         std::unordered_map<uint64_t, HeapState> m_heaps; ///< By heap handle bits.
-        std::atomic<uint32_t> m_aliased = 0;
-        std::atomic<uint32_t> m_sparse = 0;
+        /// The live aliased resources in the low 32 bits and the live Sparse resources in the high 32 bits, in one word so
+        /// `anyAliasing` reads one relaxed load.
+        std::atomic<uint64_t> m_counts = 0;
         NativeTable m_textureFlags; ///< Non-null at the slot of each live placed texture that aliases.
     };
 } // namespace rojoRHI::core

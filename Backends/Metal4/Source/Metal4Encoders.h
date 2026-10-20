@@ -43,13 +43,54 @@ namespace rojoRHI::metal4 {
         /// lingering render encoder ends first.
         MTL4::ComputeCommandEncoder* compute(core::CommandListCore& list, ListState& state, MTL::Stages command, bool kernelsOnly = false)
         {
-            // A command on an open compute encoder that holds work, with no barrier held back for its stage and no carry wait
-            // owed before it, needs nothing first: one test and no call.
-            if (m_compute != nullptr && m_holdsWork && (m_barriers.deferredDestination & command) == 0 && !owesCarryWait(command))
+            // A command on an open compute encoder that holds work, with no carry wait owed before it, needs at most the
+            // encoder-level barrier held back for its stage first: no other test and no call but the barrier's.
+            if (m_compute != nullptr && m_holdsWork && !owesCarryWait(command))
             {
+                if ((m_barriers.deferredDestination & command) != 0)
+                {
+                    emitDeferred(list, m_barriers, m_compute, kComputeStages, command);
+                }
                 return m_compute;
             }
             return prepareCompute(list, state, command, kernelsOnly);
+        }
+
+        /// Holds back a barrier from `source` to `destination` with `visibility`, already intersected with the queue's stages,
+        /// in the open encoder when it holds work, does not linger, every source lies among those its opening barrier waited
+        /// for and the destination stages it has among those that barrier held back: the part on its stages as an
+        /// encoder-level barrier held back until its next command in one of them, and the stages it lacks in the pending
+        /// barrier. Returns false, changing nothing, otherwise.
+        bool holdInOpen(MTL::Stages source, MTL::Stages destination, MTL4::VisibilityOptions visibility)
+        {
+            if (m_lingering || !m_holdsWork)
+            {
+                return false;
+            }
+            const MTL::Stages open = stages();
+            const MTL::Stages covered = destination & open;
+            if ((source & ~m_barriers.openSource) != 0 || (covered & ~m_barriers.openDestination) != 0)
+            {
+                return false;
+            }
+            // Every source since the opening barrier lies in the encoder, and that barrier already holds the encoder's
+            // destination stages for earlier work: the barrier stays in the encoder, emitted before its next command in a
+            // destination stage, or queue-level if the encoder closes first.
+            if (covered != 0)
+            {
+                m_barriers.defer(source, covered, visibility);
+            }
+            if ((destination & ~open) != 0)
+            {
+                m_barriers.merge(source, destination & ~open, visibility);
+            }
+            return true;
+        }
+
+        /// Returns the last batch of one global barrier the list lowered, which the next such batch reuses.
+        LastGlobal& lastGlobal()
+        {
+            return m_lastGlobal;
         }
 
         /// Opens a render encoder from `descriptor` when no encoder is open: the factory runs inside an autorelease pool and the
@@ -113,6 +154,19 @@ namespace rojoRHI::metal4 {
         {
             m_carryFence = fence;
             m_kernelsRan = kernelsRan;
+        }
+
+        /// Sets the stages the encoders of the list's queue run, at the list's acquisition: compute and render stages on a
+        /// graphics list, `kComputeStages` on a compute list and `MTL::StageBlit` on a copy list, whose commands are all blits.
+        void setQueueStages(MTL::Stages stages)
+        {
+            m_queueStages = stages;
+        }
+
+        /// Returns the stages the encoders of the list's queue run.
+        MTL::Stages queueStages() const
+        {
+            return m_queueStages;
         }
 
         /// Returns the carry fence the list updates and waits on, or null when it uses none.
@@ -247,7 +301,9 @@ namespace rojoRHI::metal4 {
         bool m_syncsAtEnd = false;                        ///< The open encoder carried a barrier to later lists at `end`.
         MTL::Fence* m_carryFence = nullptr;               ///< The carry fence the list uses; null but on a fenced graphics list.
         std::atomic<bool>* m_kernelsRan = nullptr;        ///< The graphics queue's flag a kernels-only encoder sets; null on other lists.
+        MTL::Stages m_queueStages = 0;                    ///< The stages the encoders of the list's queue run.
         BarrierState m_barriers;                          ///< The pending barrier and the open encoder's covered stages.
+        LastGlobal m_lastGlobal;                          ///< The last batch of one global barrier lowered; kept across recordings.
         /// The compute pipeline last set on the open compute encoder, a backend kernel's or the caller's, so neither is set
         /// again while the encoder holds it, which the validation layer reports as redundant. Reset when an encoder opens or
         /// closes. Every entry that sets a compute pipeline on the encoder records it with `setKernelPipeline`.
