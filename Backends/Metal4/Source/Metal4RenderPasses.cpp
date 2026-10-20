@@ -165,6 +165,7 @@ namespace rojoRHI {
                 // A split popped the groups of the scopes open inside the pass; they enclose this encoder's work too.
                 for (size_t i = state.scopeLabels.size() - draw.passGroups; i < state.scopeLabels.size(); ++i)
                 {
+                    const metal4::AutoreleasePool pool;
                     encoder->pushDebugGroup(state.scopeLabels[i]);
                     core::noteNativeCall(list.core);
                 }
@@ -293,7 +294,10 @@ namespace rojoRHI {
         // the core gave it, names the encoders inside the pass.
         metal4::ListState& state = list.state;
         NS::String* string = state.makeGroupLabel(list.core.scopeLog.back().label, "rojorhi.pass.unnamed");
-        state.commandBuffer->pushDebugGroup(string);
+        {
+            const metal4::AutoreleasePool pool;
+            state.commandBuffer->pushDebugGroup(string);
+        }
         core::noteNativeCall(list.core);
         state.scopeLabels.push_back(string);
         // The pair is claimed now and written on the pass's encoders: the begin timestamp at the start of its first encoder,

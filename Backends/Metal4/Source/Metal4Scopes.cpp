@@ -9,6 +9,7 @@
 
 #include "Core/CommandLists.h"
 #include "Core/RenderPasses.h"
+#include "Metal4Common.h"
 #include "Metal4DrawState.h"
 #include "Metal4Timestamps.h"
 
@@ -31,7 +32,10 @@ namespace rojoRHI {
             // enclosing label. A split ends the encoder and pushes the group again on the resumed one, but writes no timestamp.
             MTL4::RenderCommandEncoder* encoder = metal4::ensureRender(list);
             NS::String* string = state.makeGroupLabel(list.core.scopeLog.back().label, "rojorhi.scope.unnamed");
-            encoder->pushDebugGroup(string);
+            {
+                const metal4::AutoreleasePool pool;
+                encoder->pushDebugGroup(string);
+            }
             core::noteNativeCall(list.core);
             state.scopeLabels.push_back(string);
             ++list.draw.passGroups;
@@ -42,7 +46,10 @@ namespace rojoRHI {
         list.encoders.close(list.core);
         // The string stays on the label stack for the encoders the scope encloses.
         NS::String* string = state.makeGroupLabel(list.core.scopeLog.back().label, "rojorhi.scope.unnamed");
-        state.commandBuffer->pushDebugGroup(string);
+        {
+            const metal4::AutoreleasePool pool;
+            state.commandBuffer->pushDebugGroup(string);
+        }
         core::noteNativeCall(list.core);
         state.scopeLabels.push_back(string);
         // The pair is claimed with one atomic add on the frame slot's cursor; the record keeps it for the frame wait's resolve.
