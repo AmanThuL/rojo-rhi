@@ -4,7 +4,8 @@
 
 This page describes how the Metal 4 backend records a command list into native command buffers: the
 objects a list owns, the one open encoder, copies, fills, clears, barriers, scopes, upscalers and
-their upscales, the counts and the commit-timing seam. [The Metal 4 backend](metal4-backend.md)
+their upscales, the counts and the commit-timing seam
+([benchmarks](benchmarks.md#the-commit-timing-seam)). [The Metal 4 backend](metal4-backend.md)
 describes the device around it, and [drawing](metal4-drawing.md) the render passes, pipelines,
 dispatches and draws a list also records. Every scope, render pass and upscale is timed. Chapters
 07, 09 and 10 of the API reference stay the authority on semantics and on each entry's Metal 4
@@ -22,7 +23,7 @@ counts four, and the list counts one `cpuAllocations`.
 `acquireCommandList` runs the core's `beginList`, then `beginCommandBuffer(allocator)` and
 `setLabel` with an `NS::String` made by `alloc()->init` from the resolved label. The list keeps the
 string for its encoders' labels and releases it at the next acquisition. `end` runs the core's
-`endList`, closes the open encoder, emits a barrier still owed (below) and calls `endCommandBuffer`.
+`endList`, carries a barrier still owed (below), ends the encoder and calls `endCommandBuffer`.
 `Queue::submit` commits every list's command buffer in one `commit(buffers, count)` between the
 waits and the signals, from a vector the queue reuses, and a submission with no lists commits
 nothing. When a frame slot is reused, the `frameSlot` hook resets the allocator of every list the
@@ -39,8 +40,9 @@ first copy, fill or kernel: the factory runs inside an `AutoreleasePool` and the
 retained; then `setLabel` (the innermost open scope's label, else the list's), `setArgumentTable`
 with the list table, and the part of the pending barrier that falls on its stages. It closes at a
 scope boundary, before a clear's render encoders, at a barrier that must order earlier work, and at
-`end`. The list records whether the open encoder holds work. A clear's render encoders and the
-trailing encoder of the barrier lowering bind no table, since no shader runs on them.
+`end`. A pass's last encoder lingers until the next encoder, a scope boundary or `end`
+([drawing](metal4-drawing.md)). The encoder records whether it holds work; a clear's and the
+trailing encoder bind no table.
 
 Recording reads native objects only through `HandlePool::native` and the list's own state, never a
 pool record, which is read under a lock. A texture's type, pixel format, usage, mip and layer counts
@@ -151,21 +153,27 @@ pending barrier. A compute encoder that opens with D inside its stages first emi
 `barrierAfterQueueStages(P, D, V)`, records what that covered and removes those stages from D; a
 clear's render encoder emits only the fragment part of D and leaves the other render stages owed. A
 stage the opening barrier held back but the encoder ran no command in returns to the pending barrier
-when it closes.
+when it closes. The condition is stricter than "work since the last queue-level barrier" because a
+source stage that the opening barrier did not cover may name work of an earlier list, which an
+encoder-level barrier cannot order. The first barrier after a list's first encoder opens is
+therefore queue-level, and repeated barriers settle on the encoder-level form.
 
-The condition is stricter than "work since the last queue-level barrier" because a source stage
-that the opening barrier did not cover may name work of an earlier list, which an encoder-level
-barrier cannot order. The first barrier after a list's first encoder opens is therefore
-queue-level, and repeated barriers settle on the encoder-level form.
+A barrier still pending at `end` is carried to later lists by the list's last encoder, still open
+then (a pass's lingers), when P lies inside `S_open` and it ran a command in a stage of `D_open`:
+all source work has completed once `(P | D_open) & R` completes, R the stages it ran. After those
+stages it emits `updateFence(carry, ...)` for D's dispatch stage on a graphics list and
+`barrierAfterStages(..., D', V)` for the rest. Otherwise a trailing compute encoder with no command
+emits `barrierAfterQueueStages(P, Dispatch | Blit, V)` and the same two from `Dispatch | Blit`
+(Metal runs each stage of successive encoders on a queue in order, an assumption a conformance case
+is built to falsify); a list that upscaled keeps the upscale section's. The carry fence (the
+graphics queue's, uncounted) spares later counted-draw kernels, which a barrier to the dispatch
+stage would hold back: every other graphics compute encoder calls `waitForFence(carry, Dispatch)`
+before its first dispatch-stage command. Metal orders an update after its stages and a wait after
+every earlier update on the queue; that their stores are visible rests on the M3 Max conformance
+runs. A fence has no visibility option, so `IndirectArgs` or `All` destinations, or `ResourceAlias`
+visibility, keep the dispatch stage in the barrier.
 
-A barrier still pending at `end` is emitted on a closing compute encoder that holds no command:
-`barrierAfterQueueStages(P, Dispatch | Blit, V)`, `barrierAfterStages(Dispatch | Blit, D, V)`,
-`endEncoding`. One encoder, two barriers; without it a barrier at the end of a list would order
-nothing in later lists. It rests on one assumption of the lowering, which a conformance case is
-built to falsify: Metal runs each stage of successive encoders on a queue in order, so a consumer
-barrier on one encoder also holds back the same stages of every encoder after it.
-
-Worked sequence on a graphics list: copy A, barrier (copy to copy), copy B, barrier, `end`.
+Worked sequence on a graphics list: copy A, buffer barrier (copy to copy), copy B, barrier, `end`.
 
 | Step | Native result |
 |---|---|
@@ -173,9 +181,7 @@ Worked sequence on a graphics list: copy A, barrier (copy to copy), copy B, barr
 | barrier 1 | its sources are not covered by an opening barrier that emitted none: the encoder closes, the barrier is pending (P and D are blit, dispatch and fragment) |
 | copy B | a new compute encoder opens and emits `barrierAfterQueueStages` for blit and dispatch; fragment stays owed; `copyFromBuffer` |
 | barrier 2 | sources inside `S_open`, destinations inside `D_open`: held back as an encoder-level barrier; the fragment part joins the pending barrier |
-| `end` | the encoder closes and the held barrier joins the pending one; the trailing encoder emits two barriers; `endCommandBuffer` |
-
-That is three native barriers on three encoders for the two batches.
+| `end` | the held barrier joins the pending one; P lies inside `S_open` and the encoder ran a blit, so it emits `updateFence` for the dispatch stage and `barrierAfterStages` for the blit and fragment stages, then `endEncoding`; `endCommandBuffer` |
 
 ## Scopes
 
@@ -189,15 +195,14 @@ on a second stack, and writes the begin timestamp with `writeTimestampIntoHeap` 
 buffer. `endScope` closes the encoder, writes the end timestamp, calls `popDebugGroup` and releases
 the string. Inside a pass a scope is a debug group on the render encoder
 ([drawing](metal4-drawing.md)) and claims a pair the same way; the encoder writes it with
-`writeTimestamp` at `TimestampGranularityPrecise` after `RenderStageFragment`, which adds no
-encoder and measured no change in a pass's duration against `Relaxed`. A split pushes the open
-groups again on the resumed encoder but writes no timestamp, so the end timestamp may sit on a
-later encoder than the begin. A render pass claims its pair at `beginRenderPass` and writes it on
-its encoders: the begin timestamp first on its first encoder (the kernels' compute encoder of its
-leading counted draws, else its render encoder), the end timestamp on its last render encoder just
-before `endEncoding`, so its counted draws' kernels and its splits fall inside it
-([drawing](metal4-drawing.md)). An upscale writes its pair around its carrier and MetalFX's
-encoders (below).
+`writeTimestamp` at `TimestampGranularityPrecise` after `RenderStageFragment`, which adds no encoder
+and measured no change in a pass's duration against `Relaxed`. A split pushes the open groups again
+on the resumed encoder but writes no timestamp, so the end timestamp may sit on a later encoder than
+the begin. A render pass claims its pair at `beginRenderPass` and writes it on its encoders: the
+begin timestamp first on its first encoder (the kernels' compute encoder of its leading counted
+draws, else its render encoder), the end timestamp on its last render encoder just before it
+lingers, so its counted draws' kernels and its splits fall inside it ([drawing](metal4-drawing.md)).
+An upscale writes its pair around its carrier and MetalFX's encoders (below).
 
 A claim is one relaxed `fetch_add(2)` on the slot's cursor. A slot has up to eight
 `MTL4::CounterHeap`s of 4,096 timestamps, each created on the first claim that needs it and
@@ -259,41 +264,37 @@ encode, a timestamp and the pop.
 
 `nativeRecordCalls` counts every message a list sends after `beginList` to its command buffer, an
 encoder or an argument table: `beginCommandBuffer`, `setLabel`, the encoder factories,
-`setArgumentTable`, `setAddress`, `setTexture`, the pipeline, state and store-action setters,
-debug groups, timestamps, copies, fills, dispatches, draws, executes, `useResidencySet`, barriers,
-`endEncoding` and `endCommandBuffer`; a command deferred to the render encoder's open counts when
-it is replayed. Getters and the setters of a pass descriptor count nothing. A render encoder
-counts in `encodersOpened` like any other, those of a split and the compute encoder of a counted
-draw's kernels included; the pass and draw sites are in [drawing](metal4-drawing.md).
-`nativeBarriers` counts each native barrier command, so one batch may count several.
-`encodersOpened` counts every native encoder, the trailing one and a clear's render encoders
-included. An allocator reset counts one `nativeHostCalls`. `nativeSubmitCalls` counts native queue
-calls: the commit of a submission's lists is one, each fence wait and signal the core sees is one,
-and so is the progress signal that a compute or copy submission with no lists or several signals
-makes, so a submission of one list signalling one fence counts two. The core folds a list's counts
-into the device at submission. Operation counts, inside one open encoder: `uploadFrameData` makes no
-native call; a buffer copy is one; an equal-byte fill is one and an unequal one five (kernel table,
-two addresses, dispatch, list table; six for the first kernel an encoder runs, which also sets the
-pipeline); a barrier between copies is one native call and one native barrier at its emission; a
-scope outside a pass is four (the push, two timestamps and the pop) beyond the `endEncoding` of each
-boundary that closes an encoder. A counter heap counts one `nativeCreateCalls`, and each resolve and
-each invalidation of a used heap one `nativeHostCalls`. Messages to an upscaler's scaler count as
-record calls, and the carrier counts as an encoder; MetalFX's own encoders are not counted.
-
-## Commit timing
-
-`Backends/Metal4/Source/CommitTiming.h` declares a private, test-only seam that times each commit
-of a queue; [the benchmark harness](benchmarks.md#the-commit-timing-seam) describes it.
+`setArgumentTable`, `setAddress`, `setTexture`, the pipeline, state and store-action setters, debug
+groups, timestamps, copies, fills, dispatches, draws, executes, `useResidencySet`, barriers,
+`endEncoding` and `endCommandBuffer`; a command deferred to the render encoder's open counts when it
+is replayed. Getters and the setters of a pass descriptor count nothing. A render encoder counts in
+`encodersOpened` like any other, those of a split and the compute encoder of a counted draw's
+kernels included; the pass and draw sites are in [drawing](metal4-drawing.md). `nativeBarriers`
+counts each native barrier command, so one batch may count several. `encodersOpened` counts every
+native encoder, the trailing one and a clear's render encoders included; a carried barrier's
+`updateFence`, `barrierAfterStages` and each `waitForFence` are calls. An allocator reset counts one
+`nativeHostCalls`. `nativeSubmitCalls` counts native queue calls: the commit of a submission's lists
+is one, each fence wait and signal the core sees is one, and so is the progress signal that a
+compute or copy submission with no lists or several signals makes, so a submission of one list
+signalling one fence counts two. The core folds a list's counts into the device at submission.
+Operation counts, inside one open encoder: `uploadFrameData` makes no native call; a buffer copy is
+one; an equal-byte fill is one and an unequal one five (kernel table, two addresses, dispatch, list
+table; six for the first kernel an encoder runs, which also sets the pipeline); a barrier between
+copies is one native call and one native barrier at its emission; a scope outside a pass is four
+(the push, two timestamps and the pop) beyond the `endEncoding` of each boundary that closes an
+encoder. A counter heap counts one `nativeCreateCalls`, and each resolve and each invalidation of a
+used heap one `nativeHostCalls`. Messages to an upscaler's scaler count as record calls, and the
+carrier counts as an encoder; MetalFX's own encoders are not counted.
 
 ## Tests
 
 `Tests/Metal4/` holds the `[metal4]` cases of this page: lists and their counts, the encoder,
-copies, barrier forms by native counts, kernels and the fill, clears, per-operation counts and
-commit timing, and upscales. `Metal4TimestampTests.cpp` holds the scope, pass and upscale timestamp
-cases and `Metal4UpscalerTests.cpp` those of the upscaler. `Tests/Conformance/` holds T1 cases that
-read results back through `Tests/Support/GpuKit`: copies, initial data, barriers, fills, clears,
-queue handoff, scope timings (`ScopeConformanceTests.cpp`), upscales
-(`UpscaleConformanceTests.cpp`), every format class (`FormatConformanceTests.cpp`), sparse tiles
-(`SparseConformanceTests.cpp`) and write-only storage accessors (`WriteOnlyConformanceTests.cpp`)
-([testing](../conventions/testing.md)); the cases of passes, draws and dispatches are listed in
-[drawing](metal4-drawing.md#tests).
+copies, barrier forms by native counts, carried barriers (`Metal4CarryTests.cpp`), kernels and the
+fill, clears, per-operation counts and commit timing, and upscales. `Metal4TimestampTests.cpp` holds
+the scope, pass and upscale timestamp cases and `Metal4UpscalerTests.cpp` those of the upscaler.
+`Tests/Conformance/` holds T1 cases that read results back through `Tests/Support/GpuKit`: copies,
+initial data, barriers, fills, clears, queue handoff, scope timings (`ScopeConformanceTests.cpp`),
+upscales (`UpscaleConformanceTests.cpp`), every format class (`FormatConformanceTests.cpp`), sparse
+tiles (`SparseConformanceTests.cpp`) and write-only storage accessors
+(`WriteOnlyConformanceTests.cpp`) ([testing](../conventions/testing.md)); the cases of passes, draws
+and dispatches are listed in [drawing](metal4-drawing.md#tests).

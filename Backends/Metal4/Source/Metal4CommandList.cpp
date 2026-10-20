@@ -126,6 +126,7 @@ namespace rojoRHI {
         // A list that never ended, which only a Release build lets through, leaves its encoder behind; one that ended with
         // scopes open leaves their strings and timestamp pairs.
         list->encoders.release();
+        list->encoders.setCarryFence(type == QueueType::Graphics ? impl.queues[static_cast<size_t>(QueueType::Graphics)].carry : nullptr);
         list->draw.reset();
         for (NS::String* scopeLabel : state.scopeLabels)
         {
@@ -152,11 +153,12 @@ namespace rojoRHI {
         CommandListImpl& list = CommandListImpl::of(*this);
         // The core's checks run before any native call.
         core::endList(list.core);
-        list.encoders.close(list.core);
+        // A barrier still pending orders the work of later lists on the queue: the open encoder carries it when it covers its
+        // sources, and a trailing encoder emits what it did not carry.
+        list.encoders.finish(list.core);
         // The list may wait in its pool long after its textures are destroyed; its descriptor must not keep them alive.
         list.draw.forgetTextures();
-        // A barrier still pending orders the work of later lists on the queue.
-        metal4::emitTrailing(list.core, list.state, list.encoders.barriers());
+        metal4::emitTrailing(list.core, list.state, list.encoders.barriers(), list.encoders.carryFence());
         // An indirect command buffer made or replaced while recording joins the list's residency set before the command buffer
         // that uses the set is committed; a list recording the same counted draws again changes nothing.
         if (list.draw.icbs.commit())

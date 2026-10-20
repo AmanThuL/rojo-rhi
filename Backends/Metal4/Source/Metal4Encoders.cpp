@@ -18,6 +18,10 @@ namespace rojoRHI::metal4 {
     //==================================================================================================================
     MTL4::ComputeCommandEncoder* Encoders::compute(core::CommandListCore& list, ListState& state, MTL::Stages command, bool kernelsOnly)
     {
+        if (m_lingering)
+        {
+            close(list);
+        }
         ROJORHI_INTERNAL_ASSERT(m_kind != EncoderKind::Render, "a compute command is recorded while a render encoder is open");
         if (m_compute != nullptr)
         {
@@ -34,6 +38,7 @@ namespace rojoRHI::metal4 {
                 m_barriers.openDestination |= destination;
                 m_barriers.openVisibility |= visibility;
             }
+            waitCarry(list, command);
             // A command follows: the encoder-level barrier held back goes before it when it holds the command's stage back.
             emitDeferred(list, m_barriers, m_compute, kComputeStages, command);
             return m_compute;
@@ -58,12 +63,35 @@ namespace rojoRHI::metal4 {
         m_kind = EncoderKind::Compute;
         m_holdsWork = false;
         m_kernelPipeline = nullptr;
+        m_kernelsOnly = kernelsOnly;
+        m_carryWaited = false;
+        m_commandPools = state.commandPools;
+        waitCarry(list, command);
         return m_compute;
+    }
+
+    //==================================================================================================================
+    void Encoders::waitCarry(core::CommandListCore& list, MTL::Stages command)
+    {
+        if (m_carryWaited || m_kernelsOnly || m_carryFence == nullptr || (command & MTL::StageDispatch) == 0)
+        {
+            return;
+        }
+        // The wait holds back this encoder's later dispatches until every earlier update of the fence on the queue, each made
+        // by an earlier list's last encoder after the work its barrier still owed. A wait orders only the work of its own
+        // encoder, so each encoder that dispatches waits, before its first dispatch.
+        m_compute->waitForFence(m_carryFence, MTL::StageDispatch);
+        core::noteNativeCall(list);
+        m_carryWaited = true;
     }
 
     //==================================================================================================================
     MTL4::RenderCommandEncoder* Encoders::openRender(core::CommandListCore& list, ListState& state, const MTL4::RenderPassDescriptor* descriptor)
     {
+        if (m_lingering)
+        {
+            close(list);
+        }
         ROJORHI_INTERNAL_ASSERT(m_kind == EncoderKind::None, "a render encoder opens while another encoder is open");
         {
             // The factory autoreleases its encoder; the list keeps it past the pool, so it retains it.
@@ -89,6 +117,10 @@ namespace rojoRHI::metal4 {
     //==================================================================================================================
     MTL4::RenderCommandEncoder* Encoders::openPass(core::CommandListCore& list, ListState& state, const MTL4::RenderPassDescriptor* descriptor)
     {
+        if (m_lingering)
+        {
+            close(list);
+        }
         ROJORHI_INTERNAL_ASSERT(m_kind == EncoderKind::None, "a render pass's encoder opens while another encoder is open");
         {
             // The factory autoreleases its encoder; the list keeps it past the pool, so it retains it.
@@ -115,6 +147,10 @@ namespace rojoRHI::metal4 {
     //==================================================================================================================
     void Encoders::carry(core::CommandListCore& list, ListState& state, MTL::Fence* fence)
     {
+        if (m_lingering)
+        {
+            close(list);
+        }
         ROJORHI_INTERNAL_ASSERT(m_kind == EncoderKind::None, "an upscale's carrier opens while another encoder is open");
         // The factory autoreleases its encoder, which is used and ended inside the pool.
         const AutoreleasePool pool;
@@ -151,28 +187,106 @@ namespace rojoRHI::metal4 {
     }
 
     //==================================================================================================================
+    void Encoders::settle()
+    {
+        // An encoder-level barrier still held back orders nothing in later encoders, so it waits for them at queue level.
+        m_barriers.queueDeferred();
+        m_barriers.returnUnrun(ranStages());
+    }
+
+    //==================================================================================================================
+    MTL::Stages Encoders::ranStages() const
+    {
+        // stages() reads the stages the compute encoder's commands ran in; it records nothing. A render encoder has no stages
+        // getter, so it keeps those it ran in: its load and store actions are fragment-stage work, and a pass's commands add
+        // theirs.
+        return m_kind == EncoderKind::Compute ? m_compute->stages() : m_ran;
+    }
+
+    //==================================================================================================================
+    void Encoders::linger()
+    {
+        ROJORHI_INTERNAL_ASSERT(m_kind == EncoderKind::Render && !m_lingering, "a render pass's encoder lingers with none open");
+        settle();
+        m_lingering = true;
+    }
+
+    //==================================================================================================================
+    void Encoders::finish(core::CommandListCore& list)
+    {
+        if (m_kind == EncoderKind::None)
+        {
+            return;
+        }
+        if (!m_lingering)
+        {
+            settle();
+        }
+        BarrierState& barriers = m_barriers;
+        const MTL::Stages ran = ranStages();
+        // Every source stage the encoder's opening barrier waited for at queue level lies before a command the encoder ran in
+        // a stage that barrier held, and any other source work lies in the encoder: once the stages it ran complete, every
+        // source the pending barrier names has completed, in this list and in earlier ones. A list that upscaled owes
+        // MetalFX's work, which only its fence orders, so its trailing encoder emits what is owed.
+        const bool covered = (barriers.pendingSource & ~barriers.openSource) == 0 && (barriers.openDestination & ran) != 0;
+        if (barriers.pendingDestination != 0 && barriers.owedFence == nullptr && covered)
+        {
+            MTL4::CommandEncoder* encoder =
+                m_kind == EncoderKind::Compute ? static_cast<MTL4::CommandEncoder*>(m_compute) : static_cast<MTL4::CommandEncoder*>(m_render);
+            const MTL::Stages after = (barriers.pendingSource | barriers.openDestination) & ran;
+            MTL::Stages destination = barriers.pendingDestination;
+            if (const MTL::Stages carried = fencedStages(barriers, m_carryFence); carried != 0)
+            {
+                // Later dispatches wait on the fence, and a counted draw's kernels, which read only records an IndirectArgs
+                // barrier orders, do not: a barrier from these stages to the dispatch stage would hold them back too.
+                encoder->updateFence(m_carryFence, after);
+                core::noteNativeCall(list);
+                destination &= ~carried;
+                m_syncsAtEnd = true;
+            }
+            if (destination != 0)
+            {
+                // Every later encoder on the queue, in a later list, waits in these stages for the encoder's work.
+                encoder->barrierAfterStages(after, destination, barriers.pendingVisibility);
+                core::noteNativeCall(list);
+                ++list.counts.nativeBarriers;
+                m_syncsAtEnd = true;
+            }
+            barriers.pendingSource = 0;
+            barriers.pendingDestination = 0;
+            barriers.pendingVisibility = 0;
+        }
+        // Already settled: close only ends the encoder.
+        m_lingering = true;
+        close(list);
+    }
+
+    //==================================================================================================================
     void Encoders::close(core::CommandListCore& list)
     {
         if (m_kind == EncoderKind::None)
         {
             return;
         }
-        // An encoder-level barrier still held back orders nothing in later encoders, so it waits for them at queue level.
-        m_barriers.queueDeferred();
+        if (!m_lingering)
+        {
+            settle();
+        }
         if (m_kind == EncoderKind::Compute)
         {
-            // stages() reads the stages the encoder's commands ran in; it records nothing.
-            m_barriers.returnUnrun(m_compute->stages());
-            m_compute->endEncoding();
+            {
+                // The validation layer autoreleases when a compute encoder that waited on the carry fence, updated it or
+                // holds back later encoders ends; without it nothing does. Only its first dispatch and the carry at `end`
+                // bring that about, once per encoder.
+                const CommandPool pool(m_commandPools && (m_carryWaited || m_syncsAtEnd));
+                m_compute->endEncoding();
+            }
             core::noteNativeCall(list);
             m_compute->release();
             m_compute = nullptr;
         }
         else
         {
-            // A render encoder has no stages getter, so it keeps those it ran in: its load and store actions are fragment-stage
-            // work, and a pass's commands add theirs.
-            m_barriers.returnUnrun(m_ran);
             // The validation layer autoreleases in endEncoding of a render encoder with a stencil attachment.
             const CommandPool pool(m_commandPools);
             m_render->endEncoding();
@@ -183,6 +297,10 @@ namespace rojoRHI::metal4 {
         m_kind = EncoderKind::None;
         m_holdsWork = false;
         m_ran = 0;
+        m_lingering = false;
+        m_kernelsOnly = false;
+        m_carryWaited = false;
+        m_syncsAtEnd = false;
         m_kernelPipeline = nullptr;
         m_barriers.clearOpen();
     }
@@ -207,6 +325,10 @@ namespace rojoRHI::metal4 {
         m_kind = EncoderKind::None;
         m_holdsWork = false;
         m_ran = 0;
+        m_lingering = false;
+        m_kernelsOnly = false;
+        m_carryWaited = false;
+        m_syncsAtEnd = false;
         m_kernelPipeline = nullptr;
         m_barriers.reset();
     }

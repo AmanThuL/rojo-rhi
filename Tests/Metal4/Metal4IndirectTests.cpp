@@ -427,7 +427,7 @@ TEST_CASE("a kernel makes four calls on a new encoder, two once the encoder hold
     // the pass's end timestamp, endEncoding and its group.
     before = callsOf(list);
     list.endRenderPass();
-    CHECK(callsOf(list) - before == 1 + kOpenCalls + 1 + kStateCalls + 4 + 1 + 2);
+    CHECK(callsOf(list) - before == 1 + kOpenCalls + 1 + kStateCalls + 4 + 2);
     kit.run(std::array{ list });
 }
 
@@ -459,7 +459,7 @@ TEST_CASE("maxCount 1 runs the writer kernel and one native indirect draw", "[me
     // the pass's end timestamp, endEncoding and its group.
     before = callsOf(list);
     list.endRenderPass();
-    CHECK(callsOf(list) - before == 1 + kOpenCalls + 1 + kStateCalls + 2 + 1 + 2);
+    CHECK(callsOf(list) - before == 1 + kOpenCalls + 1 + kStateCalls + 2 + 2);
     kit.run(std::array{ list });
 }
 

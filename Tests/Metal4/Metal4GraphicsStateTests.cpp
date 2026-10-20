@@ -206,10 +206,10 @@ TEST_CASE("state recorded before the first draw waits in the prefix and replays 
     list.setViewport(Viewport{ .width = 8.0f, .height = 8.0f });
     CHECK(prefixKinds(list) == std::vector{ Kind::Pipeline, Kind::Viewport });
     const uint64_t before = callsOf(list);
-    // The open and the pass's begin timestamp, the pipeline with its winding and the viewport, then the pass's end timestamp,
-    // endEncoding and its group.
+    // The open and the pass's begin timestamp, the pipeline with its winding and the viewport, then the pass's end timestamp
+    // and its group; the encoder stays open until the list ends.
     list.endRenderPass();
-    CHECK(callsOf(list) == before + kOpenCalls + kPassBegin + 3 + 3);
+    CHECK(callsOf(list) == before + kOpenCalls + kPassBegin + 3 + 2);
     finish(device, list);
     destroyDevice(device);
 }
@@ -492,9 +492,9 @@ TEST_CASE("setRoot outside a pass writes the table at once and an unchanged root
     list.setRoot(first);
     CHECK(callsOf(list) == before);
     CHECK(drawOf(list).tableRoot == gpuAddressOf(second));
-    // The open and the pass's begin timestamp, the root, the pass's end timestamp, endEncoding and its group.
+    // The open and the pass's begin timestamp, the root, the pass's end timestamp and its group; the encoder stays open.
     list.endRenderPass();
-    CHECK(callsOf(list) - before == kOpenCalls + kPassBegin + 1 + 3);
+    CHECK(callsOf(list) - before == kOpenCalls + kPassBegin + 1 + 2);
     CHECK(drawOf(list).tableRoot == gpuAddressOf(first));
     finish(device, list);
     destroyDevice(device);
@@ -536,9 +536,9 @@ TEST_CASE("a compute pipeline bound before an unequal fill, or before a scope bo
         list.beginScope("test.scope");
         CHECK(encodersOf(list).kind() == metal4::EncoderKind::None);
         before = callsOf(list);
-        // The dispatch path opens the encoder again and sets the pipeline.
+        // The dispatch path opens the encoder again, waits on the carry fence and sets the pipeline.
         metal4::applyComputePipeline(impl);
-        CHECK(callsOf(list) - before == 3 + 1);
+        CHECK(callsOf(list) - before == 3 + 1 + 1);
         CHECK(encodersOf(list).kernelPipeline() == compute);
         before = callsOf(list);
         metal4::applyComputePipeline(impl);
@@ -568,10 +568,11 @@ TEST_CASE("setPipeline with a compute pipeline, then a barrier, emits the barrie
     const metal4::BarrierState& barriers = encodersOf(list).barriers();
     CHECK(countsOf(list).nativeBarriers == 0);
     CHECK(barriers.pendingDestination == MTL::StageDispatch);
-    // The dispatch path emits it on the open encoder, which keeps its pipeline: one call, the barrier.
+    // The dispatch path emits it on the open encoder, which keeps its pipeline: the barrier, and the wait on the carry fence
+    // before the encoder's first dispatch.
     const uint64_t before = callsOf(list);
     metal4::applyComputePipeline(CommandListImpl::of(list));
-    CHECK(callsOf(list) - before == 1);
+    CHECK(callsOf(list) - before == 2);
     CHECK(countsOf(list).nativeBarriers == 1);
     CHECK(barriers.pendingDestination == 0);
     CHECK((barriers.openDestination & MTL::StageDispatch) != 0);
@@ -707,13 +708,13 @@ TEST_CASE("C8's sequence makes the calls the overhead note registers", "[metal4]
         list.setScissor(kScissor);
         list.draw(3);
         list.endRenderPass();
-        // pushDebugGroup, writeTimestampIntoHeap; renderCommandEncoder, setLabel, setArgumentTable; the consumer barrier
-        // after the first pass; setRenderPipelineState, setFrontFacingWinding, setViewport, setScissorRect, drawPrimitives;
-        // endEncoding, writeTimestampIntoHeap, popDebugGroup. The winding call, one per encoder, is beyond the registered
-        // sequence: the pipeline has a fragment entry, which may read the front face, and its counter-clockwise winding is not
-        // Metal's default.
+        // After the first pass, endEncoding of the previous pass's encoder, which stayed open; pushDebugGroup,
+        // writeTimestampIntoHeap; renderCommandEncoder, setLabel, setArgumentTable; the consumer barrier after the first pass;
+        // setRenderPipelineState, setFrontFacingWinding, setViewport, setScissorRect, drawPrimitives; writeTimestamp on the
+        // encoder and popDebugGroup. The winding call, one per encoder, is beyond the registered sequence: the pipeline has a
+        // fragment entry, which may read the front face, and its counter-clockwise winding is not Metal's default.
         const uint64_t barrier = repetition > 0 ? 1 : 0;
-        CHECK(callsOf(list) - before == 2 + 3 + barrier + 5 + 3);
+        CHECK(callsOf(list) - before == barrier + 2 + 3 + barrier + 5 + 2);
         CHECK(countsOf(list).nativeBarriers - barriers == barrier);
     }
     finish(device, list);

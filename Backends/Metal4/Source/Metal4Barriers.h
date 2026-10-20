@@ -24,9 +24,10 @@ namespace rojoRHI::metal4 {
 
     /// What a list still owes of its barriers, and what the open encoder's opening barrier covered. A pending barrier waits at
     /// queue level for its source stages before the destination stages it still names; each encoder that opens emits the part
-    /// of it that falls on its own stages, and a closing encoder emits the rest at `CommandList::end`. An encoder-level barrier
-    /// is held back until the open encoder's next command in one of its remaining destination stages, which it emits for those
-    /// stages and keeps the rest, and what remains joins the pending barrier if the encoder closes first.
+    /// of it that falls on its own stages, and the list's last encoder or a trailing encoder carries the rest to later lists
+    /// at `CommandList::end`. An encoder-level barrier is held back until the open encoder's next command in one of its
+    /// remaining destination stages, which it emits for those stages and keeps the rest, and what remains joins the pending
+    /// barrier if the encoder closes first.
     struct BarrierState
     {
         MTL::Stages pendingSource = 0;                  ///< The source stages of the pending barrier.
@@ -44,6 +45,10 @@ namespace rojoRHI::metal4 {
         MTL::Fence* owedFence = nullptr;
         /// The stages of the encoder kinds that still owe a wait on `owedFence`: `kComputeStages`, `kRenderStages` or both.
         MTL::Stages owedFenceStages = 0;
+        /// A barrier of the list named `Stage::IndirectArgs`, or `Stage::All`, as a destination: what the list owes at its end
+        /// may then be records a counted draw's kernels read, so it holds the dispatch stage back with a barrier rather than
+        /// through the carry fence, which those kernels do not wait on.
+        bool argsNamed = false;
 
         /// Adds a barrier from `source` to `destination` with `visibility` to the pending barrier.
         void merge(MTL::Stages source, MTL::Stages destination, MTL4::VisibilityOptions visibility)
@@ -102,6 +107,16 @@ namespace rojoRHI::metal4 {
         }
     };
 
+    /// Returns the stages of the barrier `barriers` still owes at `CommandList::end` that the carry fence `carry` carries rather
+    /// than a barrier: the dispatch stage when the barrier holds it, the list's queue has a carry fence (a graphics list), no
+    /// barrier of the list named `IndirectArgs` as a destination, whose records a counted draw's kernels read, and the
+    /// pending visibility has no `ResourceAlias`, which a fence, carrying no visibility option, cannot flush; else none.
+    inline MTL::Stages fencedStages(const BarrierState& barriers, const MTL::Fence* carry)
+    {
+        const bool fenced = carry != nullptr && !barriers.argsNamed && (barriers.pendingVisibility & MTL4::VisibilityOptionResourceAlias) == 0;
+        return fenced ? barriers.pendingDestination & MTL::StageDispatch : MTL::Stages{ 0 };
+    }
+
     /// Emits, on `encoder`, which has just opened with `stages`, first the wait on the fence an upscale left owed when the
     /// encoder's kind still owes it, for every stage of that kind (a render encoder's `stages` may be its fragment stage
     /// alone), then the part of the pending barrier of `barriers` that falls on those stages as a queue-level barrier, and
@@ -115,11 +130,13 @@ namespace rojoRHI::metal4 {
     /// held. Does nothing when no barrier is held back or it does not hold back `command`.
     void emitDeferred(core::CommandListCore& list, BarrierState& barriers, MTL4::CommandEncoder* encoder, MTL::Stages stages, MTL::Stages command);
 
-    /// Emits the barrier still pending at `CommandList::end` on a compute encoder that holds no command: a queue-level barrier
-    /// from the pending source stages to its own, then one from its own stages to the destination stages still owed, which
-    /// holds back every later encoder on the queue, in this list or a later one. When the list upscaled, the encoder first
-    /// waits on the last upscale's fence and holds back every stage of every later encoder, with or without a barrier
-    /// pending, so the work held back follows MetalFX's. Counts the encoder, its native calls, the wait and its one or two
-    /// barriers on `list`; does nothing when no barrier is pending and the list did not upscale.
-    void emitTrailing(core::CommandListCore& list, ListState& state, BarrierState& barriers);
+    /// Emits the barrier still pending at `CommandList::end`, which the list's last encoder did not carry, on a compute
+    /// encoder that holds no command: a queue-level barrier from the pending source stages to its own, then an update
+    /// of `carry` after its own stages for the stages `fencedStages` names, which later dispatches wait on, and a
+    /// barrier from its own stages to the destination stages left, which holds them back in every later encoder on the
+    /// queue. When the list upscaled, the encoder first waits on the last upscale's fence and holds back every stage of
+    /// every later encoder, with or without a barrier pending, so the work held back follows MetalFX's. Counts the
+    /// encoder, its native calls, the wait and its barriers on `list`; does nothing when no barrier is pending and the
+    /// list did not upscale. `carry` is null on a compute or copy list.
+    void emitTrailing(core::CommandListCore& list, ListState& state, BarrierState& barriers, MTL::Fence* carry);
 } // namespace rojoRHI::metal4

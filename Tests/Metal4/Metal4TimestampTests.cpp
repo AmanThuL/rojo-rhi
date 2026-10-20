@@ -669,10 +669,10 @@ TEST_CASE("a render pass with a counted draw writes its begin timestamp on the k
     list.endRenderPass();
     // The kernels' encoder ends; the render encoder opens (factory, label, table) with the barrier that orders the kernels
     // before the vertex stage, sets the pipeline, its winding, the viewport and the scissor and draws the two records; then
-    // the end timestamp on it, its endEncoding and the pop on the command buffer.
+    // the end timestamp on it and the pop on the command buffer. The render encoder stays open until the list ends.
     CHECK(state.counts.encodersOpened == encoders + 2);
-    CHECK(state.counts.nativeRecordCalls == beforeEnd + 1 + 3 + 1 + 4 + 2 + 1 + 1 + 1);
-    CHECK(CommandListImpl::of(list).encoders.kind() == metal4::EncoderKind::None);
+    CHECK(state.counts.nativeRecordCalls == beforeEnd + 1 + 3 + 1 + 4 + 2 + 1 + 1);
+    CHECK(CommandListImpl::of(list).encoders.lingering());
     CHECK(native.scopeTimestamps.empty());
     CHECK(native.scopeLabels.empty());
     submitFrame(device, std::array{ list });
@@ -705,9 +705,9 @@ TEST_CASE("a pass whose encoder opens at endRenderPass writes both its timestamp
     CHECK(CommandListImpl::of(list).draw.passBegin == state.scopeLog.back().timestamp);
     const uint64_t encoders = state.counts.encodersOpened;
     list.endRenderPass();
-    // renderCommandEncoder, setLabel and setArgumentTable, the begin and end timestamps on the encoder, endEncoding for the
-    // pass's clear and store, then popDebugGroup on the command buffer.
-    CHECK(state.counts.nativeRecordCalls == calls + 1 + 3 + 2 + 1 + 1);
+    // renderCommandEncoder, setLabel and setArgumentTable, the begin and end timestamps on the encoder, then popDebugGroup on
+    // the command buffer; the encoder, which runs the pass's clear and store, stays open until the list ends.
+    CHECK(state.counts.nativeRecordCalls == calls + 1 + 3 + 2 + 1);
     CHECK(state.counts.encodersOpened == encoders + 1);
     CHECK(state.scopeLog.back().timestamp != core::kNoTimestamp);
     submitFrame(device, std::array{ list });
@@ -755,8 +755,8 @@ TEST_CASE("a pass that splits writes two timestamps, the begin on its first rend
     CHECK(draw.passBegin == core::kNoTimestamp);
     calls = state.counts.nativeRecordCalls;
     list.endRenderPass();
-    // The end timestamp on the resumed encoder, its endEncoding and the pop on the command buffer.
-    CHECK(state.counts.nativeRecordCalls == calls + 1 + 1 + 1);
+    // The end timestamp on the resumed encoder and the pop on the command buffer; the encoder stays open.
+    CHECK(state.counts.nativeRecordCalls == calls + 1 + 1);
     submitFrame(device, std::array{ list });
     retireOpenFrame(device);
     const std::span<const ScopeTiming> report = device.scopeTimings();
@@ -795,8 +795,8 @@ TEST_CASE("a scope that opens a pass's render encoder writes after the pass's be
     CHECK(state.counts.nativeRecordCalls == calls + 2);
     calls = state.counts.nativeRecordCalls;
     list.endRenderPass();
-    // The pass's end timestamp, endEncoding and the pop on the command buffer.
-    CHECK(state.counts.nativeRecordCalls == calls + 3);
+    // The pass's end timestamp and the pop on the command buffer; the encoder stays open.
+    CHECK(state.counts.nativeRecordCalls == calls + 2);
     submitFrame(device, std::array{ list });
     retireOpenFrame(device);
     const std::span<const ScopeTiming> report = device.scopeTimings();

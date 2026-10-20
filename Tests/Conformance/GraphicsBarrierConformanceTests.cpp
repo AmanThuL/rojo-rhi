@@ -475,6 +475,29 @@ namespace {
     }
 
     //==================================================================================================================
+    /// Ends `producer` and `consumer` and submits them to the graphics queue in that order, in one submission or, when `two`,
+    /// in two, then waits for both on the host: only the barrier the producer still owes at its end orders them.
+    void submitInOrder(test::GpuKit& kit, CommandList producer, CommandList consumer, bool two)
+    {
+        producer.end();
+        consumer.end();
+        const Fence fence = *kit.device.createFence(0, "test.carried");
+        const std::array signal{ FenceValue{ fence, 1 } };
+        Queue queue = kit.device.queue(QueueType::Graphics);
+        if (two)
+        {
+            queue.submit(std::array{ producer });
+            queue.submit(std::array{ consumer }, {}, signal);
+        }
+        else
+        {
+            queue.submit(std::array{ producer, consumer }, {}, signal);
+        }
+        REQUIRE(kit.device.wait(signal[0], UINT64_MAX));
+        kit.device.destroy(fence);
+    }
+
+    //==================================================================================================================
     /// Checks that `actual`, an oracle target read back, equals `expected`.
     void checkImage(const std::vector<std::byte>& actual, const OracleImage& expected)
     {
@@ -908,4 +931,374 @@ TEST_CASE("an attachment rendered on the graphics queue is read on the compute q
     // The compute submission waits on the value the graphics submission signals.
     kit.run(std::array{ graphics, compute });
     CHECK(kit.readBuffer(output, QueueType::Compute) == bytesOf(std::span<const float>(kSolid)));
+}
+
+//======================================================================================================================
+TEST_CASE("a pass's closing batch orders the next list's dispatch on the queue, whichever list is recorded first", "[conformance]")
+{
+    test::requireGpu();
+    // Covered: a batch before the pass names its depth stage as a source, so the pass's encoder carries the closing batch.
+    // Otherwise a trailing encoder does. Either way the dispatch waits on the carry fence, and a counted draw's kernels
+    // before it do not.
+    const bool covered = GENERATE(false, true);
+    const bool consumerFirst = GENERATE(false, true);
+    const bool two = GENERATE(false, true);
+    const bool kernels = GENERATE(false, true);
+    CAPTURE(covered, consumerFirst, two, kernels);
+    test::GpuKit kit;
+    const Oracles oracles(kit);
+    const DepthStencilState write{ .depthTest = true, .depthWrite = true, .depthCompare = CompareOp::Always };
+    const Pipeline depthOnly = graphicsOf(
+        kit.device, GraphicsPipelineDesc{ .vertex = { oracles.draw, "fullscreenVertexMain" }, .depthStencil = write, .depthFormat = Format::D32Float }, {}
+    );
+    const ShaderLibrary textures = loadLibrary(kit.device, "AbiTextures");
+    const Pipeline compare = computeOf(kit.device, textures, "compareMain");
+    const Pipeline counted = oracles.oracle();
+    const Texture depth = textureOf(kit.device, kBigEdge, Format::D32Float, TextureUsage::DepthStencil | TextureUsage::Sampled);
+    // compareMain passes when its reference, 0.5, is at most the stored depth: only the draws' 0.75 passes.
+    const ClearValue stale{ .depth = 0.25f };
+    prepare(kit, depth, Layout::DepthStencilWrite, &stale);
+    const ViewIndex view = *kit.device.createView(depth, TextureViewDesc{ .aspect = TextureAspect::Depth });
+    const SamplerIndex comparison = *kit.device.createSampler(
+        SamplerDesc{ .filter = SamplerFilter::Nearest,
+                     .mipFilter = SamplerFilter::Nearest,
+                     .address = SamplerAddress::ClampToEdge,
+                     .compareEnable = true,
+                     .compare = CompareOp::LessOrEqual,
+                     .label = "test.comparison" }
+    );
+    const std::vector<std::byte> zeroes(16, std::byte{ 0 });
+    const Buffer output = kit.buffer(16, Memory::Gpu, BufferUsage::ShaderWrite, zeroes);
+    // Records that draw nothing, so the counted draw only runs its kernels.
+    const std::vector<std::byte> empty(64 * sizeof(DrawIndirectArgs), std::byte{ 0 });
+    const Buffer records = kit.buffer(empty.size(), Memory::Gpu, BufferUsage::IndirectArgs, empty);
+    const Texture target = oracles.target();
+    CommandList producer = kit.list(QueueType::Graphics, "test.producer");
+    CommandList consumer = kit.list(QueueType::Graphics, "test.consumer");
+    const auto recordProducer = [&] {
+        if (covered)
+        {
+            producer.barrier(
+                {},
+                {},
+                std::array{ textureBarrier(
+                    depth,
+                    Stage::DepthStencil,
+                    Access::DepthStencilWrite,
+                    Layout::DepthStencilWrite,
+                    Stage::DepthStencil,
+                    Access::DepthStencilRead | Access::DepthStencilWrite,
+                    Layout::DepthStencilWrite
+                ) }
+            );
+        }
+        producer.beginRenderPass(
+            RenderPassDesc{
+                .depth = DepthAttachment{ .texture = depth, .load = LoadOp::Clear, .clearDepth = 0.0f }, .area = kBigRect, .label = "test.producer" }
+        );
+        producer.setPipeline(depthOnly);
+        // The viewport maps the triangle's clip-space depth of 0.5 to 0.75.
+        producer.setViewport(Viewport{ .width = static_cast<float>(kBigEdge), .height = static_cast<float>(kBigEdge), .minDepth = 0.5f, .maxDepth = 1.0f });
+        producer.setScissor(kBigRect);
+        producer.draw(3, kLayers);
+        producer.endRenderPass();
+        producer.barrier(
+            {},
+            {},
+            std::array{ textureBarrier(
+                depth,
+                Stage::DepthStencil,
+                Access::DepthStencilWrite,
+                Layout::DepthStencilWrite,
+                Stage::ComputeShader,
+                Access::ShaderRead,
+                Layout::DepthStencilRead
+            ) }
+        );
+    };
+    const auto recordConsumer = [&] {
+        if (kernels)
+        {
+            const std::array colors{ ColorAttachment{ .texture = target, .load = LoadOp::Clear } };
+            consumer.beginRenderPass(RenderPassDesc{ .colors = colors, .area = kOracleRect, .label = "test.kernels" });
+            consumer.setPipeline(counted);
+            consumer.setViewport(kOracleViewport);
+            consumer.setScissor(kOracleRect);
+            consumer.drawIndirect(kit.device.address(records), 64);
+            consumer.endRenderPass();
+        }
+        consumer.setPipeline(compare);
+        consumer.pushRoot(
+            FetchRoot{ .view = static_cast<uint32_t>(view),
+                       .sampler = 0,
+                       .comparison = static_cast<uint32_t>(comparison),
+                       .pad = 0,
+                       .output = kit.device.address(output) }
+        );
+        consumer.dispatch(1, 1, 1);
+    };
+    if (consumerFirst)
+    {
+        recordConsumer();
+        recordProducer();
+    }
+    else
+    {
+        recordProducer();
+        recordConsumer();
+    }
+    submitInOrder(kit, producer, consumer, two);
+    const std::array<float, 4> passed{ 1.0f, 0.0f, 0.0f, 0.0f };
+    CHECK(kit.readBuffer(output) == bytesOf(std::span<const float>(passed)));
+}
+
+//======================================================================================================================
+TEST_CASE("a pass's closing batch orders the next list's copy and sampling pass on the queue", "[conformance]")
+{
+    test::requireGpu();
+    const bool covered = GENERATE(false, true);
+    const bool consumerFirst = GENERATE(false, true);
+    CAPTURE(covered, consumerFirst);
+    test::GpuKit kit;
+    const Oracles oracles(kit);
+    const Pipeline solid = oracles.solid(Format::RGBA16Float);
+    const Pipeline sampled = oracles.sampled();
+    const Texture produced = oracles.bigTarget(TextureUsage::Sampled);
+    constexpr uint32_t kRow = kBigEdge * 8;
+    constexpr uint32_t kRows = 4;
+    const Buffer readback = kit.buffer(uint64_t{ kRow } * kRows, Memory::Readback);
+    const Texture target = oracles.target();
+    CommandList producer = kit.list(QueueType::Graphics, "test.producer");
+    CommandList consumer = kit.list(QueueType::Graphics, "test.consumer");
+    const auto recordProducer = [&](Stage stage, Access access, Layout layout) {
+        if (covered)
+        {
+            // The pass's encoder then waits for every earlier color write, so it carries the closing batch itself.
+            producer.barrier(
+                {},
+                {},
+                std::array{ textureBarrier(
+                    produced,
+                    Stage::ColorAttachment,
+                    Access::ColorAttachmentWrite,
+                    Layout::ColorAttachment,
+                    Stage::ColorAttachment,
+                    Access::ColorAttachmentWrite,
+                    Layout::ColorAttachment
+                ) }
+            );
+        }
+        Oracles::renderOn(producer, produced, solid);
+        producer.barrier(
+            {}, {}, std::array{ textureBarrier(produced, Stage::ColorAttachment, Access::ColorAttachmentWrite, Layout::ColorAttachment, stage, access, layout) }
+        );
+    };
+    SECTION("a copy")
+    {
+        const auto recordConsumer = [&] {
+            consumer.copyTextureToBuffer(
+                produced,
+                TextureRegion{ .offset = { 0, kBigEdge - kRows, 0 }, .extent = { kBigEdge, kRows, 1 } },
+                readback,
+                BufferTextureLayout{ .rowPitch = kRow }
+            );
+        };
+        if (consumerFirst)
+        {
+            recordConsumer();
+            recordProducer(Stage::Copy, Access::CopyRead, Layout::CopySrc);
+        }
+        else
+        {
+            recordProducer(Stage::Copy, Access::CopyRead, Layout::CopySrc);
+            recordConsumer();
+        }
+        submitInOrder(kit, producer, consumer, false);
+        const std::string difference = differences(kit.read(readback), texelsOf(uint64_t{ kBigEdge } * kRows, kSolid), 8, kBigEdge);
+        INFO(difference);
+        CHECK(difference.empty());
+    }
+    SECTION("a pass that samples")
+    {
+        if (consumerFirst)
+        {
+            oracles.sampleOn(consumer, target, sampled, produced);
+            recordProducer(Stage::FragmentShader, Access::ShaderRead, Layout::ShaderRead);
+        }
+        else
+        {
+            recordProducer(Stage::FragmentShader, Access::ShaderRead, Layout::ShaderRead);
+            oracles.sampleOn(consumer, target, sampled, produced);
+        }
+        submitInOrder(kit, producer, consumer, false);
+        checkImage(oracles.read(target), firstPixel(kSolid));
+    }
+}
+
+//======================================================================================================================
+TEST_CASE("a closing batch into IndirectArgs orders the next list's counted draw on the queue", "[conformance]")
+{
+    test::requireGpu();
+    // Covered: a batch before the producer names the compute stage as a source, so the dispatch's encoder carries the
+    // closing batch with a barrier that holds the counted draw's kernels back. Otherwise a trailing encoder does.
+    const bool covered = GENERATE(false, true);
+    const bool consumerFirst = GENERATE(false, true);
+    CAPTURE(covered, consumerFirst);
+    constexpr uint32_t kMaxCount = 64;
+    test::GpuKit kit;
+    const Oracles oracles(kit);
+    const Pipeline pipeline = oracles.oracle();
+    std::vector<DrawIndirectArgs> records;
+    for (uint32_t i = 0; i < kMaxCount; ++i)
+    {
+        records.push_back(DrawIndirectArgs{ .drawId = 2 * i + 5, .vertexCount = 3, .instanceCount = 1, .firstVertex = 0, .firstInstance = 0 });
+    }
+    constexpr uint32_t kCount = 37;
+    const Buffer source = sourceOf(kit, bytesOf(std::span<const DrawIndirectArgs>(records)), kCount);
+    // The records and the count start as zeroes, which draw nothing.
+    const Buffer args = destinationOf(kit, BufferUsage::IndirectArgs);
+    const Texture target = oracles.target();
+    CommandList producer = kit.list(QueueType::Graphics, "test.producer");
+    CommandList consumer = kit.list(QueueType::Graphics, "test.consumer");
+    const auto recordProducer = [&] {
+        if (covered)
+        {
+            producer.barrier(
+                std::array{ GlobalBarrier{ .srcStage = Stage::ComputeShader,
+                                           .srcAccess = Access::ShaderWrite,
+                                           .dstStage = Stage::ComputeShader,
+                                           .dstAccess = Access::ShaderRead | Access::ShaderWrite } }
+            );
+        }
+        oracles.produceOn(producer, source, args);
+        producer.barrier({}, std::array{ computeWritten(args, Stage::IndirectArgs, Access::IndirectArgs) });
+    };
+    const auto recordConsumer = [&] {
+        const std::array colors{ ColorAttachment{ .texture = target, .load = LoadOp::Clear } };
+        consumer.beginRenderPass(RenderPassDesc{ .colors = colors, .area = kOracleRect, .label = "test.consumer" });
+        consumer.setPipeline(pipeline);
+        consumer.setViewport(kOracleViewport);
+        consumer.setScissor(kOracleRect);
+        consumer.drawIndirect(kit.device.address(args, kTailOffset), kMaxCount, kit.device.address(args, kCountOffset));
+        consumer.endRenderPass();
+    };
+    if (consumerFirst)
+    {
+        recordConsumer();
+        recordProducer();
+    }
+    else
+    {
+        recordProducer();
+        recordConsumer();
+    }
+    submitInOrder(kit, producer, consumer, false);
+    OracleImage expected;
+    for (uint32_t i = 0; i < kCount; ++i)
+    {
+        expected.set(records[i].drawId, { static_cast<float>(records[i].drawId + 1), 1.0f, 1.0f, 1.0f });
+    }
+    checkImage(oracles.read(target), expected);
+}
+
+//======================================================================================================================
+TEST_CASE("two lists that carry barriers in a row both order a later list's dispatch", "[conformance]")
+{
+    test::requireGpu();
+    // List A carries its depth batch on its pass's encoder; list B renders elsewhere and carries its own batch, on its
+    // encoder or a trailing one; list C's dispatch reads A's depth, so its wait must see A's update behind B's.
+    const bool coveredB = GENERATE(false, true);
+    CAPTURE(coveredB);
+    test::GpuKit kit;
+    const Oracles oracles(kit);
+    const DepthStencilState write{ .depthTest = true, .depthWrite = true, .depthCompare = CompareOp::Always };
+    const Pipeline depthOnly = graphicsOf(
+        kit.device, GraphicsPipelineDesc{ .vertex = { oracles.draw, "fullscreenVertexMain" }, .depthStencil = write, .depthFormat = Format::D32Float }, {}
+    );
+    const Pipeline solid = oracles.solid(Format::RGBA16Float);
+    const ShaderLibrary textures = loadLibrary(kit.device, "AbiTextures");
+    const Pipeline compare = computeOf(kit.device, textures, "compareMain");
+    const Texture depth = textureOf(kit.device, kBigEdge, Format::D32Float, TextureUsage::DepthStencil | TextureUsage::Sampled);
+    // compareMain passes when its reference, 0.5, is at most the stored depth: only the draws' 0.75 passes.
+    const ClearValue stale{ .depth = 0.25f };
+    prepare(kit, depth, Layout::DepthStencilWrite, &stale);
+    const ViewIndex view = *kit.device.createView(depth, TextureViewDesc{ .aspect = TextureAspect::Depth });
+    const SamplerIndex comparison = *kit.device.createSampler(
+        SamplerDesc{ .filter = SamplerFilter::Nearest,
+                     .mipFilter = SamplerFilter::Nearest,
+                     .address = SamplerAddress::ClampToEdge,
+                     .compareEnable = true,
+                     .compare = CompareOp::LessOrEqual,
+                     .label = "test.comparison" }
+    );
+    const std::vector<std::byte> zeroes(16, std::byte{ 0 });
+    const Buffer output = kit.buffer(16, Memory::Gpu, BufferUsage::ShaderWrite, zeroes);
+    const Texture other = textureOf(kit.device, kEdge, Format::RGBA16Float, TextureUsage::RenderTarget | TextureUsage::Sampled);
+    prepare(kit, other, Layout::ColorAttachment);
+    CommandList a = kit.list(QueueType::Graphics, "test.a");
+    CommandList b = kit.list(QueueType::Graphics, "test.b");
+    CommandList c = kit.list(QueueType::Graphics, "test.c");
+    a.barrier(
+        {},
+        {},
+        std::array{ textureBarrier(
+            depth,
+            Stage::DepthStencil,
+            Access::DepthStencilWrite,
+            Layout::DepthStencilWrite,
+            Stage::DepthStencil,
+            Access::DepthStencilRead | Access::DepthStencilWrite,
+            Layout::DepthStencilWrite
+        ) }
+    );
+    a.beginRenderPass(
+        RenderPassDesc{ .depth = DepthAttachment{ .texture = depth, .load = LoadOp::Clear, .clearDepth = 0.0f }, .area = kBigRect, .label = "test.a" }
+    );
+    a.setPipeline(depthOnly);
+    // The viewport maps the triangle's clip-space depth of 0.5 to 0.75.
+    a.setViewport(Viewport{ .width = static_cast<float>(kBigEdge), .height = static_cast<float>(kBigEdge), .minDepth = 0.5f, .maxDepth = 1.0f });
+    a.setScissor(kBigRect);
+    a.draw(3, kLayers);
+    a.endRenderPass();
+    a.barrier(
+        {},
+        {},
+        std::array{ textureBarrier(
+            depth, Stage::DepthStencil, Access::DepthStencilWrite, Layout::DepthStencilWrite, Stage::ComputeShader, Access::ShaderRead, Layout::DepthStencilRead
+        ) }
+    );
+    if (coveredB)
+    {
+        b.barrier(
+            {},
+            {},
+            std::array{ textureBarrier(
+                other,
+                Stage::ColorAttachment,
+                Access::ColorAttachmentWrite,
+                Layout::ColorAttachment,
+                Stage::ColorAttachment,
+                Access::ColorAttachmentWrite,
+                Layout::ColorAttachment
+            ) }
+        );
+    }
+    Oracles::renderOn(b, other, solid, {}, kEdge);
+    b.barrier(
+        {},
+        {},
+        std::array{ textureBarrier(
+            other, Stage::ColorAttachment, Access::ColorAttachmentWrite, Layout::ColorAttachment, Stage::ComputeShader, Access::ShaderRead, Layout::ShaderRead
+        ) }
+    );
+    c.setPipeline(compare);
+    c.pushRoot(
+        FetchRoot{
+            .view = static_cast<uint32_t>(view), .sampler = 0, .comparison = static_cast<uint32_t>(comparison), .pad = 0, .output = kit.device.address(output) }
+    );
+    c.dispatch(1, 1, 1);
+    // One submission, so only the carried barriers order the lists.
+    kit.run(std::array{ a, b, c });
+    const std::array<float, 4> passed{ 1.0f, 0.0f, 0.0f, 0.0f };
+    CHECK(kit.readBuffer(output) == bytesOf(std::span<const float>(passed)));
 }

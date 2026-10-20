@@ -152,7 +152,7 @@ namespace rojoRHI {
         }
 
         //==============================================================================================================
-        void emitTrailing(core::CommandListCore& list, ListState& state, BarrierState& barriers)
+        void emitTrailing(core::CommandListCore& list, ListState& state, BarrierState& barriers, MTL::Fence* carry)
         {
             // A list that upscaled ends with a wait on the last upscale's fence even when no barrier is pending: later lists see
             // MetalFX's writes only through the encoder that waits on it.
@@ -188,10 +188,22 @@ namespace rojoRHI {
                     core::noteNativeCall(list);
                     ++list.counts.nativeBarriers;
                 }
-                // The producer half: every later encoder on the queue, in this list or a later one, waits for the encoder.
-                encoder->barrierAfterStages(kComputeStages, destination, visibility);
-                core::noteNativeCall(list);
-                ++list.counts.nativeBarriers;
+                const MTL::Stages carried = fenced ? MTL::Stages{ 0 } : fencedStages(barriers, carry);
+                if (carried != 0)
+                {
+                    // Later dispatches wait on the fence, which a counted draw's kernels do not: a barrier to the dispatch
+                    // stage would hold them back too.
+                    encoder->updateFence(carry, kComputeStages);
+                    core::noteNativeCall(list);
+                    destination &= ~carried;
+                }
+                if (destination != 0)
+                {
+                    // The producer half: every later encoder on the queue waits in these stages for the encoder.
+                    encoder->barrierAfterStages(kComputeStages, destination, visibility);
+                    core::noteNativeCall(list);
+                    ++list.counts.nativeBarriers;
+                }
                 encoder->endEncoding();
                 core::noteNativeCall(list);
             }
@@ -265,6 +277,28 @@ namespace rojoRHI {
         }
         metal4::Encoders& encoders = impl.encoders;
         metal4::BarrierState& barriers = encoders.barriers();
+        if (!barriers.argsNamed)
+        {
+            for (const GlobalBarrier& global : globals)
+            {
+                barriers.argsNamed = barriers.argsNamed || metal4::any(global.dstStage, Stage::IndirectArgs);
+            }
+            for (const BufferBarrier& buffer : buffers)
+            {
+                barriers.argsNamed = barriers.argsNamed || metal4::any(buffer.dstStage, Stage::IndirectArgs);
+            }
+            for (const TextureBarrier& texture : textures)
+            {
+                barriers.argsNamed = barriers.argsNamed || metal4::any(texture.dstStage, Stage::IndirectArgs);
+            }
+        }
+        if (encoders.lingering())
+        {
+            // The ended pass's encoder runs no further command, so the batch orders only later encoders: it joins the pending
+            // barrier, which the next encoder emits at its opening or the lingering encoder carries at `end`.
+            barriers.merge(lowered.source, lowered.destination, lowered.visibility);
+            return;
+        }
         const MTL::Stages open = encoders.stages();
         const MTL::Stages covered = lowered.destination & open;
         if (encoders.holdsWork() && (lowered.source & ~barriers.openSource) == 0 && (covered & ~barriers.openDestination) == 0)

@@ -133,7 +133,10 @@ the list allocates at its first pass and reuses.
   opens, before any command: the compute encoder of the pass's leading counted draws, when their
   kernels run first, else the render encoder, after `RenderStageVertex`. `endRenderPass` opens the
   encoder when nothing did, sets the deferred store actions, writes the end timestamp on it after
-  `RenderStageFragment`, ends it and pops the pass's debug group. Both are written at
+  `RenderStageFragment` and pops the pass's debug group; the encoder then lingers, running no
+  further command and hidden from the draw state, until the next encoder, a scope boundary or `end`
+  ends it, so a barrier the list still owes at `end` can be carried on it
+  ([command recording](metal4-recording.md#barriers)). Both are written at
   `TimestampGranularityPrecise`, which adds no encoder at an encoder's start or end; the kernels of
   counted draws and the encoders splits resume fall between the two. A command buffer's
   `writeTimestampIntoHeap` around a render encoder costs CPU and allocations per write and slows

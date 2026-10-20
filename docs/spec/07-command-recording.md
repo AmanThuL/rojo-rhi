@@ -92,7 +92,7 @@ void CommandList::end();
 ```
 
 Ends recording; the list records nothing further and is ready for `Queue::submit`. On Metal 4 it
-closes the open encoder, then emits a barrier still pending on an encoder of its own.
+carries a barrier still pending on the open encoder, or else on an encoder of its own, and ends it.
 
 #### Valid usage
 
@@ -106,7 +106,7 @@ closes the open encoder, then emits a barrier still pending on an encoder of its
 
 | | Metal 4 | D3D12 | Vulkan |
 |---|---|---|---|
-| Call | `MTL4::CommandEncoder::endEncoding` on an open encoder; for a barrier still pending, on a compute encoder that holds no command: `barrierAfterQueueStages` from its source stages to `MTL::StageDispatch \| MTL::StageBlit`, `barrierAfterStages` from those to the destination stages it still names, and `endEncoding` ([synchronization](09-synchronization-part2.md#commandlistbarrier)); then `MTL4::CommandBuffer::endCommandBuffer` | `Close` | `vkEndCommandBuffer` |
+| Call | for a barrier still pending, `MTL4::CommandEncoder::updateFence` of the graphics queue's carry fence and `barrierAfterStages` on the open encoder when it waited for every source stage, else on a compute encoder that holds no command after `barrierAfterQueueStages` ([synchronization](09-synchronization-part2.md#commandlistbarrier)); `endEncoding` on each; then `MTL4::CommandBuffer::endCommandBuffer` | `Close` | `vkEndCommandBuffer` |
 | Cost | native | native | native |
 
 ### `LoadOp`
@@ -296,5 +296,5 @@ unbinds the pipeline. The next compute or copy command opens a new Metal 4 compu
 
 | | Metal 4 | D3D12 | Vulkan |
 |---|---|---|---|
-| Call | `MTL4::CommandBuffer::renderCommandEncoder` first when nothing opened it, which then writes both timestamps; `MTL4::RenderCommandEncoder::setColorStoreAction`, `setDepthStoreAction` or `setStencilStoreAction` for an attachment that is not `Store` without a resolve; `MTL4::RenderCommandEncoder::writeTimestamp` for the pass's end timestamp; `MTL4::RenderCommandEncoder::endEncoding`; `MTL4::CommandBuffer::popDebugGroup` | `EndRenderPass` | `vkCmdEndRendering` |
+| Call | `MTL4::CommandBuffer::renderCommandEncoder` first when nothing opened it, which then writes both timestamps; `MTL4::RenderCommandEncoder::setColorStoreAction`, `setDepthStoreAction` or `setStencilStoreAction` for an attachment that is not `Store` without a resolve; `MTL4::RenderCommandEncoder::writeTimestamp` for the pass's end timestamp; `MTL4::CommandBuffer::popDebugGroup`; the encoder stays open, running no further command, and `endEncoding` follows at the next encoder, scope boundary or `end`, which may carry a barrier the list still owes on it ([synchronization](09-synchronization-part2.md#commandlistbarrier)) | `EndRenderPass` | `vkCmdEndRendering` |
 | Cost | native | native | native |
