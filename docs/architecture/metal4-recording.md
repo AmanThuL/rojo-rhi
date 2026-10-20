@@ -136,10 +136,10 @@ Visibility is `VisibilityOptionDevice` when any access is not `None`, with `Reso
 only while memory aliases (chapter 09): for a global barrier while the core's alias tracker
 (`Source/Core/AliasTracker.h`) counts a live placed resource that has overlapped another placed
 range or a live Sparse resource, and for a texture barrier from `Undefined` on a placed texture the
-tracker flags, or on a placed texture (the native texture is `Untracked`, which only placed textures
-are) while a Sparse resource is live. Placement and destruction update the tracker under its lock;
-recording reads two or three relaxed atomic loads (the counts and a texture's flag). A batch with an
-empty source or destination side emits nothing.
+tracker flags, on any Sparse texture, or on a placed texture (the native texture is `Untracked`,
+which only placed textures are) while a Sparse resource is live. Placement and destruction update
+the tracker under its lock; recording reads two or three relaxed atomic loads (the counts and a
+texture's flag). A batch with an empty source or destination side emits nothing.
 
 The list keeps a pending barrier (source stages P, destination stages D still owed, visibility V)
 and, for the open encoder, what the queue-level barrier at its opening covered (sources `S_open`,
