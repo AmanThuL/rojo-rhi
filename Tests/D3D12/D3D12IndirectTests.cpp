@@ -37,10 +37,6 @@ namespace {
     /// The width and height of the draw oracle's target: it places the triangle of a drawId on pixel `drawId` of these rows.
     constexpr uint32_t kOracleEdge = 256;
 
-    /// The viewport and scissor of the whole counting target.
-    constexpr Viewport kFull{ .width = static_cast<float>(kSize), .height = static_cast<float>(kSize) };
-    constexpr Rect2D kFullRect{ 0, 0, kSize, kSize };
-
     /// Four `uint32` words of one cell AbiVertex stores.
     using Cell = std::array<uint32_t, 4>;
 
@@ -395,7 +391,10 @@ TEST_CASE("a direct draw after an indirect draw writes b1 once; a second direct 
     constexpr uint32_t kDrawId = 42;
     const Buffer indirectOutput = outputBuffer(device, kVertices);
     const Buffer directOutput = outputBuffer(device, kVertices);
-    const std::array records{ DrawIndirectArgs{ .drawId = kDrawId, .vertexCount = kVertices, .instanceCount = 1 } };
+    // The second record draws no vertex: the direct draws after it share its root, and so its cells, and two draws' stores
+    // to one cell are unordered within a pass.
+    const std::array records{ DrawIndirectArgs{ .drawId = kDrawId, .vertexCount = kVertices, .instanceCount = 1 },
+                              DrawIndirectArgs{ .drawId = 7, .vertexCount = 0, .instanceCount = 1 } };
     const Buffer args = argsBuffer(device, std::span<const DrawIndirectArgs>(records));
     const Fence done = makeFence(device, "test.done");
     device.beginFrame();
@@ -408,11 +407,15 @@ TEST_CASE("a direct draw after an indirect draw writes b1 once; a second direct 
     list.drawIndirect(device.address(args), 1);
     CHECK(recordCalls(list) - before == 2u);
     CHECK(binding.drawIdDirty);
-    // The root, b1 back to 0, and DrawInstanced.
+    // The root and ExecuteIndirect again, for the record that draws nothing.
     (void)list.pushRoot(VertexRoot{ device.address(directOutput), 0, kVertices });
     before = recordCalls(list);
+    list.drawIndirect(device.address(args, sizeof(DrawIndirectArgs)), 1);
+    CHECK(recordCalls(list) - before == 2u);
+    // b1 back to 0 and DrawInstanced, with no root: the signature changes b1 only, so the root survives ExecuteIndirect.
+    before = recordCalls(list);
     list.draw(kVertices);
-    CHECK(recordCalls(list) - before == 3u);
+    CHECK(recordCalls(list) - before == 2u);
     CHECK_FALSE(binding.drawIdDirty);
     // DrawInstanced alone: the list holds 0 in b1.
     before = recordCalls(list);
@@ -421,7 +424,7 @@ TEST_CASE("a direct draw after an indirect draw writes b1 once; a second direct 
     list.endRenderPass();
     run(device, list, done);
     CHECK(readCells(device, indirectOutput, kVertices) == triangleCells(kDrawId));
-    // Both direct draws store into the same cells, each with drawId 0.
+    // Both direct draws store into the cells of the root bound before the second ExecuteIndirect, each with drawId 0.
     CHECK(readCells(device, directOutput, kVertices) == triangleCells(0));
     CHECK(messages.count() == 0u);
     device.destroy(target);
@@ -603,6 +606,15 @@ TEST_CASE("a count of 0 draws nothing and a count above maxCount draws maxCount"
         }
     }
     const Buffer args = argsBuffer(device, std::span<const DrawIndirectArgs>(records));
+    // The indexed records, laid out alike, draw drawIds 30 to 33, 40 to 45 and 50 to 54 through indices 0, 1 and 2.
+    std::vector<DrawIndexedIndirectArgs> indexedRecords;
+    for (const DrawIndirectArgs& record : records)
+    {
+        indexedRecords.push_back(DrawIndexedIndirectArgs{ .drawId = record.drawId + 30, .indexCount = 3, .instanceCount = 1 });
+    }
+    const Buffer indexedArgs = argsBuffer(device, std::span<const DrawIndexedIndirectArgs>(indexedRecords));
+    const std::array<uint32_t, 3> values{ 0, 1, 2 };
+    const Buffer indices = indexBuffer(device, values);
     // Two counts in one buffer: 0 at byte 0 and 6, above the maxCount of 4, at byte 4.
     const std::array<uint32_t, 2> counts{ 0, 6 };
     const Buffer counted = argsBuffer(device, std::span<const uint32_t>(counts));
@@ -615,10 +627,16 @@ TEST_CASE("a count of 0 draws nothing and a count above maxCount draws maxCount"
     list.drawIndirect(device.address(args, 4 * sizeof(DrawIndirectArgs)), kMaxCount, device.address(counted, sizeof(uint32_t)));
     // A null count draws exactly maxCount records: drawId 24 stays undrawn.
     list.drawIndirect(device.address(args, 10 * sizeof(DrawIndirectArgs)), kMaxCount);
+    // The same counts through indexed draws: drawId 54 stays undrawn.
+    list.drawIndexedIndirect(indices, IndexType::UInt32, device.address(indexedArgs), kMaxCount, device.address(counted));
+    list.drawIndexedIndirect(
+        indices, IndexType::UInt32, device.address(indexedArgs, 4 * sizeof(DrawIndexedIndirectArgs)), kMaxCount, device.address(counted, sizeof(uint32_t))
+    );
+    list.drawIndexedIndirect(indices, IndexType::UInt32, device.address(indexedArgs, 10 * sizeof(DrawIndexedIndirectArgs)), kMaxCount);
     list.endRenderPass();
     run(device, list, done);
     std::vector<float> expected(size_t{ kOracleEdge } * kOracleEdge, 0.0f);
-    for (const uint32_t drawId : { 10u, 11u, 12u, 13u, 20u, 21u, 22u, 23u })
+    for (const uint32_t drawId : { 10u, 11u, 12u, 13u, 20u, 21u, 22u, 23u, 40u, 41u, 42u, 43u, 50u, 51u, 52u, 53u })
     {
         expected[drawId] = static_cast<float>(drawId + 1);
     }
@@ -628,11 +646,13 @@ TEST_CASE("a count of 0 draws nothing and a count above maxCount draws maxCount"
     std::vector<float> observed(expected.size());
     std::memcpy(observed.data(), texels.data(), texels.size());
     // The first row holds every drawId the records name; the rest of the target stays clear.
-    CHECK(std::vector<float>(observed.begin(), observed.begin() + 32) == std::vector<float>(expected.begin(), expected.begin() + 32));
+    CHECK(std::vector<float>(observed.begin(), observed.begin() + 64) == std::vector<float>(expected.begin(), expected.begin() + 64));
     CHECK(observed == expected);
     CHECK(messages.count() == 0u);
     device.destroy(target);
     device.destroy(args);
+    device.destroy(indexedArgs);
+    device.destroy(indices);
     device.destroy(counted);
     device.destroy(done);
     destroyDevice(device);

@@ -23,8 +23,8 @@ namespace rojoRHI {
         //==============================================================================================================
         /// Records up to `maxCount` records of `signature` from `args` on `list`, whose graphics side is flushed: exactly
         /// `maxCount` when `count` is null, else as many as the `uint32` at `count` says, at most `maxCount`, which is
-        /// `ExecuteIndirect`'s own rule. The signature writes each record's drawId to `b1`, so the native list holds the last
-        /// drawn record's there afterwards, and the next direct draw writes 0 again.
+        /// `ExecuteIndirect`'s own rule. The signature writes each record's drawId to `b1`, so after it `b1` holds no value a
+        /// direct draw can rely on, and the next direct draw writes 0 again.
         void execute(CommandListImpl& list, ID3D12CommandSignature* signature, Addr args, uint32_t maxCount, Addr count)
         {
             // A buffer's payload is published before its handle is returned, so the directory finds it with one acquire load.
