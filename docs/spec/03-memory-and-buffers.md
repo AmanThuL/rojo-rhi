@@ -175,7 +175,7 @@ shader-side access.
 | | Metal 4 | D3D12 | Vulkan |
 |---|---|---|---|
 | Representation | GPU virtual address | raw-buffer heap index in `lo` (a load uses `index`, a store `index + 1`) and 32-bit byte offset in `hi`; descriptor slot 0 is reserved so the zero `Addr` is null | buffer device address |
-| Dereference | `device T*` load | `ByteAddressBuffer` from `ResourceDescriptorHeap[index]`, then `Load<T>` at the offset | `PhysicalStorageBuffer` load |
+| Dereference | `device T*` load | `ByteAddressBuffer` from `ResourceDescriptorHeap[index]`, then `LoadAligned<T>` at the offset | `PhysicalStorageBuffer` load |
 | Cost | native | costly: one descriptor fetch per base, `NonUniformResourceIndex` when divergent; spike 1 | native |
 
 ### `Device::address`

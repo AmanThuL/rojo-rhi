@@ -41,7 +41,7 @@ memory or a shader output first.
 
 | | Metal 4 | D3D12 | Vulkan |
 |---|---|---|---|
-| Lowering | none: returns the argument | `NonUniformResourceIndex` on the heap index; whether DXC carries it into each fetch kind (`load`, `store`, texture, sampler) is unverified | none for an `Addr`, a pointer rather than a descriptor index; for a `uint`, `NonUniformResourceIndex`, which Slang decorates only where the index reaches a descriptor |
+| Lowering | none: returns the argument | `NonUniformResourceIndex` on the heap index; DXC carries it into the `load`, texture and sampler fetches and drops it through the store's `+ 1`, so `rojoRHI::store` marks its own index; on a device unverified | none for an `Addr`, a pointer rather than a descriptor index; for a `uint`, `NonUniformResourceIndex`, which Slang decorates only where the index reaches a descriptor |
 | Cost | native | native: divergent fetches may serialize in hardware, as in native code | native |
 
 ## Addresses
@@ -51,14 +51,15 @@ pointers: an `Addr` there carries a raw shader-resource heap index and a byte of
 distinct base costs a descriptor fetch. A `ShaderWrite` buffer's raw unordered-access descriptor
 sits in the heap slot immediately after its raw shader-resource descriptor, so `rojoRHI::store` uses
 the index plus one. The D3D12 `Addr` is the heap index in `lo` and the 32-bit byte offset in `hi`
-([memory and buffers](03-memory-and-buffers.md)). In the emitted HLSL the only
-`NonUniformResourceIndex` sits in the return of the helper behind `nonUniform`; every heap indexing
-site (`load`, `store`, texture and sampler fetches) is a plain heap index. Whether DXC keeps the
-non-uniform qualifier through that function return, the `uint2` pack and unpack and the `+ 1` is
-verified with the D3D12 backend, which inspects the DXIL handle flags for each fetch kind. Whether
-the fetch is cheap enough for hot paths is spike 1 of [ADR
-0014](../decisions/0014-overhead-measurement.md), still pending. Until it reports, per-draw hot data
-belongs in root fields and heap indices, and an `Addr` hop is for bulk and cold data.
+([memory and buffers](03-memory-and-buffers.md)). The emitted HLSL has `NonUniformResourceIndex`
+in two places: the return of the helper behind `nonUniform`, and around every store's `index + 1`.
+DXC keeps the qualifier through that function return and the `uint2` pack and unpack, so `load`,
+texture and sampler fetches carry it from the helper, and drops it through the addition, so the
+store marks its own index, which is correct for a uniform index too
+([ADR 0023](../decisions/0023-d3d12-store-marks-its-index.md)). Whether the fetch is cheap enough
+for hot paths is spike 1 of [ADR 0014](../decisions/0014-overhead-measurement.md), still pending.
+Until it reports, per-draw hot data belongs in root fields and heap indices, and an `Addr` hop is
+for bulk and cold data.
 
 In SPIR-V, with the pinned Slang, a helper that is not inlined and takes a texture parameter loses
 the `NonUniform` decoration on its fetch; the conformance shaders mark such helpers `[ForceInline]`.
@@ -88,7 +89,7 @@ members; and `base` is dynamically uniform across the wave or marked with `rojoR
 
 | | Metal 4 | D3D12 | Vulkan |
 |---|---|---|---|
-| Lowering | `device T*` load | `ByteAddressBuffer` from `ResourceDescriptorHeap[index]`, then `Load<T>` at offset; unverified | `PhysicalStorageBuffer` load |
+| Lowering | `device T*` load | `ByteAddressBuffer` from `ResourceDescriptorHeap[index]`, then `LoadAligned<T>` at offset: one raw access for a 2- or 4-component vector `T`, or a struct member at a multiple of its size, 4-byte accesses otherwise; unverified | `PhysicalStorageBuffer` load |
 | Cost | native | costly: one descriptor fetch per base; spike 1 pending | native |
 
 ### `rojoRHI::store`
@@ -115,7 +116,7 @@ uniform across the wave or marked with `rojoRHI::nonUniform`.
 
 | | Metal 4 | D3D12 | Vulkan |
 |---|---|---|---|
-| Lowering | `device T*` store | `RWByteAddressBuffer` from `ResourceDescriptorHeap[index + 1]`, then `Store<T>` at offset; unverified | `PhysicalStorageBuffer` store |
+| Lowering | `device T*` store | `RWByteAddressBuffer` from `ResourceDescriptorHeap[NonUniformResourceIndex(index + 1)]`, then `StoreAligned<T>` at offset: one raw access for a 2- or 4-component vector `T`, or a struct member at a multiple of its size, 4-byte accesses otherwise; unverified | `PhysicalStorageBuffer` store |
 | Cost | native | costly: one descriptor fetch per base; spike 1 pending | native |
 
 ## Heap indices

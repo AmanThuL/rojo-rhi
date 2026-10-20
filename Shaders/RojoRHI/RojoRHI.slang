@@ -13,8 +13,13 @@
 //   load / store   Metal   `device` pointer from (hi << 32) | lo, plus `index * sizeof(T)`
 //                  SPIR-V  the same address as a `PhysicalStorageBuffer` pointer
 //                  HLSL    `ByteAddressBuffer` from `ResourceDescriptorHeap[base.x]` for load and
-//                          `RWByteAddressBuffer` from `ResourceDescriptorHeap[base.x + 1]` for store, at byte
-//                          offset `base.y + index * sizeof(T)`: the D3D12 `Addr` is (heap index, byte offset)
+//                          `RWByteAddressBuffer` from `ResourceDescriptorHeap[NonUniformResourceIndex(base.x + 1)]`
+//                          for store, at byte offset `base.y + index * sizeof(T)`: the D3D12 `Addr` is (heap
+//                          index, byte offset). `LoadAligned` and `StoreAligned` make a 2- or 4-component vector
+//                          `T`, or a struct member of that kind at an offset that is a multiple of its size, one
+//                          `Load2`/`Load4` or `Store2`/`Store4`, where plain `Load<T>` splits it into 4-byte
+//                          scalars; any other member stays 4-byte scalars. D3D12 raw access needs only 4-byte
+//                          alignment
 //   nonUniform     Metal   returns its argument
 //                  HLSL    `NonUniformResourceIndex` on the heap index
 //                  SPIR-V  `NonUniformResourceIndex`, which Slang decorates `NonUniform` only where the index
@@ -23,12 +28,12 @@
 //                          storage-texture and sampler fetch wraps its handle in `nonuniform(...)` instead
 //                          (`OpCapability ShaderNonUniform`, correct for a uniform index too)
 //
-//   (D3D12 note)   the emitted HLSL has one `NonUniformResourceIndex(...)`, in the return of the helper behind
-//                  `nonUniform(uint)`; every heap indexing site (`load`, `store` at `base.x + 1`, texture and
-//                  sampler) is a plain `ResourceDescriptorHeap[...]` or `SamplerDescriptorHeap[...]`. Whether DXC
-//                  keeps the non-uniform qualifier through that function return, the `uint2` pack and unpack
-//                  and the `+ 1` is to be verified with the D3D12 backend, by inspecting the DXIL handle flags
-//                  for each fetch kind
+//   (D3D12 note)   the emitted HLSL has `NonUniformResourceIndex(...)` in the return of the helper behind
+//                  `nonUniform(uint)` and around every store's `base.x + 1`; the other heap indexing sites
+//                  (`load`, texture and sampler) are a plain `ResourceDescriptorHeap[...]` or
+//                  `SamplerDescriptorHeap[...]`. DXC keeps the qualifier through that function return and the
+//                  `uint2` pack and unpack (load, texture, sampler) and drops it through the addition, which is
+//                  why the store marks its index
 //   texture*,      Metal   `((device T*)gViewIds)[view]`, T the MSL texture type, from the ID table at
 //   rwTexture*,            `[[buffer(1)]]`; written as `__intrinsic_asm` because Slang's `Load<Texture>` emits an
 //   wTexture*              `as_type` from `ulong` that the Metal compiler rejects
@@ -152,7 +157,7 @@ namespace rojoRHI
     {
 #if defined(ROJORHI_TARGET_HLSL)
         ByteAddressBuffer heap = ResourceDescriptorHeap[base.x];
-        return heap.Load<T>(base.y + index * uint(sizeof(T)));
+        return heap.LoadAligned<T>(base.y + index * uint(sizeof(T)));
 #else
         return *pointerAt<T>(base, index);
 #endif
@@ -161,8 +166,9 @@ namespace rojoRHI
     public void store<T>(Addr base, uint index, T value)
     {
 #if defined(ROJORHI_TARGET_HLSL)
-        RWByteAddressBuffer heap = ResourceDescriptorHeap[base.x + 1];
-        heap.Store<T>(base.y + index * uint(sizeof(T)), value);
+        // DXC drops the qualifier of `base.x` through the addition, so the store marks its own index, uniform or not
+        RWByteAddressBuffer heap = ResourceDescriptorHeap[NonUniformResourceIndex(base.x + 1)];
+        heap.StoreAligned<T>(base.y + index * uint(sizeof(T)), value);
 #else
         *pointerAt<T>(base, index) = value;
 #endif
