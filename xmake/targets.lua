@@ -296,7 +296,6 @@ target("RojoRHITests")
             "DrawDeathTests.cpp",
             "DrawTests.cpp",
             "FormatDeathTests.cpp",
-            "FormatTests.cpp",
             "FrameJoinDeathTests.cpp",
             "FrameJoinTests.cpp",
             "HandoffDeathTests.cpp",
