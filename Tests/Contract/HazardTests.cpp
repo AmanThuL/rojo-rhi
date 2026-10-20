@@ -142,9 +142,10 @@ TEST_CASE("a global barrier orders every buffer and texture", "[contract]")
     const Buffer buffer = kit.buffer(BufferUsage::ShaderWrite);
     const Buffer other = kit.buffer(BufferUsage::None, 8 * kBytes);
     const Texture texture = kit.target();
+    const Buffer upload = kit.buffer(BufferUsage::None);
     discardTo(kit.list, texture, Layout::General, Stage::Copy, Access::CopyWrite);
     kit.list.fillBuffer(buffer, 0, kBytes, 0);
-    kit.list.clearTexture(texture, {}, {});
+    kit.list.copyBufferToTexture(upload, kLayout, texture, kRegion);
     writeToRead(kit.list);
     kit.list.copyBuffer(buffer, 0, other, 0, kBytes);
     kit.list.copyTextureToBuffer(texture, kRegion, other, BufferTextureLayout{ .offset = 2 * kBytes, .rowPitch = 256 });
