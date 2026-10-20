@@ -44,7 +44,7 @@ PROCESS_ROOTS = (
     "Tools/ImGuiBufferProbe/",
 )
 COMMIT_SUBJECT = re.compile(
-    r"^(?:rhi|metal|render|shader|scene|asset|engine|editor|app|core|tool|build|ci|docs|test|spike): "
+    r"^(?:rhi|metal|d3d12|render|shader|scene|asset|engine|editor|app|core|tool|build|ci|docs|test|spike): "
     r"[a-z0-9]"
 )
 NON_IMPERATIVE_START = re.compile(

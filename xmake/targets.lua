@@ -110,9 +110,25 @@ option("rojorhi_backend")
     else
         set_default("null")
     end
-    set_values("null", "metal4")
+    set_values("null", "metal4", "d3d12")
     set_showmenu(true)
-    set_description("Backend for RojoRHI: metal4 (builds on macOS only, the default there) or null (the GPU-free test backend, the default elsewhere; pass it on a Mac host for another platform)")
+    set_description("Backend for RojoRHI: metal4 (builds on macOS only, the default there), d3d12 (builds on Windows only) or null (the GPU-free test backend, the default elsewhere; pass it on a Mac host for another platform)")
+option_end()
+
+-- The adapter a d3d12 build creates its device on, and the D3D12 debug features it enables. Both are
+-- build configuration, compiled into the backend as defines: the library reads no environment variable.
+option("rojorhi_d3d12_adapter")
+    set_default("hardware")
+    set_values("hardware", "warp")
+    set_showmenu(true)
+    set_description("Adapter a d3d12 build creates its device on: hardware (the default) or warp (the software rasterizer, for hosted CI)")
+option_end()
+
+option("rojorhi_d3d12_debug")
+    set_default("mode")
+    set_values("mode", "off", "layer", "gbv")
+    set_showmenu(true)
+    set_description("D3D12 debug features of a d3d12 build: mode (the debug layer and DRED in Debug builds, nothing in Release; the default), off, layer (the debug layer and DRED) or gbv (the debug layer, GPU-based validation and DRED)")
 option_end()
 
 -- Release builds use link-time optimization, so a call into the library inlines into its caller
@@ -133,6 +149,16 @@ end
 -- as every warning is off Windows. The v2 targets take it; v1 under Legacy/ is frozen (ADR 0017) and does not.
 local function warn_unreachable()
     add_cxxflags("-Wunreachable-code", "-Wunreachable-code-return", {tools = "clang"})
+end
+
+-- The D3D12 backend creates no device: createDevice refuses and every other entry aborts. Release link-time code
+-- generation sees through both, so in an executable that calls the library it finds the code after each such call
+-- unreachable (C4702) and a destructor that calls one never returning (C4722), which /WX makes errors. An executable
+-- target calls this to turn those two warnings off on a d3d12 Release build; every other warning still fails it.
+local function unreachable_after_stubs()
+    if is_config("rojorhi_backend", "d3d12") and is_mode("release") then
+        add_cxflags("/wd4702", "/wd4722")
+    end
 end
 
 -- The D3D12 runtime an executable loads from its own directory, copied there after each build:
@@ -197,6 +223,27 @@ target("RojoRHI")
             add_deps("RojoRHIMetalCpp")
             add_frameworks("CoreGraphics", {public = true})
         end
+    elseif is_config("rojorhi_backend", "d3d12") then
+        add_files(path.join(component, "Backends/D3D12/Source/*.cpp"))
+        -- A system include, so the Agility headers shadow the Windows SDK's older d3d12.h and /external:W0 covers them.
+        add_sysincludedirs(path.join(thirdparty, "agility/include"))
+        add_defines("WIN32_LEAN_AND_MEAN", "NOMINMAX")
+        add_options("rojorhi_d3d12_adapter", "rojorhi_d3d12_debug")
+        if is_config("rojorhi_d3d12_adapter", "warp") then
+            add_defines("ROJORHI_D3D12_ADAPTER_WARP")
+        else
+            add_defines("ROJORHI_D3D12_ADAPTER_HARDWARE")
+        end
+        if is_config("rojorhi_d3d12_debug", "off") then
+            add_defines("ROJORHI_D3D12_DEBUG_OFF")
+        elseif is_config("rojorhi_d3d12_debug", "layer") then
+            add_defines("ROJORHI_D3D12_DEBUG_LAYER")
+        elseif is_config("rojorhi_d3d12_debug", "gbv") then
+            add_defines("ROJORHI_D3D12_DEBUG_GBV")
+        else
+            add_defines("ROJORHI_D3D12_DEBUG_MODE")
+        end
+        add_syslinks("d3d12", "dxgi", "dxguid", {public = true})
     -- The Null backend directory holds no source until a part adds one, and xmake warns on an empty glob.
     elseif #os.files(path.join(component_dir, "Backends/Null/Source/*.cpp")) > 0 then
         add_files(path.join(component, "Backends/Null/Source/*.cpp"))
@@ -207,8 +254,10 @@ target("RojoRHI")
         local backend = get_config("rojorhi_backend")
         if backend == "metal4" then
             assert(target:is_plat("macosx"), format("rojorhi_backend=metal4 builds on macOS only; this platform is %s, so use null", target:plat()))
+        elseif backend == "d3d12" then
+            assert(target:is_plat("windows"), format("rojorhi_backend=d3d12 builds on Windows only; this platform is %s, so use null", target:plat()))
         else
-            assert(backend == "null", format("rojorhi_backend=%s is not a backend; the values are null and metal4", tostring(backend)))
+            assert(backend == "null", format("rojorhi_backend=%s is not a backend; the values are null, metal4 and d3d12", tostring(backend)))
         end
     end)
 
@@ -218,14 +267,55 @@ target("RojoRHITests")
     set_default(false)
     set_targetdir("$(builddir)/$(plat)/$(arch)/$(mode)/rojorhi-test")
     add_files(path.join(component, "Tests/*.cpp"))
-    add_files(path.join(component, "Tests/Contract/*.cpp"))
+    if is_config("rojorhi_backend", "d3d12") then
+        -- The contract files whose chapters the D3D12 backend does not implement yet. A file leaves the list when it
+        -- passes whole on WARP under the debug layer and GPU-based validation, and the list ends empty.
+        local d3d12_pending = {
+            "AliasingDeathTests.cpp", "AliasingTests.cpp", "BarrierDeathTests.cpp", "BarrierTests.cpp",
+            "BufferDeathTests.cpp", "BufferTests.cpp", "CommandListDeathTests.cpp", "CommandListTests.cpp",
+            "CopyDeathTests.cpp", "CopyTests.cpp", "CounterTests.cpp", "DeviceDeathTests.cpp", "DeviceTests.cpp",
+            "DiagnosticsDeathTests.cpp", "DiagnosticsTests.cpp", "DrawDeathTests.cpp", "DrawTests.cpp",
+            "FormatDeathTests.cpp", "FormatTests.cpp", "FrameJoinDeathTests.cpp", "FrameJoinTests.cpp",
+            "FundamentalsTests.cpp", "HandoffDeathTests.cpp", "HandoffTests.cpp", "HazardDeathTests.cpp",
+            "HazardTests.cpp", "HeapDeathTests.cpp", "HeapTests.cpp", "IndirectHazardDeathTests.cpp",
+            "IndirectHazardTests.cpp", "LifetimeDeathTests.cpp", "LifetimeTests.cpp", "MessageDeathTests.cpp",
+            "PipelineDeathTests.cpp", "PipelineTests.cpp", "QueueDeathTests.cpp", "QueueHazardDeathTests.cpp",
+            "QueueHazardTests.cpp", "QueueTests.cpp", "RenderPassDeathTests.cpp", "RenderPassTests.cpp",
+            "SamplerDeathTests.cpp", "SamplerTests.cpp", "SparseDeathTests.cpp", "SparseOrderDeathTests.cpp",
+            "SparseOrderTests.cpp", "SparseTests.cpp", "SwapchainDeathTests.cpp", "SwapchainTests.cpp",
+            "TextureDeathTests.cpp", "TextureTests.cpp", "TrackerDeathTests.cpp", "TrackerTests.cpp",
+            "UpscaleDeathTests.cpp", "UpscalerTests.cpp",
+        }
+        local pending = {}
+        for _, name in ipairs(d3d12_pending) do
+            pending[name] = true
+        end
+        -- A renamed or deleted contract file must leave the list too, so on_config fails on a name that matches no file.
+        -- The check runs in script scope, the only scope that can fail a configuration, so the values travel absolute.
+        set_values("rojorhi.d3d12_pending", d3d12_pending)
+        set_values("rojorhi.contract_dir", path.join(component_dir, "Tests/Contract"))
+        on_config(function (target)
+            local contract_dir = target:values("rojorhi.contract_dir")
+            for _, name in ipairs(table.wrap(target:values("rojorhi.d3d12_pending"))) do
+                assert(os.isfile(path.join(contract_dir, name)),
+                       format("d3d12_pending names Tests/Contract/%s, which does not exist; remove or rename the entry", name))
+            end
+        end)
+        for _, file in ipairs(os.files(path.join(component_dir, "Tests/Contract/*.cpp"))) do
+            if not pending[path.filename(file)] then
+                add_files(path.join(component, "Tests/Contract", path.filename(file)))
+            end
+        end
+    else
+        add_files(path.join(component, "Tests/Contract/*.cpp"))
+    end
     add_files(path.join(component, "Tests/Support/*.cpp"))
     -- The conformance directory holds no source until a part adds one, and xmake warns on an empty glob.
     if #os.files(path.join(component_dir, "Tests/Conformance/*.cpp")) > 0 then
         add_files(path.join(component, "Tests/Conformance/*.cpp"))
     end
     -- Core and Null cases test the core through the Null backend, which never ships, so they build only with it.
-    if not is_config("rojorhi_backend", "metal4") then
+    if is_config("rojorhi_backend", "null") then
         add_files(path.join(component, "Tests/Core/*.cpp"))
         add_files(path.join(component, "Tests/Null/*.cpp"))
         add_files(path.join(component, "Tests/Support/Null/*.cpp"))
@@ -239,6 +329,19 @@ target("RojoRHITests")
         add_includedirs(path.join(component, "Backends/Metal4/Source"))
         add_includedirs(path.join(thirdparty, "metal-cpp"))
     end
+    -- D3D12 cases may reach the backend's private headers and the Agility headers; the executable loads the runtime
+    -- the rule copies beside it.
+    if is_config("rojorhi_backend", "d3d12") then
+        if #os.files(path.join(component_dir, "Tests/D3D12/*.cpp")) > 0 then
+            add_files(path.join(component, "Tests/D3D12/*.cpp"))
+        end
+        add_files(path.join(component, "Tests/Support/D3D12/*.cpp"))
+        add_includedirs(path.join(component, "Backends/D3D12/Source"))
+        add_defines("WIN32_LEAN_AND_MEAN", "NOMINMAX")
+        add_sysincludedirs(path.join(thirdparty, "agility/include"))
+        add_rules("rojorhi.d3d12_runtime")
+        set_values("rojorhi.thirdparty", thirdparty_dir)
+    end
     add_includedirs(path.join(component, "Source"))
     add_includedirs(path.join(component, "Tests"))
     add_deps("RojoRHI")
@@ -248,6 +351,7 @@ target("RojoRHITests")
     if is_plat("windows") then
         add_defines("_CRT_SECURE_NO_WARNINGS")
     end
+    unreachable_after_stubs()
     if is_config("rojorhi_backend", "metal4") then
         -- Every Metal 4 entry runs under the Metal validation layer, from the test directory.
         local layer = {MTL_DEBUG_LAYER = "1"}
@@ -255,6 +359,10 @@ target("RojoRHITests")
         -- Each case spawns this executable again, so keep Catch2's summary in the log and bound a hang.
         add_tests("death", {runargs = {"[death]"}, runenvs = layer, realtime_output = true, run_timeout = 300000})
         add_tests("conformance", {runargs = {"[conformance]"}, runenvs = layer, realtime_output = true})
+    elseif is_config("rojorhi_backend", "d3d12") then
+        -- No death or conformance entry: while the backend creates no device, each would match no case, and Catch2
+        -- fails a filter that matches none.
+        add_tests("contract", {runargs = {"[contract]~[death],[d3d12]~[death]"}, realtime_output = true})
     else
         add_tests("contract", {runargs = {"[contract]~[death],[core]~[death],[null]~[death]"}, realtime_output = true})
         -- Each case spawns this executable again, so keep Catch2's summary in the log and bound a hang.
@@ -293,6 +401,11 @@ target("RojoRHILtoProbe")
     if is_plat("windows") then
         set_symbols("debug")
     end
+    if is_config("rojorhi_backend", "d3d12") then
+        add_rules("rojorhi.d3d12_runtime")
+        set_values("rojorhi.thirdparty", thirdparty_dir)
+    end
+    unreachable_after_stubs()
 
 -- The D3D12 floor probe: two standalone executables from one source that report, as JSON, whether
 -- the WARP adapter meets the hardware floor of ADR 0010 and how the D3D12 runtime loaded. The

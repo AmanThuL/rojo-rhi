@@ -1,0 +1,217 @@
+//----------------------------------------------------------------------------------------------------------------------
+/// @file D3D12CommandList.cpp
+/// @brief Defines the command list entries of the D3D12 backend, which creates no device, so no list exists to record into.
+//----------------------------------------------------------------------------------------------------------------------
+
+#include "D3D12Common.h"
+
+#include <rojoRHI/RHI.h>
+
+#include "Core/CommandLists.h"
+
+#include <cstddef>
+#include <cstdint>
+#include <span>
+#include <string_view>
+
+namespace rojoRHI {
+    namespace core {
+        //==============================================================================================================
+        CommandListCore& coreOf(CommandList)
+        {
+            d3d12::notImplemented("core::coreOf(CommandList)");
+        }
+    } // namespace core
+
+    //==================================================================================================================
+    CommandList Device::acquireCommandList(QueueType, std::string_view)
+    {
+        d3d12::notImplemented("Device::acquireCommandList");
+    }
+
+    //==================================================================================================================
+    void CommandList::end()
+    {
+        d3d12::notImplemented("CommandList::end");
+    }
+
+    //==================================================================================================================
+    Addr CommandList::uploadFrameData(std::span<const std::byte>, uint32_t)
+    {
+        d3d12::notImplemented("CommandList::uploadFrameData");
+    }
+
+    //==================================================================================================================
+    void CommandList::beginRenderPass(const RenderPassDesc&)
+    {
+        d3d12::notImplemented("CommandList::beginRenderPass");
+    }
+
+    //==================================================================================================================
+    void CommandList::endRenderPass()
+    {
+        d3d12::notImplemented("CommandList::endRenderPass");
+    }
+
+    //==================================================================================================================
+    void CommandList::beginScope(std::string_view)
+    {
+        d3d12::notImplemented("CommandList::beginScope");
+    }
+
+    //==================================================================================================================
+    void CommandList::endScope()
+    {
+        d3d12::notImplemented("CommandList::endScope");
+    }
+
+    //==================================================================================================================
+    void CommandList::setPipeline(Pipeline)
+    {
+        d3d12::notImplemented("CommandList::setPipeline");
+    }
+
+    //==================================================================================================================
+    void CommandList::setViewport(const Viewport&)
+    {
+        d3d12::notImplemented("CommandList::setViewport");
+    }
+
+    //==================================================================================================================
+    void CommandList::setScissor(const Rect2D&)
+    {
+        d3d12::notImplemented("CommandList::setScissor");
+    }
+
+    //==================================================================================================================
+    void CommandList::setStencilReference(uint8_t)
+    {
+        d3d12::notImplemented("CommandList::setStencilReference");
+    }
+
+    //==================================================================================================================
+    void CommandList::setBlendConstants(float, float, float, float)
+    {
+        d3d12::notImplemented("CommandList::setBlendConstants");
+    }
+
+    //==================================================================================================================
+    void CommandList::setPrimitiveTopology(PrimitiveTopology)
+    {
+        d3d12::notImplemented("CommandList::setPrimitiveTopology");
+    }
+
+    //==================================================================================================================
+    void CommandList::setDepthBias(float, float, float)
+    {
+        d3d12::notImplemented("CommandList::setDepthBias");
+    }
+
+    //==================================================================================================================
+    void CommandList::setRoot(Addr)
+    {
+        d3d12::notImplemented("CommandList::setRoot");
+    }
+
+    //==================================================================================================================
+    void CommandList::draw(uint32_t, uint32_t, uint32_t, uint32_t)
+    {
+        d3d12::notImplemented("CommandList::draw");
+    }
+
+    //==================================================================================================================
+    void CommandList::drawIndexed(Buffer, IndexType, uint32_t, uint32_t, uint32_t, int32_t, uint32_t)
+    {
+        d3d12::notImplemented("CommandList::drawIndexed");
+    }
+
+    //==================================================================================================================
+    void CommandList::drawMeshTasks(uint32_t, uint32_t, uint32_t)
+    {
+        d3d12::notImplemented("CommandList::drawMeshTasks");
+    }
+
+    //==================================================================================================================
+    void CommandList::dispatch(uint32_t, uint32_t, uint32_t)
+    {
+        d3d12::notImplemented("CommandList::dispatch");
+    }
+
+    //==================================================================================================================
+    void CommandList::drawIndirect(Addr, uint32_t, Addr)
+    {
+        d3d12::notImplemented("CommandList::drawIndirect");
+    }
+
+    //==================================================================================================================
+    void CommandList::drawIndexedIndirect(Buffer, IndexType, Addr, uint32_t, Addr)
+    {
+        d3d12::notImplemented("CommandList::drawIndexedIndirect");
+    }
+
+    //==================================================================================================================
+    void CommandList::drawMeshTasksIndirect(Addr, uint32_t, Addr)
+    {
+        d3d12::notImplemented("CommandList::drawMeshTasksIndirect");
+    }
+
+    //==================================================================================================================
+    void CommandList::dispatchIndirect(Addr)
+    {
+        d3d12::notImplemented("CommandList::dispatchIndirect");
+    }
+
+    //==================================================================================================================
+    void CommandList::copyBuffer(Buffer, uint64_t, Buffer, uint64_t, uint64_t)
+    {
+        d3d12::notImplemented("CommandList::copyBuffer");
+    }
+
+    //==================================================================================================================
+    void CommandList::copyBufferToTexture(Buffer, const BufferTextureLayout&, Texture, const TextureRegion&)
+    {
+        d3d12::notImplemented("CommandList::copyBufferToTexture");
+    }
+
+    //==================================================================================================================
+    void CommandList::copyTextureToBuffer(Texture, const TextureRegion&, Buffer, const BufferTextureLayout&)
+    {
+        d3d12::notImplemented("CommandList::copyTextureToBuffer");
+    }
+
+    //==================================================================================================================
+    void CommandList::copyTexture(Texture, const TextureRegion&, Texture, const TextureRegion&)
+    {
+        d3d12::notImplemented("CommandList::copyTexture");
+    }
+
+    //==================================================================================================================
+    void CommandList::fillBuffer(Buffer, uint64_t, uint64_t, uint32_t)
+    {
+        d3d12::notImplemented("CommandList::fillBuffer");
+    }
+
+    //==================================================================================================================
+    void CommandList::clearTexture(Texture, const SubresourceRange&, const ClearValue&)
+    {
+        d3d12::notImplemented("CommandList::clearTexture");
+    }
+
+    //==================================================================================================================
+    void CommandList::barrier(std::span<const GlobalBarrier>, std::span<const BufferBarrier>, std::span<const TextureBarrier>)
+    {
+        d3d12::notImplemented("CommandList::barrier");
+    }
+
+    //==================================================================================================================
+    void CommandList::upscale(Upscaler, const UpscaleParams&)
+    {
+        d3d12::notImplemented("CommandList::upscale");
+    }
+
+    //==================================================================================================================
+    void CommandList::declareAccessChecked(std::span<const ResourceAccess>)
+    {
+        d3d12::notImplemented("CommandList::declareAccess");
+    }
+} // namespace rojoRHI

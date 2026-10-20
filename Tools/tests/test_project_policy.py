@@ -87,6 +87,16 @@ class ProjectPolicyTests(unittest.TestCase):
             policy.check_commit_messages("base..head", errors)
         self.assertEqual(errors, [])
 
+    def test_commit_policy_accepts_the_d3d12_scope(self) -> None:
+        records = "0123456789abcdef\0d3d12: add the backend option\0"
+        errors: list[str] = []
+        with (
+            mock.patch.object(policy, "git", return_value=records),
+            mock.patch.object(policy, "author_identity_tokens", return_value=set()),
+        ):
+            policy.check_commit_messages("base..head", errors)
+        self.assertEqual(errors, [])
+
     def test_commit_policy_accepts_a_squash_merged_spike(self) -> None:
         records = "0123456789abcdef\0spike: decide the RHI execution model (#11)\0"
         errors: list[str] = []

@@ -183,7 +183,7 @@ jobs:
       - run: |
           python3 Tools/check_cpp_layout.py --compile-commands build/compile-commands/null/compile_commands.json \
               --compile-commands build/compile-commands/metal4/compile_commands.json \
-              --exclude Tools/D3D12Probe
+              --exclude Backends/D3D12 --exclude Tests/Support/D3D12 --exclude Tools/D3D12Probe
       - run: python3 Tools/check_cpp_comments.py --public-api-docs error --compile-commands build/compile-commands/null/compile_commands.json
       - run: python3 Tools/check_cpp_comments.py --public-api-docs error --compile-commands build/compile-commands/metal4/compile_commands.json
   # The floor probe gates the D3D12 backend (ADR 0010): WARP on the hosted image must meet the hardware floor
@@ -210,7 +210,7 @@ jobs:
           }
           python3 --version
       - run: xmake setup
-      - run: xmake f -m debug -y --rojorhi_backend=null
+      - run: xmake f -m debug -y --rojorhi_backend=d3d12 --rojorhi_d3d12_adapter=warp --rojorhi_d3d12_debug=gbv
       - run: xmake build RojoRHID3D12ProbeFactory
       - run: xmake build RojoRHID3D12ProbeExports
       # Each probe prints one JSON object and exits 0 only when the floor is met on the app-local WARP; the gate
@@ -292,6 +292,37 @@ jobs:
         with:
           name: d3d12-probe
           path: build/d3d12-probe/
+      - run: xmake build RojoRHITests
+      # The runtime rule copies the app-local Agility SDK and WARP beside the test executable.
+      - shell: pwsh
+        run: |
+          $dir = 'build/windows/x64/debug/rojorhi-test'
+          foreach ($dll in 'D3D12/D3D12Core.dll', 'D3D12/d3d12SDKLayers.dll', 'd3d10warp.dll') {
+            if (-not (Test-Path (Join-Path $dir $dll))) { throw "$dll is missing from $dir" }
+          }
+      - run: xmake test RojoRHITests/abi
+      - run: xmake test RojoRHITests/contract
+      # The toolchain record: the cl command lines xmake writes for the c++23 language level, the MSVC version, and
+      # whether this MSVC accepts each spelling of that level (a D9002 warning means it does not).
+      - name: Record the toolchain
+        shell: pwsh
+        run: |
+          xmake --version
+          xmake build -r -v RojoRHID3D12ProbeFactory
+          $vswhere = Join-Path ${env:ProgramFiles(x86)} 'Microsoft Visual Studio\Installer\vswhere.exe'
+          $install = & $vswhere -latest -products * -property installationPath
+          $version = (Get-Content (Join-Path $install 'VC\Auxiliary\Build\Microsoft.VCToolsVersion.default.txt')).Trim()
+          $cl = Join-Path $install "VC\Tools\MSVC\$version\bin\Hostx64\x64\cl.exe"
+          Write-Host "MSVC tools $version at $cl"
+          & $cl 2>&1 | Select-Object -First 2 | ForEach-Object { Write-Host "$_" }
+          $source = Join-Path $env:RUNNER_TEMP 'language-level.cpp'
+          Set-Content -Path $source -Value 'int main() {}' -Encoding ascii
+          foreach ($flag in '/std:c++23', '/std:c++23preview', '/std:c++latest') {
+            Write-Host "cl /nologo /Zs $flag"
+            & $cl /nologo /Zs $flag $source 2>&1 | ForEach-Object { Write-Host "  $_" }
+            Write-Host "  exit $LASTEXITCODE"
+          }
+          exit 0
       # Only Windows compiles the D3D12 sources, so only it checks their layout; the macOS format job excludes them.
       - name: Find clangd
         shell: pwsh
@@ -306,5 +337,12 @@ jobs:
       - run: xmake project -k compile_commands build/compile-commands/d3d12
       # Keep these directories equal to the ones the format job excludes.
       - run: >-
-          python3 Tools/check_cpp_layout.py --only Tools/D3D12Probe --compile-commands build/compile-commands/d3d12/compile_commands.json
-          --clangd "$env:CLANGD_PATH"
+          python3 Tools/check_cpp_layout.py --only Backends/D3D12 --only Tests/Support/D3D12 --only Tools/D3D12Probe
+          --compile-commands build/compile-commands/d3d12/compile_commands.json --clangd "$env:CLANGD_PATH"
+      # Release with debug features mode, which enables none in Release; /WX makes the build warning-free. The LTO
+      # probe only builds: createDevice refuses, so it cannot run, and the Device::capabilities it calls aborts, so
+      # MSVC keeps that call out of line and check_lto_inline.py has nothing to show here.
+      - run: xmake f -m release -y --rojorhi_backend=d3d12 --rojorhi_d3d12_adapter=warp --rojorhi_d3d12_debug=mode
+      - run: xmake build RojoRHITests
+      - run: xmake test RojoRHITests/contract
+      - run: xmake build RojoRHILtoProbe
