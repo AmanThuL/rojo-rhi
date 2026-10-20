@@ -190,7 +190,7 @@ no native call on any backend and returns the same value every time for the buff
 #### Mapping
 | | Metal 4 | D3D12 | Vulkan |
 |---|---|---|---|
-| Call | `MTL::Buffer::gpuAddress()` plus `offset` | the buffer's raw-view heap index paired with `offset` | `vkGetBufferDeviceAddress`, cached at creation, plus `offset` |
+| Call | `MTL::Buffer::gpuAddress()`, read once at creation, plus `offset` | the buffer's raw-view heap index paired with `offset` | `vkGetBufferDeviceAddress`, cached at creation, plus `offset` |
 | Cost | native | cheap: composes an index and an offset | native |
 
 ### `Device::cpuPointer`
@@ -247,6 +247,6 @@ so one into memory reused by a newer buffer names that buffer.
 #### Mapping
 | | Metal 4 | D3D12 | Vulkan |
 |---|---|---|---|
-| Arena | per-frame-slot `MTL::StorageModeShared` pages; `MTL::Buffer::gpuAddress()` plus offset | per-frame-slot buffers in the `Upload` heap type; page raw-view index and offset | per-frame-slot host-visible buffers; device address plus offset |
+| Arena | per-frame-slot `MTL::StorageModeShared` pages; the page's `MTL::Buffer::gpuAddress()`, read once at its creation, plus offset | per-frame-slot buffers in the `Upload` heap type; page raw-view index and offset | per-frame-slot host-visible buffers; device address plus offset |
 | Growth | a new page from `MTL::Device::newBuffer`, added to the residency set | a new committed buffer and raw SRV | a new buffer and allocation |
-| Cost | cheap: one bump allocation and one copy | cheap: one bump allocation and one copy | cheap: one bump allocation and one copy |
+| Cost | cheap: one bump allocation and one copy, with no call or message unless the list claims a page | cheap: one bump allocation and one copy | cheap: one bump allocation and one copy |

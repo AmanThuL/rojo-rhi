@@ -116,18 +116,38 @@ namespace rojoRHI::core {
     /// VU-rojo-queue-0001, VU-rojo-queue-0002) and marks each one submitted. A backend calls it first in `Queue::submit`.
     void submitLists(DeviceCore& core, QueueType type, std::span<const CommandList> lists);
 
-    /// Where an upload landed: the page's buffer, the byte offset inside it and the memory to copy the bytes to.
+    /// Where an upload landed: the page's buffer, the byte offset inside it, the memory to copy the bytes to and its GPU
+    /// address.
     struct ArenaAllocation
     {
         Buffer page;       ///< The page's buffer.
         uint64_t offset;   ///< Bytes from the start of the page, a multiple of the requested alignment.
         std::byte* memory; ///< The host address of that offset.
+        /// The page's `ArenaPage::address` plus `offset`; meaningful only where `ArenaPage::address` is, so on Null, whose pages
+        /// have none, it holds just the offset.
+        uint64_t address;
     };
 
+    /// Claims a page of at least `size` bytes from the arena slot of `list`'s frame, through `source`, stamps its record with
+    /// the list's frame for VU-rojo-buffer-0020 and makes it the list's page, with its cursor at zero. The claim is the one
+    /// place Release recording takes a lock (ADR 0020), so it stays out of line.
+    void claimArenaPage(DeviceCore& core, CommandListCore& list, uint64_t size, ArenaPageSource source, void* context);
+
     /// Reserves `size` bytes at `alignment` in `list`'s own page, claiming a page when it has none or the bytes do not fit,
-    /// through `source`. Only claiming takes a lock. It checks nothing: `allocateFrameData` and the scope recorder call it
-    /// after their own checks.
-    ArenaAllocation bumpArenaPage(DeviceCore& core, CommandListCore& list, uint64_t size, uint32_t alignment, ArenaPageSource source, void* context);
+    /// through `source`. Only claiming takes a lock; the bump into a page with room is inline and makes no call. It checks
+    /// nothing: `allocateFrameData` and the scope recorder call it after their own checks.
+    inline ArenaAllocation bumpArenaPage(DeviceCore& core, CommandListCore& list, uint64_t size, uint32_t alignment, ArenaPageSource source, void* context)
+    {
+        uint64_t offset = (list.pageUsed + alignment - 1) & ~(uint64_t{ alignment } - 1);
+        if (list.page.host == nullptr || offset + size > list.page.size) [[unlikely]]
+        {
+            // A new page's offset zero satisfies every alignment.
+            claimArenaPage(core, list, size, source, context);
+            offset = 0;
+        }
+        list.pageUsed = offset + size;
+        return ArenaAllocation{ list.page.buffer, offset, list.page.host + offset, list.page.address + offset };
+    }
 
     /// Checks an upload of `bytes` at `alignment` (VU-rojo-buffer-0015 to 0017, then VU-rojo-cmd-0063) and bumps the cursor of
     /// `list`'s own page; only a list with no page, or whose page is full, claims a page from the arena, which takes a lock

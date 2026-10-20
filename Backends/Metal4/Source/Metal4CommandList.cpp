@@ -17,6 +17,7 @@
 #include "Core/HandlePool.h"
 #include "Core/Records.h"
 #include "Metal4Barriers.h"
+#include "Metal4Buffers.h"
 #include "Metal4Common.h"
 #include "Metal4Memory.h"
 
@@ -67,7 +68,8 @@ namespace rojoRHI {
             buffer->setLabel(makeString(record.label));
             // The page joins the device set inside the arena's claim, the one lock recording may take (ADR 0020).
             impl.residency.add(buffer);
-            record.native = buffer;
+            std::unique_ptr<BufferPayload> payload = makeBufferPayload(core, buffer);
+            record.native = payload.get();
             Result<Buffer> page = core::addFrameArenaPage(core, std::move(record));
             if (!page)
             {
@@ -75,11 +77,14 @@ namespace rojoRHI {
                 buffer->release();
                 return std::unexpected(std::move(page.error()));
             }
+            // The pool's record owns the payload now; the retire hook frees it.
+            const BufferPayload* owned = payload.release();
 #ifndef NDEBUG
             // Only Debug checks decode addresses, so only Debug builds keep the address map.
-            impl.addresses.insert(buffer->gpuAddress(), size, core::HandlePool<Buffer, core::BufferRecord>::slotIndex(*page), buffer);
+            impl.addresses.insert(owned->address, size, core::HandlePool<Buffer, core::BufferRecord>::slotIndex(*page), buffer);
 #endif
-            return core::ArenaPage{ *page, static_cast<std::byte*>(buffer->contents()), size };
+            // The page keeps its GPU address, so an upload adds its offset to it and sends the page no message.
+            return core::ArenaPage{ .buffer = *page, .host = static_cast<std::byte*>(buffer->contents()), .size = size, .address = owned->address };
         }
     } // namespace metal4
 
@@ -168,10 +173,7 @@ namespace rojoRHI {
         // Only a list with no page, or a full one, takes the arena's lock to claim a page (ADR 0020).
         const core::ArenaAllocation place = core::allocateFrameData(*list.device, list, bytes, alignment, metal4::createArenaPage, list.device);
         std::memcpy(place.memory, bytes.data(), bytes.size());
-        // A page's payload is fixed from its creation until the device is destroyed, so it is read without a lock.
-        const auto* page = static_cast<const MTL::Buffer*>(list.device->pool<Buffer>().native(place.page));
-        const uint64_t value = page->gpuAddress() + place.offset;
-        return Addr{ static_cast<uint32_t>(value), static_cast<uint32_t>(value >> 32) };
+        return Addr{ static_cast<uint32_t>(place.address), static_cast<uint32_t>(place.address >> 32) };
     }
 
     //==================================================================================================================

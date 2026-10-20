@@ -12,6 +12,7 @@
 #include "Core/Draws.h"
 #include "Core/HandlePool.h"
 #include "Metal4Barriers.h"
+#include "Metal4Buffers.h"
 #include "Metal4Common.h"
 #include "Metal4DrawState.h"
 #include "Metal4Encoders.h"
@@ -92,15 +93,8 @@ namespace rojoRHI {
         Reservation reserve(CommandListImpl& list, uint64_t bytes)
         {
             core::DeviceCore& device = *list.core.device;
-            metal4::DrawState& draw = list.draw;
             const core::ArenaAllocation place = core::bumpArenaPage(device, list.core, bytes, kReservationAlignment, device.arenaSource(), &device);
-            if (place.page != draw.arenaPage)
-            {
-                // A page's payload is fixed from its creation until the device is destroyed, so it is read without a lock.
-                draw.arenaPage = place.page;
-                draw.arenaPageAddress = static_cast<const MTL::Buffer*>(device.pool<Buffer>().native(place.page))->gpuAddress();
-            }
-            return Reservation{ place.memory, draw.arenaPageAddress + place.offset };
+            return Reservation{ place.memory, place.address };
         }
 
         //==============================================================================================================
@@ -158,19 +152,14 @@ namespace rojoRHI {
             const Reservation place = reserve(list, kReservationBytes);
             const uint64_t base = place.address;
             const bool indexed = counted.kind == metal4::IcbKind::Indexed;
-            if (indexed && counted.indices != draw.indexBuffer)
-            {
-                // A record's payload is fixed from creation to retirement, so the buffer is read with one load and no lock (ADR 0020).
-                const auto* buffer = static_cast<const MTL::Buffer*>(device.pool<Buffer>().native(counted.indices));
-                draw.indexBuffer = counted.indices;
-                draw.indexAddress = buffer->gpuAddress();
-                draw.indexLength = buffer->length();
-            }
+            // A record's payload is fixed from creation to retirement, so it is read with one load and no lock (ADR 0020), and it
+            // holds the index buffer's GPU address and length, so the draw sends the buffer no message.
+            const metal4::BufferPayload* indices = indexed ? metal4::bufferPayload(device, counted.indices) : nullptr;
             metal4::DrawParams params{ .icb = 0,
                                        .records = counted.records,
                                        .count = counted.count,
                                        .output = 0,
-                                       .indices = indexed ? draw.indexAddress : 0,
+                                       .indices = indexed ? indices->address : 0,
                                        .maxCount = counted.maxCount,
                                        .primitive = static_cast<uint32_t>(draw.topology),
                                        .indexType = static_cast<uint32_t>(counted.indexType),
@@ -201,7 +190,7 @@ namespace rojoRHI {
                                                            .primitive = draw.topology,
                                                            .indexType = counted.indexType,
                                                            .indices = params.indices,
-                                                           .indexLength = indexed ? draw.indexLength : 0 };
+                                                           .indexLength = indexed ? indices->length : 0 };
             }
             std::memcpy(place.memory, &params, sizeof(params));
             runKernel(list, kernel, base, groups, threads, kDrawReads, split);

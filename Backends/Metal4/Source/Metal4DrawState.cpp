@@ -22,11 +22,6 @@ namespace rojoRHI::metal4 {
         tableDrawRecord = 0;
         zeroRecord = 0;
         icbs.reset();
-        arenaPage = {};
-        arenaPageAddress = 0;
-        indexBuffer = {};
-        indexAddress = 0;
-        indexLength = 0;
     }
 
     //==================================================================================================================

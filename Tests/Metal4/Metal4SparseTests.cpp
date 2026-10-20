@@ -8,6 +8,7 @@
 #include "Core/Formats.h"
 #include "Core/HandlePool.h"
 #include "Core/Records.h"
+#include "Metal4Buffers.h"
 #include "Metal4Device.h"
 #include "Metal4Formats.h"
 #include "Metal4Sparse.h"
@@ -42,7 +43,7 @@ namespace {
     /// The native buffer `buffer` wraps.
     MTL::Buffer* nativeOf(Device device, Buffer buffer)
     {
-        return static_cast<MTL::Buffer*>(DeviceImpl::of(device).core.pool<Buffer>().native(buffer));
+        return metal4::bufferPayload(DeviceImpl::of(device).core, buffer)->buffer;
     }
 
     //==================================================================================================================

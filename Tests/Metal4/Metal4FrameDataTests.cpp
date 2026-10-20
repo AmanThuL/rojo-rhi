@@ -9,6 +9,7 @@
 #include "Core/DeviceCore.h"
 #include "Core/HandlePool.h"
 #include "Core/Records.h"
+#include "Metal4Buffers.h"
 #include "Metal4Common.h"
 #include "Metal4Device.h"
 
@@ -20,6 +21,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
+#include <set>
 #include <tuple>
 #include <vector>
 
@@ -44,7 +46,7 @@ namespace {
     /// The native buffer `buffer` wraps.
     MTL::Buffer* nativeOf(Device device, Buffer buffer)
     {
-        return static_cast<MTL::Buffer*>(DeviceImpl::of(device).core.pool<Buffer>().native(buffer));
+        return metal4::bufferPayload(DeviceImpl::of(device).core, buffer)->buffer;
     }
 
     //==================================================================================================================
@@ -147,6 +149,37 @@ TEST_CASE("an upload larger than a standard page gets a page of its own size", "
     MTL::Buffer* native = nativeOf(device, pageOf(list));
     REQUIRE(native->length() >= bytes.size());
     CHECK(std::memcmp(static_cast<const std::byte*>(native->contents()) + (valueOf(addr) - native->gpuAddress()), bytes.data(), bytes.size()) == 0);
+    endAndSubmit(device, list);
+    device.endFrame();
+    destroyDevice(device);
+}
+
+//======================================================================================================================
+TEST_CASE("each upload is its page's GPU address plus its offset, across the pages a list claims", "[metal4]")
+{
+    Device device = *createDevice();
+    device.beginFrame();
+    CommandList list = device.acquireCommandList(QueueType::Graphics, "test.list");
+    // Over half a standard page, so each large upload claims a new page; a small one follows in the same page.
+    const std::vector<std::byte> large = pattern(600u << 10, 11);
+    const std::vector<std::byte> small = pattern(64, 99);
+    std::set<uint64_t> pages;
+    for (int i = 0; i < 4; ++i)
+    {
+        for (const std::vector<std::byte>* bytes : { &large, &small })
+        {
+            const Addr addr = list.uploadFrameData(*bytes, 256);
+            const core::CommandListCore& recording = core::coreOf(list);
+            MTL::Buffer* native = nativeOf(device, recording.page.buffer);
+            CHECK(recording.page.address == native->gpuAddress());
+            const uint64_t offset = recording.pageUsed - bytes->size();
+            CHECK(offset % 256 == 0);
+            CHECK(valueOf(addr) == native->gpuAddress() + offset);
+            CHECK(std::memcmp(static_cast<const std::byte*>(native->contents()) + offset, bytes->data(), bytes->size()) == 0);
+            pages.insert(native->gpuAddress());
+        }
+    }
+    CHECK(pages.size() == 4);
     endAndSubmit(device, list);
     device.endFrame();
     destroyDevice(device);

@@ -161,9 +161,8 @@ namespace rojoRHI {
                 // The parameters live in the list's arena page, which only a claim locks; they count as no frame data upload.
                 const core::ArenaAllocation place = core::bumpArenaPage(device, list, kClearParamsBytes, kClearParamsAlignment, device.arenaSource(), &device);
                 std::memcpy(place.memory, &params, sizeof(params));
-                const auto* page = static_cast<const MTL::Buffer*>(device.pool<Buffer>().native(place.page));
                 metal4::bindKernel(list, impl.state, impl.encoders, pipeline);
-                impl.state.kernelTable->setAddress(page->gpuAddress() + place.offset, 0);
+                impl.state.kernelTable->setAddress(place.address, 0);
                 core::noteNativeCall(list);
                 const MTL::Size groups(
                     (width + metal4::kClearGroupEdge - 1) / metal4::kClearGroupEdge, (height + metal4::kClearGroupEdge - 1) / metal4::kClearGroupEdge, layers

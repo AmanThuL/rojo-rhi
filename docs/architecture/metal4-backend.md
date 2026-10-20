@@ -76,10 +76,9 @@ sample counts without `supportsTextureSampleCount`. BC formats keep their ceilin
 `createDevice` requires `supportsBCTextureCompression`. Three narrowings follow the Metal Feature
 Set Tables. The shader ABI reads a storage view through `read_write` textures, and read-write
 texture tier 2 lists neither `BGRA8Unorm`, `RG16Float` nor `RGB10A2Unorm`, so storage read is off
-for all three; they keep storage write, which the write-only accessors reach through
-`access::write` textures. `R32Float` filtering and resolve follow
-`supports32BitFloatFiltering`. Linear filtering of depth formats needs Apple9. Each line carries its
-source in a comment.
+for all three; they keep storage write, which the write-only accessors reach through `access::write`
+textures. `R32Float` filtering and resolve follow `supports32BitFloatFiltering`. Linear filtering of
+depth formats needs Apple9. Each line carries its source in a comment.
 
 ## Residency
 
@@ -101,7 +100,8 @@ Every record ends in `void* native`. `HandlePool` publishes it into a lock-free 
 `allocate` stores the record, and `HandlePool::native(handle)` reads it with one acquire load,
 taking no lock and checking nothing, so an entry that recorded under no lock can reach an object
 without touching a pool. The table holds 2^22 slots; a creation that finds it full returns
-`OutOfMemory` through `core::tableFull`, and the backend releases the object it made.
+`OutOfMemory` through `core::tableFull`, and the backend releases the object it made. A buffer's
+payload, a `metal4::BufferPayload` (one `cpuAllocations`), caches its GPU address and length.
 
 A pool clears a slot's table entry before the retire hook runs, so a racing misuse reads null and
 never a dangling pointer, and the hook then releases the object and sets the record's field to null.
@@ -114,7 +114,7 @@ a `scopeTimes` hook that converts the slot's timestamps and a `waitFrame` hook.
 
 ## Addresses and the address map
 
-`Device::address` returns `MTL::Buffer::gpuAddress` plus the offset, split into `lo` and `hi`.
+`Device::address` returns the payload's GPU address plus the offset, split into `lo` and `hi`.
 `operator+` checks the offset against `maxAddrOffset` (`maxBufferSize` less one, since no byte of
 a buffer lies further from its start, and at least 2^32 − 1 by the floor check; read from a
 process-wide value `createDevice` stores) and adds in 64 bits. Decoding an address back to

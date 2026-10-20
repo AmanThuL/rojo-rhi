@@ -190,11 +190,6 @@ namespace rojoRHI::metal4 {
         const PipelineState* compute = nullptr;
         /// The indirect command buffers of the list's counted draws and the residency set that keeps them resident.
         IcbPool icbs;
-        Buffer arenaPage;              ///< The frame-arena page a counted draw last reserved in; null before the first.
-        uint64_t arenaPageAddress = 0; ///< The GPU address of `arenaPage`, so a counted draw sends the page no message.
-        Buffer indexBuffer;            ///< The index buffer a counted indexed draw last named; null before the first.
-        uint64_t indexAddress = 0;     ///< The GPU address of `indexBuffer`.
-        uint64_t indexLength = 0;      ///< The bytes of `indexBuffer`.
         /// The GPU addresses of the device's view and sampler tables, which a counted mesh draw's commands bind themselves:
         /// fixed from the device's creation, so read once per list and kept across recordings; 0 before the first.
         uint64_t viewTableAddress = 0;
@@ -230,14 +225,14 @@ namespace rojoRHI::metal4 {
         void forgetTextures();
     };
 
-    /// Returns the open pass's render encoder, opening it when none is open: the descriptor takes the copied attachments, with
-    /// the caller's load operations on the pass's first encoder and `Load` on one resuming it, and the caller's store
-    /// operation when it is `Store` without a resolve, else `MTL::StoreActionUnknown` for `finishPass` to set. An open compute
-    /// encoder closes first. The new encoder takes the innermost open scope's label, binds the list's argument table to the
-    /// four render stages and emits the pending barrier's render part; a resuming encoder sets again the state the encoder the
-    /// split ended held and pushes the open in-pass debug groups again, outermost first. The prefix then replays in order. A
-    /// pass must be open.
-    MTL4::RenderCommandEncoder* ensureRender(CommandListImpl& list);
+    /// Opens the open pass's render encoder and returns it; `ensureRender` calls it when no render encoder is open. The
+    /// descriptor takes the copied attachments, with the caller's load operations on the pass's first encoder and `Load` on
+    /// one resuming it, and the caller's store operation when it is `Store` without a resolve, else
+    /// `MTL::StoreActionUnknown` for `finishPass` to set. An open compute encoder closes first. The new encoder takes the
+    /// innermost open scope's label, binds the list's argument table to the four render stages and emits the pending
+    /// barrier's render part; a resuming encoder sets again the state the encoder the split ended held and pushes the open
+    /// in-pass debug groups again, outermost first. The prefix then replays in order. A pass must be open.
+    MTL4::RenderCommandEncoder* openRender(CommandListImpl& list);
 
     /// Sets the store action of every attachment the open render encoder was created with `MTL::StoreActionUnknown` for: at a
     /// split (`split`) `Store`, so the resuming encoder loads it, with a resolve for an attachment that has a resolve target,

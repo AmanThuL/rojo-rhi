@@ -169,6 +169,17 @@ namespace rojoRHI {
     };
 
     namespace metal4 {
+        /// Returns the open pass's render encoder, opening it through `openRender` when none is open. The test is inline, so a
+        /// command recorded into an open render encoder makes no call to reach it.
+        inline MTL4::RenderCommandEncoder* ensureRender(CommandListImpl& list)
+        {
+            if (MTL4::RenderCommandEncoder* open = list.encoders.renderEncoder(); open != nullptr) [[likely]]
+            {
+                return open;
+            }
+            return openRender(list);
+        }
+
         /// Creates one frame-arena page of `size` bytes: an Upload buffer of the device's pool, resident in the device set, whose
         /// `contents()` the page maps. `context` is the `DeviceCore`; its retire hooks' context is the `DeviceImpl`. The arena
         /// calls it while it claims a page, under its lock.

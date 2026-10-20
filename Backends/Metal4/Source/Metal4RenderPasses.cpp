@@ -134,12 +134,8 @@ namespace rojoRHI {
 
     namespace metal4 {
         //==============================================================================================================
-        MTL4::RenderCommandEncoder* ensureRender(CommandListImpl& list)
+        MTL4::RenderCommandEncoder* openRender(CommandListImpl& list)
         {
-            if (MTL4::RenderCommandEncoder* open = list.encoders.renderEncoder(); open != nullptr)
-            {
-                return open;
-            }
             DrawState& draw = list.draw;
             ListState& state = list.state;
             ROJORHI_INTERNAL_ASSERT(draw.passOpen, "a render encoder opens with no render pass open");

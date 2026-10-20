@@ -9,6 +9,7 @@
 #include "Core/Formats.h"
 #include "Core/Records.h"
 #include "Core/Textures.h"
+#include "Metal4Buffers.h"
 #include "Metal4Common.h"
 #include "Metal4Device.h"
 
@@ -28,8 +29,9 @@ namespace rojoRHI::test {
     {
         DeviceImpl& impl = DeviceImpl::of(device);
         const core::BufferRecord& record = core::checkedBuffer(impl.core, buffer);
-        auto* source = static_cast<MTL::Buffer*>(record.native);
-        REQUIRE(source != nullptr);
+        const auto* payload = static_cast<const metal4::BufferPayload*>(record.native);
+        REQUIRE(payload != nullptr);
+        MTL::Buffer* source = payload->buffer;
         const uint64_t size = record.size;
         const metal4::AutoreleasePool pool;
         MTL::Buffer* target = impl.device->newBuffer(size, MTL::ResourceStorageModeShared);

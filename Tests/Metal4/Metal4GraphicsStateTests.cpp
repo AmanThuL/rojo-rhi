@@ -607,9 +607,8 @@ TEST_CASE("direct mesh draws bind one zero record per recording", "[metal4]")
         CHECK(drawOf(list).tableDrawRecord == record);
         // The record lies in the list's arena page and holds zeroes.
         const core::ArenaPage& page = core::coreOf(list).page;
-        const auto* native = static_cast<const MTL::Buffer*>(core::coreOf(list).device->pool<Buffer>().native(page.buffer));
-        REQUIRE(record >= native->gpuAddress());
-        const std::byte* bytes = page.host + (record - native->gpuAddress());
+        REQUIRE(record >= page.address);
+        const std::byte* bytes = page.host + (record - page.address);
         CHECK(bytes[0] == std::byte{ 0 });
         CHECK(bytes[1] == std::byte{ 0 });
         CHECK(bytes[2] == std::byte{ 0 });

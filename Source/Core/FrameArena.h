@@ -16,12 +16,15 @@ namespace rojoRHI::core {
     /// Bytes of a standard arena page; a request larger than that gets a page of its own size.
     constexpr uint64_t kFrameArenaPageBytes = 1ull << 20;
 
-    /// One arena page: a host-visible buffer of the device's buffer pool and the pointer to its first byte.
+    /// One arena page: a host-visible buffer of the device's buffer pool, the pointer to its first byte and its GPU address.
     struct ArenaPage
     {
         Buffer buffer;             ///< The page's buffer.
         std::byte* host = nullptr; ///< The page's persistently mapped memory.
         uint64_t size = 0;         ///< Bytes.
+        /// The GPU address of the page's first byte, read once when the page is created; zero on a backend whose addresses
+        /// are no GPU addresses.
+        uint64_t address = 0;
     };
 
     /// A function that creates one arena page of `size` bytes in the device's buffer pool, labelled as a frame-arena page.

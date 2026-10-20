@@ -12,6 +12,7 @@
 #include "Core/DeviceCore.h"
 #include "Core/Formats.h"
 #include "Core/HandlePool.h"
+#include "Metal4Buffers.h"
 #include "Metal4Common.h"
 #include "Metal4Encoders.h"
 #include "Metal4Formats.h"
@@ -31,7 +32,7 @@ namespace rojoRHI {
         /// load and no lock (ADR 0020).
         const MTL::Buffer* nativeBuffer(const core::CommandListCore& list, Buffer buffer)
         {
-            return static_cast<const MTL::Buffer*>(list.device->pool<Buffer>().native(buffer));
+            return metal4::bufferPayload(*list.device, buffer)->buffer;
         }
 
         //==============================================================================================================
@@ -242,14 +243,15 @@ namespace rojoRHI {
         CommandListImpl& impl = CommandListImpl::of(*this);
         core::CommandListCore& list = impl.core;
         core::fillBuffer(list, dst, offset, size);
-        const MTL::Buffer* destination = nativeBuffer(list, dst);
+        // The payload holds the buffer's GPU address, so the fill kernel's binding sends the buffer no message.
+        const metal4::BufferPayload& destination = *metal4::bufferPayload(*list.device, dst);
         const auto byte = static_cast<uint8_t>(pattern & 0xFFu);
         if (pattern == byte * 0x01010101u)
         {
             MTL4::ComputeCommandEncoder* encoder = impl.encoders.compute(list, impl.state, MTL::StageBlit);
             // The driver builds an internal blit pipeline on a shape's first use and autoreleases while it does.
             const metal4::AutoreleasePool pool;
-            encoder->fillBuffer(destination, NS::Range(offset, size), byte);
+            encoder->fillBuffer(destination.buffer, NS::Range(offset, size), byte);
             core::noteNativeCall(list);
             impl.encoders.markWork();
             return;
@@ -270,11 +272,10 @@ namespace rojoRHI {
             const core::ArenaAllocation place = core::bumpArenaPage(device, list, kFillParamsBytes, kFillParamsBytes, device.arenaSource(), &device);
             const metal4::FillParams params{ pattern, static_cast<uint32_t>(count) };
             std::memcpy(place.memory, &params, sizeof(params));
-            const auto* page = static_cast<const MTL::Buffer*>(device.pool<Buffer>().native(place.page));
             metal4::bindKernel(list, impl.state, impl.encoders, kernels.fill);
-            impl.state.kernelTable->setAddress(page->gpuAddress() + place.offset, 0);
+            impl.state.kernelTable->setAddress(place.address, 0);
             core::noteNativeCall(list);
-            impl.state.kernelTable->setAddress(destination->gpuAddress() + offset + first * sizeof(uint32_t), 1);
+            impl.state.kernelTable->setAddress(destination.address + offset + first * sizeof(uint32_t), 1);
             core::noteNativeCall(list);
             const uint64_t groups = (count + metal4::kFillGroupThreads - 1) / metal4::kFillGroupThreads;
             metal4::dispatchKernel(list, impl.state, encoder, MTL::Size(groups, 1, 1), MTL::Size(metal4::kFillGroupThreads, 1, 1));

@@ -11,6 +11,7 @@
 #include "Core/DeviceCore.h"
 #include "Core/Draws.h"
 #include "Core/HandlePool.h"
+#include "Metal4Buffers.h"
 #include "Metal4Common.h"
 #include "Metal4DrawState.h"
 #include "Metal4Encoders.h"
@@ -43,8 +44,7 @@ namespace rojoRHI {
                 const core::ArenaAllocation place =
                     core::bumpArenaPage(device, list.core, kZeroRecordBytes, kZeroRecordAlignment, device.arenaSource(), &device);
                 std::memset(place.memory, 0, kZeroRecordBytes);
-                const auto* page = static_cast<const MTL::Buffer*>(device.pool<Buffer>().native(place.page));
-                draw.zeroRecord = page->gpuAddress() + place.offset;
+                draw.zeroRecord = place.address;
             }
             metal4::applyDrawRecord(list, draw.zeroRecord);
         }
@@ -103,14 +103,15 @@ namespace rojoRHI {
             return;
         }
         MTL4::RenderCommandEncoder* encoder = metal4::ensureRender(list);
-        // A record's payload is fixed from creation to retirement, so the buffer is read with one load and no lock (ADR 0020).
-        const auto* buffer = static_cast<const MTL::Buffer*>(list.core.device->pool<Buffer>().native(indices));
+        // A record's payload is fixed from creation to retirement, so it is read with one load and no lock (ADR 0020), and it
+        // holds the buffer's GPU address and length, so the draw sends the buffer no message.
+        const metal4::BufferPayload& buffer = *metal4::bufferPayload(*list.core.device, indices);
         const uint64_t offset = uint64_t{ firstIndex } * (type == IndexType::UInt16 ? 2 : 4);
         {
             // The validation layer autoreleases in a draw it checks.
             const metal4::AutoreleasePool pool;
             encoder->drawIndexedPrimitives(
-                list.draw.topology, count, metal4::indexType(type), buffer->gpuAddress() + offset, buffer->length() - offset, instances, baseVertex, 0
+                list.draw.topology, count, metal4::indexType(type), buffer.address + offset, buffer.length - offset, instances, baseVertex, 0
             );
         }
         core::noteNativeCall(list.core);
