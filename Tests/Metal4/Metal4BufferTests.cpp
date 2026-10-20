@@ -8,6 +8,7 @@
 #include "Core/DeviceCore.h"
 #include "Core/HandlePool.h"
 #include "Core/Records.h"
+#include "Metal4Buffers.h"
 #include "Metal4Common.h"
 #include "Metal4Device.h"
 #include "Metal4Memory.h"
@@ -30,7 +31,7 @@ namespace {
     /// The native buffer `buffer` wraps.
     MTL::Buffer* nativeOf(Device device, Buffer buffer)
     {
-        return static_cast<MTL::Buffer*>(DeviceImpl::of(device).core.pool<Buffer>().native(buffer));
+        return metal4::bufferPayload(DeviceImpl::of(device).core, buffer)->buffer;
     }
 
     //==================================================================================================================
@@ -150,6 +151,33 @@ TEST_CASE("Device::address is the buffer's GPU address plus the offset, split in
         CHECK(addr.lo == static_cast<uint32_t>(base + offset));
         CHECK(addr.hi == static_cast<uint32_t>((base + offset) >> 32));
     }
+    destroyDevice(device);
+}
+
+//======================================================================================================================
+TEST_CASE("a buffer's payload holds the GPU address and length Metal reports, which Device::address adds to", "[metal4]")
+{
+    Device device = *createDevice();
+    core::DeviceCore& core = DeviceImpl::of(device).core;
+    const Heap heap = *device.createHeap({ .size = 1u << 20, .memory = Memory::Gpu, .label = "test.heap" });
+    const std::array buffers{ *device.createBuffer({ .size = 64 }),
+                              *device.createBuffer({ .size = 100, .memory = Memory::Upload }),
+                              *device.createBuffer({ .size = 4096, .memory = Memory::Readback }),
+                              *device.createBuffer({ .size = 256, .usage = BufferUsage::Index }, {}, { heap, 0 }) };
+    for (const Buffer buffer : buffers)
+    {
+        const metal4::BufferPayload* payload = metal4::bufferPayload(core, buffer);
+        REQUIRE(payload != nullptr);
+        REQUIRE(payload->buffer != nullptr);
+        CHECK(payload->address == payload->buffer->gpuAddress());
+        CHECK(payload->length == payload->buffer->length());
+        if (buffer.bits != buffers[2].bits)
+        {
+            // A Readback buffer has no shader-visible address.
+            CHECK(valueOf(device.address(buffer, 0)) == payload->address);
+        }
+    }
+    CHECK(metal4::bufferPayload(core, Buffer{}) == nullptr);
     destroyDevice(device);
 }
 

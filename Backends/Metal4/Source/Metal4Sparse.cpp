@@ -12,6 +12,7 @@
 #include "Core/HandlePool.h"
 #include "Core/Records.h"
 #include "Core/Sparse.h"
+#include "Metal4Buffers.h"
 #include "Metal4Common.h"
 #include "Metal4Device.h"
 
@@ -168,7 +169,7 @@ namespace rojoRHI::metal4 {
                 {
                     continue;
                 }
-                target.buffer = static_cast<const MTL::Buffer*>(found.record->native);
+                target.buffer = static_cast<const metal4::BufferPayload*>(found.record->native)->buffer;
                 target.shape = core::bufferTileShape();
             }
             target.heap = static_cast<const MTL::Heap*>(core.pool<Heap>().native(mapping.heap));

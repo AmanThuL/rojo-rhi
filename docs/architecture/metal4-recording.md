@@ -95,7 +95,9 @@ own pipeline on the encoder, and the next `dispatch` sets the caller's again whe
 pass run on a compute encoder that holds only kernels, through the batch form (`bindKernelBatch`,
 `dispatchKernelBatch`), which sets the kernel table once and does not set the list's table back
 ([counted draws](metal4-drawing.md#counted-draws)). Parameters come from the frame arena through
-`core::bumpArenaPage`, which locks only to claim a page, and count as no frame data upload.
+`core::bumpArenaPage`, which locks only to claim a page, and count as no frame data upload. Its bump
+into a page with room is inline, and the list's page keeps the GPU address read when the page was
+created, so a reservation or `uploadFrameData` makes no call and sends the page no message.
 
 The fill kernel writes one 32-bit word per thread, 64 threads per group, at most 2^31 words per
 dispatch. The pattern's bytes land in little-endian order.

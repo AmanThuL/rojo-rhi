@@ -44,7 +44,8 @@ namespace rojoRHI {
             return std::unexpected(std::move(page.error()));
         }
         core::DeviceCounts::add(core.counts().cpuAllocations);
-        return core::ArenaPage{ *page, host, size };
+        // Null addresses encode a slot index and an offset, not a GPU address, so the page has none.
+        return core::ArenaPage{ .buffer = *page, .host = host, .size = size, .address = 0 };
     }
 
     //==================================================================================================================

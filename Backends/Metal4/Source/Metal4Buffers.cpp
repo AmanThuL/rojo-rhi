@@ -8,6 +8,7 @@
 #include <rojoRHI/RHI.h>
 
 #include "Core/Buffers.h"
+#include "Core/Counters.h"
 #include "Core/DeviceCore.h"
 #include "Core/HandlePool.h"
 #include "Core/Heaps.h"
@@ -22,6 +23,7 @@
 #include <cstdint>
 #include <cstring>
 #include <format>
+#include <memory>
 #include <span>
 #include <utility>
 
@@ -50,17 +52,26 @@ namespace rojoRHI {
 
     namespace metal4 {
         //==============================================================================================================
+        std::unique_ptr<BufferPayload> makeBufferPayload(core::DeviceCore& core, MTL::Buffer* buffer)
+        {
+            auto payload = std::make_unique<BufferPayload>(BufferPayload{ .buffer = buffer, .address = buffer->gpuAddress(), .length = buffer->length() });
+            core::DeviceCounts::add(core.counts().cpuAllocations);
+            return payload;
+        }
+
+        //==============================================================================================================
         void retireBuffer(void* context, core::BufferRecord& record)
         {
-            auto* buffer = static_cast<MTL::Buffer*>(record.native);
-            if (buffer == nullptr)
+            auto* payload = static_cast<BufferPayload*>(record.native);
+            if (payload == nullptr)
             {
                 return;
             }
             DeviceImpl& impl = *static_cast<DeviceImpl*>(context);
+            MTL::Buffer* buffer = payload->buffer;
             const AutoreleasePool pool;
 #ifndef NDEBUG
-            impl.addresses.erase(buffer->gpuAddress(), buffer);
+            impl.addresses.erase(payload->address, buffer);
 #endif
             // A placed buffer never joined the set: its heap did.
             if (record.heap.bits == 0)
@@ -68,6 +79,7 @@ namespace rojoRHI {
                 impl.residency.remove(buffer);
             }
             buffer->release();
+            delete payload;
             record.native = nullptr;
         }
 
@@ -139,16 +151,19 @@ namespace rojoRHI {
                 return std::unexpected(std::move(uploaded.error()));
             }
         }
-        record.native = buffer;
+        std::unique_ptr<metal4::BufferPayload> payload = metal4::makeBufferPayload(impl.core, buffer);
+        record.native = payload.get();
         Result<Buffer> handle = core::addBuffer(impl.core, std::move(record));
         if (!handle)
         {
             discardBuffer(impl, buffer, placed);
             return handle;
         }
+        // The pool's record owns the payload now; the retire hook frees it.
+        [[maybe_unused]] const metal4::BufferPayload* owned = payload.release();
 #ifndef NDEBUG
         // Only Debug checks decode addresses, so only Debug builds keep the address map.
-        impl.addresses.insert(buffer->gpuAddress(), desc.size, core::HandlePool<Buffer, core::BufferRecord>::slotIndex(*handle), buffer);
+        impl.addresses.insert(owned->address, desc.size, core::HandlePool<Buffer, core::BufferRecord>::slotIndex(*handle), buffer);
 #endif
         return handle;
     }
@@ -205,7 +220,7 @@ namespace rojoRHI {
         DeviceImpl& impl = DeviceImpl::of(*this);
         const core::BufferRecord& record = core::checkedBuffer(impl.core, buffer);
         core::checkBufferAddress(record, offset, impl.core.capabilities().limits.maxAddrOffset);
-        const uint64_t value = static_cast<MTL::Buffer*>(record.native)->gpuAddress() + offset;
+        const uint64_t value = static_cast<const metal4::BufferPayload*>(record.native)->address + offset;
         return Addr{ static_cast<uint32_t>(value), static_cast<uint32_t>(value >> 32) };
     }
 
@@ -215,7 +230,7 @@ namespace rojoRHI {
         DeviceImpl& impl = DeviceImpl::of(*this);
         const core::BufferRecord& record = core::checkedBuffer(impl.core, buffer);
         core::checkCpuAccess(record);
-        return static_cast<std::byte*>(static_cast<MTL::Buffer*>(record.native)->contents());
+        return static_cast<std::byte*>(static_cast<const metal4::BufferPayload*>(record.native)->buffer->contents());
     }
 
     //==================================================================================================================
@@ -225,8 +240,9 @@ namespace rojoRHI {
 #ifndef NDEBUG
         // Only Debug checks decode addresses. The payload is read while the handle still holds its slot: once destroyed, a
         // frame may retire the slot and release the buffer. A bad handle is reported by the destroy before anything is marked.
-        const auto* native = static_cast<const MTL::Buffer*>(impl.core.pool<Buffer>().native(buffer));
-        const uint64_t base = native != nullptr ? native->gpuAddress() : 0;
+        const metal4::BufferPayload* payload = metal4::bufferPayload(impl.core, buffer);
+        const MTL::Buffer* native = payload != nullptr ? payload->buffer : nullptr;
+        const uint64_t base = payload != nullptr ? payload->address : 0;
 #endif
         core::destroyBuffer(impl.core, buffer);
 #ifndef NDEBUG

@@ -191,13 +191,12 @@ namespace {
     //==================================================================================================================
     /// The parameters the encode kernel of the mesh execute `command` of `list` reads, found from its range in the list's
     /// frame-arena page.
-    metal4::MeshParams paramsOf(Device device, CommandList list, const metal4::PrefixCommand& command)
+    metal4::MeshParams paramsOf(CommandList list, const metal4::PrefixCommand& command)
     {
-        const metal4::DrawState& draw = drawOf(list);
-        auto* page = static_cast<MTL::Buffer*>(core::coreOf(device).pool<Buffer>().native(draw.arenaPage));
-        const uint64_t offset = command.execute.range - metal4::kMeshRangeOffset - draw.arenaPageAddress;
+        const core::ArenaPage& page = core::coreOf(list).page;
+        const uint64_t offset = command.execute.range - metal4::kMeshRangeOffset - page.address;
         metal4::MeshParams params{};
-        std::memcpy(&params, static_cast<const std::byte*>(page->contents()) + offset, sizeof(params));
+        std::memcpy(&params, page.host + offset, sizeof(params));
         return params;
     }
 
@@ -308,7 +307,7 @@ TEST_CASE("a mesh batch encodes an ICB whose commands bind the reserved buffers 
     const metal4::PrefixCommand& execute = drawOf(list).prefix.back();
     CHECK(execute.execute.buffer == icbs.buffer(metal4::IcbKind::Mesh, 0));
     // Each command binds the root recorded at the call, the view and sampler tables and its record on every stage.
-    const metal4::MeshParams params = paramsOf(kit.device, list, execute);
+    const metal4::MeshParams params = paramsOf(list, execute);
     CHECK(params.records == gpuAddressOf(fixture.record()));
     CHECK(params.count == gpuAddressOf(fixture.counted()));
     CHECK(params.maxCount == kRecords);
@@ -325,7 +324,7 @@ TEST_CASE("a mesh batch encodes an ICB whose commands bind the reserved buffers 
     // A pipeline without a task entry: no object threads, and the pipeline joins the prefix.
     list.setPipeline(fixture.meshOnly);
     list.drawMeshTasksIndirect(fixture.record(), 4);
-    CHECK(paramsOf(kit.device, list, drawOf(list).prefix.back()).objectThreads[0] == 0);
+    CHECK(paramsOf(list, drawOf(list).prefix.back()).objectThreads[0] == 0);
     // The kernels' encoder ends; the render encoder's open with its barrier, the state, the root, each execute, the second
     // pipeline, endEncoding, the pass's end timestamp and its group.
     before = callsOf(list);
