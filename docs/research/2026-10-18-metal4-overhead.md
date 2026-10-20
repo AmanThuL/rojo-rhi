@@ -295,3 +295,6 @@ round misses three budgets: CPU per operation (33 of 34 judged configurations; C
 68%), the composed frame's GPU time (+85.6 µs [82.7, 89.6], +4.37%) and allocations (R above N in 61
 of 63 configurations). Hidden pipeline variants (none) and native calls (all within N plus `c`, C9
 with no margin) are met. Texture indexing is not the cause of the GPU miss; #30 is not reopened.
+
+Round 2 ran on 2026-10-20 at 0a0b53f ([results](2026-10-20-metal4-overhead-round2-results.md)): it
+meets GPU (−2.40%), pipelines and native calls; misses CPU (15 of 34) and allocations (57 of 63).

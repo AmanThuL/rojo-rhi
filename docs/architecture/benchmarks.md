@@ -199,12 +199,15 @@ out of the timed round's `t2` directory. The native arm runs on this Mac, and it
 
 The first timed round ran on 2026-10-19 under the `t2` topic and missed the CPU, GPU and allocation
 budgets ([results](../research/2026-10-18-metal4-overhead-results.md)); a report-only diagnosis of
-the misses is kept under `t2-diagnosis`. Round 2 measures the fixed backend and is registered by the
-note's amendment of 2026-10-20 ([round 2](../research/2026-10-20-metal4-overhead-round2.md)), with
-every R sequence and count that changed; it runs `build`, `correctness`, `timing` and `analyze`
-from a clean checkout of the commit that merges that amendment, with `--date <date>-round2`, into
-`t2/<date>-round2/`, and reports on a results page of its own. Keep the obligations the N arm
-encodes (next section) in view.
+the misses is kept under `t2-diagnosis`. Round 2, registered by the note's amendment of 2026-10-20
+([round 2](../research/2026-10-20-metal4-overhead-round2.md)) with every R sequence and count that
+changed, measured the fixed backend on 2026-10-20 from a clean checkout of 0a0b53f into
+`t2/2026-10-20-round2/` ([round 2 results](
+../research/2026-10-20-metal4-overhead-round2-results.md)). It met the GPU budget (−2.40% on the
+composed frame), the pipeline and the native-call budgets, and missed CPU per operation in 15 of 34
+judged configurations (C1 to C3 at `K` 100, C2 and C3 above, C5-k10000, C6, and C1-k100000
+narrowly) and allocations in 57 of 63, by 2 to 7 a frame; those misses are defects for the next
+round. Keep the obligations the N arm encodes (next section) in view.
 
 ## Backend obligations the N arm encodes
 
