@@ -53,6 +53,12 @@ constexpr float kFsrFrameTimeMs = 16.6f;
 constexpr uint64_t kFsrColorTexel = 0x3C00300034003800ull;
 constexpr float kFsrDepth = 0.5f;
 constexpr std::chrono::seconds kFsrTimeout{ 30 };
+// Under GPU-based validation the FSR section loads the upscaler and creates a context but does not dispatch: on WARP the
+// dispatch never completed within kFsrTimeout on a hosted runner and on some runs faulted inside the runtime while the
+// probe waited for it (issue #96), so it carries no result. The upscale cases run on WARP only without it (PR #76).
+constexpr const char* kFsrGbvDispatchSkipped =
+    "skipped under GPU-based validation: on WARP the dispatch does not complete within the 30 s limit and has faulted inside the runtime; "
+    "upscale cases run on WARP only without it";
 
 #if defined(ROJORHI_D3D12_PROBE_EXPORTS)
 constexpr bool kExportsVariant = true;
@@ -140,6 +146,7 @@ struct FsrReport
     std::vector<std::string> versions;
     bool contextCreated = false;
     bool dispatched = false;
+    std::string dispatchSkipped;
     std::optional<uint64_t> outputTexel;
     std::string error;
     std::vector<LoadedModule> upscalerModules;
@@ -153,6 +160,8 @@ struct FsrSection
     std::wstring exeDir;
     ID3D12Device* device = nullptr;
     MessageLog* log = nullptr;
+    // Why the section does not dispatch, empty when it does.
+    std::string_view skipDispatch;
     FsrReport report;
     FsrReport snapshot;
     std::string step;
@@ -1416,8 +1425,8 @@ static void readFsrOutput(FsrSection& section, FsrRun& run)
 }
 
 //======================================================================================================================
-// The version query, the inputs, then one context: created, dispatched once, read back and destroyed. The Dispatch
-// phase runs from the context's creation to the end of the dispatch's wait.
+// The version query, the inputs, then one context: created, dispatched once unless the section skips the dispatch, read
+// back and destroyed. The Dispatch phase runs from the context's creation to the end of the dispatch's wait.
 static void runFsr(FsrSection& section, const FfxApi& api)
 {
     if (!queryFsrVersions(section, api))
@@ -1442,7 +1451,11 @@ static void runFsr(FsrSection& section, const FfxApi& api)
     {
         return;
     }
-    const bool dispatched = dispatchFsr(section, api, run, context);
+    if (!section.skipDispatch.empty())
+    {
+        section.report.dispatchSkipped = section.skipDispatch;
+    }
+    const bool dispatched = section.skipDispatch.empty() && dispatchFsr(section, api, run, context);
     if (dispatched)
     {
         beginSectionPhase(section, "Readback");
@@ -1589,6 +1602,7 @@ static bool probeFsrSections(Probe& probe)
     probe.fsrGbv.exeDir = probe.exeDir;
     probe.fsrGbv.device = probe.device.p;
     probe.fsrGbv.log = &probe.log;
+    probe.fsrGbv.skipDispatch = kFsrGbvDispatchSkipped;
     probe.fsrNoGbv.phasePrefix = "fsrNoGbv";
     probe.fsrNoGbv.exeDir = probe.exeDir;
     probe.fsrNoGbv.log = &probe.noGbvLog;
@@ -1847,7 +1861,8 @@ static void writePresent(Json& json, const Probe& probe)
 //======================================================================================================================
 // The fields of one FSR section. layerMessages holds the section's debug-layer messages of severity warning or worse,
 // errors and corruption first, at most kMessagesPerPhase a phase, and layerMessageCount counts all of them by phase;
-// outputNonZero is null when no texel was read.
+// dispatchSkipped says why the section skipped the dispatch and is null otherwise; outputNonZero is null when no texel
+// was read.
 static void writeFsrFields(Json& json, const FsrReport& fsr, MessageLog& messageLog, std::string_view phasePrefix)
 {
     // A section that never ran has no phases.
@@ -1862,6 +1877,7 @@ static void writeFsrFields(Json& json, const FsrReport& fsr, MessageLog& message
     close(json, ']');
     member(json, "contextCreated", jsonBool(fsr.contextCreated));
     member(json, "dispatched", jsonBool(fsr.dispatched));
+    member(json, "dispatchSkipped", fsr.dispatchSkipped.empty() ? "null" : quote(fsr.dispatchSkipped));
     member(json, "outputNonZero", fsr.outputTexel ? jsonBool(*fsr.outputTexel != 0) : "null");
     member(json, "outputTexel", fsr.outputTexel ? quote(std::format("0x{:016X}", *fsr.outputTexel)) : "null");
     {
@@ -2058,7 +2074,7 @@ static void printFsrSummary(const char* name, const FsrReport& fsr)
         yesNo(fsr.loaded),
         fsr.version.empty() ? "none" : fsr.version.c_str(),
         yesNo(fsr.contextCreated),
-        yesNo(fsr.dispatched),
+        fsr.dispatchSkipped.empty() ? yesNo(fsr.dispatched) : "skipped",
         fsr.outputTexel ? yesNo(*fsr.outputTexel != 0) : "not read",
         fsr.error.empty() ? "none" : fsr.error.c_str()
     );

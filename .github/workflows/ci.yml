@@ -275,7 +275,8 @@ jobs:
       # Each probe prints one JSON object and exits 0 only when the floor is met on the app-local WARP; the gate
       # requires the factory variant to exit 0 (the backend creates devices through the factory), the exports
       # variant's exit code is informational, and an unparsable report fails it. The fsr section, whether the
-      # FidelityFX upscaler loads and runs on WARP with and without GPU-based validation, is reported and gates nothing.
+      # FidelityFX upscaler loads on WARP with and without GPU-based validation and runs without it (the dispatch is
+      # skipped under it, with the reason in fsr.dispatchSkipped), is reported and gates nothing.
       - name: Probe the D3D12 floor
         shell: pwsh
         run: |
@@ -330,7 +331,7 @@ jobs:
             'OPTIONS19 max view heap'       = { $args[0].features.options19.maxViewDescriptorHeapSize }
             'largest view heap'             = { $args[0].features.largestViewHeap }
             'FSR loaded, version'           = { "$($args[0].fsr.loaded) $($args[0].fsr.version)" }
-            'FSR context, dispatch, output' = { "$($args[0].fsr.contextCreated), $($args[0].fsr.dispatched), $($args[0].fsr.outputNonZero)" }
+            'FSR context, dispatch, output' = { "$($args[0].fsr.contextCreated), $(if ($args[0].fsr.dispatchSkipped) { 'skipped' } else { $args[0].fsr.dispatched }), $($args[0].fsr.outputNonZero)" }
             'FSR layer messages'            = { "$(@($args[0].fsr.layerMessages).Count) $($args[0].fsr.error)" }
             'FSR no GBV: device, context, dispatch, output' = { "$($args[0].fsr.noGbv.device.created), $($args[0].fsr.noGbv.contextCreated), $($args[0].fsr.noGbv.dispatched), $($args[0].fsr.noGbv.outputNonZero)" }
             'FSR no GBV: layer messages'    = { "$(@($args[0].fsr.noGbv.layerMessages).Count) $($args[0].fsr.noGbv.error)" }
