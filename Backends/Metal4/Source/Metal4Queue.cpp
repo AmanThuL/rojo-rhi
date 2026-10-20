@@ -25,7 +25,8 @@ namespace rojoRHI {
     namespace {
         //==============================================================================================================
         /// Commits the buffers in `queue.commitBuffers` in one native call. With a commit timing callback set, the commit carries
-        /// feedback that reports the GPU span of this commit; commit options are not native calls and count nothing.
+        /// feedback that reports the GPU span of this commit and then releases the commit's options; commit options are not
+        /// native calls and count nothing.
         void commit(QueueImpl& queue)
         {
             if (queue.commitCallback == nullptr)
@@ -39,15 +40,17 @@ namespace rojoRHI {
             const uint64_t serial = ++queue.commitSerial;
             MTL4::CommitOptions* options = MTL4::CommitOptions::alloc()->init();
             // A block literal, not metal-cpp's std::function overload, whose wrapper and __block copy allocate on every commit:
-            // the overhead harness gives its native arm the same handler, so the seam adds no allocation that arm lacks.
+            // the overhead harness gives its native arm the same handler, so the seam adds no allocation that arm lacks. The
+            // handler releases the options after its report, so the submission does not, as the native arm releases its
+            // options after its frame wait: neither arm's timed span holds that release.
             options->addFeedbackHandler(^(MTL4::CommitFeedback* feedback) {
               // Metal's notification thread holds no autorelease pool.
               const metal4::AutoreleasePool handlerPool;
               const metal4::CommitTime time{ type, serial, feedback->GPUStartTime(), feedback->GPUEndTime(), feedback->error() != nullptr };
               callback(user, time);
+              options->release();
             });
             queue.native->commit(queue.commitBuffers.data(), queue.commitBuffers.size(), options);
-            options->release();
         }
     } // namespace
 
