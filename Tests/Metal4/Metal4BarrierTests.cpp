@@ -978,3 +978,58 @@ TEST_CASE("a barrier after a dispatch whose sources lie outside the encoder stil
     submitAndWait(kit.device, std::array{ list });
     destroyDevice(kit.device);
 }
+
+//======================================================================================================================
+TEST_CASE("each batch of one global barrier lowers its own record, whether or not it repeats the last", "[metal4]")
+{
+    Device device = *createDevice();
+    const Buffer a = *device.createBuffer({ .size = 256, .label = "test.a" });
+    const Buffer b = *device.createBuffer({ .size = 256, .label = "test.b" });
+    const GlobalBarrier executionOnly{ .srcStage = Stage::Copy, .dstStage = Stage::Copy };
+    device.beginFrame();
+    CommandList list = device.acquireCommandList(QueueType::Copy, "test.list");
+    list.barrier(std::array{ copyToCopy() });
+    list.copyBuffer(a, 0, b, 0, 128);
+    // Each batch stays in the open encoder, held back with its own visibility until the copy after it.
+    const auto heldVisibility = [&](const GlobalBarrier& global) {
+        list.barrier(std::array{ global });
+        const MTL4::VisibilityOptions held = barriersOf(list).deferredVisibility;
+        CHECK(barriersOf(list).deferredDestination == MTL::StageBlit);
+        list.copyBuffer(b, 0, a, 0, 128);
+        CHECK(barriersOf(list).deferredDestination == 0);
+        return held;
+    };
+    CHECK(heldVisibility(executionOnly) == MTL4::VisibilityOptionNone);
+    CHECK(heldVisibility(copyToCopy()) == MTL4::VisibilityOptionDevice);
+    CHECK(heldVisibility(copyToCopy()) == MTL4::VisibilityOptionDevice);
+    CHECK(heldVisibility(executionOnly) == MTL4::VisibilityOptionNone);
+    // A batch of two records between them lowers both, and the next batch of one still lowers its own.
+    list.barrier(std::array{ executionOnly, executionOnly });
+    CHECK(barriersOf(list).deferredVisibility == MTL4::VisibilityOptionNone);
+    list.copyBuffer(a, 0, b, 0, 128);
+    CHECK(heldVisibility(copyToCopy()) == MTL4::VisibilityOptionDevice);
+    CHECK(countsOf(list).encodersOpened == 1);
+    CHECK(countsOf(list).nativeBarriers == 7);
+    list.end();
+    submitAndWait(device, std::array{ list }, QueueType::Copy);
+    destroyDevice(device);
+}
+
+//======================================================================================================================
+TEST_CASE("a batch of one global barrier that names IndirectArgs after one that does not marks the list as naming it", "[metal4]")
+{
+    Device device = *createDevice();
+    device.beginFrame();
+    CommandList list = device.acquireCommandList(QueueType::Graphics, "test.list");
+    list.barrier(std::array{ copyToCopy() });
+    CHECK_FALSE(barriersOf(list).argsNamed);
+    list.barrier(
+        std::array{ GlobalBarrier{
+            .srcStage = Stage::ComputeShader, .srcAccess = Access::ShaderWrite, .dstStage = Stage::IndirectArgs, .dstAccess = Access::IndirectArgs } }
+    );
+    CHECK(barriersOf(list).argsNamed);
+    CHECK((barriersOf(list).pendingDestination & MTL::StageVertex) != 0);
+    list.end();
+    submitAndWait(device, std::array{ list });
+    destroyDevice(device);
+}

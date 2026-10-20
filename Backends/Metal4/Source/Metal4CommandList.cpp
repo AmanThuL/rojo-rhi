@@ -138,6 +138,18 @@ namespace rojoRHI {
         {
             list->encoders.setCarry(nullptr, nullptr);
         }
+        // A stage no encoder of the queue runs names no work in a barrier: a graphics queue runs compute and render encoders, a
+        // compute queue compute encoders, and a copy queue only the blits of its copies.
+        MTL::Stages queueStages = metal4::kComputeStages | metal4::kRenderStages;
+        if (type == QueueType::Compute)
+        {
+            queueStages = metal4::kComputeStages;
+        }
+        else if (type == QueueType::Copy)
+        {
+            queueStages = MTL::StageBlit;
+        }
+        list->encoders.setQueueStages(queueStages);
         list->draw.reset();
         for (NS::String* scopeLabel : state.scopeLabels)
         {

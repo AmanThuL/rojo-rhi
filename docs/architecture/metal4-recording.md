@@ -138,8 +138,8 @@ only while memory aliases (chapter 09): for a global barrier while the core's al
 range or a live Sparse resource, and for a texture barrier from `Undefined` on a placed texture the
 tracker flags, on any Sparse texture, or on a placed texture (the native texture is `Untracked`,
 which only placed textures are) while a Sparse resource is live. Placement and destruction update
-the tracker under its lock; recording reads two or three relaxed atomic loads (the counts and a
-texture's flag). A batch with an empty source or destination side emits nothing.
+the tracker under its lock. Recording reads one relaxed load per global barrier (one word holds both
+counts), up to two more per texture barrier from `Undefined`; an empty batch side emits nothing.
 
 The list keeps a pending barrier (source stages P, destination stages D still owed, visibility V)
 and, for the open encoder, what the queue-level barrier at its opening covered (sources `S_open`,
@@ -155,7 +155,7 @@ first emits `barrierAfterQueueStages(P, D, V)`, records what that covered and re
 from D; a clear's render encoder emits only the fragment part of D and leaves the other render
 stages owed. A stage it held back in which the encoder ran no command returns to the pending barrier
 at its close. A source outside `S_open` may name an earlier list's work, which only a queue-level
-barrier orders.
+barrier orders. A repeated lone global barrier reuses its lowering inline, sending the same calls.
 
 A barrier still pending at `end` is carried to later lists by the list's last encoder, still open
 then (a pass's lingers), when P lies inside `S_open` and it ran a command in a stage of `D_open`:

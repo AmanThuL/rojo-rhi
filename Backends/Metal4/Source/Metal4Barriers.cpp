@@ -30,17 +30,9 @@ namespace rojoRHI {
                 return (stages & mask) != Stage::None;
             }
 
-            /// The Metal stages, the source and destination stages and the visibility of one barrier batch.
-            struct Lowered
-            {
-                MTL::Stages source = 0;                 ///< The union of the source stages.
-                MTL::Stages destination = 0;            ///< The union of the destination stages.
-                MTL4::VisibilityOptions visibility = 0; ///< `Device` when any access is named, `ResourceAlias` for an alias.
-            };
-
             //==========================================================================================================
             /// Adds one barrier's sides to `lowered`.
-            void addSides(Lowered& lowered, Stage srcStage, Access srcAccess, Stage dstStage, Access dstAccess)
+            void addSides(BatchLowering& lowered, Stage srcStage, Access srcAccess, Stage dstStage, Access dstAccess)
             {
                 lowered.source |= metalStages(srcStage);
                 lowered.destination |= metalStages(dstStage);
@@ -48,6 +40,148 @@ namespace rojoRHI {
                 {
                     lowered.visibility |= MTL4::VisibilityOptionDevice;
                 }
+                lowered.args = lowered.args || any(dstStage, Stage::IndirectArgs);
+            }
+
+            //==========================================================================================================
+            /// Returns the lowering of a batch of any shape, the alias visibility included.
+            BatchLowering lowerBatch(
+                core::CommandListCore& list,
+                std::span<const GlobalBarrier> globals,
+                std::span<const BufferBarrier> buffers,
+                std::span<const TextureBarrier> textures
+            )
+            {
+                BatchLowering lowered;
+                for (const GlobalBarrier& global : globals)
+                {
+                    addSides(lowered, global.srcStage, global.srcAccess, global.dstStage, global.dstAccess);
+                }
+                const core::AliasTracker& aliasing = list.device->aliasing();
+                if (!globals.empty() && aliasing.anyAliasing())
+                {
+                    // A global barrier is how the first use of a placed buffer is ordered after the resource that held its
+                    // memory, which only matters while placed resources share memory or sparse tiles can name it.
+                    lowered.visibility |= MTL4::VisibilityOptionResourceAlias;
+                }
+                for (const BufferBarrier& buffer : buffers)
+                {
+                    addSides(lowered, buffer.srcStage, buffer.srcAccess, buffer.dstStage, buffer.dstAccess);
+                }
+                for (const TextureBarrier& texture : textures)
+                {
+                    addSides(lowered, texture.srcStage, texture.srcAccess, texture.dstStage, texture.dstAccess);
+                    if (texture.oldLayout == Layout::Undefined && (lowered.visibility & MTL4::VisibilityOptionResourceAlias) == 0)
+                    {
+                        // A discard of a placed texture may follow another resource in its memory, and a newly mapped tile
+                        // of a Sparse texture holds whatever its heap memory held. A texture whose range never overlapped
+                        // another's needs no alias unless sparse tiles are live, which can name any placed memory. The payload
+                        // is read without a lock.
+                        bool aliases = aliasing.textureAliases(texture.texture);
+                        if (!aliases && aliasing.anySparse())
+                        {
+                            const auto* native = static_cast<const MTL::Texture*>(list.device->pool<Texture>().native(texture.texture));
+                            aliases = native != nullptr && (native->isSparse() || native->hazardTrackingMode() == MTL::HazardTrackingModeUntracked);
+                        }
+                        if (aliases)
+                        {
+                            lowered.visibility |= MTL4::VisibilityOptionResourceAlias;
+                        }
+                    }
+                }
+                return lowered;
+            }
+
+            //==========================================================================================================
+            /// Places a batch lowered to a barrier from `source` to `destination` with `visibility`, already intersected with
+            /// the queue's stages, that the open encoder does not hold back as it stands: on a lingering encoder it joins the
+            /// pending barrier; on an open compute encoder with work it may stay in the encoder as a queue-level
+            /// barrier with the encoder-level part held back; otherwise the open encoder ends and the batch joins the
+            /// pending barrier. Kept out of line, so the barrier entry that holds a batch back calls nothing and saves no register.
+            [[clang::noinline]] void placeBatch(
+                core::CommandListCore& list, Encoders& encoders, MTL::Stages source, MTL::Stages destination, MTL4::VisibilityOptions visibility
+            )
+            {
+                BarrierState& barriers = encoders.barriers();
+                if (encoders.lingering())
+                {
+                    // The ended pass's encoder runs no further command, so the batch orders only later encoders: it joins the
+                    // pending barrier, which the next encoder emits at its opening or the lingering encoder carries at `end`.
+                    barriers.merge(source, destination, visibility);
+                    return;
+                }
+                // A source may lie in an earlier encoder or an earlier list, which only a queue-level barrier orders. An open
+                // compute encoder that has not yet run a command in the destination stages takes it, with the encoder-level
+                // part for its own work; otherwise the open encoder ends, and the next encoders to open emit the barrier for
+                // their stages.
+                const MTL::Stages open = encoders.stages();
+                const MTL::Stages covered = destination & open;
+                if (encoders.holdsWork() && covered != 0 && encoders.barrierInOpen(list, source, covered, visibility))
+                {
+                    if ((destination & ~open) != 0)
+                    {
+                        barriers.merge(source, destination & ~open, visibility);
+                    }
+                    return;
+                }
+                if (encoders.holdsWork())
+                {
+                    encoders.close(list);
+                }
+                barriers.merge(source, destination, visibility);
+            }
+
+            //==========================================================================================================
+            /// Records a batch lowered to a barrier from `source` to `destination` with `visibility` on `impl`: drops the
+            /// stages no encoder of the list's queue runs, then holds the batch back in the open encoder or places it as
+            /// `placeBatch` does. `args` says whether a destination names `Stage::IndirectArgs`. Inlined into both callers, so
+            /// the batch of one global barrier makes no call it does not need.
+            [[clang::always_inline]] inline void recordBatch(
+                CommandListImpl& impl, MTL::Stages source, MTL::Stages destination, MTL4::VisibilityOptions visibility, bool args
+            )
+            {
+                Encoders& encoders = impl.encoders;
+                source &= encoders.queueStages();
+                destination &= encoders.queueStages();
+                if (source == 0 || destination == 0)
+                {
+                    // No earlier work to wait for, or no later work to hold back: an execution-only barrier with nothing to
+                    // order.
+                    return;
+                }
+                if (args)
+                {
+                    encoders.barriers().argsNamed = true;
+                }
+                if (encoders.holdInOpen(source, destination, visibility))
+                {
+                    return;
+                }
+                placeBatch(impl.core, encoders, source, destination, visibility);
+            }
+
+            //==========================================================================================================
+            /// Checks, counts and records a batch of any shape but one global barrier that repeats the list's last such batch.
+            /// Kept out of line, as `placeBatch` is.
+            [[clang::noinline]] void recordAnyBatch(
+                CommandListImpl& impl, std::span<const GlobalBarrier> globals, std::span<const BufferBarrier> buffers, std::span<const TextureBarrier> textures
+            )
+            {
+                core::barrier(impl.core, globals, buffers, textures);
+                if (globals.empty() && buffers.empty() && textures.empty())
+                {
+                    return;
+                }
+                if (globals.size() == 1 && buffers.empty() && textures.empty())
+                {
+                    // A batch of one global barrier that names a new record: the next one that repeats it reuses its lowering.
+                    LastGlobal& last = impl.encoders.lastGlobal();
+                    last.record = globals.front();
+                    last.lowering = BatchLowering{};
+                    addSides(last.lowering, last.record.srcStage, last.record.srcAccess, last.record.dstStage, last.record.dstAccess);
+                }
+                const BatchLowering lowered = lowerBatch(impl.core, globals, buffers, textures);
+                recordBatch(impl, lowered.source, lowered.destination, lowered.visibility, lowered.args);
             }
         } // namespace
 
@@ -215,116 +349,30 @@ namespace rojoRHI {
     } // namespace metal4
 
     //==================================================================================================================
-    void CommandList::barrier(std::span<const GlobalBarrier> globals, std::span<const BufferBarrier> buffers, std::span<const TextureBarrier> textures)
+    [[clang::always_inline]] void CommandList::barrier(
+        std::span<const GlobalBarrier> globals, std::span<const BufferBarrier> buffers, std::span<const TextureBarrier> textures
+    )
     {
+        // The entry is inlined into each caller under link-time optimization (ADR 0012), which its size alone would not get it,
+        // so a batch the open encoder holds back costs no call: about 1.5 ns less CPU per barrier on C6 at K = 10,000 on an M3
+        // Max (paired diagnostic). The attribute is clang's, which holds because the Metal 4 backend builds only with clang.
+        // The common batch, one global barrier that repeats the list's last such batch, reuses its lowering; any other takes
+        // the general path, which lowers it.
         CommandListImpl& impl = CommandListImpl::of(*this);
-        core::CommandListCore& list = impl.core;
-        core::barrier(list, globals, buffers, textures);
-        if (globals.empty() && buffers.empty() && textures.empty())
+        const metal4::LastGlobal& last = impl.encoders.lastGlobal();
+        if (globals.size() != 1 || !buffers.empty() || !textures.empty() || !last.holds(globals.front()))
         {
+            metal4::recordAnyBatch(impl, globals, buffers, textures);
             return;
         }
-        metal4::Lowered lowered;
-        // Whether a destination names IndirectArgs, read with the sides in the same pass over the records.
-        bool args = false;
-        for (const GlobalBarrier& global : globals)
-        {
-            metal4::addSides(lowered, global.srcStage, global.srcAccess, global.dstStage, global.dstAccess);
-            args = args || metal4::any(global.dstStage, Stage::IndirectArgs);
-        }
-        const core::AliasTracker& aliasing = list.device->aliasing();
-        if (!globals.empty() && aliasing.anyAliasing())
+        core::barrier(impl.core, globals, buffers, textures);
+        MTL4::VisibilityOptions visibility = last.lowering.visibility;
+        if (impl.core.device->aliasing().anyAliasing())
         {
             // A global barrier is how the first use of a placed buffer is ordered after the resource that held its memory, which
             // only matters while placed resources share memory or sparse tiles can name it.
-            lowered.visibility |= MTL4::VisibilityOptionResourceAlias;
+            visibility |= MTL4::VisibilityOptionResourceAlias;
         }
-        for (const BufferBarrier& buffer : buffers)
-        {
-            metal4::addSides(lowered, buffer.srcStage, buffer.srcAccess, buffer.dstStage, buffer.dstAccess);
-            args = args || metal4::any(buffer.dstStage, Stage::IndirectArgs);
-        }
-        for (const TextureBarrier& texture : textures)
-        {
-            metal4::addSides(lowered, texture.srcStage, texture.srcAccess, texture.dstStage, texture.dstAccess);
-            args = args || metal4::any(texture.dstStage, Stage::IndirectArgs);
-            if (texture.oldLayout == Layout::Undefined && (lowered.visibility & MTL4::VisibilityOptionResourceAlias) == 0)
-            {
-                // A discard of a placed texture may follow another resource in its memory, and a newly mapped tile of a Sparse
-                // texture holds whatever its heap memory held. A texture whose range never overlapped another's needs no alias
-                // unless sparse tiles are live, which can name any placed memory. The payload is read without a lock.
-                bool aliases = aliasing.textureAliases(texture.texture);
-                if (!aliases && aliasing.anySparse())
-                {
-                    const auto* native = static_cast<const MTL::Texture*>(list.device->pool<Texture>().native(texture.texture));
-                    aliases = native != nullptr && (native->isSparse() || native->hazardTrackingMode() == MTL::HazardTrackingModeUntracked);
-                }
-                if (aliases)
-                {
-                    lowered.visibility |= MTL4::VisibilityOptionResourceAlias;
-                }
-            }
-        }
-        // A stage no encoder of the queue runs names no work: a graphics queue runs compute and render encoders, a compute
-        // queue compute encoders, and a copy queue only the blits of its copies.
-        MTL::Stages queueStages = metal4::kComputeStages | metal4::kRenderStages;
-        if (list.type == QueueType::Compute)
-        {
-            queueStages = metal4::kComputeStages;
-        }
-        else if (list.type == QueueType::Copy)
-        {
-            queueStages = MTL::StageBlit;
-        }
-        lowered.source &= queueStages;
-        lowered.destination &= queueStages;
-        if (lowered.source == 0 || lowered.destination == 0)
-        {
-            // No earlier work to wait for, or no later work to hold back: an execution-only barrier with nothing to order.
-            return;
-        }
-        metal4::Encoders& encoders = impl.encoders;
-        metal4::BarrierState& barriers = encoders.barriers();
-        barriers.argsNamed = barriers.argsNamed || args;
-        if (encoders.lingering())
-        {
-            // The ended pass's encoder runs no further command, so the batch orders only later encoders: it joins the pending
-            // barrier, which the next encoder emits at its opening or the lingering encoder carries at `end`.
-            barriers.merge(lowered.source, lowered.destination, lowered.visibility);
-            return;
-        }
-        const MTL::Stages open = encoders.stages();
-        const MTL::Stages covered = lowered.destination & open;
-        if (encoders.holdsWork() && (lowered.source & ~barriers.openSource) == 0 && (covered & ~barriers.openDestination) == 0)
-        {
-            // Every source since the open encoder's opening barrier lies in the encoder, and that barrier already holds the
-            // encoder's destination stages for earlier work: the barrier stays in the encoder, emitted before its next
-            // command in a destination stage, or queue-level if the encoder closes first.
-            if (covered != 0)
-            {
-                barriers.defer(lowered.source, covered, lowered.visibility);
-            }
-            if ((lowered.destination & ~open) != 0)
-            {
-                barriers.merge(lowered.source, lowered.destination & ~open, lowered.visibility);
-            }
-            return;
-        }
-        // A source may lie in an earlier encoder or an earlier list, which only a queue-level barrier orders. An open compute
-        // encoder that has not yet run a command in the destination stages takes it, with the encoder-level part for its own
-        // work; otherwise the open encoder ends, and the next encoders to open emit the barrier for their stages.
-        if (encoders.holdsWork() && covered != 0 && encoders.barrierInOpen(list, lowered.source, covered, lowered.visibility))
-        {
-            if ((lowered.destination & ~open) != 0)
-            {
-                barriers.merge(lowered.source, lowered.destination & ~open, lowered.visibility);
-            }
-            return;
-        }
-        if (encoders.holdsWork())
-        {
-            encoders.close(list);
-        }
-        barriers.merge(lowered.source, lowered.destination, lowered.visibility);
+        metal4::recordBatch(impl, last.lowering.source, last.lowering.destination, visibility, last.lowering.args);
     }
 } // namespace rojoRHI

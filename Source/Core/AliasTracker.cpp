@@ -87,7 +87,7 @@ namespace rojoRHI::core {
     void AliasTracker::markAliased(Placed& placed)
     {
         placed.aliased = true;
-        m_aliased.fetch_add(1, std::memory_order_relaxed);
+        m_counts.fetch_add(kAliasedOne, std::memory_order_relaxed);
         if (placed.slot != 0)
         {
             m_textureFlags.publish(placed.slot, &gAliasMark);
@@ -110,7 +110,8 @@ namespace rojoRHI::core {
         }
         if (placed->second.aliased)
         {
-            m_aliased.fetch_sub(1, std::memory_order_relaxed);
+            [[maybe_unused]] const uint64_t before = m_counts.fetch_sub(kAliasedOne, std::memory_order_relaxed);
+            ROJORHI_INTERNAL_ASSERT((before & 0xffffffff) != 0, "more aliased resources were destroyed than were counted");
             if (placed->second.slot != 0)
             {
                 m_textureFlags.publish(placed->second.slot, nullptr);
@@ -122,14 +123,14 @@ namespace rojoRHI::core {
     //==================================================================================================================
     void AliasTracker::addSparse()
     {
-        m_sparse.fetch_add(1, std::memory_order_relaxed);
+        m_counts.fetch_add(kSparseOne, std::memory_order_relaxed);
     }
 
     //==================================================================================================================
     void AliasTracker::removeSparse()
     {
-        [[maybe_unused]] const uint32_t before = m_sparse.fetch_sub(1, std::memory_order_relaxed);
-        ROJORHI_INTERNAL_ASSERT(before > 0, "more sparse resources were destroyed than were created");
+        [[maybe_unused]] const uint64_t before = m_counts.fetch_sub(kSparseOne, std::memory_order_relaxed);
+        ROJORHI_INTERNAL_ASSERT(before >= kSparseOne, "more sparse resources were destroyed than were created");
     }
 
     //==================================================================================================================
@@ -142,13 +143,13 @@ namespace rojoRHI::core {
     //==================================================================================================================
     bool AliasTracker::anyAliasing() const
     {
-        return m_aliased.load(std::memory_order_relaxed) != 0 || m_sparse.load(std::memory_order_relaxed) != 0;
+        return m_counts.load(std::memory_order_relaxed) != 0;
     }
 
     //==================================================================================================================
     bool AliasTracker::anySparse() const
     {
-        return m_sparse.load(std::memory_order_relaxed) != 0;
+        return m_counts.load(std::memory_order_relaxed) >= kSparseOne;
     }
 
     //==================================================================================================================
