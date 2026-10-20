@@ -7,8 +7,9 @@
 --   slang.moduledir   the directory `import` resolves through (-I)
 --
 -- Outputs land in <targetdir>/Shaders/<name>.{metal,spv,hlsl} plus <name>.metal.json, the reflection of the
--- MSL compile, and .metallib and .dxil when the host has the toolchain. Beside each .metallib the rule
--- writes <name>.metal4lib, a RojoRHI shader library: the metallib behind a text header with the
+-- MSL compile, and .metallib and .dxil when the host has the toolchain; a d3d12 configure requires DXIL and
+-- fails without a DXC beside slangc. Beside each .metallib the rule writes <name>.metal4lib, a RojoRHI
+-- shader library: the metallib behind a text header with the
 -- ROJORHI_SHADER_ABI_VERSION stamp and each entry's stage and threadgroup size, which
 -- Tools/shader_library.py packages from the reflection and the SPIR-V module. A host without the Metal
 -- toolchain builds neither. Metallibs target the macOS 26 deployment floor. The basenames are written to
@@ -186,7 +187,7 @@ rule("rojorhi.slang")
         -- whether DXIL is attempted at all. Without a DXC, slangc (v2026.14.1, macOS) exits non-zero
         -- with, among other lines: "error[E00100]: failed to load downstream compiler 'dxc'". Only
         -- this probe may turn a failure into a skip: when it succeeds, every DXIL failure on a real
-        -- shader fails the build.
+        -- shader fails the build. A d3d12 configure has no skip: the probe failing fails the build.
         local probe = path.join(outdir, "DxilProbe.slang")
         io.writefile(probe, "[shader(\"compute\")]\n[numthreads(1, 1, 1)]\nvoid probeMain() {}\n")
         local dxil_available, probe_err = run_tool(slangc, "slangc", {probe, "-D", "ROJORHI_TARGET_HLSL",
@@ -196,6 +197,10 @@ rule("rojorhi.slang")
         os.tryrm(path.join(outdir, "DxilProbe.dxil"))
         if not dxil_available then
             local reason = probe_err:match("[^\n]*failed to load[^\n]*") or probe_err:match("[^\n]+") or "unknown"
+            if get_config("rojorhi_backend") == "d3d12" then
+                raise("slang: the DXIL probe compile failed (%s); a d3d12 build requires DXIL; run xmake setup, "
+                      .. "which places the pinned DXC beside slangc", reason)
+            end
             cprint("${yellow}slang: DXIL skipped, the probe compile failed (%s)", reason)
         else
             cprint("${green}slang: DXIL enabled (dxc probe ok)")
