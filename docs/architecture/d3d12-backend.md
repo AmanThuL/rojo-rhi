@@ -258,8 +258,8 @@ globs the directory, so no build file lists them. The entries on a d3d12 build:
 
 `d3d12_pending` in `xmake/targets.lua` lists the contract files of chapters the backend does not
 implement yet, and `d3d12_conformance_pending` lists the conformance files it leaves out; both
-hold one file name per line, a name that matches no file fails the configure, and a later part
-removes a file when it passes whole on WARP under the debug layer and GPU-based validation.
+hold one file name per line, a name that matches no file fails the configure, and a file leaves
+the list when it passes whole on WARP under the debug layer and GPU-based validation.
 
 The `d3d12` job on `windows-latest` runs a Debug configure with
 `--rojorhi_d3d12_adapter=warp --rojorhi_d3d12_debug=gbv`, the probes and their gate, the
@@ -271,5 +271,4 @@ macOS format job excludes the same directories). A Release configure with
 `--rojorhi_d3d12_debug=mode` then builds warning-free under `/W4 /WX`, runs `contract` and
 `conformance`, and builds the link-time-optimization probe for `check_lto_inline.py`. The Release
 executables still turn off warnings C4702 and C4722 because entries not yet implemented abort
-(issue #83). The first run of the debug layer on WARP passed `contract` (161 cases) with GPU-based
-validation, `death` and Release `contract` (run 39471643531); this is WARP evidence only.
+(issue #83).

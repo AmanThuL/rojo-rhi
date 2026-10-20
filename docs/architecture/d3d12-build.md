@@ -77,12 +77,12 @@ identical result came from both variants):
 | Agility / WARP version | 1.619.6.0 / 1.0.21.0 |
 | Maximum feature level, highest shader model | 12_2, 6.9 |
 | Resource binding tier, resource heap tier | 3, 2 |
-| Typed UAV additional formats, enhanced barriers, dynamic depth bias | all supported |
+| Typed UAV additional formats, enhanced barriers, dynamic depth bias | all reported |
 | Tiled resources tier, conservative rasterization tier | 4, 3 |
 | `OPTIONS19` sampler, sampler with static, view heap maximum | 2,097,152 each |
 | Largest shader-visible view heap created | 2,097,152 |
 | Raw SRV of 2^27 and 2^27 + 1 elements | no debug-layer error for either |
-| Relaxed format casting, GPU upload heap, copy-queue timestamp queries (reported, not floor items) | all supported |
+| Relaxed format casting, GPU upload heap, copy-queue timestamp queries (reported, not floor items) | all reported |
 | Presentation on a hidden window | window, queue and swapchain created; 2 frames, `Present` S_OK |
 
 The silent 2^27 + 1 view means the layer does not catch an over-long raw view, so the core's own
