@@ -1,6 +1,6 @@
--- Bootstrap for a standalone configure of this component: the two vendored dependencies its
--- targets compile and run against, at the same pins a host project uses. A host has a setup task
--- of its own and never includes this file, so exactly one `setup` task exists per project root.
+-- Bootstrap for a standalone configure of this component: the vendored dependencies its targets
+-- compile and run against, at the same pins a host project uses. A host has a setup task of its
+-- own and never includes this file, so exactly one `setup` task exists per project root.
 --
 -- Everything lands in <project root>/ThirdParty, which is the directory the targets default to
 -- when no host overrides it.
@@ -10,6 +10,13 @@ local slang_pin    = "v2026.14.1"
 local slang_sha256 = "a1c5ecae0d2425b13fe7f616686f2df7cc7028d3f6a85fb717497cf98bee3d0a"
 -- The Windows archive's compiler, checked by the hash of bin/slangc.exe.
 local slang_windows_sha256 = "b9f786a651569aa4f968e4014d04b6e2f4f1a6c9584f47ea9f4ccc841fdeeeeb"
+-- The D3D12 runtime a Windows executable loads from beside itself: the Agility SDK (its headers and
+-- D3D12Core.dll with the debug layer) and WARP, the software adapter hosted CI runs on. Each pin is
+-- the SHA-256 of the NuGet package, checked before anything is extracted from it.
+local agility_pin    = "1.619.6"
+local agility_sha256 = "08f0489281401aa430fc37322d6c3fc98a8025175aacd714c10d562f4963f1e9"
+local warp_pin       = "1.0.21"
+local warp_sha256    = "ea44b77eb30eec14427193e20f40cdb2e4c31ed11ab39cb880538fdf4bac2681"
 
 task("setup")
     -- An explicit (even empty) options table is required for -P to work with this task: a
@@ -17,12 +24,74 @@ task("setup")
     set_menu {usage = "xmake setup", description = "fetch the pinned third-party dependencies",
               options = {}}
     on_run(function ()
+        import("net.http")
+        import("utils.archive")
+        local thirdparty = path.join(os.projectdir(), "ThirdParty")
+
+        -- Downloads a pinned archive and checks its SHA-256 before extracting it. Returns false when
+        -- ThirdParty/<name> already holds that archive's files, else the directory it was extracted
+        -- to; the caller copies what it keeps into ThirdParty/<name> and then calls finish_pin. The
+        -- marker finish_pin writes is the last step, so an interrupted run is fetched again, and the
+        -- marker counts only while the sentinel, a file the pin keeps (relative to its directory),
+        -- still exists. xmake's own downloader, extractor and hash work the same on every host;
+        -- utils.archive picks the extractor by the extension, so a NuGet package is saved under a
+        -- .zip name.
+        local function fetch_pin(name, url, sha256, archive_name, sentinel)
+            local dir = path.join(thirdparty, name)
+            local marker = path.join(dir, ".archive-sha256")
+            if os.isfile(marker) and io.readfile(marker):trim() == sha256 and os.isfile(path.join(dir, sentinel)) then
+                return false
+            end
+            os.tryrm(dir)
+            os.mkdir(thirdparty)
+            local download = path.join(thirdparty, archive_name)
+            os.tryrm(download)
+            http.download(url, download)
+            local actual = hash.sha256(download)
+            if actual ~= sha256 then
+                os.tryrm(download)
+                raise("%s checksum mismatch; expected %s, got %s", url, sha256, actual)
+            end
+            local extract = path.join(thirdparty, ".extract-" .. name)
+            os.tryrm(extract)
+            archive.extract(download, extract)
+            os.rm(download)
+            return extract
+        end
+
+        local function finish_pin(name, sha256, extract)
+            os.rm(extract)
+            io.writefile(path.join(thirdparty, name, ".archive-sha256"), sha256 .. "\n")
+        end
+
         if is_host("windows") then
-            -- Only Slang is fetched on Windows: the compile-only shader checks need it and no
-            -- Metal toolchain. xmake's own downloader, archive extractor and hash replace curl,
-            -- unzip and shasum, which a Windows runner may lack.
-            import("net.http")
-            import("utils.archive")
+            -- Slang and the D3D12 runtime are fetched on Windows: the shader checks need Slang and
+            -- no Metal toolchain, and the D3D12 executables load the Agility SDK and WARP.
+            local agility_url = format("https://api.nuget.org/v3-flatcontainer/microsoft.direct3d.d3d12/%s/microsoft.direct3d.d3d12.%s.nupkg",
+                                       agility_pin, agility_pin)
+            local agility_extract = fetch_pin("agility", agility_url, agility_sha256, format("agility-%s.zip", agility_pin),
+                                              path.join("bin", "D3D12Core.dll"))
+            if agility_extract then
+                local agility = path.join(thirdparty, "agility")
+                os.mkdir(path.join(agility, "bin"))
+                os.cp(path.join(agility_extract, "build", "native", "include"), path.join(agility, "include"))
+                os.cp(path.join(agility_extract, "build", "native", "bin", "x64", "D3D12Core.dll"), path.join(agility, "bin"))
+                os.cp(path.join(agility_extract, "build", "native", "bin", "x64", "d3d12SDKLayers.dll"), path.join(agility, "bin"))
+                os.cp(path.join(agility_extract, "LICENSE.txt"), agility)
+                finish_pin("agility", agility_sha256, agility_extract)
+            end
+            local warp_url = format("https://api.nuget.org/v3-flatcontainer/microsoft.direct3d.warp/%s/microsoft.direct3d.warp.%s.nupkg",
+                                    warp_pin, warp_pin)
+            local warp_extract = fetch_pin("warp", warp_url, warp_sha256, format("warp-%s.zip", warp_pin),
+                                           path.join("bin", "d3d10warp.dll"))
+            if warp_extract then
+                local warp = path.join(thirdparty, "warp")
+                os.mkdir(path.join(warp, "bin"))
+                os.cp(path.join(warp_extract, "build", "native", "bin", "x64", "d3d10warp.dll"), path.join(warp, "bin"))
+                os.cp(path.join(warp_extract, "LICENSE.TXT"), warp)
+                finish_pin("warp", warp_sha256, warp_extract)
+            end
+
             local slang = path.join(os.projectdir(), "ThirdParty", "slang")
             local slangc = path.join(slang, "bin", "slangc.exe")
             if not os.isfile(slangc) then
@@ -38,14 +107,13 @@ task("setup")
             local slang_hash = hash.sha256(slangc)
             assert(slang_hash == slang_windows_sha256,
                    format("%s checksum mismatch; expected %s, got %s", slangc, slang_windows_sha256, slang_hash))
-            print("setup done: slang %s", slang_pin)
+            print("setup done: slang %s, agility %s, warp %s", slang_pin, agility_pin, warp_pin)
             return
         end
         if not is_host("macosx") then
             print("setup done: nothing to fetch on %s", os.host())
             return
         end
-        local thirdparty = path.join(os.projectdir(), "ThirdParty")
         local metalcpp = path.join(thirdparty, "metal-cpp")
         local slang = path.join(thirdparty, "slang")
         if not os.isdir(metalcpp) then

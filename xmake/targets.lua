@@ -135,6 +135,39 @@ local function warn_unreachable()
     add_cxxflags("-Wunreachable-code", "-Wunreachable-code-return", {tools = "clang"})
 end
 
+-- The D3D12 runtime an executable loads from its own directory, copied there after each build:
+-- the Agility SDK's D3D12Core.dll and d3d12SDKLayers.dll into D3D12/, and WARP's d3d10warp.dll
+-- beside the executable. The FidelityFX loader and upscaler DLLs are copied only when the
+-- third-party directory holds them: the backend lists FSR only when its loader loads, so their
+-- absence is a supported state. An executable adds the rule and sets the value rojorhi.thirdparty
+-- to the absolute third-party directory setup fills; a host does the same for its own executable.
+rule("rojorhi.d3d12_runtime")
+    after_build(function (target)
+        local thirdparty = target:values("rojorhi.thirdparty")
+        if type(thirdparty) == "table" then
+            thirdparty = thirdparty[1]
+        end
+        assert(thirdparty, format("%s adds rojorhi.d3d12_runtime without setting rojorhi.thirdparty", target:name()))
+        local function copy(source, destination_dir, required)
+            if not os.isfile(source) then
+                if required then
+                    raise("%s is missing; run xmake setup", source)
+                end
+                return
+            end
+            -- Compared by content, not time, so a pin moved to an older version is copied too.
+            os.mkdir(destination_dir)
+            os.cp(source, path.join(destination_dir, path.filename(source)), {copy_if_different = true})
+        end
+        local targetdir = target:targetdir()
+        copy(path.join(thirdparty, "agility", "bin", "D3D12Core.dll"), path.join(targetdir, "D3D12"), true)
+        copy(path.join(thirdparty, "agility", "bin", "d3d12SDKLayers.dll"), path.join(targetdir, "D3D12"), true)
+        copy(path.join(thirdparty, "warp", "bin", "d3d10warp.dll"), targetdir, true)
+        copy(path.join(thirdparty, "fidelityfx", "bin", "amd_fidelityfx_loader_dx12.dll"), targetdir, false)
+        copy(path.join(thirdparty, "fidelityfx", "bin", "amd_fidelityfx_upscaler_dx12.dll"), targetdir, false)
+    end)
+rule_end()
+
 -- The one metal-cpp implementation unit: it emits the Objective-C class and selector tables every
 -- metal-cpp caller links against, so a binary links exactly one copy. The frameworks are public so a
 -- binary linking the backend gets them.
@@ -260,6 +293,30 @@ target("RojoRHILtoProbe")
     if is_plat("windows") then
         set_symbols("debug")
     end
+
+-- The D3D12 floor probe: two standalone executables from one source that report, as JSON, whether
+-- the WARP adapter meets the hardware floor of ADR 0010 and how the D3D12 runtime loaded. The
+-- factory variant loads the Agility SDK through a device factory; the exports variant through the
+-- D3D12SDKVersion and D3D12SDKPath exports. They link neither RojoRHI nor Catch2.
+if is_plat("windows") then
+    for _, variant in ipairs({"Factory", "Exports"}) do
+        target("RojoRHID3D12Probe" .. variant)
+            set_kind("binary")
+            set_default(false)
+            set_targetdir("$(builddir)/$(plat)/$(arch)/$(mode)/rojorhi-d3d12-probe")
+            add_files(path.join(component, "Tools/D3D12Probe/D3D12Probe.cpp"))
+            if variant == "Exports" then
+                add_files(path.join(component, "Tools/D3D12Probe/D3D12ProbeExports.cpp"))
+                add_defines("ROJORHI_D3D12_PROBE_EXPORTS")
+            end
+            -- A system include, so the Agility headers shadow the Windows SDK's older d3d12.h.
+            add_sysincludedirs(path.join(thirdparty, "agility/include"))
+            add_defines("WIN32_LEAN_AND_MEAN", "NOMINMAX", "UNICODE", "_UNICODE")
+            add_syslinks("d3d12", "dxgi", "dxguid", "user32", "version", "advapi32")
+            add_rules("rojorhi.d3d12_runtime")
+            set_values("rojorhi.thirdparty", thirdparty_dir)
+    end
+end
 
 -- The benchmark harness under Benchmarks/, one executable so that a process measures RojoRHI and hand-written
 -- metal-cpp code on the same device. It links RojoRHI of the configured backend and runs its own Catch2 session, so
