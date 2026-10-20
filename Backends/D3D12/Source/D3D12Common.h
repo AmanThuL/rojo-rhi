@@ -71,6 +71,12 @@ namespace rojoRHI::d3d12 {
             return m_pointer;
         }
 
+        /// Returns the interface held, which must not be null.
+        T& operator*() const
+        {
+            return *m_pointer;
+        }
+
         explicit operator bool() const
         {
             return m_pointer != nullptr;
