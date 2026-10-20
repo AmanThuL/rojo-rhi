@@ -128,6 +128,13 @@ local function release_lto()
     end
 end
 
+-- MSVC's C4702 (unreachable code) fails hosted Windows CI under /WX, and only an MSVC build sees it. clang's
+-- -Wunreachable-code finds the same pattern, a FAIL or a return followed by more code, on a Mac. It is a warning here,
+-- as every warning is off Windows. The v2 targets take it; v1 under Legacy/ is frozen (ADR 0017) and does not.
+local function warn_unreachable()
+    add_cxxflags("-Wunreachable-code", "-Wunreachable-code-return", {tools = "clang"})
+end
+
 -- The one metal-cpp implementation unit: it emits the Objective-C class and selector tables every
 -- metal-cpp caller links against, so a binary links exactly one copy. The frameworks are public so a
 -- binary linking the backend gets them.
@@ -143,6 +150,7 @@ end
 
 target("RojoRHI")
     set_kind("static")
+    warn_unreachable()
     add_options("rojorhi_backend")
     release_lto()
     add_files(path.join(component, "Source/**.cpp"))
@@ -173,6 +181,7 @@ target("RojoRHI")
 
 target("RojoRHITests")
     set_kind("binary")
+    warn_unreachable()
     set_default(false)
     set_targetdir("$(builddir)/$(plat)/$(arch)/$(mode)/rojorhi-test")
     add_files(path.join(component, "Tests/*.cpp"))
@@ -258,6 +267,7 @@ target("RojoRHILtoProbe")
 if is_plat("macosx") then
     target("RojoRHIBench")
         set_kind("binary")
+        warn_unreachable()
         set_default(false)
         set_targetdir("$(builddir)/$(plat)/$(arch)/$(mode)/rojorhi-bench")
         release_lto()
