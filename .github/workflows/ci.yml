@@ -381,10 +381,29 @@ jobs:
             if (-not (Test-Path (Join-Path $dir $dll))) { throw "$dll is missing from $dir" }
           }
       - run: xmake test RojoRHITests/abi
+        timeout-minutes: 15
       # The pinned DXC's disassembly of the module's heap fetches and raw accesses.
       - run: python3 Tools/check_dxil.py
       - run: xmake test RojoRHITests/contract
+        timeout-minutes: 15
       - run: xmake test RojoRHITests/death
+        timeout-minutes: 15
+      - run: xmake test RojoRHITests/conformance
+        timeout-minutes: 15
+      # Lists the cases of each tag and requires a floor, so a dropped file fails. The floors are the case counts
+      # at this commit; they rise as files leave the pending lists.
+      - name: Count the cases
+        shell: pwsh
+        run: |
+          $exe = 'build/windows/x64/debug/rojorhi-test/RojoRHITests.exe'
+          $floors = [ordered]@{ conformance = 7; d3d12 = 83; contract = 238 }
+          foreach ($tag in $floors.Keys) {
+            $out = & $exe --list-tests "[$tag]" | Out-String
+            if ($out -notmatch '(\d+) matching test cases') { throw "no case count for [$tag]" }
+            $n = [int]$Matches[1]
+            Write-Host "[$tag]: $n cases, floor $($floors[$tag])"
+            if ($n -lt $floors[$tag]) { throw "[$tag] lists $n cases, below its floor $($floors[$tag])" }
+          }
       # The toolchain record: the cl command lines xmake writes for the c++23 language level, the MSVC version, and
       # whether this MSVC accepts each spelling of that level (a D9002 warning means it does not).
       - name: Record the toolchain
@@ -423,9 +442,13 @@ jobs:
           python3 Tools/check_cpp_layout.py --only Backends/D3D12 --only Tests/D3D12 --only Tests/Support/D3D12 --only Tools/D3D12Probe
           --compile-commands build/compile-commands/d3d12/compile_commands.json --clangd "$env:CLANGD_PATH"
       # Release with debug features mode, which enables none in Release; /WX makes the build warning-free. The LTO
-      # probe only builds: createDevice refuses, so it cannot run, and the Device::capabilities it calls aborts, so
-      # MSVC keeps that call out of line and check_lto_inline.py has nothing to show here.
+      # probe only builds and is not run, and check_lto_inline.py disassembles it to require that link-time
+      # optimization inlined Device::capabilities into its caller (ADR 0012).
       - run: xmake f -m release -y --rojorhi_backend=d3d12 --rojorhi_d3d12_adapter=warp --rojorhi_d3d12_debug=mode
       - run: xmake build RojoRHITests
       - run: xmake test RojoRHITests/contract
+        timeout-minutes: 15
+      - run: xmake test RojoRHITests/conformance
+        timeout-minutes: 15
       - run: xmake build RojoRHILtoProbe
+      - run: python3 Tools/check_lto_inline.py
