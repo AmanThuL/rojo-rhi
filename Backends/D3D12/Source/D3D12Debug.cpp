@@ -205,6 +205,11 @@ namespace rojoRHI::d3d12 {
             abortOn("QueryInterface(ID3D12InfoQueue1) with the debug layer on", found);
         }
 
+        // The runtime's default storage filter drops informational messages, and a callback registered without
+        // `D3D12_MESSAGE_CALLBACK_IGNORE_FILTERS` obeys the filter; clearing it lets every severity through, and the filter
+        // below drops only what `kFiltered` names.
+        queue->ClearStorageFilter();
+
         if constexpr (!kFiltered.empty())
         {
             std::vector<D3D12_MESSAGE_ID> ids;
