@@ -250,14 +250,14 @@ namespace rojoRHI {
             args = args || metal4::any(texture.dstStage, Stage::IndirectArgs);
             if (texture.oldLayout == Layout::Undefined && (lowered.visibility & MTL4::VisibilityOptionResourceAlias) == 0)
             {
-                // A discard of a placed texture may follow another resource in its memory. A texture whose range never overlapped
-                // another's needs no alias unless sparse tiles are live, which can name any placed memory. The payload is read
-                // without a lock.
+                // A discard of a placed texture may follow another resource in its memory, and a newly mapped tile of a Sparse
+                // texture holds whatever its heap memory held. A texture whose range never overlapped another's needs no alias
+                // unless sparse tiles are live, which can name any placed memory. The payload is read without a lock.
                 bool aliases = aliasing.textureAliases(texture.texture);
                 if (!aliases && aliasing.anySparse())
                 {
                     const auto* native = static_cast<const MTL::Texture*>(list.device->pool<Texture>().native(texture.texture));
-                    aliases = native != nullptr && native->hazardTrackingMode() == MTL::HazardTrackingModeUntracked;
+                    aliases = native != nullptr && (native->isSparse() || native->hazardTrackingMode() == MTL::HazardTrackingModeUntracked);
                 }
                 if (aliases)
                 {
