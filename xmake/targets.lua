@@ -151,10 +151,10 @@ local function warn_unreachable()
     add_cxxflags("-Wunreachable-code", "-Wunreachable-code-return", {tools = "clang"})
 end
 
--- The D3D12 backend creates no device: createDevice refuses and every other entry aborts. Release link-time code
--- generation sees through both, so in an executable that calls the library it finds the code after each such call
--- unreachable (C4702) and a destructor that calls one never returning (C4722), which /WX makes errors. An executable
--- target calls this to turn those two warnings off on a d3d12 Release build; every other warning still fails it.
+-- Entries of the D3D12 backend that recording, pipelines, presentation, sparse and upscaling will implement still abort.
+-- Release link-time code generation sees through them, so in an executable that calls the library it finds the code after
+-- each such call unreachable (C4702) and a destructor that calls one never returning (C4722), which /WX makes errors. An
+-- executable target calls this to turn those two warnings off on a d3d12 Release build; every other warning still fails it.
 local function unreachable_after_stubs()
     if is_config("rojorhi_backend", "d3d12") and is_mode("release") then
         add_cxflags("/wd4702", "/wd4722")
@@ -285,8 +285,6 @@ target("RojoRHITests")
             "CopyDeathTests.cpp",
             "CopyTests.cpp",
             "CounterTests.cpp",
-            "DeviceDeathTests.cpp",
-            "DeviceTests.cpp",
             "DiagnosticsDeathTests.cpp",
             "DiagnosticsTests.cpp",
             "DrawDeathTests.cpp",
@@ -297,7 +295,6 @@ target("RojoRHITests")
             "HandoffTests.cpp",
             "HazardDeathTests.cpp",
             "HazardTests.cpp",
-            "HeapDeathTests.cpp",
             "IndirectHazardDeathTests.cpp",
             "IndirectHazardTests.cpp",
             "LifetimeDeathTests.cpp",
@@ -314,7 +311,6 @@ target("RojoRHITests")
             "SparseTests.cpp",
             "SwapchainDeathTests.cpp",
             "SwapchainTests.cpp",
-            "TextureTests.cpp",
             "TrackerDeathTests.cpp",
             "TrackerTests.cpp",
             "UpscaleDeathTests.cpp",
@@ -345,7 +341,51 @@ target("RojoRHITests")
     end
     add_files(path.join(component, "Tests/Support/*.cpp"))
     -- The conformance directory holds no source until a part adds one, and xmake warns on an empty glob.
-    if #os.files(path.join(component_dir, "Tests/Conformance/*.cpp")) > 0 then
+    if is_config("rojorhi_backend", "d3d12") then
+        -- The conformance files whose chapters the D3D12 backend does not implement yet. A file leaves the list when its
+        -- cases pass whole on WARP under the debug layer and GPU-based validation, and the list ends empty.
+        local d3d12_conformance_pending = {
+            "AbiComputeConformanceTests.cpp",
+            "AbiGraphicsConformanceTests.cpp",
+            "BarrierConformanceTests.cpp",
+            "ClearConformanceTests.cpp",
+            "CopyConformanceTests.cpp",
+            "DispatchConformanceTests.cpp",
+            "DrawConformanceTests.cpp",
+            "FillConformanceTests.cpp",
+            "FormatConformanceTests.cpp",
+            "GraphicsBarrierConformanceTests.cpp",
+            "HandoffConformanceTests.cpp",
+            "IndirectConformanceTests.cpp",
+            "InitialDataConformanceTests.cpp",
+            "MeshConformanceTests.cpp",
+            "PresentationConformanceTests.cpp",
+            "RenderPassConformanceTests.cpp",
+            "ScopeConformanceTests.cpp",
+            "SparseConformanceTests.cpp",
+            "UpscaleConformanceTests.cpp",
+            "WriteOnlyConformanceTests.cpp",
+        }
+        local conformance_pending = {}
+        for _, name in ipairs(d3d12_conformance_pending) do
+            conformance_pending[name] = true
+        end
+        -- A renamed or deleted conformance file must leave the list too; on_config fails on a name that matches no file.
+        set_values("rojorhi.d3d12_conformance_pending", d3d12_conformance_pending)
+        set_values("rojorhi.conformance_dir", path.join(component_dir, "Tests/Conformance"))
+        on_config(function (target)
+            local conformance_dir = target:values("rojorhi.conformance_dir")
+            for _, name in ipairs(table.wrap(target:values("rojorhi.d3d12_conformance_pending"))) do
+                assert(os.isfile(path.join(conformance_dir, name)),
+                       format("d3d12_conformance_pending names Tests/Conformance/%s, which does not exist; remove or rename the entry", name))
+            end
+        end)
+        for _, file in ipairs(os.files(path.join(component_dir, "Tests/Conformance/*.cpp"))) do
+            if not conformance_pending[path.filename(file)] then
+                add_files(path.join(component, "Tests/Conformance", path.filename(file)))
+            end
+        end
+    elseif #os.files(path.join(component_dir, "Tests/Conformance/*.cpp")) > 0 then
         add_files(path.join(component, "Tests/Conformance/*.cpp"))
     end
     -- Core and Null cases test the core through the Null backend, which never ships, so they build only with it.
@@ -395,10 +435,12 @@ target("RojoRHITests")
         add_tests("death", {runargs = {"[death]"}, runenvs = layer, realtime_output = true, run_timeout = 300000})
         add_tests("conformance", {runargs = {"[conformance]"}, runenvs = layer, realtime_output = true})
     elseif is_config("rojorhi_backend", "d3d12") then
-        -- No conformance entry yet: its cases need resources the backend does not create.
+        -- contract runs the shared and [d3d12] cases without the death ones, death runs every death case, and
+        -- conformance runs the [conformance] cases of the files the backend has taken off its pending list.
         add_tests("contract", {runargs = {"[contract]~[death],[d3d12]~[death]"}, realtime_output = true})
         -- Each case spawns this executable again, so keep Catch2's summary in the log and bound a hang.
         add_tests("death", {runargs = {"[death]"}, realtime_output = true, run_timeout = 300000})
+        add_tests("conformance", {runargs = {"[conformance]"}, realtime_output = true})
     else
         add_tests("contract", {runargs = {"[contract]~[death],[core]~[death],[null]~[death]"}, realtime_output = true})
         -- Each case spawns this executable again, so keep Catch2's summary in the log and bound a hang.
