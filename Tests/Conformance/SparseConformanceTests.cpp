@@ -95,6 +95,7 @@ TEST_CASE("a mapped sparse buffer tile holds what a copy wrote", "[conformance]"
     const Buffer upload = kit.buffer(2 * kTile, Memory::Upload, BufferUsage::None, bytes);
     const Buffer readback = kit.buffer(2 * kTile, Memory::Readback);
     CommandList list = kit.list(QueueType::Graphics, "test.copy");
+    list.barrier(std::array{ GlobalBarrier{ .srcStage = Stage::Copy, .dstStage = Stage::Copy, .dstAccess = Access::CopyWrite } });
     list.copyBuffer(upload, 0, sparse, 0, 2 * kTile);
     list.barrier(std::array{ copyWriteToRead() });
     list.copyBuffer(sparse, 0, readback, 0, 2 * kTile);
@@ -116,6 +117,7 @@ TEST_CASE("a heap tile mapped into a second sparse buffer reads the first one's 
     const std::vector<std::byte> bytes = test::pattern(kTile, 9);
     const Buffer upload = kit.buffer(kTile, Memory::Upload, BufferUsage::None, bytes);
     CommandList write = kit.list(QueueType::Graphics, "test.write");
+    write.barrier(std::array{ GlobalBarrier{ .srcStage = Stage::Copy, .dstStage = Stage::Copy, .dstAccess = Access::CopyWrite } });
     write.copyBuffer(upload, 0, first, 0, kTile);
     kit.run(std::array{ write });
     // The second buffer's first use of memory another resource wrote follows the aliasing rule: a global barrier.
@@ -220,6 +222,7 @@ TEST_CASE("a mapping on the compute queue, ordered by a fence, is seen by a grap
     const Buffer upload = kit.buffer(kTile, Memory::Upload, BufferUsage::None, bytes);
     const Buffer readback = kit.buffer(kTile, Memory::Readback);
     CommandList list = kit.list(QueueType::Graphics, "test.copy");
+    list.barrier(std::array{ GlobalBarrier{ .srcStage = Stage::Copy, .dstStage = Stage::Copy, .dstAccess = Access::CopyWrite } });
     list.copyBuffer(upload, 0, sparse, 0, kTile);
     list.barrier(std::array{ copyWriteToRead() });
     list.copyBuffer(sparse, 0, readback, 0, kTile);

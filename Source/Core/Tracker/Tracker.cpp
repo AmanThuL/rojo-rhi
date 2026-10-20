@@ -361,6 +361,7 @@ namespace rojoRHI::core {
         {
             state.tileUses.resize(subresources);
             state.tileMaps.resize(subresources);
+            state.newTiles.resize(subresources);
         }
         const std::lock_guard held(m_mutex);
         if (heap.bits != 0)
@@ -664,6 +665,15 @@ namespace rojoRHI::core {
                 if (buffer != nullptr && buffer->sparse)
                 {
                     buffer->byteMaps[index].note(change.offset, change.offset + change.size, position, m_host[index]);
+                    // A mapped range's first use must follow a global barrier; an unmapped one has no first use to order.
+                    if (change.unmap)
+                    {
+                        buffer->newBytes.clear(change.offset, change.offset + change.size);
+                    }
+                    else
+                    {
+                        buffer->newBytes.mark(change.offset, change.offset + change.size, queue, position);
+                    }
                 }
                 continue;
             }
@@ -676,7 +686,17 @@ namespace rojoRHI::core {
             {
                 for (uint32_t layer = change.range.baseLayer; layer < change.range.baseLayer + change.range.layerCount; ++layer)
                 {
-                    texture->tileMaps[static_cast<size_t>(mip) * texture->layers + layer][index].note(change.box, position, m_host[index]);
+                    const size_t subresource = static_cast<size_t>(mip) * texture->layers + layer;
+                    texture->tileMaps[subresource][index].note(change.box, position, m_host[index]);
+                    // A mapped tile's first event must discard its subresource; an unmapped one has no first use to order.
+                    if (change.unmap)
+                    {
+                        texture->newTiles[subresource].clear(change.box);
+                    }
+                    else
+                    {
+                        texture->newTiles[subresource].mark(change.box);
+                    }
                 }
             }
         }
@@ -1223,6 +1243,27 @@ namespace rojoRHI::core {
             }
         }
         replayTextureHazards(*texture, use, queue, list, position);
+        if (!texture->newTiles.empty())
+        {
+            // A newly mapped tile's first event is a discard of its subresource; the cross-queue rules above report first.
+            for (uint32_t mip = use.range.baseMip; mip < mipEnd; ++mip)
+            {
+                for (uint32_t layer = use.range.baseLayer; layer < layerEnd; ++layer)
+                {
+                    ROJORHI_VU(
+                        !texture->newTiles[static_cast<size_t>(mip) * texture->layers + layer].reaches(use.box),
+                        "VU-rojo-sparse-0014",
+                        "the list \"{}\" on the {} queue uses tiles of mip {} layer {} of the sparse texture \"{}\" that were mapped onto heap "
+                        "memory since its last texture barrier from Undefined; the first use of a newly mapped tile is that discard",
+                        list,
+                        queueName(queue),
+                        mip,
+                        layer,
+                        texture->label
+                    );
+                }
+            }
+        }
         if (texture->heap.bits != 0)
         {
             // Only the subresources the use names follow the marks before it; the others still owe their discard.
@@ -1331,6 +1372,24 @@ namespace rojoRHI::core {
             recordUse(state, position, later, fenced);
         }
         buffer->segments.merge(use.offset, end, mergeFloor(queue));
+        if (buffer->sparse)
+        {
+            // A newly mapped range's first use follows a global barrier on its queue; the cross-queue rules above report first.
+            [[maybe_unused]] const std::optional<ByteMark> mark = buffer->newBytes.firstUse(use.offset, end, queue, later);
+            ROJORHI_VU(
+                !mark.has_value(),
+                "VU-rojo-sparse-0014",
+                "the list \"{}\" uses bytes {} to {} of the sparse buffer \"{}\" at {} on the {} queue first since mapTiles mapped them on the {} "
+                "queue, and no global barrier on this queue since the mapping has a destination that covers the use",
+                list,
+                use.offset,
+                end,
+                buffer->label,
+                scopeText(later),
+                queueName(queue),
+                queueName(mark->queue)
+            );
+        }
     }
 
     //==================================================================================================================
@@ -1444,6 +1503,15 @@ namespace rojoRHI::core {
             for (HeapSegments::Range& segment : heap.segments.ranges())
             {
                 reachHeapUse(segment.state, queue, position, source, destination);
+            }
+        }
+        // It alone orders a sparse buffer's first use of newly mapped bytes after the mapping (VU-rojo-sparse-0014).
+        const Clock ordered = orderedBefore(queue);
+        for (auto& [bits, buffer] : m_buffers)
+        {
+            if (buffer.sparse)
+            {
+                buffer.newBytes.reach(queue, ordered, destination);
             }
         }
     }
@@ -1625,6 +1693,27 @@ namespace rojoRHI::core {
                         static_cast<int>(barrier.newLayout),
                         earlierUse(Hazard{ .earlier = across->earlier, .earlierTransition = across->earlierTransition }),
                         queueName(across->queue)
+                    );
+                }
+                if (!texture.newTiles.empty())
+                {
+                    // A discard is the first event a newly mapped tile needs, and clears its marks; any other barrier reaches them.
+                    if (barrier.oldLayout == Layout::Undefined)
+                    {
+                        texture.newTiles[index].clear(std::nullopt);
+                    }
+                    ROJORHI_VU(
+                        !texture.newTiles[index].reaches(std::nullopt),
+                        "VU-rojo-sparse-0014",
+                        "a texture barrier in the list \"{}\" on the {} queue moves mip {} layer {} of the sparse texture \"{}\" from layout {}, "
+                        "and tiles of it were mapped onto heap memory since its last texture barrier from Undefined; the first use of a newly "
+                        "mapped tile is that discard",
+                        list,
+                        queueName(queue),
+                        mip,
+                        layer,
+                        texture.label,
+                        static_cast<int>(barrier.oldLayout)
                     );
                 }
                 if (barrier.oldLayout == barrier.newLayout)

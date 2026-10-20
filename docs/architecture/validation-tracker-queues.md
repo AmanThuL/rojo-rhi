@@ -70,9 +70,10 @@ it writes: a pair with at least one write that the ordering clock does not cover
   marks on the queue clear at its own next event there, and those on other queues clear when the
   clock covers them.
 - **Precedence.** For a texture use: `sync-0017`, the layout rules, `sparse-0013`, `sync-0021` or
-  `sync-0024`, the unit `queue-0005` (per subresource), then the heap `queue-0005`. For a buffer
-  use: `sync-0009`, the heap `queue-0005`, the indirect rules, `sparse-0013`, `sync-0021` or
-  `sync-0024`, then the unit `queue-0005`. A barrier reports `queue-0005` only for a transition.
+  `sync-0024`, the unit `queue-0005` (per subresource), `sparse-0014`, then the heap `queue-0005`.
+  For a buffer use: `sync-0009`, the heap `queue-0005`, the indirect rules, `sparse-0013`,
+  `sync-0021` or `sync-0024`, the unit `queue-0005`, then `sparse-0014`. A barrier reports
+  `queue-0005` only for a transition.
 
 ## Layouts per queue and the handoff
 
@@ -146,6 +147,33 @@ which bounds the state by the uncovered work.
   touches one. Other uses and transitions are judged per subresource, and a tail change covers each
   tail mip of its layers. Buffers are judged per byte range.
 
+## First use of a new tile: VU-rojo-sparse-0014
+
+A tile `mapTiles` maps holds whatever the heap memory held, so its first use must follow the
+aliasing rule (chapter 13). Each `TileChange` carries `unmap`. A change that maps marks its region
+on the resource (`Tracker/FirstUse.*`): a sparse texture keeps, per subresource, the boxes of the
+regions mapped since its last barrier from `Undefined`, or a whole-subresource mark for a mip tail;
+a sparse buffer keeps byte ranges, each with the queue and position of its mapping. A remap marks
+again, and a buffer range remapped forgets the barriers it had gained; an unmap clears the marks it
+covers, cutting a box into at most six; destroying the resource drops its marks with its state.
+
+Marks belong to the resource, not to a queue: the next event that reaches one on any queue is
+judged, and whether that queue is ordered after the mapping at all is `sparse-0013`'s to judge.
+
+- **Textures.** A texture barrier from `Undefined` over a subresource clears all its marks. Any
+  other event on the subresource reports when it reaches a mark: a copy when its texel box
+  intersects one, any event with no box (barriers, passes, views, clears) always. A copy whose box
+  misses every mark neither reports nor clears.
+- **Buffers.** A global barrier replayed on a queue adds its destination to each mark it follows:
+  one mapped on that queue (queue order), or one whose mapping the queue's ordering clock covers.
+  A use of marked bytes clears their marks when one of those destinations on its queue covers the
+  use's stages and accesses, and reports otherwise. A buffer barrier orders nothing here.
+- **Precedence.** In a use, texture or buffer, the check reports after `sparse-0013`,
+  `sync-0021` or `sync-0024`, and the unit `queue-0005`. In a texture barrier it reports after
+  `sparse-0013` and `queue-0005` but before `sync-0024`. It never meets `sync-0017` or `sync-0009`:
+  a sparse resource is never placed (`VU-rojo-heap-0006`). So every older rule keeps its report,
+  and an event that breaks only this rule reports only this one.
+
 ## Locking
 
 The tracker mutex is held by `Queue::submit` from the wait check through replay to publishing the
@@ -162,8 +190,9 @@ lock while holding a pool lock. Release recording takes no tracker lock.
 - **Older reads of aliased bytes.** Heap state keeps the last use per queue. An older read of the
   bytes on another queue, with no fence, is missed once a later read by another resource replaced
   it, though any write is caught.
-- **First use of a mapped tile.** Chapter 13 says the first use of a newly mapped tile follows the
-  aliasing rule, but no identifier states it, so no rule checks it.
+- **New tiles of a resident texture.** `sparse-0014` asks for a discard of the whole subresource
+  before a newly mapped tile's first use, as chapter 13 states, so a partially resident texture
+  loses the contents of its other tiles in that subresource when it takes a new one (issue #82).
 - **Whole-subresource uses.** Remapping any tile of a subresource needs a fence against a use
   with no texel box, or a transition, of that subresource on another queue.
 - **Barriers.** A barrier that keeps the layout is neither a layout event nor compared with

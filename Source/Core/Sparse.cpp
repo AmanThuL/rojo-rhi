@@ -297,7 +297,9 @@ namespace rojoRHI::core {
             {
                 if (mapping.texture.bits == 0)
                 {
-                    changes.push_back(TileChange{ .buffer = mapping.buffer, .offset = mapping.bufferOffset, .size = mapping.bufferSize });
+                    changes.push_back(
+                        TileChange{ .buffer = mapping.buffer, .offset = mapping.bufferOffset, .size = mapping.bufferSize, .unmap = mapping.unmap }
+                    );
                     continue;
                 }
                 // The handle was checked live; a destroy racing the call is misuse that no tier detects, and the change is skipped.
@@ -314,14 +316,16 @@ namespace rojoRHI::core {
                     changes.push_back(
                         TileChange{
                             .texture = mapping.texture,
-                            .range = { .baseMip = first, .mipCount = found.record->mips - first, .baseLayer = region.layer, .layerCount = region.layers } }
+                            .range = { .baseMip = first, .mipCount = found.record->mips - first, .baseLayer = region.layer, .layerCount = region.layers },
+                            .unmap = mapping.unmap }
                     );
                     continue;
                 }
                 changes.push_back(
                     TileChange{ .texture = mapping.texture,
                                 .range = { .baseMip = region.mip, .mipCount = 1, .baseLayer = region.layer, .layerCount = region.layers },
-                                .box = TexelBox{ .offset = region.offset, .extent = region.extent } }
+                                .box = TexelBox{ .offset = region.offset, .extent = region.extent },
+                                .unmap = mapping.unmap }
                 );
             }
             mapTileChanges(core, queue, changes);
