@@ -71,7 +71,7 @@ namespace {
                 return output.bytes;
             }
         }
-        FAIL("no output named " << name);
+        FAIL_CHECK("no output named " << name);
         return result.outputs.front().bytes;
     }
 

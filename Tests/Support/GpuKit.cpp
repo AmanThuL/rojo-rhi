@@ -45,7 +45,7 @@ namespace rojoRHI::test {
             case Format::D32FloatS8: break;
             }
             // Undefined names no texels, and the reference gives D32FloatS8 no packed size; neither is copied (VU-rojo-cmd-0041).
-            FAIL("GpuKit reads no texels of a format without a packed size");
+            FAIL_CHECK("GpuKit reads no texels of a format without a packed size");
             return {};
         }
 

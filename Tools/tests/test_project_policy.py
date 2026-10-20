@@ -133,6 +133,35 @@ class ProjectPolicyTests(unittest.TestCase):
             policy.check_process_narration([Path("Benchmarks/Main.cpp")], errors)
         self.assertEqual(len(errors), 1)
 
+    def test_fail_followed_by_a_statement_is_flagged(self) -> None:
+        errors = policy.code_after_fail_errors("a.cpp", 'void f() {\n  FAIL("x");\n  return;\n}\n')
+        self.assertEqual(len(errors), 1)
+        self.assertIn("a.cpp:2:", errors[0])
+
+    def test_multi_line_fail_with_nested_parens_is_flagged(self) -> None:
+        text = 'int f() {\n  FAIL("a ) " << g(1,\n    h(2)));\n  return 0;\n}\n'
+        self.assertEqual(len(policy.code_after_fail_errors("a.cpp", text)), 1)
+
+    def test_fail_ending_its_block_is_accepted(self) -> None:
+        text = 'void f() {\n  FAIL("x");  // done\n  /* note */\n}\n'
+        self.assertEqual(policy.code_after_fail_errors("a.cpp", text), [])
+
+    def test_fail_check_and_braceless_fail_are_accepted(self) -> None:
+        text = 'int f() {\n  FAIL_CHECK("x");\n  if (a) FAIL("y");\n  return 1;\n}\n'
+        self.assertEqual(policy.code_after_fail_errors("a.cpp", text), [])
+
+    def test_fail_in_a_string_or_comment_is_ignored(self) -> None:
+        text = 'void f() {\n  // FAIL("x"); g();\n  s = "FAIL(1); g();"; g();\n}\n'
+        self.assertEqual(policy.code_after_fail_errors("a.cpp", text), [])
+
+    def test_fail_scan_covers_v2_sources_only(self) -> None:
+        text = 'void f() {\n  FAIL("x");\n  g();\n}\n'
+        for name, expected in (("Tests/a.cpp", 1), ("Legacy/a.cpp", 0)):
+            errors: list[str] = []
+            with mock.patch.object(policy, "read_text", return_value=text):
+                policy.check_code_after_fail([Path(name)], errors)
+            self.assertEqual(len(errors), expected, name)
+
     def test_commit_messages_are_checked_only_when_a_range_is_given(self) -> None:
         errors: list[str] = []
         with mock.patch.object(policy, "git", side_effect=AssertionError("git must not run")):

@@ -309,6 +309,60 @@ def check_process_narration(files: list[Path], errors: list[str]) -> None:
                 )
 
 
+FAIL_ROOTS = ("Source/", "Backends/", "Tests/", "Benchmarks/")
+FAIL_CALL = re.compile(r"\bFAIL\s*\(")
+CPP_LITERAL_OR_COMMENT = re.compile(
+    r'''//[^\n]*|/\*.*?\*/|R"(?P<d>[^()\\\s]{0,16})\(.*?\)(?P=d)"|"(?:\\.|[^"\\\n])*"|'(?:\\.|[^'\\\n])*''''',
+    re.DOTALL,
+)
+FAIL_MESSAGE = (
+    "statement after Catch2 FAIL() is unreachable (MSVC C4702); use FAIL_CHECK() followed by an "
+    "explicit return or break, or restructure"
+)
+
+
+def blank_literals_and_comments(text: str) -> str:
+    """Replace comments and string or character literals with spaces, keeping newlines."""
+    return CPP_LITERAL_OR_COMMENT.sub(lambda m: re.sub(r"[^\n]", " ", m.group(0)), text)
+
+
+def code_after_fail_errors(path: str, text: str) -> list[str]:
+    """Flag a FAIL(...); statement that is followed by anything but the closing brace of its block.
+
+    Catch2's FAIL ends in std::unreachable(), so Clang stays quiet while MSVC reports C4702.
+    """
+    code = blank_literals_and_comments(text)
+    errors: list[str] = []
+    for match in FAIL_CALL.finditer(code):
+        before = code[: match.start()].rstrip()
+        if before.endswith(")") or re.search(r"\b(?:else|do)$", before):
+            continue  # the body of a brace-less if, else, while or for
+        depth, index = 1, match.end()
+        while index < len(code) and depth:
+            depth += {"(": 1, ")": -1}.get(code[index], 0)
+            index += 1
+        if depth:
+            continue
+        rest = code[index:].lstrip()
+        if not rest.startswith(";"):
+            continue
+        tail = re.sub(r"(?m)^[ \t]*#[^\n]*$", "", rest[1:]).lstrip()
+        if not tail or tail.startswith("}") or re.match(r"(?:case\b|default\s*:)", tail):
+            continue
+        errors.append(f"{path}:{line_number(code, match.start())}: {FAIL_MESSAGE}")
+    return errors
+
+
+def check_code_after_fail(files: list[Path], errors: list[str]) -> None:
+    for path in files:
+        name = path.as_posix()
+        if not name.startswith(FAIL_ROOTS) or path.suffix not in {".cpp", ".h", ".hpp", ".mm", ".inl"}:
+            continue
+        text = read_text(path)
+        if text is not None:
+            errors.extend(code_after_fail_errors(name, text))
+
+
 def check_public_copy(files: list[Path], errors: list[str]) -> None:
     for path in files:
         if path not in PUBLIC_COPY:
@@ -349,6 +403,7 @@ def main() -> int:
         check_line_budgets(files, errors)
         check_process_narration(files, errors)
         check_public_copy(files, errors)
+        check_code_after_fail(files, errors)
     except (OSError, RuntimeError) as exc:
         print(f"policy check could not run: {exc}", file=sys.stderr)
         return 2
