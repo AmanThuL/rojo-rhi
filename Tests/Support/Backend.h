@@ -30,4 +30,7 @@ namespace rojoRHI::test {
 
     /// True when the compiled backend executes work on a GPU, so a conformance case can observe results.
     bool runsOnGpu();
+
+    /// True when the compiled backend's conformance shaders read a multisample view's size, not a sample: the pinned Slang's Metal lowering.
+    bool multisampleReadsSize();
 } // namespace rojoRHI::test

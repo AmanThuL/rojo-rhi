@@ -131,4 +131,10 @@ namespace rojoRHI::test {
     {
         return true;
     }
+
+    //==================================================================================================================
+    bool multisampleReadsSize()
+    {
+        return true;
+    }
 } // namespace rojoRHI::test

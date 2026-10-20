@@ -5,8 +5,10 @@
 #include <rojoRHI/RHI.h>
 
 #include "AbiExamples.h"
+#include "Support/Backend.h"
 #include "Support/Conformance.h"
 #include "Support/GpuKit.h"
+#include "Support/PassKit.h"
 
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/generators/catch_generators.hpp>
@@ -177,6 +179,22 @@ namespace {
         Float4 value{};
         std::memcpy(value.data(), bytes.data(), sizeof(value));
         return value;
+    }
+
+    //==================================================================================================================
+    /// Clears layer `layer` of the multisample `texture` to (1, 0, 1, 1) through a render pass and leaves it readable by a
+    /// shader, as the fetch kernels need.
+    void clearMultisample(test::GpuKit& kit, Texture texture, uint32_t layer)
+    {
+        const SubresourceRange range{ .baseMip = 0, .mipCount = 1, .baseLayer = layer, .layerCount = 1 };
+        CommandList list = kit.list(QueueType::Graphics, "test.clearMultisample");
+        test::transition(list, texture, Layout::Undefined, Layout::ColorAttachment, range);
+        const std::array colors{ ColorAttachment{
+            .texture = texture, .layer = layer, .load = LoadOp::Clear, .store = StoreOp::Store, .clear = ClearColor{ 1.0f, 0.0f, 1.0f, 1.0f } } };
+        list.beginRenderPass(RenderPassDesc{ .colors = colors, .area = { 0, 0, kEdge, kEdge }, .label = "test.clearMultisample" });
+        list.endRenderPass();
+        test::transition(list, texture, Layout::ColorAttachment, Layout::ShaderRead, range);
+        kit.run(std::array{ list });
     }
 
     //==================================================================================================================
@@ -412,7 +430,7 @@ TEST_CASE("AbiTextures compareMain returns the comparison of a depth texture aga
 }
 
 //======================================================================================================================
-TEST_CASE("AbiTextures texture2DMSMain stores the size and sample count Metal reports for a multisample texture", "[conformance]")
+TEST_CASE("AbiTextures texture2DMSMain reads a cleared multisample texture", "[conformance]")
 {
     test::requireGpu();
     test::GpuKit kit;
@@ -424,13 +442,16 @@ TEST_CASE("AbiTextures texture2DMSMain stores the size and sample count Metal re
                      .usage = TextureUsage::Sampled | TextureUsage::RenderTarget,
                      .label = "test.ms" }
     );
+    clearMultisample(kit, texture, 0);
     const ViewIndex view = *kit.device.createView(texture, TextureViewDesc{});
-    // On Metal the kernel stores (width, height, samples, 0): the pinned Slang miscompiles the multisample `Load`.
-    CHECK(fetch(kit, "texture2DMSMain", FetchRoot{ .view = static_cast<uint32_t>(view) }) == Float4{ 4, 4, 4, 0 });
+    // Other targets load sample 0 of texel (1, 1), the cleared color. On Metal the kernel stores (width, height, samples, 0)
+    // instead: the pinned Slang miscompiles the multisample `Load`.
+    const Float4 expected = test::multisampleReadsSize() ? Float4{ 4, 4, 4, 0 } : Float4{ 1, 0, 1, 1 };
+    CHECK(fetch(kit, "texture2DMSMain", FetchRoot{ .view = static_cast<uint32_t>(view) }) == expected);
 }
 
 //======================================================================================================================
-TEST_CASE("AbiTextures texture2DMSArrayMain stores the size, array size and sample count Metal reports for a multisample array", "[conformance]")
+TEST_CASE("AbiTextures texture2DMSArrayMain reads a cleared multisample array", "[conformance]")
 {
     test::requireGpu();
     test::GpuKit kit;
@@ -443,9 +464,12 @@ TEST_CASE("AbiTextures texture2DMSArrayMain stores the size, array size and samp
                      .usage = TextureUsage::Sampled | TextureUsage::RenderTarget,
                      .label = "test.msArray" }
     );
+    clearMultisample(kit, texture, 1);
     const ViewIndex view = *kit.device.createView(texture, TextureViewDesc{ .type = TextureType::Tex2DArray });
-    // On Metal the kernel stores (width, height, array size, samples).
-    CHECK(fetch(kit, "texture2DMSArrayMain", FetchRoot{ .view = static_cast<uint32_t>(view) }) == Float4{ 4, 4, 3, 4 });
+    // Other targets load sample 0 of texel (1, 1) of layer 1, the cleared color. On Metal the kernel stores (width, height,
+    // array size, samples) instead, for the same reason.
+    const Float4 expected = test::multisampleReadsSize() ? Float4{ 4, 4, 3, 4 } : Float4{ 1, 0, 1, 1 };
+    CHECK(fetch(kit, "texture2DMSArrayMain", FetchRoot{ .view = static_cast<uint32_t>(view) }) == expected);
 }
 
 //======================================================================================================================
