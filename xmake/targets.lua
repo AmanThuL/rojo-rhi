@@ -410,7 +410,8 @@ target("RojoRHILtoProbe")
 -- The D3D12 floor probe: two standalone executables from one source that report, as JSON, whether
 -- the WARP adapter meets the hardware floor of ADR 0010 and how the D3D12 runtime loaded. The
 -- factory variant loads the Agility SDK through a device factory; the exports variant through the
--- D3D12SDKVersion and D3D12SDKPath exports. They link neither RojoRHI nor Catch2.
+-- D3D12SDKVersion and D3D12SDKPath exports. Each also reports whether the FidelityFX upscaler the
+-- runtime rule copies beside it loads and runs on that adapter. They link neither RojoRHI nor Catch2.
 if is_plat("windows") then
     for _, variant in ipairs({"Factory", "Exports"}) do
         target("RojoRHID3D12Probe" .. variant)
@@ -422,8 +423,9 @@ if is_plat("windows") then
                 add_files(path.join(component, "Tools/D3D12Probe/D3D12ProbeExports.cpp"))
                 add_defines("ROJORHI_D3D12_PROBE_EXPORTS")
             end
-            -- A system include, so the Agility headers shadow the Windows SDK's older d3d12.h.
-            add_sysincludedirs(path.join(thirdparty, "agility/include"))
+            -- System includes, so the Agility headers shadow the Windows SDK's older d3d12.h and /external:W0 covers
+            -- them and the FidelityFX headers.
+            add_sysincludedirs(path.join(thirdparty, "agility/include"), path.join(thirdparty, "fidelityfx/include"))
             add_defines("WIN32_LEAN_AND_MEAN", "NOMINMAX", "UNICODE", "_UNICODE")
             add_syslinks("d3d12", "dxgi", "dxguid", "user32", "version", "advapi32")
             add_rules("rojorhi.d3d12_runtime")
