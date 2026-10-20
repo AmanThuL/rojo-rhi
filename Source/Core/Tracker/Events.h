@@ -47,7 +47,7 @@ namespace rojoRHI::core {
         Cmd0054,             ///< Either texture of `copyTexture` (VU-rojo-cmd-0054).
         Cmd0067,             ///< The destination of `copyBufferToTexture` (VU-rojo-cmd-0067).
         Cmd0069,             ///< The source of `copyTextureToBuffer` (VU-rojo-cmd-0069).
-        Cmd0070,             ///< The range of `clearTexture` (VU-rojo-cmd-0070).
+        Cmd0072,             ///< The range of `clearTexture` (VU-rojo-cmd-0072).
         Upscale0016,         ///< An input or the output of `upscale` (VU-rojo-upscale-0016).
         Indirect0005Records, ///< The records `drawIndirect` reads (VU-rojo-indirect-0005).
         Indirect0005Count,   ///< The count `drawIndirect` reads (VU-rojo-indirect-0005).

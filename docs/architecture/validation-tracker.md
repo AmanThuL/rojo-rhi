@@ -91,7 +91,7 @@ The state persists across submissions and frames. Which layout a queue sees is t
 For each subresource of a use, replay reports the first rule that fails: `VU-rojo-sync-0017` for a
 placed texture (see aliasing), `VU-rojo-sync-0006` (a use on a Copy list while the layout is not
 `General`), then the entry's own rule (`VU-rojo-cmd-0007` for a colour or resolve attachment,
-`0010`, `0054`, `0067`, `0069`, `0070`, or `VU-rojo-upscale-0016`) or, for a use no entry rule
+`0010`, `0054`, `0067`, `0069`, `0072`, or `VU-rojo-upscale-0016`) or, for a use no entry rule
 names, `VU-rojo-sync-0004`, then the hazard rules. A texture barrier reports `VU-rojo-present-0014`
 for the first barrier on an acquired image before `VU-rojo-sync-0013`. `VU-rojo-present-0018` is
 judged at `presentImage`, before the image is released.
