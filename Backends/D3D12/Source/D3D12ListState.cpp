@@ -1,25 +1,44 @@
 //----------------------------------------------------------------------------------------------------------------------
 /// @file D3D12ListState.cpp
-/// @brief Stubs the D3D12 command list pools: the backend acquires no command list yet.
+/// @brief Implements the D3D12 command list pools: each frame slot hands out the lists it keeps and grows when it runs out.
 //----------------------------------------------------------------------------------------------------------------------
 
 #include "D3D12ListState.h"
 
-#include "D3D12Common.h"
+#include "Base/Assert.h"
+#include "Core/Counters.h"
 #include "D3D12Device.h"
 
+#include <cstddef>
 #include <cstdint>
+#include <memory>
+#include <mutex>
 
 namespace rojoRHI::d3d12 {
     //==================================================================================================================
-    CommandListImpl& ListPools::acquire(uint32_t)
+    CommandListImpl& ListPools::acquire(uint32_t slot, QueueType type, core::DeviceCounts& counts)
     {
-        notImplemented("ListPools::acquire");
+        ROJORHI_INTERNAL_ASSERT(slot < m_slots.size(), "a frame slot beyond the three a device may use has no list pool");
+        const size_t index = static_cast<size_t>(type);
+        ROJORHI_INTERNAL_ASSERT(index < m_slots[slot].size(), "a QueueType outside the enumerators has no list pool");
+        ListPool& pool = m_slots[slot][index];
+        std::lock_guard lock(pool.mutex);
+        if (pool.used == pool.lists.size())
+        {
+            pool.lists.push_back(std::make_unique<CommandListImpl>());
+            core::DeviceCounts::add(counts.cpuAllocations);
+        }
+        return *pool.lists[pool.used++];
     }
 
     //==================================================================================================================
-    void ListPools::reset(uint32_t)
+    void ListPools::reset(uint32_t slot)
     {
-        notImplemented("ListPools::reset");
+        ROJORHI_INTERNAL_ASSERT(slot < m_slots.size(), "a frame slot beyond the three a device may use has no list pool");
+        for (ListPool& pool : m_slots[slot])
+        {
+            std::lock_guard lock(pool.mutex);
+            pool.used = 0;
+        }
     }
 } // namespace rojoRHI::d3d12

@@ -1,13 +1,14 @@
 //----------------------------------------------------------------------------------------------------------------------
 /// @file D3D12CommandList.cpp
-/// @brief Stubs the command list entries of the D3D12 backend: acquisition and recording abort until they are implemented.
+/// @brief Implements D3D12 command list acquisition and `end` on the core's state; recording entries abort until implemented.
 //----------------------------------------------------------------------------------------------------------------------
 
-#include "D3D12Common.h"
+#include "D3D12Device.h"
 
 #include <rojoRHI/RHI.h>
 
 #include "Core/CommandLists.h"
+#include "D3D12Common.h"
 
 #include <cstddef>
 #include <cstdint>
@@ -17,22 +18,28 @@
 namespace rojoRHI {
     namespace core {
         //==============================================================================================================
-        CommandListCore& coreOf(CommandList)
+        CommandListCore& coreOf(CommandList list)
         {
-            d3d12::notImplemented("core::coreOf(CommandList)");
+            return CommandListImpl::of(list).core;
         }
     } // namespace core
 
     //==================================================================================================================
-    CommandList Device::acquireCommandList(QueueType, std::string_view)
+    CommandList Device::acquireCommandList(QueueType type, std::string_view label)
     {
-        d3d12::notImplemented("Device::acquireCommandList");
+        DeviceImpl& impl = DeviceImpl::of(*this);
+        core::checkAcquire(impl.core);
+        // A list is the core's state alone: it encodes no native command, so acquisition makes no native call.
+        const uint32_t slot = static_cast<uint32_t>(impl.core.frameNumber() % impl.core.framesInFlight());
+        CommandListImpl& list = impl.lists.acquire(slot, type, impl.core.counts());
+        core::beginList(list.core, impl.core, type, label);
+        return CommandListImpl::wrap(&list);
     }
 
     //==================================================================================================================
     void CommandList::end()
     {
-        d3d12::notImplemented("CommandList::end");
+        core::endList(CommandListImpl::of(*this).core);
     }
 
     //==================================================================================================================
