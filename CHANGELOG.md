@@ -269,3 +269,7 @@
   4-component vector, alone or as a struct member at a multiple of its size, and `store` marks its
   heap index non-uniform itself, because DXC drops the qualifier through the `+ 1`
   ([ADR 0023](docs/decisions/0023-d3d12-store-marks-its-index.md)).
+- `Tools/check_dxil.py` disassembles the DXIL of two compile-only shaders and fails unless every
+  heap handle fed by `rojoRHI::nonUniform` carries the non-uniform flag, for each fetch kind, and
+  the module's root loads and 16-byte raw accesses are as wide as the kernel needs; hosted Windows
+  CI runs it.

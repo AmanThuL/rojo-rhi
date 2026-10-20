@@ -56,10 +56,11 @@ in two places: the return of the helper behind `nonUniform`, and around every st
 DXC keeps the qualifier through that function return and the `uint2` pack and unpack, so `load`,
 texture and sampler fetches carry it from the helper, and drops it through the addition, so the
 store marks its own index, which is correct for a uniform index too
-([ADR 0023](../decisions/0023-d3d12-store-marks-its-index.md)). Whether the fetch is cheap enough
-for hot paths is spike 1 of [ADR 0014](../decisions/0014-overhead-measurement.md), still pending.
-Until it reports, per-draw hot data belongs in root fields and heap indices, and an `Addr` hop is
-for bulk and cold data.
+([ADR 0023](../decisions/0023-d3d12-store-marks-its-index.md)). `Tools/check_dxil.py` checks the
+DXIL handle flag of each fetch kind on hosted Windows CI. Whether the fetch is cheap enough for hot
+paths is spike 1 of [ADR 0014](../decisions/0014-overhead-measurement.md), still pending. Until it
+reports, per-draw hot data belongs in root fields and heap indices, and an `Addr` hop is for bulk
+and cold data.
 
 In SPIR-V, with the pinned Slang, a helper that is not inlined and takes a texture parameter loses
 the `NonUniform` decoration on its fetch; the conformance shaders mark such helpers `[ForceInline]`.

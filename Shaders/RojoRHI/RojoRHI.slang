@@ -33,7 +33,8 @@
 //                  (`load`, texture and sampler) are a plain `ResourceDescriptorHeap[...]` or
 //                  `SamplerDescriptorHeap[...]`. DXC keeps the qualifier through that function return and the
 //                  `uint2` pack and unpack (load, texture, sampler) and drops it through the addition, which is
-//                  why the store marks its index
+//                  why the store marks its index. `Tools/check_dxil.py` checks the DXIL handle flag of each fetch
+//                  kind on hosted Windows CI
 //   texture*,      Metal   `((device T*)gViewIds)[view]`, T the MSL texture type, from the ID table at
 //   rwTexture*,            `[[buffer(1)]]`; written as `__intrinsic_asm` because Slang's `Load<Texture>` emits an
 //   wTexture*              `as_type` from `ulong` that the Metal compiler rejects
