@@ -33,8 +33,10 @@ number and title, in a `**Restates**:` line, and never by a link into another re
 
 ## What documents may not claim
 
-- A second backend is a design target, not a capability. No document, release text or interface
-  comment describes RojoRHI as having one.
+- A backend is a capability only when its T1 conformance suite passes on hardware (ADR 0009). A
+  backend that is implemented and verified only on WARP is described exactly so, "implemented,
+  verified on WARP only, not on hardware", and never as supported or accepted. No document,
+  release text or interface comment describes RojoRHI as having a second backend before then.
 - A tool, check or command that does not exist yet is written as arriving with the work that adds
   it, never in the present tense.
 - The repository is public and licensed under the Apache License, Version 2.0; see `LICENSE`.

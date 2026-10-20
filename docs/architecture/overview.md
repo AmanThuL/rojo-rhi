@@ -52,7 +52,8 @@ rojo-rhi/
 `xmake.lua` at the root declares project settings, requires and the language level once; it is never
 included directly by a host project. `xmake/` holds `targets.lua` (the includable target
 declarations; the v1 targets and `RojoRHIBench` are macOS only), a minimal `setup.lua` (metal-cpp
-and Slang pins, fetched on macOS; Windows fetches Slang alone), and a test-only copy of the
+and Slang pins, fetched on macOS; Windows fetches Slang, the Agility SDK, WARP and DXC, as
+hash-checked archives), and a test-only copy of the
 shader-to-metallib rule, so RojoRHI configures, builds and tests standalone.
 
 `Include/`, `Source/`, `Backends/`, `Tests/` and `Shaders/` are the permanent tree of the v2
