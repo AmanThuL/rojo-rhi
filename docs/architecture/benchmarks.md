@@ -240,7 +240,11 @@ defect:
   native call and changes no count above; it shows only in CPU time.
 - Every render pass of R is a timed scope, so C1 to C3 and C10 pay a debug group and two
   timestamps per frame that their N arms do not write; N mirrors them in C8 and the composed frame
-  only, as the note registers.
+  only, as the note registers. R writes a pass's pair on its encoders, the begin timestamp first on
+  its first encoder (the kernels' encoder of C10's counted draws) and the end timestamp on its last
+  render encoder before `endEncoding`, while N writes it on the command buffer around the pass's
+  encoders. R's sequence for C8 and the composed frame therefore has the begin timestamp after the
+  encoder's open and the end timestamp before its `endEncoding`; its counts are unchanged.
 - A pipeline that culls, tests stencil or has a fragment entry makes the backend set the winding
   once per encoder it opens, one native call more than N's sequence. C8 therefore makes 14 native
   calls per repetition, the registered 13 plus that call, against N's 12 and the budget of 12 plus

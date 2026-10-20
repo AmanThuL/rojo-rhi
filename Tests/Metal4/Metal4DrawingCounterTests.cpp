@@ -302,10 +302,10 @@ TEST_CASE("C8: a pass from barrier to endRenderPass costs the registered native 
         },
         nothing
     );
-    // The registered 13: the pass's debug group pushed and popped and its two timestamps on the command buffer, the
-    // encoder's open, label, table and consumer barrier, the pipeline, viewport, scissor, the draw and endEncoding. The
-    // pipeline's winding adds one call per encoder, so the pin is 14. N's 12 leaves out the argument table, so the budget is
-    // N's 12 plus c (7), 19, a margin of 5.
+    // The registered 13: the pass's debug group pushed and popped on the command buffer and its two timestamps on the
+    // encoder, the encoder's open, label, table and consumer barrier, the pipeline, viewport, scissor, the draw and
+    // endEncoding. The pipeline's winding adds one call per encoder, so the pin is 14. N's 12 leaves out the argument table,
+    // so the budget is N's 12 plus c (7), 19, a margin of 5.
     CHECK(per.calls == 14);
     CHECK(per.calls <= 12 + 7);
     CHECK(per.encoders == 1);

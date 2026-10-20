@@ -128,12 +128,18 @@ the list allocates at its first pass and reuses.
 - The encoder is labelled after the innermost open scope, binds the list's argument table to the
   vertex, fragment, object and mesh stages (ADR 0018), emits the render part of the pending
   barrier, and replays the prefix (next section).
-- `beginRenderPass` writes the pass's begin timestamp on the command buffer right after its debug
-  group, before any encoder of the pass; `endRenderPass` opens the encoder when nothing did, sets
-  the deferred store actions, ends it, writes the end timestamp and pops the pass's debug group. The
-  kernels of counted draws and the encoders splits resume fall between the two. `end` clears the
-  descriptor's texture references, so an idle list keeps no destroyed target alive. Descriptor
-  setters are not native messages and are not counted.
+- `beginRenderPass` claims the pass's timestamp pair and keeps its begin entry in
+  `DrawState::passBegin`; the pass's first encoder writes it with `writePassBegin` right after it
+  opens, before any command: the compute encoder of the pass's leading counted draws, when their
+  kernels run first, else the render encoder, after `RenderStageVertex`. `endRenderPass` opens the
+  encoder when nothing did, sets the deferred store actions, writes the end timestamp on it after
+  `RenderStageFragment`, ends it and pops the pass's debug group. Both are written at
+  `TimestampGranularityPrecise`, which adds no encoder at an encoder's start or end; the kernels of
+  counted draws and the encoders splits resume fall between the two. A command buffer's
+  `writeTimestampIntoHeap` around a render encoder costs CPU and allocations per write and slows
+  that encoder's draws on the GPU, so no pass writes one. `end` clears the descriptor's texture
+  references, so an idle list keeps no destroyed target alive. Descriptor setters are not native
+  messages and are not counted.
 - A scope that begins or ends inside a pass opens the render encoder and pushes or pops a debug
   group on it. A split pops the open groups first and the resumed encoder pushes them again,
   outermost first. Such a scope writes its timestamps on the render encoder after the fragment
@@ -244,7 +250,8 @@ kernel reads the count and either encodes the draws into an indirect command buf
   pipeline (the parameters' address and the dispatch), three when the kind changes, four on a new
   encoder (pipeline, kernel table, address, dispatch), and its execute one more at replay. The
   batch adds the compute encoder's open, `endEncoding`, the residency set's use once per recording
-  and one barrier at the render encoder's open. Dispatches and executes each run in their own
+  and one barrier at the render encoder's open, and the pass's begin timestamp when it opens the
+  pass. Dispatches and executes each run in their own
   pool.
 
 ## Mesh paths

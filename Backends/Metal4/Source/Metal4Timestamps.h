@@ -103,8 +103,10 @@ namespace rojoRHI::metal4 {
         std::atomic<bool> m_refusalLogged = false; ///< True once a refused heap was logged; each device logs one.
     };
 
-    /// The granularity of a timestamp a render encoder writes for a scope inside a pass.
-    constexpr MTL4::TimestampGranularity kInPassGranularity = MTL4::TimestampGranularityPrecise;
+    /// The granularity of every timestamp an encoder writes: a render pass's pair and the pairs of the scopes inside it.
+    /// Precise keeps each timestamp at its place among the encoder's commands; at an encoder's start and end, and after the
+    /// fragment stage inside a pass, it adds no encoder.
+    constexpr MTL4::TimestampGranularity kEncoderGranularity = MTL4::TimestampGranularityPrecise;
 
     /// Claims a pair of entries of `list`'s frame slot for the scope the core recorded last on `list`, stores it on that
     /// record for the resolve, pushes it on the list's pair stack and returns its first index, or `core::kNoTimestamp` when
@@ -117,13 +119,26 @@ namespace rojoRHI::metal4 {
 
     /// Writes entry `index` of `list`'s frame slot on its command buffer, which takes it only between encoders; writes nothing
     /// for `core::kNoTimestamp`. Counts one native call and opens an autorelease pool, because Metal autoreleases inside the
-    /// write.
+    /// write. Scopes outside a pass and upscales write their pairs here.
     void writeBetweenEncoders(CommandListImpl& list, uint32_t index);
 
     /// Writes entry `index` of `list`'s frame slot on `encoder`, the open render encoder of its pass, after the fragment stage
-    /// of the work recorded before it, at `kInPassGranularity`; writes nothing for `core::kNoTimestamp`. Counts one native
-    /// call.
+    /// of the work recorded before it, at `kEncoderGranularity`: both entries of a scope inside the pass, and the pass's end
+    /// entry just before its last encoder ends. Writes nothing for `core::kNoTimestamp`. Counts one native call; the encoder's
+    /// write autoreleases nothing, so it opens no pool.
     void writeInPass(CommandListImpl& list, MTL4::RenderCommandEncoder* encoder, uint32_t index);
+
+    /// Writes the begin entry of the open pass's pair on `encoder`, a render encoder of the pass that just opened, when the
+    /// pass still owes it (`DrawState::passBegin`): the pass's first encoder, when no counted draw's kernels ran before it.
+    /// The write follows the encoder's opening calls and precedes its commands, after the vertex stage at
+    /// `kEncoderGranularity`: the encoder's first stage, of which no earlier work exists in it, so the timestamp waits for none
+    /// of the pass's work. Counts one native call.
+    void writePassBegin(CommandListImpl& list, MTL4::RenderCommandEncoder* encoder);
+
+    /// Writes the begin entry of the open pass's pair on `encoder`, the compute encoder the pass's counted draws open for
+    /// their kernels ahead of its render encoder, when the pass still owes it: that encoder is then the pass's first, so the
+    /// pass's time takes in the kernels. At `kEncoderGranularity`; counts one native call.
+    void writePassBegin(CommandListImpl& list, MTL4::ComputeCommandEncoder* encoder);
 
     /// The scope-time hook of a Metal 4 device: `context` is its `DeviceImpl`, whose timestamps resolve the durations.
     void scopeTimes(void* context, uint32_t slot, std::span<const core::ScopeRecord> records, std::span<ScopeTiming> report);

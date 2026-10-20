@@ -196,7 +196,7 @@ TEST_CASE("a scope between encoders and a render pass open their command pools o
     const Texture target = *device.createTexture(
         TextureDesc{ .format = Format::RGBA8Unorm, .extent = { kEdge, kEdge, 1 }, .usage = TextureUsage::RenderTarget, .label = "test.target" }
     );
-    // A pass writes the same two timestamps and ends its render encoder once, which is the third pool.
+    // A pass writes its two timestamps on its render encoder, which opens no pool, and ends that encoder once.
     checkPoolsPerCommand(
         device,
         [&](CommandList list, uint32_t count) {
@@ -207,7 +207,7 @@ TEST_CASE("a scope between encoders and a render pass open their command pools o
                 list.endRenderPass();
             }
         },
-        3,
+        1,
         Counting::CommandPools
     );
     destroyDevice(device);

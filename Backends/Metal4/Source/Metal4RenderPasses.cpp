@@ -152,6 +152,9 @@ namespace rojoRHI {
                 configure(draw);
                 encoder = list.encoders.openPass(list.core, state, draw.descriptor);
             }
+            // The pass's first encoder writes its begin timestamp after its opening calls and before any command, unless the
+            // kernels of its counted draws ran first and wrote it.
+            writePassBegin(list, encoder);
             // A new encoder holds Metal's defaults.
             const RenderHeld previous = draw.held;
             draw.held = {};
@@ -293,9 +296,10 @@ namespace rojoRHI {
         state.commandBuffer->pushDebugGroup(string);
         core::noteNativeCall(list.core);
         state.scopeLabels.push_back(string);
-        // The begin timestamp goes before any encoder of the pass, so the pass's duration takes in the kernels of its counted
-        // draws and the encoders its splits resume.
-        metal4::writeBetweenEncoders(list, metal4::claimPair(list));
+        // The pair is claimed now and written on the pass's encoders: the begin timestamp at the start of its first encoder,
+        // the kernels' encoder of its counted draws when they run first, so the pass's duration takes in those kernels and
+        // the encoders its splits resume. A command buffer's timestamp between encoders would slow the render encoder's draws.
+        const uint32_t pair = metal4::claimPair(list);
         // A record's payload is fixed from creation to retirement, so each texture is read with one load and no lock (ADR 0020).
         const auto& textures = list.core.device->pool<Texture>();
         metal4::DrawState& draw = list.draw;
@@ -332,6 +336,7 @@ namespace rojoRHI {
         draw.passOpen = true;
         draw.resuming = false;
         draw.passGroups = 0;
+        draw.passBegin = pair;
     }
 
     //==================================================================================================================
@@ -339,12 +344,13 @@ namespace rojoRHI {
     {
         CommandListImpl& list = CommandListImpl::of(*this);
         core::endPass(list.core);
-        // A pass that recorded nothing opens its encoder now, so its load and store actions run.
-        metal4::ensureRender(list);
+        // A pass that recorded nothing opens its encoder now, so its load and store actions run; that encoder writes both
+        // timestamps.
+        MTL4::RenderCommandEncoder* encoder = metal4::ensureRender(list);
         metal4::finishPass(list, false);
+        // The end timestamp goes on the pass's last encoder, after the fragment stage of all its work, just before it ends.
+        metal4::writeInPass(list, encoder, metal4::popPairEnd(list));
         list.encoders.close(list.core);
-        // The end timestamp follows the pass's last encoder.
-        metal4::writeBetweenEncoders(list, metal4::popPairEnd(list));
         metal4::ListState& state = list.state;
         state.commandBuffer->popDebugGroup();
         core::noteNativeCall(list.core);
