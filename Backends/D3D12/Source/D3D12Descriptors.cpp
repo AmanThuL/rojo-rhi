@@ -97,10 +97,18 @@ namespace rojoRHI::d3d12 {
     Result<void> DescriptorHeaps::create(DeviceImpl& impl)
     {
         const uint32_t capacity = viewHeapSize(impl.device());
-        if (capacity < kMinViewHeap)
+        const uint32_t blocks = impl.core.framesInFlight();
+        ROJORHI_INTERNAL_ASSERT(blocks <= m_ringClaims.size(), "more frame slots than transient ring blocks");
+        const uint32_t ringSize = blocks * kTransientPerSlot;
+        const uint32_t reserved = kHeldViewSlots + ringSize;
+        // The held slots and the ring never reach a caller, so they do not count in maxViews. A device that does not report
+        // OPTIONS19 gets the 1,000,000-descriptor heap of binding tier 3, which leaves fewer than 1,000,000 slots after the
+        // reservation, so it fails this check.
+        const uint32_t slots = capacity > reserved ? capacity - reserved : 0;
+        if (slots < kMinViewHeap)
         {
             return std::unexpected(
-                Error{ ErrorCategory::Unsupported, std::format("the D3D12 hardware floor is not met: maxViews is {}, below {}", capacity, kMinViewHeap) }
+                Error{ ErrorCategory::Unsupported, std::format("the D3D12 hardware floor is not met: maxViews is {}, below {}", slots, kMinViewHeap) }
             );
         }
         Result<Com<ID3D12DescriptorHeap>> views = createHeap(impl, D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, capacity, true, "rojorhi.views");
@@ -113,9 +121,6 @@ namespace rojoRHI::d3d12 {
         {
             return std::unexpected(std::move(samplers.error()));
         }
-        const uint32_t blocks = impl.core.framesInFlight();
-        ROJORHI_INTERNAL_ASSERT(blocks <= m_ringClaims.size(), "more frame slots than transient ring blocks");
-        const uint32_t ringSize = blocks * kTransientPerSlot;
         Result<Com<ID3D12DescriptorHeap>> twins = createHeap(impl, D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, ringSize, false, "rojorhi.transient");
         if (!twins)
         {
@@ -131,15 +136,13 @@ namespace rojoRHI::d3d12 {
         m_viewIncrement = impl.device()->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
         m_samplerIncrement = impl.device()->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_SAMPLER);
         m_viewCapacity = capacity;
+        m_viewSlots = slots;
         m_ringBlocks = blocks;
+        m_ringBase = kHeldViewSlots;
 
-        // Slots 0 and 1 are the first slots a fresh allocator hands out, and they are never released: the core's teardown
-        // drains them.
-        for (uint32_t held = 0; held < kHeldViewSlots; ++held)
-        {
-            [[maybe_unused]] const std::optional<uint32_t> reserved = impl.core.views().allocate(capacity, 0);
-            ROJORHI_INTERNAL_ASSERT(reserved == held, "the view heap's held slots are not its first slots");
-        }
+        // The view allocator never hands out, releases or counts the held slots and the ring; its teardown drain ends the
+        // reservation.
+        impl.core.views().reserveLeading(reserved);
         // A null raw SRV and a null raw UAV, described as a four-byte buffer, so a load through the zero Addr reads zeros and
         // a store through it is discarded.
         const D3D12_SHADER_RESOURCE_VIEW_DESC nullSrv = rawSrv(4);
@@ -148,16 +151,6 @@ namespace rojoRHI::d3d12 {
         const D3D12_UNORDERED_ACCESS_VIEW_DESC nullUav = rawUav(4);
         impl.device()->CreateUnorderedAccessView(nullptr, nullptr, &nullUav, viewCpu(1));
         core::DeviceCounts::add(impl.core.counts().descriptorWrites);
-
-        const std::optional<uint32_t> ring = impl.core.views().allocateRange(capacity, ringSize, 0);
-        if (!ring)
-        {
-            return std::unexpected(
-                Error{ ErrorCategory::OutOfMemory,
-                       std::format("maxViews: the view heap of {} descriptors has no room for the transient ring of {}", capacity, ringSize) }
-            );
-        }
-        m_ringBase = *ring;
         return {};
     }
 
@@ -165,6 +158,12 @@ namespace rojoRHI::d3d12 {
     uint32_t DescriptorHeaps::viewCapacity() const
     {
         return m_viewCapacity;
+    }
+
+    //==================================================================================================================
+    uint32_t DescriptorHeaps::viewSlots() const
+    {
+        return m_viewSlots;
     }
 
     //==================================================================================================================
@@ -238,13 +237,13 @@ namespace rojoRHI::d3d12 {
         ROJORHI_INTERNAL_ASSERT(resource != nullptr, "raw views of no resource");
         ROJORHI_INTERNAL_ASSERT(width >= 4 && width % 4 == 0, "a raw-view width that is not a positive multiple of 4");
         const uint32_t count = writable ? 2 : 1;
-        const uint32_t capacity = impl.descriptors.viewCapacity();
+        const uint32_t capacity = impl.descriptors.viewSlots();
         const std::optional<uint32_t> base = impl.core.views().allocateRange(capacity, count, 0);
         if (!base)
         {
             return std::unexpected(
                 Error{ ErrorCategory::OutOfMemory,
-                       std::format("maxViews: the view heap of {} descriptors has no {} adjacent free slots for raw views", capacity, count) }
+                       std::format("maxViews: the view heap of {} slots has no {} adjacent free slots for raw views", capacity, count) }
             );
         }
         const D3D12_SHADER_RESOURCE_VIEW_DESC srv = rawSrv(width);

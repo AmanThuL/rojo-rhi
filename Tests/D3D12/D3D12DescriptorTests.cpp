@@ -153,6 +153,10 @@ TEST_CASE("the view heap is shader-visible and holds H descriptors", "[d3d12]")
     CHECK(desc.Type == D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
     CHECK(desc.Flags == D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE);
     CHECK(desc.NumDescriptors == capacity);
+    const uint32_t reserved = d3d12::kHeldViewSlots + impl.core.framesInFlight() * d3d12::kTransientPerSlot;
+    CHECK(impl.descriptors.viewSlots() == capacity - reserved);
+    CHECK(created->capabilities().maxViews == capacity - reserved);
+    CHECK(created->capabilities().maxViews >= 1'000'000u);
     destroyDevice(*created);
 }
 
@@ -172,29 +176,31 @@ TEST_CASE("the sampler heap is shader-visible and holds 2,048 samplers", "[d3d12
 }
 
 //======================================================================================================================
-TEST_CASE("slots 0 and 1 are held for the device's life", "[d3d12]")
+TEST_CASE("slots 0 and 1 are held for the device's life and count as no caller's view", "[d3d12]")
 {
     Result<Device> created = createDevice();
     REQUIRE(created.has_value());
     core::DeviceCore& core = DeviceImpl::of(*created).core;
-    const uint32_t capacity = DeviceImpl::of(*created).descriptors.viewCapacity();
-    CHECK(core.views().state(0) == core::SlotState::Assigned);
-    CHECK(core.views().state(1) == core::SlotState::Assigned);
+    const uint32_t slots = DeviceImpl::of(*created).descriptors.viewSlots();
+    CHECK(core.views().state(0) == core::SlotState::Reserved);
+    CHECK(core.views().state(1) == core::SlotState::Reserved);
+    CHECK(core.views().assignedCount() == 0u);
     for (uint32_t frame = 0; frame <= core.framesInFlight(); ++frame)
     {
         emptyFrame(*created);
     }
-    CHECK(core.views().state(0) == core::SlotState::Assigned);
-    CHECK(core.views().state(1) == core::SlotState::Assigned);
-    const std::optional<uint32_t> slot = core.views().allocate(capacity, 7);
+    CHECK(core.views().state(0) == core::SlotState::Reserved);
+    CHECK(core.views().state(1) == core::SlotState::Reserved);
+    const std::optional<uint32_t> slot = core.views().allocate(slots, 7);
     REQUIRE(slot.has_value());
-    CHECK(*slot >= d3d12::kHeldViewSlots);
+    CHECK(*slot >= d3d12::kHeldViewSlots + core.framesInFlight() * d3d12::kTransientPerSlot);
+    CHECK(*slot < DeviceImpl::of(*created).descriptors.viewCapacity());
     CHECK(core.views().release(*slot, [&] { return core.releaseFrame(); }).has_value());
     destroyDevice(*created);
 }
 
 //======================================================================================================================
-TEST_CASE("the ring is one range of framesInFlight x 1,024 slots", "[d3d12]")
+TEST_CASE("the ring is the framesInFlight x 1,024 reserved slots after slot 1", "[d3d12]")
 {
     const uint32_t framesInFlight = GENERATE(2u, 3u);
     DeviceDesc desc;
@@ -202,7 +208,15 @@ TEST_CASE("the ring is one range of framesInFlight x 1,024 slots", "[d3d12]")
     Result<Device> created = createDevice(desc);
     REQUIRE(created.has_value());
     INFO("framesInFlight " << framesInFlight);
-    CHECK(DeviceImpl::of(*created).core.views().holdsRange(d3d12::kHeldViewSlots, framesInFlight * 1'024));
+    core::SlotAllocator& views = DeviceImpl::of(*created).core.views();
+    const uint32_t end = d3d12::kHeldViewSlots + framesInFlight * 1'024;
+    CHECK(views.state(d3d12::kHeldViewSlots) == core::SlotState::Reserved);
+    CHECK(views.state(end - 1) == core::SlotState::Reserved);
+    CHECK(views.state(end) == core::SlotState::Free);
+    const d3d12::TransientSlot first = DeviceImpl::of(*created).descriptors.claimTransient(0);
+    CHECK(first.index == d3d12::kHeldViewSlots);
+    const d3d12::TransientSlot last = DeviceImpl::of(*created).descriptors.claimTransient(framesInFlight - 1);
+    CHECK(last.index == end - 1'024);
     destroyDevice(*created);
 }
 
@@ -240,7 +254,7 @@ TEST_CASE("a writable raw view pair is adjacent and a read-only one takes one sl
         const uint64_t before = created->counters().descriptorWrites;
         const Result<uint32_t> pair = d3d12::createRawViews(impl, buffer.get(), 256, true);
         REQUIRE(pair.has_value());
-        CHECK(*pair >= d3d12::kHeldViewSlots);
+        CHECK(*pair >= d3d12::kHeldViewSlots + impl.core.framesInFlight() * d3d12::kTransientPerSlot);
         CHECK(impl.core.views().holdsRange(*pair, 2));
         CHECK(created->counters().descriptorWrites == before + 2);
         const Result<uint32_t> single = d3d12::createRawViews(impl, buffer.get(), 256, false);

@@ -27,8 +27,8 @@ namespace rojoRHI::d3d12 {
         D3D12_CPU_DESCRIPTOR_HANDLE cpuTwin = {}; ///< The CPU handle of its twin in the CPU-only heap.
     };
 
-    /// The view-heap size used when the device does not report `D3D12_FEATURE_D3D12_OPTIONS19`, and the least the device
-    /// accepts: the resource binding tier 3 guarantee.
+    /// The view-heap size used when the device does not report `D3D12_FEATURE_D3D12_OPTIONS19` (the resource binding tier 3
+    /// guarantee), and the least `maxViews` the device accepts.
     inline constexpr uint32_t kMinViewHeap = 1'000'000;
 
     /// The largest view heap the device creates, whatever the device reports.
@@ -44,7 +44,8 @@ namespace rojoRHI::d3d12 {
     inline constexpr uint32_t kMaxFrameSlots = 3;
 
     /// The view-heap slots held for the device's life: slot 0 holds a null raw SRV and slot 1 a null raw UAV, so a load or
-    /// a store through the zero `Addr` reaches a null descriptor. The transient ring starts after them.
+    /// a store through the zero `Addr` reaches a null descriptor. The transient ring starts after them, and the view
+    /// allocator reserves both as its leading block.
     inline constexpr uint32_t kHeldViewSlots = 2;
 
     /// The shader-visible heaps of a device: the view heap every buffer view, texture view and transient descriptor lives in,
@@ -55,14 +56,18 @@ namespace rojoRHI::d3d12 {
       public:
         /// Creates both heaps, the held slots 0 and 1 and the transient ring on `impl`'s device. The view heap holds the
         /// `D3D12_FEATURE_D3D12_OPTIONS19` maximum, capped at `kMaxViewHeap`, or `kMinViewHeap` when the device does not
-        /// report it; a smaller maximum is `Unsupported`, naming `maxViews`. Slot 0 holds a null raw SRV and slot 1 a null raw
-        /// UAV for the device's life, so the zero `Addr` names no buffer, and the ring is one range of `framesInFlight` blocks
-        /// of `kTransientPerSlot` slots right after them, each with a twin in a CPU-only heap. The core's teardown releases
-        /// them all.
+        /// report it. Slot 0 holds a null raw SRV and slot 1 a null raw UAV for the device's life, so the zero `Addr` names no
+        /// buffer, and the ring is `framesInFlight` blocks of `kTransientPerSlot` slots right after them, each with a twin in
+        /// a CPU-only heap. The view allocator reserves those slots as its leading block, so `viewSlots`, the heap less the
+        /// block, is `maxViews`; fewer than `kMinViewHeap` is `Unsupported`, naming `maxViews`.
         Result<void> create(DeviceImpl& impl);
 
         /// Returns the number of descriptors of the view heap.
         uint32_t viewCapacity() const;
+
+        /// Returns the view-heap slots the view allocator hands out, after the reserved leading block: the device's
+        /// `maxViews`, and the capacity every allocating call on the view allocator takes.
+        uint32_t viewSlots() const;
 
         /// Returns the number of descriptors of the sampler heap.
         uint32_t samplerCapacity() const;
@@ -100,6 +105,7 @@ namespace rojoRHI::d3d12 {
         D3D12_CPU_DESCRIPTOR_HANDLE m_twinCpu = {};                          ///< The CPU handle of the first twin.
         uint32_t m_viewIncrement = 0;                                        ///< Bytes between two view descriptors.
         uint32_t m_samplerIncrement = 0;                                     ///< Bytes between two sampler descriptors.
+        uint32_t m_viewSlots = 0;                                            ///< Slots after the reserved leading block.
         uint32_t m_viewCapacity = 0;                                         ///< Descriptors of the view heap.
         uint32_t m_ringBase = 0;                                             ///< The view-heap index of the ring's first slot.
         uint32_t m_ringBlocks = 0;                                           ///< Blocks of the ring, one per frame slot.
