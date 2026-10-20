@@ -18,7 +18,8 @@ namespace rojoRHI {
 
 namespace rojoRHI::d3d12 {
     /// Routes the debug layer's messages of one device into the library's message callback while it is attached. A message of
-    /// severity error or corruption aborts the process once it has been forwarded.
+    /// severity error or corruption aborts the process once it has been forwarded. The runtime may raise a message on any
+    /// thread, so the installed message callback may run on any thread.
     class MessageRouter
     {
       public:

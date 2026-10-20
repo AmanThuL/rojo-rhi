@@ -38,6 +38,15 @@ namespace rojoRHI::d3d12 {
         constexpr size_t kMaxReportedNodes = 32;
 
         //==============================================================================================================
+        /// Logs that the native call `call` failed with `result` and aborts, in every build: a layer that was asked for and
+        /// cannot route its messages must not run silently.
+        [[noreturn]] void abortOn(std::string_view call, HRESULT result)
+        {
+            ROJORHI_LOG_ERROR("{} failed with HRESULT 0x{:08x}", call, hresultBits(result));
+            std::abort();
+        }
+
+        //==============================================================================================================
         /// Returns the name of a message category, for the text of a message.
         std::string_view categoryName(D3D12_MESSAGE_CATEGORY category)
         {
@@ -126,29 +135,37 @@ namespace rojoRHI::d3d12 {
             {
                 return;
             }
+            // Lists the runtime has not finished come first: they hold the work the device stopped in.
             size_t count = 0;
-            for (const D3D12_AUTO_BREADCRUMB_NODE1* node = output.pHeadAutoBreadcrumbNode; node != nullptr; node = node->pNext)
+            for (const bool unfinished : { true, false })
             {
-                if (count == kMaxReportedNodes)
+                for (const D3D12_AUTO_BREADCRUMB_NODE1* node = output.pHeadAutoBreadcrumbNode; node != nullptr; node = node->pNext)
                 {
-                    ROJORHI_LOG_ERROR("D3D12 removal: breadcrumb list continues past {} nodes", kMaxReportedNodes);
-                    return;
+                    const UINT completed = node->pLastBreadcrumbValue != nullptr ? *node->pLastBreadcrumbValue : 0;
+                    if ((completed < node->BreadcrumbCount) != unfinished)
+                    {
+                        continue;
+                    }
+                    if (count == kMaxReportedNodes)
+                    {
+                        ROJORHI_LOG_ERROR("D3D12 removal: breadcrumb list continues past {} nodes", kMaxReportedNodes);
+                        return;
+                    }
+                    ++count;
+                    std::string next = "none";
+                    if (unfinished && node->pCommandHistory != nullptr)
+                    {
+                        next = std::format("op {}", static_cast<int>(node->pCommandHistory[completed]));
+                    }
+                    ROJORHI_LOG_ERROR(
+                        "D3D12 removal: command list '{}' on queue '{}' completed {} of {} breadcrumbs, next {}",
+                        nameOf(node->pCommandListDebugNameA, node->pCommandListDebugNameW),
+                        nameOf(node->pCommandQueueDebugNameA, node->pCommandQueueDebugNameW),
+                        completed,
+                        node->BreadcrumbCount,
+                        next
+                    );
                 }
-                ++count;
-                const UINT completed = node->pLastBreadcrumbValue != nullptr ? *node->pLastBreadcrumbValue : 0;
-                std::string next = "none";
-                if (completed < node->BreadcrumbCount && node->pCommandHistory != nullptr)
-                {
-                    next = std::format("op {}", static_cast<int>(node->pCommandHistory[completed]));
-                }
-                ROJORHI_LOG_ERROR(
-                    "D3D12 removal: command list '{}' on queue '{}' completed {} of {} breadcrumbs, next {}",
-                    nameOf(node->pCommandListDebugNameA, node->pCommandListDebugNameW),
-                    nameOf(node->pCommandQueueDebugNameA, node->pCommandQueueDebugNameW),
-                    completed,
-                    node->BreadcrumbCount,
-                    next
-                );
             }
         }
 
@@ -183,10 +200,9 @@ namespace rojoRHI::d3d12 {
         ROJORHI_INTERNAL_ASSERT(device != nullptr, "the message router was attached to no device");
         ROJORHI_INTERNAL_ASSERT(!m_queue, "the message router was attached twice");
         Com<ID3D12InfoQueue1> queue;
-        if (FAILED(device->QueryInterface(IID_PPV_ARGS(queue.put()))))
+        if (const HRESULT found = device->QueryInterface(IID_PPV_ARGS(queue.put())); FAILED(found))
         {
-            ROJORHI_INTERNAL_ASSERT(false, "the debug layer is on and the device has no ID3D12InfoQueue1");
-            return;
+            abortOn("QueryInterface(ID3D12InfoQueue1) with the debug layer on", found);
         }
 
         if constexpr (!kFiltered.empty())
@@ -199,18 +215,16 @@ namespace rojoRHI::d3d12 {
             D3D12_INFO_QUEUE_FILTER filter = {};
             filter.DenyList.NumIDs = static_cast<UINT>(ids.size());
             filter.DenyList.pIDList = ids.data();
-            if (FAILED(queue->PushStorageFilter(&filter)))
+            if (const HRESULT pushed = queue->PushStorageFilter(&filter); FAILED(pushed))
             {
-                ROJORHI_INTERNAL_ASSERT(false, "the debug layer refused the message filter");
-                return;
+                abortOn("ID3D12InfoQueue::PushStorageFilter", pushed);
             }
         }
 
         DWORD cookie = 0;
-        if (FAILED(queue->RegisterMessageCallback(onMessage, D3D12_MESSAGE_CALLBACK_FLAG_NONE, this, &cookie)))
+        if (const HRESULT registered = queue->RegisterMessageCallback(onMessage, D3D12_MESSAGE_CALLBACK_FLAG_NONE, this, &cookie); FAILED(registered))
         {
-            ROJORHI_INTERNAL_ASSERT(false, "the debug layer refused the message callback");
-            return;
+            abortOn("ID3D12InfoQueue1::RegisterMessageCallback", registered);
         }
         m_queue = std::move(queue);
         m_cookie = cookie;
@@ -223,9 +237,9 @@ namespace rojoRHI::d3d12 {
         {
             return;
         }
-        if (FAILED(m_queue->UnregisterMessageCallback(m_cookie)))
+        if (const HRESULT unregistered = m_queue->UnregisterMessageCallback(m_cookie); FAILED(unregistered))
         {
-            ROJORHI_INTERNAL_ASSERT(false, "the debug layer refused to unregister the message callback");
+            abortOn("ID3D12InfoQueue1::UnregisterMessageCallback", unregistered);
         }
         m_queue.reset();
         m_cookie = 0;
