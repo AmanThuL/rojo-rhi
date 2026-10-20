@@ -93,9 +93,18 @@ namespace rojoRHI {
         }
 
         //==============================================================================================================
-        /// Releases what `payload` holds: its raw views, its mapping and its resource, then the payload itself. The caller has
-        /// cleared its directory entry, if it was published.
-        void discardPayload(DeviceImpl& impl, d3d12::BufferPayload* payload)
+        /// Unmaps `resource`, a mapped buffer in `memory`: an Upload buffer may have been written anywhere, a Readback buffer
+        /// nowhere.
+        void unmap(ID3D12Resource* resource, Memory memory)
+        {
+            const D3D12_RANGE none = { 0, 0 };
+            resource->Unmap(0, memory == Memory::Readback ? &none : nullptr);
+        }
+
+        //==============================================================================================================
+        /// Releases what `payload`, a buffer in `memory`, holds: its raw views, its mapping and its resource, then the payload
+        /// itself. The caller has cleared its directory entry, if it was published.
+        void discardPayload(DeviceImpl& impl, d3d12::BufferPayload* payload, Memory memory)
         {
             if (payload->viewCount > 0)
             {
@@ -103,7 +112,7 @@ namespace rojoRHI {
             }
             if (payload->host != nullptr)
             {
-                payload->resource->Unmap(0, nullptr);
+                unmap(payload->resource, memory);
             }
             payload->resource->Release();
             delete payload;
@@ -177,7 +186,7 @@ namespace rojoRHI {
                 {
                     if (host != nullptr)
                     {
-                        resource->Unmap(0, nullptr);
+                        unmap(resource.get(), desc.memory);
                     }
                     return std::unexpected(views.error());
                 }
@@ -226,7 +235,7 @@ namespace rojoRHI {
             {
                 impl.directory.clear(payload->viewIndex);
             }
-            discardPayload(impl, payload);
+            discardPayload(impl, payload, record.memory);
             record.native = nullptr;
         }
 
@@ -261,7 +270,7 @@ namespace rojoRHI {
             Result<Buffer> page = core::addFrameArenaPage(core, std::move(record));
             if (!page)
             {
-                discardPayload(impl, *payload);
+                discardPayload(impl, *payload, Memory::Upload);
                 return std::unexpected(std::move(page.error()));
             }
             publish(impl, *payload, *page);
@@ -303,7 +312,7 @@ namespace rojoRHI {
         Result<Buffer> handle = core::addBuffer(impl.core, std::move(record));
         if (!handle)
         {
-            discardPayload(impl, *payload);
+            discardPayload(impl, *payload, desc.memory);
             return handle;
         }
         // The pool's record owns the payload now; the retire hook frees it.
