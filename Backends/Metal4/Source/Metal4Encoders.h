@@ -72,6 +72,14 @@ namespace rojoRHI::metal4 {
         /// barrier and one encoder on `list`. A lingering render encoder ends first.
         void carry(core::CommandListCore& list, ListState& state, MTL::Fence* fence);
 
+        /// Emits a barrier from `source` to `destination`, which are stages of the open compute encoder, inside that encoder
+        /// instead of ending it, when its opening barrier covered nothing, it runs more than backend kernels and it ran no
+        /// command in `destination` yet: a queue-level barrier holds its later commands in `destination` for earlier encoders'
+        /// work in `source`, and the encoder-level part for its own work is held back until a command in `destination`, as a
+        /// covered barrier is. Since every command of the encoder in `destination` follows the pair, it then counts as the
+        /// encoder's opening barrier. Counts the queue-level barrier on `list`. Returns false, emitting nothing, otherwise.
+        bool barrierInOpen(core::CommandListCore& list, MTL::Stages source, MTL::Stages destination, MTL4::VisibilityOptions visibility);
+
         /// Keeps the open render pass encoder open after its pass ended, running no further command: an encoder-level barrier
         /// still held back and the stages its opening barrier held in which it ran no command join the pending barrier now, as
         /// `close` would add them, while what its opening covered and the stages it ran stay known for `finish`.
