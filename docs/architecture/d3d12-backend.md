@@ -2,12 +2,30 @@
 
 **Status**: Accepted
 
-This page describes the D3D12 backend as it stands: the build wiring, the pinned runtime, the
-way the Agility SDK loads, the floor probe and the Windows CI job. Every entry of the backend is
-defined and `createDevice` returns `Unsupported`, so the backend creates no device and is not a
-capability ([ADR 0009](../decisions/0009-conformance-and-valid-usage.md),
-[documentation](../conventions/documentation.md)). Everything measured on WARP below is
-"implemented, verified on WARP only, not on hardware".
+This page describes the D3D12 backend as it stands. `createDevice` opens a device on the Agility
+runtime and the backend owns the device-wide native state: queues, fences and frames, shader-visible
+descriptor heaps, root and command signatures, memory, buffers, heaps, textures, views and
+samplers, and the debug layer. Command lists are acquired, ended and given frame data, and
+submission waits and signals fences; no list encodes a native command yet. Everything below is
+"implemented, verified on WARP only, not on hardware": the backend is not a capability until a
+hardware run says so ([ADR 0009](../decisions/0009-conformance-and-valid-usage.md),
+[documentation](../conventions/documentation.md)). The API reference under `docs/spec/` stays the
+authority on every entry's semantics; [the Null backend](null-backend.md) describes the shared core
+this backend translates to. The pins, the runtime layout, the floor probe and the toolchain record
+are in [the build record](d3d12-build.md).
+
+| Chapter | State |
+|---|---|
+| 01 fundamentals, 02 device | implemented, `createDevice` and `destroyDevice`; `loadShaderLibrary`, `createPipeline`, `pipelineCacheData` and `createUpscaler` return `Unsupported` |
+| 03 memory and buffers, 04 textures and heaps | implemented, with views and samplers |
+| 09 synchronization (fences), 10 queues and frames | implemented: fences, `submit`, frames; `Queue::present` and `Queue::mapTiles` abort |
+| 07 command recording | `acquireCommandList`, `end` and `uploadFrameData` only; every other recording entry aborts |
+| 06 pipelines, 08 GPU-driven work, 11 presentation, 12 upscaling, 13 sparse | not implemented: entries return `Unsupported` or abort, and `createSwapchain` is `Unsupported` |
+| 14 diagnostics | the core's counters and checks; no capture hook, so `beginCapture` is `Unsupported` |
+
+An entry the backend does not implement logs its name and aborts in every build, or returns
+`Unsupported` when it returns a `Result`. Each entry calls the core's check first and then
+translates; the backend holds no `ROJORHI_VU`.
 
 ## Build options
 
@@ -18,133 +36,240 @@ capability ([ADR 0009](../decisions/0009-conformance-and-valid-usage.md),
   that meets the floor of [ADR 0010](../decisions/0010-hardware-floor.md)) or `warp` (the software
   rasterizer, for hosted CI, which has no GPU).
 - `rojorhi_d3d12_debug` is `mode` (the default: the debug layer and DRED in Debug builds, nothing
-  in Release; it defines `ROJORHI_D3D12_DEBUG_MODE`, which the backend reads once it creates
-  devices), `off`, `layer` (the debug layer and DRED) or `gbv` (the debug layer, GPU-based
-  validation and DRED). The value is `mode` and not `auto` because xmake reads `auto` as unset.
+  in Release; it defines `ROJORHI_D3D12_DEBUG_MODE`), `off`, `layer` (the debug layer and DRED) or
+  `gbv` (the debug layer, GPU-based validation and DRED). The value is `mode` and not `auto`
+  because xmake reads `auto` as unset.
 
 Both are build configuration, not environment variables: RojoRHI reads and sets none.
 
-## Pins and the runtime layout
-
-`xmake setup` fetches and keeps these. Each hash lives in `xmake/setup.lua`, is the SHA-256 of the
-downloaded archive, and is checked before anything is extracted.
-
-| Pin | Version | What setup keeps |
-|---|---|---|
-| Agility SDK (NuGet package) | 1.619.6 | the headers, `D3D12Core.dll`, `d3d12SDKLayers.dll` |
-| WARP (NuGet package) | 1.0.21 | `d3d10warp.dll` |
-| DXC | v1.9.2607 | `dxc.exe`, `dxcompiler.dll`, `dxil.dll`, copied beside `slangc` |
-
-The rule `rojorhi.d3d12_runtime` copies the runtime next to an executable after each build:
-
-```
-<exe dir>\D3D12\D3D12Core.dll
-<exe dir>\D3D12\d3d12SDKLayers.dll
-<exe dir>\d3d10warp.dll
-```
-
-The FidelityFX loader and upscaler DLLs are copied beside the executable only when the
-third-party directory holds them, so their absence is a supported state. A host adds the rule to
-its own executable and sets the value `rojorhi.thirdparty` to the absolute third-party directory
-that setup fills. The Agility headers come first on the include path, so they shadow the older
-`d3d12.h` of the Windows SDK.
-
-DXIL is mandatory on a d3d12 configure: the shader rule probes one known-good DXIL compile
-through the pinned DXC, and a failure fails the build instead of skipping DXIL. On the other
-backends the probe may skip.
-
 ## Agility loading
 
-The probe loads the Agility SDK through the device factory: it takes `ID3D12SDKConfiguration1`
-from `D3D12GetInterface(CLSID_D3D12SDKConfiguration)`, calls
-`CreateDeviceFactory(619, <absolute exe dir>\D3D12\)`, creates the device from that factory, and
-reads the debug and DRED configuration from the same factory with `GetConfigurationInterface`. It
-passes an absolute path, and the call worked on the first attempt. The backend has no device
-creation yet (`createDevice` returns `Unsupported`); it is specified to take this factory path,
-under which a consumer executable defines no `D3D12SDKVersion` or `D3D12SDKPath` export and the
-debug configuration reaches the runtime the device uses.
+`D3D12Loader.cpp` opens a device in this order, and each device owns what it opens
+(`d3d12::Loaded`: device factory, DXGI factory, adapter, device):
 
-The classic exports (`D3D12SDKVersion` 619 and `D3D12SDKPath` `.\D3D12\`) were also shown to work
-and are the documented fallback; the backend does not use them.
+1. The OS check: `RtlGetVersion` must report build 22000 or later, whatever the manifest says;
+   otherwise `Unsupported`.
+2. The device factory: `ID3D12SDKConfiguration1::CreateDeviceFactory` with the SDK version of the
+   headers (619) and the absolute path of the `D3D12\` directory beside the executable, passed as
+   UTF-8. A consumer executable defines no `D3D12SDKVersion` or `D3D12SDKPath` export.
+3. The debug features of the build, on that factory only and never process-wide: the debug layer,
+   GPU-based validation for `gbv`, and DRED (breadcrumbs, breadcrumb contexts and page faults forced
+   on) with the layer. A configuration interface the factory refuses fails creation.
+4. `CreateDXGIFactory2` without the debug flag (`dxgidebug.dll` is not redistributable), then the
+   adapters of the configured kind: `EnumWarpAdapter` on a WARP build, otherwise
+   `EnumAdapterByGpuPreference` with high-performance preference, software adapters skipped.
+5. For each candidate in order, `ID3D12DeviceFactory::CreateDevice` at `D3D_FEATURE_LEVEL_12_2`
+   and `checkFloor`. The first to pass wins; if none does, `Unsupported` names the first missing
+   item.
 
-Evidence, from the `-factory` and `-exports` probe variants on the hosted runner
-([run 39398881860](https://github.com/AmanThuL/rojo-rhi/actions/runs/39398881860), and
-[run 39404593529](https://github.com/AmanThuL/rojo-rhi/actions/runs/39404593529) after the probe
-was tightened; the exports path is corroborated by the
-[spike run 39402446591](https://github.com/AmanThuL/rojo-rhi/actions/runs/39402446591)):
+The floor items are Shader Model 6.6, resource binding tier 3, `TypedUAVLoadAdditionalFormats`,
+resource heap tier 2 (which `HeapDesc`'s `ALLOW_ALL_BUFFERS_AND_TEXTURES` needs), enhanced
+barriers and dynamic depth bias. The evidence that the factory path loads the app-local runtime is
+in [the build record](d3d12-build.md#agility-loading-evidence). Several devices coexist because
+none shares a factory or a debug configuration.
 
-- Method: factory, `CreateDeviceFactory` succeeded first try; exports, `D3D12SDKVersion` 619.
-- Modules: exactly one `D3D12Core.dll` loaded, `<exe dir>\D3D12\D3D12Core.dll`, version
-  1.619.6.0; the in-box `D3D12Core.dll` never loaded.
-- WARP: exactly one `d3d10warp.dll`, `<exe dir>\d3d10warp.dll`, version 1.0.21.0, app-local.
-- Debug layer: `ID3D12DebugDevice` answers and `ID3D12InfoQueue1::RegisterMessageCallback`
-  succeeds.
-- GPU-based validation: the layer's startup message (id 1016) reads "GPU-Based Validation is
-  enabled", and the probe reports `gbvActive`.
-- DRED: breadcrumbs and page faults forced on, and `ID3D12DeviceRemovedExtendedData` answers.
+## Device objects and teardown
+
+`DeviceImpl` (`D3D12Device.h`) declares its members in creation order: the core (`DeviceCore`),
+`loaded`, the message router, the optional `features`, the three `QueueImpl` (one per `QueueType`),
+the frame state, the descriptor heaps, the heap directory, the root signatures, the stager, the
+per-slot list pools and the two name strings behind `Capabilities`. `createDevice` validates the
+description in the core, calls `loadDevice`, registers the retire hooks (buffer, heap, texture,
+view, fence, frame slot, frame wait) and creates the native state in that order. A failure part
+way runs the same teardown.
+
+`destroyDevice` idles the queues, idles the stager, has the core pass every remaining record to
+the retire hooks, releases the kept fences, deletes the `DeviceImpl` (which releases every other
+native object in reverse order of declaration) and releases the device last. The device's
+reference count must then reach 0: `ROJORHI_INTERNAL_ASSERT` checks it in Debug builds, so a child
+object that outlives the device is a defect. The factory that made the device is released
+after it.
+
+## Capabilities and formats
+
+`checkFloor` runs at creation and `reportCapabilities` fills the report from the device
+(`D3D12Capabilities.cpp`). The report is honest about what the backend does: `placementSparse` and
+`conservativeRaster` are false, `upscalers` is empty, `meshTasksIndirect` is true,
+`uploadInDeviceMemory` is `GPUUploadHeapSupported`, and `floorName` reads `FL 12_2, SM 6.<n>` with
+the highest shader model. `maxViews` is the view heap size, `maxSamplers` is 2,048,
+`maxAddrOffset` is 2^29 − 1, and `maxBufferSize` is the adapter's dedicated video memory (shared
+system memory when that is 0), capped by one resource's virtual address bits.
+
+The format table (`D3D12Formats.cpp`) starts from the core's ceiling and narrows it by what the
+device reports; no format reports a sparse capability, and a failed query is an error, never a
+narrower table. A texture's native format depends on its usage: a `Sampled` depth texture is
+created in the typeless family of its depth format so its depth and stencil planes both get views;
+a format with an sRGB counterpart is created in the typeless family of both unless the device
+reports relaxed format casting, in which case it is created as itself and `castableFormats` lists
+the formats its views may use. Any other texture is created as itself. A stencil view reads plane 1
+through a component mapping into the first component, and a `Storage` view of an sRGB format uses
+its linear counterpart because a typed UAV has no sRGB form.
+
+## Memory
+
+`Memory::Gpu` is a `DEFAULT` heap, `Readback` is `READBACK`, and `Upload` is `GPU_UPLOAD` when the
+device reports it and `UPLOAD` otherwise (`D3D12Memory.cpp`). Buffers and textures are created
+committed with `CreateCommittedResource3` (buffers in `D3D12_BARRIER_LAYOUT_UNDEFINED`), or placed
+in a heap with `CreatePlacedResource2`. A `Heap` is one `ID3D12Heap` with
+`ALLOW_ALL_BUFFERS_AND_TEXTURES`, aligned to 4 MiB for `Gpu` so multisample textures can be placed
+and to 64 KiB otherwise, its size rounded up to that alignment. An `Upload` or `Readback` buffer
+is mapped once at creation and stays mapped until it retires. The backend makes no residency
+calls: the interface exposes no residency control ([memory and buffers](
+../spec/03-memory-and-buffers.md#residency)), and every allocation stays resident for its life.
+
+A buffer's `Width` is its size rounded up to a multiple of 4. Each buffer record carries a
+`BufferPayload` (`D3D12Addr.h`): the resource, its GPU address, the mapped pointer and the
+view-heap index of its raw views. The retire hook releases the raw views to the core's view
+allocator, unmaps, releases the resource and frees the payload.
+
+## Descriptor heaps
+
+`DescriptorHeaps` (`D3D12Descriptors.cpp`) creates two shader-visible heaps, `rojorhi.views` and
+`rojorhi.samplers`, and one CPU-only heap of twins. The view heap holds
+`D3D12_FEATURE_D3D12_OPTIONS19`'s maximum capped at 2^21 descriptors, or 1,000,000 when the
+device does not report it; a smaller maximum is `Unsupported` naming `maxViews`. The sampler heap
+always holds 2,048. The core's view and sampler allocators hand out the slots, so a `ViewIndex` or
+`SamplerIndex` is the heap index a shader reads.
+
+Slot 0 holds a null raw SRV and slot 1 a null raw UAV for the device's life, so a load through the
+zero `Addr` reads zeros and a store through it is discarded. The transient ring follows them: one
+range of `framesInFlight` blocks of 1,024 slots, each with a twin in the CPU-only heap. A frame
+slot claims its next transient with one atomic increment and no lock; claiming more than 1,024 in
+one frame slot logs "at most 1,024 storage-texture clears per frame slot" and aborts in every
+build, and the block is claimable again once the slot's frame has retired. The ring and the two
+held slots all count against `maxViews`.
+
+A texture with `RenderTarget` or `DepthStencil` usage gets, at creation, a CPU-only heap with one
+RTV or DSV per mip and layer (per mip and depth slice for a 3D texture), immutable for its life
+and released with the texture. Recording reads it without a lock. A single-layer view at
+layer 0 uses the non-array dimension and a later layer the array form of one layer, so a
+non-array view of a later layer does not exist (issue #90).
+
+## Addresses
+
+An `Addr` is `{lo, hi}`: `lo` is the view-heap index of the buffer's raw SRV, whose raw UAV, when
+the buffer has one, is at `lo + 1`, and `hi` is the byte offset. Only `D3D12Addr.cpp` encodes and
+decodes (`encodeAddr`, `core::decodeAddr`, `operator+`). A raw view is `DXGI_FORMAT_R32_TYPELESS`
+with the raw flag and at most 2^27 four-byte elements, so one view reaches the first 512 MiB of a
+larger buffer and `maxAddrOffset` is 2^29 − 1; the core checks every offset against it. A buffer
+above 512 MiB is created without error and `address` still reaches only that range. A `Readback`
+buffer has no raw views.
+
+The heap directory (`HeapDirectory`) finds the buffer of a raw SRV: a `core::NativeTable` the size
+of the view heap, written under a leaf mutex by creation and by the retire hook, read with one
+acquire load. An entry is published before the buffer's handle is returned and cleared before the
+payload is freed. Frame-arena pages are `Upload` buffers with one raw SRV, and `uploadFrameData`
+returns the address of the page payload's view index and the offset. A page larger than the
+address reach is a core defect recorded in issue #89.
+
+## Root and command signatures
+
+`RootSignatures` (`D3D12RootSignature.cpp`) creates, once per device:
+
+| Object | Content |
+|---|---|
+| `rojorhi.root` (global) | version 1.1, flags `CBV_SRV_UAV_HEAP_DIRECTLY_INDEXED` and `SAMPLER_HEAP_DIRECTLY_INDEXED`; parameter 0 a root SRV `t0` space 0 `DATA_VOLATILE`, parameter 1 one 32-bit root constant `b1` |
+| `rojorhi.root.kernel` | four 32-bit root constants `b0` and the heap-indexed flag |
+| draw | arguments root constant of parameter 1 then `DRAW`, stride 20 |
+| indexed draw | constant then `DRAW_INDEXED`, stride 24 |
+| mesh | constant then `DISPATCH_MESH`, stride 16 |
+| dispatch | `DISPATCH`, stride 12, no root signature |
+
+The serialized global signature is kept for the device's life. No pipeline uses them yet.
+
+## Initial data
+
+`Stager` (`D3D12Stager.cpp`) copies initial data of `Gpu` buffers and textures. Its queue,
+`rojorhi.upload`, is a `DIRECT` queue no `QueueType` names, so it never runs a caller's lists and
+never signals a caller's fence. Each upload fills a committed `UPLOAD` staging buffer, records the
+copy into the stager's one allocator and list, executes, signals the stager's fence and waits for
+that value before returning, one upload at a time under a leaf mutex, so the data is complete
+before any work submitted afterwards. A texture is created in `D3D12_BARRIER_LAYOUT_COPY_DEST`;
+the stager repacks its rows to the footprint's 256-byte pitch and then moves every subresource to
+the generic `D3D12_BARRIER_LAYOUT_SHADER_RESOURCE`, which direct and compute queues accept.
+
+## Queues, fences and frames
+
+Each `QueueType` has an `ID3D12CommandQueue` (`rojorhi.queue.graphics|compute|copy`) and a
+progress fence only it signals. A caller's `Fence` is an `ID3D12Fence`. `Queue::submit`, under the
+core's tracker lock, checks and replays the lists, issues one `Wait` per wait value and one
+`Signal` per signal value, then, for a compute or copy submission that joins no frame (no lists,
+or more than one signal), signals the queue's progress fence. A destroyed fence's native fence is
+kept until every queue's progress passes the point it was destroyed at.
+
+`Device::completedValue` and `Device::wait` read through `waitForFence` (`D3D12Common.cpp`): it
+reads `GetCompletedValue`, and when the value is not reached and the timeout is not 0 it arms the
+calling thread's own auto-reset event with `SetEventOnCompletion` and waits in slices of at most
+ten seconds. A removed device reports `UINT64_MAX`; the entry reports the removal and aborts
+before that value can reach the core. `endFrame` signals the frame fence from the graphics queue
+with the frame number; `beginFrame` waits for the frame whose slot it reuses, and reusing a slot
+resets its list pools and transient ring and releases the kept fences every queue has passed.
+
+## Debug layer and device removal
+
+When the build enables the layer, `MessageRouter` registers an `ID3D12InfoQueue1` callback that
+forwards each message with its severity (info and message as `Info`, warning as `Warning`, error
+and corruption as `Error`), on whatever thread the runtime raises it, and aborts after an error
+or corruption message. Messages are dropped only by the filter list in `D3D12Debug.cpp`, which is
+empty; each entry would carry a reason that holds on every use. On
+`DXGI_ERROR_DEVICE_REMOVED`, `_RESET` or `_HUNG`, `d3d12::failure` reports the removal reason, the
+auto-breadcrumb nodes and the page-fault data as `Error` messages, then the entry fails as its
+contract says: a `Result` error, or a logged abort in an entry with no `Result`. Every native
+object is named from its label.
+
+## Threading and lock order
+
+RojoRHI creates no thread. Locks the backend adds, outermost first: the list-pool mutex of a slot
+and queue type (acquisition only); the frame-arena claim, then the core's view allocator, then the
+directory's mutex. The heap directory mutex, the stager mutex, the kept-fence mutex and a list
+pool's mutex are leaves. The tracker lock in `submit` is held from the check to the last native
+call. Release recording reads the directory and each texture's target heap without a lock and
+claims transient slots with an atomic.
+
+## Counting
+
+Counters follow the native call. `descriptorWrites` counts each `Create*View` and
+`CreateSampler` the backend issues (raw views, the two null views, RTVs and DSVs);
+`nativeCreateCalls` counts each staging buffer and each internal object made after creation;
+`cpuAllocations` counts each command list a pool grows by; `nativeSubmitCalls` counts each
+`ExecuteCommandLists`, `Wait` and `Signal`; and `nativeHostCalls` counts each `GetCompletedValue`,
+`SetEventOnCompletion` and `Map`. `waitForFence` returns the number of host calls it made and its
+caller counts them.
 
 ## The floor probe
 
-`RojoRHID3D12ProbeFactory` and `RojoRHID3D12ProbeExports` (under `Tools/D3D12Probe/`) each create
-a device on the app-local WARP at feature level 12_2, record the floor items of ADR 0010, the
-loaded modules and their versions, the debug layer messages, a large raw view and a hidden-window
-presentation, and print one JSON object. A probe exits 0 only when the floor is met on the
-app-local WARP. The `d3d12` CI job prints both objects, writes a step summary table, uploads them
-as the artifact `d3d12-probe`, and fails when the factory probe does not exit 0; the exports
-probe's exit code is printed and does not gate.
-
-Results, all "WARP on hosted windows-latest" (Windows Server 2025, build 10.0.26100.33438; the
-identical result came from both variants):
-
-| Item | Result |
-|---|---|
-| Agility / WARP version | 1.619.6.0 / 1.0.21.0 |
-| Maximum feature level, highest shader model | 12_2, 6.9 |
-| Resource binding tier, resource heap tier | 3, 2 |
-| Typed UAV additional formats, enhanced barriers, dynamic depth bias | all supported |
-| Tiled resources tier, conservative rasterization tier | 4, 3 |
-| `OPTIONS19` sampler, sampler with static, view heap maximum | 2,097,152 each |
-| Largest shader-visible view heap created | 2,097,152 |
-| Raw SRV of 2^27 and 2^27 + 1 elements | no debug-layer error for either |
-| Relaxed format casting, GPU upload heap, copy-queue timestamp queries (reported, not floor items) | all supported |
-| Presentation on a hidden window | window, queue and swapchain created; 2 frames, `Present` S_OK |
-
-The silent 2^27 + 1 view means the layer does not catch an over-long raw view, so the core's own
-valid-usage check must. These are WARP results: not hardware evidence and not T1 acceptance.
-
-## Toolchain
-
-Recorded from the log of
-[run 39415964342](https://github.com/AmanThuL/rojo-rhi/actions/runs/39415964342) on
-windows-latest:
-
-- xmake v3.1.2 passes `-std:c++23preview` to MSVC for `c++23`.
-- MSVC tools 14.51.36231, Visual Studio 18, `cl` 19.51.36260 (`_MSC_FULL_VER` 195136260,
-  `_MSVC_LANG` 202302).
-- `/std:c++23preview` and `/std:c++latest` are accepted. `/std:c++23` is not: `cl` warns D9002 and
-  ignores it.
-
-Nothing changed because of this; xmake already uses the accepted spelling
-([ADR 0012](../decisions/0012-language-and-dispatch.md)).
+Two probe executables under `Tools/D3D12Probe/` create a device on the app-local WARP at feature
+level 12_2 and record the floor, the loaded modules and the debug-layer messages. On the hosted
+runner both met the floor, loaded exactly the app-local `D3D12Core.dll` 1.619.6.0 and
+`d3d10warp.dll` 1.0.21.0, and showed the layer, GPU-based validation and DRED active. The `d3d12`
+job uploads their output as the artifact `d3d12-probe`. The full results are in
+[the build record](d3d12-build.md#the-floor-probe); they are WARP results, not hardware evidence.
 
 ## Tests and CI
 
-The `d3d12` job on `windows-latest` runs, in order: setup; a Debug configure with
-`--rojorhi_d3d12_adapter=warp --rojorhi_d3d12_debug=gbv`; the two probes and their gate; the
-`RojoRHITests` build; the check that every shader under `Shaders/Tests` has DXIL (except
-`LayoutProbe`); the check that the runtime sits beside the test executable; `RojoRHITests/abi`
-and `RojoRHITests/contract`; the toolchain record; the compilation database and the layout check;
-then a Release configure with `--rojorhi_d3d12_debug=mode`, the `RojoRHITests` build (warning-free
-under `/W4 /WX`), `contract` and the build of the link-time-optimization probe.
+`Tests/D3D12/*.cpp` holds the backend's own cases, tagged `[d3d12]` (`[d3d12][death]` for death
+cases). They may include the backend headers and reach native objects through
+`DeviceImpl::of(device)`; native readbacks go through `Tests/Support/D3D12/`. The test target
+globs the directory, so no build file lists them. The entries on a d3d12 build:
 
-`d3d12_pending` in `xmake/targets.lua` lists every contract file today; the entry cannot create
-a device yet. Each later part removes the files that pass whole on WARP under the debug layer
-and GPU-based validation, and the list ends empty. A name that matches no contract file fails the
-configure. There is no `death` or `conformance` entry until the backend creates a device. The
-Release `RojoRHITests` and `RojoRHILtoProbe` executables turn off warnings C4702 and C4722
-because the stubs abort; `check_lto_inline.py` does not run on d3d12.
+- `contract` runs `[contract]~[death]` and `[d3d12]~[death]`.
+- `death` runs `[death]`.
+- `conformance` runs `[conformance]` over the files the build does not hold back.
 
-The layout check splits by platform. The macOS `format` job passes `--exclude Backends/D3D12
---exclude Tests/Support/D3D12 --exclude Tools/D3D12Probe`; the `d3d12` job passes the matching
-`--only` selectors with its own compilation database and `clangd`. A selector that selects
-nothing fails, and a directory is named in either list only once it exists.
+`d3d12_pending` in `xmake/targets.lua` lists the contract files of chapters the backend does not
+implement yet, and `d3d12_conformance_pending` lists the conformance files it leaves out; both
+hold one file name per line, a name that matches no file fails the configure, and a later part
+removes a file when it passes whole on WARP under the debug layer and GPU-based validation.
+
+The `d3d12` job on `windows-latest` runs a Debug configure with
+`--rojorhi_d3d12_adapter=warp --rojorhi_d3d12_debug=gbv`, the probes and their gate, the
+`RojoRHITests` build, the DXIL and runtime-DLL checks, `abi`, `contract`, `death` and
+`conformance`, a case-count step with floors for `conformance`, `d3d12` and `contract`, the
+toolchain record and the layout check (`--only Backends/D3D12 --only Tests/D3D12 --only
+Tests/Support/D3D12 --only Tools/D3D12Probe`, with its own compilation database and `clangd`; the
+macOS format job excludes the same directories). A Release configure with
+`--rojorhi_d3d12_debug=mode` then builds warning-free under `/W4 /WX`, runs `contract` and
+`conformance`, and builds the link-time-optimization probe for `check_lto_inline.py`. The Release
+executables still turn off warnings C4702 and C4722 because entries not yet implemented abort
+(issue #83). The first run of the debug layer on WARP passed `contract` (161 cases) with GPU-based
+validation, `death` and Release `contract` (run 39471643531); this is WARP evidence only.
