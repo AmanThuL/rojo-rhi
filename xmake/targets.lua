@@ -345,7 +345,6 @@ target("RojoRHITests")
         local d3d12_conformance_pending = {
             "AbiComputeConformanceTests.cpp",
             "AbiGraphicsConformanceTests.cpp",
-            "DispatchConformanceTests.cpp",
             "DrawConformanceTests.cpp",
             "FormatConformanceTests.cpp",
             "GraphicsBarrierConformanceTests.cpp",
@@ -356,7 +355,6 @@ target("RojoRHITests")
             "ScopeConformanceTests.cpp",
             "SparseConformanceTests.cpp",
             "UpscaleConformanceTests.cpp",
-            "WriteOnlyConformanceTests.cpp",
         }
         local conformance_pending = {}
         for _, name in ipairs(d3d12_conformance_pending) do
