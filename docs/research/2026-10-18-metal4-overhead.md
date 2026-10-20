@@ -284,6 +284,9 @@ the backend and the harness. Nothing here changes a budget, a workload, a `K` or
   applied per configuration, so a workload misses when any of its configurations does; and a count
   that differs between frames or processes is reported unstable and judged on its maximum.
 
+2026-10-20, before any round-2 timed run: round 2 is registered by amendment, as [round 2](
+2026-10-20-metal4-overhead-round2.md) states; it changes no budget, workload, `K` or rule.
+
 ## Results
 
 Run on 2026-10-19 at 4f2e0d6: 1,260 processes, all nominal on their first attempt. Every row, the

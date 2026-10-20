@@ -199,8 +199,12 @@ out of the timed round's `t2` directory. The native arm runs on this Mac, and it
 
 The first timed round ran on 2026-10-19 under the `t2` topic and missed the CPU, GPU and allocation
 budgets ([results](../research/2026-10-18-metal4-overhead-results.md)); a report-only diagnosis of
-the misses is kept under `t2-diagnosis`. A later round is a new note: keep the obligations the N
-arm encodes (next section) in view, and run `build`, `correctness`, `timing` and `analyze` again.
+the misses is kept under `t2-diagnosis`. Round 2 measures the fixed backend and is registered by the
+note's amendment of 2026-10-20 ([round 2](../research/2026-10-20-metal4-overhead-round2.md)), with
+every R sequence and count that changed; it runs `build`, `correctness`, `timing` and `analyze`
+from a clean checkout of the commit that merges that amendment, with `--date <date>-round2`, into
+`t2/<date>-round2/`, and reports on a results page of its own. Keep the obligations the N arm
+encodes (next section) in view.
 
 ## Backend obligations the N arm encodes
 
