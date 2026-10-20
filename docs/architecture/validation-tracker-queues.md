@@ -168,10 +168,11 @@ judged, and whether that queue is ordered after the mapping at all is `sparse-00
   one mapped on that queue (queue order), or one whose mapping the queue's ordering clock covers.
   A use of marked bytes clears their marks when one of those destinations on its queue covers the
   use's stages and accesses, and reports otherwise. A buffer barrier orders nothing here.
-- **Precedence.** The texture check sits where `sync-0017` would for a placed texture, after
-  `sparse-0013` and the unit `queue-0005` of the use, and in a barrier after `sparse-0013` and
-  `queue-0005` but before `sync-0024`; the buffer check sits after the unit `queue-0005`. So every
-  older rule keeps its report, and an event that breaks only this rule reports only this one.
+- **Precedence.** In a use, texture or buffer, the check reports after `sparse-0013`,
+  `sync-0021` or `sync-0024`, and the unit `queue-0005`. In a texture barrier it reports after
+  `sparse-0013` and `queue-0005` but before `sync-0024`. It never meets `sync-0017` or `sync-0009`:
+  a sparse resource is never placed (`VU-rojo-heap-0006`). So every older rule keeps its report,
+  and an event that breaks only this rule reports only this one.
 
 ## Locking
 

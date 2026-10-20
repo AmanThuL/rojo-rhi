@@ -268,3 +268,42 @@ TEST_CASE("VU-rojo-sparse-0014 a newly mapped buffer tile is first used on anoth
         submitTo(kit.device, compute, QueueType::Compute, mapped);
     });
 }
+
+//======================================================================================================================
+TEST_CASE("VU-rojo-sparse-0014 a newly mapped mip tail is moved from a defined layout and copied to", "[contract][death]")
+{
+    // A tail mapping marks every tail mip of its layer as a whole, so a barrier that keeps the contents reaches it.
+    ROJORHI_EXPECT_DEATH("VU-rojo-sparse-0014", [] {
+        PassKit kit(QueueType::Graphics, true);
+        const SparseSet set = sparse(kit);
+        const Buffer source = kit.buffer(BufferUsage::None, kBytes);
+        test::transition(kit.list, set.texture, Layout::Undefined, Layout::General);
+        submitTo(kit.device, kit.list, QueueType::Graphics);
+        const TileMapping tail{ .texture = set.texture, .region = { .mip = set.shape.mipTailFirst }, .mipTail = true, .heap = set.heap };
+        kit.device.queue(QueueType::Graphics).mapTiles(std::array{ tail });
+        CommandList graphics = kit.device.acquireCommandList(QueueType::Graphics, "test.graphics");
+        test::transition(graphics, set.texture, Layout::General, Layout::CopyDst);
+        graphics.copyBufferToTexture(source, { .rowPitch = 256 }, set.texture, TextureRegion{ .mip = set.shape.mipTailFirst, .extent = { 1, 1, 1 } });
+        submitTo(kit.device, graphics, QueueType::Graphics);
+    });
+}
+
+//======================================================================================================================
+TEST_CASE("VU-rojo-sparse-0014 a shader read of a texture with a newly mapped tile reaches it", "[contract][death]")
+{
+    // A declared shader access names no texel box, so it reaches every mark of the subresources it names.
+    ROJORHI_EXPECT_DEATH("VU-rojo-sparse-0014", [] {
+        PassKit kit(QueueType::Graphics, true);
+        const SparseSet set = sparse(kit);
+        test::transition(kit.list, set.texture, Layout::Undefined, Layout::General);
+        submitTo(kit.device, kit.list, QueueType::Graphics);
+        kit.device.queue(QueueType::Graphics).mapTiles(std::array{ textureTile(set) });
+        CommandList graphics = kit.device.acquireCommandList(QueueType::Graphics, "test.graphics");
+        const std::array<ResourceAccess, 1> reads{ ResourceAccess{
+            .texture = set.texture, .range = { .mipCount = 1, .layerCount = 1 }, .stage = Stage::ComputeShader, .access = Access::ShaderRead } };
+        graphics.setPipeline(kit.compute());
+        graphics.declareAccess(reads);
+        graphics.dispatch(1, 1, 1);
+        submitTo(kit.device, graphics, QueueType::Graphics);
+    });
+}

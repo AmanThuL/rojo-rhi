@@ -351,3 +351,22 @@ TEST_CASE("a mapping on Compute is first used on Graphics after a fence and a gl
     destroyDevice(kit.device);
 #endif
 }
+
+//======================================================================================================================
+TEST_CASE("bytes of a buffer tile mapped and then unmapped are copied to with no global barrier", "[contract]")
+{
+#ifdef NDEBUG
+    SKIP("validation exists only in a Debug build");
+#else
+    PassKit kit(QueueType::Graphics, true);
+    const SparseSet set = sparse(kit);
+    const Buffer source = kit.buffer(BufferUsage::None, kBytes);
+    kit.device.queue(QueueType::Graphics).mapTiles(std::array{ bufferTile(set) });
+    kit.device.queue(QueueType::Graphics).mapTiles(std::array{ TileMapping{ .buffer = set.buffer, .bufferSize = 65536, .unmap = true } });
+    // The tile is unmapped, so the copy's writes are discarded and there is no first use of new memory to order.
+    kit.list.copyBuffer(source, 0, set.buffer, 0, kBytes);
+    submitTo(kit.device, kit.list, QueueType::Graphics);
+    kit.device.endFrame();
+    destroyDevice(kit.device);
+#endif
+}

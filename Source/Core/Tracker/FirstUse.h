@@ -32,7 +32,7 @@ namespace rojoRHI::core {
         void mark(const std::optional<TexelBox>& box);
 
         /// Clears the marks of the texels `box`, or every mark when `box` is empty: an unmap, or a discard of the subresource.
-        /// A box leaves a mark of the whole subresource, which only a mip tail makes and only a change of the tail clears.
+        /// A box leaves a mark of the whole subresource, which only a mip tail makes and only a change of the tail or a discard clears.
         void clear(const std::optional<TexelBox>& box);
 
         /// Returns true when an event of the texels `box` reaches a mark: the boxes intersect, or the whole subresource is
