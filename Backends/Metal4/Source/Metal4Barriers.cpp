@@ -316,8 +316,17 @@ namespace rojoRHI {
             }
             return;
         }
-        // A source may lie in an earlier encoder or an earlier list, which only a queue-level barrier orders: the open encoder
-        // ends, and the next encoders to open emit the barrier for their stages.
+        // A source may lie in an earlier encoder or an earlier list, which only a queue-level barrier orders. An open compute
+        // encoder that has not yet run a command in the destination stages takes it, with the encoder-level part for its own
+        // work; otherwise the open encoder ends, and the next encoders to open emit the barrier for their stages.
+        if (encoders.holdsWork() && covered != 0 && encoders.barrierInOpen(list, lowered.source, covered, lowered.visibility))
+        {
+            if ((lowered.destination & ~open) != 0)
+            {
+                barriers.merge(lowered.source, lowered.destination & ~open, lowered.visibility);
+            }
+            return;
+        }
         if (encoders.holdsWork())
         {
             encoders.close(list);

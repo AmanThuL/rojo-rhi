@@ -851,3 +851,70 @@ TEST_CASE("a barrier from a pass into Copy followed only by copies owes its frag
     submitAndWait(kit.device, std::array{ list });
     destroyDevice(kit.device);
 }
+
+//======================================================================================================================
+TEST_CASE("a barrier after a fill stays on the open compute encoder for the dispatches that follow", "[metal4]")
+{
+    test::PassKit kit;
+    CommandList list = kit.list;
+    const Buffer counter = kit.buffer(BufferUsage::ShaderWrite, 256);
+    list.fillBuffer(counter, 0, 256, 0);
+    CHECK(countsOf(list).encodersOpened == 1);
+    const uint64_t calls = countsOf(list).nativeRecordCalls;
+    list.barrier(
+        std::array{
+            GlobalBarrier{ .srcStage = Stage::Copy, .srcAccess = Access::CopyWrite, .dstStage = Stage::ComputeShader, .dstAccess = Access::ShaderRead } }
+    );
+    // The fill's encoder ran no dispatch, so it keeps the barrier: barrierAfterQueueStages for earlier encoders' work now,
+    // and the encoder-level part held back for the first dispatch. It does not end.
+    CHECK(encodersOf(list).kind() == metal4::EncoderKind::Compute);
+    CHECK(countsOf(list).nativeRecordCalls - calls == 1);
+    CHECK(countsOf(list).nativeBarriers == 1);
+    CHECK(barriersOf(list).openSource == kCopyStages);
+    CHECK(barriersOf(list).openDestination == MTL::StageDispatch);
+    CHECK(barriersOf(list).deferredDestination == MTL::StageDispatch);
+    CHECK(barriersOf(list).pendingDestination == 0);
+    list.setPipeline(kit.compute());
+    list.dispatch(1, 1, 1);
+    // setComputePipelineState, waitForFence, barrierAfterEncoderStages and the dispatch, on the same encoder.
+    CHECK(countsOf(list).encodersOpened == 1);
+    CHECK(countsOf(list).nativeBarriers == 2);
+    CHECK(countsOf(list).nativeRecordCalls - calls == 1 + 4);
+    CHECK(barriersOf(list).deferredDestination == 0);
+    // A barrier between dispatches is now covered by the encoder's barrier and stays in it.
+    list.barrier(
+        std::array{ GlobalBarrier{
+            .srcStage = Stage::ComputeShader, .srcAccess = Access::ShaderWrite, .dstStage = Stage::ComputeShader, .dstAccess = Access::ShaderRead } }
+    );
+    CHECK(encodersOf(list).kind() == metal4::EncoderKind::Compute);
+    CHECK(barriersOf(list).deferredDestination == MTL::StageDispatch);
+    list.dispatch(1, 1, 1);
+    CHECK(countsOf(list).encodersOpened == 1);
+    CHECK(countsOf(list).nativeBarriers == 3);
+    list.end();
+    CHECK(countsOf(list).encodersOpened == 1);
+    submitAndWait(kit.device, std::array{ list });
+    destroyDevice(kit.device);
+}
+
+//======================================================================================================================
+TEST_CASE("a barrier after a dispatch whose sources lie outside the encoder still ends it", "[metal4]")
+{
+    test::PassKit kit;
+    CommandList list = kit.list;
+    list.setPipeline(kit.compute());
+    list.dispatch(1, 1, 1);
+    // The encoder opened with no barrier and ran a dispatch before this one, so a queue-level barrier inside it could not
+    // stand for an opening barrier for the dispatch stage.
+    list.barrier(
+        std::array{ GlobalBarrier{
+            .srcStage = Stage::ComputeShader, .srcAccess = Access::ShaderWrite, .dstStage = Stage::ComputeShader, .dstAccess = Access::ShaderRead } }
+    );
+    CHECK(encodersOf(list).kind() == metal4::EncoderKind::None);
+    CHECK(barriersOf(list).pendingDestination == MTL::StageDispatch);
+    list.dispatch(1, 1, 1);
+    CHECK(countsOf(list).encodersOpened == 2);
+    list.end();
+    submitAndWait(kit.device, std::array{ list });
+    destroyDevice(kit.device);
+}

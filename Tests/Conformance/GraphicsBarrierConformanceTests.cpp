@@ -1302,3 +1302,66 @@ TEST_CASE("two lists that carry barriers in a row both order a later list's disp
     const std::array<float, 4> passed{ 1.0f, 0.0f, 0.0f, 0.0f };
     CHECK(kit.readBuffer(output) == bytesOf(std::span<const float>(passed)));
 }
+
+//======================================================================================================================
+TEST_CASE("a barrier on a compute encoder that ran only copies orders the dispatch after it", "[conformance]")
+{
+    test::requireGpu();
+    test::GpuKit kit;
+    const Oracles oracles(kit);
+    // The dispatch reads the tail of a 64 MiB blit's destination, so a dispatch the barrier left unordered would read zeroes.
+    const std::vector<std::byte> tailA = test::pattern(kTail - 16, 41);
+    const std::vector<std::byte> tailB = test::pattern(kTail - 16, 42);
+    const Buffer sourceA = sourceOf(kit, tailA);
+    const Buffer sourceB = sourceOf(kit, tailB);
+    const Buffer destinationA = destinationOf(kit);
+    const Buffer destinationB = destinationOf(kit);
+    const std::vector<std::byte> zeroes(kTail, std::byte{ 0 });
+    const Buffer outA = kit.buffer(kTail, Memory::Gpu, BufferUsage::ShaderWrite, zeroes);
+    const Buffer outB = kit.buffer(kTail, Memory::Gpu, BufferUsage::ShaderWrite, zeroes);
+    const auto copied = [](Buffer buffer) {
+        return BufferBarrier{
+            .buffer = buffer, .srcStage = Stage::Copy, .srcAccess = Access::CopyWrite, .dstStage = Stage::ComputeShader, .dstAccess = Access::ShaderRead
+        };
+    };
+    const auto consume = [&](CommandList list, Buffer destination, Buffer out) {
+        oracles.copyOn(list, kit.device.address(destination, kTailOffset), kit.device.address(out), static_cast<uint32_t>(kTail / 16));
+    };
+    const auto head = [&](Buffer out, size_t size) {
+        const std::vector<std::byte> bytes = kit.readBuffer(out);
+        return std::vector<std::byte>(bytes.begin(), bytes.begin() + static_cast<std::ptrdiff_t>(size));
+    };
+    SECTION("the copy in the same encoder")
+    {
+        CommandList list = kit.list(QueueType::Graphics, "test.list");
+        list.copyBuffer(sourceA, 0, destinationA, 0, kCopyBytes);
+        list.barrier({}, std::array{ copied(destinationA) });
+        consume(list, destinationA, outA);
+        kit.run(std::array{ list });
+        CHECK(head(outA, tailA.size()) == tailA);
+    }
+    SECTION("the copy in an earlier list, the encoder holding an unrelated fill")
+    {
+        CommandList producer = kit.list(QueueType::Graphics, "test.producer");
+        producer.copyBuffer(sourceA, 0, destinationA, 0, kCopyBytes);
+        CommandList consumer = kit.list(QueueType::Graphics, "test.consumer");
+        consumer.fillBuffer(outB, 0, kTail, 0);
+        consumer.barrier({}, std::array{ copied(destinationA) });
+        consume(consumer, destinationA, outA);
+        kit.run(std::array{ producer, consumer });
+        CHECK(head(outA, tailA.size()) == tailA);
+    }
+    SECTION("copies in an earlier list and in the same encoder")
+    {
+        CommandList producer = kit.list(QueueType::Graphics, "test.producer");
+        producer.copyBuffer(sourceA, 0, destinationA, 0, kCopyBytes);
+        CommandList consumer = kit.list(QueueType::Graphics, "test.consumer");
+        consumer.copyBuffer(sourceB, 0, destinationB, 0, kCopyBytes);
+        consumer.barrier({}, std::array{ copied(destinationA), copied(destinationB) });
+        consume(consumer, destinationA, outA);
+        consume(consumer, destinationB, outB);
+        kit.run(std::array{ producer, consumer });
+        CHECK(head(outA, tailA.size()) == tailA);
+        CHECK(head(outB, tailB.size()) == tailB);
+    }
+}

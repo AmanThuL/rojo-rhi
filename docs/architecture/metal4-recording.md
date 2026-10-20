@@ -148,15 +148,15 @@ destinations `D_open`). A batch (T, U, V') recorded while the open encoder holds
 `S_open` and the encoder's part of U inside `D_open`, has the encoder-level form: it is held back
 and emitted as `barrierAfterEncoderStages` just before the encoder's next command in a destination
 stage, and U outside the encoder joins the pending barrier. If the encoder closes first, the held
-barrier joins the pending one. Any other batch closes an open encoder that holds work and joins the
-pending barrier. A compute encoder that opens with D inside its stages first emits
-`barrierAfterQueueStages(P, D, V)`, records what that covered and removes those stages from D; a
-clear's render encoder emits only the fragment part of D and leaves the other render stages owed. A
-stage the opening barrier held back but the encoder ran no command in returns to the pending barrier
-when it closes. The condition is stricter than "work since the last queue-level barrier" because a
-source stage that the opening barrier did not cover may name work of an earlier list, which an
-encoder-level barrier cannot order. The first barrier after a list's first encoder opens is
-therefore queue-level, and repeated barriers settle on the encoder-level form.
+barrier joins the pending one. An open compute encoder whose opening covered nothing and that ran no
+command in U's stages keeps the batch as its opening barrier: `barrierAfterQueueStages(T, U, V')` at
+once, for earlier encoders, plus the held encoder-level form. Any other batch closes an open encoder
+that holds work and joins the pending barrier. A compute encoder that opens with D inside its stages
+first emits `barrierAfterQueueStages(P, D, V)`, records what that covered and removes those stages
+from D; a clear's render encoder emits only the fragment part of D and leaves the other render
+stages owed. A stage it held back in which the encoder ran no command returns to the pending barrier
+at its close. A source outside `S_open` may name an earlier list's work, which only a queue-level
+barrier orders.
 
 A barrier still pending at `end` is carried to later lists by the list's last encoder, still open
 then (a pass's lingers), when P lies inside `S_open` and it ran a command in a stage of `D_open`:

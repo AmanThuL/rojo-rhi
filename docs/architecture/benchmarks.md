@@ -222,6 +222,11 @@ overhead and not a defect of the harness. In particular:
 - `Copy` on a Graphics list lowers to `Blit | Dispatch | Fragment` on Metal 4, so that a copy waits
   and signals for every stage that may touch its buffers; N's copy is a blit alone. The wider stage
   set is measured overhead.
+- C6's barrier after its fill stays on the fill's compute encoder, which has run no dispatch: R
+  emits `barrierAfterQueueStages` there at once, for earlier lists' copies, and the encoder-level
+  barrier before the first dispatch, so its frame opens one compute encoder, as N's does, where it
+  opened two. N's barrier after its fill is encoder-level only; the queue-level one is measured
+  overhead. The per-repetition count is unchanged.
 - Allocator resets count in `nativeHostCalls`, outside every timed window and outside every
   per-operation count, though inside the composed frame's per-frame count; they are not native-call
   targets.

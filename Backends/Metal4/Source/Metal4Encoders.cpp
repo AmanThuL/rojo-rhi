@@ -86,6 +86,31 @@ namespace rojoRHI::metal4 {
     }
 
     //==================================================================================================================
+    bool Encoders::barrierInOpen(core::CommandListCore& list, MTL::Stages source, MTL::Stages destination, MTL4::VisibilityOptions visibility)
+    {
+        if (m_kind != EncoderKind::Compute || m_kernelsOnly || m_barriers.openDestination != 0)
+        {
+            return false;
+        }
+        // stages() reads the stages the encoder's commands ran in; it records nothing. A command already run in a destination
+        // stage lies before the barrier, so the pair could not stand for an opening barrier there.
+        if ((m_compute->stages() & destination) != 0)
+        {
+            return false;
+        }
+        // The queue-level barrier orders only earlier encoders' work, and Metal may apply it earlier in the encoder, which
+        // only waits more; the encoder-level part orders the encoder's own work before its next command in `destination`.
+        m_compute->barrierAfterQueueStages(source, destination, visibility);
+        core::noteNativeCall(list);
+        ++list.counts.nativeBarriers;
+        m_barriers.openSource = source;
+        m_barriers.openDestination = destination;
+        m_barriers.openVisibility = visibility;
+        m_barriers.defer(source, destination, visibility);
+        return true;
+    }
+
+    //==================================================================================================================
     MTL4::RenderCommandEncoder* Encoders::openRender(core::CommandListCore& list, ListState& state, const MTL4::RenderPassDescriptor* descriptor)
     {
         if (m_lingering)
