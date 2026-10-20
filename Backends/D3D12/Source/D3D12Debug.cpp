@@ -267,8 +267,8 @@ namespace rojoRHI::d3d12 {
         {
             return;
         }
-        reportBreadcrumbs(*data);
-        reportPageFault(*data);
+        reportBreadcrumbs(*data.get());
+        reportPageFault(*data.get());
     }
 
     //==================================================================================================================
