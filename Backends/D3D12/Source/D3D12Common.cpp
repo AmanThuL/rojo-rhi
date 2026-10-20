@@ -26,10 +26,16 @@ namespace rojoRHI::d3d12 {
         class WaitEvent
         {
           public:
+            //==========================================================================================================
             WaitEvent() = default;
+
+            //==========================================================================================================
             WaitEvent(const WaitEvent&) = delete;
+
+            //==========================================================================================================
             WaitEvent& operator=(const WaitEvent&) = delete;
 
+            //==========================================================================================================
             ~WaitEvent()
             {
                 // An armed event stays open: closing it would let the fence signal whatever handle reuses its value.
@@ -39,6 +45,7 @@ namespace rojoRHI::d3d12 {
                 }
             }
 
+            //==========================================================================================================
             /// Returns the event, made on the first call; logs and aborts, in every build, when none can be made for `what`.
             HANDLE get(std::string_view what)
             {
@@ -54,6 +61,7 @@ namespace rojoRHI::d3d12 {
                 return m_event;
             }
 
+            //==========================================================================================================
             /// Records that a wait timed out, so an arming of the event may never be signalled before the thread exits.
             void leaveArmed()
             {
