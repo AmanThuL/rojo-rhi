@@ -76,6 +76,7 @@ namespace {
     class MessageWatch
     {
       public:
+        //==============================================================================================================
         /// Starts counting the messages `device` stores from now on.
         explicit MessageWatch(ID3D12Device12* device)
         {
@@ -85,6 +86,7 @@ namespace {
             }
         }
 
+        //==============================================================================================================
         /// Returns the messages at warning severity or above stored since the watch started, and lists them for the log.
         uint64_t warnings()
         {
@@ -112,6 +114,7 @@ namespace {
             return count;
         }
 
+        //==============================================================================================================
         /// Releases the info queue, and with it the queue's reference to the device.
         void reset()
         {
