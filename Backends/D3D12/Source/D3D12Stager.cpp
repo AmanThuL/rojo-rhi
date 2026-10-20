@@ -8,6 +8,7 @@
 #include <rojoRHI/RHI.h>
 
 #include "Base/Assert.h"
+#include "Base/Log.h"
 #include "Core/Counters.h"
 #include "D3D12Common.h"
 #include "D3D12Debug.h"
@@ -16,6 +17,7 @@
 #include <algorithm>
 #include <cstddef>
 #include <cstdint>
+#include <cstdlib>
 #include <cstring>
 #include <format>
 #include <mutex>
@@ -82,6 +84,63 @@ namespace rojoRHI::d3d12 {
             staging.host = static_cast<std::byte*>(mapped);
             return staging;
         }
+
+        //==============================================================================================================
+        /// Unmaps the staging buffer of `staging`, if it has one, before its release.
+        void unmap(Staging& staging)
+        {
+            if (staging.buffer)
+            {
+                staging.buffer->Unmap(0, nullptr);
+            }
+        }
+
+        //==============================================================================================================
+        /// Records into `list` the copy of each non-empty entry of `subresources` from `staging`, laid out as `footprints`
+        /// says, into the same subresource of `destination`, then the barrier that moves every subresource of `destination`
+        /// from COPY_DEST to SHADER_RESOURCE.
+        void recordTexture(
+            ID3D12GraphicsCommandList9* list,
+            ID3D12Resource* destination,
+            ID3D12Resource* staging,
+            std::span<const SubresourceData> subresources,
+            std::span<const D3D12_PLACED_SUBRESOURCE_FOOTPRINT> footprints
+        )
+        {
+            for (size_t index = 0; index < subresources.size(); ++index)
+            {
+                if (subresources[index].bytes.empty())
+                {
+                    continue;
+                }
+                D3D12_TEXTURE_COPY_LOCATION target = {};
+                target.pResource = destination;
+                target.Type = D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX;
+                target.SubresourceIndex = static_cast<UINT>(index);
+                D3D12_TEXTURE_COPY_LOCATION source = {};
+                source.pResource = staging;
+                source.Type = D3D12_TEXTURE_COPY_TYPE_PLACED_FOOTPRINT;
+                source.PlacedFootprint = footprints[index];
+                list->CopyTextureRegion(&target, 0, 0, 0, &source, nullptr);
+            }
+            // One barrier over every subresource, empty ones included, so none is left in COPY_DEST: the texture starts in
+            // Layout::ShaderRead, which the generic SHADER_RESOURCE layout serves on direct and compute queues alike.
+            D3D12_TEXTURE_BARRIER barrier = {};
+            barrier.SyncBefore = D3D12_BARRIER_SYNC_COPY;
+            barrier.SyncAfter = D3D12_BARRIER_SYNC_NONE;
+            barrier.AccessBefore = D3D12_BARRIER_ACCESS_COPY_DEST;
+            barrier.AccessAfter = D3D12_BARRIER_ACCESS_NO_ACCESS;
+            barrier.LayoutBefore = D3D12_BARRIER_LAYOUT_COPY_DEST;
+            barrier.LayoutAfter = D3D12_BARRIER_LAYOUT_SHADER_RESOURCE;
+            barrier.pResource = destination;
+            barrier.Subresources.IndexOrFirstMipLevel = kAllSubresources;
+            barrier.Flags = D3D12_TEXTURE_BARRIER_FLAG_NONE;
+            D3D12_BARRIER_GROUP group = {};
+            group.Type = D3D12_BARRIER_TYPE_TEXTURE;
+            group.NumBarriers = 1;
+            group.pTextureBarriers = &barrier;
+            list->Barrier(1, &group);
+        }
     } // namespace
 
     //==================================================================================================================
@@ -129,13 +188,15 @@ namespace rojoRHI::d3d12 {
             return std::unexpected(std::move(staging.error()));
         }
         std::memcpy(staging->host, bytes.data(), bytes.size());
-        if (Result<void> opened = reset(impl); !opened)
+        Result<void> copied = reset(impl);
+        if (copied)
         {
-            return opened;
+            m_list->CopyBufferRegion(destination, 0, staging->buffer.get(), 0, bytes.size());
+            copied = submit(impl);
         }
-        m_list->CopyBufferRegion(destination, 0, staging->buffer.get(), 0, bytes.size());
-        // The staging buffer is released after `submit` waited for the copy.
-        return submit(impl);
+        // `submit` waited for the copy, or failed before the list ran, so the staging buffer is free to go.
+        unmap(*staging);
+        return copied;
     }
 
     //==================================================================================================================
@@ -206,45 +267,14 @@ namespace rojoRHI::d3d12 {
                 }
             }
         }
-        if (Result<void> opened = reset(impl); !opened)
+        Result<void> copied = reset(impl);
+        if (copied)
         {
-            return opened;
+            recordTexture(m_list.get(), destination, staging.buffer.get(), subresources, footprints);
+            copied = submit(impl);
         }
-        for (UINT index = 0; index < count; ++index)
-        {
-            if (subresources[index].bytes.empty())
-            {
-                continue;
-            }
-            D3D12_TEXTURE_COPY_LOCATION target = {};
-            target.pResource = destination;
-            target.Type = D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX;
-            target.SubresourceIndex = index;
-            D3D12_TEXTURE_COPY_LOCATION source = {};
-            source.pResource = staging.buffer.get();
-            source.Type = D3D12_TEXTURE_COPY_TYPE_PLACED_FOOTPRINT;
-            source.PlacedFootprint = footprints[index];
-            m_list->CopyTextureRegion(&target, 0, 0, 0, &source, nullptr);
-        }
-        // One barrier over every subresource, empty ones included, so none is left in COPY_DEST: the texture starts in
-        // Layout::ShaderRead, which the generic SHADER_RESOURCE layout serves on direct and compute queues alike.
-        D3D12_TEXTURE_BARRIER barrier = {};
-        barrier.SyncBefore = D3D12_BARRIER_SYNC_COPY;
-        barrier.SyncAfter = D3D12_BARRIER_SYNC_NONE;
-        barrier.AccessBefore = D3D12_BARRIER_ACCESS_COPY_DEST;
-        barrier.AccessAfter = D3D12_BARRIER_ACCESS_NO_ACCESS;
-        barrier.LayoutBefore = D3D12_BARRIER_LAYOUT_COPY_DEST;
-        barrier.LayoutAfter = D3D12_BARRIER_LAYOUT_SHADER_RESOURCE;
-        barrier.pResource = destination;
-        barrier.Subresources.IndexOrFirstMipLevel = kAllSubresources;
-        barrier.Flags = D3D12_TEXTURE_BARRIER_FLAG_NONE;
-        D3D12_BARRIER_GROUP group = {};
-        group.Type = D3D12_BARRIER_TYPE_TEXTURE;
-        group.NumBarriers = 1;
-        group.pTextureBarriers = &barrier;
-        m_list->Barrier(1, &group);
-        // The staging buffer is released after `submit` waited for the copies.
-        return submit(impl);
+        unmap(staging);
+        return copied;
     }
 
     //==================================================================================================================
@@ -287,6 +317,15 @@ namespace rojoRHI::d3d12 {
         core::DeviceCounts::add(impl.core.counts().nativeSubmitCalls);
         if (FAILED(signalled))
         {
+            // The list may still run, and nothing can wait for it: releasing its staging buffer or resetting its allocator
+            // then is undefined. Only a removed device, whose work no longer runs, returns the error.
+            if (!deviceRemoved(signalled))
+            {
+                ROJORHI_LOG_ERROR(
+                    "ID3D12CommandQueue::Signal for {} failed with HRESULT 0x{:08X} after its copy was submitted", kQueueLabel, hresultBits(signalled)
+                );
+                std::abort();
+            }
             return std::unexpected(failure(impl, signalled, std::format("ID3D12CommandQueue::Signal for {}", kQueueLabel)));
         }
         m_value = value;

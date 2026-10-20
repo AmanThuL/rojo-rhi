@@ -52,6 +52,33 @@ namespace {
         g_messages.emplace_back(message);
     }
 
+    /// Collects the library's warnings and errors into `g_messages`, emptied first, while it lives, and removes the callback
+    /// when it goes, however the case ends.
+    class MessageCollection
+    {
+      public:
+        MessageCollection();
+        ~MessageCollection();
+        MessageCollection(const MessageCollection&) = delete;
+        MessageCollection& operator=(const MessageCollection&) = delete;
+    };
+
+    //==================================================================================================================
+    MessageCollection::MessageCollection()
+    {
+        {
+            const std::lock_guard lock(g_messagesMutex);
+            g_messages.clear();
+        }
+        setMessageCallback(collectMessage, nullptr);
+    }
+
+    //==================================================================================================================
+    MessageCollection::~MessageCollection()
+    {
+        setMessageCallback(nullptr, nullptr);
+    }
+
     //==================================================================================================================
     /// Returns `size` bytes counting up from `seed`, wrapping at 256.
     std::vector<std::byte> pattern(size_t size, uint32_t seed)
@@ -251,11 +278,7 @@ TEST_CASE("a BC1 texture's block rows read back", "[d3d12]")
 //======================================================================================================================
 TEST_CASE("an empty subresource is skipped and the texture still leaves COPY_DEST", "[d3d12]")
 {
-    {
-        const std::lock_guard lock(g_messagesMutex);
-        g_messages.clear();
-    }
-    setMessageCallback(collectMessage, nullptr);
+    const MessageCollection collecting;
     Result<Device> created = createDevice();
     REQUIRE(created.has_value());
     DeviceImpl& impl = DeviceImpl::of(*created);
@@ -270,7 +293,6 @@ TEST_CASE("an empty subresource is skipped and the texture still leaves COPY_DES
         CHECK(test::readNativeTexture(impl, texture.get(), 1, D3D12_BARRIER_LAYOUT_SHADER_RESOURCE).size() == 4 * 4 * 4);
     }
     destroyDevice(*created);
-    setMessageCallback(nullptr, nullptr);
     const std::lock_guard lock(g_messagesMutex);
     std::string reported;
     for (const std::string& message : g_messages)

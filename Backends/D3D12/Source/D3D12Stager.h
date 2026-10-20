@@ -58,7 +58,8 @@ namespace rojoRHI::d3d12 {
         Result<void> reset(DeviceImpl& impl);
 
         /// Closes the list, executes it on the upload queue, signals the next fence value and waits for it, then reports a
-        /// removed device. The caller holds `m_mutex` and has recorded into the list since its `Reset`.
+        /// removed device. A signal that fails on a device that is not removed is logged and aborts, in every build, since the
+        /// list may still run. The caller holds `m_mutex` and has recorded into the list since its `Reset`.
         Result<void> submit(DeviceImpl& impl);
 
         std::mutex m_mutex;

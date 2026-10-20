@@ -51,14 +51,16 @@ namespace rojoRHI::test {
         }
 
         //==============================================================================================================
-        /// Closes the list of `shot`, executes it, signals its fence with 1 and waits for the value.
-        void runAndWait(OneShot& shot)
+        /// Closes the list of `shot`, executes it, signals its fence with 1 and waits for the value, then requires that
+        /// `device`, which a removal would complete the wait for at once, was not removed.
+        void runAndWait(ID3D12Device12* device, OneShot& shot)
         {
             REQUIRE(SUCCEEDED(shot.list->Close()));
             ID3D12CommandList* const lists[] = { shot.list.get() };
             shot.queue->ExecuteCommandLists(1, lists);
             REQUIRE(SUCCEEDED(shot.queue->Signal(shot.fence.get(), 1)));
             REQUIRE(d3d12::waitForFence(shot.fence.get(), 1, UINT64_MAX, kLabel));
+            REQUIRE(SUCCEEDED(device->GetDeviceRemovedReason()));
         }
 
         //==============================================================================================================
@@ -125,7 +127,7 @@ namespace rojoRHI::test {
         d3d12::Com<ID3D12Resource> readback = createReadback(device, size);
         OneShot shot = open(device);
         shot.list->CopyBufferRegion(readback.get(), 0, buffer, 0, size);
-        runAndWait(shot);
+        runAndWait(device, shot);
         void* mapped = nullptr;
         const D3D12_RANGE read = { 0, static_cast<SIZE_T>(size) };
         REQUIRE(SUCCEEDED(readback->Map(0, &read, &mapped)));
@@ -163,7 +165,7 @@ namespace rojoRHI::test {
         source.SubresourceIndex = subresource;
         shot.list->CopyTextureRegion(&destination, 0, 0, 0, &source, nullptr);
         recordBarrier(shot.list.get(), layoutBarrier(texture, subresource, D3D12_BARRIER_LAYOUT_COPY_SOURCE, layout));
-        runAndWait(shot);
+        runAndWait(device, shot);
         void* mapped = nullptr;
         const D3D12_RANGE read = { 0, static_cast<SIZE_T>(total) };
         REQUIRE(SUCCEEDED(readback->Map(0, &read, &mapped)));
