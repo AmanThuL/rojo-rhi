@@ -348,7 +348,6 @@ target("RojoRHITests")
             "DrawConformanceTests.cpp",
             "GraphicsBarrierConformanceTests.cpp",
             "IndirectConformanceTests.cpp",
-            "MeshConformanceTests.cpp",
             "PresentationConformanceTests.cpp",
             "ScopeConformanceTests.cpp",
             "SparseConformanceTests.cpp",

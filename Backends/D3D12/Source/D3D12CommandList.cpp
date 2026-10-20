@@ -112,24 +112,6 @@ namespace rojoRHI {
     }
 
     //==================================================================================================================
-    void CommandList::drawIndirect(Addr, uint32_t, Addr)
-    {
-        d3d12::notImplemented("CommandList::drawIndirect");
-    }
-
-    //==================================================================================================================
-    void CommandList::drawIndexedIndirect(Buffer, IndexType, Addr, uint32_t, Addr)
-    {
-        d3d12::notImplemented("CommandList::drawIndexedIndirect");
-    }
-
-    //==================================================================================================================
-    void CommandList::drawMeshTasksIndirect(Addr, uint32_t, Addr)
-    {
-        d3d12::notImplemented("CommandList::drawMeshTasksIndirect");
-    }
-
-    //==================================================================================================================
     void CommandList::upscale(Upscaler, const UpscaleParams&)
     {
         d3d12::notImplemented("CommandList::upscale");

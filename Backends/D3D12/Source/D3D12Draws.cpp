@@ -1,6 +1,6 @@
 //----------------------------------------------------------------------------------------------------------------------
 /// @file D3D12Draws.cpp
-/// @brief Implements the direct draw entries for the D3D12 backend: the graphics flush, the draw identifier and the draw.
+/// @brief Implements the direct draw entries for the D3D12 backend and the index buffer every indexed draw binds.
 //----------------------------------------------------------------------------------------------------------------------
 
 #include "D3D12Device.h"
@@ -19,6 +19,38 @@
 #include <cstdint>
 
 namespace rojoRHI {
+    namespace d3d12 {
+        namespace {
+            //==========================================================================================================
+            /// Returns the view of the whole of `buffer` as indices of `type`, from offset 0: the indices of `type` that fit in
+            /// the buffer and in the view's 32-bit size.
+            D3D12_INDEX_BUFFER_VIEW indexView(const BufferPayload& buffer, IndexType type)
+            {
+                const uint32_t indexSize = type == IndexType::UInt16 ? 2 : 4;
+                const auto size = static_cast<uint32_t>(std::min<uint64_t>(buffer.size, UINT32_MAX));
+                D3D12_INDEX_BUFFER_VIEW view = {};
+                view.BufferLocation = buffer.base;
+                view.SizeInBytes = size - size % indexSize;
+                view.Format = type == IndexType::UInt16 ? DXGI_FORMAT_R16_UINT : DXGI_FORMAT_R32_UINT;
+                return view;
+            }
+        } // namespace
+
+        //==============================================================================================================
+        void applyIndexBuffer(CommandListImpl& list, const BufferPayload& buffer, IndexType type)
+        {
+            const D3D12_INDEX_BUFFER_VIEW view = indexView(buffer, type);
+            D3D12_INDEX_BUFFER_VIEW& held = list.state.dynamic.indexBuffer;
+            if (held.BufferLocation == view.BufferLocation && held.SizeInBytes == view.SizeInBytes && held.Format == view.Format)
+            {
+                return;
+            }
+            list.state.list->IASetIndexBuffer(&view);
+            core::noteNativeCall(list.core);
+            held = view;
+        }
+    } // namespace d3d12
+
     namespace {
         //==============================================================================================================
         /// Brings the graphics side of `list` to the caller's binding and writes 0 to the draw-record constant `b1`, which
@@ -34,34 +66,6 @@ namespace rojoRHI {
                 core::noteNativeCall(list.core);
                 binding.drawIdDirty = false;
             }
-        }
-
-        //==============================================================================================================
-        /// Returns the view of the whole of `buffer` as indices of `type`, from offset 0: the indices of `type` that fit in
-        /// the buffer and in the view's 32-bit size.
-        D3D12_INDEX_BUFFER_VIEW indexView(const d3d12::BufferPayload& buffer, IndexType type)
-        {
-            const uint32_t indexSize = type == IndexType::UInt16 ? 2 : 4;
-            const auto size = static_cast<uint32_t>(std::min<uint64_t>(buffer.size, UINT32_MAX));
-            D3D12_INDEX_BUFFER_VIEW view = {};
-            view.BufferLocation = buffer.base;
-            view.SizeInBytes = size - size % indexSize;
-            view.Format = type == IndexType::UInt16 ? DXGI_FORMAT_R16_UINT : DXGI_FORMAT_R32_UINT;
-            return view;
-        }
-
-        //==============================================================================================================
-        /// Sets `view` unless the native list of `list` holds it.
-        void applyIndexBuffer(CommandListImpl& list, const D3D12_INDEX_BUFFER_VIEW& view)
-        {
-            D3D12_INDEX_BUFFER_VIEW& held = list.state.dynamic.indexBuffer;
-            if (held.BufferLocation == view.BufferLocation && held.SizeInBytes == view.SizeInBytes && held.Format == view.Format)
-            {
-                return;
-            }
-            list.state.list->IASetIndexBuffer(&view);
-            core::noteNativeCall(list.core);
-            held = view;
         }
     } // namespace
 
@@ -95,7 +99,7 @@ namespace rojoRHI {
         // A record's payload is fixed from creation to retirement, so it is read with one load and no lock (ADR 0020).
         const auto& buffer = *static_cast<const d3d12::BufferPayload*>(list.core.device->pool<Buffer>().native(indices));
         // The view covers the whole buffer, so draws of one buffer share it and firstIndex is the draw's start index.
-        applyIndexBuffer(list, indexView(buffer, type));
+        d3d12::applyIndexBuffer(list, buffer, type);
         list.state.list->DrawIndexedInstanced(count, instances, firstIndex, baseVertex, firstInstance);
         core::noteNativeCall(list.core);
     }

@@ -25,6 +25,7 @@ namespace rojoRHI {
 } // namespace rojoRHI
 
 namespace rojoRHI::d3d12 {
+    struct BufferPayload;
     struct PipelineState;
 
     /// The root signature the compute side of a list holds: the global one of caller pipelines, or the backend kernels' one.
@@ -145,4 +146,9 @@ namespace rojoRHI::d3d12 {
     /// and the root block after `setRoot`. A list with no root binds none. It writes no draw-record constant: a direct draw
     /// writes it, and an indirect draw's command signature does. A graphics or mesh pipeline must be bound.
     void flushGraphics(CommandListImpl& list);
+
+    /// Sets the view of the whole of `buffer`, from offset 0, as indices of `type` on `list`, unless the native list holds
+    /// that view: the indices of `type` that fit in the buffer and in the view's 32-bit size. Every indexed draw, direct or
+    /// indirect, binds its buffer here, so draws of one buffer share the view.
+    void applyIndexBuffer(CommandListImpl& list, const BufferPayload& buffer, IndexType type);
 } // namespace rojoRHI::d3d12
