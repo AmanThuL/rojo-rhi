@@ -48,6 +48,55 @@ namespace rojoRHI {
             }
             metal4::applyDrawRecord(list, draw.zeroRecord);
         }
+
+        //==============================================================================================================
+        /// Sends a direct draw of `instances` instances, with base instance 0, inside the pool the device asks for: the form
+        /// with the instance count. Out of line, so the common draw, one instance and no pool, stays small enough for link-time
+        /// optimization to inline into the caller.
+        [[gnu::noinline]] void sendDraw(CommandListImpl& list, MTL4::RenderCommandEncoder* encoder, uint32_t vertices, uint32_t instances, uint32_t firstVertex)
+        {
+            // The Metal validation layer autoreleases in a draw it checks, so the draw holds a pool, as a kernel dispatch does.
+            const metal4::CommandPool pool(list.state.commandPools);
+            if (instances == 1)
+            {
+                encoder->drawPrimitives(list.draw.topology, firstVertex, vertices);
+            }
+            else
+            {
+                encoder->drawPrimitives(list.draw.topology, firstVertex, vertices, instances);
+            }
+        }
+
+        //==============================================================================================================
+        /// Sends an indexed draw of `count` indices of `type` at `address`, `length` bytes, inside the pool the device asks for,
+        /// in the shortest form that says the same with base instance 0: both values with a base vertex other than 0, the
+        /// instance count for several instances, else neither. Out of line, as `sendDraw` is.
+        [[gnu::noinline]] void sendIndexed(
+            CommandListImpl& list,
+            MTL4::RenderCommandEncoder* encoder,
+            MTL::IndexType type,
+            uint32_t count,
+            uint64_t address,
+            uint64_t length,
+            uint32_t instances,
+            int32_t baseVertex
+        )
+        {
+            // The validation layer autoreleases in a draw it checks.
+            const metal4::CommandPool pool(list.state.commandPools);
+            if (baseVertex != 0)
+            {
+                encoder->drawIndexedPrimitives(list.draw.topology, count, type, address, length, instances, baseVertex, 0);
+            }
+            else if (instances == 1)
+            {
+                encoder->drawIndexedPrimitives(list.draw.topology, count, type, address, length);
+            }
+            else
+            {
+                encoder->drawIndexedPrimitives(list.draw.topology, count, type, address, length, instances);
+            }
+        }
     } // namespace
 
     //==================================================================================================================
@@ -80,19 +129,15 @@ namespace rojoRHI {
             return;
         }
         MTL4::RenderCommandEncoder* encoder = metal4::ensureRender(list);
+        // Base instance 0: rojoRHI::drawId reads it in the vertex stage, and firstInstance is invisible to shaders. The
+        // shortest form that says so is sent: one instance, else the instance count, with base instance 0 either way.
+        if (instances == 1 && !list.state.commandPools) [[likely]]
         {
-            // The Metal validation layer autoreleases in a draw it checks, so the draw holds a pool, as a kernel dispatch does.
-            const metal4::CommandPool pool(list.state.commandPools);
-            // Base instance 0: rojoRHI::drawId reads it in the vertex stage, and firstInstance is invisible to shaders. The
-            // shortest form that says so is sent: one instance, else the instance count, with base instance 0 either way.
-            if (instances == 1)
-            {
-                encoder->drawPrimitives(list.draw.topology, firstVertex, vertices);
-            }
-            else
-            {
-                encoder->drawPrimitives(list.draw.topology, firstVertex, vertices, instances);
-            }
+            encoder->drawPrimitives(list.draw.topology, firstVertex, vertices);
+        }
+        else
+        {
+            sendDraw(list, encoder, vertices, instances, firstVertex);
         }
         core::noteNativeCall(list.core);
         list.encoders.markWork();
@@ -115,24 +160,16 @@ namespace rojoRHI {
         // holds the buffer's GPU address and length, so the draw sends the buffer no message.
         const metal4::BufferPayload& buffer = *metal4::bufferPayload(*list.core.device, indices);
         const uint64_t offset = uint64_t{ firstIndex } * (type == IndexType::UInt16 ? 2 : 4);
+        const MTL::IndexType native = metal4::indexType(type);
+        // One instance and base vertex 0 with no pool is the common draw, sent here in the short form; any other goes out of
+        // line.
+        if (instances == 1 && baseVertex == 0 && !list.state.commandPools) [[likely]]
         {
-            // The validation layer autoreleases in a draw it checks.
-            const metal4::CommandPool pool(list.state.commandPools);
-            // The shortest form that says the same is sent: one instance and base vertex 0, base vertex 0, or both values with
-            // base instance 0.
-            const MTL::IndexType native = metal4::indexType(type);
-            if (baseVertex != 0)
-            {
-                encoder->drawIndexedPrimitives(list.draw.topology, count, native, buffer.address + offset, buffer.length - offset, instances, baseVertex, 0);
-            }
-            else if (instances == 1)
-            {
-                encoder->drawIndexedPrimitives(list.draw.topology, count, native, buffer.address + offset, buffer.length - offset);
-            }
-            else
-            {
-                encoder->drawIndexedPrimitives(list.draw.topology, count, native, buffer.address + offset, buffer.length - offset, instances);
-            }
+            encoder->drawIndexedPrimitives(list.draw.topology, count, native, buffer.address + offset, buffer.length - offset);
+        }
+        else
+        {
+            sendIndexed(list, encoder, native, count, buffer.address + offset, buffer.length - offset, instances, baseVertex);
         }
         core::noteNativeCall(list.core);
         list.encoders.markWork();

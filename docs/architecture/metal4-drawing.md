@@ -183,6 +183,8 @@ before it.
 - Every draw skips a zero count, marks the encoder as holding work, and records the stages it ran
   for the barrier lowering. Each native draw runs inside a `CommandPool`, since the validation
   layer autoreleases inside a draw; that is one pool per draw under the layer and none without it.
+  The common draw, one instance and base vertex 0 with no pool, is sent in the entry; any other
+  goes through an out-of-line helper, so link-time optimization inlines the entry into its caller.
 
 ## Compute binding and dispatches
 
