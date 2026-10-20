@@ -131,15 +131,18 @@ a non-zero `[native]` inventory, since hosted runners have no Metal 4 device.
 
 ## The commit timing seam
 
-The Metal 4 backend implements `Backends/Metal4/Source/CommitTiming.h`, a private header that no
-public header names. `rojoRHI::metal4::setCommitTiming(queue, callback, user)` makes every later
-commit of that queue carry `MTL4::CommitOptions` feedback that calls `callback` from Metal's
-completion thread with a `CommitTime` (queue, a per-queue serial counted from 1, start and end in
-seconds, and a failure flag); a null callback detaches, which does not cancel the reports of commits
-made before the detach, so the caller keeps `user` alive until that work completes. Those calls are
-not counted in the device's counters. The harness calls it from one file,
-`Benchmarks/Rojo/RojoGpuTiming.cpp`, under `ROJORHI_BENCH_BACKEND_METAL4`; on Null the R arm reports
-no GPU time.
+The Metal 4 backend implements `Backends/Metal4/Source/CommitTiming.h`, a private, test-only header
+that no public header names. `rojoRHI::metal4::setCommitTiming(queue, callback, user)` makes every
+later commit of that queue carry `MTL4::CommitOptions` feedback that calls `callback` from Metal's
+completion thread, so RojoRHI starts no thread (ADR 0013), with a `CommitTime` (queue, a per-queue
+serial counted from 1, start and end in seconds, and a failure flag); a null callback detaches,
+which does not cancel the reports of commits made before the detach, so the caller keeps `user`
+alive until that work completes. Those calls are not counted in the device's counters.
+`Queue::submit` makes exactly one commit per submission that names lists, and the backend commits
+nothing else on a caller's queue except the empty commit that `destroyDevice` drains with, which is
+never timed; the stager's internal queue is unreachable from the seam. The harness calls it from one
+file, `Benchmarks/Rojo/RojoGpuTiming.cpp`, under `ROJORHI_BENCH_BACKEND_METAL4`, and the `[metal4]`
+tests call it too; on Null the R arm reports no GPU time.
 
 ## The driver
 
@@ -229,12 +232,12 @@ overhead and not a defect of the harness. In particular:
 Where the Metal 4 backend departs from N today, each difference is measured overhead and not a
 defect:
 
-- Every native draw, dispatch, copy and fill runs in its own autorelease pool, and so do an
-  encoder's open and end and each timestamp written on a command buffer, which keeps a recording
-  thread's pool depth flat but costs a pool push and pop per command (issue #60 tracks the cost). A
-  pool is not a message to a command buffer, encoder, argument table or scaler, so it is no native
-  call and changes no count above; it shows only in CPU time, as do a new label string per list and
-  per pass and the pass descriptor configured for each encoder.
+- An encoder's open runs in an autorelease pool, as do a new label string per list and per pass and
+  the pass descriptor configured for each encoder. Every native draw, dispatch, copy and fill, the
+  end of a render encoder and each timestamp written on a command buffer run in a pool only when
+  the Metal validation layer wraps the device, so a run without the layer pays none per command.
+  A pool is not a message to a command buffer, encoder, argument table or scaler, so it is no
+  native call and changes no count above; it shows only in CPU time.
 - Every render pass of R is a timed scope, so C1 to C3 and C10 pay a debug group and two
   timestamps per frame that their N arms do not write; N mirrors them in C8 and the composed frame
   only, as the note registers.

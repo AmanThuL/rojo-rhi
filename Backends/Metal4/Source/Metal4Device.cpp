@@ -356,6 +356,7 @@ namespace rojoRHI {
         }
         auto impl = std::make_unique<DeviceImpl>(desc);
         impl->device = device;
+        impl->commandPools = metal4::commandsMayAutorelease(device);
         impl->timestamps.create(device);
         reportCapabilities(*impl);
         impl->core.setSurfaceCheck(metal4::isMetalLayer);

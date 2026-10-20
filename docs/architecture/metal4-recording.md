@@ -45,15 +45,20 @@ trailing encoder of the barrier lowering bind no table, since no shader runs on 
 Recording reads native objects only through `HandlePool::native` and the list's own state, never a
 pool record, which is read under a lock. A texture's type, pixel format, usage, mip and layer counts
 and extents come from the native texture's getters, and a format class comes from the
-`MTL::PixelFormat` through a backend switch (`formatOf`). Per-command paths open no pool and call no
-autoreleasing factory, except where the next paragraph says.
+`MTL::PixelFormat` through a backend switch (`formatOf`). Per-command paths call no autoreleasing
+factory, except where the next paragraph says.
 
-The Metal validation layer and the driver autorelease on some native calls: the layer on every
-dispatch it checks, the driver the first time it builds an internal blit pipeline for a copy shape.
-The copy entries, the native `fillBuffer`, every backend kernel dispatch, dispatch and draw
-therefore open an `AutoreleasePool` around their native call, as does the render path of a clear
-and the end of a render encoder. Barriers and debug
-groups open none. This is a runtime effect of the layer, so Release builds pay it too.
+The Metal validation layer autoreleases inside the native commands it checks. The copy entries, the
+native `fillBuffer`, every backend kernel dispatch, dispatch and draw, a command buffer's timestamp
+write and the end of a render encoder therefore open a `CommandPool` around their native call, which
+opens an `NS::AutoreleasePool` only when the device is wrapped by the layer
+(`DeviceImpl::commandPools`, found once at creation) and costs one untaken branch otherwise. The
+render path of a clear opens an `AutoreleasePool` always, since it calls the encoder factory.
+Barriers and debug groups open none. Without the layer the driver still autoreleases one object the
+first time a copy shape builds its internal blit pipeline, under `copyBuffer` or the native
+`fillBuffer`. Without `OBJC_DEBUG_MISSING_POOLS` the runtime installs a page for an object
+autoreleased with no pool, so a thread that holds no pool keeps that object until the thread exits;
+it does not accumulate, since the driver caches the pipeline and builds it once per shape.
 
 ## Copies
 
@@ -87,17 +92,18 @@ device's other objects. A failure is a `DriverFailure` naming the library or the
 `destroyDevice` releases the pipelines, then the library.
 
 A kernel run is `bindKernel` (set the pipeline unless the open encoder already has it, then the
-kernel table), the caller's bindings, and `dispatchKernel` (dispatch inside a pool, then set the
-list's table again). `Encoders::kernelPipeline` remembers the encoder's pipeline, whether a kernel's
-or the caller's compute pipeline, and is reset when an encoder opens or closes. A kernel leaves its
-own pipeline on the encoder, and the next `dispatch` sets the caller's again when it differs
-([drawing](metal4-drawing.md#compute-binding-and-dispatches)). The counted-draw kernels of a render
-pass run on a compute encoder that holds only kernels, through the batch form (`bindKernelBatch`,
-`dispatchKernelBatch`), which sets the kernel table once and does not set the list's table back
-([counted draws](metal4-drawing.md#counted-draws)). Parameters come from the frame arena through
-`core::bumpArenaPage`, which locks only to claim a page, and count as no frame data upload. Its bump
-into a page with room is inline, and the list's page keeps the GPU address read when the page was
-created, so a reservation or `uploadFrameData` makes no call and sends the page no message.
+kernel table), the caller's bindings, and `dispatchKernel` (dispatch inside a command pool, then set
+the list's table again). `Encoders::kernelPipeline` remembers the encoder's pipeline, whether a
+kernel's or the caller's compute pipeline, and is reset when an encoder opens or closes. A kernel
+leaves its own pipeline on the encoder, and the next `dispatch` sets the caller's again when it
+differs ([drawing](metal4-drawing.md#compute-binding-and-dispatches)). The counted-draw kernels of a
+render pass run on a compute encoder that holds only kernels, through the batch form
+(`bindKernelBatch`, `dispatchKernelBatch`), which sets the kernel table once and does not set the
+list's table back ([counted draws](metal4-drawing.md#counted-draws)). Parameters come from the frame
+arena through `core::bumpArenaPage`, which locks only to claim a page, and count as no frame data
+upload. Its bump into a page with room is inline, and the list's page keeps the GPU address read
+when the page was created, so a reservation or `uploadFrameData` makes no call and sends the page no
+message.
 
 The fill kernel writes one 32-bit word per thread, 64 threads per group, at most 2^31 words per
 dispatch. The pattern's bytes land in little-endian order.
@@ -198,9 +204,8 @@ no lock and a device that records no scope holds no heap. A scope past the slot'
 whose heap Metal refuses (Metal allows 32 counter heaps per process or on the system), writes no
 timestamp. A refusal holds until the slot's reuse, so while Metal keeps refusing, a frame makes one
 failed `newCounterHeap` per refused heap it needs (more only when threads race to create it). Metal
-autoreleases objects inside `writeTimestampIntoHeap` (an array, and strings under the validation
-layer), so each write runs inside an autorelease pool of its own; the render encoder's
-`writeTimestamp` autoreleases nothing and opens none.
+autoreleases objects inside `writeTimestampIntoHeap` under the validation layer, so each write runs
+inside a command pool; the render encoder's `writeTimestamp` autoreleases nothing and opens none.
 
 At the frame wait the core calls the scope-time hook once per queue with records. The first call of
 the frame resolves each heap the slot used, once, with `resolveCounterRange` inside a pool, and
@@ -275,16 +280,8 @@ record calls, and the carrier counts as an encoder; MetalFX's own encoders are n
 
 ## Commit timing
 
-`Backends/Metal4/Source/CommitTiming.h` declares a private, test-only seam that is not part of the
-public interface. `rojoRHI::metal4::setCommitTiming(queue, callback, user)` makes every later commit
-of `queue` carry `MTL4::CommitOptions` with a feedback handler that calls `callback` with a
-`CommitTime`: the queue, a serial counted per queue from 1, the GPU start and end in seconds and a
-failure flag. It runs on Metal's completion thread, so RojoRHI starts no thread (ADR 0013). A null
-callback detaches. The calls on the options are not native calls and are not counted.
-`Queue::submit` makes exactly one commit per submission that names lists, and the backend commits
-nothing else on a caller's queue except the empty commit that `destroyDevice` drains with, which is
-never timed. The stager's internal queue is unreachable from it. The benchmark harness is its user,
-as are the `[metal4]` tests.
+`Backends/Metal4/Source/CommitTiming.h` declares a private, test-only seam that times each commit
+of a queue; [the benchmark harness](benchmarks.md#the-commit-timing-seam) describes it.
 
 ## Tests
 

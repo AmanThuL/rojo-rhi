@@ -27,6 +27,59 @@ namespace rojoRHI::metal4 {
         NS::AutoreleasePool* m_pool = nullptr;
     };
 
+    /// The autorelease pools the calling thread has opened through `AutoreleasePool` and `CommandPool`. A recording entry that
+    /// opens no pool leaves the count unchanged. The count is the thread's own, so counting touches no shared cache line.
+    inline uint64_t& poolsOpened()
+    {
+        static thread_local uint64_t opened = 0;
+        return opened;
+    }
+
+    /// The pools the calling thread has opened through `CommandPool` alone: what the native commands open.
+    inline uint64_t& commandPoolsOpened()
+    {
+        static thread_local uint64_t opened = 0;
+        return opened;
+    }
+
+    /// An autorelease pool for one native command, opened only when `open` is true. The Metal validation layer autoreleases
+    /// objects inside the commands it checks, and without it those commands autorelease nothing, so a device passes whether
+    /// its commands may autorelease (`DeviceImpl::commandPools`, `commandsMayAutorelease`). With `open` false the object is one untaken branch. Entries that
+    /// call an autoreleasing factory use `AutoreleasePool`, which always opens one.
+    class CommandPool
+    {
+      public:
+        explicit CommandPool(bool open)
+        {
+            if (open)
+            {
+                m_pool = NS::AutoreleasePool::alloc()->init();
+                ++poolsOpened();
+                ++commandPoolsOpened();
+            }
+        }
+
+        ~CommandPool()
+        {
+            if (m_pool != nullptr)
+            {
+                m_pool->release();
+            }
+        }
+
+        CommandPool(const CommandPool&) = delete;
+        CommandPool& operator=(const CommandPool&) = delete;
+
+      private:
+        NS::AutoreleasePool* m_pool = nullptr;
+    };
+
+    /// Returns whether a native command may autorelease, which is every case but one: the device's class name is positively a
+    /// bare driver class, whose names start with "AGX" on Apple silicon. The validation layer replaces the device with a debug
+    /// class ("MTLDebugDevice"), and any other name, a capture or shader-validation wrapper or none at all, is treated as a
+    /// wrapper too, so detection fails closed and opens the pools. It reads the object, never the environment.
+    bool commandsMayAutorelease(const MTL::Device* device);
+
     /// Returns `text` as an autoreleased string, so the caller holds a pool. The text is copied first, because a view is not
     /// NUL-terminated.
     NS::String* makeString(std::string_view text);

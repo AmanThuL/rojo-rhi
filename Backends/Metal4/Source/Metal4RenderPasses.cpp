@@ -249,7 +249,7 @@ namespace rojoRHI {
             }
             {
                 // The validation layer autoreleases in a draw it checks, so each counted draw holds a pool, as a direct draw does.
-                const AutoreleasePool pool;
+                const CommandPool pool(list.state.commandPools);
                 switch (command.kind)
                 {
                 case PrefixKind::Execute:

@@ -192,5 +192,5 @@ namespace rojoRHI::metal4 {
 
     /// Dispatches `groups` threadgroups of `threads` threads of the kernel `bindKernelBatch` set, counting the call on `list`;
     /// the kernel table stays bound for the next kernel of the batch.
-    void dispatchKernelBatch(core::CommandListCore& list, MTL4::ComputeCommandEncoder* encoder, MTL::Size groups, MTL::Size threads);
+    void dispatchKernelBatch(core::CommandListCore& list, const ListState& state, MTL4::ComputeCommandEncoder* encoder, MTL::Size groups, MTL::Size threads);
 } // namespace rojoRHI::metal4

@@ -30,12 +30,15 @@ namespace rojoRHI::metal4 {
         std::vector<NS::String*> scopeLabels; ///< The label of each open scope's debug group, innermost last.
         /// The timestamp pair each open scope claimed, innermost last: the index of its begin entry, or `core::kNoTimestamp`.
         std::vector<uint32_t> scopeTimestamps;
+        /// True when each native command the list records opens a `CommandPool`: the device's `commandPools`, copied at creation
+        /// so a recording entry reads it from the list's own state.
+        bool commandPools = false;
         std::string scratch; ///< A NUL-terminated copy of a scope label, made before its string is.
 
         /// Creates the allocator, the command buffer, the argument table and the kernel table on `device`, binding the view
-        /// table at `viewTableAddress` to `buffer(1)` and the sampler table at `samplerTableAddress` to `buffer(2)` (ADR 0018).
-        /// On failure it releases what it created and names the object Metal did not make.
-        Result<void> create(MTL::Device* device, uint64_t viewTableAddress, uint64_t samplerTableAddress);
+        /// table at `viewTableAddress` to `buffer(1)` and the sampler table at `samplerTableAddress` to `buffer(2)` (ADR 0018). `perCommandPools` is stored as
+        /// the list's `commandPools`. On failure it releases what it created and names the object Metal did not make.
+        Result<void> create(MTL::Device* device, uint64_t viewTableAddress, uint64_t samplerTableAddress, bool perCommandPools);
 
         /// Releases every object that exists, in reverse order of creation, and clears each pointer. The caller holds an
         /// autorelease pool and no queue holds work that uses them.

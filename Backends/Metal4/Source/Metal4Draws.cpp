@@ -82,7 +82,7 @@ namespace rojoRHI {
         MTL4::RenderCommandEncoder* encoder = metal4::ensureRender(list);
         {
             // The Metal validation layer autoreleases in a draw it checks, so the draw holds a pool, as a kernel dispatch does.
-            const metal4::AutoreleasePool pool;
+            const metal4::CommandPool pool(list.state.commandPools);
             // Base instance 0: rojoRHI::drawId reads it in the vertex stage, and firstInstance is invisible to shaders.
             encoder->drawPrimitives(list.draw.topology, firstVertex, vertices, instances, 0);
         }
@@ -109,7 +109,7 @@ namespace rojoRHI {
         const uint64_t offset = uint64_t{ firstIndex } * (type == IndexType::UInt16 ? 2 : 4);
         {
             // The validation layer autoreleases in a draw it checks.
-            const metal4::AutoreleasePool pool;
+            const metal4::CommandPool pool(list.state.commandPools);
             encoder->drawIndexedPrimitives(
                 list.draw.topology, count, metal4::indexType(type), buffer.address + offset, buffer.length - offset, instances, baseVertex, 0
             );
@@ -134,7 +134,7 @@ namespace rojoRHI {
         const metal4::PipelineState& pipeline = *list.draw.pipeline;
         {
             // The validation layer autoreleases in a draw it checks.
-            const metal4::AutoreleasePool pool;
+            const metal4::CommandPool pool(list.state.commandPools);
             encoder->drawMeshThreadgroups(MTL::Size(x, y, z), pipeline.objectThreads, pipeline.meshThreads);
         }
         core::noteNativeCall(list.core);

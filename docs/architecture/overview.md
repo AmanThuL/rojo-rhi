@@ -62,9 +62,10 @@ default there, and `null`, the GPU-free Null backend and the default elsewhere. 
 the private base (the Debug-tier `ROJORHI_VU` check and the message sink) and `Source/Core/` the
 backend-neutral core every backend embeds; `Backends/Null/Source/` and `Backends/Metal4/Source/`
 implement the public entries over it, each one backend per build. `Backends/Metal4/MetalCpp/` holds
-the one metal-cpp implementation unit, the `RojoRHIMetalCpp` target, which the Metal 4 backend,
-`RojoRHILegacy` and `RojoRHIBench` link, so a host that links more than one has one definition of
-metal-cpp's tables. `Backends/Metal4/Kernels/` holds the MSL files of the backend's fill, clear and
+`MetalCppImpl.cpp`, the one unit that defines metal-cpp's class and selector tables: the
+`RojoRHIMetalCpp` target compiles it on macOS for any backend option, and the Metal 4 backend,
+`RojoRHILegacy` and `RojoRHIBench` link it, so a host that links more than one has one definition of
+each table. `Backends/Metal4/Kernels/` holds the MSL files of the backend's fill, clear and
 counted-draw kernels, which `xmake/kernels.lua` compiles on a `metal4` build into a library embedded
 in the binary; that build needs the Metal toolchain. [The Null backend](null-backend.md) describes
 both layers and what is implemented, [command recording](null-backend-recording.md) the recording

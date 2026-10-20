@@ -113,7 +113,7 @@ namespace rojoRHI {
             metal4::bindKernelBatch(list.core, list.state, list.encoders, kernel);
             list.state.kernelTable->setAddress(params, 0);
             core::noteNativeCall(list.core);
-            metal4::dispatchKernelBatch(list.core, encoder, groups, threads);
+            metal4::dispatchKernelBatch(list.core, list.state, encoder, groups, threads);
             list.encoders.markWork();
             list.encoders.barriers().merge(MTL::StageDispatch, reads, MTL4::VisibilityOptionDevice);
             if (split)
@@ -275,7 +275,7 @@ namespace rojoRHI {
             const metal4::PipelineState& pipeline = *list.draw.pipeline;
             {
                 // The validation layer autoreleases in a draw it checks.
-                const metal4::AutoreleasePool pool;
+                const metal4::CommandPool pool(list.state.commandPools);
                 encoder->drawMeshThreadgroups(record + offsetof(DrawMeshTasksIndirectArgs, x), pipeline.objectThreads, pipeline.meshThreads);
             }
             core::noteNativeCall(list.core);

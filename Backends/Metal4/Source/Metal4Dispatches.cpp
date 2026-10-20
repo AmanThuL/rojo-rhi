@@ -30,8 +30,8 @@ namespace rojoRHI {
         }
         MTL4::ComputeCommandEncoder* encoder = metal4::applyComputePipeline(list);
         {
-            // The Metal validation layer autoreleases in a dispatch it checks, so the dispatch holds a pool.
-            const metal4::AutoreleasePool pool;
+            // The Metal validation layer autoreleases in a dispatch it checks, so the dispatch holds a pool under it.
+            const metal4::CommandPool pool(list.state.commandPools);
             encoder->dispatchThreadgroups(MTL::Size(x, y, z), list.draw.compute->computeThreads);
         }
         core::noteNativeCall(list.core);
@@ -46,7 +46,7 @@ namespace rojoRHI {
         MTL4::ComputeCommandEncoder* encoder = metal4::applyComputePipeline(list);
         {
             // The validation layer autoreleases in a dispatch it checks.
-            const metal4::AutoreleasePool pool;
+            const metal4::CommandPool pool(list.state.commandPools);
             encoder->dispatchThreadgroups(uint64_t{ args.lo } | uint64_t{ args.hi } << 32, list.draw.compute->computeThreads);
         }
         core::noteNativeCall(list.core);

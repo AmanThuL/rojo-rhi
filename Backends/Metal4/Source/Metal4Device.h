@@ -142,6 +142,9 @@ namespace rojoRHI {
         std::array<QueueImpl, 3> queues = {}; ///< One queue per `QueueType`, indexed by its value.
         std::array<ListPool, 3> listPools;    ///< One list pool per frame slot; a device uses its first `framesInFlight`.
         MTL::Device* device = nullptr;        ///< The system default device.
+        /// False only when `device` is positively a bare driver class, found once at creation (`commandsMayAutorelease`); any other
+        /// device, the validation layer's included, makes each native draw, dispatch, copy, fill and encoder end open a pool.
+        bool commandPools = false;
         /// The serializer `compiler` records every pipeline into, and the archive of `DeviceDesc::pipelineCache`.
         metal4::PipelineCache pipelineCache;
         MTL4::Compiler* compiler = nullptr;      ///< The device's one compiler.
