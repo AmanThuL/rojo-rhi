@@ -118,14 +118,15 @@ TEST_CASE("a C8 render pass allocates less on Metal 4 than the native arm's, whi
 {
     // Per pass, from the first measured frame at K 100 and 1,000. N writes the pass's two timestamps with
     // writeTimestampIntoHeap on the command buffer, which allocates inside Metal; R writes them on the pass's encoders, which
-    // allocate nothing. Each such write allocates about two blocks (2026-10-19 diagnosis), so R stays at least two below.
+    // allocate nothing. The pair costs N one block without the validation layer (R 6.01, N 7.01 in Debug) and many with it (R 25.4,
+    // N 40.6), so R stays at least one allocation below N in every build and layer setting.
     const auto perPass = [](Arm arm) {
         return (static_cast<double>(frameAllocations("C8", 1000, arm)) - static_cast<double>(frameAllocations("C8", 100, arm))) / 900.0;
     };
     const double rojo = perPass(Arm::Rojo);
     const double native = perPass(Arm::Native);
     CAPTURE(rojo, native);
-    CHECK(rojo <= native - 2.0);
+    CHECK(rojo <= native - 0.9);
 }
 
 //======================================================================================================================
