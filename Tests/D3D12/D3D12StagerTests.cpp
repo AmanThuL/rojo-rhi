@@ -59,7 +59,11 @@ namespace {
       public:
         MessageCollection();
         ~MessageCollection();
+
+        //==============================================================================================================
         MessageCollection(const MessageCollection&) = delete;
+
+        //==============================================================================================================
         MessageCollection& operator=(const MessageCollection&) = delete;
     };
 
