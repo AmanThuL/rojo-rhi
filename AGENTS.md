@@ -64,14 +64,15 @@ Metal 4 backend, the optional ImGui adapter, tests and shaders — alongside its
   [command recording on it](docs/architecture/metal4-recording.md),
   [drawing on it: libraries, pipelines, passes, draws](docs/architecture/metal4-drawing.md),
   [its edges: presentation, sparse, capture](docs/architecture/metal4-backend-edges.md),
-  [the benchmark harness](docs/architecture/benchmarks.md)
+  [the benchmark harness](docs/architecture/benchmarks.md),
+  [the D3D12 backend's wiring and floor probe](docs/architecture/d3d12-backend.md)
 
 ## Commands
 
 Standalone:
 
 ```
-xmake setup   # fetches pinned metal-cpp and Slang on macOS, Slang alone on Windows
+xmake setup   # fetches pinned metal-cpp and Slang on macOS; Slang, Agility, WARP, DXC on Windows
 xmake         # builds the frozen v1 library, RojoRHILegacy
 xmake test RojoRHILegacyTests/unit   # runs the v1 CPU contract cases
 xmake test RojoRHITests/contract     # runs the v2 contract cases on the default backend
