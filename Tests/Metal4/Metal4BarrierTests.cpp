@@ -888,7 +888,7 @@ TEST_CASE("a barrier after a fill stays on the open compute encoder for the disp
     CHECK(countsOf(list).nativeBarriers == 2);
     CHECK(countsOf(list).nativeRecordCalls - calls == 1 + 4);
     CHECK(barriersOf(list).deferredDestination == 0);
-    // A barrier between dispatches is now covered by the encoder's barrier and stays in it.
+    // A barrier between dispatches is covered by the encoder's barrier and stays in it.
     list.barrier(
         std::array{ GlobalBarrier{
             .srcStage = Stage::ComputeShader, .srcAccess = Access::ShaderWrite, .dstStage = Stage::ComputeShader, .dstAccess = Access::ShaderRead } }

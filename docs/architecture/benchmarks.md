@@ -137,7 +137,9 @@ later commit of that queue carry `MTL4::CommitOptions` feedback that calls `call
 completion thread, so RojoRHI starts no thread (ADR 0013), with a `CommitTime` (queue, a per-queue
 serial counted from 1, start and end in seconds, and a failure flag); a null callback detaches,
 which does not cancel the reports of commits made before the detach, so the caller keeps `user`
-alive until that work completes. Those calls are not counted in the device's counters.
+alive until that work completes. Each commit's options are released by their own feedback handler,
+after the report, as N releases its options after its frame wait, so neither arm's CPU span holds
+that release. Those calls are not counted in the device's counters.
 `Queue::submit` makes exactly one commit per submission that names lists, and the backend commits
 nothing else on a caller's queue except the empty commit that `destroyDevice` drains with, which is
 never timed; the stager's internal queue is unreachable from the seam. The harness calls it from one
@@ -214,19 +216,20 @@ overhead and not a defect of the harness. In particular:
   encoder waited for every source, as gbuffer's geometry encoder, C6's dispatch encoder and C10's
   pass encoder do, and otherwise a trailing encoder emits it, as for the lighting and ao lists; each
   compute encoder of a graphics list that dispatches waits on the fence once, as lighting's does.
-  Both are measured overhead; in the gate run of 2026-10-19 R makes 1291 native calls per composed
-  frame to N's 1254 (37 more). They are per frame, so they change no per-operation count. A render
-  pass's last encoder ends at the next encoder or `end` rather than at `endRenderPass`, after the
-  pass's pop, and its end timestamp is written on that encoder: C8's sequence keeps its count and
-  changes its order.
+  Both are measured overhead; in the integrated gate R makes 1280 native calls per composed frame
+  with the validation layer on (Debug) and 1259 without it (Release) to N's 1254; the figure depends
+  on the layer because encoder labels are native calls. They are per frame, so they change no
+  per-operation count. A render pass's last encoder ends at the next encoder, a scope boundary or
+  `end` rather than at `endRenderPass`, after the pass's pop, and its end timestamp is written on
+  that encoder: C8's sequence keeps its count and changes its order.
 - `Copy` on a Graphics list lowers to `Blit | Dispatch | Fragment` on Metal 4, so that a copy waits
   and signals for every stage that may touch its buffers; N's copy is a blit alone. The wider stage
   set is measured overhead.
 - C6's barrier after its fill stays on the fill's compute encoder, which has run no dispatch: R
   emits `barrierAfterQueueStages` there at once, for earlier lists' copies, and the encoder-level
-  barrier before the first dispatch, so its frame opens one compute encoder, as N's does, where it
-  opened two. N's barrier after its fill is encoder-level only; the queue-level one is measured
-  overhead. The per-repetition count is unchanged.
+  barrier before the first dispatch, so its frame opens one compute encoder, as N's does. N's
+  barrier after its fill is encoder-level only; the queue-level one is measured overhead. The
+  per-repetition count is unchanged.
 - A list's indirect command buffers are resident through the device's residency set, which the
   submission that follows their making updates, so a list with counted draws sends its command
   buffer no `useResidencySet`: one native call and two Metal allocations fewer per such list, C10's
