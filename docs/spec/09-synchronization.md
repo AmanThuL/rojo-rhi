@@ -44,7 +44,8 @@ on the matching side.
 | Depth-stencil attachment test without writes | `DepthStencil` | `DepthStencilRead` | `DepthStencilWrite` |
 | Render-pass resolve target | `Resolve` | `Resolve` | `ColorAttachment` |
 | Copy source | `Copy` | `CopyRead` | `CopySrc`, `General` |
-| Copy destination, `fillBuffer`, `clearTexture` | `Copy` | `CopyWrite` | `CopyDst`, `General` |
+| Copy destination, `fillBuffer` | `Copy` | `CopyWrite` | `CopyDst`, `General` |
+| `clearTexture` | `Copy` | `CopyWrite` | `CopyDst` |
 | Presentation ([presentation](11-presentation.md)) | `None` | `None` | `Present` |
 
 Accesses of one render pass to its own attachments are ordered by the pass, and accesses within
@@ -117,7 +118,7 @@ A bit set of pipeline stages, modelled on D3D12 enhanced barriers and Vulkan syn
 | `ComputeShader` | `MTL::StageDispatch` | `SYNC_COMPUTE_SHADING` | `COMPUTE_SHADER` |
 | `ColorAttachment` | `MTL::StageFragment` | `SYNC_RENDER_TARGET` | `COLOR_ATTACHMENT_OUTPUT` |
 | `DepthStencil` | `MTL::StageFragment` | `SYNC_DEPTH_STENCIL` | `EARLY_FRAGMENT_TESTS \| LATE_FRAGMENT_TESTS` |
-| `Copy` | `MTL::StageBlit \| MTL::StageDispatch \| MTL::StageFragment`: blits, the backend kernels of `fillBuffer` and `clearTexture`, and a `clearTexture` run as a render-pass load action | `SYNC_COPY`, plus `SYNC_COMPUTE_SHADING` for the `fillBuffer` kernel and `SYNC_RENDER_TARGET`, `SYNC_DEPTH_STENCIL` or `SYNC_CLEAR_UNORDERED_ACCESS_VIEW` for `clearTexture`, which the backend brackets with transitions from `CopyDst` or `General` into the render-target, depth-stencil-write or unordered-access layout and back | `COPY \| CLEAR` |
+| `Copy` | `MTL::StageBlit \| MTL::StageDispatch \| MTL::StageFragment`: blits, the backend kernels of `fillBuffer` and `clearTexture`, and a `clearTexture` run as a render-pass load action | `SYNC_COPY`, plus `SYNC_COMPUTE_SHADING` for the `fillBuffer` kernel and `SYNC_RENDER_TARGET`, `SYNC_DEPTH_STENCIL` or `SYNC_CLEAR_UNORDERED_ACCESS_VIEW` for `clearTexture`, which the backend brackets with transitions from `CopyDst` into the render-target, depth-stencil-write or unordered-access layout and back | `COPY \| CLEAR` |
 | `Resolve` | `MTL::StageFragment` (store-action resolve) | `SYNC_RESOLVE` | `COLOR_ATTACHMENT_OUTPUT` (render-pass resolve) |
 | `AllGraphics` | the union of its bits: `MTL::StageDispatch \| MTL::StageVertex \| MTL::StageObject \| MTL::StageMesh \| MTL::StageFragment`, with `MTL::StageDispatch` from `IndirectArgs` for the argument-encoding kernel | `SYNC_DRAW \| SYNC_EXECUTE_INDIRECT \| SYNC_RESOLVE` | `ALL_GRAPHICS` |
 | `All` | `MTL::StageAll` | `SYNC_ALL` | `ALL_COMMANDS` |
@@ -198,8 +199,8 @@ one layout.
 
 - `Undefined`: contents are undefined. Valid only as the layout before a barrier, which discards
   the contents.
-- `General`: shader reads, copy reads and copy writes; the layout of a cross-queue handoff
-  ([part 2](09-synchronization-part2.md)).
+- `General`: shader reads, copy reads and copy writes other than `clearTexture`; the layout of
+  a cross-queue handoff ([part 2](09-synchronization-part2.md)).
 - `ShaderRead`: shader reads through `Sampled` views.
 - `ShaderWrite`: shader reads and writes through `Storage` views.
 - `ColorAttachment`: color attachment use, and the target of a render-pass resolve.

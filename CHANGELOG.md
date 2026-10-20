@@ -258,3 +258,10 @@
   and rule and states the new value. The Null device reports 2^29 − 1; Metal 4 still reports
   `maxBufferLength` − 1. Portable code that reaches past the first 512 MiB of a buffer through
   one `Addr` places that data in another buffer.
+- API reference change for the planned D3D12 backend: `VU-rojo-cmd-0070` is retired and
+  re-issued as `VU-rojo-cmd-0072`, so `clearTexture` takes its subresources in
+  `Layout::CopyDst` only, no longer in `Layout::General`. A D3D12 clear is bracketed by
+  barriers that name the exact layout before and after it, and a backend tracks no layouts. A
+  caller holding a `General` texture records one barrier to `CopyDst` first. Chapter 09's
+  table of accesses, its `General` layout and its `Copy` stage row say so; the Null and Metal 4
+  backends are unchanged.

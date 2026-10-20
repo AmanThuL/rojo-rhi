@@ -7,8 +7,8 @@ This part of the command-recording chapter ([command recording](07-command-recor
 copies, fills and clears. All are recorded outside render passes; on Metal 4 copies and fills
 record on the lazily opened compute encoder. For barriers a copy reads and writes with the copy
 stage and copy accesses, and `fillBuffer` and `clearTexture` count as copy writes, a cleared
-texture being in `Layout::CopyDst` or `Layout::General` ([synchronization](09-synchronization.md));
-copies are not ordered against each other or against dispatches without a barrier.
+texture being in `Layout::CopyDst` ([synchronization](09-synchronization.md)); copies are not
+ordered against each other or against dispatches without a barrier.
 
 **Copies take buffer handles and offsets, not addresses.** Metal 4 copy commands take the native
 `MTL::Buffer`, and recovering it from an `Addr`, a GPU virtual address there, means a reverse lookup
@@ -247,8 +247,9 @@ void CommandList::clearTexture(Texture texture, const SubresourceRange& range,
 
 Clears every subresource in `range` ([textures and heaps](04-textures-and-heaps.md)) outside a
 render pass; inside one, clearing is a load operation (`LoadOp::Clear`). Like a copy, a clear is a
-copy-stage write to subresources in a copy destination layout; the backend performs whatever
-native transitions its clear needs and returns the subresources to that layout.
+copy-stage write; its subresources are in `Layout::CopyDst`, and the backend performs whatever
+native transitions its clear needs and returns them to `CopyDst`. A texture in `General` is moved to
+`CopyDst` by a barrier first.
 
 #### Valid usage
 
@@ -258,12 +259,14 @@ native transitions its clear needs and returns the subresources to that layout.
 - `VU-rojo-cmd-0062` Retired in 0.1.0: `range` lies within `texture`, and its subresources are in
   `Layout::CopyDst` or `Layout::General`. The range is `VU-rojo-texture-0016`, `0017` and `0041`
   ([textures and heaps](04-textures-and-heaps.md)); the layouts are `VU-rojo-cmd-0070`.
-- `VU-rojo-cmd-0070` The subresources of `range` are in `Layout::CopyDst` or `Layout::General`.
-  Checked by the validation tracker.
+- `VU-rojo-cmd-0070` Retired in 0.1.0: The subresources of `range` are in `Layout::CopyDst` or
+  `Layout::General`. `VU-rojo-cmd-0072` narrows it to `Layout::CopyDst`.
+- `VU-rojo-cmd-0072` The subresources of `range` are in `Layout::CopyDst`. Checked by the
+  validation tracker.
 
 #### Mapping
 
 | | Metal 4 | D3D12 | Vulkan |
 |---|---|---|---|
-| Call | layouts ignored; per mip and layer, and per depth plane of each mip of a 3D texture, a render encoder from `MTL4::CommandBuffer::renderCommandEncoder` with `MTL::LoadActionClear` and `MTL::StoreActionStore`, or for `Storage`-only textures one dispatch of the backend's clear kernel per mip | barriers `COPY_DEST` to `RENDER_TARGET`, `DEPTH_STENCIL_WRITE` or `UNORDERED_ACCESS` and back around `ClearRenderTargetView`, `ClearDepthStencilView` or `ClearUnorderedAccessView*` per subresource; the last needs backend-written GPU and CPU descriptors | `vkCmdClearColorImage` or `vkCmdClearDepthStencilImage` in `TRANSFER_DST_OPTIMAL` or `GENERAL` |
+| Call | layouts ignored; per mip and layer, and per depth plane of each mip of a 3D texture, a render encoder from `MTL4::CommandBuffer::renderCommandEncoder` with `MTL::LoadActionClear` and `MTL::StoreActionStore`, or for `Storage`-only textures one dispatch of the backend's clear kernel per mip | barriers `COPY_DEST` to `RENDER_TARGET`, `DEPTH_STENCIL_WRITE` or `UNORDERED_ACCESS` and back around `ClearRenderTargetView`, `ClearDepthStencilView` or `ClearUnorderedAccessView*` per subresource; the last needs backend-written GPU and CPU descriptors | `vkCmdClearColorImage` or `vkCmdClearDepthStencilImage` in `TRANSFER_DST_OPTIMAL` |
 | Cost | costly: one render encoder per mip and layer, per depth plane for a 3D texture, closing the compute encoder; or one dispatch per mip on the compute encoder | costly: two hidden layout transitions per subresource and transient descriptors | native |

@@ -22,8 +22,11 @@ namespace rojoRHI::core {
         /// The layouts that permit a copy source: chapter 09's table.
         [[maybe_unused]] constexpr LayoutSet kCopySource = layoutSet({ Layout::CopySrc, Layout::General });
 
-        /// The layouts that permit a copy, fill or clear destination: chapter 09's table.
+        /// The layouts that permit a copy destination: chapter 09's table.
         [[maybe_unused]] constexpr LayoutSet kCopyDestination = layoutSet({ Layout::CopyDst, Layout::General });
+
+        /// The layouts that permit a clear destination: chapter 09's table.
+        [[maybe_unused]] constexpr LayoutSet kClearDestination = layoutSet({ Layout::CopyDst });
 
         //==============================================================================================================
         [[maybe_unused]] bool hasUsage(BufferUsage usage, BufferUsage flag)
@@ -415,7 +418,7 @@ namespace rojoRHI::core {
             target->label,
             list.type == QueueType::Compute ? "Compute" : "Graphics"
         );
-        logUse(list, textureUse(texture, range, Stage::Copy, Access::CopyWrite, kCopyDestination, UseRule::Cmd0070));
+        logUse(list, textureUse(texture, range, Stage::Copy, Access::CopyWrite, kClearDestination, UseRule::Cmd0072));
 #endif
     }
 } // namespace rojoRHI::core

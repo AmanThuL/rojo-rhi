@@ -117,11 +117,23 @@ TEST_CASE("VU-rojo-cmd-0069 the source of a texture to buffer copy is in neither
 }
 
 //======================================================================================================================
-TEST_CASE("VU-rojo-cmd-0070 a cleared range is in neither CopyDst nor General", "[contract][death]")
+TEST_CASE("VU-rojo-cmd-0072 a cleared range is not in CopyDst", "[contract][death]")
 {
-    ROJORHI_EXPECT_DEATH("VU-rojo-cmd-0070", [] {
+    ROJORHI_EXPECT_DEATH("VU-rojo-cmd-0072", [] {
         PassKit kit(QueueType::Graphics, true);
         kit.list.clearTexture(kit.target(), {}, {});
+        kit.finish();
+    });
+}
+
+//======================================================================================================================
+TEST_CASE("VU-rojo-cmd-0072 a cleared range is in General", "[contract][death]")
+{
+    ROJORHI_EXPECT_DEATH("VU-rojo-cmd-0072", [] {
+        PassKit kit(QueueType::Graphics, true);
+        const Texture target = kit.target();
+        move(kit.list, target, Layout::Undefined, Layout::General);
+        kit.list.clearTexture(target, {}, {});
         kit.finish();
     });
 }

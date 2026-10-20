@@ -93,6 +93,26 @@ TEST_CASE("a copy on a validating device logs each endpoint with its stage, acce
 }
 
 //======================================================================================================================
+TEST_CASE("a clear on a validating device logs its range in CopyDst alone under its rule", "[core]")
+{
+#ifndef NDEBUG
+    PassKit kit(QueueType::Graphics, true);
+    const Texture target = kit.target();
+    move(kit.list, target, Layout::Undefined, Layout::CopyDst);
+    const size_t before = core::coreOf(kit.list).trackerLog.events.size();
+    kit.list.clearTexture(target, {}, {});
+    REQUIRE(core::coreOf(kit.list).trackerLog.events.size() == before + 1);
+    const core::UseEvent clear = useAt(kit.list, before);
+    CHECK(clear.texture == target);
+    CHECK(clear.stage == Stage::Copy);
+    CHECK(clear.access == Access::CopyWrite);
+    CHECK(clear.layouts == core::layoutSet({ Layout::CopyDst }));
+    CHECK(clear.rule == core::UseRule::Cmd0072);
+    kit.finish();
+#endif
+}
+
+//======================================================================================================================
 TEST_CASE("a buffer copy on a Copy list logs byte ranges", "[core]")
 {
 #ifndef NDEBUG

@@ -317,9 +317,9 @@ TEST_CASE("VU-rojo-sync-0017 a placed texture's use of one mip does not exempt a
 }
 
 //======================================================================================================================
-TEST_CASE("VU-rojo-cmd-0070 a placed texture is cleared on Graphics, with no discard, after a buffer used its memory on Compute", "[contract][death]")
+TEST_CASE("VU-rojo-cmd-0072 a placed texture is cleared on Graphics, with no discard, after a buffer used its memory on Compute", "[contract][death]")
 {
-    ROJORHI_EXPECT_DEATH("VU-rojo-cmd-0070", [] {
+    ROJORHI_EXPECT_DEATH("VU-rojo-cmd-0072", [] {
         PassKit kit(QueueType::Graphics, true);
         const Heap heap = makeHeap(kit);
         const Buffer earlier = placedBuffer(kit, heap, 0);

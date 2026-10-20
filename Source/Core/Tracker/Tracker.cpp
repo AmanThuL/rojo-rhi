@@ -1131,11 +1131,11 @@ namespace rojoRHI::core {
                         static_cast<int>(current)
                     );
                     break;
-                case UseRule::Cmd0070:
+                case UseRule::Cmd0072:
                     ROJORHI_VU(
                         holds(use.layouts, current),
-                        "VU-rojo-cmd-0070",
-                        "the list \"{}\" clears mip {} layer {} of the texture \"{}\" in layout {}, not CopyDst or General",
+                        "VU-rojo-cmd-0072",
+                        "the list \"{}\" clears mip {} layer {} of the texture \"{}\" in layout {}, not CopyDst",
                         list,
                         mip,
                         layer,
