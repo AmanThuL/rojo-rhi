@@ -242,7 +242,7 @@ jobs:
       - run: |
           python3 Tools/check_cpp_layout.py --compile-commands build/compile-commands/null/compile_commands.json \
               --compile-commands build/compile-commands/metal4/compile_commands.json \
-              --exclude Backends/D3D12 --exclude Tests/Support/D3D12 --exclude Tools/D3D12Probe
+              --exclude Backends/D3D12 --exclude Tests/D3D12 --exclude Tests/Support/D3D12 --exclude Tools/D3D12Probe
       - run: python3 Tools/check_cpp_comments.py --public-api-docs error --compile-commands build/compile-commands/null/compile_commands.json
       - run: python3 Tools/check_cpp_comments.py --public-api-docs error --compile-commands build/compile-commands/metal4/compile_commands.json
   # The floor probe gates the D3D12 backend (ADR 0010): WARP on the hosted image must meet the hardware floor
@@ -384,6 +384,7 @@ jobs:
       # The pinned DXC's disassembly of the module's heap fetches and raw accesses.
       - run: python3 Tools/check_dxil.py
       - run: xmake test RojoRHITests/contract
+      - run: xmake test RojoRHITests/death
       # The toolchain record: the cl command lines xmake writes for the c++23 language level, the MSVC version, and
       # whether this MSVC accepts each spelling of that level (a D9002 warning means it does not).
       - name: Record the toolchain
@@ -419,7 +420,7 @@ jobs:
       - run: xmake project -k compile_commands build/compile-commands/d3d12
       # Keep these directories equal to the ones the format job excludes.
       - run: >-
-          python3 Tools/check_cpp_layout.py --only Backends/D3D12 --only Tests/Support/D3D12 --only Tools/D3D12Probe
+          python3 Tools/check_cpp_layout.py --only Backends/D3D12 --only Tests/D3D12 --only Tests/Support/D3D12 --only Tools/D3D12Probe
           --compile-commands build/compile-commands/d3d12/compile_commands.json --clangd "$env:CLANGD_PATH"
       # Release with debug features mode, which enables none in Release; /WX makes the build warning-free. The LTO
       # probe only builds: createDevice refuses, so it cannot run, and the Device::capabilities it calls aborts, so

@@ -1,6 +1,6 @@
 //----------------------------------------------------------------------------------------------------------------------
 /// @file D3D12CommandList.cpp
-/// @brief Defines the command list entries of the D3D12 backend, which creates no device, so no list exists to record into.
+/// @brief Stubs the command list entries of the D3D12 backend: acquisition and recording abort until they are implemented.
 //----------------------------------------------------------------------------------------------------------------------
 
 #include "D3D12Common.h"

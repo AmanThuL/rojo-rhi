@@ -340,54 +340,70 @@ namespace rojoRHI::test {
         return std::string_view(value) == "1" ? DeathRole::Child : DeathRole::Invalid;
     }
 
+    namespace {
+        //==============================================================================================================
+        /// Runs the current case again in a child process that runs `body`; in the child itself it runs `body` and exits 0 when
+        /// `body` returns. In the parent it requires the child to die with a non-zero status and `matches` to
+        /// accept its captured standard error.
+        void runDeathCase(const std::function<void()>& body, const std::function<bool(const std::string&)>& matches)
+        {
+#ifdef NDEBUG
+            SKIP("death tests need a Debug build");
+#endif
+            const char* marker = std::getenv("ROJORHI_DEATH_CHILD");
+            const DeathRole role = deathRoleOf(marker);
+            if (role == DeathRole::Invalid)
+            {
+                FAIL(
+                    "ROJORHI_DEATH_CHILD is set to \"" << marker
+                                                       << "\" in the environment; it must be unset or 1, and a death test spawns nothing until it is unset"
+                );
+            }
+            if (role == DeathRole::Child)
+            {
+#if defined(_WIN32)
+                // A crash must end the child without a modal dialog that would hang a runner.
+                _set_abort_behavior(0, _WRITE_ABORT_MSG | _CALL_REPORTFAULT);
+                for ([[maybe_unused]] const int kind : { _CRT_WARN, _CRT_ERROR, _CRT_ASSERT })
+                {
+                    _CrtSetReportMode(kind, _CRTDBG_MODE_FILE);
+                    _CrtSetReportFile(kind, _CRTDBG_FILE_STDERR);
+                }
+                SetErrorMode(SEM_FAILCRITICALERRORS | SEM_NOGPFAULTERRORBOX);
+#endif
+                body();
+                std::exit(0);
+            }
+
+            const std::string name = Catch::getResultCapture().getCurrentTestName();
+            std::string reason;
+            const std::filesystem::path capture = makeCapturePath(reason);
+            if (capture.empty())
+            {
+                FAIL("could not create the capture file: " << reason);
+            }
+            const ChildResult child = runChild(escapeTestSpec(name), capture);
+            const std::string text = readFile(capture);
+            std::error_code ignored;
+            std::filesystem::remove(capture, ignored);
+
+            INFO("child: " << child.status << "\ncaptured:\n" << text);
+            REQUIRE(child.launched);
+            REQUIRE(child.died);
+            REQUIRE(matches(text));
+        }
+    } // namespace
+
     //==================================================================================================================
     void expectDeath(std::string_view id, const std::function<void()>& body)
     {
-#ifdef NDEBUG
-        SKIP("death tests need a Debug build");
-#endif
-        const char* marker = std::getenv("ROJORHI_DEATH_CHILD");
-        const DeathRole role = deathRoleOf(marker);
-        if (role == DeathRole::Invalid)
-        {
-            FAIL(
-                "ROJORHI_DEATH_CHILD is set to \"" << marker
-                                                   << "\" in the environment; it must be unset or 1, and a death test spawns nothing until it is unset"
-            );
-        }
-        if (role == DeathRole::Child)
-        {
-#if defined(_WIN32)
-            // A crash must end the child without a modal dialog that would hang a runner.
-            _set_abort_behavior(0, _WRITE_ABORT_MSG | _CALL_REPORTFAULT);
-            for ([[maybe_unused]] const int kind : { _CRT_WARN, _CRT_ERROR, _CRT_ASSERT })
-            {
-                _CrtSetReportMode(kind, _CRTDBG_MODE_FILE);
-                _CrtSetReportFile(kind, _CRTDBG_FILE_STDERR);
-            }
-            SetErrorMode(SEM_FAILCRITICALERRORS | SEM_NOGPFAULTERRORBOX);
-#endif
-            body();
-            std::exit(0);
-        }
-
-        const std::string name = Catch::getResultCapture().getCurrentTestName();
-        std::string reason;
-        const std::filesystem::path capture = makeCapturePath(reason);
-        if (capture.empty())
-        {
-            FAIL("could not create the capture file: " << reason);
-        }
-        const ChildResult child = runChild(escapeTestSpec(name), capture);
-        const std::string text = readFile(capture);
-        std::error_code ignored;
-        std::filesystem::remove(capture, ignored);
-
-        const std::string line = firstViolationLine(text);
         const std::string expected = std::string(id) + ":";
-        INFO("child: " << child.status << "\ncaptured:\n" << text);
-        REQUIRE(child.launched);
-        REQUIRE(child.died);
-        REQUIRE(line.starts_with(expected));
+        runDeathCase(body, [&](const std::string& text) { return firstViolationLine(text).starts_with(expected); });
+    }
+
+    //==================================================================================================================
+    void expectAbort(std::string_view marker, const std::function<void()>& body)
+    {
+        runDeathCase(body, [&](const std::string& text) { return text.find(marker) != std::string::npos; });
     }
 } // namespace rojoRHI::test
