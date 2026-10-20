@@ -20,6 +20,10 @@
 #include <string_view>
 #include <utility>
 
+namespace rojoRHI {
+    struct DeviceImpl;
+}
+
 namespace rojoRHI::d3d12 {
     /// An owning pointer to a COM interface: it holds one reference, which it releases when it is reset, reassigned or
     /// destroyed. A copy takes a reference of its own.
@@ -126,4 +130,9 @@ namespace rojoRHI::d3d12 {
     /// so the wait reports completion at once: a caller checks for removal before it passes a value to `core::completeFence`.
     /// Logs and aborts, in every build, when no event can be made or armed.
     bool waitForFence(ID3D12Fence* fence, uint64_t value, uint64_t timeoutNs, std::string_view what);
+
+    /// Does nothing when `result`, returned by the native call `what` of an entry that returns no `Result`, succeeded;
+    /// otherwise reports the removal of `impl`'s device when it was removed, then logs the call and `result` and aborts, in
+    /// every build.
+    void requireSucceeded(DeviceImpl& impl, HRESULT result, std::string_view what);
 } // namespace rojoRHI::d3d12

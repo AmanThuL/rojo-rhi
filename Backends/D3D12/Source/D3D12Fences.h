@@ -14,7 +14,6 @@
 #include <cstddef>
 #include <cstdint>
 #include <mutex>
-#include <string_view>
 #include <vector>
 
 namespace rojoRHI {
@@ -23,8 +22,9 @@ namespace rojoRHI {
 
 namespace rojoRHI::d3d12 {
     /// A fence only its queue signals, each time with the next value, so a destroyed fence is released once every queue has
-    /// passed the point it was destroyed at. The compute and copy queues signal it after each submission that waits or
-    /// signals and joins no frame: one with no lists, or with more than one signal.
+    /// passed the value its progress had when the fence retired, which covers every submission made before the destruction.
+    /// The compute and copy queues signal it after each submission that waits or signals and joins no frame: one with no
+    /// lists, or with more than one signal.
     struct QueueProgress
     {
         Com<ID3D12Fence> fence; ///< The progress fence.
@@ -88,8 +88,4 @@ namespace rojoRHI::d3d12 {
     /// Returns frame slot `slot`'s command lists and transient descriptors for reuse and releases the kept fences every queue
     /// has passed. `context` is the `DeviceImpl`.
     void reuseSlot(void* context, uint32_t slot);
-
-    /// Does nothing when `result`, returned by the native queue or fence call `what` of an entry that returns no `Result`,
-    /// succeeded; otherwise reports the removal when the device was removed, then logs the call and `result` and aborts.
-    void requireSucceeded(DeviceImpl& impl, HRESULT result, std::string_view what);
 } // namespace rojoRHI::d3d12

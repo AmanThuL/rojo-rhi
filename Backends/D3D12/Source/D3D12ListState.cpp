@@ -9,16 +9,19 @@
 #include "Core/Counters.h"
 #include "D3D12Device.h"
 
+#include <cstddef>
 #include <cstdint>
 #include <memory>
 #include <mutex>
 
 namespace rojoRHI::d3d12 {
     //==================================================================================================================
-    CommandListImpl& ListPools::acquire(uint32_t slot, core::DeviceCounts& counts)
+    CommandListImpl& ListPools::acquire(uint32_t slot, QueueType type, core::DeviceCounts& counts)
     {
         ROJORHI_INTERNAL_ASSERT(slot < m_slots.size(), "a frame slot beyond the three a device may use has no list pool");
-        ListPool& pool = m_slots[slot];
+        const size_t index = static_cast<size_t>(type);
+        ROJORHI_INTERNAL_ASSERT(index < m_slots[slot].size(), "a QueueType outside the enumerators has no list pool");
+        ListPool& pool = m_slots[slot][index];
         std::lock_guard lock(pool.mutex);
         if (pool.used == pool.lists.size())
         {
@@ -32,8 +35,10 @@ namespace rojoRHI::d3d12 {
     void ListPools::reset(uint32_t slot)
     {
         ROJORHI_INTERNAL_ASSERT(slot < m_slots.size(), "a frame slot beyond the three a device may use has no list pool");
-        ListPool& pool = m_slots[slot];
-        std::lock_guard lock(pool.mutex);
-        pool.used = 0;
+        for (ListPool& pool : m_slots[slot])
+        {
+            std::lock_guard lock(pool.mutex);
+            pool.used = 0;
+        }
     }
 } // namespace rojoRHI::d3d12

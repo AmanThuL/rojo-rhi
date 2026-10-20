@@ -11,10 +11,13 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include <array>
+#include <atomic>
+#include <chrono>
 #include <cstddef>
 #include <cstdint>
 #include <string>
 #include <string_view>
+#include <thread>
 
 using namespace rojoRHI;
 
@@ -39,6 +42,24 @@ namespace {
             read.pop_back();
         }
         return read;
+    }
+
+    //==================================================================================================================
+    /// Returns a native fence at zero named `test.gate`, which only the CPU signals, made on `device`'s native device.
+    d3d12::Com<ID3D12Fence> makeGate(Device device)
+    {
+        d3d12::Com<ID3D12Fence> gate;
+        REQUIRE(SUCCEEDED(DeviceImpl::of(device).device()->CreateFence(0, D3D12_FENCE_FLAG_NONE, IID_PPV_ARGS(gate.put()))));
+        d3d12::setName(gate.get(), "test.gate");
+        return gate;
+    }
+
+    //==================================================================================================================
+    /// Queues a native wait for `gate` to reach 1 on `device`'s queue of `type`, which holds that queue's later work until the
+    /// CPU opens the gate.
+    void holdQueue(Device device, QueueType type, ID3D12Fence* gate)
+    {
+        REQUIRE(SUCCEEDED(DeviceImpl::of(device).queues[static_cast<size_t>(type)].native->Wait(gate, 1)));
     }
 
     //==================================================================================================================
@@ -105,16 +126,13 @@ TEST_CASE("a wait on another queue's fence holds the waiting queue's signal", "[
 {
     Result<Device> created = createDevice();
     REQUIRE(created.has_value());
-    DeviceImpl& impl = DeviceImpl::of(*created);
     Result<Fence> a = created->createFence(0, "test.a");
     REQUIRE(a.has_value());
     Result<Fence> b = created->createFence(0, "test.b");
     REQUIRE(b.has_value());
     // The graphics queue's signal of a waits on a gate only the CPU opens, so the compute queue's wait on a holds until then.
-    d3d12::Com<ID3D12Fence> gate;
-    REQUIRE(SUCCEEDED(impl.device()->CreateFence(0, D3D12_FENCE_FLAG_NONE, IID_PPV_ARGS(gate.put()))));
-    d3d12::setName(gate.get(), "test.gate");
-    REQUIRE(SUCCEEDED(impl.queues[static_cast<size_t>(QueueType::Graphics)].native->Wait(gate.get(), 1)));
+    d3d12::Com<ID3D12Fence> gate = makeGate(*created);
+    holdQueue(*created, QueueType::Graphics, gate.get());
     const std::array<FenceValue, 1> signalA{ FenceValue{ *a, 1 } };
     created->queue(QueueType::Graphics).submit({}, {}, signalA);
     const std::array<FenceValue, 1> waitA{ FenceValue{ *a, 1 } };
@@ -158,15 +176,29 @@ TEST_CASE("beginFrame waits for the frame framesInFlight earlier", "[d3d12]")
     REQUIRE(created.has_value());
     ID3D12Fence* frames = DeviceImpl::of(*created).frames.fence();
     REQUIRE(frames != nullptr);
-    for (uint64_t frame = 1; frame <= 4; ++frame)
-    {
-        created->beginFrame();
-        if (frame > 2)
-        {
-            CHECK(frames->GetCompletedValue() >= frame - 2);
-        }
-        created->endFrame();
-    }
+    // The graphics queue holds frame 1's end behind a gate, so frame 3 begins only once a wait has seen the gate open.
+    d3d12::Com<ID3D12Fence> gate = makeGate(*created);
+    created->beginFrame();
+    holdQueue(*created, QueueType::Graphics, gate.get());
+    created->endFrame();
+    created->beginFrame();
+    created->endFrame();
+    CHECK(frames->GetCompletedValue() == 0);
+    std::atomic<HRESULT> opened = E_FAIL;
+    std::thread opener([&gate, &opened] {
+        std::this_thread::sleep_for(std::chrono::milliseconds(200));
+        opened = gate->Signal(1);
+    });
+    created->beginFrame();
+    CHECK(frames->GetCompletedValue() >= 1);
+    created->endFrame();
+    created->beginFrame();
+    CHECK(frames->GetCompletedValue() >= 2);
+    created->endFrame();
+    opener.join();
+    CHECK(SUCCEEDED(opened.load()));
+    // The gate holds a reference to the device, which must be the device's last one when it is destroyed.
+    gate.reset();
     destroyDevice(*created);
 }
 
@@ -178,17 +210,23 @@ TEST_CASE("a destroyed fence is released once every queue has passed it", "[d3d1
     DeviceImpl& impl = DeviceImpl::of(*created);
     Result<Fence> fence = created->createFence(0, "test.fence");
     REQUIRE(fence.has_value());
-    // A fence-only submission on the copy queue joins no frame, so the copy queue signals its progress after it.
+    // A fence-only submission on the copy queue joins no frame, so the copy queue signals its progress after it; a gate
+    // holds both signals until the CPU opens it.
+    d3d12::Com<ID3D12Fence> gate = makeGate(*created);
+    holdQueue(*created, QueueType::Copy, gate.get());
     const std::array<FenceValue, 1> signal{ FenceValue{ *fence, 1 } };
     created->queue(QueueType::Copy).submit({}, {}, signal);
     created->beginFrame();
     created->destroy(*fence);
     created->endFrame();
+    // The last of these frames retires the fence; the copy queue has not passed its progress, so the fence is kept.
     for (uint32_t frame = 0; frame < impl.core.framesInFlight(); ++frame)
     {
         created->beginFrame();
         created->endFrame();
     }
+    CHECK(impl.frames.keptCount() == 1);
+    REQUIRE(SUCCEEDED(gate->Signal(1)));
     QueueImpl& copy = impl.queues[static_cast<size_t>(QueueType::Copy)];
     const uint64_t progress = copy.progress.value.load();
     CHECK(progress >= 1);
@@ -196,6 +234,7 @@ TEST_CASE("a destroyed fence is released once every queue has passed it", "[d3d1
     created->beginFrame();
     CHECK(impl.frames.keptCount() == 0);
     created->endFrame();
+    gate.reset();
     destroyDevice(*created);
 }
 

@@ -272,21 +272,6 @@ namespace rojoRHI {
             impl.descriptors.resetTransient(slot);
             impl.frames.releasePassed(impl);
         }
-
-        //==============================================================================================================
-        void requireSucceeded(DeviceImpl& impl, HRESULT result, std::string_view what)
-        {
-            if (SUCCEEDED(result))
-            {
-                return;
-            }
-            if (deviceRemoved(result))
-            {
-                reportRemoval(impl, what);
-            }
-            ROJORHI_LOG_ERROR("{} failed with HRESULT 0x{:08X}", what, hresultBits(result));
-            std::abort();
-        }
     } // namespace d3d12
 
     //==================================================================================================================

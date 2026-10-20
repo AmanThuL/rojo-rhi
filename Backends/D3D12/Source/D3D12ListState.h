@@ -4,6 +4,8 @@
 //----------------------------------------------------------------------------------------------------------------------
 #pragma once
 
+#include <rojoRHI/RHI.h>
+
 #include "Core/Counters.h"
 
 #include <array>
@@ -26,19 +28,19 @@ namespace rojoRHI::d3d12 {
         size_t used = 0;                                     ///< How many of `lists` the open frame has taken.
     };
 
-    /// The command list pools of a device, one per frame slot; a device uses its first `framesInFlight`.
+    /// The command list pools of a device, one per frame slot and `QueueType`; a device uses its first `framesInFlight` slots.
     class ListPools
     {
       public:
-        /// Takes a list of frame slot `slot`'s pool, reusing one when the pool has one left, and returns it. A list the pool
-        /// grows by is one explicit allocation, counted in `counts`. The pool's mutex is a leaf lock: acquisition is not
-        /// recording.
-        CommandListImpl& acquire(uint32_t slot, core::DeviceCounts& counts);
+        /// Takes a list of frame slot `slot`'s pool of `type`, reusing one when the pool has one left, and returns it. A list
+        /// the pool grows by is one explicit allocation, counted in `counts`. The pool's mutex is a leaf lock: acquisition is
+        /// not recording.
+        CommandListImpl& acquire(uint32_t slot, QueueType type, core::DeviceCounts& counts);
 
-        /// Returns every list frame slot `slot` took to its pool, once the slot's frame has retired.
+        /// Returns every list frame slot `slot` took to its pools, once the slot's frame has retired.
         void reset(uint32_t slot);
 
       private:
-        std::array<ListPool, 3> m_slots;
+        std::array<std::array<ListPool, 3>, 3> m_slots; ///< Indexed by frame slot, then by `QueueType`.
     };
 } // namespace rojoRHI::d3d12

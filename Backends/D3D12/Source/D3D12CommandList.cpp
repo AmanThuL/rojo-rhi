@@ -31,7 +31,7 @@ namespace rojoRHI {
         core::checkAcquire(impl.core);
         // A list is the core's state alone: it encodes no native command, so acquisition makes no native call.
         const uint32_t slot = static_cast<uint32_t>(impl.core.frameNumber() % impl.core.framesInFlight());
-        CommandListImpl& list = impl.lists.acquire(slot, impl.core.counts());
+        CommandListImpl& list = impl.lists.acquire(slot, type, impl.core.counts());
         core::beginList(list.core, impl.core, type, label);
         return CommandListImpl::wrap(&list);
     }
