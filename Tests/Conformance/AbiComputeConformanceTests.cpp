@@ -183,17 +183,16 @@ namespace {
 
     //==================================================================================================================
     /// Clears layer `layer` of the multisample `texture` to (1, 0, 1, 1) through a render pass and leaves it readable by a
-    /// shader, as the fetch kernels need.
+    /// shader, as the fetch kernels need. Every layer changes layout together, so no view spans mixed layouts.
     void clearMultisample(test::GpuKit& kit, Texture texture, uint32_t layer)
     {
-        const SubresourceRange range{ .baseMip = 0, .mipCount = 1, .baseLayer = layer, .layerCount = 1 };
         CommandList list = kit.list(QueueType::Graphics, "test.clearMultisample");
-        test::transition(list, texture, Layout::Undefined, Layout::ColorAttachment, range);
+        test::transition(list, texture, Layout::Undefined, Layout::ColorAttachment);
         const std::array colors{ ColorAttachment{
             .texture = texture, .layer = layer, .load = LoadOp::Clear, .store = StoreOp::Store, .clear = ClearColor{ 1.0f, 0.0f, 1.0f, 1.0f } } };
-        list.beginRenderPass(RenderPassDesc{ .colors = colors, .area = { 0, 0, kEdge, kEdge }, .label = "test.clearMultisample" });
+        list.beginRenderPass(RenderPassDesc{ .colors = colors, .area = { 0, 0, kEdge, kEdge }, .label = "test.clearMultisample.pass" });
         list.endRenderPass();
-        test::transition(list, texture, Layout::ColorAttachment, Layout::ShaderRead, range);
+        test::transition(list, texture, Layout::ColorAttachment, Layout::ShaderRead);
         kit.run(std::array{ list });
     }
 
