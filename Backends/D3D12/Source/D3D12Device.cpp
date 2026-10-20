@@ -16,6 +16,7 @@
 #include "D3D12Common.h"
 #include "D3D12Fences.h"
 #include "D3D12Loader.h"
+#include "D3D12PipelineState.h"
 #include "D3D12ShaderLibrary.h"
 #include "D3D12Textures.h"
 #include "D3D12Views.h"
@@ -178,6 +179,7 @@ namespace rojoRHI {
         hooks.texture = d3d12::retireTexture;
         hooks.view = d3d12::retireView;
         hooks.fence = d3d12::retireFence;
+        hooks.pipeline = d3d12::retirePipeline;
         hooks.shaderLibrary = d3d12::retireShaderLibrary;
         hooks.frameSlot = d3d12::reuseSlot;
         hooks.waitFrame = d3d12::waitFrame;

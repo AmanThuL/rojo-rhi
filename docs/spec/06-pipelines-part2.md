@@ -23,7 +23,7 @@ it is not part of the descriptor or of `dispatch`.
 
 | | Metal 4 | D3D12 | Vulkan |
 |---|---|---|---|
-| Call | `MTL4::ComputePipelineDescriptor`, `setRequiredThreadsPerThreadgroup` with the threadgroup size the library declares for the entry | `D3D12_COMPUTE_PIPELINE_STATE_DESC` with the global root signature | `VkComputePipelineCreateInfo` |
+| Call | `MTL4::ComputePipelineDescriptor`, `setRequiredThreadsPerThreadgroup` with the threadgroup size the library declares for the entry | pipeline state stream: the global root signature and CS | `VkComputePipelineCreateInfo` |
 | Cost | native | native | native |
 
 ### `Device::createPipeline`
