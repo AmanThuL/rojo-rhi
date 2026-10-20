@@ -394,7 +394,7 @@ TEST_CASE("the render pass table fixes targets, depth state, blending and rectan
                 return pass;
             }
         }
-        FAIL("no render pass " << label);
+        FAIL_CHECK("no render pass " << label);
         return kRenderPasses[0];
     };
     CHECK(byLabel("geometry").depthStencil.depthWrite);
