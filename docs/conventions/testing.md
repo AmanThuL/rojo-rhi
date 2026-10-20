@@ -58,7 +58,7 @@ A Metal 4 run is also checked for `autoreleased with no pool` lines under
 `OBJC_DEBUG_MISSING_POOLS=YES`, and the check is judged by their stacks: a line with a RojoRHI frame
 is a failure. It runs twice, with `MTL_DEBUG_LAYER=1` and without it, because the native commands
 open their pools only when the layer wraps the device. Without the layer, a line under `copyBuffer`,
-`fillBuffer`, `commitIfDirty`, `forgetTextures`, `end`, `Encoders::close`, `Encoders::finish`,
+`fillBuffer`, `commitIfDirty`, `forgetTextures`, `Encoders::close`, `Encoders::finish`,
 `copyBufferToTexture`, `copyTextureToBuffer` or `commit` may appear, where the driver autoreleases a
 bounded set of objects once; the count stays flat from 3 to 200 samples and from K 10 to 1,000, so
 it is not a leak per command.

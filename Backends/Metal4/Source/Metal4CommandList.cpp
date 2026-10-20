@@ -191,6 +191,8 @@ namespace rojoRHI {
         CommandListImpl& list = CommandListImpl::of(*this);
         // The core's checks run before any native call.
         core::endList(list.core);
+        // The driver autoreleases objects while it closes the open encoder and ends the buffer.
+        const metal4::AutoreleasePool pool;
         // A barrier still pending orders the work of later lists on the queue: the open encoder carries it when it covers its
         // sources, and a trailing encoder emits what it did not carry.
         list.encoders.finish(list.core);

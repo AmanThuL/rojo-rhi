@@ -56,10 +56,10 @@ write, the end of a render encoder and the end of a compute encoder after a carr
 update therefore open a `CommandPool` around their native call, which pushes an autorelease pool
 only when the device is wrapped by the layer (`DeviceImpl::commandPools`) and costs one untaken
 branch otherwise. The render path of a clear opens an `AutoreleasePool` always, for the encoder
-factory. Barriers open none; labels and debug-group pushes always open one. Without the layer the
-driver still autoreleases a bounded set of objects once, under copies and fills, `commitIfDirty`,
-`forgetTextures`, `end`, `Encoders::close` and `finish`, and `commit`; the count stays flat from 3
-to 200 samples and from K 10 to 1,000. A thread with no pool keeps such an object until it exits.
+factory, and so does `end`. Barriers open none; labels and debug-group pushes always open one.
+Without the layer the driver autoreleases a bounded set of objects once, under copies and fills,
+`commitIfDirty`, `forgetTextures`, `Encoders::close` and `finish`, and `commit`; the count stays
+flat from 3 to 200 samples and from K 10 to 1,000. A poolless thread keeps one until it exits.
 
 ## Copies
 
