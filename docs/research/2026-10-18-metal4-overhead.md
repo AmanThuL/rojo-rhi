@@ -286,4 +286,9 @@ the backend and the harness. Nothing here changes a budget, a workload, a `K` or
 
 ## Results
 
-Not yet run.
+Run on 2026-10-19 at 4f2e0d6: 1,260 processes, all nominal on their first attempt. Every row, the
+cause analysis and the decisions are in [the results](2026-10-18-metal4-overhead-results.md). The
+round misses three budgets: CPU per operation (33 of 34 judged configurations; C1 to C7 by 23% to
+68%), the composed frame's GPU time (+85.6 µs [82.7, 89.6], +4.37%) and allocations (R above N in 61
+of 63 configurations). Hidden pipeline variants (none) and native calls (all within N plus `c`, C9
+with no margin) are met. Texture indexing is not the cause of the GPU miss; #30 is not reopened.

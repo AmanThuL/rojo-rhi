@@ -139,7 +139,10 @@ python3 Tools/bench.py analyze        # writes summary.json and analysis.txt fro
 `bench.py build` takes `--backend metal4` (the default) or `null`; on `metal4` the harness links,
 `xmake test RojoRHIBench/metal4` passes and `correctness` (R against N, both builds, untimed)
 passes; no CI job builds it there. `correctness --arms N` with the native arm alone smoke-runs it.
-Timing follows ADR 0014: Release, validation off, on AC power, never on hosted runners.
+Timing follows ADR 0014: Release, validation off, on AC power, never on hosted runners. The first
+timed round (2026-10-19) missed the CPU, GPU and allocation budgets and met the pipeline and
+native-call ones ([results](docs/research/2026-10-18-metal4-overhead-results.md)); a fixed backend
+is measured again in a new note.
 
 `python3 Tools/check_lto_inline.py`, after `xmake build RojoRHILtoProbe` in a Release configure,
 fails unless link-time optimization inlined `Device::capabilities` into its caller in the probe

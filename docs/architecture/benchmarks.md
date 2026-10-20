@@ -189,12 +189,12 @@ untimed correctness gate (`bench.py build --backend metal4`, then `correctness`,
 Release and Debug) passes every configuration, kept under the `t2-gate` topic so that its logs stay
 out of the timed round's `t2` directory. The native arm runs on this Mac, and its correctness smoke
 (`--arms N`) is recorded as `t2-native-smoke` evidence, the three runs `native-check`,
-`native-build` and `native-gate` ([recording GPU evidence](../guides/gpu-evidence.md)). Before a
-timed round:
+`native-build` and `native-gate` ([recording GPU evidence](../guides/gpu-evidence.md)).
 
-- keep the obligations the N arm encodes (next section) in view;
-- run `build`, `correctness`, `timing` and `analyze` and record the results in the note's Results
-  section.
+The first timed round ran on 2026-10-19 under the `t2` topic and missed the CPU, GPU and allocation
+budgets ([results](../research/2026-10-18-metal4-overhead-results.md)); a report-only diagnosis of
+the misses is kept under `t2-diagnosis`. A later round is a new note: keep the obligations the N
+arm encodes (next section) in view, and run `build`, `correctness`, `timing` and `analyze` again.
 
 ## Backend obligations the N arm encodes
 
