@@ -1,6 +1,6 @@
 //----------------------------------------------------------------------------------------------------------------------
 /// @file D3D12CommandList.cpp
-/// @brief Implements D3D12 command list acquisition and `end` on the core's state; recording entries abort until implemented.
+/// @brief Implements D3D12 command list acquisition, `end` and frame data on the core's state; other recording entries abort.
 //----------------------------------------------------------------------------------------------------------------------
 
 #include "D3D12Device.h"
@@ -8,10 +8,17 @@
 #include <rojoRHI/RHI.h>
 
 #include "Core/CommandLists.h"
+#include "Core/DeviceCore.h"
+#include "Core/FrameArena.h"
+#include "Core/HandlePool.h"
+#include "Core/Records.h"
+#include "D3D12Addr.h"
+#include "D3D12Buffers.h"
 #include "D3D12Common.h"
 
 #include <cstddef>
 #include <cstdint>
+#include <cstring>
 #include <span>
 #include <string_view>
 
@@ -43,9 +50,15 @@ namespace rojoRHI {
     }
 
     //==================================================================================================================
-    Addr CommandList::uploadFrameData(std::span<const std::byte>, uint32_t)
+    Addr CommandList::uploadFrameData(std::span<const std::byte> bytes, uint32_t alignment)
     {
-        d3d12::notImplemented("CommandList::uploadFrameData");
+        core::CommandListCore& list = CommandListImpl::of(*this).core;
+        // Only a list with no page, or a full one, takes the arena's lock to claim a page (ADR 0020).
+        const core::ArenaAllocation place = core::allocateFrameData(*list.device, list, bytes, alignment, d3d12::createArenaPage, list.device);
+        std::memcpy(place.memory, bytes.data(), bytes.size());
+        // The page's payload is fixed while the page lives, so it is read with one acquire load and no lock.
+        const auto* page = static_cast<const d3d12::BufferPayload*>(list.device->pool<Buffer>().native(place.page));
+        return d3d12::encodeAddr(*page, place.offset);
     }
 
     //==================================================================================================================
