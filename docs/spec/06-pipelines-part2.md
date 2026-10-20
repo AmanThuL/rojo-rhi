@@ -120,9 +120,10 @@ Dynamic state lives for one render pass ([command recording](07-command-recordin
 | Topology | the list form of the pipeline's class, reset by every `setPipeline` | `setPrimitiveTopology` |
 | Depth bias | 0, 0, 0 | `setDepthBias` |
 
-D3D12 command-list state persists across render passes, so the planned backend writes the starting
-values at `beginRenderPass`; Metal 4 starts each render encoder fresh and Vulkan 1.4 sets them as
-dynamic state.
+D3D12 command-list state persists across render passes, so its backend writes the starting stencil
+reference and blend constants at `beginRenderPass` where the list holds other values, and records
+the zero depth bias; Metal 4 starts each render encoder fresh and Vulkan 1.4 sets them as dynamic
+state.
 
 ### `CommandList::setViewport`
 
@@ -268,4 +269,4 @@ hidden pipeline variants, which the zero-variant budget forbids.
 | | Metal 4 | D3D12 | Vulkan |
 |---|---|---|---|
 | Call | `MTL4::RenderCommandEncoder::setDepthBias` | `RSSetDepthBias` (`ID3D12GraphicsCommandList9`) | `vkCmdSetDepthBias` |
-| Cost | cheap: values re-issued at a pipeline change | native: needs `DynamicDepthBiasSupported`; per-vendor support unverified | native |
+| Cost | cheap: values re-issued at a pipeline change | cheap: values re-issued at each `setPipeline` of a `depthBias` pipeline; needs `DynamicDepthBiasSupported`; per-vendor support unverified | native |

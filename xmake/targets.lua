@@ -345,8 +345,6 @@ target("RojoRHITests")
         local d3d12_conformance_pending = {
             "AbiComputeConformanceTests.cpp",
             "AbiGraphicsConformanceTests.cpp",
-            "DrawConformanceTests.cpp",
-            "FormatConformanceTests.cpp",
             "GraphicsBarrierConformanceTests.cpp",
             "IndirectConformanceTests.cpp",
             "MeshConformanceTests.cpp",

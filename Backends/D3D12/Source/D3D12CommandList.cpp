@@ -100,42 +100,6 @@ namespace rojoRHI {
     }
 
     //==================================================================================================================
-    void CommandList::setViewport(const Viewport&)
-    {
-        d3d12::notImplemented("CommandList::setViewport");
-    }
-
-    //==================================================================================================================
-    void CommandList::setScissor(const Rect2D&)
-    {
-        d3d12::notImplemented("CommandList::setScissor");
-    }
-
-    //==================================================================================================================
-    void CommandList::setStencilReference(uint8_t)
-    {
-        d3d12::notImplemented("CommandList::setStencilReference");
-    }
-
-    //==================================================================================================================
-    void CommandList::setBlendConstants(float, float, float, float)
-    {
-        d3d12::notImplemented("CommandList::setBlendConstants");
-    }
-
-    //==================================================================================================================
-    void CommandList::setPrimitiveTopology(PrimitiveTopology)
-    {
-        d3d12::notImplemented("CommandList::setPrimitiveTopology");
-    }
-
-    //==================================================================================================================
-    void CommandList::setDepthBias(float, float, float)
-    {
-        d3d12::notImplemented("CommandList::setDepthBias");
-    }
-
-    //==================================================================================================================
     void CommandList::setRoot(Addr root)
     {
         CommandListImpl& list = CommandListImpl::of(*this);
@@ -145,24 +109,6 @@ namespace rojoRHI {
         binding.root = d3d12::rootAddress(d3d12::deviceOf(list).directory, root);
         binding.graphicsRootDirty = true;
         binding.computeRootDirty = true;
-    }
-
-    //==================================================================================================================
-    void CommandList::draw(uint32_t, uint32_t, uint32_t, uint32_t)
-    {
-        d3d12::notImplemented("CommandList::draw");
-    }
-
-    //==================================================================================================================
-    void CommandList::drawIndexed(Buffer, IndexType, uint32_t, uint32_t, uint32_t, int32_t, uint32_t)
-    {
-        d3d12::notImplemented("CommandList::drawIndexed");
-    }
-
-    //==================================================================================================================
-    void CommandList::drawMeshTasks(uint32_t, uint32_t, uint32_t)
-    {
-        d3d12::notImplemented("CommandList::drawMeshTasks");
     }
 
     //==================================================================================================================

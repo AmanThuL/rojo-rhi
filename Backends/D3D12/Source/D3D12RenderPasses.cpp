@@ -200,6 +200,9 @@ namespace rojoRHI {
         core::beginPass(list.core, desc);
         d3d12::beginNativeScope(list);
         d3d12::ListState& state = list.state;
+        // A pass starts with no pipeline bound, as the core records; BeginRenderPass changes no PSO, so the native slot's
+        // record stays.
+        state.binding.pipeline = nullptr;
         d3d12::PassStorage& pass = state.pass;
         // Payloads are fixed while their textures live, so each is read with one acquire load and no lock (ADR 0020).
         const auto& texturePool = list.core.device->pool<Texture>();
@@ -249,6 +252,8 @@ namespace rojoRHI {
         CommandListImpl& list = CommandListImpl::of(*this);
         core::endPass(list.core);
         d3d12::ListState& state = list.state;
+        // The pass's end unbinds the caller's pipeline, as the core records; the native slot keeps it.
+        state.binding.pipeline = nullptr;
         state.list->EndRenderPass();
         core::noteNativeCall(list.core);
         // The resolves have written their targets: each returns to the render-target layout the caller's barriers name.
