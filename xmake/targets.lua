@@ -282,35 +282,20 @@ target("RojoRHITests")
         -- The contract files whose chapters the D3D12 backend does not implement yet. A file leaves the list when it
         -- passes whole on WARP under the debug layer and GPU-based validation, and the list ends empty.
         local d3d12_pending = {
-            "AliasingDeathTests.cpp",
-            "AliasingTests.cpp",
-            "BarrierDeathTests.cpp",
-            "BarrierTests.cpp",
-            "CopyDeathTests.cpp",
-            "CopyTests.cpp",
-            "CounterTests.cpp",
-            "DiagnosticsDeathTests.cpp",
-            "DiagnosticsTests.cpp",
-            "DrawDeathTests.cpp",
-            "DrawTests.cpp",
-            "HandoffDeathTests.cpp",
-            "HandoffTests.cpp",
-            "HazardDeathTests.cpp",
-            "HazardTests.cpp",
-            "IndirectHazardDeathTests.cpp",
-            "IndirectHazardTests.cpp",
-            "LifetimeDeathTests.cpp",
-            "LifetimeTests.cpp",
-            "RenderPassDeathTests.cpp",
-            "RenderPassTests.cpp",
+            "DiagnosticsDeathTests.cpp", -- needs capture
+            "DiagnosticsTests.cpp", -- needs capture and upscalers
+            "HandoffDeathTests.cpp", -- needs swapchains
+            "HandoffTests.cpp", -- needs swapchains
+            "LifetimeDeathTests.cpp", -- needs swapchains
+            "LifetimeTests.cpp", -- needs swapchains
             "SparseDeathTests.cpp",
             "SparseOrderDeathTests.cpp",
             "SparseOrderTests.cpp",
             "SparseTests.cpp",
             "SwapchainDeathTests.cpp",
             "SwapchainTests.cpp",
-            "TrackerDeathTests.cpp",
-            "TrackerTests.cpp",
+            "TrackerDeathTests.cpp", -- needs swapchains
+            "TrackerTests.cpp", -- needs swapchains
             "UpscaleDeathTests.cpp",
             "UpscalerTests.cpp",
         }
@@ -343,13 +328,10 @@ target("RojoRHITests")
         -- The conformance files whose chapters the D3D12 backend does not implement yet. A file leaves the list when its
         -- cases pass whole on WARP under the debug layer and GPU-based validation, and the list ends empty.
         local d3d12_conformance_pending = {
-            "AbiComputeConformanceTests.cpp",
-            "AbiGraphicsConformanceTests.cpp",
-            "DrawConformanceTests.cpp",
-            "GraphicsBarrierConformanceTests.cpp",
-            "IndirectConformanceTests.cpp",
+            "AbiGraphicsConformanceTests.cpp", -- draws with firstVertex and baseVertex assert the base-including vertexIndex, which D3D12 does not produce
+            "IndirectConformanceTests.cpp", -- baseVertex records assert the base-including vertexIndex, which D3D12 does not produce
             "PresentationConformanceTests.cpp",
-            "ScopeConformanceTests.cpp",
+            "ScopeConformanceTests.cpp", -- one case upscales
             "SparseConformanceTests.cpp",
             "UpscaleConformanceTests.cpp",
         }
