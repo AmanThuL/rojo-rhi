@@ -41,7 +41,7 @@ TEST_CASE("the Null limits are the Floor column of the reference", "[null]")
     CHECK(limits.rootAlignment == 256);
     CHECK(limits.frameDataAlignment == 256);
     CHECK(limits.maxBufferSize == (1ull << 32));
-    CHECK(limits.maxAddrOffset == 4'294'967'295ull);
+    CHECK(limits.maxAddrOffset == 536'870'911ull);
     CHECK(limits.maxTextureDimension1D == 16'384);
     CHECK(limits.maxTextureDimension2D == 16'384);
     CHECK(limits.maxTextureDimension3D == 2'048);

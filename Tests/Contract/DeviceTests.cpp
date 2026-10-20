@@ -142,7 +142,7 @@ TEST_CASE("every limit is at least the floor of the reference", "[contract]")
     CHECK(limits.maxRootBlockSize >= 65'536);
     CHECK(limits.rootAlignment >= 256);
     CHECK(limits.frameDataAlignment >= 256);
-    CHECK(limits.maxAddrOffset >= 4'294'967'295ull);
+    CHECK(limits.maxAddrOffset >= 536'870'911ull);
     CHECK(limits.maxTextureDimension1D >= 16'384);
     CHECK(limits.maxTextureDimension2D >= 16'384);
     CHECK(limits.maxTextureDimension3D >= 2'048);

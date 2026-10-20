@@ -158,8 +158,8 @@ The Null device is deterministic and does no work.
   conservative rasterisation) and every upscaler kind except `Auto`.
 - `Limits` takes the Floor column of the limits table in
   [formats and limits](../spec/15-formats-and-limits-part2.md) wherever that column gives a number.
-  `maxBufferSize` has no number there, so the Null device reports 2^32 bytes, a value above the
-  reach of an `Addr` that is not verified against any hardware. `maxViews` and `maxSamplers` in
+  `maxBufferSize` has no number there, so the Null device reports 2^32 bytes, a value no hardware
+  verifies, chosen above the 2^29 − 1 reach of an `Addr`. `maxViews` and `maxSamplers` in
   `Capabilities` repeat the limits.
 - `formatCapabilities` reports, for each format, every capability the reference allows its class
   (`formatCeiling`): the class rules decide, for example, that an sRGB format has no storage use,
@@ -191,8 +191,8 @@ The Null `Addr` is not a virtual address. `Device::address` returns `lo` as the 
 slot index and `hi` as the byte offset, the way D3D12 pairs a resource with an offset, so a caller
 cannot come to depend on arithmetic beyond `operator+`. The backend defines `operator+`
 (`NullAddr.cpp`) and the core owns the bound: `checkAddrOffset` rejects an offset, and the sum,
-above `maxAddrOffset`, which is 2^32 - 1 here (`VU-rojo-buffer-0011`). The offset is checked alone
-first so the sum cannot wrap.
+above `maxAddrOffset`, which is the floor, 2^29 - 1, here (`VU-rojo-buffer-0011`). The offset is
+checked alone first so the sum cannot wrap.
 
 ## Heaps and placement
 

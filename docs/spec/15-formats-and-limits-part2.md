@@ -52,7 +52,7 @@ identifier; this entry only defines the values.
 | `rootAlignment` | 256 | 4, raised to 256 | 256, `D3D12_CONSTANT_BUFFER_DATA_PLACEMENT_ALIGNMENT` | `minUniformBufferOffsetAlignment`, at most 256 |
 | `frameDataAlignment` | 256 | 256 | 256 | 256 |
 | `maxBufferSize` | device | `maxBufferLength` | adapter memory; an `Addr` reaches only `maxAddrOffset` bytes of it | `maxBufferSize` (Vulkan 1.3) |
-| `maxAddrOffset` | 4,294,967,295 (2^32 − 1) | `maxBufferLength` − 1, per device: an `Addr` is a GPU virtual address and reaches every byte of the largest buffer, and `createDevice` refuses a `maxBufferLength` below 2^32 | 2^32 − 1: the 32-bit byte offset an `Addr` carries into a `ByteAddressBuffer` (*unverified*: the raw-view limit of 2^27 elements may cap one raw view at 512 MiB) | per device, up to 2^64 − 1: a buffer device address |
+| `maxAddrOffset` | 536,870,911 (2^29 − 1) | `maxBufferLength` − 1, per device: an `Addr` is a GPU virtual address and reaches every byte of the largest buffer, and `createDevice` refuses a `maxBufferLength` below 2^32 | 2^29 − 1: an `Addr` is a raw-buffer heap index and a byte offset into that buffer's raw view, and a raw view holds at most 2^27 four-byte elements (`D3D12_REQ_BUFFER_RESOURCE_TEXEL_COUNT_2_TO_EXP`), 512 MiB | per device, up to 2^64 − 1: a buffer device address |
 | `maxTextureDimension1D` | 16,384 | 16,384 | 16,384 | `maxImageDimension1D` |
 | `maxTextureDimension2D` | 16,384 | 16,384 | 16,384 | `maxImageDimension2D` |
 | `maxTextureDimension3D` | 2,048 | 2,048 | 2,048 | `maxImageDimension3D` |
@@ -82,11 +82,12 @@ Notes on the floor:
   [shader ABI](05-shader-abi.md) and `CommandList::uploadFrameData`.
 - `maxAddrOffset` bounds `Addr` arithmetic and dereference (`VU-rojo-buffer-0011` in
   [memory and buffers](03-memory-and-buffers.md#addr)). On the planned D3D12 backend an `Addr` is a
-  raw-buffer heap index and a 32-bit byte offset, so the portable value is 2^32 − 1 even where
-  `maxBufferSize` is larger. A larger buffer is valid; portable shader code reaches only its first
-  2^32 − 1 bytes through one `Addr`. The value is *unverified*: a D3D12 raw buffer view is limited
-  to 2^27 elements, which may cap one raw view, and so one `Addr` base, at 512 MiB of 4-byte
-  elements. It is settled before [memory and buffers](03-memory-and-buffers.md) is accepted.
+  raw-buffer heap index and a byte offset into that buffer's raw view, and a raw view holds at most
+  2^27 four-byte elements, so one `Addr` base reaches 512 MiB and the portable value is 2^29 − 1
+  even where `maxBufferSize` is larger. Shader arithmetic stays inside one view, so no encoding of a
+  heap index and an offset reaches further. A larger buffer is valid: portable shader code reaches
+  only its first 2^29 − 1 bytes through one `Addr`, and copies reach all of it. Metal 4 reports its
+  own, larger value.
 - `maxTextureLayers` counts cube faces: a cube array holds at most `maxTextureLayers / 6` cubes.
 - `maxColorBytesPerSample` is a Metal tile-memory budget with no D3D12 counterpart; a render pass
   over it cannot run on Metal 4, so the floor binds every backend (`VU-rojo-cmd-0015` in

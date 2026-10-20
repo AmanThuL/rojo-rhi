@@ -18,8 +18,9 @@
 #include <vector>
 
 namespace rojoRHI {
-    /// The Null device's `Limits::maxAddrOffset`: the 32-bit byte offset an address carries in its `hi` word, 2^32 - 1.
-    constexpr uint64_t kNullMaxAddrOffset = 4'294'967'295;
+    /// The Null device's `Limits::maxAddrOffset`, the floor 2^29 - 1: the bytes one D3D12 raw view reaches, 2^27 four-byte
+    /// elements, so the `hi` offset of a Null address never exceeds what a D3D12 address can hold.
+    constexpr uint64_t kNullMaxAddrOffset = 536'870'911;
 
     /// The extent a Null swapchain's images have until `Swapchain::resize`: the Null backend reads no surface, so it gives every
     /// swapchain the same one, a common window size.

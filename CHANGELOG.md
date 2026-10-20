@@ -252,3 +252,9 @@
   MetalFX fills an unsynchronized table of Metal's; `Queue::mapTiles` orders its updates against
   the queue's earlier and later work (chapter 13 states the order); and `Swapchain::resize` runs
   inside an autorelease pool.
+- API reference change for the planned D3D12 backend: the floor of `maxAddrOffset` is
+  2^29 − 1, down from 2^32 − 1, because a D3D12 raw view holds at most 2^27 four-byte
+  elements, so one `Addr` base reaches 512 MiB. `VU-rojo-buffer-0011` keeps its identifier
+  and rule and states the new value. The Null device reports 2^29 − 1; Metal 4 still reports
+  `maxBufferLength` − 1. Portable code that reaches past the first 512 MiB of a buffer through
+  one `Addr` places that data in another buffer.

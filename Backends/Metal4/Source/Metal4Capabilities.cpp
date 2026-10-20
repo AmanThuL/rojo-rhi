@@ -20,7 +20,7 @@ namespace rojoRHI::metal4 {
         /// The floor's `maxSamplers`, chapter 15 part 2.
         constexpr uint64_t kFloorSamplers = 996;
 
-        /// The floor's `maxBufferSize` in bytes: the floor's `maxAddrOffset`, 2^32 - 1, is `maxBufferLength` less one.
+        /// The Metal 4 floor of `maxBufferLength` in bytes, chapter 02; `maxAddrOffset`, one less, stays above the portable floor.
         constexpr uint64_t kFloorBufferLength = uint64_t{ 1 } << 32;
 
         /// The floor's `maxGroupSize` on each axis, chapter 15 part 2; the x axis is also the floor's `maxThreadsPerGroup`.

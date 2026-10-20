@@ -47,23 +47,23 @@ implemented. The device reports no conservative rasterisation.
 
 `createDevice` validates the description in the core, takes `MTL::CreateSystemDefaultDevice` and
 requires the Metal 4 family, the Apple7 family, read-write texture tier 2, 996 argument-buffer
-samplers, a `maxBufferLength` of 2^32 bytes (so `maxAddrOffset` reaches its floor of 2^32 − 1),
-1,024 x 1,024 x 64 threads per threadgroup, 32,768 bytes of threadgroup memory and BC texture
-compression: every floor item of chapters 02 and 15 that Metal reports. The first missing one is
-named in an `Unsupported` result. It then creates, in this order: the three `MTL4::CommandQueue`s
-(graphics, compute, copy), one `MTL4::Compiler` with its pipeline data set serializer, the residency
-set, the stager and its internal queue, the frame event, the two ID tables and the backend's kernel
-library with its pipelines, then loads `DeviceDesc::pipelineCache`
+samplers, a `maxBufferLength` of 2^32 bytes (so `maxAddrOffset` is at least 2^32 − 1, above the
+floor of 2^29 − 1), 1,024 x 1,024 x 64 threads per threadgroup, 32,768 bytes of threadgroup memory
+and BC texture compression: every floor item of chapters 02 and 15 that Metal reports. The first
+missing one is named in an `Unsupported` result. It then creates, in this order: the three
+`MTL4::CommandQueue`s (graphics, compute, copy), one `MTL4::Compiler` with its pipeline data set
+serializer, the residency set, the stager and its internal queue, the frame event, the two ID tables
+and the backend's kernel library with its pipelines, then loads `DeviceDesc::pipelineCache`
 ([drawing](metal4-drawing.md#the-pipeline-cache)). Each of the three queues also owns a progress
 event, described under fences. Any failure releases what exists in reverse and returns the error.
 `destroyDevice` drains every queue, the internal upload queue included, by signalling a throwaway
 event and waiting for it, then committing an empty command buffer with a feedback handler and
 waiting for the handler (Metal making no event or buffer is fatal, since nothing could be released
 safely), so the retire hooks that `beginDestroy` runs find idle queues; `VU-rojo-device-0002`
-therefore fires after the drain. It then releases the lists' objects, the swapchains still held,
-the counter heaps scopes created on first need ([command recording](metal4-recording.md)) and the
-native objects in reverse order of creation. The device's own objects and the calls that create,
-drain and release them are not counted.
+therefore fires after the drain. It then releases the lists' objects, the swapchains still held, the
+counter heaps scopes created on first need ([command recording](metal4-recording.md)) and the native
+objects in reverse order of creation. The device's own objects and the calls that create, drain and
+release them are not counted.
 
 `createDevice` leaves the residency set dirty: the first submission, or the first staged upload,
 commits it. Capabilities come from the device and from the Metal 4 column of the limits table of

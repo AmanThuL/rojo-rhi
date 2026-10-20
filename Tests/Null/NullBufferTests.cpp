@@ -85,7 +85,7 @@ TEST_CASE("an address one byte below maxAddrOffset is accepted", "[null]")
     Device device = *createDevice();
     const Buffer buffer = *device.createBuffer({ .size = 1ull << 32 }); // A Gpu buffer holds no host memory.
     const Addr reached = device.address(buffer) + (device.capabilities().limits.maxAddrOffset - 1);
-    CHECK(reached.hi == 0xFFFF'FFFEu);
+    CHECK(reached.hi == 0x1FFF'FFFEu);
     destroyDevice(device);
 }
 
