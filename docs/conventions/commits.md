@@ -6,8 +6,8 @@
 
 - Use `<scope>: <imperative outcome>` in English. Keep the subject at 60 characters when practical,
   never over 72, and omit the trailing period. The scopes are `rhi` for the public interface and
-  shared implementation, `metal` for the Metal 4 backend, `imgui` for the optional adapter, `test`,
-  `tool`, `build`, `ci` and `docs`.
+  shared implementation, `metal` for the Metal 4 backend, `d3d12` for the D3D12 backend, `imgui`
+  for the optional adapter, `test`, `tool`, `build`, `ci` and `docs`.
 - Make one explainable behaviour or constraint one commit. Keep its implementation, tests and
   nearby documentation together. Do not split work to manufacture commit count, and do not combine
   unrelated files into a cleanup wave.
