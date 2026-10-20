@@ -89,8 +89,8 @@ namespace rojoRHI {
         const MTL::Buffer* source = nativeBuffer(list, src);
         const MTL::Buffer* destination = nativeBuffer(list, dst);
         MTL4::ComputeCommandEncoder* encoder = impl.encoders.compute(list, impl.state, MTL::StageBlit);
-        // The driver builds an internal blit pipeline on a shape's first use and autoreleases while it does.
-        const metal4::AutoreleasePool pool;
+        // Pooled only where the device may autorelease; see the copy entries in metal4-recording.md.
+        const metal4::CommandPool pool(impl.state.commandPools);
         encoder->copyFromBuffer(source, srcOffset, destination, dstOffset, size);
         core::noteNativeCall(list);
         impl.encoders.markWork();
@@ -106,8 +106,8 @@ namespace rojoRHI {
         const MTL::Texture* texture = nativeTexture(list, dst);
         const BufferImages images = bufferImages(texture, layout, region);
         MTL4::ComputeCommandEncoder* encoder = impl.encoders.compute(list, impl.state, MTL::StageBlit);
-        // The driver builds an internal blit pipeline on a shape's first use and autoreleases while it does.
-        const metal4::AutoreleasePool pool;
+        // Pooled only where the device may autorelease; see the copy entries in metal4-recording.md.
+        const metal4::CommandPool pool(impl.state.commandPools);
         if (images.volume)
         {
             encoder->copyFromBuffer(
@@ -155,8 +155,8 @@ namespace rojoRHI {
         const MTL::Buffer* destination = nativeBuffer(list, dst);
         const BufferImages images = bufferImages(texture, layout, region);
         MTL4::ComputeCommandEncoder* encoder = impl.encoders.compute(list, impl.state, MTL::StageBlit);
-        // The driver builds an internal blit pipeline on a shape's first use and autoreleases while it does.
-        const metal4::AutoreleasePool pool;
+        // Pooled only where the device may autorelease; see the copy entries in metal4-recording.md.
+        const metal4::CommandPool pool(impl.state.commandPools);
         if (images.volume)
         {
             encoder->copyFromTexture(
@@ -216,8 +216,8 @@ namespace rojoRHI {
             blocks(srcRegion.extent.width, packing.blockWidth), blocks(srcRegion.extent.height, packing.blockHeight), volume ? srcRegion.extent.depth : 1
         );
         MTL4::ComputeCommandEncoder* encoder = impl.encoders.compute(list, impl.state, MTL::StageBlit);
-        // The driver builds an internal blit pipeline on a shape's first use and autoreleases while it does.
-        const metal4::AutoreleasePool pool;
+        // Pooled only where the device may autorelease; see the copy entries in metal4-recording.md.
+        const metal4::CommandPool pool(impl.state.commandPools);
         for (uint32_t layer = 0; layer < calls; ++layer)
         {
             // Formats that differ only in sRGB transfer copy directly: the stored bits move unchanged.
@@ -249,8 +249,8 @@ namespace rojoRHI {
         if (pattern == byte * 0x01010101u)
         {
             MTL4::ComputeCommandEncoder* encoder = impl.encoders.compute(list, impl.state, MTL::StageBlit);
-            // The driver builds an internal blit pipeline on a shape's first use and autoreleases while it does.
-            const metal4::AutoreleasePool pool;
+            // Pooled only where the device may autorelease; see the copy entries in metal4-recording.md.
+            const metal4::CommandPool pool(impl.state.commandPools);
             encoder->fillBuffer(destination.buffer, NS::Range(offset, size), byte);
             core::noteNativeCall(list);
             impl.encoders.markWork();

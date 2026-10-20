@@ -71,6 +71,7 @@ namespace rojoRHI::metal4 {
             m_render = state.commandBuffer->renderCommandEncoder(descriptor);
             m_render->retain();
         }
+        m_commandPools = state.commandPools;
         core::noteNativeCall(list);
         ++list.counts.encodersOpened;
         m_render->setLabel(state.scopeLabels.empty() ? state.label : state.scopeLabels.back());
@@ -95,6 +96,7 @@ namespace rojoRHI::metal4 {
             m_render = state.commandBuffer->renderCommandEncoder(descriptor);
             m_render->retain();
         }
+        m_commandPools = state.commandPools;
         core::noteNativeCall(list);
         ++list.counts.encodersOpened;
         m_render->setLabel(state.scopeLabels.empty() ? state.label : state.scopeLabels.back());
@@ -171,9 +173,8 @@ namespace rojoRHI::metal4 {
             // A render encoder has no stages getter, so it keeps those it ran in: its load and store actions are fragment-stage
             // work, and a pass's commands add theirs.
             m_barriers.returnUnrun(m_ran);
-            // The validation layer autoreleases in endEncoding of a render encoder with a stencil attachment. A render encoder
-            // ends once per pass or clear, so the pool costs nothing per command.
-            const AutoreleasePool pool;
+            // The validation layer autoreleases in endEncoding of a render encoder with a stencil attachment.
+            const CommandPool pool(m_commandPools);
             m_render->endEncoding();
             core::noteNativeCall(list);
             m_render->release();

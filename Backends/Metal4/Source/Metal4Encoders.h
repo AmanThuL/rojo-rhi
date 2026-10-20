@@ -149,6 +149,7 @@ namespace rojoRHI::metal4 {
         MTL4::RenderCommandEncoder* m_render = nullptr;   ///< The open render encoder, retained; null when none is open.
         EncoderKind m_kind = EncoderKind::None;           ///< The kind of the open encoder.
         bool m_holdsWork = false;                         ///< The open encoder holds at least one command.
+        bool m_commandPools = false;                      ///< The list's `commandPools`, taken when a render encoder opens.
         MTL::Stages m_ran = 0;                            ///< The stages the open render encoder ran a command in.
         BarrierState m_barriers;                          ///< The pending barrier and the open encoder's covered stages.
         /// The compute pipeline last set on the open compute encoder, a backend kernel's or the caller's, so neither is set

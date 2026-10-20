@@ -286,9 +286,7 @@ namespace rojoRHI::metal4 {
             return;
         }
         const Timestamps& timestamps = deviceOf(list.core).timestamps;
-        // Metal autoreleases objects inside the write (an array without the validation layer, strings with it), so it runs
-        // inside a pool of its own.
-        const AutoreleasePool pool;
+        const CommandPool pool(list.state.commandPools);
         list.state.commandBuffer->writeTimestampIntoHeap(timestamps.heapFor(slotOf(list.core), index), index % Timestamps::kHeapEntries);
         core::noteNativeCall(list.core);
     }

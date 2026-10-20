@@ -139,8 +139,8 @@ the list allocates at its first pass and reuses.
   outermost first. Such a scope writes its timestamps on the render encoder after the fragment
   stage, at `TimestampGranularityPrecise`; a split writes none
   ([command recording](metal4-recording.md)).
-- Ending a render encoder opens an autorelease pool, once per encoder and never per command,
-  because the validation layer autoreleases when a stencil attachment ends.
+- Ending a render encoder opens a command pool, once per encoder and never per command, because
+  the validation layer autoreleases when a stencil attachment ends.
 
 ## State and the prefix
 
@@ -171,8 +171,8 @@ before it.
   `buffer(3)`, the `drawId` the shader reads, filtered; the list writes them into its frame-arena
   page at its first direct mesh draw of a recording.
 - Every draw skips a zero count, marks the encoder as holding work, and records the stages it ran
-  for the barrier lowering. Each native draw runs inside an `AutoreleasePool`, since the validation
-  layer autoreleases inside a draw; that is one pool per draw, a cost the Release build pays too.
+  for the barrier lowering. Each native draw runs inside a `CommandPool`, since the validation
+  layer autoreleases inside a draw; that is one pool per draw under the layer and none without it.
 
 ## Compute binding and dispatches
 
@@ -184,9 +184,9 @@ backend kernel's. A kernel run leaves its own pipeline on the encoder, so `dispa
 both cause. Restoring at the next dispatch orders the same as restoring after every kernel and
 spends a call only when a dispatch follows. A dispatch with a zero group count returns before any
 encoder work. Both entries take the threadgroup size from the payload, run the native dispatch
-inside a pool and count one message; `dispatchIndirect` passes the GPU address of the arguments.
-A pending barrier owed to an encoder that opened empty is emitted at the encoder's next command
-of any compute stage.
+inside a command pool and count one message; `dispatchIndirect` passes the GPU address of the
+arguments. A pending barrier owed to an encoder that opened empty is emitted at the encoder's next
+command of any compute stage.
 
 ## Counted draws
 

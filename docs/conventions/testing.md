@@ -56,13 +56,16 @@ skips three, and a run with the variable set passes three and skips one.
 
 A Metal 4 run is also checked for `autoreleased with no pool` lines under
 `OBJC_DEBUG_MISSING_POOLS=YES`, and the check is judged by their stacks: a line with a RojoRHI frame
-is a failure. Presenting a drawable makes Apple's FramePacing and submission threads print such
-lines with no RojoRHI frame, and so do the IOGPU completion threads, where the driver frees a
-completed command buffer's resources. A RojoRHI frame that only pushes an autorelease pool, such as
-a completion handler's pool, does not count: the push autoreleases nothing and reports an earlier
-driver autorelease. A run with `MTL_CAPTURE_ENABLED=1` prints more from the capture
-tool's XPC code; neither counts, so a count of zero holds only for a run that presents nothing and
-captures nothing ([the Metal 4
+is a failure. It runs twice, with `MTL_DEBUG_LAYER=1` and without it, because the native commands
+open their pools only when the layer wraps the device. Without the layer, a line under `copyBuffer`
+or `fillBuffer` may appear once per blit shape, where the driver builds its internal blit pipeline;
+it is the driver's one-time object, not a leak per command. Presenting a drawable makes Apple's
+FramePacing and submission threads print such lines with no RojoRHI frame, and so do the IOGPU
+completion threads, where the driver frees a completed command buffer's resources. A RojoRHI frame
+that only pushes an autorelease pool, such as a completion handler's pool, does not count: the push
+autoreleases nothing and reports an earlier driver autorelease. A run with `MTL_CAPTURE_ENABLED=1`
+prints more from the capture tool's XPC code; neither counts, so a count of zero holds only for a
+run that presents nothing and captures nothing ([the Metal 4
 edges](../architecture/metal4-backend-edges.md#presenting-under-objc_debug_missing_pools) lists the
 sources).
 

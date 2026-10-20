@@ -264,19 +264,16 @@ take no lock: a claim is an atomic add and a heap is published by a compare-exch
 ## Autorelease pools
 
 Every entry that calls an autoreleasing factory opens an `NS::AutoreleasePool` and retains what it
-keeps, as do the copies, the native fill, each kernel dispatch, dispatch and draw, and the end of a
-render encoder, where the driver or the validation layer autoreleases; every retire hook and every
-destructor of an object that holds Metal references does the same and releases in reverse order of
-creation. Objects from `new*` factories are +1 and released once. An `NS::Error*` is reset to null
-before each call that takes it. RojoRHI reads and sets no environment variable; whoever runs the
-tests sets `MTL_DEBUG_LAYER`.
-
-## The shared metal-cpp unit
-
-`Backends/Metal4/MetalCpp/MetalCppImpl.cpp` is the one unit that defines metal-cpp's class and
-selector tables. The `RojoRHIMetalCpp` target compiles it on macOS for any backend option; the
-`RojoRHI` target with `metal4`, `RojoRHILegacy` and the benchmark harness `RojoRHIBench` link it,
-so a host that links more than one gets one definition of each table.
+keeps; every retire hook and destructor of an object that holds Metal references does the same and
+releases in reverse order of creation. The native commands (copies, the native fill, each kernel
+dispatch, dispatch and draw, a command buffer timestamp and the end of a render encoder) autorelease
+only inside the validation layer, which wraps the device in a debug class. `createDevice` decides
+once from the class name of the `MTL::Device` (`metal4::commandsMayAutorelease`, not the
+environment) and keeps `DeviceImpl::commandPools`, which each list copies into its `ListState`.
+Detection fails closed: pools turn off only for a name positively a bare driver class (prefix
+`AGX`), and any other name, null or a capture or shader-validation wrapper included, opens them. A
+command opens a `metal4::CommandPool` with that flag. `new*` objects are +1 and released once. An
+`NS::Error*` is reset to null before each call that takes it.
 
 ## Tests
 

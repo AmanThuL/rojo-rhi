@@ -110,7 +110,8 @@ namespace rojoRHI {
                 auto created = std::make_unique<CommandListImpl>();
                 core::DeviceCounts::add(impl.core.counts().cpuAllocations);
                 // The list's objects are its own for good: the pool keeps the list, and the slot's reuse resets its allocator.
-                if (Result<void> made = created->state.create(impl.device, impl.viewTable->gpuAddress(), impl.samplerTable->gpuAddress()); !made)
+                if (Result<void> made = created->state.create(impl.device, impl.viewTable->gpuAddress(), impl.samplerTable->gpuAddress(), impl.commandPools);
+                    !made)
                 {
                     ROJORHI_LOG_ERROR("acquireCommandList on device \"{}\": {}", impl.core.label(), made.error().message);
                     std::abort();

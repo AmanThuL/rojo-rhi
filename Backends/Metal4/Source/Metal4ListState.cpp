@@ -36,8 +36,9 @@ namespace rojoRHI::metal4 {
     } // namespace
 
     //==================================================================================================================
-    Result<void> ListState::create(MTL::Device* device, uint64_t viewTableAddress, uint64_t samplerTableAddress)
+    Result<void> ListState::create(MTL::Device* device, uint64_t viewTableAddress, uint64_t samplerTableAddress, bool perCommandPools)
     {
+        commandPools = perCommandPools;
         // The tables' labels and the errors are autoreleased.
         const AutoreleasePool pool;
         allocator = device->newCommandAllocator();

@@ -231,11 +231,11 @@ namespace rojoRHI::metal4 {
     }
 
     //==================================================================================================================
-    void dispatchKernelBatch(core::CommandListCore& list, MTL4::ComputeCommandEncoder* encoder, MTL::Size groups, MTL::Size threads)
+    void dispatchKernelBatch(core::CommandListCore& list, const ListState& state, MTL4::ComputeCommandEncoder* encoder, MTL::Size groups, MTL::Size threads)
     {
         {
             // The validation layer autoreleases in each dispatch it checks, as for dispatchKernel.
-            const AutoreleasePool pool;
+            const CommandPool pool(state.commandPools);
             encoder->dispatchThreadgroups(groups, threads);
         }
         core::noteNativeCall(list);
@@ -263,9 +263,9 @@ namespace rojoRHI::metal4 {
     void dispatchKernel(core::CommandListCore& list, const ListState& state, MTL4::ComputeCommandEncoder* encoder, MTL::Size groups, MTL::Size threads)
     {
         {
-            // The Metal validation layer autoreleases an object in each dispatch it checks, so the dispatch holds a pool:
-            // one push and pop per kernel dispatch, which leaves a thread without a pool of its own leaking nothing.
-            const AutoreleasePool pool;
+            // The Metal validation layer autoreleases an object in each dispatch it checks, so under it the dispatch holds a
+            // pool, which leaves a thread without a pool of its own leaking nothing.
+            const CommandPool pool(state.commandPools);
             encoder->dispatchThreadgroups(groups, threads);
         }
         core::noteNativeCall(list);
