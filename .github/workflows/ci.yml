@@ -381,11 +381,15 @@ jobs:
             if (-not (Test-Path (Join-Path $dir $dll))) { throw "$dll is missing from $dir" }
           }
       - run: xmake test RojoRHITests/abi
+        timeout-minutes: 15
       # The pinned DXC's disassembly of the module's heap fetches and raw accesses.
       - run: python3 Tools/check_dxil.py
       - run: xmake test RojoRHITests/contract
+        timeout-minutes: 15
       - run: xmake test RojoRHITests/death
+        timeout-minutes: 15
       - run: xmake test RojoRHITests/conformance
+        timeout-minutes: 15
       # Lists the cases of each tag and requires a floor, so a dropped file fails. The floors are the case counts
       # at this commit and a later part raises them as it frees files.
       - name: Count the cases
@@ -443,6 +447,8 @@ jobs:
       - run: xmake f -m release -y --rojorhi_backend=d3d12 --rojorhi_d3d12_adapter=warp --rojorhi_d3d12_debug=mode
       - run: xmake build RojoRHITests
       - run: xmake test RojoRHITests/contract
+        timeout-minutes: 15
       - run: xmake test RojoRHITests/conformance
+        timeout-minutes: 15
       - run: xmake build RojoRHILtoProbe
       - run: python3 Tools/check_lto_inline.py
