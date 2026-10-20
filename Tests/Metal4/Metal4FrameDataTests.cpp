@@ -172,7 +172,7 @@ TEST_CASE("each upload is its page's GPU address plus its offset, across the pag
             const core::CommandListCore& recording = core::coreOf(list);
             MTL::Buffer* native = nativeOf(device, recording.page.buffer);
             CHECK(recording.page.address == native->gpuAddress());
-            const uint64_t offset = recording.pageUsed - bytes->size();
+            const uint64_t offset = core::pageUsedBytes(recording) - bytes->size();
             CHECK(offset % 256 == 0);
             CHECK(valueOf(addr) == native->gpuAddress() + offset);
             CHECK(std::memcmp(static_cast<const std::byte*>(native->contents()) + offset, bytes->data(), bytes->size()) == 0);
@@ -180,6 +180,28 @@ TEST_CASE("each upload is its page's GPU address plus its offset, across the pag
         }
     }
     CHECK(pages.size() == 4);
+    endAndSubmit(device, list);
+    device.endFrame();
+    destroyDevice(device);
+}
+
+//======================================================================================================================
+TEST_CASE("an upload's address is aligned to the alignment asked, from 16 bytes to above a page's host alignment", "[metal4]")
+{
+    Device device = *createDevice();
+    device.beginFrame();
+    CommandList list = device.acquireCommandList(QueueType::Graphics, "test.list");
+    const std::vector<std::byte> bytes = pattern(40, 5);
+    for (const uint32_t alignment : { 16u, 256u, 16u, 4096u, 64u, 1024u, 4096u })
+    {
+        const Addr addr = list.uploadFrameData(bytes, alignment);
+        const core::CommandListCore& recording = core::coreOf(list);
+        MTL::Buffer* native = nativeOf(device, recording.page.buffer);
+        const uint64_t offset = core::pageUsedBytes(recording) - bytes.size();
+        CHECK(offset % alignment == 0);
+        CHECK(valueOf(addr) == native->gpuAddress() + offset);
+        CHECK(std::memcmp(static_cast<const std::byte*>(native->contents()) + offset, bytes.data(), bytes.size()) == 0);
+    }
     endAndSubmit(device, list);
     device.endFrame();
     destroyDevice(device);

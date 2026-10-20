@@ -75,8 +75,8 @@ without a diagnosis.
 frame data as its arguments, as chapter 03 allows. The arena has one list of pages per frame slot,
 each with a `claimed` flag.
 
-A list claims a whole page and bumps its own cursor (`CommandListCore::pageUsed`) with no lock.
-Claiming takes the arena's mutex, and creating a page, when no unclaimed page of the slot fits, is
+A list claims a whole page and bumps its own cursor (`CommandListCore::cursor`, a host pointer)
+with no lock. Claiming takes the arena's mutex, and creating a page, when no unclaimed page of the slot fits, is
 a growth event. A new page has max(1 MiB, request) bytes, falling back to exactly the request only
 when that maximum exceeds `Limits::maxBufferSize`. A request above `maxBufferSize`, or a page the
 backend cannot create, is fatal in every build, as the reference says. `rewind(slot)`, called from

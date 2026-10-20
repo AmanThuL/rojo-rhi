@@ -124,6 +124,24 @@ namespace rojoRHI::core {
         const uint32_t slot = static_cast<uint32_t>(list.frame % core.framesInFlight());
         list.page = core.arena().claim(slot, size, core.capabilities().limits.maxBufferSize, source, context);
         core.pool<Buffer>().update(list.page.buffer, [&](BufferRecord& record) { record.arenaFrame = list.frame; });
-        list.pageUsed = 0;
+        ROJORHI_INTERNAL_ASSERT(
+            reinterpret_cast<uintptr_t>(list.page.host) % kArenaPageAlignment == 0, "an arena page's host memory is not aligned to kArenaPageAlignment"
+        );
+        list.cursor = list.page.host;
+        list.limit = list.page.host + list.page.size;
+    }
+
+    //==================================================================================================================
+    ArenaAllocation bumpArenaPageSlow(DeviceCore& core, CommandListCore& list, uint64_t size, uint32_t alignment, ArenaPageSource source, void* context)
+    {
+        uint64_t offset = list.page.host == nullptr ? 0 : (pageUsedBytes(list) + alignment - 1) & ~(uint64_t{ alignment } - 1);
+        if (list.page.host == nullptr || offset + size > list.page.size)
+        {
+            // A new page's offset zero satisfies every alignment.
+            claimArenaPage(core, list, size, source, context);
+            offset = 0;
+        }
+        list.cursor = list.page.host + offset + size;
+        return ArenaAllocation{ list.page.buffer, offset, list.page.host + offset, list.page.address + offset };
     }
 } // namespace rojoRHI::core

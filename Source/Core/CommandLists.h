@@ -69,7 +69,8 @@ namespace rojoRHI::core {
         size_t passScopeBase = 0;                    ///< The number of open scopes when the open pass began.
         std::string label;                           ///< The label the list was acquired with.
         ArenaPage page;                              ///< The arena page the list uploads into; null until its first upload.
-        uint64_t pageUsed = 0;                       ///< Bytes of `page` the list has used: its bump cursor, which takes no lock.
+        std::byte* cursor = nullptr;                 ///< The next free byte of `page`: its bump cursor, which takes no lock.
+        std::byte* limit = nullptr;                  ///< One past the last byte of `page`; null until the list has a page.
         std::vector<ScopeRecord> scopeLog;           ///< The scopes recorded on the list in the order they began, for `Device::scopeTimings`.
         std::vector<ResourceAccess> pendingAccesses; ///< Declared accesses no draw or dispatch has consumed; kept only on a validating device.
         TrackerLog trackerLog;                       ///< The uses and barriers the list recorded; kept only on a validating device, in Debug.
@@ -133,20 +134,35 @@ namespace rojoRHI::core {
     /// place Release recording takes a lock (ADR 0020), so it stays out of line.
     void claimArenaPage(DeviceCore& core, CommandListCore& list, uint64_t size, ArenaPageSource source, void* context);
 
+    /// The alignment every arena page's host memory has, so rounding the cursor up to an alignment up to this one rounds
+    /// the page offset up to it too.
+    inline constexpr uint32_t kArenaPageAlignment = 256;
+
+    /// Bytes of `list`'s page that are used: zero before the list has a page.
+    inline uint64_t pageUsedBytes(const CommandListCore& list)
+    {
+        return static_cast<uint64_t>(list.cursor - list.page.host);
+    }
+
     /// Reserves `size` bytes at `alignment` in `list`'s own page, claiming a page when it has none or the bytes do not fit,
-    /// through `source`. Only claiming takes a lock; the bump into a page with room is inline and makes no call. It checks
-    /// nothing: `allocateFrameData` and the scope recorder call it after their own checks.
+    /// through `source`; the slow path of `bumpArenaPage`, out of line.
+    ArenaAllocation bumpArenaPageSlow(DeviceCore& core, CommandListCore& list, uint64_t size, uint32_t alignment, ArenaPageSource source, void* context);
+
+    /// Reserves `size` bytes at `alignment` in `list`'s own page, claiming a page when it has none or the bytes do not fit,
+    /// through `source`. Only claiming takes a lock; the bump into a page with room and an alignment up to
+    /// `kArenaPageAlignment` is inline and makes no call. It checks nothing: `allocateFrameData` and the scope recorder
+    /// call it after their own checks.
     inline ArenaAllocation bumpArenaPage(DeviceCore& core, CommandListCore& list, uint64_t size, uint32_t alignment, ArenaPageSource source, void* context)
     {
-        uint64_t offset = (list.pageUsed + alignment - 1) & ~(uint64_t{ alignment } - 1);
-        if (list.page.host == nullptr || offset + size > list.page.size) [[unlikely]]
+        const uintptr_t mask = uintptr_t{ alignment } - 1;
+        std::byte* const place = reinterpret_cast<std::byte*>((reinterpret_cast<uintptr_t>(list.cursor) + mask) & ~mask);
+        if (alignment > kArenaPageAlignment || list.limit - place <= static_cast<std::ptrdiff_t>(size)) [[unlikely]]
         {
-            // A new page's offset zero satisfies every alignment.
-            claimArenaPage(core, list, size, source, context);
-            offset = 0;
+            return bumpArenaPageSlow(core, list, size, alignment, source, context);
         }
-        list.pageUsed = offset + size;
-        return ArenaAllocation{ list.page.buffer, offset, list.page.host + offset, list.page.address + offset };
+        list.cursor = place + size;
+        const uint64_t offset = static_cast<uint64_t>(place - list.page.host);
+        return ArenaAllocation{ list.page.buffer, offset, place, list.page.address + offset };
     }
 
     /// Checks an upload of `bytes` at `alignment` (VU-rojo-buffer-0015 to 0017, then VU-rojo-cmd-0063) and bumps the cursor of

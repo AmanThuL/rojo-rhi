@@ -33,6 +33,12 @@ namespace rojoRHI {
     /// serve as indirect arguments.
     Result<core::ArenaPage> createArenaPage(void* context, uint64_t size);
 
+    /// Returns `size` zeroed bytes of host memory aligned to `core::kArenaPageAlignment`, or null when there is none.
+    std::byte* allocateHostMemory(uint64_t size);
+
+    /// Frees memory `allocateHostMemory` returned; null is allowed.
+    void freeHostMemory(void* memory);
+
     /// The Null backend's queue: it knows its type and the device that owns it, which is how a queue used with another device
     /// is told apart. It executes nothing; a submission completes during the call.
     struct QueueImpl

@@ -128,7 +128,7 @@ TEST_CASE("a reused list starts empty and keeps the capacity of its scope stack"
             CHECK(state.scopes.empty());
             CHECK(state.scopes.capacity() == capacity);
             CHECK(state.page.host == nullptr);
-            CHECK(state.pageUsed == 0);
+            CHECK(core::pageUsedBytes(state) == 0);
             CHECK(state.label == "next");
         }
         submit(device, list);
