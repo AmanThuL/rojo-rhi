@@ -198,13 +198,14 @@ TEST_CASE("a pass with no command opens its render encoder at endRenderPass", "[
     list.beginRenderPass(passOf(colors));
     CHECK(countsOf(list).nativeRecordCalls == 2 + 1);
     CHECK(countsOf(list).encodersOpened == 0);
-    // The factory, the label and the table, the begin and end timestamps on the encoder, then endEncoding, and the pass's
-    // group popped on the command buffer.
+    // The factory, the label and the table, the begin and end timestamps on the encoder, and the pass's group popped on the
+    // command buffer; the encoder stays open, running no further command, until the next encoder or `end`.
     list.endRenderPass();
-    CHECK(countsOf(list).nativeRecordCalls == 3 + 7);
+    CHECK(countsOf(list).nativeRecordCalls == 3 + 6);
     CHECK(countsOf(list).encodersOpened == 1);
     CHECK(countsOf(list).nativeBarriers == 0);
-    CHECK(encodersOf(list).kind() == metal4::EncoderKind::None);
+    CHECK(encodersOf(list).lingering());
+    CHECK(encodersOf(list).renderEncoder() == nullptr);
     CHECK(stateOf(list).scopeLabels.empty());
     CHECK_FALSE(drawOf(list).passOpen);
     // The list ends right after the pass.
@@ -218,9 +219,9 @@ TEST_CASE("a Store attachment costs no store-action call; DontCare and resolve a
     Device device = *createDevice();
     device.beginFrame();
     CommandList list = device.acquireCommandList(QueueType::Graphics, "test.list");
-    // An empty pass's encoder records its factory, label, table, the pass's two timestamps and endEncoding, then the pass's
-    // group pops.
-    constexpr uint64_t kBase = 7;
+    // An empty pass's encoder records its factory, label, table and the pass's two timestamps, then the pass's group pops; it
+    // ends at the next beginRenderPass.
+    constexpr uint64_t kBase = 6;
     const MTL::RenderPassColorAttachmentDescriptor* color = nullptr;
     SECTION("color attachments")
     {
@@ -351,7 +352,7 @@ TEST_CASE("a scope inside a pass opens the render encoder and its debug group go
     CHECK(stateOf(list).scopeLabels.size() == 1);
     // endRenderPass finds the encoder open: the pass's end timestamp, endEncoding and its group.
     list.endRenderPass();
-    CHECK(countsOf(list).nativeRecordCalls == 11 + 3);
+    CHECK(countsOf(list).nativeRecordCalls == 11 + 2);
     CHECK(countsOf(list).encodersOpened == 1);
     finish(device, list);
     destroyDevice(device);
@@ -392,7 +393,7 @@ TEST_CASE("a split stores, ends and resumes with Load, re-pushing the open in-pa
     // The outer scope's end timestamp and pop; the caller's DontCare at the end, the pass's end timestamp, endEncoding and
     // its group.
     list.endRenderPass();
-    CHECK(countsOf(list).nativeRecordCalls == 22 + 2 + 1 + 1 + 1 + 1);
+    CHECK(countsOf(list).nativeRecordCalls == 22 + 2 + 1 + 1 + 1);
     CHECK_FALSE(drawOf(list).resuming);
     // The next pass loads as its caller asks.
     list.beginRenderPass(passOf(colors));
@@ -427,9 +428,11 @@ TEST_CASE("a barrier pending before the pass is emitted by the render encoder fo
     // The encoder ran only its load and store actions, so the stages in which it ran nothing are owed again.
     CHECK(countsOf(list).nativeBarriers == 1);
     CHECK(barriers.pendingDestination == (metal4::kComputeStages | (metal4::kRenderStages & ~MTL::StageFragment)));
-    // The trailing encoder emits the rest at end.
+    // The pass's encoder waited for every source and carries the rest at end; the All destination names IndirectArgs, so
+    // one barrier holds back every stage left, the dispatch stage included.
     list.end();
-    CHECK(countsOf(list).nativeBarriers == 3);
+    CHECK(countsOf(list).nativeBarriers == 2);
+    CHECK(countsOf(list).encodersOpened == 1);
     const Fence fence = *device.createFence(0, "test.done");
     device.queue(QueueType::Graphics).submit(std::array{ list }, {}, std::array{ FenceValue{ fence, 1 } });
     CHECK(device.wait({ fence, 1 }, UINT64_MAX));
@@ -583,8 +586,9 @@ TEST_CASE("end empties the list's descriptor so it keeps no texture alive in the
     CHECK_FALSE(holdsTexture(colorOf(list, 1)));
     CHECK_FALSE(holdsTexture(depthOf(list)));
     CHECK_FALSE(holdsTexture(stencilOf(list)));
-    // Descriptor setters are no message to a command buffer, encoder or table: end counts only endCommandBuffer.
-    CHECK(countsOf(list).nativeRecordCalls == calls + 1);
+    // Descriptor setters are no message to a command buffer, encoder or table: end counts only the pass's endEncoding and
+    // endCommandBuffer.
+    CHECK(countsOf(list).nativeRecordCalls == calls + 2);
     const Fence fence = *device.createFence(0, "test.done");
     device.queue(QueueType::Graphics).submit(std::array{ list }, {}, std::array{ FenceValue{ fence, 1 } });
     CHECK(device.wait({ fence, 1 }, UINT64_MAX));

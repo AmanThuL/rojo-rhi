@@ -209,11 +209,16 @@ overhead and not a defect of the harness. In particular:
   to no native barrier in N.
 - N closes the compute encoder at a scope's end, while the design's M7 keeps it open until a render
   pass, an upscale or `end`; R may therefore emit an encoder barrier at the ao closing batch that N
-  does not, and the trailing barrier a list emits at its end is R's own native call. Both are
-  measured overhead; they appear in the composed frame, where R makes 1293 native calls to N's 1254
-  (39 more) in the gate run, in C6, whose fill barrier splits the compute encoder and whose last
-  barrier closes the list with a trailing encoder, and in C10, whose per-frame target barrier leaves
-  stages pending at `end`. They are per frame, so they change no per-operation count.
+  does not. What a list of R still owes at its end is R's own native calls: its last encoder carries
+  it (`updateFence` of the graphics queue's carry fence, `barrierAfterStages`, or both) when that
+  encoder waited for every source, as gbuffer's geometry encoder, C6's dispatch encoder and C10's
+  pass encoder do, and otherwise a trailing encoder emits it, as for the lighting and ao lists; each
+  compute encoder of a graphics list that dispatches waits on the fence once, as lighting's does.
+  Both are measured overhead; in the gate run of 2026-10-19 R makes 1291 native calls per composed
+  frame to N's 1254 (37 more). They are per frame, so they change no per-operation count. A render
+  pass's last encoder ends at the next encoder or `end` rather than at `endRenderPass`, after the
+  pass's pop, and its end timestamp is written on that encoder: C8's sequence keeps its count and
+  changes its order.
 - `Copy` on a Graphics list lowers to `Blit | Dispatch | Fragment` on Metal 4, so that a copy waits
   and signals for every stage that may touch its buffers; N's copy is a blit alone. The wider stage
   set is measured overhead.

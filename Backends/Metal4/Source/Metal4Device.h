@@ -56,6 +56,10 @@ namespace rojoRHI {
         /// each `mapTiles` call, each of those two signals followed by a wait on the queue for it, which orders the updates
         /// against the queue's other work.
         MTL::SharedEvent* progress = nullptr;
+        /// On the graphics queue only, the fence a list's last encoder updates after the work a barrier it still owes at its end
+        /// names, for that barrier's dispatch stage, and each later encoder that dispatches waits on before its first dispatch,
+        /// except a counted draw's kernels. Null on the compute and copy queues, which run no such kernels.
+        MTL::Fence* carry = nullptr;
         /// The last value submitted for signal on `progress`. Only `submit` and `mapTiles`, which the caller serialises per
         /// queue, write it; a fence's destruction reads it, after the submissions that named the fence.
         std::atomic<uint64_t> progressValue = 0;

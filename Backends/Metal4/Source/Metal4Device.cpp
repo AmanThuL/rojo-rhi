@@ -177,6 +177,11 @@ namespace rojoRHI {
             for (size_t i = impl.queues.size(); i-- > 0;)
             {
                 QueueImpl& queue = impl.queues[i];
+                if (queue.carry != nullptr)
+                {
+                    queue.carry->release();
+                    queue.carry = nullptr;
+                }
                 if (queue.progress != nullptr)
                 {
                     queue.progress->release();
@@ -222,6 +227,17 @@ namespace rojoRHI {
                     return std::unexpected(Error{ ErrorCategory::OutOfMemory, std::format("the progress event of queue {} was not created", kQueueLabels[i]) });
                 }
                 impl.queues[i].progress->setLabel(metal4::makeString(std::format("{}.progress", kQueueLabels[i])));
+                if (static_cast<QueueType>(i) == QueueType::Graphics)
+                {
+                    impl.queues[i].carry = impl.device->newFence();
+                    if (impl.queues[i].carry == nullptr)
+                    {
+                        return std::unexpected(
+                            Error{ ErrorCategory::OutOfMemory, std::format("the carry fence of queue {} was not created", kQueueLabels[i]) }
+                        );
+                    }
+                    impl.queues[i].carry->setLabel(metal4::makeString(std::format("{}.carry", kQueueLabels[i])));
+                }
             }
             if (Result<void> created = impl.pipelineCache.create(impl.device); !created)
             {

@@ -422,7 +422,8 @@ TEST_CASE("a render pass after an upscale waits on its fence on the render encod
     CHECK(barriersOf(kit.kit.list).owedFenceStages == metal4::kComputeStages);
     CHECK(barriersOf(kit.kit.list).owedFence == stateOf(kit.kit.device, kit.upscaler).fence);
     const uint64_t second = pass();
-    CHECK(first == second + 1);
+    // The first pass's wait on the fence; the second pass's beginRenderPass ends the first pass's encoder, which stayed open.
+    CHECK(first == second);
     CHECK(barriersOf(kit.kit.list).owedFenceStages == metal4::kComputeStages);
     submitAndWait(kit);
     destroyDevice(kit.kit.device);

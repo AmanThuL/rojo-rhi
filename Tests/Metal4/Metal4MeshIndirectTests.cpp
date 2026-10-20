@@ -280,7 +280,7 @@ TEST_CASE("a mesh draw with a count runs the writer kernel and one native indire
     // indirect draw, the pass's end timestamp, endEncoding and its group.
     before = callsOf(list);
     list.endRenderPass();
-    CHECK(callsOf(list) - before == 1 + kOpenCalls + 1 + kStateCalls + 2 + 1 + 2);
+    CHECK(callsOf(list) - before == 1 + kOpenCalls + 1 + kStateCalls + 2 + 2);
     CHECK(drawOf(list).tableDrawRecord == gpuAddressOf(fixture.record(5)));
     // The draw ran in the stages its barrier covered, so nothing is owed after the pass.
     CHECK(encodersOf(list).barriers().pendingDestination == 0);
@@ -335,7 +335,7 @@ TEST_CASE("a mesh batch encodes an ICB whose commands bind the reserved buffers 
     // pipeline, the pass's end timestamp, endEncoding and its group.
     before = callsOf(list);
     list.endRenderPass();
-    CHECK(callsOf(list) - before == 1 + kOpenCalls + 1 + kStateCalls + 1 + 3 + 1 + 1 + 2);
+    CHECK(callsOf(list) - before == 1 + kOpenCalls + 1 + kStateCalls + 1 + 3 + 1 + 2);
     CHECK(encodersOf(list).barriers().pendingDestination == 0);
     kit.run(std::array{ list });
 }

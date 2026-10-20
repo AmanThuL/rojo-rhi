@@ -348,9 +348,11 @@ namespace rojoRHI {
         // timestamps.
         MTL4::RenderCommandEncoder* encoder = metal4::ensureRender(list);
         metal4::finishPass(list, false);
-        // The end timestamp goes on the pass's last encoder, after the fragment stage of all its work, just before it ends.
+        // The end timestamp goes on the pass's last encoder, after the fragment stage of all its work.
         metal4::writeInPass(list, encoder, metal4::popPairEnd(list));
-        list.encoders.close(list.core);
+        // The pass's last encoder stays open, running no further command, so a barrier the list still owes at its end can be
+        // carried on it; the next encoder, a scope boundary or `end` ends it.
+        list.encoders.linger();
         metal4::ListState& state = list.state;
         state.commandBuffer->popDebugGroup();
         core::noteNativeCall(list.core);
