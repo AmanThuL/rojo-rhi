@@ -200,6 +200,34 @@ then `device-0007`. Each rule has one `ROJORHI_VU` site per arm and a death test
 that rule; tests pin `present-0014` before `sync-0013`, `sync-0006` before the entry's rule, and the
 destruction order.
 
+## Stress runs
+
+Two hidden cases in `Tests/Core/TrackerStressTests.cpp` stress the tracker on the Null backend in
+Debug. One runs 100,000 frames on three queues, each frame churning a transient texture, aliasing a
+heap and joining the queues, and requires the fence clocks, heap segments and live textures to stay
+bounded after a 1,000-frame warm-up. The other has every queue submit from its own thread, 16
+batches of 1,000 rounds, while a fourth thread reads their fences. Both carry `[stress]` and `[.]`,
+so no default entry runs them. After a Null Debug configure, `RojoRHITests "[stress]"` from the test
+directory (or `xmake run RojoRHITests "[stress]"`) runs them; `--policies=build.sanitizer.thread` on
+`xmake f` adds ThreadSanitizer on macOS.
+
+On macOS (Apple M3 Max, plain Debug) the 100,000-frame case takes 5.2 s and the threaded case 1.1 s.
+Earlier ad hoc runs were frame loops of up to 100,000 frames on a validating device and
+ThreadSanitizer runs with every queue submitting from its own thread, all clean. ThreadSanitizer has
+not been run on the committed cases.
+
+On Windows the `tracker-stress` job (`windows-latest`, MSVC toolset 14.51.36231, AddressSanitizer)
+passed on 2026-10-20: the 100,000-frame case took 92.914 s, the threaded case 15.425 s, and 21
+assertions in 2 test cases held ([run
+39440777819](https://github.com/AmanThuL/rojo-rhi/actions/runs/39440777819)). The job instruments
+the project's targets only; Catch2 and the other packages are not instrumented, and the STL
+container-overflow annotations are disabled on the targets to match them. The job checks that the
+executable imports the AddressSanitizer runtime.
+
+MSVC has no ThreadSanitizer, so the Windows run finds the memory errors a race causes when it
+happens, not the race itself, and MSVC's AddressSanitizer has no leak detection. There is no other
+difference.
+
 ## Known limits
 
 The queues page lists those of cross-queue order. Besides them, a barrier that keeps the layout
