@@ -1,0 +1,36 @@
+# Spike 1 of ADR 0014: builds the D3D12 Addr dereference harness on a hosted Windows runner,
+# records the device limits on WARP, the software adapter, and runs the untimed correctness gate
+# there under the debug layer and GPU-based validation, then checks the timing analysis and its
+# decision rule on synthetic data. The harness and this workflow exist
+# only on the spike branch, which is never merged, so the trigger names that branch alone. Nothing
+# here is timed: WARP measures nothing, and timing runs on the Windows GPU machine.
+name: Spike 1
+on:
+  push: {branches: [spike/d3d12-addr-dereference]}
+jobs:
+  warp:
+    runs-on: windows-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.x'}
+      - uses: ilammy/msvc-dev-cmd@v1
+      # The pinned archives; run.py checks each one's SHA-256 before extracting it, cached or not.
+      - uses: actions/cache@v5
+        with:
+          path: build/spike-1-deps
+          key: spike-1-deps-${{ hashFiles('Tools/Spikes/AddrDereference/run.py') }}
+      - run: python Tools/Spikes/AddrDereference/run.py build --adapter warp
+      - run: python Tools/Spikes/AddrDereference/run.py correctness --adapter warp
+      - run: python Tools/Spikes/AddrDereference/run.py selftest
+      - if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: spike-1-warp
+          path: |
+            build/spike-1/kernels/
+            build/spike-1/limits.json
+            build/spike-1/environment.json
+            build/spike-1/correctness/
+          if-no-files-found: warn
