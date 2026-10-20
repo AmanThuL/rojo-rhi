@@ -167,8 +167,8 @@ shader-side access.
 - `VU-rojo-buffer-0011` Every address `operator+` produces, and every byte reached through an
   address, lies less than
   [`Limits::maxAddrOffset`](15-formats-and-limits-part2.md#limits) bytes from the start of the
-  buffer it names; the portable value is 2^32 − 1, *unverified* until the D3D12 raw-view element
-  limit is settled ([limits](15-formats-and-limits-part2.md#limits)).
+  buffer it names; the portable value is 2^29 − 1, the reach of one D3D12 raw view
+  ([limits](15-formats-and-limits-part2.md#limits)).
 - `VU-rojo-buffer-0019` Work recorded with an address passed to a recorded command is submitted
   before the buffer the address names is destroyed. Checked by the validation tracker.
 #### Mapping

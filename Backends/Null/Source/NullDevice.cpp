@@ -50,8 +50,8 @@ namespace rojoRHI {
             limits.rootAlignment = 256;       // Floor.
             limits.frameDataAlignment = 256;  // Floor.
             limits.maxBufferSize =
-                1ull << 32; // Unverified: the Floor column names no number ("device"); 4 GiB, an arbitrary value above the 2^32 - 1 Addr reach.
-            limits.maxAddrOffset = kNullMaxAddrOffset; // Floor, 2^32 - 1.
+                1ull << 32; // Unverified: the Floor column names no number ("device"); 4 GiB, an arbitrary value above the 2^29 - 1 Addr reach.
+            limits.maxAddrOffset = kNullMaxAddrOffset; // Floor, 2^29 - 1.
             limits.maxTextureDimension1D = 16'384;     // Floor.
             limits.maxTextureDimension2D = 16'384;     // Floor.
             limits.maxTextureDimension3D = 2'048;      // Floor.
