@@ -46,12 +46,14 @@ namespace rojoRHI::d3d12 {
     void PipelineCache::open(DeviceImpl& impl, std::span<const std::byte> blob)
     {
         ID3D12Device12* device = impl.device();
+        // Why the caller's blob is discarded, when it is; reported once, with the empty library's outcome.
+        std::string refused;
         if (!blob.empty())
         {
             const std::expected<std::span<const std::byte>, std::string_view> library = libraryOf(blob);
             if (!library)
             {
-                discard(library.error());
+                refused = library.error();
             }
             else if (!library->empty())
             {
@@ -72,19 +74,25 @@ namespace rojoRHI::d3d12 {
                 }
                 // D3D12_ERROR_DRIVER_VERSION_MISMATCH, D3D12_ERROR_ADAPTER_NOT_FOUND or E_INVALIDARG: another driver, another
                 // adapter, or bytes that are no library.
-                discard(std::format("holds a pipeline library that CreatePipelineLibrary refused with HRESULT 0x{:08x}", hresultBits(created)));
+                refused = std::format("holds a pipeline library that CreatePipelineLibrary refused with HRESULT 0x{:08x}", hresultBits(created));
             }
         }
         if (const HRESULT created = device->CreatePipelineLibrary(nullptr, 0, IID_PPV_ARGS(m_library.put())); FAILED(created))
         {
             m_library.reset();
+            const std::string discarded = refused.empty() ? std::string() : std::format("the pipeline cache blob {} and is discarded; ", refused);
             ROJORHI_LOG_WARN(
-                "ID3D12Device1::CreatePipelineLibrary refused an empty pipeline library with HRESULT 0x{:08x}; every pipeline is compiled and none is cached",
+                "{}ID3D12Device1::CreatePipelineLibrary refused an empty pipeline library with HRESULT 0x{:08x}; every pipeline is compiled and none is cached",
+                discarded,
                 hresultBits(created)
             );
             return;
         }
         nameLibrary(impl, m_library.get());
+        if (!refused.empty())
+        {
+            discard(refused);
+        }
     }
 
     //==================================================================================================================
@@ -122,11 +130,13 @@ namespace rojoRHI::d3d12 {
             const std::lock_guard lock(m_mutex);
             stored = m_library->StorePipeline(name.c_str(), pso.get());
         }
-        // E_INVALIDARG means another creation stored the name first, or a description whose key is the same holds it; the
-        // pipeline is still created, only not stored.
+        // E_INVALIDARG means another creation stored the name first. Any other failure leaves the pipeline uncached, which a
+        // later creation of it pays for, but the pipeline itself is sound.
         if (FAILED(stored) && stored != E_INVALIDARG)
         {
-            return std::unexpected(failure(impl, stored, std::format("ID3D12PipelineLibrary::StorePipeline for pipeline \"{}\"", label)));
+            ROJORHI_LOG_WARN(
+                "ID3D12PipelineLibrary::StorePipeline for pipeline \"{}\" failed with HRESULT 0x{:08x}; the pipeline is not cached", label, hresultBits(stored)
+            );
         }
         return pso.detach();
     }

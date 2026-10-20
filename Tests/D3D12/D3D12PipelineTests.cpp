@@ -414,11 +414,11 @@ TEST_CASE("a mesh pipeline with a task entry streams AS, MS and PS and no input 
 }
 
 //======================================================================================================================
-TEST_CASE("a mesh stream names no topology type and a vertex stream the type of its class", "[d3d12]")
+TEST_CASE("a mesh stream whose DXIL declares no output topology names no topology type, and a vertex stream the type of its class", "[d3d12]")
 {
     Device device = makeDevice();
     ID3D12RootSignature* global = DeviceImpl::of(device).roots.global();
-    // A mesh pipeline ignores the class: its mesh entry declares its output topology.
+    // A mesh pipeline ignores the class: its mesh entry declares its output topology, which these stand-in bytes do not.
     const d3d12::PipelineShaders meshShaders{ .mesh = bytecodeOf(kMeshBytes), .fragment = bytecodeOf(kFragmentBytes) };
     const d3d12::PipelineStream mesh = d3d12::graphicsStream(global, GraphicsPipelineDesc{ .primitive = PrimitiveClass::Line, .colors = kColor }, meshShaders);
     CHECK_FALSE(mesh.has(D3D12_PIPELINE_STATE_SUBOBJECT_TYPE_PRIMITIVE_TOPOLOGY));

@@ -148,8 +148,9 @@ namespace rojoRHI::d3d12 {
 
     /// Returns the stream of the graphics pipeline `desc` over `root` and `shaders`: the root signature; VS and an empty
     /// input layout, or AS (with a task entry) and MS; PS with a fragment entry; then the blend, sample mask, rasterizer,
-    /// depth-stencil, topology type (vertex pipelines only), render target formats, depth-stencil format, sample description and
-    /// flags, the flag `DYNAMIC_DEPTH_BIAS` with `raster.depthBias`.
+    /// depth-stencil, topology type, render target formats, depth-stencil format, sample description and flags, the flag
+    /// `DYNAMIC_DEPTH_BIAS` with `raster.depthBias`. A vertex pipeline's topology type is its class's; a mesh pipeline's is
+    /// the output topology its mesh entry's DXIL declares, and none when the container declares none this backend reads.
     PipelineStream graphicsStream(ID3D12RootSignature* root, const GraphicsPipelineDesc& desc, const PipelineShaders& shaders);
 
     /// Returns the stream of a compute pipeline over `root` and the compute entry's `bytecode`: the root signature and CS.

@@ -9,6 +9,8 @@
 
 #include <algorithm>
 #include <charconv>
+#include <cstddef>
+#include <cstdint>
 #include <cstring>
 #include <expected>
 #include <format>
@@ -265,6 +267,66 @@ namespace rojoRHI::d3d12 {
             lines.push_back(reader.line);
             header.entries.push_back(std::move(entry->entry));
         }
+    }
+
+    //==================================================================================================================
+    MeshTopology meshOutputTopology(std::span<const std::byte> dxil)
+    {
+        // The container: "DXBC", a 16-byte digest, a 4-byte version, the container size, the part count and one offset per
+        // part; each part is a four-character code, its size and its data.
+        constexpr size_t kPartCountOffset = 28;
+        constexpr size_t kPartOffsets = 32;
+        constexpr size_t kPartHeader = 8;
+        // The runtime information of the PSV0 part: the shader kind and the mesh output topology of its version 1 fields.
+        constexpr size_t kShaderKind = 24;
+        constexpr size_t kMeshTopology = 27;
+        constexpr uint8_t kMeshKind = 13;
+        const auto read32 = [&dxil](size_t at) {
+            uint32_t value = 0;
+            std::memcpy(&value, dxil.data() + at, sizeof(value));
+            return static_cast<size_t>(value);
+        };
+        if (dxil.size() < kPartOffsets || std::memcmp(dxil.data(), "DXBC", 4) != 0)
+        {
+            return MeshTopology::Unknown;
+        }
+        const size_t parts = read32(kPartCountOffset);
+        if (parts > (dxil.size() - kPartOffsets) / 4)
+        {
+            return MeshTopology::Unknown;
+        }
+        for (size_t part = 0; part < parts; ++part)
+        {
+            const size_t at = read32(kPartOffsets + 4 * part);
+            if (at > dxil.size() || dxil.size() - at < kPartHeader || std::memcmp(dxil.data() + at, "PSV0", 4) != 0)
+            {
+                continue;
+            }
+            const size_t size = read32(at + 4);
+            if (size > dxil.size() - at - kPartHeader || size < 4)
+            {
+                return MeshTopology::Unknown;
+            }
+            const std::span<const std::byte> psv = dxil.subspan(at + kPartHeader, size);
+            uint32_t infoSize = 0;
+            std::memcpy(&infoSize, psv.data(), sizeof(infoSize));
+            if (infoSize <= kMeshTopology || infoSize > psv.size() - 4)
+            {
+                return MeshTopology::Unknown;
+            }
+            const std::span<const std::byte> info = psv.subspan(4, infoSize);
+            if (std::to_integer<uint8_t>(info[kShaderKind]) != kMeshKind)
+            {
+                return MeshTopology::Unknown;
+            }
+            switch (std::to_integer<uint8_t>(info[kMeshTopology]))
+            {
+            case 1: return MeshTopology::Line;
+            case 2: return MeshTopology::Triangle;
+            default: return MeshTopology::Unknown;
+            }
+        }
+        return MeshTopology::Unknown;
     }
 
     //==================================================================================================================

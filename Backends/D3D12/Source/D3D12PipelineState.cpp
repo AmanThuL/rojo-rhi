@@ -10,6 +10,7 @@
 #include "Base/Assert.h"
 #include "D3D12Common.h"
 #include "D3D12Formats.h"
+#include "D3D12ShaderLibrary.h"
 
 #include <algorithm>
 #include <cstddef>
@@ -365,8 +366,19 @@ namespace rojoRHI::d3d12 {
         stream.add(D3D12_PIPELINE_STATE_SUBOBJECT_TYPE_DEPTH_STENCIL2, depthStencilDesc(desc.depthStencil));
         if (shaders.mesh.pShaderBytecode == nullptr)
         {
-            // A mesh pipeline ignores the class: its mesh entry declares its output topology.
             stream.add(D3D12_PIPELINE_STATE_SUBOBJECT_TYPE_PRIMITIVE_TOPOLOGY, topologyType(desc.primitive));
+        }
+        else
+        {
+            // A mesh pipeline ignores the class: its mesh entry declares its output topology. Naming that topology keeps the
+            // stream complete, so the description a pipeline library stores is the one a later look-up passes.
+            const std::span<const std::byte> mesh(static_cast<const std::byte*>(shaders.mesh.pShaderBytecode), shaders.mesh.BytecodeLength);
+            switch (meshOutputTopology(mesh))
+            {
+            case MeshTopology::Line: stream.add(D3D12_PIPELINE_STATE_SUBOBJECT_TYPE_PRIMITIVE_TOPOLOGY, D3D12_PRIMITIVE_TOPOLOGY_TYPE_LINE); break;
+            case MeshTopology::Triangle: stream.add(D3D12_PIPELINE_STATE_SUBOBJECT_TYPE_PRIMITIVE_TOPOLOGY, D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE); break;
+            case MeshTopology::Unknown: break;
+            }
         }
         stream.add(D3D12_PIPELINE_STATE_SUBOBJECT_TYPE_RENDER_TARGET_FORMATS, renderTargetFormats(desc.colors));
         stream.add(

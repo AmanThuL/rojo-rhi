@@ -42,6 +42,20 @@ namespace rojoRHI::d3d12 {
     /// never read as text, and each entry's slice is checked to start `DXBC` and nothing more.
     Result<LibraryHeader> parseShaderLibrary(std::span<const std::byte> blob);
 
+    /// The output topology a mesh entry declares.
+    enum class MeshTopology : uint8_t
+    {
+        Unknown,  ///< The container declares none that this reader recognises.
+        Line,     ///< `outputtopology("line")`.
+        Triangle, ///< `outputtopology("triangle")`.
+    };
+
+    /// Returns the output topology the mesh entry compiled into the DXIL container `dxil` declares, read from the runtime
+    /// information of its pipeline state validation part (`PSV0`): the shader kind at byte 24 must be mesh (13) and the
+    /// topology at byte 27 line (1) or triangle (2). A container without that part, too short, out of bounds, or of another
+    /// stage is `Unknown`. Pure C++.
+    MeshTopology meshOutputTopology(std::span<const std::byte> dxil);
+
     /// What a D3D12 shader library keeps in `ShaderLibraryRecord::native`: one copy of the DXIL region.
     struct LibraryPayload
     {

@@ -5,6 +5,7 @@
 #include <rojoRHI/RHI.h>
 
 #include "D3D12PipelineKey.h"
+#include "D3D12ShaderLibrary.h"
 #include "ShaderList.h"
 #include "Support/Backend.h"
 
@@ -145,6 +146,56 @@ namespace {
               v.dxil.fragment = {};
           } },
     } };
+
+    //==================================================================================================================
+    /// Returns a DXIL container holding a `SFI0` part and, with `psv`, a `PSV0` part whose runtime information is
+    /// `infoSize` bytes with the shader kind `kind` at byte 24 and the mesh output topology `topology` at byte 27.
+    std::vector<std::byte> psvContainer(uint8_t kind, uint8_t topology, uint32_t infoSize = 52, bool psv = true)
+    {
+        const auto le32 = [](std::vector<std::byte>& bytes, size_t at, uint32_t value) {
+            for (size_t i = 0; i < 4; ++i)
+            {
+                bytes[at + i] = static_cast<std::byte>((value >> (8 * i)) & 0xFF);
+            }
+        };
+        std::vector<std::vector<std::byte>> parts;
+        std::vector<std::byte> features(8 + 8);
+        features[0] = std::byte{ 'S' };
+        features[1] = std::byte{ 'F' };
+        features[2] = std::byte{ 'I' };
+        features[3] = std::byte{ '0' };
+        le32(features, 4, 8);
+        parts.push_back(features);
+        if (psv)
+        {
+            std::vector<std::byte> part(8 + 4 + infoSize);
+            part[0] = std::byte{ 'P' };
+            part[1] = std::byte{ 'S' };
+            part[2] = std::byte{ 'V' };
+            part[3] = std::byte{ '0' };
+            le32(part, 4, 4 + infoSize);
+            le32(part, 8, infoSize);
+            if (infoSize > 27)
+            {
+                part[12 + 24] = std::byte{ kind };
+                part[12 + 27] = std::byte{ topology };
+            }
+            parts.push_back(part);
+        }
+        std::vector<std::byte> bytes(32 + 4 * parts.size());
+        bytes[0] = std::byte{ 'D' };
+        bytes[1] = std::byte{ 'X' };
+        bytes[2] = std::byte{ 'B' };
+        bytes[3] = std::byte{ 'C' };
+        le32(bytes, 28, static_cast<uint32_t>(parts.size()));
+        for (size_t i = 0; i < parts.size(); ++i)
+        {
+            le32(bytes, 32 + 4 * i, static_cast<uint32_t>(bytes.size()));
+            bytes.insert(bytes.end(), parts[i].begin(), parts[i].end());
+        }
+        le32(bytes, 24, static_cast<uint32_t>(bytes.size()));
+        return bytes;
+    }
 
     std::mutex gMessageMutex;               ///< Guards `gMessages`; the callback may run on any thread.
     std::vector<MessageSeverity> gMessages; ///< The severities of the messages `messagesOf` collected.
@@ -398,6 +449,58 @@ TEST_CASE("libraryOf reads the header blobHeader writes and names the reason it 
 }
 
 //======================================================================================================================
+TEST_CASE("meshOutputTopology reads the mesh output topology from PSV0 and is Unknown for anything else", "[d3d12]")
+{
+    CHECK(d3d12::meshOutputTopology(psvContainer(13, 2)) == d3d12::MeshTopology::Triangle);
+    CHECK(d3d12::meshOutputTopology(psvContainer(13, 1)) == d3d12::MeshTopology::Line);
+    CHECK(d3d12::meshOutputTopology(psvContainer(13, 0)) == d3d12::MeshTopology::Unknown);
+    CHECK(d3d12::meshOutputTopology(psvContainer(13, 3)) == d3d12::MeshTopology::Unknown);
+    // A compute (5) or amplification (14) entry declares no mesh output.
+    CHECK(d3d12::meshOutputTopology(psvContainer(5, 2)) == d3d12::MeshTopology::Unknown);
+    CHECK(d3d12::meshOutputTopology(psvContainer(14, 2)) == d3d12::MeshTopology::Unknown);
+    // Runtime information of version 0 ends before the shader kind.
+    CHECK(d3d12::meshOutputTopology(psvContainer(13, 2, 24)) == d3d12::MeshTopology::Unknown);
+    CHECK(d3d12::meshOutputTopology(psvContainer(13, 2, 52, false)) == d3d12::MeshTopology::Unknown);
+    CHECK(d3d12::meshOutputTopology({}) == d3d12::MeshTopology::Unknown);
+
+    std::vector<std::byte> truncated = psvContainer(13, 2);
+    truncated.resize(truncated.size() - 20);
+    CHECK(d3d12::meshOutputTopology(truncated) == d3d12::MeshTopology::Unknown);
+    std::vector<std::byte> counted = psvContainer(13, 2);
+    counted[28] = std::byte{ 0xFF };
+    counted[29] = std::byte{ 0xFF };
+    CHECK(d3d12::meshOutputTopology(counted) == d3d12::MeshTopology::Unknown);
+    std::vector<std::byte> magic = psvContainer(13, 2);
+    magic[0] = std::byte{ 'X' };
+    CHECK(d3d12::meshOutputTopology(magic) == d3d12::MeshTopology::Unknown);
+}
+
+//======================================================================================================================
+TEST_CASE("the packaged mesh entry declares triangles and its amplification entry no mesh output", "[d3d12]")
+{
+    REQUIRE(kD3D12LibrariesBuilt);
+    const std::vector<std::byte> blob = test::shaderLibraryFile("AbiMesh");
+    const Result<d3d12::LibraryHeader> header = d3d12::parseShaderLibrary(blob);
+    REQUIRE(header.has_value());
+    size_t checked = 0;
+    for (const d3d12::LibraryEntry& entry : header->entries)
+    {
+        INFO(entry.name);
+        if (entry.name == "meshMain")
+        {
+            CHECK(d3d12::meshOutputTopology(entry.dxil) == d3d12::MeshTopology::Triangle);
+            ++checked;
+        }
+        else if (entry.name == "taskMain")
+        {
+            CHECK(d3d12::meshOutputTopology(entry.dxil) == d3d12::MeshTopology::Unknown);
+            ++checked;
+        }
+    }
+    CHECK(checked == 2);
+}
+
+//======================================================================================================================
 TEST_CASE("a second device loaded from pipelineCacheData hits every pipeline the first created", "[d3d12]")
 {
     REQUIRE(kD3D12LibrariesBuilt);
@@ -425,14 +528,40 @@ TEST_CASE("a second device loaded from pipelineCacheData hits every pipeline the
     Device second = deviceWith(blob, messages);
     CHECK(messages.empty());
     const ShaderLibrary again = loadStandard(second);
-    createRender(second, again);
-    createCompute(second, again);
-    createMesh(second);
+    // Each pipeline is checked on its own, so a miss names the pipeline that missed.
+    const auto hitOf = [&second](auto create) {
+        const uint64_t before = second.counters().pipelineCacheHits;
+        create();
+        return second.counters().pipelineCacheHits - before;
+    };
+    CHECK(hitOf([&] { createRender(second, again); }) == 1);
+    CHECK(hitOf([&] { createCompute(second, again); }) == 1);
+    CHECK(hitOf([&] { createMesh(second); }) == 1);
     const Counters counters = second.counters();
     CHECK(counters.pipelinesCreated == 3);
-    CHECK(counters.pipelineCacheHits == 3);
     CHECK(counters.pipelineCacheMisses == 0);
     destroyDevice(second);
+}
+
+//======================================================================================================================
+TEST_CASE("a pipeline created twice on one device is a hit the second time, mesh pipelines included", "[d3d12]")
+{
+    REQUIRE(kD3D12LibrariesBuilt);
+    std::vector<MessageSeverity> messages;
+    Device device = deviceWith({}, messages);
+    const ShaderLibrary library = loadStandard(device);
+    const auto hitOf = [&device](auto create) {
+        const uint64_t before = device.counters().pipelineCacheHits;
+        create();
+        return device.counters().pipelineCacheHits - before;
+    };
+    CHECK(hitOf([&] { createRender(device, library); }) == 0);
+    CHECK(hitOf([&] { createRender(device, library); }) == 1);
+    CHECK(hitOf([&] { createCompute(device, library); }) == 0);
+    CHECK(hitOf([&] { createCompute(device, library); }) == 1);
+    CHECK(hitOf([&] { createMesh(device); }) == 0);
+    CHECK(hitOf([&] { createMesh(device); }) == 1);
+    destroyDevice(device);
 }
 
 //======================================================================================================================
@@ -550,9 +679,9 @@ TEST_CASE("concurrent createPipeline calls on two threads each count a hit or a 
 
     const Counters counters = device.counters();
     CHECK(counters.pipelinesCreated == 4 * kRounds);
-    CHECK(counters.pipelineCacheHits + counters.pipelineCacheMisses == counters.pipelinesCreated);
-    // Each thread misses the compute pipeline at most once, on its first round, before either stored it.
-    CHECK(counters.pipelineCacheMisses >= 1);
-    CHECK(counters.pipelineCacheMisses <= 2);
+    // Every render creation hits, and each thread misses the compute pipeline at most once, on its first round, before
+    // either thread stored it; at least one compute creation misses.
+    CHECK(counters.pipelineCacheHits >= 4 * kRounds - 2);
+    CHECK(counters.pipelineCacheHits <= 4 * kRounds - 1);
     destroyDevice(device);
 }

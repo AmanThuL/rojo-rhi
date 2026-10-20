@@ -37,13 +37,14 @@ namespace rojoRHI::d3d12 {
         /// Makes the library of `impl`'s device from `blob`. An empty blob makes an empty library and reports nothing. A blob
         /// `libraryOf` refuses, or library bytes `CreatePipelineLibrary` refuses (another adapter or driver, or bytes that are
         /// no library), is one warning through the message callback and leaves an empty library. A runtime that refuses an
-        /// empty library is one warning and leaves no library.
+        /// empty library leaves no library; that is one warning too, which also names a discarded blob.
         void open(DeviceImpl& impl, std::span<const std::byte> blob);
 
         /// Returns the pipeline state `stream` describes, with one reference the caller owns, stored under `name`, and sets
         /// `hit` when the library served it. A miss creates it with `CreatePipelineState` and stores it under `name`; a name
-        /// already stored for another description stays as stored. A failed creation is `d3d12::failure` naming the pipeline
-        /// `label`. Free-threaded; the creation itself runs outside the cache's lock, so creations compile side by side.
+        /// already stored by another creation stays as stored, and any other refused store is one warning and an uncached
+        /// pipeline. A failed look-up or creation is `d3d12::failure` naming the pipeline `label`. Free-threaded; the creation
+        /// itself runs outside the cache's lock, so creations compile side by side.
         Result<ID3D12PipelineState*> create(DeviceImpl& impl, const PipelineStream& stream, const std::wstring& name, std::string_view label, bool& hit);
 
         /// Returns the blob `Device::pipelineCacheData` hands out: `blobHeader` and the serialized library, under the cache's
