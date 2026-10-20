@@ -127,8 +127,10 @@ configuring them and emptying them at `end` call no getter and need no pool.
   split. A split stores and resolves an attachment that has a resolve target, because the validation
   layer rejects a plain `Store` there; the split costs one extra resolve.
 - The encoder is labelled after the innermost open scope when the device labels encoders, binds the
-list's argument table to the vertex, fragment, object and mesh stages (ADR 0018), emits the render
-part of the pending barrier, and replays the prefix (next section).
+list's argument table to the vertex and fragment stages (ADR 0018), emits the render part of the
+pending barrier, and replays the prefix (next section). Its first mesh pipeline binds the table to
+the object and mesh stages too: each bound stage costs every draw that follows a table write
+(about 2 ns per draw for the two mesh stages on C1 and C2, Release, Apple M3 Max).
 - `beginRenderPass` claims the pass's timestamp pair and keeps its begin entry in
   `DrawState::passBegin`; the pass's first encoder writes it with `writePassBegin` right after it
   opens, before any command: the compute encoder of the pass's leading counted draws, when their

@@ -35,7 +35,10 @@ namespace rojoRHI {
         }
 
         //==============================================================================================================
-        /// Sets the render pipeline state of `pipeline` on `encoder`, the open render encoder, unless it holds it.
+        /// Sets the render pipeline state of `pipeline` on `encoder`, the open render encoder, unless it holds it. A mesh
+        /// pipeline's object and mesh entries read the reserved bindings through the list's table, which the encoder binds to
+        /// those stages at its first mesh pipeline: a stage the table is bound to costs every draw that follows a table write,
+        /// so an encoder that draws no mesh binds only the vertex and fragment stages.
         void setRenderState(CommandListImpl& list, MTL4::RenderCommandEncoder* encoder, const metal4::PipelineState* pipeline)
         {
             metal4::RenderHeld& held = list.draw.held;
@@ -43,6 +46,12 @@ namespace rojoRHI {
             {
                 held.pipeline = pipeline;
                 return;
+            }
+            if (pipeline->mesh && !held.meshStages)
+            {
+                encoder->setArgumentTable(list.state.table, MTL::RenderStageObject | MTL::RenderStageMesh);
+                core::noteNativeCall(list.core);
+                held.meshStages = true;
             }
             encoder->setRenderPipelineState(pipeline->render);
             core::noteNativeCall(list.core);

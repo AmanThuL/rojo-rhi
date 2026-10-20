@@ -53,9 +53,9 @@ namespace {
         return 1 + test::encoderLabel(list);
     }
 
-    /// The calls a pass's render encoder makes for the mesh oracle's pipeline and the viewport and scissor: the pipeline with
-    /// its counter-clockwise winding, the viewport and the scissor.
-    constexpr uint64_t kStateCalls = 4;
+    /// The calls a pass's render encoder makes for the mesh oracle's pipeline and the viewport and scissor: the list's table
+    /// at the object and mesh stages, the pipeline with its counter-clockwise winding, the viewport and the scissor.
+    constexpr uint64_t kStateCalls = 5;
 
     /// The call of the begin timestamp a pass's first encoder writes right after it opens: the kernels' encoder when the pass's
     /// counted draws run first, else its render encoder.
@@ -292,6 +292,37 @@ TEST_CASE("a mesh draw with a count runs the writer kernel and one native indire
     CHECK(drawOf(list).tableDrawRecord == gpuAddressOf(fixture.record(5)));
     // The draw ran in the stages its barrier covered, so nothing is owed after the pass.
     CHECK(encodersOf(list).barriers().pendingDestination == 0);
+    kit.run(std::array{ list });
+}
+
+//======================================================================================================================
+TEST_CASE("a counted mesh draw that splits a pass leaves the resumed encoder to bind the mesh stages again", "[metal4]")
+{
+    test::GpuKit kit;
+    const Fixture fixture(kit.device);
+    CommandList list = kit.list(QueueType::Graphics, "test.meshIndirect");
+    fixture.begin(list);
+    // A direct mesh draw opens the render encoder, whose mesh pipeline binds the table at the object and mesh stages.
+    list.drawMeshTasks(1, 1, 1);
+    REQUIRE(encodersOf(list).kind() == metal4::EncoderKind::Render);
+    CHECK(drawOf(list).held.meshStages);
+    // The counted draw's writer kernel needs a compute encoder, so the render encoder ends and the draw waits in the prefix.
+    list.drawMeshTasksIndirect(fixture.record(5), 1, fixture.counted());
+    CHECK(encodersOf(list).kind() == metal4::EncoderKind::Compute);
+    CHECK(prefixKinds(list) == std::vector{ Kind::MeshIndirect });
+    uint64_t before = callsOf(list);
+    // The kernels' encoder ends; the resumed render encoder opens with its barrier and restores the held state, the table at
+    // the object and mesh stages first, as kStateCalls counts; then the counted draw's record and draw, and the direct
+    // draw's zero record and draw.
+    list.drawMeshTasks(1, 1, 1);
+    CHECK(callsOf(list) - before == 1 + openCalls(list) + 1 + kStateCalls + 2 + 2);
+    CHECK(drawOf(list).held.meshStages);
+    // A mesh pipeline set again on the resumed encoder sends only the pipelines.
+    before = callsOf(list);
+    list.setPipeline(fixture.meshOnly);
+    list.setPipeline(fixture.pipeline);
+    CHECK(callsOf(list) - before == 2);
+    list.endRenderPass();
     kit.run(std::array{ list });
 }
 

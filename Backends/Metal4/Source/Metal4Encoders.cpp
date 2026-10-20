@@ -174,8 +174,10 @@ namespace rojoRHI::metal4 {
         m_commandPools = state.commandPools;
         core::noteNativeCall(list);
         ++list.counts.encodersOpened;
-        // Every shader of a draw reads the reserved bindings through the list's table (ADR 0018).
-        m_render->setArgumentTable(state.table, MTL::RenderStageVertex | MTL::RenderStageFragment | MTL::RenderStageObject | MTL::RenderStageMesh);
+        // Every shader of a draw reads the reserved bindings through the list's table (ADR 0018). The object and mesh stages
+        // take it at the encoder's first mesh pipeline (`applyPipeline`), since each bound stage costs every draw after a
+        // table write.
+        m_render->setArgumentTable(state.table, MTL::RenderStageVertex | MTL::RenderStageFragment);
         core::noteNativeCall(list);
         // The pending barrier's part on every render stage waits at queue level before the pass's load actions and draws.
         emitAtOpen(list, m_barriers, m_render, kRenderStages);
