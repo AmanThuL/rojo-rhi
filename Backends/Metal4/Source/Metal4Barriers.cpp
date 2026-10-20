@@ -168,8 +168,11 @@ namespace rojoRHI {
                 MTL4::ComputeCommandEncoder* encoder = state.commandBuffer->computeCommandEncoder();
                 core::noteNativeCall(list);
                 ++list.counts.encodersOpened;
-                encoder->setLabel(state.label);
-                core::noteNativeCall(list);
+                if (state.encoderLabels)
+                {
+                    encoder->setLabel(state.label);
+                    core::noteNativeCall(list);
+                }
                 MTL::Stages destination = barriers.pendingDestination;
                 MTL4::VisibilityOptions visibility = barriers.pendingVisibility;
                 if (fenced)

@@ -167,13 +167,14 @@ ordered against each other or against copies without a barrier
 void CommandList::beginScope(std::string_view label);
 ```
 
-Opens a scope: a debug group in captures and the first of a pair of GPU timestamps. Scopes nest,
-are valid inside and outside render passes, and every render pass forms its own scope. The GPU
-time of each scope is read through `Device::scopeTimings` ([diagnostics](14-diagnostics.md)),
-replacing per-pass timings. The Metal 4 backend labels each encoder after its enclosing scope. On a
-tile-based GPU, scopes nested inside one render pass may report coarse times. Where a queue cannot
-write timestamps (some D3D12 copy queues, some Vulkan transfer families), a scope on a `Copy` list
-is a debug group without timing.
+Opens a scope: a debug group in captures and the first of a pair of GPU timestamps. Scopes nest, are
+valid inside and outside render passes, and every render pass forms its own scope. The GPU time of
+each scope is read through `Device::scopeTimings` ([diagnostics](14-diagnostics.md)), replacing
+per-pass timings. The Metal 4 backend labels each encoder after its enclosing scope on a device
+created with `validation` or `enableCapture`, or one whose class is not positively the bare driver's
+(the validation layer). On a tile-based GPU, scopes nested inside one render pass may report coarse
+times. Where a queue cannot write timestamps (some D3D12 copy queues, some Vulkan transfer
+families), a scope on a `Copy` list is a debug group without timing.
 
 #### Valid usage
 

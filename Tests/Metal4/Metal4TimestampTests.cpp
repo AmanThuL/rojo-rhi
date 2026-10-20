@@ -627,6 +627,7 @@ TEST_CASE("a render pass with a counted draw writes its begin timestamp on the k
     const Drawing drawing(device);
     device.beginFrame();
     CommandList list = device.acquireCommandList(QueueType::Graphics, "test.list");
+    const uint64_t label = test::encoderLabel(list);
     claimArenaPage(list);
     const core::CommandListCore& state = core::coreOf(list);
     const metal4::ListState& native = CommandListImpl::of(list).state;
@@ -658,7 +659,7 @@ TEST_CASE("a render pass with a counted draw writes its begin timestamp on the k
     drawing.counted(device, list);
     CHECK(state.counts.encodersOpened == encoders + 1);
     CHECK(CommandListImpl::of(list).encoders.kind() == metal4::EncoderKind::Compute);
-    CHECK(state.counts.nativeRecordCalls == before + 2 + 1 + 4);
+    CHECK(state.counts.nativeRecordCalls == before + 1 + label + 1 + 4);
     CHECK(draw.passBegin == core::kNoTimestamp);
     // A second counted draw shares the kernels' encoder and writes no timestamp: its parameters and its dispatch.
     before = state.counts.nativeRecordCalls;
@@ -671,7 +672,7 @@ TEST_CASE("a render pass with a counted draw writes its begin timestamp on the k
     // before the vertex stage, sets the pipeline, its winding, the viewport and the scissor and draws the two records; then
     // the end timestamp on it and the pop on the command buffer. The render encoder stays open until the list ends.
     CHECK(state.counts.encodersOpened == encoders + 2);
-    CHECK(state.counts.nativeRecordCalls == beforeEnd + 1 + 3 + 1 + 4 + 2 + 1 + 1);
+    CHECK(state.counts.nativeRecordCalls == beforeEnd + 1 + 2 + label + 1 + 4 + 2 + 1 + 1);
     CHECK(CommandListImpl::of(list).encoders.lingering());
     CHECK(native.scopeTimestamps.empty());
     CHECK(native.scopeLabels.empty());
@@ -693,6 +694,7 @@ TEST_CASE("a pass whose encoder opens at endRenderPass writes both its timestamp
     const Drawing drawing(device);
     device.beginFrame();
     CommandList list = device.acquireCommandList(QueueType::Graphics, "test.list");
+    const uint64_t label = test::encoderLabel(list);
     claimArenaPage(list);
     const core::CommandListCore& state = core::coreOf(list);
     const uint64_t calls = state.counts.nativeRecordCalls;
@@ -707,7 +709,7 @@ TEST_CASE("a pass whose encoder opens at endRenderPass writes both its timestamp
     list.endRenderPass();
     // renderCommandEncoder, setLabel and setArgumentTable, the begin and end timestamps on the encoder, then popDebugGroup on
     // the command buffer; the encoder, which runs the pass's clear and store, stays open until the list ends.
-    CHECK(state.counts.nativeRecordCalls == calls + 1 + 3 + 2 + 1);
+    CHECK(state.counts.nativeRecordCalls == calls + 1 + 2 + label + 2 + 1);
     CHECK(state.counts.encodersOpened == encoders + 1);
     CHECK(state.scopeLog.back().timestamp != core::kNoTimestamp);
     submitFrame(device, std::array{ list });
@@ -728,6 +730,7 @@ TEST_CASE("a pass that splits writes two timestamps, the begin on its first rend
     const Drawing drawing(device);
     device.beginFrame();
     CommandList list = device.acquireCommandList(QueueType::Graphics, "test.list");
+    const uint64_t label = test::encoderLabel(list);
     claimArenaPage(list);
     const core::CommandListCore& state = core::coreOf(list);
     const uint64_t encoders = state.counts.encodersOpened;
@@ -741,14 +744,14 @@ TEST_CASE("a pass that splits writes two timestamps, the begin on its first rend
     uint64_t calls = state.counts.nativeRecordCalls;
     list.draw(3);
     CHECK(state.counts.encodersOpened == encoders + 1);
-    CHECK(state.counts.nativeRecordCalls == calls + 3 + 1 + 4 + 1);
+    CHECK(state.counts.nativeRecordCalls == calls + 2 + label + 1 + 4 + 1);
     CHECK(draw.passBegin == core::kNoTimestamp);
     // A counted draw splits the pass with no timestamp: the render encoder ends (its Store attachment costs no call), and the
     // kernels' encoder opens (factory, label) and runs the writer kernel (pipeline, kernel table, parameters, dispatch).
     calls = state.counts.nativeRecordCalls;
     drawing.counted(device, list);
     CHECK(state.counts.encodersOpened == encoders + 2);
-    CHECK(state.counts.nativeRecordCalls == calls + 1 + 2 + 4);
+    CHECK(state.counts.nativeRecordCalls == calls + 1 + 1 + label + 4);
     // The resumed render encoder writes none either.
     list.draw(3);
     CHECK(state.counts.encodersOpened == encoders + 3);
@@ -775,6 +778,7 @@ TEST_CASE("a scope that opens a pass's render encoder writes after the pass's be
     const Drawing drawing(device);
     device.beginFrame();
     CommandList list = device.acquireCommandList(QueueType::Graphics, "test.list");
+    const uint64_t label = test::encoderLabel(list);
     claimArenaPage(list);
     const core::CommandListCore& state = core::coreOf(list);
     drawing.begin(list, "test.pass");
@@ -786,7 +790,7 @@ TEST_CASE("a scope that opens a pass's render encoder writes after the pass's be
     // The scope opened the render encoder (factory, label, table), which wrote the pass's begin timestamp and replayed the
     // pipeline with its winding, the viewport and the scissor before the scope's group and begin timestamp.
     CHECK(state.scopeLog.back().timestamp == passPair + 2);
-    CHECK(state.counts.nativeRecordCalls == calls + 3 + 1 + 4 + 1 + 1);
+    CHECK(state.counts.nativeRecordCalls == calls + 2 + label + 1 + 4 + 1 + 1);
     CHECK(CommandListImpl::of(list).draw.passBegin == core::kNoTimestamp);
     list.draw(3);
     calls = state.counts.nativeRecordCalls;
@@ -886,6 +890,7 @@ TEST_CASE("an upscale writes its two timestamps around the carrier and the Metal
     test::UpscaleKit kit;
     Device device = kit.kit.device;
     CommandList list = kit.kit.list;
+    const uint64_t label = test::encoderLabel(list);
     claimArenaPage(list);
     const core::CommandListCore& state = core::coreOf(list);
     const uint64_t calls = state.counts.nativeRecordCalls;
@@ -895,7 +900,7 @@ TEST_CASE("an upscale writes its two timestamps around the carrier and the Metal
     test::requireTimed(list);
     // pushDebugGroup, the begin timestamp, the carrier's five calls, the scaler's fourteen setters, encodeToCommandBuffer,
     // the end timestamp and popDebugGroup.
-    CHECK(state.counts.nativeRecordCalls == calls + 1 + 1 + 5 + 14 + 1 + 1 + 1);
+    CHECK(state.counts.nativeRecordCalls == calls + 1 + 1 + 4 + label + 14 + 1 + 1 + 1);
     const uint32_t pair = state.scopeLog.back().timestamp;
     CHECK(pair != core::kNoTimestamp);
     CHECK(pair % 2 == 0);

@@ -32,11 +32,15 @@ using namespace rojoRHI;
 using rojoRHI::test::UpscaleKit;
 
 namespace {
+    //==================================================================================================================
     /// The native calls an upscale sends with no encoder open and no barrier pending: `pushDebugGroup` and the begin
-    /// timestamp; the carrier's `computeCommandEncoder`, `setLabel`, its queue barrier after every stage, `updateFence` and
+    /// timestamp; the carrier's `computeCommandEncoder`, `setLabel` when `list`'s encoders carry labels, its queue barrier after every stage, `updateFence` and
     /// `endEncoding`; the scaler's six textures, content width and height, two jitter offsets, two motion scales,
     /// pre-exposure and reset; `encodeToCommandBuffer`; the end timestamp and `popDebugGroup`.
-    constexpr uint64_t kUpscaleCalls = 2 + 5 + 14 + 1 + 2;
+    uint64_t upscaleCalls(CommandList list)
+    {
+        return 2 + 4 + test::encoderLabel(list) + 14 + 1 + 2;
+    }
 
     //==================================================================================================================
     /// What `list` has counted so far; fails the case when a scope it recorded holds no timestamp pair, since the pinned
@@ -250,7 +254,7 @@ TEST_CASE("an upscale sends its debug group, a carrier encoder with the fence up
     UpscaleKit kit;
     const core::RecordCounts before = countsOf(kit.kit.list);
     kit.upscale();
-    CHECK(countsOf(kit.kit.list).nativeRecordCalls == before.nativeRecordCalls + kUpscaleCalls);
+    CHECK(countsOf(kit.kit.list).nativeRecordCalls == before.nativeRecordCalls + upscaleCalls(kit.kit.list));
     CHECK(countsOf(kit.kit.list).encodersOpened == before.encodersOpened + 1);
     // The carrier's barrier waits for every earlier stage on the queue, an earlier frame's MetalFX work included.
     CHECK(countsOf(kit.kit.list).nativeBarriers == before.nativeBarriers + 1);
@@ -267,7 +271,7 @@ TEST_CASE("an upscale sends its debug group, a carrier encoder with the fence up
     kit.kit.list.upscale(other, kit.params);
     // The copy's encoder ends; it took the compute wait on the first upscale's fence, and the carrier takes the render wait
     // still owed, so the second fence, which replaces the first, follows the first upscale's work.
-    CHECK(countsOf(kit.kit.list).nativeRecordCalls == open.nativeRecordCalls + 1 + kUpscaleCalls + 1);
+    CHECK(countsOf(kit.kit.list).nativeRecordCalls == open.nativeRecordCalls + 1 + upscaleCalls(kit.kit.list) + 1);
     CHECK(barriersOf(kit.kit.list).owedFence == stateOf(kit.kit.device, other).fence);
     CHECK(barriersOf(kit.kit.list).owedFenceStages == (metal4::kComputeStages | metal4::kRenderStages));
     submitAndWait(kit);
@@ -286,14 +290,14 @@ TEST_CASE("the encoder after an upscale waits on its fence, once", "[metal4]")
         const core::RecordCounts before = countsOf(kit.kit.list);
         kit.kit.list.copyBuffer(a, 0, b, 0, 256);
         // computeCommandEncoder, setLabel, setArgumentTable, waitForFence, then the copy.
-        CHECK(countsOf(kit.kit.list).nativeRecordCalls == before.nativeRecordCalls + 5);
+        CHECK(countsOf(kit.kit.list).nativeRecordCalls == before.nativeRecordCalls + 4 + test::encoderLabel(kit.kit.list));
         // The first render encoder still owes its wait.
         CHECK(barriersOf(kit.kit.list).owedFenceStages == metal4::kRenderStages);
         // A later compute encoder owes nothing: the barrier ends the encoder, and the next opens with the barrier and no wait.
         const core::RecordCounts second = countsOf(kit.kit.list);
         kit.kit.list.barrier(std::array{ copyToCopy() });
         kit.kit.list.copyBuffer(b, 0, a, 0, 256);
-        CHECK(countsOf(kit.kit.list).nativeRecordCalls == second.nativeRecordCalls + 1 + 3 + 1 + 1);
+        CHECK(countsOf(kit.kit.list).nativeRecordCalls == second.nativeRecordCalls + 1 + 2 + test::encoderLabel(kit.kit.list) + 1 + 1);
         submitAndWait(kit);
         destroyDevice(kit.kit.device);
     }
@@ -324,7 +328,7 @@ TEST_CASE("the encoder after an upscale waits on its fence, once", "[metal4]")
         // No barrier is pending, but the fence is: the trailing encoder waits on it and holds back every stage of every later
         // encoder on the queue, so a later list's reads of the output follow MetalFX's writes. computeCommandEncoder,
         // setLabel, waitForFence, barrierAfterStages and endEncoding, then endCommandBuffer.
-        CHECK(countsOf(kit.kit.list).nativeRecordCalls == before.nativeRecordCalls + 5 + 1);
+        CHECK(countsOf(kit.kit.list).nativeRecordCalls == before.nativeRecordCalls + 4 + test::encoderLabel(kit.kit.list) + 1);
         CHECK(countsOf(kit.kit.list).encodersOpened == before.encodersOpened + 1);
         CHECK(countsOf(kit.kit.list).nativeBarriers == before.nativeBarriers + 1);
         CHECK(barriersOf(kit.kit.list).owedFence == nullptr);
@@ -347,7 +351,7 @@ TEST_CASE("the encoder after an upscale waits on its fence, once", "[metal4]")
         CHECK(barriersOf(kit.kit.list).owedFence == stateOf(kit.kit.device, kit.upscaler).fence);
         const core::RecordCounts before = countsOf(kit.kit.list);
         kit.kit.list.end();
-        CHECK(countsOf(kit.kit.list).nativeRecordCalls == before.nativeRecordCalls + 5 + 1);
+        CHECK(countsOf(kit.kit.list).nativeRecordCalls == before.nativeRecordCalls + 4 + test::encoderLabel(kit.kit.list) + 1);
         CHECK(countsOf(kit.kit.list).nativeBarriers == before.nativeBarriers + 1);
         const std::array<CommandList, 1> lists{ kit.kit.list };
         kit.kit.device.queue(QueueType::Graphics).submit(lists);
@@ -364,7 +368,7 @@ TEST_CASE("the encoder after an upscale waits on its fence, once", "[metal4]")
         kit.kit.list.end();
         // The trailing encoder waits on the fence before its two barriers, so the work it holds back follows MetalFX's: its
         // five calls, waitForFence and endCommandBuffer.
-        CHECK(countsOf(kit.kit.list).nativeRecordCalls == before.nativeRecordCalls + 5 + 1 + 1);
+        CHECK(countsOf(kit.kit.list).nativeRecordCalls == before.nativeRecordCalls + 4 + test::encoderLabel(kit.kit.list) + 1 + 1);
         CHECK(countsOf(kit.kit.list).nativeBarriers == before.nativeBarriers + 2);
         const std::array<CommandList, 1> lists{ kit.kit.list };
         kit.kit.device.queue(QueueType::Graphics).submit(lists);
@@ -388,7 +392,7 @@ TEST_CASE("the first compute and the first render encoder after an upscale each 
     const core::RecordCounts beforeClear = countsOf(kit.kit.list);
     kit.kit.list.clearTexture(c, {}, ClearValue{});
     // renderCommandEncoder, setLabel, waitForFence for every render stage, the fragment barrier and endEncoding.
-    CHECK(countsOf(kit.kit.list).nativeRecordCalls == beforeClear.nativeRecordCalls + 5);
+    CHECK(countsOf(kit.kit.list).nativeRecordCalls == beforeClear.nativeRecordCalls + 4 + test::encoderLabel(kit.kit.list));
     CHECK(countsOf(kit.kit.list).nativeBarriers == beforeClear.nativeBarriers + 1);
     CHECK(barriersOf(kit.kit.list).owedFenceStages == metal4::kComputeStages);
     CHECK(barriersOf(kit.kit.list).owedFence == stateOf(kit.kit.device, kit.upscaler).fence);
@@ -396,7 +400,7 @@ TEST_CASE("the first compute and the first render encoder after an upscale each 
     // work and the carrier: computeCommandEncoder, setLabel, setArgumentTable, waitForFence and the copy.
     const core::RecordCounts beforeCopy = countsOf(kit.kit.list);
     kit.kit.list.copyBuffer(b, 0, d, 0, 256);
-    CHECK(countsOf(kit.kit.list).nativeRecordCalls == beforeCopy.nativeRecordCalls + 5);
+    CHECK(countsOf(kit.kit.list).nativeRecordCalls == beforeCopy.nativeRecordCalls + 4 + test::encoderLabel(kit.kit.list));
     CHECK(countsOf(kit.kit.list).nativeBarriers == beforeCopy.nativeBarriers);
     CHECK(barriersOf(kit.kit.list).owedFenceStages == 0);
     CHECK(barriersOf(kit.kit.list).owedFence == stateOf(kit.kit.device, kit.upscaler).fence);
@@ -444,7 +448,7 @@ TEST_CASE(
     const core::RecordCounts start = countsOf(kit.kit.list);
     kit.upscale();
     // The carrier's one barrierAfterQueueStages, after every stage, covers the pending part on its dispatch and blit stages.
-    CHECK(countsOf(kit.kit.list).nativeRecordCalls == start.nativeRecordCalls + kUpscaleCalls);
+    CHECK(countsOf(kit.kit.list).nativeRecordCalls == start.nativeRecordCalls + upscaleCalls(kit.kit.list));
     CHECK(countsOf(kit.kit.list).nativeBarriers == start.nativeBarriers + 1);
     CHECK(barriersOf(kit.kit.list).pendingDestination == MTL::StageFragment);
     CHECK(barriersOf(kit.kit.list).pendingSource == (MTL::StageFragment | MTL::StageBlit | MTL::StageDispatch));

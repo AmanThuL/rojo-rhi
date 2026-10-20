@@ -359,7 +359,7 @@ namespace rojoRHI {
             return std::unexpected(std::move(valid.error()));
         }
         const metal4::AutoreleasePool pool;
-        // DeviceDesc::enableCapture has no effect on this backend.
+        // DeviceDesc::enableCapture only makes encoders carry labels (encoderLabels, below).
         MTL::Device* device = MTL::CreateSystemDefaultDevice();
         if (device == nullptr)
         {
@@ -373,6 +373,7 @@ namespace rojoRHI {
         auto impl = std::make_unique<DeviceImpl>(desc);
         impl->device = device;
         impl->commandPools = metal4::commandsMayAutorelease(device);
+        impl->encoderLabels = desc.validation || desc.enableCapture || impl->commandPools;
         impl->timestamps.create(device);
         reportCapabilities(*impl);
         impl->core.setSurfaceCheck(metal4::isMetalLayer);

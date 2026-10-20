@@ -125,9 +125,9 @@ the list allocates at its first pass and reuses.
   `endEncoding`: the caller's action, or its resolve form, at `endRenderPass`, and `Store` at a
   split. A split stores and resolves an attachment that has a resolve target, because the validation
   layer rejects a plain `Store` there; the split costs one extra resolve.
-- The encoder is labelled after the innermost open scope, binds the list's argument table to the
-  vertex, fragment, object and mesh stages (ADR 0018), emits the render part of the pending
-  barrier, and replays the prefix (next section).
+- The encoder is labelled after the innermost open scope when the device labels encoders, binds the
+list's argument table to the vertex, fragment, object and mesh stages (ADR 0018), emits the render
+part of the pending barrier, and replays the prefix (next section).
 - `beginRenderPass` claims the pass's timestamp pair and keeps its begin entry in
   `DrawState::passBegin`; the pass's first encoder writes it with `writePassBegin` right after it
   opens, before any command: the compute encoder of the pass's leading counted draws, when their

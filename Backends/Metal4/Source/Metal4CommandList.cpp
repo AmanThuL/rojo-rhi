@@ -110,7 +110,9 @@ namespace rojoRHI {
                 auto created = std::make_unique<CommandListImpl>();
                 core::DeviceCounts::add(impl.core.counts().cpuAllocations);
                 // The list's objects are its own for good: the pool keeps the list, and the slot's reuse resets its allocator.
-                if (Result<void> made = created->state.create(impl.device, impl.viewTable->gpuAddress(), impl.samplerTable->gpuAddress(), impl.commandPools);
+                if (Result<void> made = created->state.create(
+                        impl.device, impl.viewTable->gpuAddress(), impl.samplerTable->gpuAddress(), impl.commandPools, impl.encoderLabels
+                    );
                     !made)
                 {
                     ROJORHI_LOG_ERROR("acquireCommandList on device \"{}\": {}", impl.core.label(), made.error().message);
@@ -134,19 +136,31 @@ namespace rojoRHI {
         }
         state.scopeLabels.clear();
         state.scopeTimestamps.clear();
-        if (state.label != nullptr)
+        state.groupCursor = 0;
+        if (state.label == nullptr || state.labelText != list->core.label)
         {
-            state.label->release();
+            if (state.label != nullptr)
+            {
+                state.label->release();
+            }
+            // Made with alloc and init, so not autoreleased: a new label opens no pool to be made. It stays for encoder labels.
+            state.label = NS::String::alloc()->init(list->core.label.c_str(), NS::UTF8StringEncoding);
+            state.labelText = list->core.label;
+            state.labelSet = false;
         }
-        // Made with alloc and init, so not autoreleased: acquisition opens no pool. The string stays for encoder labels.
-        state.label = NS::String::alloc()->init(list->core.label.c_str(), NS::UTF8StringEncoding);
         state.commandBuffer->beginCommandBuffer(state.allocator);
         core::noteNativeCall(list->core);
+        // The command buffer keeps its label across recordings, so a list acquired again with the same label sends none.
+        if (!state.labelSet)
         {
-            const metal4::AutoreleasePool pool;
-            state.commandBuffer->setLabel(state.label);
+            {
+                // The driver reads a short label through an autoreleased copy.
+                const metal4::AutoreleasePool pool;
+                state.commandBuffer->setLabel(state.label);
+            }
+            core::noteNativeCall(list->core);
+            state.labelSet = true;
         }
-        core::noteNativeCall(list->core);
         return CommandListImpl::wrap(list);
     }
 

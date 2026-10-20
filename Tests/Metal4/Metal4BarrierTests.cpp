@@ -122,6 +122,7 @@ TEST_CASE("a barrier at the start of a list is emitted by the first encoder at q
     device.beginFrame();
     // A Copy list runs blits only, so its barriers name the blit stage alone.
     CommandList list = device.acquireCommandList(QueueType::Copy, "test.list");
+    const uint64_t label = test::encoderLabel(list);
     list.barrier(std::array{ copyToCopy() });
     // Nothing is emitted yet: no encoder is open, so the barrier waits for one.
     CHECK(countsOf(list).nativeBarriers == 0);
@@ -134,7 +135,7 @@ TEST_CASE("a barrier at the start of a list is emitted by the first encoder at q
     // The opening adds computeCommandEncoder, setLabel, setArgumentTable and barrierAfterQueueStages; then the copy.
     CHECK(countsOf(list).encodersOpened == 1);
     CHECK(countsOf(list).nativeBarriers == 1);
-    CHECK(countsOf(list).nativeRecordCalls == 2 + 4 + 1);
+    CHECK(countsOf(list).nativeRecordCalls == 2 + 3 + label + 1);
     CHECK(barriersOf(list).pendingDestination == 0);
     CHECK(barriersOf(list).pendingSource == 0);
     CHECK(barriersOf(list).pendingVisibility == 0);
@@ -142,7 +143,7 @@ TEST_CASE("a barrier at the start of a list is emitted by the first encoder at q
     CHECK(barriersOf(list).openDestination == MTL::StageBlit);
     list.end();
     // endEncoding and endCommandBuffer; nothing is pending, so no trailing encoder.
-    CHECK(countsOf(list).nativeRecordCalls == 7 + 2);
+    CHECK(countsOf(list).nativeRecordCalls == 6 + label + 2);
     CHECK(countsOf(list).encodersOpened == 1);
     CHECK(barriersOf(list).openSource == 0);
     CHECK(barriersOf(list).openDestination == 0);
@@ -158,31 +159,32 @@ TEST_CASE("a barrier whose sources the opening barrier covered stays in the open
     const Buffer b = *device.createBuffer({ .size = 256, .label = "test.b" });
     device.beginFrame();
     CommandList list = device.acquireCommandList(QueueType::Copy, "test.list");
+    const uint64_t label = test::encoderLabel(list);
     list.barrier(std::array{ copyToCopy() });
     list.copyBuffer(a, 0, b, 0, 128);
-    CHECK(countsOf(list).nativeRecordCalls == 7);
+    CHECK(countsOf(list).nativeRecordCalls == 6 + label);
     list.barrier(std::array{ copyToCopy() });
     // The encoder stays open and holds the barrier back until a command follows it in the encoder.
     CHECK(encodersOf(list).kind() == metal4::EncoderKind::Compute);
     CHECK(encodersOf(list).holdsWork());
     CHECK(countsOf(list).nativeBarriers == 1);
-    CHECK(countsOf(list).nativeRecordCalls == 7);
+    CHECK(countsOf(list).nativeRecordCalls == 6 + label);
     CHECK(barriersOf(list).pendingDestination == 0);
     CHECK(barriersOf(list).deferredDestination == MTL::StageBlit);
     // A second barrier with no command between them merges with the first.
     list.barrier(std::array{ copyToCopy() });
     CHECK(countsOf(list).nativeBarriers == 1);
-    CHECK(countsOf(list).nativeRecordCalls == 7);
+    CHECK(countsOf(list).nativeRecordCalls == 6 + label);
     // barrierAfterEncoderStages goes before the copy that follows it.
     list.copyBuffer(b, 0, a, 0, 128);
     CHECK(countsOf(list).encodersOpened == 1);
     CHECK(countsOf(list).nativeBarriers == 2);
-    CHECK(countsOf(list).nativeRecordCalls == 7 + 1 + 1);
+    CHECK(countsOf(list).nativeRecordCalls == 6 + label + 1 + 1);
     CHECK(barriersOf(list).deferredDestination == 0);
     list.end();
     CHECK(countsOf(list).encodersOpened == 1);
     CHECK(countsOf(list).nativeBarriers == 2);
-    CHECK(countsOf(list).nativeRecordCalls == 9 + 2);
+    CHECK(countsOf(list).nativeRecordCalls == 8 + label + 2);
     submitAndWait(device, std::array{ list }, QueueType::Copy);
     destroyDevice(device);
 }
@@ -195,17 +197,18 @@ TEST_CASE("an encoder-level barrier with no command after it is carried at end b
     const Buffer b = *device.createBuffer({ .size = 256, .label = "test.b" });
     device.beginFrame();
     CommandList list = device.acquireCommandList(QueueType::Copy, "test.list");
+    const uint64_t label = test::encoderLabel(list);
     list.barrier(std::array{ copyToCopy() });
     list.copyBuffer(a, 0, b, 0, 128);
     list.barrier(std::array{ copyToCopy() });
     CHECK(countsOf(list).nativeBarriers == 1);
-    CHECK(countsOf(list).nativeRecordCalls == 7);
+    CHECK(countsOf(list).nativeRecordCalls == 6 + label);
     list.end();
     // The held barrier joins the pending one, whose sources the encoder's opening barrier waited for: the encoder emits
     // barrierAfterStages after the stage it ran, then endEncoding; then endCommandBuffer. No trailing encoder.
     CHECK(countsOf(list).encodersOpened == 1);
     CHECK(countsOf(list).nativeBarriers == 1 + 1);
-    CHECK(countsOf(list).nativeRecordCalls == 7 + 1 + 1 + 1);
+    CHECK(countsOf(list).nativeRecordCalls == 6 + label + 1 + 1 + 1);
     CHECK(barriersOf(list).deferredDestination == 0);
     CHECK(barriersOf(list).pendingDestination == 0);
     submitAndWait(device, std::array{ list }, QueueType::Copy);
@@ -251,26 +254,27 @@ TEST_CASE("a barrier after uncovered work closes the encoder and the next encode
     const Buffer b = *device.createBuffer({ .size = 256, .label = "test.b" });
     device.beginFrame();
     CommandList list = device.acquireCommandList(QueueType::Copy, "test.list");
+    const uint64_t label = test::encoderLabel(list);
     list.copyBuffer(a, 0, b, 0, 128);
     // The encoder opened with no barrier, so its opening covered nothing.
     CHECK(barriersOf(list).openSource == 0);
     CHECK(barriersOf(list).openDestination == 0);
-    CHECK(countsOf(list).nativeRecordCalls == 6);
+    CHECK(countsOf(list).nativeRecordCalls == 5 + label);
     list.barrier(std::array{ copyToCopy() });
     // The copy's sources may include earlier lists' work, so the barrier is queue-level: the encoder ends (endEncoding).
     CHECK(encodersOf(list).kind() == metal4::EncoderKind::None);
     CHECK(countsOf(list).nativeBarriers == 0);
-    CHECK(countsOf(list).nativeRecordCalls == 6 + 1);
+    CHECK(countsOf(list).nativeRecordCalls == 5 + label + 1);
     CHECK(barriersOf(list).pendingSource == MTL::StageBlit);
     CHECK(barriersOf(list).pendingDestination == MTL::StageBlit);
     list.copyBuffer(b, 0, a, 0, 128);
     CHECK(countsOf(list).encodersOpened == 2);
     CHECK(countsOf(list).nativeBarriers == 1);
-    CHECK(countsOf(list).nativeRecordCalls == 7 + 4 + 1);
+    CHECK(countsOf(list).nativeRecordCalls == 6 + label + 3 + label + 1);
     CHECK(barriersOf(list).pendingDestination == 0);
     list.end();
     CHECK(countsOf(list).encodersOpened == 2);
-    CHECK(countsOf(list).nativeRecordCalls == 12 + 2);
+    CHECK(countsOf(list).nativeRecordCalls == 10 + 2 * label + 2);
     submitAndWait(device, std::array{ list }, QueueType::Copy);
     destroyDevice(device);
 }
@@ -283,13 +287,14 @@ TEST_CASE("a graphics list owes the fragment part of a Copy barrier and emits it
     const Buffer b = *device.createBuffer({ .size = 256, .label = "test.b" });
     device.beginFrame();
     CommandList list = device.acquireCommandList(QueueType::Graphics, "test.list");
+    const uint64_t label = test::encoderLabel(list);
     list.barrier(std::array{ copyToCopy() });
     CHECK(barriersOf(list).pendingSource == kCopyStages);
     CHECK(barriersOf(list).pendingDestination == kCopyStages);
     list.copyBuffer(a, 0, b, 0, 128);
     // The compute encoder emits the dispatch and blit part; the fragment part stays owed.
     CHECK(countsOf(list).nativeBarriers == 1);
-    CHECK(countsOf(list).nativeRecordCalls == 7);
+    CHECK(countsOf(list).nativeRecordCalls == 6 + label);
     CHECK(barriersOf(list).pendingSource == kCopyStages);
     CHECK(barriersOf(list).pendingDestination == MTL::StageFragment);
     CHECK(barriersOf(list).openSource == kCopyStages);
@@ -298,18 +303,18 @@ TEST_CASE("a graphics list owes the fragment part of a Copy barrier and emits it
     list.barrier(std::array{ copyToCopy() });
     CHECK(encodersOf(list).kind() == metal4::EncoderKind::Compute);
     CHECK(countsOf(list).nativeBarriers == 1);
-    CHECK(countsOf(list).nativeRecordCalls == 7);
+    CHECK(countsOf(list).nativeRecordCalls == 6 + label);
     CHECK(barriersOf(list).pendingDestination == MTL::StageFragment);
     list.copyBuffer(b, 0, a, 0, 128);
     CHECK(countsOf(list).nativeBarriers == 2);
-    CHECK(countsOf(list).nativeRecordCalls == 9);
+    CHECK(countsOf(list).nativeRecordCalls == 8 + label);
     list.end();
     // The encoder's opening barrier waited for every pending source, so the encoder carries what is owed: updateFence for
     // the dispatch stage it gave back, barrierAfterStages for the fragment stage, then endEncoding; then endCommandBuffer.
     // No memory aliases, so the global barriers carry no alias visibility that would keep the dispatch stage in the barrier.
     CHECK(countsOf(list).encodersOpened == 1);
     CHECK(countsOf(list).nativeBarriers == 3);
-    CHECK(countsOf(list).nativeRecordCalls == 9 + 2 + 1 + 1);
+    CHECK(countsOf(list).nativeRecordCalls == 8 + label + 2 + 1 + 1);
     CHECK(barriersOf(list).pendingSource == 0);
     CHECK(barriersOf(list).pendingDestination == 0);
     CHECK(barriersOf(list).pendingVisibility == 0);
@@ -329,6 +334,7 @@ TEST_CASE("Compute and Copy lists owe no render stage", "[metal4]")
     const Buffer b = *device.createBuffer({ .size = 256, .label = "test.b" });
     device.beginFrame();
     CommandList list = device.acquireCommandList(type, "test.list");
+    const uint64_t label = test::encoderLabel(list);
     // All stands for the whole queue.
     list.barrier(std::array{ GlobalBarrier{ .srcStage = Stage::All, .srcAccess = Access::CopyWrite, .dstStage = Stage::Copy, .dstAccess = Access::CopyRead } });
     CHECK(barriersOf(list).pendingSource == stages);
@@ -342,14 +348,14 @@ TEST_CASE("Compute and Copy lists owe no render stage", "[metal4]")
         // The encoder ran a command in every stage its opening barrier held: nothing is owed.
         CHECK(countsOf(list).encodersOpened == 1);
         CHECK(countsOf(list).nativeBarriers == 1);
-        CHECK(countsOf(list).nativeRecordCalls == 2 + 4 + 1 + 2);
+        CHECK(countsOf(list).nativeRecordCalls == 2 + 3 + label + 1 + 2);
     }
     else
     {
         // The encoder ran no dispatch, so the dispatch stage is still owed, and the encoder carries it with a barrier.
         CHECK(countsOf(list).encodersOpened == 1);
         CHECK(countsOf(list).nativeBarriers == 2);
-        CHECK(countsOf(list).nativeRecordCalls == 2 + 4 + 1 + 1 + 1 + 1);
+        CHECK(countsOf(list).nativeRecordCalls == 2 + 3 + label + 1 + 1 + 1 + 1);
     }
     submitAndWait(device, std::array{ list }, type);
     destroyDevice(device);
@@ -436,11 +442,12 @@ TEST_CASE("a batch with a None source records no native barrier, and an empty ba
     const Buffer b = *device.createBuffer({ .size = 256, .label = "test.b" });
     device.beginFrame();
     CommandList list = device.acquireCommandList(QueueType::Graphics, "test.list");
+    const uint64_t label = test::encoderLabel(list);
     list.barrier({});
     CHECK(countsOf(list).globalBarriers == 0);
     CHECK(countsOf(list).nativeRecordCalls == 2);
     list.copyBuffer(a, 0, b, 0, 128);
-    CHECK(countsOf(list).nativeRecordCalls == 6);
+    CHECK(countsOf(list).nativeRecordCalls == 5 + label);
     // No earlier work to wait for: nothing to order, and the encoder stays open.
     list.barrier(std::array{ GlobalBarrier{ .srcStage = Stage::None, .dstStage = Stage::Copy } });
     CHECK(countsOf(list).globalBarriers == 1);
@@ -449,14 +456,14 @@ TEST_CASE("a batch with a None source records no native barrier, and an empty ba
     CHECK(countsOf(list).bufferBarriers == 1);
     list.barrier({}, {}, {});
     CHECK(countsOf(list).nativeBarriers == 0);
-    CHECK(countsOf(list).nativeRecordCalls == 6);
+    CHECK(countsOf(list).nativeRecordCalls == 5 + label);
     CHECK(encodersOf(list).kind() == metal4::EncoderKind::Compute);
     CHECK(encodersOf(list).holdsWork());
     CHECK(barriersOf(list).pendingDestination == 0);
     CHECK(barriersOf(list).pendingSource == 0);
     list.end();
     CHECK(countsOf(list).encodersOpened == 1);
-    CHECK(countsOf(list).nativeRecordCalls == 6 + 2);
+    CHECK(countsOf(list).nativeRecordCalls == 5 + label + 2);
     submitAndWait(device, std::array{ list });
     destroyDevice(device);
 }

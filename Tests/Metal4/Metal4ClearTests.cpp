@@ -11,6 +11,7 @@
 #include "Metal4Device.h"
 #include "Metal4Encoders.h"
 #include "Metal4Kernels.h"
+#include "Support/Metal4/Metal4Timing.h"
 
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/generators/catch_generators.hpp>
@@ -136,19 +137,20 @@ TEST_CASE("a render-target clear opens one render encoder per subresource and cl
     const Texture cube = makeTexture(device, TextureType::Cube, Format::RGBA16Float, TextureUsage::RenderTarget, { 8, 8, 1 }, 1, 6);
     device.beginFrame();
     CommandList list = device.acquireCommandList(QueueType::Graphics, "test.list");
+    const uint64_t label = test::encoderLabel(list);
     list.copyBuffer(a, 0, b, 0, 256);
-    REQUIRE(countsOf(list).nativeRecordCalls == 2 + 3 + 1);
+    REQUIRE(countsOf(list).nativeRecordCalls == 2 + 2 + label + 1);
     REQUIRE(encodersOf(list).kind() == metal4::EncoderKind::Compute);
     // Mips 1 and 2 of layers 1 and 2: four subresources. The compute encoder ends first; each render encoder counts its factory,
     // setLabel and endEncoding.
     list.clearTexture(array, SubresourceRange{ .baseMip = 1, .mipCount = kAllMips, .baseLayer = 1, .layerCount = 2 }, ClearValue{});
-    CHECK(countsOf(list).nativeRecordCalls == 6 + 1 + 4 * 3);
+    CHECK(countsOf(list).nativeRecordCalls == 5 + label + 1 + 4 * (2 + label));
     CHECK(countsOf(list).encodersOpened == 1 + 4);
     CHECK(encodersOf(list).kind() == metal4::EncoderKind::None);
     CHECK_FALSE(encodersOf(list).holdsWork());
     // A 3D texture clears each depth plane of each mip: eight planes of mip 0 and four of mip 1.
     list.clearTexture(volume, {}, ClearValue{});
-    CHECK(countsOf(list).nativeRecordCalls == 19 + 12 * 3);
+    CHECK(countsOf(list).nativeRecordCalls == 14 + 5 * label + 12 * (2 + label));
     CHECK(countsOf(list).encodersOpened == 5 + 12);
     // A cube's layers are its faces.
     list.clearTexture(cube, SubresourceRange{ .baseLayer = 2, .layerCount = 3 }, ClearValue{});
@@ -170,19 +172,20 @@ TEST_CASE("a Storage-only clear dispatches one kernel per mip on the compute enc
     CAPTURE(static_cast<int>(type));
     device.beginFrame();
     CommandList list = device.acquireCommandList(type, "test.list");
+    const uint64_t label = test::encoderLabel(list);
     list.clearTexture(array, {}, ClearValue{ .color = { 0.25f, 0.5f, 0.75f, 1.0f } });
     // The encoder opens (3), on a graphics list waits on the carry fence before its first dispatch (1), and the texture is
     // bound once (1); the first mip sets the pipeline, the kernel table, the parameters, dispatches and sets the list's
     // table back (5); each later mip skips the pipeline (4).
     const uint64_t wait = type == QueueType::Graphics ? 1 : 0;
-    CHECK(countsOf(list).nativeRecordCalls == 2 + 3 + wait + 1 + 5 + 4 + 4);
+    CHECK(countsOf(list).nativeRecordCalls == 2 + 2 + label + wait + 1 + 5 + 4 + 4);
     CHECK(countsOf(list).encodersOpened == 1);
     CHECK(encodersOf(list).kind() == metal4::EncoderKind::Compute);
     CHECK(encodersOf(list).holdsWork());
     CHECK(encodersOf(list).kernelPipeline() == kernels.clear[static_cast<size_t>(metal4::ClearKernel::Tex2DArray)]);
     // Another texture type takes another pipeline, on the same encoder.
     list.clearTexture(volume, SubresourceRange{ .baseMip = 1 }, ClearValue{ .color = { 2.0f, 0.0f, 0.0f, 0.0f } });
-    CHECK(countsOf(list).nativeRecordCalls == 19 + wait + 1 + 5);
+    CHECK(countsOf(list).nativeRecordCalls == 18 + label + wait + 1 + 5);
     CHECK(countsOf(list).encodersOpened == 1);
     CHECK(encodersOf(list).kernelPipeline() == kernels.clear[static_cast<size_t>(metal4::ClearKernel::Tex3D)]);
     list.end();

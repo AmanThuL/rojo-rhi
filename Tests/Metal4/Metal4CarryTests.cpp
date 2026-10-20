@@ -162,6 +162,7 @@ TEST_CASE("a closing batch whose sources may lie before the closing encoder take
 {
     test::PassKit kit;
     CommandList list = kit.list;
+    const uint64_t label = test::encoderLabel(list);
     const Buffer ordered = kit.buffer(BufferUsage::ShaderWrite);
     // No batch precedes the pass, so its encoder's opening covered nothing and an earlier list's fragment work is unordered.
     emptyPass(list, kit.target());
@@ -175,7 +176,7 @@ TEST_CASE("a closing batch whose sources may lie before the closing encoder take
         // endCommandBuffer. No producer barrier holds back later dispatches.
         CHECK(countsOf(list).encodersOpened == before.encodersOpened + 1);
         CHECK(countsOf(list).nativeBarriers == before.nativeBarriers + 1);
-        CHECK(countsOf(list).nativeRecordCalls == before.nativeRecordCalls + 1 + 5 + 1);
+        CHECK(countsOf(list).nativeRecordCalls == before.nativeRecordCalls + 1 + 4 + label + 1);
     }
     SECTION("into Copy")
     {
@@ -185,7 +186,7 @@ TEST_CASE("a closing batch whose sources may lie before the closing encoder take
         // As above, with a producer barrier for the blit and fragment stages.
         CHECK(countsOf(list).encodersOpened == before.encodersOpened + 1);
         CHECK(countsOf(list).nativeBarriers == before.nativeBarriers + 2);
-        CHECK(countsOf(list).nativeRecordCalls == before.nativeRecordCalls + 1 + 6 + 1);
+        CHECK(countsOf(list).nativeRecordCalls == before.nativeRecordCalls + 1 + 5 + label + 1);
     }
     CHECK(barriersOf(list).pendingDestination == 0);
     submitAndWait(kit.device, list);
@@ -254,6 +255,7 @@ TEST_CASE("a graphics compute encoder waits on the carry fence once, before its 
 {
     test::PassKit kit;
     CommandList list = kit.list;
+    const uint64_t label = test::encoderLabel(list);
     list.setPipeline(kit.compute());
     CHECK_FALSE(encodersOf(list).carryWaited());
     uint64_t before = countsOf(list).nativeRecordCalls;
@@ -276,7 +278,7 @@ TEST_CASE("a graphics compute encoder waits on the carry fence once, before its 
     before = countsOf(list).nativeRecordCalls;
     list.dispatch(1, 1, 1);
     // The open (factory, label, table), the pipeline, waitForFence and the dispatch.
-    CHECK(countsOf(list).nativeRecordCalls - before == 3 + 1 + 1 + 1);
+    CHECK(countsOf(list).nativeRecordCalls - before == 2 + label + 1 + 1 + 1);
     CHECK(encodersOf(list).carryWaited());
     list.endScope();
     list.end();
@@ -326,6 +328,7 @@ TEST_CASE("a closing batch whose visibility includes ResourceAlias keeps the dis
     CAPTURE(covered);
     test::PassKit kit;
     CommandList list = kit.list;
+    const uint64_t label = test::encoderLabel(list);
     if (covered)
     {
         list.barrier(std::array{ global(Stage::FragmentShader, Access::None, Stage::ColorAttachment, Access::ColorAttachmentWrite) });
@@ -350,7 +353,7 @@ TEST_CASE("a closing batch whose visibility includes ResourceAlias keeps the dis
         // endCommandBuffer: no updateFence.
         CHECK(countsOf(list).encodersOpened == before.encodersOpened + 1);
         CHECK(countsOf(list).nativeBarriers == before.nativeBarriers + 2);
-        CHECK(countsOf(list).nativeRecordCalls == before.nativeRecordCalls + 1 + 5 + 1);
+        CHECK(countsOf(list).nativeRecordCalls == before.nativeRecordCalls + 1 + 4 + label + 1);
     }
     CHECK(barriersOf(list).pendingDestination == 0);
     submitAndWait(kit.device, list);

@@ -209,6 +209,7 @@ working directory). Errors:
 | The path cannot be made absolute, or there is no Metal device | `Unsupported` |
 | `startCapture` refuses the descriptor | `DriverFailure`, with the path and Metal's description |
 
-Metal creates missing directories, so only a path below a regular file is refused. A started
-capture counts one `nativeHostCalls` in `Device::beginCapture`, and `Device::endCapture` counts one
-more when it stops a capture the manager reports. `DeviceDesc::enableCapture` has no effect.
+Metal creates missing directories, so only a path below a regular file is refused. A started capture
+counts one `nativeHostCalls` in `Device::beginCapture`, and `Device::endCapture` counts one more
+when it stops a capture the manager reports. `DeviceDesc::enableCapture` only makes encoders carry
+labels.
