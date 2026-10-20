@@ -10,6 +10,7 @@
 #include "D3D12Debug.h"
 
 #include <algorithm>
+#include <chrono>
 #include <cstdint>
 #include <cstdlib>
 #include <format>
@@ -19,6 +20,50 @@ namespace rojoRHI::d3d12 {
     namespace {
         /// The longest single wait on a fence event, in milliseconds; a longer wait runs in slices of this length.
         constexpr uint64_t kWaitSliceMs = 10'000;
+
+        /// The calling thread's fence-wait event: auto-reset, made on the thread's first wait and closed at its exit unless a
+        /// wait timed out, which leaves the event armed for good.
+        class WaitEvent
+        {
+          public:
+            WaitEvent() = default;
+            WaitEvent(const WaitEvent&) = delete;
+            WaitEvent& operator=(const WaitEvent&) = delete;
+
+            ~WaitEvent()
+            {
+                // An armed event stays open: closing it would let the fence signal whatever handle reuses its value.
+                if (m_event != nullptr && !m_armed)
+                {
+                    CloseHandle(m_event);
+                }
+            }
+
+            /// Returns the event, made on the first call; logs and aborts, in every build, when none can be made for `what`.
+            HANDLE get(std::string_view what)
+            {
+                if (m_event == nullptr)
+                {
+                    m_event = CreateEventW(nullptr, FALSE, FALSE, nullptr);
+                    if (m_event == nullptr)
+                    {
+                        ROJORHI_LOG_ERROR("CreateEventW for a wait on {} failed with error {}", what, GetLastError());
+                        std::abort();
+                    }
+                }
+                return m_event;
+            }
+
+            /// Records that a wait timed out, so an arming of the event may never be signalled before the thread exits.
+            void leaveArmed()
+            {
+                m_armed = true;
+            }
+
+          private:
+            HANDLE m_event = nullptr;
+            bool m_armed = false;
+        };
     } // namespace
 
     //==================================================================================================================
@@ -78,56 +123,66 @@ namespace rojoRHI::d3d12 {
     }
 
     //==================================================================================================================
-    bool waitForFence(ID3D12Fence* fence, uint64_t value, uint64_t timeoutNs, std::string_view what)
+    FenceWait waitForFence(ID3D12Fence* fence, uint64_t value, uint64_t timeoutNs, std::string_view what)
     {
         // A removed device reports UINT64_MAX, which passes every value, so no wait outlives the device.
-        if (fence->GetCompletedValue() >= value)
+        FenceWait wait{ false, fence->GetCompletedValue(), 1 };
+        wait.reached = wait.completed >= value;
+        if (wait.reached || timeoutNs == 0)
         {
-            return true;
+            return wait;
         }
-        const HANDLE event = CreateEventW(nullptr, FALSE, FALSE, nullptr);
-        if (event == nullptr)
+        thread_local WaitEvent waitEvent;
+        const HANDLE event = waitEvent.get(what);
+        const HRESULT armed = fence->SetEventOnCompletion(value, event);
+        ++wait.hostCalls;
+        if (FAILED(armed))
         {
-            ROJORHI_LOG_ERROR("CreateEventW for a wait on {} failed with error {}", what, GetLastError());
-            std::abort();
-        }
-        if (const HRESULT armed = fence->SetEventOnCompletion(value, event); FAILED(armed))
-        {
-            CloseHandle(event);
             ROJORHI_LOG_ERROR("ID3D12Fence::SetEventOnCompletion for {} at {} failed with HRESULT 0x{:08X}", what, value, hresultBits(armed));
             std::abort();
         }
         const bool endless = timeoutNs == UINT64_MAX;
         uint64_t remainingMs = timeoutNs / 1'000'000 + (timeoutNs % 1'000'000 != 0 ? 1 : 0);
-        bool reached = false;
         for (;;)
         {
             const uint64_t slice = endless ? kWaitSliceMs : std::min(remainingMs, kWaitSliceMs);
+            const auto start = std::chrono::steady_clock::now();
             const DWORD waited = WaitForSingleObject(event, static_cast<DWORD>(slice));
             if (waited == WAIT_OBJECT_0)
             {
-                reached = true;
-                break;
+                // The wake may be an earlier timed-out wait's arming, so only the fence says whether this value was reached.
+                wait.completed = fence->GetCompletedValue();
+                ++wait.hostCalls;
+                if (wait.completed >= value)
+                {
+                    wait.reached = true;
+                    return wait;
+                }
+                if (!endless)
+                {
+                    const auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - start);
+                    remainingMs -= std::min(remainingMs, static_cast<uint64_t>(elapsed.count()));
+                }
             }
-            if (waited != WAIT_TIMEOUT)
+            else if (waited != WAIT_TIMEOUT)
             {
-                CloseHandle(event);
                 ROJORHI_LOG_ERROR("WaitForSingleObject for {} at {} returned {} with error {}", what, value, waited, GetLastError());
                 std::abort();
             }
-            if (endless)
+            else if (endless)
             {
                 ROJORHI_LOG_WARN("still waiting for {} to reach {} after another {} ms", what, value, kWaitSliceMs);
-                continue;
             }
-            remainingMs -= slice;
-            if (remainingMs == 0)
+            else
             {
-                break;
+                remainingMs -= slice;
+            }
+            if (!endless && remainingMs == 0)
+            {
+                waitEvent.leaveArmed();
+                return wait;
             }
         }
-        CloseHandle(event);
-        return reached;
     }
 
     //==================================================================================================================

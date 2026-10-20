@@ -123,13 +123,25 @@ namespace rojoRHI::d3d12 {
     /// name.
     void setName(ID3D12Object* object, std::string_view label);
 
-    /// Blocks until `fence` reaches `value` or `timeoutNs` nanoseconds pass, and returns whether it reached the value. A
-    /// completed value already at `value` returns at once; otherwise one event, closed before the return, waits in slices of
-    /// at most ten seconds, the timeout rounded up to whole milliseconds. With `UINT64_MAX` it waits without end and logs a
-    /// warning naming `what` and the value after each full slice. On a removed device `GetCompletedValue` returns `UINT64_MAX`,
-    /// so the wait reports completion at once: a caller checks for removal before it passes a value to `core::completeFence`.
-    /// Logs and aborts, in every build, when no event can be made or armed.
-    bool waitForFence(ID3D12Fence* fence, uint64_t value, uint64_t timeoutNs, std::string_view what);
+    /// What `waitForFence` saw of a fence.
+    struct FenceWait
+    {
+        bool reached = false;   ///< Whether the fence reached the value waited for.
+        uint64_t completed = 0; ///< The last completed value read: `UINT64_MAX` on a removed device.
+        uint32_t hostCalls = 0; ///< The `GetCompletedValue` and `SetEventOnCompletion` calls made, one `nativeHostCalls` each.
+    };
+
+    /// Blocks until `fence` reaches `value` or `timeoutNs` nanoseconds pass. It reads the completed value first and returns
+    /// at once when the value is reached or `timeoutNs` is 0. Otherwise it arms the calling thread's wait event and waits in
+    /// slices of at most ten seconds, the timeout rounded up to whole milliseconds, reading the completed value again after
+    /// every wake; with `UINT64_MAX` it waits without end and logs a warning naming `what` and the value after each full
+    /// slice. The event is auto-reset, made on the thread's first wait and reused by its later ones. A wait that times out
+    /// leaves it armed, since D3D12 cannot disarm an event: a later wake from that arming finds the value unreached and waits
+    /// on, and the thread's exit leaves such an event open, so no handle that reuses its value is ever signalled. On a
+    /// removed device `GetCompletedValue` returns `UINT64_MAX`, so the wait ends at once with that value: a caller checks
+    /// `completed` before it passes a value to `core::completeFence`. Logs and aborts, in every build, when no event can be
+    /// made or armed or the wait itself fails. The caller counts `hostCalls`.
+    FenceWait waitForFence(ID3D12Fence* fence, uint64_t value, uint64_t timeoutNs, std::string_view what);
 
     /// Does nothing when `result`, returned by the native call `what` of an entry that returns no `Result`, succeeded;
     /// otherwise reports the removal of `impl`'s device when it was removed, then logs the call and `result` and aborts, in
