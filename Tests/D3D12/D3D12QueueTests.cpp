@@ -1,0 +1,236 @@
+//----------------------------------------------------------------------------------------------------------------------
+/// @file D3D12QueueTests.cpp
+/// @brief Tests D3D12 queues, fences and frame pacing against the native queues and fences they create and signal.
+//----------------------------------------------------------------------------------------------------------------------
+#include <rojoRHI/RHI.h>
+
+#include "Core/DeviceCore.h"
+#include "D3D12Common.h"
+#include "D3D12Device.h"
+
+#include <catch2/catch_test_macros.hpp>
+
+#include <array>
+#include <cstddef>
+#include <cstdint>
+#include <string>
+#include <string_view>
+
+using namespace rojoRHI;
+
+namespace {
+    /// The longest a case waits on a native fence before it fails: thirty seconds, in nanoseconds.
+    constexpr uint64_t kNativeWaitNs = 30'000'000'000;
+
+    //==================================================================================================================
+    /// Returns the name `object` carries, without a terminating null.
+    std::wstring objectName(ID3D12Object* object)
+    {
+        wchar_t name[128] = {};
+        UINT size = static_cast<UINT>(sizeof(name));
+        if (FAILED(object->GetPrivateData(WKPDID_D3DDebugObjectNameW, &size, name)))
+        {
+            return {};
+        }
+        // The size counts bytes; a terminating null, when stored, is dropped.
+        std::wstring read(name, size / sizeof(wchar_t));
+        while (!read.empty() && read.back() == L'\0')
+        {
+            read.pop_back();
+        }
+        return read;
+    }
+
+    //==================================================================================================================
+    /// Returns the native fence of `fence`, created on `device`.
+    ID3D12Fence* nativeFence(Device device, Fence fence)
+    {
+        return static_cast<ID3D12Fence*>(DeviceImpl::of(device).core.pool<Fence>().native(fence));
+    }
+} // namespace
+
+//======================================================================================================================
+TEST_CASE("each queue type has its own native queue of the matching list type", "[d3d12]")
+{
+    Result<Device> created = createDevice();
+    REQUIRE(created.has_value());
+    constexpr std::array<D3D12_COMMAND_LIST_TYPE, 3> kTypes = { D3D12_COMMAND_LIST_TYPE_DIRECT, D3D12_COMMAND_LIST_TYPE_COMPUTE, D3D12_COMMAND_LIST_TYPE_COPY };
+    constexpr std::array<std::wstring_view, 3> kNames = { L"graphics", L"compute", L"copy" };
+    for (size_t i = 0; i < kTypes.size(); ++i)
+    {
+        QueueImpl& queue = QueueImpl::of(created->queue(static_cast<QueueType>(i)));
+        REQUIRE(queue.native);
+        REQUIRE(queue.progress.fence);
+        CHECK(queue.native->GetDesc().Type == kTypes[i]);
+        const std::wstring label = std::wstring(L"rojorhi.queue.") + std::wstring(kNames[i]);
+        CHECK(objectName(queue.native.get()) == label);
+        CHECK(objectName(queue.progress.fence.get()) == label + L".progress");
+    }
+    destroyDevice(*created);
+}
+
+//======================================================================================================================
+TEST_CASE("a fence is an ID3D12Fence at its initial value", "[d3d12]")
+{
+    Result<Device> created = createDevice();
+    REQUIRE(created.has_value());
+    Result<Fence> fence = created->createFence(5, "test.fence");
+    REQUIRE(fence.has_value());
+    ID3D12Fence* native = nativeFence(*created, *fence);
+    REQUIRE(native != nullptr);
+    CHECK(native->GetCompletedValue() == 5);
+    CHECK(objectName(native) == L"test.fence");
+    destroyDevice(*created);
+}
+
+//======================================================================================================================
+TEST_CASE("a signal submitted with no lists completes on the GPU", "[d3d12]")
+{
+    Result<Device> created = createDevice();
+    REQUIRE(created.has_value());
+    Result<Fence> fence = created->createFence(0, "test.fence");
+    REQUIRE(fence.has_value());
+    for (uint64_t n = 1; n <= 3; ++n)
+    {
+        const std::array<FenceValue, 1> signal{ FenceValue{ *fence, n } };
+        created->queue(static_cast<QueueType>(n - 1)).submit({}, {}, signal);
+        CHECK(created->wait({ *fence, n }, UINT64_MAX));
+        CHECK(created->completedValue(*fence) >= n);
+    }
+    destroyDevice(*created);
+}
+
+//======================================================================================================================
+TEST_CASE("a wait on another queue's fence holds the waiting queue's signal", "[d3d12]")
+{
+    Result<Device> created = createDevice();
+    REQUIRE(created.has_value());
+    DeviceImpl& impl = DeviceImpl::of(*created);
+    Result<Fence> a = created->createFence(0, "test.a");
+    REQUIRE(a.has_value());
+    Result<Fence> b = created->createFence(0, "test.b");
+    REQUIRE(b.has_value());
+    // The graphics queue's signal of a waits on a gate only the CPU opens, so the compute queue's wait on a holds until then.
+    d3d12::Com<ID3D12Fence> gate;
+    REQUIRE(SUCCEEDED(impl.device()->CreateFence(0, D3D12_FENCE_FLAG_NONE, IID_PPV_ARGS(gate.put()))));
+    d3d12::setName(gate.get(), "test.gate");
+    REQUIRE(SUCCEEDED(impl.queues[static_cast<size_t>(QueueType::Graphics)].native->Wait(gate.get(), 1)));
+    const std::array<FenceValue, 1> signalA{ FenceValue{ *a, 1 } };
+    created->queue(QueueType::Graphics).submit({}, {}, signalA);
+    const std::array<FenceValue, 1> waitA{ FenceValue{ *a, 1 } };
+    const std::array<FenceValue, 1> signalB{ FenceValue{ *b, 1 } };
+    created->queue(QueueType::Compute).submit({}, waitA, signalB);
+    CHECK(created->completedValue(*a) == 0);
+    CHECK(created->completedValue(*b) == 0);
+    CHECK_FALSE(created->wait({ *b, 1 }, 1'000'000));
+    REQUIRE(SUCCEEDED(gate->Signal(1)));
+    CHECK(created->wait({ *b, 1 }, UINT64_MAX));
+    CHECK(created->completedValue(*a) == 1);
+    // The gate holds a reference to the device, which must be the device's last one when it is destroyed.
+    gate.reset();
+    destroyDevice(*created);
+}
+
+//======================================================================================================================
+TEST_CASE("endFrame signals the frame fence with the frame number", "[d3d12]")
+{
+    Result<Device> created = createDevice();
+    REQUIRE(created.has_value());
+    for (int frame = 0; frame < 3; ++frame)
+    {
+        created->beginFrame();
+        created->endFrame();
+    }
+    ID3D12Fence* frames = DeviceImpl::of(*created).frames.fence();
+    REQUIRE(frames != nullptr);
+    CHECK(objectName(frames) == L"rojorhi.frame");
+    CHECK(d3d12::waitForFence(frames, 3, kNativeWaitNs, "the frame fence"));
+    CHECK(frames->GetCompletedValue() >= 3);
+    destroyDevice(*created);
+}
+
+//======================================================================================================================
+TEST_CASE("beginFrame waits for the frame framesInFlight earlier", "[d3d12]")
+{
+    DeviceDesc desc;
+    desc.framesInFlight = 2;
+    Result<Device> created = createDevice(desc);
+    REQUIRE(created.has_value());
+    ID3D12Fence* frames = DeviceImpl::of(*created).frames.fence();
+    REQUIRE(frames != nullptr);
+    for (uint64_t frame = 1; frame <= 4; ++frame)
+    {
+        created->beginFrame();
+        if (frame > 2)
+        {
+            CHECK(frames->GetCompletedValue() >= frame - 2);
+        }
+        created->endFrame();
+    }
+    destroyDevice(*created);
+}
+
+//======================================================================================================================
+TEST_CASE("a destroyed fence is released once every queue has passed it", "[d3d12]")
+{
+    Result<Device> created = createDevice();
+    REQUIRE(created.has_value());
+    DeviceImpl& impl = DeviceImpl::of(*created);
+    Result<Fence> fence = created->createFence(0, "test.fence");
+    REQUIRE(fence.has_value());
+    // A fence-only submission on the copy queue joins no frame, so the copy queue signals its progress after it.
+    const std::array<FenceValue, 1> signal{ FenceValue{ *fence, 1 } };
+    created->queue(QueueType::Copy).submit({}, {}, signal);
+    created->beginFrame();
+    created->destroy(*fence);
+    created->endFrame();
+    for (uint32_t frame = 0; frame < impl.core.framesInFlight(); ++frame)
+    {
+        created->beginFrame();
+        created->endFrame();
+    }
+    QueueImpl& copy = impl.queues[static_cast<size_t>(QueueType::Copy)];
+    const uint64_t progress = copy.progress.value.load();
+    CHECK(progress >= 1);
+    REQUIRE(d3d12::waitForFence(copy.progress.fence.get(), progress, kNativeWaitNs, "the copy queue's progress fence"));
+    created->beginFrame();
+    CHECK(impl.frames.keptCount() == 0);
+    created->endFrame();
+    destroyDevice(*created);
+}
+
+//======================================================================================================================
+TEST_CASE("a submission counts one native queue call per wait and signal", "[d3d12]")
+{
+    Result<Device> created = createDevice();
+    REQUIRE(created.has_value());
+    Result<Fence> a = created->createFence(0, "test.a");
+    Result<Fence> b = created->createFence(0, "test.b");
+    Result<Fence> c = created->createFence(0, "test.c");
+    REQUIRE((a.has_value() && b.has_value() && c.has_value()));
+    Queue graphics = created->queue(QueueType::Graphics);
+    const std::array<FenceValue, 1> first{ FenceValue{ *a, 1 } };
+    graphics.submit({}, {}, first);
+    // The graphics queue never signals a progress fence, so the submission's native calls are its wait and two signals.
+    const uint64_t before = created->counters().nativeSubmitCalls;
+    const std::array<FenceValue, 1> wait{ FenceValue{ *a, 1 } };
+    const std::array<FenceValue, 2> signal{ FenceValue{ *b, 1 }, FenceValue{ *c, 1 } };
+    graphics.submit({}, wait, signal);
+    CHECK(created->counters().nativeSubmitCalls - before == 3);
+    CHECK(created->wait({ *c, 1 }, UINT64_MAX));
+    destroyDevice(*created);
+}
+
+//======================================================================================================================
+TEST_CASE("Device::wait with a zero timeout polls", "[d3d12]")
+{
+    Result<Device> created = createDevice();
+    REQUIRE(created.has_value());
+    Result<Fence> fence = created->createFence(0, "test.fence");
+    REQUIRE(fence.has_value());
+    // A poll reads the fence once and arms no event.
+    const uint64_t before = created->counters().nativeHostCalls;
+    CHECK_FALSE(created->wait({ *fence, 1 }, 0));
+    CHECK(created->counters().nativeHostCalls - before == 1);
+    destroyDevice(*created);
+}

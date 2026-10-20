@@ -4,6 +4,8 @@
 //----------------------------------------------------------------------------------------------------------------------
 #pragma once
 
+#include "Core/Counters.h"
+
 #include <array>
 #include <cstddef>
 #include <cstdint>
@@ -28,8 +30,10 @@ namespace rojoRHI::d3d12 {
     class ListPools
     {
       public:
-        /// Takes a list of frame slot `slot`'s pool, reusing one when the pool has one left, and returns it.
-        CommandListImpl& acquire(uint32_t slot);
+        /// Takes a list of frame slot `slot`'s pool, reusing one when the pool has one left, and returns it. A list the pool
+        /// grows by is one explicit allocation, counted in `counts`. The pool's mutex is a leaf lock: acquisition is not
+        /// recording.
+        CommandListImpl& acquire(uint32_t slot, core::DeviceCounts& counts);
 
         /// Returns every list frame slot `slot` took to its pool, once the slot's frame has retired.
         void reset(uint32_t slot);
