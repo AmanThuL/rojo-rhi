@@ -50,6 +50,9 @@ namespace rojoRHI::metal4 {
         MTL::Viewport viewport = {};                            ///< The viewport, when `viewportKnown`.
         bool scissorKnown = false;                              ///< A scissor rectangle is set.
         MTL::ScissorRect scissor = {};                          ///< The scissor rectangle, when `scissorKnown`.
+        /// The list's argument table is bound to the object and mesh stages too: a new encoder binds it to the vertex and
+        /// fragment stages only, and the first mesh pipeline set on it adds the other two.
+        bool meshStages = false;
     };
 
     /// The kinds of command a list records into its prefix while its pass's render encoder is closed.
@@ -255,7 +258,8 @@ namespace rojoRHI::metal4 {
     void splitPass(CommandListImpl& list);
 
     /// Sets `pipeline`'s render state on the open render encoder where it differs from what the encoder holds: the pipeline
-    /// state, its depth-stencil state, its cull mode, its front-facing winding when the winding decides something (the
+    /// state, first binding the list's argument table to the object and mesh stages for a mesh pipeline when the encoder has
+    /// not, its depth-stencil state, its cull mode, its front-facing winding when the winding decides something (the
     /// pipeline culls, tests stencil or has a fragment entry; a depth-only or rasterization-off pipeline skips it), its fill
     /// and depth clip modes, then the depth bias, `DrawState::bias` when the pipeline has `RasterState::depthBias` and zero
     /// otherwise. Counts each call.

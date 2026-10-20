@@ -609,10 +609,10 @@ TEST_CASE("direct mesh draws bind one zero record per recording", "[metal4]")
         list.setViewport(kViewport);
         list.setScissor(kScissor);
         uint64_t before = callsOf(list);
-        // The open and the pass's begin timestamp, the pipeline and its winding, the viewport and the scissor, the zero record
-        // at buffer(3), then the draw.
+        // The open and the pass's begin timestamp, the table at the object and mesh stages, the pipeline and its winding, the
+        // viewport and the scissor, the zero record at buffer(3), then the draw.
         list.drawMeshTasks(1, 1, 1);
-        CHECK(callsOf(list) - before == openCalls(list) + kPassBegin + 4 + 1 + 1);
+        CHECK(callsOf(list) - before == openCalls(list) + kPassBegin + 5 + 1 + 1);
         const uint64_t record = drawOf(list).zeroRecord;
         REQUIRE(record != 0);
         CHECK(record % 16 == 0);
@@ -636,12 +636,55 @@ TEST_CASE("direct mesh draws bind one zero record per recording", "[metal4]")
         list.setScissor(kScissor);
         before = callsOf(list);
         list.drawMeshTasks(1, 1, 1);
-        CHECK(callsOf(list) - before == openCalls(list) + kPassBegin + 4 + 1);
+        CHECK(callsOf(list) - before == openCalls(list) + kPassBegin + 5 + 1);
         CHECK(drawOf(list).zeroRecord == record);
         list.endRenderPass();
         list.end();
         device.queue(QueueType::Graphics).submit(std::array{ list });
     }
+    device.endFrame();
+    destroyDevice(device);
+}
+
+//======================================================================================================================
+TEST_CASE("a render encoder binds the list's table to the object and mesh stages at its first mesh pipeline only", "[metal4]")
+{
+    Device device = *createDevice();
+    const ShaderLibrary library = standard(device);
+    const std::array targets{ ColorTarget{ .format = Format::RGBA8Unorm } };
+    const Pipeline plain = vertexPipeline(device, library);
+    const Pipeline mesh = *device.createPipeline(
+        GraphicsPipelineDesc{ .mesh = { library, "msMain" }, .fragment = { library, "fsMain" }, .colors = targets, .label = "test.mesh" }
+    );
+    const Texture target = makeTexture(device, Format::RGBA8Unorm);
+    device.beginFrame();
+    CommandList list = device.acquireCommandList(QueueType::Graphics, "test.list");
+    const std::array colors{ ColorAttachment{ .texture = target, .load = LoadOp::Clear } };
+    for (int pass = 0; pass < 2; ++pass)
+    {
+        CAPTURE(pass);
+        list.beginRenderPass(passOf(colors));
+        list.setViewport(kViewport);
+        list.setScissor(kScissor);
+        list.setPipeline(plain);
+        list.draw(3);
+        // The encoder opened with the table at the vertex and fragment stages alone.
+        CHECK_FALSE(drawOf(list).held.meshStages);
+        uint64_t before = callsOf(list);
+        // The table at the object and mesh stages, then the pipeline; the two share their winding.
+        list.setPipeline(mesh);
+        CHECK(callsOf(list) - before == 2);
+        CHECK(drawOf(list).held.meshStages);
+        list.drawMeshTasks(1, 1, 1);
+        before = callsOf(list);
+        // A mesh pipeline set again on the same encoder sends only the pipelines.
+        list.setPipeline(plain);
+        list.setPipeline(mesh);
+        CHECK(callsOf(list) - before == 2);
+        list.endRenderPass();
+    }
+    list.end();
+    device.queue(QueueType::Graphics).submit(std::array{ list });
     device.endFrame();
     destroyDevice(device);
 }
