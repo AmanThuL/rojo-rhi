@@ -38,8 +38,9 @@ namespace rojoRHI::d3d12 {
         Result<void> create(DeviceImpl& impl);
 
         /// Copies `bytes`, which are not empty, into the start of the buffer `destination` and waits for the copy. It counts
-        /// the staging buffer as one `nativeCreateCalls`, its `Map` as one `nativeHostCalls`, and the execution and the signal
-        /// as one `nativeSubmitCalls` each. A failed native call is the error `d3d12::failure` gives.
+        /// the staging buffer as one `nativeCreateCalls`, its `Map` and each `GetCompletedValue` and `SetEventOnCompletion` of
+        /// the wait as one `nativeHostCalls`, and the execution and the signal as one `nativeSubmitCalls` each. A failed native
+        /// call is the error `d3d12::failure` gives.
         Result<void> uploadBuffer(DeviceImpl& impl, ID3D12Resource* destination, std::span<const std::byte> bytes);
 
         /// Copies each non-empty entry of `subresources`, one per subresource of the texture `destination` in D3D12 subresource
@@ -50,7 +51,8 @@ namespace rojoRHI::d3d12 {
         /// staging buffer and records the barrier alone.
         Result<void> uploadTexture(DeviceImpl& impl, ID3D12Resource* destination, std::span<const SubresourceData> subresources);
 
-        /// Blocks until the last upload has completed; returns at once when nothing was uploaded.
+        /// Blocks until the last upload has completed; returns at once when nothing was uploaded. Device teardown calls it, so
+        /// it counts nothing.
         void idle();
 
       private:

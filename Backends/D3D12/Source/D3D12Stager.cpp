@@ -283,7 +283,8 @@ namespace rojoRHI::d3d12 {
         const std::lock_guard lock(m_mutex);
         if (m_fence && m_value != 0)
         {
-            waitForFence(m_fence.get(), m_value, UINT64_MAX, kQueueLabel);
+            // Teardown's own wait, not counted: no counter is read after the device is destroyed.
+            (void)waitForFence(m_fence.get(), m_value, UINT64_MAX, kQueueLabel);
         }
     }
 
@@ -329,7 +330,8 @@ namespace rojoRHI::d3d12 {
             return std::unexpected(failure(impl, signalled, std::format("ID3D12CommandQueue::Signal for {}", kQueueLabel)));
         }
         m_value = value;
-        waitForFence(m_fence.get(), value, UINT64_MAX, kQueueLabel);
+        const FenceWait waited = waitForFence(m_fence.get(), value, UINT64_MAX, kQueueLabel);
+        core::DeviceCounts::add(impl.core.counts().nativeHostCalls, waited.hostCalls);
         // A removed device completes every fence value at once, so the wait alone cannot tell a copy that ran from one that
         // never will.
         if (const HRESULT removed = impl.device()->GetDeviceRemovedReason(); FAILED(removed))

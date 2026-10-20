@@ -59,7 +59,7 @@ namespace rojoRHI::test {
             ID3D12CommandList* const lists[] = { shot.list.get() };
             shot.queue->ExecuteCommandLists(1, lists);
             REQUIRE(SUCCEEDED(shot.queue->Signal(shot.fence.get(), 1)));
-            REQUIRE(d3d12::waitForFence(shot.fence.get(), 1, UINT64_MAX, kLabel));
+            REQUIRE(d3d12::waitForFence(shot.fence.get(), 1, UINT64_MAX, kLabel).reached);
             REQUIRE(SUCCEEDED(device->GetDeviceRemovedReason()));
         }
 

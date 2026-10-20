@@ -304,7 +304,7 @@ TEST_CASE("an empty subresource is skipped and the texture still leaves COPY_DES
 }
 
 //======================================================================================================================
-TEST_CASE("a staged upload counts one staging buffer and two queue calls", "[d3d12]")
+TEST_CASE("a staged upload counts one staging buffer, two queue calls and its host calls", "[d3d12]")
 {
     Result<Device> created = createDevice();
     REQUIRE(created.has_value());
@@ -317,6 +317,8 @@ TEST_CASE("a staged upload counts one staging buffer and two queue calls", "[d3d
         const Counters after = created->counters();
         CHECK(after.nativeCreateCalls == before.nativeCreateCalls + 1);
         CHECK(after.nativeSubmitCalls == before.nativeSubmitCalls + 2);
+        // The Map of the staging buffer and at least the wait's first read of the fence.
+        CHECK(after.nativeHostCalls >= before.nativeHostCalls + 2);
     }
     destroyDevice(*created);
 }
