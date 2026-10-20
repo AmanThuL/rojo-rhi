@@ -30,9 +30,83 @@ namespace rojoRHI::d3d12 {
             std::string_view reason; ///< One line on why the message is dropped.
         };
 
+        /// Why the notices of object creation and destruction are dropped.
+        constexpr std::string_view kObjectNotice = "one notice per native object's creation or destruction, not a diagnosis";
+
         /// The messages the router never forwards. A message is dropped only with a reason that holds for every use of the
-        /// library.
-        constexpr std::array<FilteredMessage, 0> kFiltered = {};
+        /// library: here the per-object notices the runtime raises at information severity, which a run creating thousands of
+        /// objects would otherwise bury every diagnosis under. Every error, warning and application message passes, and so does a live-object report, which
+        /// diagnoses a leak.
+        constexpr std::array<FilteredMessage, 68> kFiltered = { {
+            { D3D12_MESSAGE_ID_CREATE_COMMANDQUEUE, kObjectNotice },
+            { D3D12_MESSAGE_ID_CREATE_COMMANDALLOCATOR, kObjectNotice },
+            { D3D12_MESSAGE_ID_CREATE_PIPELINESTATE, kObjectNotice },
+            { D3D12_MESSAGE_ID_CREATE_COMMANDLIST12, kObjectNotice },
+            { D3D12_MESSAGE_ID_CREATE_RESOURCE, kObjectNotice },
+            { D3D12_MESSAGE_ID_CREATE_DESCRIPTORHEAP, kObjectNotice },
+            { D3D12_MESSAGE_ID_CREATE_ROOTSIGNATURE, kObjectNotice },
+            { D3D12_MESSAGE_ID_CREATE_LIBRARY, kObjectNotice },
+            { D3D12_MESSAGE_ID_CREATE_HEAP, kObjectNotice },
+            { D3D12_MESSAGE_ID_CREATE_MONITOREDFENCE, kObjectNotice },
+            { D3D12_MESSAGE_ID_CREATE_QUERYHEAP, kObjectNotice },
+            { D3D12_MESSAGE_ID_CREATE_COMMANDSIGNATURE, kObjectNotice },
+            { D3D12_MESSAGE_ID_DESTROY_COMMANDQUEUE, kObjectNotice },
+            { D3D12_MESSAGE_ID_DESTROY_COMMANDALLOCATOR, kObjectNotice },
+            { D3D12_MESSAGE_ID_DESTROY_PIPELINESTATE, kObjectNotice },
+            { D3D12_MESSAGE_ID_DESTROY_COMMANDLIST12, kObjectNotice },
+            { D3D12_MESSAGE_ID_DESTROY_RESOURCE, kObjectNotice },
+            { D3D12_MESSAGE_ID_DESTROY_DESCRIPTORHEAP, kObjectNotice },
+            { D3D12_MESSAGE_ID_DESTROY_ROOTSIGNATURE, kObjectNotice },
+            { D3D12_MESSAGE_ID_DESTROY_LIBRARY, kObjectNotice },
+            { D3D12_MESSAGE_ID_DESTROY_HEAP, kObjectNotice },
+            { D3D12_MESSAGE_ID_DESTROY_MONITOREDFENCE, kObjectNotice },
+            { D3D12_MESSAGE_ID_DESTROY_QUERYHEAP, kObjectNotice },
+            { D3D12_MESSAGE_ID_DESTROY_COMMANDSIGNATURE, kObjectNotice },
+            { D3D12_MESSAGE_ID_CREATE_PIPELINELIBRARY, kObjectNotice },
+            { D3D12_MESSAGE_ID_DESTROY_PIPELINELIBRARY, kObjectNotice },
+            { D3D12_MESSAGE_ID_CREATE_VIDEODECODECOMMANDLIST, kObjectNotice },
+            { D3D12_MESSAGE_ID_CREATE_VIDEODECODER, kObjectNotice },
+            { D3D12_MESSAGE_ID_CREATE_VIDEODECODESTREAM, kObjectNotice },
+            { D3D12_MESSAGE_ID_DESTROY_VIDEODECODECOMMANDLIST, kObjectNotice },
+            { D3D12_MESSAGE_ID_DESTROY_VIDEODECODER, kObjectNotice },
+            { D3D12_MESSAGE_ID_DESTROY_VIDEODECODESTREAM, kObjectNotice },
+            { D3D12_MESSAGE_ID_CREATE_VIDEODECODECOMMANDQUEUE, kObjectNotice },
+            { D3D12_MESSAGE_ID_CREATE_VIDEOPROCESSCOMMANDLIST, kObjectNotice },
+            { D3D12_MESSAGE_ID_CREATE_VIDEOPROCESSCOMMANDQUEUE, kObjectNotice },
+            { D3D12_MESSAGE_ID_DESTROY_VIDEODECODECOMMANDQUEUE, kObjectNotice },
+            { D3D12_MESSAGE_ID_DESTROY_VIDEOPROCESSCOMMANDLIST, kObjectNotice },
+            { D3D12_MESSAGE_ID_DESTROY_VIDEOPROCESSCOMMANDQUEUE, kObjectNotice },
+            { D3D12_MESSAGE_ID_CREATE_VIDEOPROCESSOR, kObjectNotice },
+            { D3D12_MESSAGE_ID_CREATE_VIDEOPROCESSSTREAM, kObjectNotice },
+            { D3D12_MESSAGE_ID_DESTROY_VIDEOPROCESSOR, kObjectNotice },
+            { D3D12_MESSAGE_ID_DESTROY_VIDEOPROCESSSTREAM, kObjectNotice },
+            { D3D12_MESSAGE_ID_CREATE_VIDEODECODERHEAP, kObjectNotice },
+            { D3D12_MESSAGE_ID_DESTROY_VIDEODECODERHEAP, kObjectNotice },
+            { D3D12_MESSAGE_ID_CREATE_COMMANDRECORDER, kObjectNotice },
+            { D3D12_MESSAGE_ID_DESTROY_COMMANDRECORDER, kObjectNotice },
+            { D3D12_MESSAGE_ID_CREATE_COMMANDPOOL, kObjectNotice },
+            { D3D12_MESSAGE_ID_DESTROY_COMMANDPOOL, kObjectNotice },
+            { D3D12_MESSAGE_ID_CREATE_LIFETIMETRACKER, kObjectNotice },
+            { D3D12_MESSAGE_ID_DESTROY_LIFETIMETRACKER, kObjectNotice },
+            { D3D12_MESSAGE_ID_CREATE_TRACKEDWORKLOAD, kObjectNotice },
+            { D3D12_MESSAGE_ID_DESTROY_TRACKEDWORKLOAD, kObjectNotice },
+            { D3D12_MESSAGE_ID_CREATE_VIDEOENCODECOMMANDLIST, kObjectNotice },
+            { D3D12_MESSAGE_ID_DESTROY_VIDEOENCODECOMMANDLIST, kObjectNotice },
+            { D3D12_MESSAGE_ID_CREATE_VIDEOENCODECOMMANDQUEUE, kObjectNotice },
+            { D3D12_MESSAGE_ID_DESTROY_VIDEOENCODECOMMANDQUEUE, kObjectNotice },
+            { D3D12_MESSAGE_ID_CREATE_VIDEOMOTIONESTIMATOR, kObjectNotice },
+            { D3D12_MESSAGE_ID_DESTROY_VIDEOMOTIONESTIMATOR, kObjectNotice },
+            { D3D12_MESSAGE_ID_CREATE_VIDEOMOTIONVECTORHEAP, kObjectNotice },
+            { D3D12_MESSAGE_ID_DESTROY_VIDEOMOTIONVECTORHEAP, kObjectNotice },
+            { D3D12_MESSAGE_ID_CREATE_VIDEOEXTENSIONCOMMAND, kObjectNotice },
+            { D3D12_MESSAGE_ID_DESTROY_VIDEOEXTENSIONCOMMAND, kObjectNotice },
+            { D3D12_MESSAGE_ID_CREATE_SHADERCACHESESSION, kObjectNotice },
+            { D3D12_MESSAGE_ID_DESTROY_SHADERCACHESESSION, kObjectNotice },
+            { D3D12_MESSAGE_ID_CREATE_VIDEOENCODER, kObjectNotice },
+            { D3D12_MESSAGE_ID_DESTROY_VIDEOENCODER, kObjectNotice },
+            { D3D12_MESSAGE_ID_CREATE_VIDEOENCODERHEAP, kObjectNotice },
+            { D3D12_MESSAGE_ID_DESTROY_VIDEOENCODERHEAP, kObjectNotice },
+        } };
 
         /// The most nodes of one list that a removal report prints, so a long history cannot flood the log.
         constexpr size_t kMaxReportedNodes = 32;
