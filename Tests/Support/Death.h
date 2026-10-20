@@ -20,6 +20,11 @@ namespace rojoRHI::test {
     /// builds skip the case, because valid-usage checks do not exist there.
     void expectDeath(std::string_view id, const std::function<void()>& body);
 
+    /// Runs `body` in a child process and requires it to terminate with a non-zero status after writing `marker` to standard
+    /// error, anywhere in the captured text and without a `VU-rojo-` prefix: for an abort that no valid-usage rule raises, such
+    /// as one a native layer's error message causes. Release builds skip the case.
+    void expectAbort(std::string_view marker, const std::function<void()>& body);
+
     /// What the `ROJORHI_DEATH_CHILD` variable makes the current process: no variable is a parent, exactly "1" is a child
     /// and any other value is invalid, because a child spawned from such a parent could not tell itself apart.
     enum class DeathRole
@@ -79,3 +84,6 @@ namespace rojoRHI::test {
 /// Asserts that the body violates the valid-usage rule `id` and aborts the process. The body is variadic so a comma outside
 /// parentheses, in a braced initializer or a template argument list, does not split it.
 #define ROJORHI_EXPECT_DEATH(id, ...) ::rojoRHI::test::expectDeath(id, __VA_ARGS__)
+
+/// Asserts that the body aborts the process after writing `marker` to standard error. The body is variadic for the same reason.
+#define ROJORHI_EXPECT_ABORT(marker, ...) ::rojoRHI::test::expectAbort(marker, __VA_ARGS__)
