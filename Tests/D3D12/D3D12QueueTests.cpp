@@ -162,7 +162,7 @@ TEST_CASE("endFrame signals the frame fence with the frame number", "[d3d12]")
     ID3D12Fence* frames = DeviceImpl::of(*created).frames.fence();
     REQUIRE(frames != nullptr);
     CHECK(objectName(frames) == L"rojorhi.frame");
-    CHECK(d3d12::waitForFence(frames, 3, kNativeWaitNs, "the frame fence"));
+    CHECK(d3d12::waitForFence(frames, 3, kNativeWaitNs, "the frame fence").reached);
     CHECK(frames->GetCompletedValue() >= 3);
     destroyDevice(*created);
 }
@@ -230,7 +230,7 @@ TEST_CASE("a destroyed fence is released once every queue has passed it", "[d3d1
     QueueImpl& copy = impl.queues[static_cast<size_t>(QueueType::Copy)];
     const uint64_t progress = copy.progress.value.load();
     CHECK(progress >= 1);
-    REQUIRE(d3d12::waitForFence(copy.progress.fence.get(), progress, kNativeWaitNs, "the copy queue's progress fence"));
+    REQUIRE(d3d12::waitForFence(copy.progress.fence.get(), progress, kNativeWaitNs, "the copy queue's progress fence").reached);
     created->beginFrame();
     CHECK(impl.frames.keptCount() == 0);
     created->endFrame();

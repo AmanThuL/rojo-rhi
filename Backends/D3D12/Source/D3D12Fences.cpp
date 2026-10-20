@@ -55,35 +55,19 @@ namespace rojoRHI {
 
         //==============================================================================================================
         /// Blocks until `fence` reaches `value` or `timeoutNs` nanoseconds pass and returns whether it reached the value; a zero
-        /// timeout only polls. A value already reached costs one counted `GetCompletedValue`; a wait goes through
-        /// `d3d12::waitForFence`, which reads the fence once more and arms one event, two more counted host calls. Before a
-        /// reached value is returned, a device found removed is reported and aborts (`entry` names the caller), so `UINT64_MAX`
-        /// never reaches the core.
+        /// timeout only polls. It counts each `GetCompletedValue` and `SetEventOnCompletion` of `d3d12::waitForFence` as one
+        /// `nativeHostCalls`: one for a value already reached or a poll, two more for an armed wait and one more per further
+        /// wake. Before a reached value is returned, a device found removed is reported and aborts (`entry` names the caller),
+        /// so `UINT64_MAX` never reaches the core.
         bool waitOn(DeviceImpl& impl, ID3D12Fence* fence, uint64_t value, uint64_t timeoutNs, std::string_view what, std::string_view entry)
         {
-            core::DeviceCounts& counts = impl.core.counts();
-            core::DeviceCounts::add(counts.nativeHostCalls);
-            const uint64_t completed = fence->GetCompletedValue();
-            if (completed >= value)
+            const d3d12::FenceWait waited = d3d12::waitForFence(fence, value, timeoutNs, what);
+            core::DeviceCounts::add(impl.core.counts().nativeHostCalls, waited.hostCalls);
+            if (waited.completed == UINT64_MAX)
             {
-                if (completed == UINT64_MAX)
-                {
-                    abortIfRemoved(impl, entry);
-                }
-                return true;
+                abortIfRemoved(impl, entry);
             }
-            if (timeoutNs == 0)
-            {
-                return false;
-            }
-            core::DeviceCounts::add(counts.nativeHostCalls, 2);
-            if (!d3d12::waitForFence(fence, value, timeoutNs, what))
-            {
-                return false;
-            }
-            // The wait does not say what value it saw: a removed device ends it at once, so the device is asked.
-            abortIfRemoved(impl, entry);
-            return true;
+            return waited.reached;
         }
 
         //==============================================================================================================
@@ -219,7 +203,7 @@ namespace rojoRHI {
                 {
                     continue;
                 }
-                // The signal is teardown's own and is not counted: no counter is read after the device is destroyed.
+                // The signal and the wait are teardown's own and are not counted: no counter is read after the device is destroyed.
                 const uint64_t value = queue.progress.value.load(std::memory_order_relaxed) + 1;
                 queue.progress.value.store(value, std::memory_order_relaxed);
                 if (const HRESULT signalled = queue.native->Signal(queue.progress.fence.get(), value); FAILED(signalled))
@@ -236,7 +220,7 @@ namespace rojoRHI {
                     std::abort();
                 }
                 const std::string what = std::format("the progress fence of \"{}\" at destroyDevice", kQueueLabels[i]);
-                waitForFence(queue.progress.fence.get(), value, UINT64_MAX, what);
+                (void)waitForFence(queue.progress.fence.get(), value, UINT64_MAX, what);
             }
         }
 
