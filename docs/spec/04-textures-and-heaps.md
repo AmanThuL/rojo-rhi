@@ -209,8 +209,8 @@ struct TextureViewDesc {
 Describes how a shader sees a texture through a view index. `aspect` selects the depth or the
 stencil plane of a depth-stencil format, so the stencil of `D32FloatS8` can be sampled. `format`
 may reinterpret only between the sRGB and linear members of one format family; the backend sets the
-castable or mutable-format flags at creation whenever a texture's format has an sRGB counterpart,
-so `TextureDesc` carries no view-format list.
+castable or mutable-format flags at creation whenever a native API needs them for a texture's
+format family, so `TextureDesc` carries no view-format list.
 #### Valid usage
 - `VU-rojo-texture-0022` `usage` is exactly `Sampled` or exactly `Storage`, and the texture was
   created with that usage.
@@ -230,7 +230,7 @@ so `TextureDesc` carries no view-format list.
 #### Mapping
 | | Metal 4 | D3D12 | Vulkan |
 |---|---|---|---|
-| Descriptor | `MTL::TextureViewDescriptor`; reinterpretation needs `MTL::TextureUsagePixelFormatView` at creation | `D3D12_SHADER_RESOURCE_VIEW_DESC` or `D3D12_UNORDERED_ACCESS_VIEW_DESC`; reinterpretation through castable formats at creation | `VkImageViewCreateInfo`; reinterpretation through `VK_IMAGE_CREATE_MUTABLE_FORMAT_BIT` and a format list |
+| Descriptor | `MTL::TextureViewDescriptor`; an sRGB or linear partner view needs no flag, and the stencil plane of a `Sampled` `D32FloatS8` texture needs `MTL::TextureUsagePixelFormatView` at creation | `D3D12_SHADER_RESOURCE_VIEW_DESC` or `D3D12_UNORDERED_ACCESS_VIEW_DESC`; reinterpretation through castable formats at creation | `VkImageViewCreateInfo`; reinterpretation through `VK_IMAGE_CREATE_MUTABLE_FORMAT_BIT` and a format list |
 | Aspect | stencil through an `MTL::PixelFormatX32_Stencil8` view | plane slice 1 with `DXGI_FORMAT_X32_TYPELESS_G8X24_UINT` | `VK_IMAGE_ASPECT_DEPTH_BIT` or `VK_IMAGE_ASPECT_STENCIL_BIT` |
 | Cost | native | native | native |
 

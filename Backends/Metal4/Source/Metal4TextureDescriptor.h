@@ -15,10 +15,11 @@ namespace rojoRHI::metal4 {
     /// sample are the multisample types.
     MTL::TextureType textureType(TextureType type, uint32_t samples);
 
-    /// Returns a new descriptor (+1; the caller releases it) of a Private texture described by `desc`, which the core accepted:
-    /// its type, pixel format, extent, mips, array length in cubes for cube types, samples and usage. The usage adds
-    /// `MTL::TextureUsagePixelFormatView` when the format has an sRGB counterpart or a stencil plane, so its views may
-    /// reinterpret the format. A `placed` descriptor is untracked, matching the heaps it is placed in. A `Sparse` usage sets
-    /// the placement sparse page size to 64 KiB.
+    /// Returns a new descriptor (+1; the caller releases it) of a Private texture described by `desc`, which the core
+    /// accepted: its type, pixel format, extent, mips, array length in cubes for cube types, samples and usage. The usage
+    /// adds `MTL::TextureUsagePixelFormatView` only when the format has a stencil plane and the texture is `Sampled`, for
+    /// the X32_Stencil8 view of that plane; an sRGB texture and its linear partner are viewed without it. A `placed`
+    /// descriptor is untracked, matching the heaps it is placed in. A `Sparse` usage sets the placement sparse page size to
+    /// 64 KiB.
     MTL::TextureDescriptor* textureDescriptor(const TextureDesc& desc, bool placed);
 } // namespace rojoRHI::metal4

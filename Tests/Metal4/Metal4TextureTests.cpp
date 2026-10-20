@@ -398,7 +398,8 @@ TEST_CASE("a texture's descriptor maps its type, extent, layers, samples and usa
     CHECK(cube->mipmapLevelCount() == 4);
     CHECK(cube->storageMode() == MTL::StorageModePrivate);
     CHECK((cube->usage() & MTL::TextureUsageShaderRead) != 0);
-    CHECK((cube->usage() & MTL::TextureUsagePixelFormatView) != 0);
+    // Metal views an sRGB texture as its linear partner without the flag.
+    CHECK((cube->usage() & MTL::TextureUsagePixelFormatView) == 0);
     CHECK((cube->usage() & (MTL::TextureUsageShaderWrite | MTL::TextureUsageRenderTarget)) == 0);
     cube->release();
     MTL::TextureDescriptor* target = metal4::textureDescriptor(
@@ -487,6 +488,9 @@ TEST_CASE("a stencil view of D32FloatS8 is an X32_Stencil8 view", "[metal4]")
         *device.createTexture({ .format = Format::D32FloatS8, .extent = { 8, 8, 1 }, .usage = TextureUsage::Sampled | TextureUsage::DepthStencil });
     MTL::Texture* parent = nativeOf(device, texture);
     CHECK((parent->usage() & MTL::TextureUsagePixelFormatView) != 0);
+    // Without a Sampled usage no view of the stencil plane can be made, so the flag is not set.
+    const Texture attachment = *device.createTexture({ .format = Format::D32FloatS8, .extent = { 8, 8, 1 }, .usage = TextureUsage::DepthStencil });
+    CHECK((nativeOf(device, attachment)->usage() & MTL::TextureUsagePixelFormatView) == 0);
     const ViewIndex depth = *device.createView(texture, { .aspect = TextureAspect::Depth });
     CHECK(viewEntry(device, std::to_underlying(depth)) == parent->gpuResourceID()._impl);
     const ViewIndex stencil = *device.createView(texture, { .aspect = TextureAspect::Stencil });
@@ -506,12 +510,31 @@ TEST_CASE("an sRGB texture has a linear view in its family", "[metal4]")
     spyOnRetirement(device);
     const Texture texture = *device.createTexture({ .format = Format::RGBA8Unorm_sRGB, .extent = { 8, 8, 1 }, .usage = TextureUsage::Sampled });
     MTL::Texture* parent = nativeOf(device, texture);
-    CHECK((parent->usage() & MTL::TextureUsagePixelFormatView) != 0);
+    CHECK((parent->usage() & MTL::TextureUsagePixelFormatView) == 0);
     const ViewIndex linear = *device.createView(texture, { .format = Format::RGBA8Unorm });
     const uint64_t entry = viewEntry(device, std::to_underlying(linear));
     CHECK(entry != parent->gpuResourceID()._impl);
     MTL::Texture* native = retireView(device, linear);
     CHECK(native->pixelFormat() == MTL::PixelFormatRGBA8Unorm);
+    CHECK(native->parentTexture() == parent);
+    CHECK(native->gpuResourceID()._impl == entry);
+    destroyDevice(device);
+    releaseRetired();
+}
+
+//======================================================================================================================
+TEST_CASE("a linear texture has an sRGB view in its family and no format-view usage", "[metal4]")
+{
+    Device device = *createDevice();
+    spyOnRetirement(device);
+    const Texture texture =
+        *device.createTexture({ .format = Format::RGBA8Unorm, .extent = { 8, 8, 1 }, .usage = TextureUsage::Sampled | TextureUsage::RenderTarget });
+    MTL::Texture* parent = nativeOf(device, texture);
+    CHECK((parent->usage() & MTL::TextureUsagePixelFormatView) == 0);
+    const ViewIndex srgb = *device.createView(texture, { .format = Format::RGBA8Unorm_sRGB });
+    const uint64_t entry = viewEntry(device, std::to_underlying(srgb));
+    MTL::Texture* native = retireView(device, srgb);
+    CHECK(native->pixelFormat() == MTL::PixelFormatRGBA8Unorm_sRGB);
     CHECK(native->parentTexture() == parent);
     CHECK(native->gpuResourceID()._impl == entry);
     destroyDevice(device);
