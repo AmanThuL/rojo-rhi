@@ -35,8 +35,8 @@ namespace rojoRHI {
         }
 
         //==============================================================================================================
-        /// Sets the render pipeline state of `pipeline` unless the encoder holds it.
-        void setRenderState(CommandListImpl& list, const metal4::PipelineState* pipeline)
+        /// Sets the render pipeline state of `pipeline` on `encoder`, the open render encoder, unless it holds it.
+        void setRenderState(CommandListImpl& list, MTL4::RenderCommandEncoder* encoder, const metal4::PipelineState* pipeline)
         {
             metal4::RenderHeld& held = list.draw.held;
             if (held.pipeline != nullptr && held.pipeline->render == pipeline->render)
@@ -44,77 +44,77 @@ namespace rojoRHI {
                 held.pipeline = pipeline;
                 return;
             }
-            openEncoder(list)->setRenderPipelineState(pipeline->render);
+            encoder->setRenderPipelineState(pipeline->render);
             core::noteNativeCall(list.core);
             held.pipeline = pipeline;
         }
 
         //==============================================================================================================
-        /// Sets `state` unless the encoder holds it; equal states share one object, so a pointer compares them.
-        void setDepthStencil(CommandListImpl& list, const MTL::DepthStencilState* state)
+        /// Sets `state` on `encoder` unless it holds it; equal states share one object, so a pointer compares them.
+        void setDepthStencil(CommandListImpl& list, MTL4::RenderCommandEncoder* encoder, const MTL::DepthStencilState* state)
         {
             metal4::RenderHeld& held = list.draw.held;
             if (held.depthStencil == state)
             {
                 return;
             }
-            openEncoder(list)->setDepthStencilState(state);
+            encoder->setDepthStencilState(state);
             core::noteNativeCall(list.core);
             held.depthStencil = state;
         }
 
         //==============================================================================================================
-        /// Sets `cull` unless the encoder holds it.
-        void setCull(CommandListImpl& list, MTL::CullMode cull)
+        /// Sets `cull` on `encoder` unless it holds it.
+        void setCull(CommandListImpl& list, MTL4::RenderCommandEncoder* encoder, MTL::CullMode cull)
         {
             metal4::RenderHeld& held = list.draw.held;
             if (held.cull == cull)
             {
                 return;
             }
-            openEncoder(list)->setCullMode(cull);
+            encoder->setCullMode(cull);
             core::noteNativeCall(list.core);
             held.cull = cull;
         }
 
         //==============================================================================================================
-        /// Sets `winding` unless the encoder holds it.
-        void setWinding(CommandListImpl& list, MTL::Winding winding)
+        /// Sets `winding` on `encoder` unless it holds it.
+        void setWinding(CommandListImpl& list, MTL4::RenderCommandEncoder* encoder, MTL::Winding winding)
         {
             metal4::RenderHeld& held = list.draw.held;
             if (held.winding == winding)
             {
                 return;
             }
-            openEncoder(list)->setFrontFacingWinding(winding);
+            encoder->setFrontFacingWinding(winding);
             core::noteNativeCall(list.core);
             held.winding = winding;
         }
 
         //==============================================================================================================
-        /// Sets `fill` unless the encoder holds it.
-        void setFill(CommandListImpl& list, MTL::TriangleFillMode fill)
+        /// Sets `fill` on `encoder` unless it holds it.
+        void setFill(CommandListImpl& list, MTL4::RenderCommandEncoder* encoder, MTL::TriangleFillMode fill)
         {
             metal4::RenderHeld& held = list.draw.held;
             if (held.fill == fill)
             {
                 return;
             }
-            openEncoder(list)->setTriangleFillMode(fill);
+            encoder->setTriangleFillMode(fill);
             core::noteNativeCall(list.core);
             held.fill = fill;
         }
 
         //==============================================================================================================
-        /// Sets `clip` unless the encoder holds it.
-        void setDepthClip(CommandListImpl& list, MTL::DepthClipMode clip)
+        /// Sets `clip` on `encoder` unless it holds it.
+        void setDepthClip(CommandListImpl& list, MTL4::RenderCommandEncoder* encoder, MTL::DepthClipMode clip)
         {
             metal4::RenderHeld& held = list.draw.held;
             if (held.depthClip == clip)
             {
                 return;
             }
-            openEncoder(list)->setDepthClipMode(clip);
+            encoder->setDepthClipMode(clip);
             core::noteNativeCall(list.core);
             held.depthClip = clip;
         }
@@ -199,6 +199,32 @@ namespace rojoRHI {
         }
 
         //==============================================================================================================
+        /// `metal4::applyPipeline`, inlined into `setPipeline` so a bind on the open render encoder makes no call to reach it.
+        [[gnu::always_inline]] inline void applyPipelineNow(CommandListImpl& list, const metal4::PipelineState& pipeline)
+        {
+            // The encoder is read once: the setters below leave it open.
+            MTL4::RenderCommandEncoder* encoder = openEncoder(list);
+            setRenderState(list, encoder, &pipeline);
+            setDepthStencil(list, encoder, pipeline.depthStencil);
+            setCull(list, encoder, pipeline.cull);
+            if (pipeline.setsWinding)
+            {
+                setWinding(list, encoder, pipeline.winding);
+            }
+            setFill(list, encoder, pipeline.fill);
+            setDepthClip(list, encoder, pipeline.depthClip);
+            if (pipeline.depthBias)
+            {
+                metal4::applyDepthBias(list, list.draw.bias);
+            }
+            else if (list.draw.held.bias != metal4::DepthBias{})
+            {
+                // A pipeline without depth bias draws with none.
+                metal4::applyDepthBias(list, metal4::DepthBias{});
+            }
+        }
+
+        //==============================================================================================================
         /// True when the render encoder of the open pass is open, so a state command applies now; otherwise it joins the
         /// prefix.
         bool appliesNow(const CommandListImpl& list)
@@ -211,16 +237,7 @@ namespace rojoRHI {
         //==============================================================================================================
         void applyPipeline(CommandListImpl& list, const PipelineState& pipeline)
         {
-            setRenderState(list, &pipeline);
-            setDepthStencil(list, pipeline.depthStencil);
-            setCull(list, pipeline.cull);
-            if (pipeline.setsWinding)
-            {
-                setWinding(list, pipeline.winding);
-            }
-            setFill(list, pipeline.fill);
-            setDepthClip(list, pipeline.depthClip);
-            applyDepthBias(list, pipeline.depthBias ? list.draw.bias : DepthBias{});
+            applyPipelineNow(list, pipeline);
         }
 
         //==============================================================================================================
@@ -252,15 +269,16 @@ namespace rojoRHI {
         //==============================================================================================================
         void restoreHeld(CommandListImpl& list, const RenderHeld& previous)
         {
+            MTL4::RenderCommandEncoder* encoder = openEncoder(list);
             if (previous.pipeline != nullptr)
             {
-                setRenderState(list, previous.pipeline);
+                setRenderState(list, encoder, previous.pipeline);
             }
-            setDepthStencil(list, previous.depthStencil);
-            setCull(list, previous.cull);
-            setWinding(list, previous.winding);
-            setFill(list, previous.fill);
-            setDepthClip(list, previous.depthClip);
+            setDepthStencil(list, encoder, previous.depthStencil);
+            setCull(list, encoder, previous.cull);
+            setWinding(list, encoder, previous.winding);
+            setFill(list, encoder, previous.fill);
+            setDepthClip(list, encoder, previous.depthClip);
             applyDepthBias(list, previous.bias);
             if (previous.viewportKnown)
             {
@@ -341,7 +359,7 @@ namespace rojoRHI {
         draw.topology = state->listType;
         if (appliesNow(list))
         {
-            metal4::applyPipeline(list, *state);
+            applyPipelineNow(list, *state);
             return;
         }
         metal4::PrefixCommand command{ .kind = metal4::PrefixKind::Pipeline };
