@@ -12,17 +12,28 @@
 #include <dxgi1_6.h>
 #include <psapi.h>
 
+#include <api/include/dx12/ffx_api_dx12.h>
+#include <api/include/ffx_api.h>
+#include <api/include/ffx_api_types.h>
+#include <upscalers/include/ffx_upscale.h>
+
 #include <algorithm>
+#include <bit>
+#include <chrono>
 #include <cstddef>
 #include <cstdint>
 #include <cstdio>
+#include <cstring>
 #include <format>
+#include <future>
 #include <iterator>
 #include <map>
+#include <memory>
 #include <mutex>
 #include <optional>
 #include <string>
 #include <string_view>
+#include <thread>
 #include <utility>
 #include <vector>
 
@@ -33,6 +44,15 @@ constexpr UINT64 kRawViewElements = UINT64{ 1 } << 27;
 constexpr UINT kWindowSize = 256;
 constexpr const wchar_t* kWindowClass = L"RojoRHID3D12Probe";
 constexpr const char* kRelativeSdkPath = ".\\D3D12\\";
+constexpr const wchar_t* kFsrLoader = L"amd_fidelityfx_loader_dx12.dll";
+constexpr const wchar_t* kFsrUpscaler = L"amd_fidelityfx_upscaler_dx12.dll";
+constexpr UINT kFsrRenderSize = 64;
+constexpr UINT kFsrUpscaleSize = 128;
+constexpr float kFsrFrameTimeMs = 16.6f;
+// Half-float RGBA (0.5, 0.25, 0.125, 1.0), red in the low bits: the constant color of the FSR input.
+constexpr uint64_t kFsrColorTexel = 0x3C00300034003800ull;
+constexpr float kFsrDepth = 0.5f;
+constexpr std::chrono::seconds kFsrTimeout{ 30 };
 
 #if defined(ROJORHI_D3D12_PROBE_EXPORTS)
 constexpr bool kExportsVariant = true;
@@ -76,6 +96,8 @@ struct Message
 };
 
 // Debug-layer messages by the phase that raised them. The runtime may call back on its own threads, so the log is locked.
+// Besides the first messages of each phase, it keeps the messages of severity warning or worse, errors and corruption
+// before warnings, and counts every one of them.
 struct MessageLog
 {
     std::mutex mutex;
@@ -83,6 +105,8 @@ struct MessageLog
     std::vector<Message> messages;
     std::map<std::string, size_t> counts;
     std::map<std::string, size_t> errors;
+    std::map<std::string, std::vector<Message>> severe;
+    std::map<std::string, size_t> severeCounts;
 };
 
 struct Attempt
@@ -96,6 +120,60 @@ struct LoadedModule
     std::wstring path;
     std::string fileVersion;
     bool appLocal;
+};
+
+// The FidelityFX API entry points the loader exports.
+struct FfxApi
+{
+    PfnFfxCreateContext createContext = nullptr;
+    PfnFfxDestroyContext destroyContext = nullptr;
+    PfnFfxConfigure configure = nullptr;
+    PfnFfxQuery query = nullptr;
+    PfnFfxDispatch dispatch = nullptr;
+};
+
+// What the FidelityFX upscaler section measured. It is no floor item: the floor verdict and the exit code ignore it.
+struct FsrReport
+{
+    bool loaded = false;
+    std::string version;
+    std::vector<std::string> versions;
+    bool contextCreated = false;
+    bool dispatched = false;
+    std::optional<uint64_t> outputTexel;
+    std::string error;
+    std::vector<LoadedModule> upscalerModules;
+};
+
+// One run of the FSR section on one device. Its thread writes report; under log->mutex it copies report to snapshot as
+// each step begins and names the step, so a section that does not finish in time is reported from them.
+struct FsrSection
+{
+    std::string phasePrefix;
+    std::wstring exeDir;
+    ID3D12Device* device = nullptr;
+    MessageLog* log = nullptr;
+    FsrReport report;
+    FsrReport snapshot;
+    std::string step;
+    bool finished = true;
+};
+
+// The D3D12 objects the FSR section records and submits with, released when the section ends.
+struct FsrRun
+{
+    Com<ID3D12Device10> device;
+    Com<ID3D12CommandQueue> queue;
+    Com<ID3D12CommandAllocator> allocator;
+    Com<ID3D12GraphicsCommandList7> list;
+    Com<ID3D12Fence> fence;
+    UINT64 fenceValue = 0;
+    Com<ID3D12Resource> color;
+    Com<ID3D12Resource> depth;
+    Com<ID3D12Resource> motion;
+    Com<ID3D12Resource> output;
+    Com<ID3D12Resource> readback;
+    Com<ID3D12Resource> uploads[3];
 };
 
 // Everything the probe measured. A call result left empty was never made.
@@ -161,6 +239,16 @@ struct Probe
     std::vector<UINT> backBufferIndices;
     std::vector<HRESULT> presentResults;
 
+    // FidelityFX upscaler: on the probe's device, and on a second device whose debug layer runs without GPU-based
+    // validation
+    FsrSection fsrGbv;
+    FsrSection fsrNoGbv;
+    std::optional<HRESULT> noGbvFactoryResult;
+    std::optional<HRESULT> noGbvDebugResult;
+    std::optional<HRESULT> noGbvDeviceResult;
+    std::optional<HRESULT> noGbvCallbackResult;
+    std::string noGbvStartup;
+
     // Objects, released in reverse order
     MessageLog log;
     Com<ID3D12SDKConfiguration1> sdkConfig;
@@ -173,6 +261,12 @@ struct Probe
     Com<ID3D12InfoQueue> infoQueue;
     Com<ID3D12InfoQueue1> infoQueue1;
     DWORD callbackCookie = 0;
+    MessageLog noGbvLog;
+    Com<ID3D12DeviceFactory> noGbvFactory;
+    Com<ID3D12Debug3> noGbvDebug;
+    Com<ID3D12Device> noGbvDevice;
+    Com<ID3D12InfoQueue1> noGbvInfoQueue1;
+    DWORD noGbvCookie = 0;
 };
 
 // A JSON text written front to back; each open object or array records whether it holds a member yet.
@@ -355,9 +449,29 @@ static void recordMessage(MessageLog& messageLog, D3D12_MESSAGE_SEVERITY severit
     std::lock_guard lock(messageLog.mutex);
     size_t& count = messageLog.counts[messageLog.phase];
     ++count;
-    if (severity == D3D12_MESSAGE_SEVERITY_ERROR || severity == D3D12_MESSAGE_SEVERITY_CORRUPTION)
+    const bool error = severity == D3D12_MESSAGE_SEVERITY_ERROR || severity == D3D12_MESSAGE_SEVERITY_CORRUPTION;
+    if (error)
     {
         ++messageLog.errors[messageLog.phase];
+    }
+    if (error || severity == D3D12_MESSAGE_SEVERITY_WARNING)
+    {
+        ++messageLog.severeCounts[messageLog.phase];
+        std::vector<Message>& kept = messageLog.severe[messageLog.phase];
+        Message message = { messageLog.phase, severityName(severity), id, text };
+        if (kept.size() < kMessagesPerPhase)
+        {
+            kept.push_back(std::move(message));
+        }
+        else if (error)
+        {
+            // A full list gives up a warning for an error.
+            const auto warning = std::find_if(kept.begin(), kept.end(), [](const Message& other) { return other.severity == "warning"; });
+            if (warning != kept.end())
+            {
+                *warning = std::move(message);
+            }
+        }
     }
     if (count <= kMessagesPerPhase)
     {
@@ -373,14 +487,9 @@ static void __stdcall onMessage(D3D12_MESSAGE_CATEGORY, D3D12_MESSAGE_SEVERITY s
 }
 
 //======================================================================================================================
-// Without a message callback, the messages the info queue stored are read at each phase boundary instead.
-static void drainStoredMessages(Probe& probe)
+// Files the messages the info queue stored under the log's current phase, then clears them.
+static void drainInfoQueue(ID3D12InfoQueue* queue, MessageLog& messageLog)
 {
-    ID3D12InfoQueue* queue = probe.infoQueue.p;
-    if (queue == nullptr || probe.infoQueue1Callback)
-    {
-        return;
-    }
     const UINT64 count = queue->GetNumStoredMessages();
     for (UINT64 index = 0; index < count; ++index)
     {
@@ -393,10 +502,20 @@ static void drainStoredMessages(Probe& probe)
         auto* message = reinterpret_cast<D3D12_MESSAGE*>(storage.data());
         if (SUCCEEDED(queue->GetMessage(index, message, &size)))
         {
-            recordMessage(probe.log, message->Severity, static_cast<int>(message->ID), fromAnsi(message->pDescription));
+            recordMessage(messageLog, message->Severity, static_cast<int>(message->ID), fromAnsi(message->pDescription));
         }
     }
     queue->ClearStoredMessages();
+}
+
+//======================================================================================================================
+// Without a message callback, the messages the info queue stored are read at each phase boundary instead.
+static void drainStoredMessages(Probe& probe)
+{
+    if (probe.infoQueue.p != nullptr && !probe.infoQueue1Callback)
+    {
+        drainInfoQueue(probe.infoQueue.p, probe.log);
+    }
 }
 
 //======================================================================================================================
@@ -850,6 +969,644 @@ static void probePresentation(Probe& probe)
 }
 
 //======================================================================================================================
+// Messages the section's device raises from here on are filed under this phase of the section's log.
+static void beginSectionPhase(FsrSection& section, std::string_view phase)
+{
+    const std::string name = section.phasePrefix + std::string(phase);
+    {
+        std::lock_guard lock(section.log->mutex);
+        section.log->phase = name;
+    }
+    std::fprintf(stderr, "d3d12 probe (%s): %s\n", kVariant, name.c_str());
+}
+
+//======================================================================================================================
+// Marks the call the FSR section makes next, on stderr and in the snapshot a section that does not finish reports.
+static void beginFsrStep(FsrSection& section, std::string_view step)
+{
+    {
+        std::lock_guard lock(section.log->mutex);
+        section.snapshot = section.report;
+        section.step = step;
+    }
+    std::fprintf(stderr, "d3d12 probe (%s): %s step %.*s\n", kVariant, section.phasePrefix.c_str(), static_cast<int>(step.size()), step.data());
+}
+
+//======================================================================================================================
+// Records the first failing call of the FSR section; a later failure keeps the first.
+static bool succeeded(FsrSection& section, std::string_view call, HRESULT result)
+{
+    if (FAILED(result) && section.report.error.empty())
+    {
+        section.report.error = std::format("{} 0x{:08X}", call, static_cast<uint32_t>(result));
+    }
+    return SUCCEEDED(result);
+}
+
+//======================================================================================================================
+static const char* ffxReturnCodeName(ffxReturnCode_t code)
+{
+    switch (code)
+    {
+    case FFX_API_RETURN_OK: return "FFX_API_RETURN_OK";
+    case FFX_API_RETURN_ERROR: return "FFX_API_RETURN_ERROR";
+    case FFX_API_RETURN_ERROR_UNKNOWN_DESCTYPE: return "FFX_API_RETURN_ERROR_UNKNOWN_DESCTYPE";
+    case FFX_API_RETURN_ERROR_RUNTIME_ERROR: return "FFX_API_RETURN_ERROR_RUNTIME_ERROR";
+    case FFX_API_RETURN_NO_PROVIDER: return "FFX_API_RETURN_NO_PROVIDER";
+    case FFX_API_RETURN_ERROR_MEMORY: return "FFX_API_RETURN_ERROR_MEMORY";
+    case FFX_API_RETURN_ERROR_PARAMETER: return "FFX_API_RETURN_ERROR_PARAMETER";
+    case FFX_API_RETURN_PROVIDER_NO_SUPPORT_NEW_DESCTYPE: return "FFX_API_RETURN_PROVIDER_NO_SUPPORT_NEW_DESCTYPE";
+    }
+    return "unknown";
+}
+
+//======================================================================================================================
+static bool ffxSucceeded(FsrSection& section, std::string_view call, ffxReturnCode_t code)
+{
+    const ffxReturnCode_t ok = FFX_API_RETURN_OK;
+    if (code != ok && section.report.error.empty())
+    {
+        section.report.error = std::format("{} {} ({})", call, ffxReturnCodeName(code), code);
+    }
+    return code == ok;
+}
+
+//======================================================================================================================
+template<typename T> static bool resolveFfx(FsrSection& section, HMODULE loader, const char* name, T& entry)
+{
+    entry = reinterpret_cast<T>(GetProcAddress(loader, name));
+    if (entry == nullptr && section.report.error.empty())
+    {
+        section.report.error = std::format("GetProcAddress {} 0x{:08X}", name, static_cast<uint32_t>(HRESULT_FROM_WIN32(GetLastError())));
+    }
+    return entry != nullptr;
+}
+
+//======================================================================================================================
+// The upscaler versions the loader offers for the device; the first is the one a context gets by default.
+static bool queryFsrVersions(FsrSection& section, const FfxApi& api)
+{
+    beginFsrStep(section, "ffxQuery (GET_VERSIONS)");
+    uint64_t count = 0;
+    ffxQueryDescGetVersions query = {};
+    query.header.type = FFX_API_QUERY_DESC_TYPE_GET_VERSIONS;
+    query.createDescType = FFX_API_CREATE_CONTEXT_DESC_TYPE_UPSCALE;
+    query.device = section.device;
+    query.outputCount = &count;
+    if (!ffxSucceeded(section, "ffxQuery (GET_VERSIONS count)", api.query(nullptr, &query.header)))
+    {
+        return false;
+    }
+    std::vector<uint64_t> ids(static_cast<size_t>(count));
+    std::vector<const char*> names(static_cast<size_t>(count), nullptr);
+    query.versionIds = ids.data();
+    query.versionNames = names.data();
+    if (count > 0 && !ffxSucceeded(section, "ffxQuery (GET_VERSIONS)", api.query(nullptr, &query.header)))
+    {
+        return false;
+    }
+    names.resize(static_cast<size_t>(std::min<uint64_t>(count, names.size())));
+    for (const char* name : names)
+    {
+        section.report.versions.push_back(name != nullptr ? name : "");
+    }
+    if (section.report.versions.empty())
+    {
+        section.report.error = "ffxQuery (GET_VERSIONS) found no upscaler provider for the device";
+        return false;
+    }
+    section.report.version = section.report.versions.front();
+    return true;
+}
+
+//======================================================================================================================
+static D3D12_RESOURCE_DESC1 textureDesc(UINT size, DXGI_FORMAT format, D3D12_RESOURCE_FLAGS flags)
+{
+    D3D12_RESOURCE_DESC1 desc = {};
+    desc.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
+    desc.Width = size;
+    desc.Height = size;
+    desc.DepthOrArraySize = 1;
+    desc.MipLevels = 1;
+    desc.Format = format;
+    desc.SampleDesc.Count = 1;
+    desc.Layout = D3D12_TEXTURE_LAYOUT_UNKNOWN;
+    desc.Flags = flags;
+    return desc;
+}
+
+//======================================================================================================================
+static D3D12_RESOURCE_DESC1 bufferDesc(UINT64 size)
+{
+    D3D12_RESOURCE_DESC1 desc = {};
+    desc.Dimension = D3D12_RESOURCE_DIMENSION_BUFFER;
+    desc.Width = size;
+    desc.Height = 1;
+    desc.DepthOrArraySize = 1;
+    desc.MipLevels = 1;
+    desc.Format = DXGI_FORMAT_UNKNOWN;
+    desc.SampleDesc.Count = 1;
+    desc.Layout = D3D12_TEXTURE_LAYOUT_ROW_MAJOR;
+    return desc;
+}
+
+//======================================================================================================================
+static bool createCommitted(
+    FsrSection& section,
+    FsrRun& run,
+    std::string_view what,
+    D3D12_HEAP_TYPE heap,
+    const D3D12_RESOURCE_DESC1& desc,
+    D3D12_BARRIER_LAYOUT layout,
+    Com<ID3D12Resource>& out
+)
+{
+    D3D12_HEAP_PROPERTIES properties = {};
+    properties.Type = heap;
+    const HRESULT result =
+        run.device.p->CreateCommittedResource3(&properties, D3D12_HEAP_FLAG_NONE, &desc, layout, nullptr, nullptr, 0, nullptr, IID_PPV_ARGS(&out.p));
+    return succeeded(section, std::format("CreateCommittedResource3 ({})", what), result);
+}
+
+//======================================================================================================================
+// A layout transition at the start of a submission: the work before it finished at the previous fence wait.
+static D3D12_TEXTURE_BARRIER textureBarrier(
+    ID3D12Resource* resource, D3D12_BARRIER_LAYOUT before, D3D12_BARRIER_LAYOUT after, D3D12_BARRIER_SYNC sync, D3D12_BARRIER_ACCESS access
+)
+{
+    D3D12_TEXTURE_BARRIER barrier = {};
+    barrier.SyncBefore = D3D12_BARRIER_SYNC_NONE;
+    barrier.SyncAfter = sync;
+    barrier.AccessBefore = D3D12_BARRIER_ACCESS_NO_ACCESS;
+    barrier.AccessAfter = access;
+    barrier.LayoutBefore = before;
+    barrier.LayoutAfter = after;
+    barrier.pResource = resource;
+    barrier.Subresources = { 0, 1, 0, 1, 0, 1 };
+    barrier.Flags = D3D12_TEXTURE_BARRIER_FLAG_NONE;
+    return barrier;
+}
+
+//======================================================================================================================
+// The queue, list, fence, the three inputs in COPY_DEST, the output in COMMON and the readback buffer. Sampled depth is
+// R32_TYPELESS, as the backend creates it, and FidelityFX reads it through an R32_FLOAT view.
+static bool createFsrObjects(FsrSection& section, FsrRun& run)
+{
+    if (!succeeded(section, "QueryInterface (ID3D12Device10)", queryInterface(section.device, run.device)))
+    {
+        return false;
+    }
+    ID3D12Device10* device = run.device.p;
+    const D3D12_COMMAND_LIST_TYPE direct = D3D12_COMMAND_LIST_TYPE_DIRECT;
+    D3D12_COMMAND_QUEUE_DESC queueDesc = {};
+    queueDesc.Type = direct;
+    const bool commands =
+        succeeded(section, "CreateCommandQueue", device->CreateCommandQueue(&queueDesc, IID_PPV_ARGS(&run.queue.p))) &&
+        succeeded(section, "CreateCommandAllocator", device->CreateCommandAllocator(direct, IID_PPV_ARGS(&run.allocator.p))) &&
+        succeeded(section, "CreateCommandList1", device->CreateCommandList1(0, direct, D3D12_COMMAND_LIST_FLAG_NONE, IID_PPV_ARGS(&run.list.p))) &&
+        succeeded(section, "CreateFence", device->CreateFence(0, D3D12_FENCE_FLAG_NONE, IID_PPV_ARGS(&run.fence.p)));
+    if (!commands)
+    {
+        return false;
+    }
+    const D3D12_HEAP_TYPE gpu = D3D12_HEAP_TYPE_DEFAULT;
+    const D3D12_BARRIER_LAYOUT copyDest = D3D12_BARRIER_LAYOUT_COPY_DEST;
+    const D3D12_RESOURCE_DESC1 color = textureDesc(kFsrRenderSize, DXGI_FORMAT_R16G16B16A16_FLOAT, D3D12_RESOURCE_FLAG_NONE);
+    const D3D12_RESOURCE_DESC1 depth = textureDesc(kFsrRenderSize, DXGI_FORMAT_R32_TYPELESS, D3D12_RESOURCE_FLAG_ALLOW_DEPTH_STENCIL);
+    const D3D12_RESOURCE_DESC1 motion = textureDesc(kFsrRenderSize, DXGI_FORMAT_R16G16_FLOAT, D3D12_RESOURCE_FLAG_NONE);
+    const D3D12_RESOURCE_DESC1 output = textureDesc(kFsrUpscaleSize, DXGI_FORMAT_R16G16B16A16_FLOAT, D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS);
+    const D3D12_RESOURCE_DESC1 readback = bufferDesc(D3D12_TEXTURE_DATA_PITCH_ALIGNMENT);
+    return createCommitted(section, run, "color", gpu, color, copyDest, run.color) && createCommitted(section, run, "depth", gpu, depth, copyDest, run.depth) &&
+           createCommitted(section, run, "motion", gpu, motion, copyDest, run.motion) &&
+           createCommitted(section, run, "output", gpu, output, D3D12_BARRIER_LAYOUT_COMMON, run.output) &&
+           createCommitted(section, run, "readback", D3D12_HEAP_TYPE_READBACK, readback, D3D12_BARRIER_LAYOUT_UNDEFINED, run.readback);
+}
+
+//======================================================================================================================
+static bool beginList(FsrSection& section, FsrRun& run)
+{
+    return succeeded(section, "ID3D12CommandAllocator::Reset", run.allocator.p->Reset()) &&
+           succeeded(section, "ID3D12GraphicsCommandList::Reset", run.list.p->Reset(run.allocator.p, nullptr));
+}
+
+//======================================================================================================================
+// Executes the open list and waits for it; a removed device fails the submission.
+static bool submitAndWait(FsrSection& section, FsrRun& run, std::string_view what)
+{
+    if (!succeeded(section, std::format("Close ({})", what), run.list.p->Close()))
+    {
+        return false;
+    }
+    ID3D12CommandList* lists[] = { run.list.p };
+    run.queue.p->ExecuteCommandLists(1, lists);
+    ++run.fenceValue;
+    return succeeded(section, std::format("Signal ({})", what), run.queue.p->Signal(run.fence.p, run.fenceValue)) &&
+           succeeded(section, std::format("SetEventOnCompletion ({})", what), run.fence.p->SetEventOnCompletion(run.fenceValue, nullptr)) &&
+           succeeded(section, std::format("GetDeviceRemovedReason ({})", what), section.device->GetDeviceRemovedReason());
+}
+
+//======================================================================================================================
+// Fills an upload buffer with one texel repeated over the whole texture and records its copy into the texture.
+static bool recordUpload(FsrSection& section, FsrRun& run, ID3D12Resource* texture, const void* texel, size_t texelSize, Com<ID3D12Resource>& upload)
+{
+    const D3D12_RESOURCE_DESC desc = texture->GetDesc();
+    D3D12_PLACED_SUBRESOURCE_FOOTPRINT footprint = {};
+    UINT rows = 0;
+    UINT64 rowBytes = 0;
+    UINT64 total = 0;
+    section.device->GetCopyableFootprints(&desc, 0, 1, 0, &footprint, &rows, &rowBytes, &total);
+    if (!createCommitted(section, run, "upload", D3D12_HEAP_TYPE_UPLOAD, bufferDesc(total), D3D12_BARRIER_LAYOUT_UNDEFINED, upload))
+    {
+        return false;
+    }
+    const D3D12_RANGE noRead = { 0, 0 };
+    void* mapped = nullptr;
+    if (!succeeded(section, "Map (upload)", upload.p->Map(0, &noRead, &mapped)))
+    {
+        return false;
+    }
+    auto* bytes = static_cast<std::byte*>(mapped) + footprint.Offset;
+    for (UINT row = 0; row < rows; ++row)
+    {
+        for (UINT64 column = 0; column < desc.Width; ++column)
+        {
+            std::memcpy(bytes + static_cast<size_t>(row) * footprint.Footprint.RowPitch + column * texelSize, texel, texelSize);
+        }
+    }
+    upload.p->Unmap(0, nullptr);
+    D3D12_TEXTURE_COPY_LOCATION destination = {};
+    destination.pResource = texture;
+    destination.Type = D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX;
+    destination.SubresourceIndex = 0;
+    D3D12_TEXTURE_COPY_LOCATION source = {};
+    source.pResource = upload.p;
+    source.Type = D3D12_TEXTURE_COPY_TYPE_PLACED_FOOTPRINT;
+    source.PlacedFootprint = footprint;
+    run.list.p->CopyTextureRegion(&destination, 0, 0, 0, &source, nullptr);
+    return true;
+}
+
+//======================================================================================================================
+// The color input to a constant color, depth to a constant depth and the motion vectors to zero, in one submission.
+static bool uploadFsrInputs(FsrSection& section, FsrRun& run)
+{
+    const uint32_t depth = std::bit_cast<uint32_t>(kFsrDepth);
+    const uint32_t motion = 0;
+    return beginList(section, run) && recordUpload(section, run, run.color.p, &kFsrColorTexel, sizeof(kFsrColorTexel), run.uploads[0]) &&
+           recordUpload(section, run, run.depth.p, &depth, sizeof(depth), run.uploads[1]) &&
+           recordUpload(section, run, run.motion.p, &motion, sizeof(motion), run.uploads[2]) && submitAndWait(section, run, "upload");
+}
+
+//======================================================================================================================
+// A minimal upscale context: no flags, 64x64 render size and 128x128 upscale size, on the section's device.
+static bool createFsrContext(FsrSection& section, const FfxApi& api, ffxContext& context)
+{
+    ffxCreateBackendDX12Desc backend = {};
+    backend.header.type = FFX_API_CREATE_CONTEXT_DESC_TYPE_BACKEND_DX12;
+    backend.device = section.device;
+    ffxCreateContextDescUpscaleVersion version = {};
+    version.header.type = FFX_API_CREATE_CONTEXT_DESC_TYPE_UPSCALE_VERSION;
+    version.header.pNext = &backend.header;
+    version.version = FFX_UPSCALER_VERSION;
+    ffxCreateContextDescUpscale upscale = {};
+    upscale.header.type = FFX_API_CREATE_CONTEXT_DESC_TYPE_UPSCALE;
+    upscale.header.pNext = &version.header;
+    upscale.flags = 0;
+    upscale.maxRenderSize = { kFsrRenderSize, kFsrRenderSize };
+    upscale.maxUpscaleSize = { kFsrUpscaleSize, kFsrUpscaleSize };
+    upscale.fpMessage = nullptr;
+    beginFsrStep(section, "ffxCreateContext");
+    if (!ffxSucceeded(section, "ffxCreateContext", api.createContext(&context, &upscale.header, nullptr)))
+    {
+        return false;
+    }
+    section.report.contextCreated = true;
+    // The provider the context runs on, which names the version better than the default the version query reported.
+    ffxQueryGetProviderVersion provider = {};
+    provider.header.type = FFX_API_QUERY_DESC_TYPE_GET_PROVIDER_VERSION;
+    beginFsrStep(section, "ffxQuery (GET_PROVIDER_VERSION)");
+    if (ffxSucceeded(section, "ffxQuery (GET_PROVIDER_VERSION)", api.query(&context, &provider.header)) && provider.versionName != nullptr)
+    {
+        section.report.version = provider.versionName;
+    }
+    return true;
+}
+
+//======================================================================================================================
+static FfxApiResource fsrResource(ID3D12Resource* resource, UINT size, uint32_t format, uint32_t usage, uint32_t state)
+{
+    FfxApiResource out = {};
+    out.resource = resource;
+    out.description.type = FFX_API_RESOURCE_TYPE_TEXTURE2D;
+    out.description.format = format;
+    out.description.width = size;
+    out.description.height = size;
+    out.description.depth = 1;
+    out.description.mipCount = 1;
+    out.description.flags = FFX_API_RESOURCE_FLAGS_NONE;
+    out.description.usage = usage;
+    out.state = state;
+    return out;
+}
+
+//======================================================================================================================
+// One direct list: an enhanced barrier group moving the inputs to SHADER_RESOURCE and the output to UNORDERED_ACCESS,
+// then the upscale, which FidelityFX records with legacy barriers from the states it is given: the inputs in
+// NON_PIXEL_SHADER_RESOURCE | PIXEL_SHADER_RESOURCE, the output in UNORDERED_ACCESS.
+static bool dispatchFsr(FsrSection& section, const FfxApi& api, FsrRun& run, ffxContext& context)
+{
+    if (!beginList(section, run))
+    {
+        return false;
+    }
+    const D3D12_BARRIER_LAYOUT copyDest = D3D12_BARRIER_LAYOUT_COPY_DEST;
+    const D3D12_BARRIER_LAYOUT shaderResource = D3D12_BARRIER_LAYOUT_SHADER_RESOURCE;
+    const D3D12_BARRIER_SYNC compute = D3D12_BARRIER_SYNC_COMPUTE_SHADING;
+    const D3D12_BARRIER_ACCESS read = D3D12_BARRIER_ACCESS_SHADER_RESOURCE;
+    const D3D12_TEXTURE_BARRIER barriers[] = {
+        textureBarrier(run.color.p, copyDest, shaderResource, compute, read),
+        textureBarrier(run.depth.p, copyDest, shaderResource, compute, read),
+        textureBarrier(run.motion.p, copyDest, shaderResource, compute, read),
+        textureBarrier(run.output.p, D3D12_BARRIER_LAYOUT_COMMON, D3D12_BARRIER_LAYOUT_UNORDERED_ACCESS, compute, D3D12_BARRIER_ACCESS_UNORDERED_ACCESS),
+    };
+    D3D12_BARRIER_GROUP group = {};
+    group.Type = D3D12_BARRIER_TYPE_TEXTURE;
+    group.NumBarriers = static_cast<UINT32>(std::size(barriers));
+    group.pTextureBarriers = barriers;
+    run.list.p->Barrier(1, &group);
+
+    const uint32_t inputState = FFX_API_RESOURCE_STATE_PIXEL_COMPUTE_READ;
+    ffxDispatchDescUpscale desc = {};
+    desc.header.type = FFX_API_DISPATCH_DESC_TYPE_UPSCALE;
+    desc.commandList = run.list.p;
+    desc.color = fsrResource(run.color.p, kFsrRenderSize, FFX_API_SURFACE_FORMAT_R16G16B16A16_FLOAT, FFX_API_RESOURCE_USAGE_READ_ONLY, inputState);
+    desc.depth = fsrResource(run.depth.p, kFsrRenderSize, FFX_API_SURFACE_FORMAT_R32_FLOAT, FFX_API_RESOURCE_USAGE_DEPTHTARGET, inputState);
+    desc.motionVectors = fsrResource(run.motion.p, kFsrRenderSize, FFX_API_SURFACE_FORMAT_R16G16_FLOAT, FFX_API_RESOURCE_USAGE_READ_ONLY, inputState);
+    desc.output = fsrResource(
+        run.output.p, kFsrUpscaleSize, FFX_API_SURFACE_FORMAT_R16G16B16A16_FLOAT, FFX_API_RESOURCE_USAGE_UAV, FFX_API_RESOURCE_STATE_UNORDERED_ACCESS
+    );
+    desc.jitterOffset = { 0.0f, 0.0f };
+    desc.motionVectorScale = { static_cast<float>(kFsrRenderSize), static_cast<float>(kFsrRenderSize) };
+    desc.renderSize = { kFsrRenderSize, kFsrRenderSize };
+    desc.upscaleSize = { kFsrUpscaleSize, kFsrUpscaleSize };
+    desc.enableSharpening = false;
+    desc.sharpness = 0.0f;
+    desc.frameTimeDelta = kFsrFrameTimeMs;
+    desc.preExposure = 1.0f;
+    desc.reset = true;
+    desc.cameraNear = 0.1f;
+    desc.cameraFar = 100.0f;
+    desc.cameraFovAngleVertical = 1.0f;
+    desc.viewSpaceToMetersFactor = 1.0f;
+    desc.flags = 0;
+    beginFsrStep(section, "ffxDispatch");
+    if (!ffxSucceeded(section, "ffxDispatch", api.dispatch(&context, &desc.header)))
+    {
+        return false;
+    }
+    beginFsrStep(section, "dispatch submission and wait");
+    section.report.dispatched = submitAndWait(section, run, "dispatch");
+    return section.report.dispatched;
+}
+
+//======================================================================================================================
+// Copies the output's centre texel to the readback buffer and reads it.
+static void readFsrOutput(FsrSection& section, FsrRun& run)
+{
+    beginFsrStep(section, "readback");
+    if (!beginList(section, run))
+    {
+        return;
+    }
+    const D3D12_TEXTURE_BARRIER barrier = textureBarrier(
+        run.output.p, D3D12_BARRIER_LAYOUT_UNORDERED_ACCESS, D3D12_BARRIER_LAYOUT_COPY_SOURCE, D3D12_BARRIER_SYNC_COPY, D3D12_BARRIER_ACCESS_COPY_SOURCE
+    );
+    D3D12_BARRIER_GROUP group = {};
+    group.Type = D3D12_BARRIER_TYPE_TEXTURE;
+    group.NumBarriers = 1;
+    group.pTextureBarriers = &barrier;
+    run.list.p->Barrier(1, &group);
+    D3D12_TEXTURE_COPY_LOCATION source = {};
+    source.pResource = run.output.p;
+    source.Type = D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX;
+    source.SubresourceIndex = 0;
+    D3D12_TEXTURE_COPY_LOCATION destination = {};
+    destination.pResource = run.readback.p;
+    destination.Type = D3D12_TEXTURE_COPY_TYPE_PLACED_FOOTPRINT;
+    destination.PlacedFootprint.Offset = 0;
+    destination.PlacedFootprint.Footprint = { DXGI_FORMAT_R16G16B16A16_FLOAT, 1, 1, 1, D3D12_TEXTURE_DATA_PITCH_ALIGNMENT };
+    const UINT centre = kFsrUpscaleSize / 2;
+    const D3D12_BOX box = { centre, centre, 0, centre + 1, centre + 1, 1 };
+    run.list.p->CopyTextureRegion(&destination, 0, 0, 0, &source, &box);
+    if (!submitAndWait(section, run, "readback"))
+    {
+        return;
+    }
+    const D3D12_RANGE read = { 0, sizeof(uint64_t) };
+    void* mapped = nullptr;
+    if (!succeeded(section, "Map (readback)", run.readback.p->Map(0, &read, &mapped)))
+    {
+        return;
+    }
+    uint64_t texel = 0;
+    std::memcpy(&texel, mapped, sizeof(texel));
+    const D3D12_RANGE noWrite = { 0, 0 };
+    run.readback.p->Unmap(0, &noWrite);
+    section.report.outputTexel = texel;
+}
+
+//======================================================================================================================
+// The version query, the inputs, then one context: created, dispatched once, read back and destroyed. The Dispatch
+// phase runs from the context's creation to the end of the dispatch's wait.
+static void runFsr(FsrSection& section, const FfxApi& api)
+{
+    if (!queryFsrVersions(section, api))
+    {
+        return;
+    }
+    beginSectionPhase(section, "Setup");
+    FsrRun run;
+    beginFsrStep(section, "resource creation");
+    if (!createFsrObjects(section, run))
+    {
+        return;
+    }
+    beginFsrStep(section, "input upload");
+    if (!uploadFsrInputs(section, run))
+    {
+        return;
+    }
+    beginSectionPhase(section, "Dispatch");
+    ffxContext context = nullptr;
+    if (!createFsrContext(section, api, context))
+    {
+        return;
+    }
+    const bool dispatched = dispatchFsr(section, api, run, context);
+    if (dispatched)
+    {
+        beginSectionPhase(section, "Readback");
+        readFsrOutput(section, run);
+    }
+    beginSectionPhase(section, "Teardown");
+    beginFsrStep(section, "ffxDestroyContext");
+    ffxSucceeded(section, "ffxDestroyContext", api.destroyContext(&context, nullptr));
+}
+
+//======================================================================================================================
+// FidelityFX FSR through the loader beside the executable, on the section's device.
+static void probeFsr(FsrSection& section)
+{
+    beginSectionPhase(section, "Load");
+    beginFsrStep(section, "LoadLibraryW");
+    const HMODULE loader = LoadLibraryW((section.exeDir + L"\\" + kFsrLoader).c_str());
+    if (loader == nullptr)
+    {
+        section.report.error = std::format("LoadLibraryW {} 0x{:08X}", utf8(kFsrLoader), static_cast<uint32_t>(HRESULT_FROM_WIN32(GetLastError())));
+        return;
+    }
+    FfxApi api;
+    const bool resolved = resolveFfx(section, loader, "ffxCreateContext", api.createContext) &&
+                          resolveFfx(section, loader, "ffxDestroyContext", api.destroyContext) && resolveFfx(section, loader, "ffxConfigure", api.configure) &&
+                          resolveFfx(section, loader, "ffxQuery", api.query) && resolveFfx(section, loader, "ffxDispatch", api.dispatch);
+    if (resolved)
+    {
+        section.report.loaded = true;
+        runFsr(section, api);
+    }
+    section.report.upscalerModules = loadedModules(kFsrUpscaler, section.exeDir);
+    beginFsrStep(section, "FreeLibrary");
+    FreeLibrary(loader);
+    beginFsrStep(section, "done");
+}
+
+//======================================================================================================================
+// Runs the FSR section on a thread of its own and waits for it at most kFsrTimeout, so a call that never returns is
+// reported instead of stopping the probe. Returns whether the section finished; when it did not, its thread keeps
+// running and the process must end without releasing what the section uses.
+static bool probeFsrWithin(FsrSection& section)
+{
+    auto finished = std::make_shared<std::promise<void>>();
+    std::future<void> done = finished->get_future();
+    std::thread worker([&section, finished] {
+        probeFsr(section);
+        finished->set_value();
+    });
+    if (done.wait_for(kFsrTimeout) == std::future_status::ready)
+    {
+        worker.join();
+        return true;
+    }
+    worker.detach();
+    section.finished = false;
+    return false;
+}
+
+//======================================================================================================================
+// The report of an FSR section that did not finish: what it had measured when its last step began.
+static FsrReport unfinishedFsr(FsrSection& section)
+{
+    std::lock_guard lock(section.log->mutex);
+    FsrReport fsr = section.snapshot;
+    if (fsr.error.empty())
+    {
+        fsr.error = std::format("{} did not return within {} s", section.step, kFsrTimeout.count());
+    }
+    return fsr;
+}
+
+//======================================================================================================================
+// A second device on the WARP adapter, from a device factory of its own whose debug layer runs without GPU-based
+// validation. With no factory flag it is independent of the probe's device; its messages go to a log of their own.
+static void createNoGbvDevice(Probe& probe)
+{
+    {
+        std::lock_guard lock(probe.noGbvLog.mutex);
+        probe.noGbvLog.phase = "fsrNoGbvDevice";
+    }
+    if constexpr (kExportsVariant)
+    {
+        probe.noGbvFactoryResult = D3D12GetInterface(CLSID_D3D12DeviceFactory, IID_PPV_ARGS(&probe.noGbvFactory.p));
+    }
+    else
+    {
+        if (probe.sdkConfig.p == nullptr)
+        {
+            return;
+        }
+        probe.noGbvFactoryResult = probe.sdkConfig.p->CreateDeviceFactory(kSdkVersion, probe.sdkPath.c_str(), IID_PPV_ARGS(&probe.noGbvFactory.p));
+    }
+    if (FAILED(*probe.noGbvFactoryResult))
+    {
+        return;
+    }
+    probe.noGbvDebugResult = probe.noGbvFactory.p->GetConfigurationInterface(CLSID_D3D12Debug, IID_PPV_ARGS(&probe.noGbvDebug.p));
+    if (FAILED(*probe.noGbvDebugResult))
+    {
+        return;
+    }
+    probe.noGbvDebug.p->EnableDebugLayer();
+    probe.noGbvDebug.p->SetEnableGPUBasedValidation(FALSE);
+    probe.noGbvDeviceResult = probe.noGbvFactory.p->SetFlags(D3D12_DEVICE_FACTORY_FLAG_NONE);
+    if (SUCCEEDED(*probe.noGbvDeviceResult))
+    {
+        probe.noGbvDeviceResult = probe.noGbvFactory.p->CreateDevice(probe.adapter.p, D3D_FEATURE_LEVEL_12_2, IID_PPV_ARGS(&probe.noGbvDevice.p));
+    }
+    if (FAILED(*probe.noGbvDeviceResult))
+    {
+        return;
+    }
+    // The debug layer's startup message, raised at device creation, says whether GPU-based validation is on.
+    Com<ID3D12InfoQueue> infoQueue;
+    if (SUCCEEDED(queryInterface(probe.noGbvDevice.p, infoQueue)))
+    {
+        drainInfoQueue(infoQueue.p, probe.noGbvLog);
+    }
+    {
+        std::lock_guard lock(probe.noGbvLog.mutex);
+        for (const Message& message : probe.noGbvLog.messages)
+        {
+            if (message.id == static_cast<int>(D3D12_MESSAGE_ID_CREATEDEVICE_DEBUG_LAYER_STARTUP_OPTIONS))
+            {
+                probe.noGbvStartup = message.text;
+            }
+        }
+    }
+    probe.noGbvCallbackResult = queryInterface(probe.noGbvDevice.p, probe.noGbvInfoQueue1);
+    if (SUCCEEDED(*probe.noGbvCallbackResult))
+    {
+        probe.noGbvCallbackResult =
+            probe.noGbvInfoQueue1.p->RegisterMessageCallback(onMessage, D3D12_MESSAGE_CALLBACK_IGNORE_FILTERS, &probe.noGbvLog, &probe.noGbvCookie);
+    }
+}
+
+//======================================================================================================================
+// The section without GPU-based validation runs first: a section that does not finish leaves its work running on WARP,
+// which would slow or stall any section after it. Returns whether both finished.
+static bool probeFsrSections(Probe& probe)
+{
+    probe.fsrGbv.phasePrefix = "fsr";
+    probe.fsrGbv.exeDir = probe.exeDir;
+    probe.fsrGbv.device = probe.device.p;
+    probe.fsrGbv.log = &probe.log;
+    probe.fsrNoGbv.phasePrefix = "fsrNoGbv";
+    probe.fsrNoGbv.exeDir = probe.exeDir;
+    probe.fsrNoGbv.log = &probe.noGbvLog;
+    createNoGbvDevice(probe);
+    bool finished = true;
+    if (probe.noGbvDevice.p != nullptr)
+    {
+        probe.fsrNoGbv.device = probe.noGbvDevice.p;
+        finished = probeFsrWithin(probe.fsrNoGbv);
+    }
+    else
+    {
+        probe.fsrNoGbv.report.error = "no device without GPU-based validation";
+    }
+    return probeFsrWithin(probe.fsrGbv) && finished;
+}
+
+//======================================================================================================================
 // The floor items of ADR 0010 and ResourceHeapTier 2 that the device misses, by their JSON names.
 static std::vector<std::string> missingFloorItems(const Probe& probe)
 {
@@ -1088,7 +1845,96 @@ static void writePresent(Json& json, const Probe& probe)
 }
 
 //======================================================================================================================
-static std::string writeReport(Probe& probe, const std::vector<std::string>& missing)
+// The fields of one FSR section. layerMessages holds the section's debug-layer messages of severity warning or worse,
+// errors and corruption first, at most kMessagesPerPhase a phase, and layerMessageCount counts all of them by phase;
+// outputNonZero is null when no texel was read.
+static void writeFsrFields(Json& json, const FsrReport& fsr, MessageLog& messageLog, std::string_view phasePrefix)
+{
+    // A section that never ran has no phases.
+    const auto ownPhase = [phasePrefix](const std::string& phase) { return !phasePrefix.empty() && phase.starts_with(phasePrefix); };
+    member(json, "loaded", jsonBool(fsr.loaded));
+    member(json, "version", fsr.version.empty() ? "null" : quote(fsr.version));
+    open(json, "versions", '[');
+    for (const std::string& version : fsr.versions)
+    {
+        member(json, "", quote(version));
+    }
+    close(json, ']');
+    member(json, "contextCreated", jsonBool(fsr.contextCreated));
+    member(json, "dispatched", jsonBool(fsr.dispatched));
+    member(json, "outputNonZero", fsr.outputTexel ? jsonBool(*fsr.outputTexel != 0) : "null");
+    member(json, "outputTexel", fsr.outputTexel ? quote(std::format("0x{:016X}", *fsr.outputTexel)) : "null");
+    {
+        std::lock_guard lock(messageLog.mutex);
+        std::vector<Message> severe;
+        for (const auto& [phase, kept] : messageLog.severe)
+        {
+            if (ownPhase(phase))
+            {
+                severe.insert(severe.end(), kept.begin(), kept.end());
+            }
+        }
+        std::stable_sort(severe.begin(), severe.end(), [](const Message& a, const Message& b) { return a.severity != "warning" && b.severity == "warning"; });
+        open(json, "layerMessages", '[');
+        for (const Message& message : severe)
+        {
+            open(json, "", '{');
+            member(json, "phase", quote(message.phase));
+            member(json, "severity", quote(message.severity));
+            member(json, "id", std::to_string(message.id));
+            member(json, "text", quote(message.text));
+            close(json, '}');
+        }
+        close(json, ']');
+        open(json, "layerMessageCount", '{');
+        for (const auto& [phase, count] : messageLog.severeCounts)
+        {
+            if (ownPhase(phase))
+            {
+                member(json, phase, std::to_string(count));
+            }
+        }
+        close(json, '}');
+    }
+    member(json, "error", fsr.error.empty() ? "null" : quote(fsr.error));
+    open(json, "upscaler", '{');
+    writeModules(json, fsr.upscalerModules);
+    close(json, '}');
+}
+
+//======================================================================================================================
+// The section on the probe's device, with GPU-based validation, and in noGbv the one on the second device without it.
+static void writeFsr(Json& json, Probe& probe, const FsrReport& gbv, const FsrReport& noGbv)
+{
+    open(json, "fsr", '{');
+    writeFsrFields(json, gbv, probe.log, probe.fsrGbv.phasePrefix);
+    open(json, "noGbv", '{');
+    open(json, "device", '{');
+    member(json, "created", jsonBool(probe.noGbvDevice.p != nullptr));
+    member(json, "factoryHresult", hresult(probe.noGbvFactoryResult));
+    member(json, "debugHresult", hresult(probe.noGbvDebugResult));
+    member(json, "hresult", hresult(probe.noGbvDeviceResult));
+    member(json, "messageCallbackHresult", hresult(probe.noGbvCallbackResult));
+    member(json, "startupOptions", probe.noGbvStartup.empty() ? "null" : quote(probe.noGbvStartup));
+    member(json, "gbvActive", jsonBool(probe.noGbvStartup.find("GPU-Based Validation is enabled") != std::string::npos));
+    close(json, '}');
+    // Messages of every severity by phase: a count above zero shows the debug layer ran on the second device.
+    {
+        std::lock_guard lock(probe.noGbvLog.mutex);
+        open(json, "messageCounts", '{');
+        for (const auto& [phase, count] : probe.noGbvLog.counts)
+        {
+            member(json, phase, std::to_string(count));
+        }
+        close(json, '}');
+    }
+    writeFsrFields(json, noGbv, probe.noGbvLog, probe.fsrNoGbv.phasePrefix);
+    close(json, '}');
+    close(json, '}');
+}
+
+//======================================================================================================================
+static std::string writeReport(Probe& probe, const std::vector<std::string>& missing, const FsrReport& gbv, const FsrReport& noGbv)
 {
     Json json;
     open(json, "", '{');
@@ -1163,6 +2009,7 @@ static std::string writeReport(Probe& probe, const std::vector<std::string>& mis
     close(json, '}');
 
     writePresent(json, probe);
+    writeFsr(json, probe, gbv, noGbv);
 
     {
         std::lock_guard lock(probe.log.mutex);
@@ -1200,10 +2047,31 @@ static std::string writeReport(Probe& probe, const std::vector<std::string>& mis
 }
 
 //======================================================================================================================
+static void printFsrSummary(const char* name, const FsrReport& fsr)
+{
+    const auto yesNo = [](bool value) { return value ? "yes" : "no"; };
+    std::fprintf(
+        stderr,
+        "d3d12 probe (%s): %s loaded %s, version %s, context %s, dispatched %s, output non-zero %s, error %s\n",
+        kVariant,
+        name,
+        yesNo(fsr.loaded),
+        fsr.version.empty() ? "none" : fsr.version.c_str(),
+        yesNo(fsr.contextCreated),
+        yesNo(fsr.dispatched),
+        fsr.outputTexel ? yesNo(*fsr.outputTexel != 0) : "not read",
+        fsr.error.empty() ? "none" : fsr.error.c_str()
+    );
+}
+
+//======================================================================================================================
 // Exit codes: 0 when the floor is met on the app-local WARP, 1 when a device exists but either is not, 2 with no device.
+// The FSR section never changes them. When it does not finish, the process is terminated without releasing anything or
+// detaching any DLL, since its thread may still be inside a call on the device.
 int main()
 {
     Probe probe;
+    bool fsrFinished = true;
     probeProcess(probe);
     loadAgility(probe);
     configureDebug(probe);
@@ -1216,20 +2084,30 @@ int main()
         probeViewHeap(probe);
         probeRawViews(probe);
         probePresentation(probe);
-        beginPhase(probe, "end");
+        fsrFinished = probeFsrSections(probe);
+        if (fsrFinished)
+        {
+            beginPhase(probe, "end");
+        }
         // Modules loaded by any later phase count too, so a second copy of either runtime is caught.
         findRuntimeModules(probe);
     }
 
     const std::vector<std::string> missing = missingFloorItems(probe);
-    const std::string report = writeReport(probe, missing);
+    const FsrReport gbv = probe.fsrGbv.finished ? probe.fsrGbv.report : unfinishedFsr(probe.fsrGbv);
+    const FsrReport noGbv = probe.fsrNoGbv.finished ? probe.fsrNoGbv.report : unfinishedFsr(probe.fsrNoGbv);
+    const std::string report = writeReport(probe, missing, gbv, noGbv);
     std::fwrite(report.data(), 1, report.size(), stdout);
     std::fputc('\n', stdout);
     std::fflush(stdout);
 
-    if (probe.infoQueue1Callback)
+    if (probe.infoQueue1Callback && fsrFinished)
     {
         probe.infoQueue1.p->UnregisterMessageCallback(probe.callbackCookie);
+    }
+    if (probe.noGbvCallbackResult && SUCCEEDED(*probe.noGbvCallbackResult) && fsrFinished)
+    {
+        probe.noGbvInfoQueue1.p->UnregisterMessageCallback(probe.noGbvCookie);
     }
 
     const bool appLocal = warpAppLocal(probe);
@@ -1252,9 +2130,13 @@ int main()
         appLocal ? "yes" : "no",
         core != nullptr ? utf8(core->path).c_str() : "not loaded"
     );
-    if (probe.device.p == nullptr)
+    printFsrSummary("fsr (GBV)", gbv);
+    printFsrSummary("fsr (no GBV)", noGbv);
+    const int code = probe.device.p == nullptr ? 2 : (missing.empty() && appLocal ? 0 : 1);
+    if (!fsrFinished)
     {
-        return 2;
+        std::fflush(stderr);
+        TerminateProcess(GetCurrentProcess(), static_cast<UINT>(code));
     }
-    return missing.empty() && appLocal ? 0 : 1;
+    return code;
 }
