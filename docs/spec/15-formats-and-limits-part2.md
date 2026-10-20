@@ -74,7 +74,9 @@ Notes on the floor:
 - `maxViews` counts slots a caller can hold. On D3D12 every buffer also takes one raw
   shader-resource slot, and one unordered-access slot for `ShaderWrite`, in the same heap (see
   [memory and buffers](03-memory-and-buffers.md)), so many small buffers reduce the views
-  available; few large buffers with suballocation avoid that.
+  available; few large buffers with suballocation avoid that. On D3D12 the held slots 0 and 1 and
+  the transient ring (`framesInFlight` × 1,024 slots) sit outside `maxViews`, which is the view
+  heap size minus them.
 - `maxSamplers` is the Metal 4 value on Apple7 and Apple8, below D3D12's 2,048; inline samplers in
   Metal shaders count toward it. A device reports its own, larger value where it has one.
 - `rootAlignment` and `frameDataAlignment` are 256 everywhere because a D3D12 root constant
