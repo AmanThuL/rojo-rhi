@@ -22,7 +22,7 @@ Tile shapes come from the backend per format and sample count. Accessing an unma
 fault: reads return undefined values and writes are discarded. A tile newly mapped onto heap memory
 holds that memory's contents, so its first use follows the aliasing rule of
 [synchronization](09-synchronization.md): a barrier from `Layout::Undefined` for a texture, a global
-barrier for a buffer.
+barrier for a buffer (`VU-rojo-sparse-0014`).
 
 ### `TileShape`
 ```cpp
@@ -144,6 +144,10 @@ that only it kept alive may then be destroyed.
   complete, or ordered against the mapping by fences, before the mapping executes. Ordering through
   an earlier submission on the same queue, and completion the CPU observed through a fence, count
   as orderings by a fence. Checked by the validation tracker.
+- `VU-rojo-sparse-0014` The first use of a tile that `Queue::mapTiles` newly mapped onto heap
+  memory is, for a texture, a texture barrier from `Layout::Undefined` over the subresource that
+  holds it, and, for a buffer, ordered after the mapping by a global barrier whose destination
+  covers that use. Checked by the validation tracker.
 #### Mapping
 | | Metal 4 | D3D12 | Vulkan |
 |---|---|---|---|
