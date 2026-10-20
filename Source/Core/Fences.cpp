@@ -52,6 +52,8 @@ namespace rojoRHI::core {
     {
         // One native call for each wait and signal; the backend counts the submissions it commits.
         DeviceCounts::add(core.counts().nativeSubmitCalls, wait.size() + signal.size());
+#ifndef NDEBUG
+        // The records are read only for the checks, which Release leaves out, so Release takes no pool lock here (ADR 0020).
         for (const FenceValue& entry : wait)
         {
             [[maybe_unused]] const FenceRecord record = snapshot(core, entry.fence);
@@ -93,11 +95,19 @@ namespace rojoRHI::core {
                 record.submitted
             );
         }
+#endif
     }
 
     //==================================================================================================================
     void recordSignals(DeviceCore& core, std::span<const FenceValue> signal, SignalCompletion completion)
     {
+#ifdef NDEBUG
+        // Only the checks read the submitted value, so Release records a signal only where it also completes it.
+        if (completion == SignalCompletion::Later)
+        {
+            return;
+        }
+#endif
         for (const FenceValue& entry : signal)
         {
             // One update raises both values, so a concurrent wait never sees a value submitted but not yet completed.
