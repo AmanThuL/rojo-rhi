@@ -282,8 +282,10 @@ TEST_CASE("setPipeline with a compute pipeline sets it at once and a dispatch af
     CHECK(binding.pipeline == &payload);
     CHECK(binding.computePipeline == payload.pso);
     CHECK(binding.graphicsPipeline == nullptr);
-    // The first dispatch also binds the root.
+    before = recordCalls(list);
     list.dispatch(1, 1, 1);
+    // The first dispatch also binds the root: SetComputeRootShaderResourceView and Dispatch.
+    CHECK(recordCalls(list) - before == 2u);
     before = recordCalls(list);
     list.setPipeline(pipeline);
     // The native list holds the pipeline already.
@@ -408,9 +410,11 @@ TEST_CASE("dispatchIndirect is one ExecuteIndirect after the flush", "[d3d12]")
     const MessageCollection messages;
     const Pipeline pipeline = oraclePipeline(device);
     const DispatchIndirectArgs groups{ 2, 3, 1 };
-    std::array<std::byte, sizeof(DispatchIndirectArgs)> record = {};
-    std::memcpy(record.data(), &groups, record.size());
-    const Buffer args = makeBuffer(device, { .size = sizeof(DispatchIndirectArgs), .usage = BufferUsage::IndirectArgs, .label = "test.args" }, record);
+    // The record sits at byte 16, after a zero record: an offset the call dropped would dispatch nothing.
+    constexpr uint64_t kRecordOffset = 16;
+    std::array<std::byte, kRecordOffset + sizeof(DispatchIndirectArgs)> record = {};
+    std::memcpy(record.data() + kRecordOffset, &groups, sizeof(groups));
+    const Buffer args = makeBuffer(device, { .size = record.size(), .usage = BufferUsage::IndirectArgs, .label = "test.args" }, record);
     const uint64_t cells = uint64_t{ 2 * kGroupX } * (3 * kGroupY) * kGroupZ;
     const Buffer output = outputBuffer(device, cells + 16);
     const Fence done = makeFence(device, "test.done");
@@ -419,11 +423,11 @@ TEST_CASE("dispatchIndirect is one ExecuteIndirect after the flush", "[d3d12]")
     list.setPipeline(pipeline);
     (void)list.pushRoot(rootOf(device, output, 2, 3));
     uint64_t before = recordCalls(list);
-    list.dispatchIndirect(device.address(args));
+    list.dispatchIndirect(device.address(args, kRecordOffset));
     // SetComputeRootShaderResourceView and ExecuteIndirect.
     CHECK(recordCalls(list) - before == 2u);
     before = recordCalls(list);
-    list.dispatchIndirect(device.address(args));
+    list.dispatchIndirect(device.address(args, kRecordOffset));
     // ExecuteIndirect alone.
     CHECK(recordCalls(list) - before == 1u);
     run(device, list, done);
