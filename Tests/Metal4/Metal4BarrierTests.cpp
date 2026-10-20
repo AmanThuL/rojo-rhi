@@ -508,6 +508,47 @@ TEST_CASE("visibility is Device for named accesses and none for an execution-onl
 }
 
 //======================================================================================================================
+TEST_CASE("a discard of a Sparse texture carries alias visibility", "[metal4]")
+{
+    Device device = *createDevice();
+    if (!device.capabilities().placementSparse)
+    {
+        destroyDevice(device);
+        SKIP("the device reports no sparse resources");
+    }
+    const TextureDesc plainDesc{ .format = Format::RGBA8Unorm, .extent = { 16, 16, 1 }, .usage = TextureUsage::Sampled, .label = "test.plain" };
+    const Texture plain = *device.createTexture(plainDesc);
+    const auto discardOf = [](Texture texture) {
+        return TextureBarrier{ .texture = texture,
+                               .srcStage = Stage::Copy,
+                               .dstStage = Stage::Copy,
+                               .dstAccess = Access::CopyWrite,
+                               .oldLayout = Layout::Undefined,
+                               .newLayout = Layout::CopyDst };
+    };
+    device.beginFrame();
+    std::vector<CommandList> lists;
+    const auto visibilityOf = [&](Texture texture) {
+        CommandList list = device.acquireCommandList(QueueType::Graphics, "test.list");
+        list.barrier({}, {}, std::array{ discardOf(texture) });
+        lists.push_back(list);
+        return barriersOf(list).pendingVisibility;
+    };
+    CHECK((visibilityOf(plain) & MTL4::VisibilityOptionResourceAlias) == 0);
+    const TextureDesc sparseDesc{
+        .format = Format::RGBA8Unorm, .extent = { 256, 256, 1 }, .usage = TextureUsage::Sampled | TextureUsage::Sparse, .label = "test.sparse"
+    };
+    const Texture sparse = *device.createTexture(sparseDesc);
+    CHECK((visibilityOf(sparse) & MTL4::VisibilityOptionResourceAlias) != 0);
+    for (CommandList list : lists)
+    {
+        list.end();
+    }
+    submitAndWait(device, lists);
+    destroyDevice(device);
+}
+
+//======================================================================================================================
 TEST_CASE("a global barrier adds ResourceAlias only while placed memory aliases", "[metal4]")
 {
     Device device = *createDevice();

@@ -112,6 +112,8 @@ buffer is `newBuffer(size, options, MTL::SparsePageSize64)` at its own length, w
 tile mapping like any other; a `Memory::Gpu` heap sets `setMaxCompatiblePlacementSparsePageSize`
 when the device supports placement sparse, since the validation layer refuses a mapping from a
 heap without it. Sparse textures and buffers join the residency set like any other resource.
+A barrier from `Undefined` on a sparse texture carries `MTL4::VisibilityOptionResourceAlias`, so a newly
+mapped tile's first use is ordered after whatever its heap memory held.
 
 `createTexture` stores the shape Metal measured, `measureTiles`, in the record's `tiles`, which
 `core::textureTileShape` returns unchanged: the tile extent from `sparseTileSize` for the texture's
