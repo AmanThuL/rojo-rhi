@@ -299,8 +299,6 @@ target("RojoRHITests")
             "IndirectHazardTests.cpp",
             "LifetimeDeathTests.cpp",
             "LifetimeTests.cpp",
-            "PipelineDeathTests.cpp",
-            "PipelineTests.cpp",
             "QueueHazardDeathTests.cpp",
             "QueueHazardTests.cpp",
             "RenderPassDeathTests.cpp",

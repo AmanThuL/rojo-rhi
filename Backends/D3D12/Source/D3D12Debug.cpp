@@ -33,11 +33,25 @@ namespace rojoRHI::d3d12 {
         /// Why the notices of object creation and destruction are dropped.
         constexpr std::string_view kObjectNotice = "one notice per native object's creation or destruction, not a diagnosis";
 
+        /// Why the pipeline library's outcomes are dropped.
+        constexpr std::string_view kCacheOutcome =
+            "an outcome the pipeline cache reads from the call's HRESULT: a name not stored yet, a name another creation stored "
+            "first, or a refused blob, which the cache reports as its one warning";
+
         /// The messages the router never forwards. A message is dropped only with a reason that holds for every use of the
-        /// library: here the per-object notices the runtime raises at information severity, which a run creating thousands of
-        /// objects would otherwise bury every diagnosis under. Every error, warning and application message passes, and so does a live-object report, which
-        /// diagnoses a leak.
-        constexpr std::array<FilteredMessage, 68> kFiltered = { {
+        /// library: the per-object notices the runtime raises at information severity, which a run creating thousands of
+        /// objects would otherwise bury every diagnosis under, and the outcomes of the pipeline library's calls, which only
+        /// the pipeline cache makes and which it handles. A look-up whose stored description differs from the one passed
+        /// (`LOADPIPELINE_INVALIDDESC`) is not dropped: the cache's key covers the whole description, so it shows a defect.
+        /// Every other error, warning and application message passes, and so does a live-object report, which diagnoses a
+        /// leak.
+        constexpr std::array<FilteredMessage, 74> kFiltered = { {
+            { D3D12_MESSAGE_ID_CREATEPIPELINELIBRARY_INVALIDLIBRARYBLOB, kCacheOutcome },
+            { D3D12_MESSAGE_ID_CREATEPIPELINELIBRARY_DRIVERVERSIONMISMATCH, kCacheOutcome },
+            { D3D12_MESSAGE_ID_CREATEPIPELINELIBRARY_ADAPTERVERSIONMISMATCH, kCacheOutcome },
+            { D3D12_MESSAGE_ID_CREATEPIPELINELIBRARY_UNSUPPORTED, kCacheOutcome },
+            { D3D12_MESSAGE_ID_STOREPIPELINE_DUPLICATENAME, kCacheOutcome },
+            { D3D12_MESSAGE_ID_LOADPIPELINE_NAMENOTFOUND, kCacheOutcome },
             { D3D12_MESSAGE_ID_CREATE_COMMANDQUEUE, kObjectNotice },
             { D3D12_MESSAGE_ID_CREATE_COMMANDALLOCATOR, kObjectNotice },
             { D3D12_MESSAGE_ID_CREATE_PIPELINESTATE, kObjectNotice },

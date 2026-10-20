@@ -17,6 +17,7 @@
 #include "D3D12Fences.h"
 #include "D3D12ListState.h"
 #include "D3D12Loader.h"
+#include "D3D12PipelineCache.h"
 #include "D3D12RootSignature.h"
 #include "D3D12Stager.h"
 
@@ -93,6 +94,7 @@ namespace rojoRHI {
         d3d12::HeapDirectory directory;       ///< The buffer of each raw SRV, by view-heap index.
         d3d12::RootSignatures roots;          ///< The root and command signatures every pipeline shares.
         d3d12::Stager stager;                 ///< Copies initial data on the internal upload queue.
+        d3d12::PipelineCache pipelineCache;   ///< The pipeline library every pipeline creation looks up first.
         d3d12::ListPools lists;               ///< The command lists of each frame slot.
         std::string adapterName;              ///< The storage `Capabilities::adapterName` views.
         std::string floorName;                ///< The storage `Capabilities::floorName` views.
