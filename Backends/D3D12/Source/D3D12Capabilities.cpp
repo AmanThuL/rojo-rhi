@@ -159,7 +159,7 @@ namespace rojoRHI::d3d12 {
         Capabilities& capabilities = impl.core.capabilities();
         capabilities.adapterName = impl.adapterName;
         capabilities.floorName = impl.floorName;
-        capabilities.maxViews = impl.descriptors.viewCapacity();
+        capabilities.maxViews = impl.descriptors.viewSlots();
         capabilities.maxSamplers = impl.descriptors.samplerCapacity();
         capabilities.uploadInDeviceMemory = impl.features.gpuUploadHeap;
         capabilities.placementSparse = false;
