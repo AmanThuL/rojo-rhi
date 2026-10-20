@@ -11,6 +11,11 @@
 #include <string>
 #include <string_view>
 
+// The Objective-C runtime's pool entries, which clang emits for @autoreleasepool: a push returns a boundary token and a pop
+// releases every object autoreleased since it. A pushed pool allocates nothing, unlike an NSAutoreleasePool object.
+extern "C" void* objc_autoreleasePoolPush(void);
+extern "C" void objc_autoreleasePoolPop(void* boundary);
+
 namespace rojoRHI::metal4 {
     /// An autorelease pool for the scope that holds it. Every entry that calls an autoreleasing factory opens one for its body,
     /// and every function that releases Metal objects opens one before it releases them.
@@ -24,7 +29,7 @@ namespace rojoRHI::metal4 {
         AutoreleasePool& operator=(const AutoreleasePool&) = delete;
 
       private:
-        NS::AutoreleasePool* m_pool = nullptr;
+        void* m_boundary; ///< The token `objc_autoreleasePoolPush` returned.
     };
 
     /// The autorelease pools the calling thread has opened through `AutoreleasePool` and `CommandPool`. A recording entry that
@@ -42,10 +47,22 @@ namespace rojoRHI::metal4 {
         return opened;
     }
 
+    //==================================================================================================================
+    inline AutoreleasePool::AutoreleasePool() : m_boundary(objc_autoreleasePoolPush())
+    {
+        ++poolsOpened();
+    }
+
+    //==================================================================================================================
+    inline AutoreleasePool::~AutoreleasePool()
+    {
+        objc_autoreleasePoolPop(m_boundary);
+    }
+
     /// An autorelease pool for one native command, opened only when `open` is true. The Metal validation layer autoreleases
     /// objects inside the commands it checks, and without it those commands autorelease nothing, so a device passes whether
-    /// its commands may autorelease (`DeviceImpl::commandPools`, `commandsMayAutorelease`). With `open` false the object is one untaken branch. Entries that
-    /// call an autoreleasing factory use `AutoreleasePool`, which always opens one.
+    /// its commands may autorelease (`DeviceImpl::commandPools`, `commandsMayAutorelease`). With `open` false the object is
+    /// one untaken branch. Entries that call an autoreleasing factory use `AutoreleasePool`, which always opens one.
     class CommandPool
     {
       public:
@@ -53,7 +70,7 @@ namespace rojoRHI::metal4 {
         {
             if (open)
             {
-                m_pool = NS::AutoreleasePool::alloc()->init();
+                m_boundary = objc_autoreleasePoolPush();
                 ++poolsOpened();
                 ++commandPoolsOpened();
             }
@@ -61,9 +78,9 @@ namespace rojoRHI::metal4 {
 
         ~CommandPool()
         {
-            if (m_pool != nullptr)
+            if (m_boundary != nullptr)
             {
-                m_pool->release();
+                objc_autoreleasePoolPop(m_boundary);
             }
         }
 
@@ -71,7 +88,7 @@ namespace rojoRHI::metal4 {
         CommandPool& operator=(const CommandPool&) = delete;
 
       private:
-        NS::AutoreleasePool* m_pool = nullptr;
+        void* m_boundary = nullptr; ///< The token `objc_autoreleasePoolPush` returned; null when no pool was opened.
     };
 
     /// Returns whether a native command may autorelease, which is every case but one: the device's class name is positively a

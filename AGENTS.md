@@ -188,7 +188,7 @@ recording](docs/architecture/null-backend-recording.md)).
   until it is real. The Null backend is test-only and implements every chapter (ADR 0008).
 - Every check lives in `Source/Core`; a backend entry calls the core's check first, then
   translates, and holds no `ROJORHI_VU`. A Metal 4 entry that calls an autoreleasing factory opens
-  an `NS::AutoreleasePool`, and so does every retire hook ([Metal 4 backend](
+  an autorelease pool, and so does every retire hook ([Metal 4 backend](
   docs/architecture/metal4-backend.md)).
 - Rules for v2 work: the v2 interface is address-first and has no binding slots (ADR 0007); it is
   a C++23 subset with one backend per build, chosen by an xmake option, and no virtual interfaces

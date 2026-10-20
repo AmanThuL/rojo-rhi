@@ -83,8 +83,16 @@ namespace rojoRHI {
         {
             // The Metal validation layer autoreleases in a draw it checks, so the draw holds a pool, as a kernel dispatch does.
             const metal4::CommandPool pool(list.state.commandPools);
-            // Base instance 0: rojoRHI::drawId reads it in the vertex stage, and firstInstance is invisible to shaders.
-            encoder->drawPrimitives(list.draw.topology, firstVertex, vertices, instances, 0);
+            // Base instance 0: rojoRHI::drawId reads it in the vertex stage, and firstInstance is invisible to shaders. The
+            // shortest form that says so is sent: one instance, else the instance count, with base instance 0 either way.
+            if (instances == 1)
+            {
+                encoder->drawPrimitives(list.draw.topology, firstVertex, vertices);
+            }
+            else
+            {
+                encoder->drawPrimitives(list.draw.topology, firstVertex, vertices, instances);
+            }
         }
         core::noteNativeCall(list.core);
         list.encoders.markWork();
@@ -110,9 +118,21 @@ namespace rojoRHI {
         {
             // The validation layer autoreleases in a draw it checks.
             const metal4::CommandPool pool(list.state.commandPools);
-            encoder->drawIndexedPrimitives(
-                list.draw.topology, count, metal4::indexType(type), buffer.address + offset, buffer.length - offset, instances, baseVertex, 0
-            );
+            // The shortest form that says the same is sent: one instance and base vertex 0, base vertex 0, or both values with
+            // base instance 0.
+            const MTL::IndexType native = metal4::indexType(type);
+            if (baseVertex != 0)
+            {
+                encoder->drawIndexedPrimitives(list.draw.topology, count, native, buffer.address + offset, buffer.length - offset, instances, baseVertex, 0);
+            }
+            else if (instances == 1)
+            {
+                encoder->drawIndexedPrimitives(list.draw.topology, count, native, buffer.address + offset, buffer.length - offset);
+            }
+            else
+            {
+                encoder->drawIndexedPrimitives(list.draw.topology, count, native, buffer.address + offset, buffer.length - offset, instances);
+            }
         }
         core::noteNativeCall(list.core);
         list.encoders.markWork();

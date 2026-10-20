@@ -52,9 +52,9 @@ namespace rojoRHI::metal4 {
         size_t groupCursor = 0;              ///< How many scopes and passes the current recording has begun.
 
         /// Creates the allocator, the command buffer, the argument table and the kernel table on `device`, binding the view
-        /// table at `viewTableAddress` to `buffer(1)` and the sampler table at `samplerTableAddress` to `buffer(2)` (ADR 0018). `perCommandPools` is stored as
-        /// the list's `commandPools` and `labelEncoders` as its `encoderLabels`. On failure it releases what it created and names
-        /// the object Metal did not make.
+        /// table at `viewTableAddress` to `buffer(1)` and the sampler table at `samplerTableAddress` to `buffer(2)` (ADR
+        /// 0018). `perCommandPools` is stored as the list's `commandPools` and `labelEncoders` as its `encoderLabels`. On
+        /// failure it releases what it created and names the object Metal did not make.
         Result<void> create(MTL::Device* device, uint64_t viewTableAddress, uint64_t samplerTableAddress, bool perCommandPools, bool labelEncoders);
 
         /// Releases every object that exists, in reverse order of creation, and clears each pointer. The caller holds an

@@ -263,17 +263,17 @@ take no lock: a claim is an atomic add and a heap is published by a compare-exch
 
 ## Autorelease pools
 
-Every entry that calls an autoreleasing factory opens an `NS::AutoreleasePool` and retains what it
-keeps, as does every retire hook and destructor of an object that holds Metal references. The native
-commands (copies, the native fill, each kernel dispatch, dispatch and draw, a command buffer
-timestamp and the end of a render encoder) autorelease only inside the validation layer, which wraps
-the device in a debug class. `createDevice` decides once from the class name of the `MTL::Device`
-(`metal4::commandsMayAutorelease`) and keeps `DeviceImpl::commandPools`, copied into each list.
-Detection fails closed: only a bare driver class name (prefix `AGX`) turns pools off; any other,
-null or a wrapper included, opens them. Commands open a `metal4::CommandPool` on it. A label is +1,
-but the driver reads its text through an autoreleased container, so each call that passes one (a
-list's new label, scope and pass groups, encoder opens) has a pool whatever the flag. `new*` objects
-are +1, released once; an `NS::Error*` is reset before each call.
+Every entry that calls an autoreleasing factory opens a pool (`objc_autoreleasePoolPush`) and
+retains what it keeps, as does every retire hook and destructor that holds Metal references. The
+native commands (copies, the native fill, each kernel dispatch, dispatch and draw, a command buffer
+timestamp and the end of a render encoder) autorelease per call only inside the validation layer,
+which wraps the device in a debug class. `createDevice` decides once from the class name of the
+`MTL::Device` (`metal4::commandsMayAutorelease`) and keeps `DeviceImpl::commandPools`, copied into
+each list. Detection fails closed: only a bare driver class name (prefix `AGX`) turns pools off; any
+other, null or a wrapper included, opens them. Commands open a `metal4::CommandPool` on it. A label
+is +1, but the driver reads its text through an autoreleased container, so each call that passes one
+(a list's new label, scope and pass groups, encoder opens) has a pool whatever the flag. `new*`
+objects are +1, released once; an `NS::Error*` is reset before each call.
 
 ## Tests
 

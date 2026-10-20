@@ -16,7 +16,7 @@
 
 namespace rojoRHI::metal4 {
     //==================================================================================================================
-    MTL4::ComputeCommandEncoder* Encoders::compute(core::CommandListCore& list, ListState& state, MTL::Stages command, bool kernelsOnly)
+    MTL4::ComputeCommandEncoder* Encoders::prepareCompute(core::CommandListCore& list, ListState& state, MTL::Stages command, bool kernelsOnly)
     {
         if (m_lingering)
         {
@@ -76,7 +76,7 @@ namespace rojoRHI::metal4 {
     //==================================================================================================================
     void Encoders::waitCarry(core::CommandListCore& list, MTL::Stages command)
     {
-        if (m_carryWaited || m_kernelsOnly || m_carryFence == nullptr || (command & MTL::StageDispatch) == 0)
+        if (!owesCarryWait(command))
         {
             return;
         }

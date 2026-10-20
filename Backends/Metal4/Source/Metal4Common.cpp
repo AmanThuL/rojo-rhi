@@ -20,18 +20,6 @@
 
 namespace rojoRHI::metal4 {
     //==================================================================================================================
-    AutoreleasePool::AutoreleasePool() : m_pool(NS::AutoreleasePool::alloc()->init())
-    {
-        ++poolsOpened();
-    }
-
-    //==================================================================================================================
-    AutoreleasePool::~AutoreleasePool()
-    {
-        m_pool->release();
-    }
-
-    //==================================================================================================================
     bool commandsMayAutorelease(const MTL::Device* device)
     {
         const char* name = object_getClassName(reinterpret_cast<id>(const_cast<MTL::Device*>(device)));
