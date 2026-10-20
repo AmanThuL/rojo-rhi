@@ -141,12 +141,12 @@ TEST_CASE("fill parameters take arena space but count as no frame data upload", 
     const Counters before = device.counters();
     CommandList list = device.acquireCommandList(QueueType::Graphics, "test.list");
     const core::CommandListCore& listCore = core::coreOf(list);
-    CHECK(listCore.pageUsed == 0);
+    CHECK(core::pageUsedBytes(listCore) == 0);
     list.fillBuffer(buffer, 0, 256, 0x11223344u);
-    CHECK(listCore.pageUsed >= 8);
-    const uint64_t used = listCore.pageUsed;
+    CHECK(core::pageUsedBytes(listCore) >= 8);
+    const uint64_t used = core::pageUsedBytes(listCore);
     list.fillBuffer(buffer, 0, 128, 0x55667788u);
-    CHECK(listCore.pageUsed > used);
+    CHECK(core::pageUsedBytes(listCore) > used);
     CHECK(countsOf(list).frameDataUploads == 0);
     CHECK(countsOf(list).frameArenaBytes == 0);
     finish(device, list);

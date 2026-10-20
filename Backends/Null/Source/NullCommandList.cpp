@@ -19,19 +19,37 @@
 #include "Core/RenderPasses.h"
 #include "Core/Upscalers.h"
 
-#include <cstdlib>
 #include <cstring>
 #include <format>
+#include <new>
 #include <utility>
 
 namespace rojoRHI {
+    //==================================================================================================================
+    std::byte* allocateHostMemory(uint64_t size)
+    {
+        void* const memory = ::operator new(size, std::align_val_t{ core::kArenaPageAlignment }, std::nothrow);
+        if (memory != nullptr)
+        {
+            std::memset(memory, 0, size);
+        }
+        return static_cast<std::byte*>(memory);
+    }
+
+    //==================================================================================================================
+    void freeHostMemory(void* memory)
+    {
+        ::operator delete(memory, std::align_val_t{ core::kArenaPageAlignment });
+    }
+
     //==================================================================================================================
     Result<core::ArenaPage> createArenaPage(void* context, uint64_t size)
     {
         core::DeviceCore& core = *static_cast<core::DeviceCore*>(context);
         const BufferDesc desc{ .size = size, .memory = Memory::Upload, .usage = BufferUsage::IndirectArgs, .label = "rojorhi.frameArena.page" };
         core::BufferRecord record = core::prepareBuffer(core, desc, {}, {}, {});
-        auto* host = static_cast<std::byte*>(std::calloc(size, 1));
+        // A page's host memory is aligned to kArenaPageAlignment, so the cursor rounds like the offset.
+        std::byte* const host = allocateHostMemory(size);
         if (host == nullptr)
         {
             return std::unexpected(Error{ ErrorCategory::OutOfMemory, std::format("no host memory for {} bytes of a frame arena page", size) });
@@ -40,7 +58,7 @@ namespace rojoRHI {
         Result<Buffer> page = core::addFrameArenaPage(core, std::move(record));
         if (!page)
         {
-            std::free(host);
+            freeHostMemory(host);
             return std::unexpected(std::move(page.error()));
         }
         core::DeviceCounts::add(core.counts().cpuAllocations);

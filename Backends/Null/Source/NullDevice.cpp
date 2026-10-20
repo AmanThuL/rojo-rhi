@@ -111,7 +111,7 @@ namespace rojoRHI {
         /// Frees the host memory of a retiring buffer; a Device buffer holds none.
         void retireBuffer(void*, core::BufferRecord& record)
         {
-            std::free(record.native);
+            freeHostMemory(record.native);
             record.native = nullptr;
         }
 
@@ -305,7 +305,7 @@ namespace rojoRHI {
         std::byte* host = nullptr;
         if (desc.memory != Memory::Gpu)
         {
-            host = static_cast<std::byte*>(std::calloc(desc.size, 1));
+            host = allocateHostMemory(desc.size);
             if (host == nullptr)
             {
                 return std::unexpected(
@@ -321,7 +321,7 @@ namespace rojoRHI {
         Result<Buffer> buffer = core::addBuffer(impl.core, std::move(record));
         if (!buffer)
         {
-            std::free(host);
+            freeHostMemory(host);
             return buffer;
         }
         if (host != nullptr)
