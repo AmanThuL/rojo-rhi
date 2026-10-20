@@ -85,6 +85,27 @@ TEST_CASE("completedValue reports what the event has reached once the GPU signal
 }
 
 //======================================================================================================================
+TEST_CASE("a Release build records no submitted fence value, which only the checks read", "[metal4]")
+{
+    Device device = *createDevice();
+    const Fence fence = *device.createFence(0, "test.fence");
+    const std::array<FenceValue, 1> signal{ FenceValue{ fence, 5 } };
+    signalOn(device, QueueType::Compute, signal);
+    REQUIRE(eventOf(device, fence)->waitUntilSignaledValue(5, 10'000));
+    uint64_t submitted = 0;
+    DeviceImpl::of(device).core.pool<Fence>().update(fence, [&](const core::FenceRecord& record) { submitted = record.submitted; });
+#ifdef NDEBUG
+    // Neither checkSubmit nor recordSignals touched the record: Release takes no fence pool lock to submit.
+    CHECK(submitted == 0);
+#else
+    CHECK(submitted == 5);
+#endif
+    // The completed value, which Release reads, still comes from the event.
+    CHECK(device.completedValue(fence) == 5);
+    destroyDevice(device);
+}
+
+//======================================================================================================================
 TEST_CASE("submit commits the residency set only when an allocation joined or left it", "[metal4]")
 {
     Device device = *createDevice({ .framesInFlight = 2 });

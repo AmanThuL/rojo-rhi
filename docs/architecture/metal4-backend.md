@@ -166,11 +166,11 @@ so every backend rejects the same descriptors.
 
 A fence is an `MTL::SharedEvent` created at its initial value and labelled. `Queue::submit` runs the
 core's list checks, then under the tracker's lock checks the fences, replays the lists, commits the
-residency set when dirty, records the signals as completing later, calls `MTL4::CommandQueue::wait`
-for each wait, commits the lists' command buffers in one `commit` and calls `signalEvent` for each
-signal. `completedValue` reads the event and reports it to the core; `Device::wait` follows chapter
-10: zero polls, an unlimited wait loops in 10 s slices that each log a warning with the fence's
-label, a finite one rounds up to milliseconds.
+residency set when dirty, records the signals as completing later (Debug only: only checks read
+them), calls `MTL4::CommandQueue::wait` for each wait, commits the lists' command buffers in one
+`commit` and calls `signalEvent` for each signal. `completedValue` reports the event's value to the
+core; `Device::wait` follows chapter 10: zero polls, an unlimited wait loops in 10 s slices that
+each log a warning with the fence's label, a finite one rounds up to milliseconds.
 
 A fence's native event must outlive every submission that names it. `Device::destroy` defers its
 release to a frame slot's retirement, whose wait covers each earlier graphics submission and each
