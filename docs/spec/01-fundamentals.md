@@ -219,7 +219,7 @@ An object handle carries no generation, so using one after its object is destroy
 #### Mapping
 | | Metal 4 | D3D12 | Vulkan |
 |---|---|---|---|
-| `Device` | `MTL::Device` | `ID3D12Device10` (Agility SDK 1.619) | `VkDevice` |
+| `Device` | `MTL::Device` | `ID3D12Device12` (Agility SDK 1.619) | `VkDevice` |
 | `Queue` | `MTL4::CommandQueue` | `ID3D12CommandQueue` | `VkQueue` |
 | `CommandList` | `MTL4::CommandBuffer` with a per-frame `MTL4::CommandAllocator` | `ID3D12GraphicsCommandList9`, for `RSSetDepthBias`, with a per-frame `ID3D12CommandAllocator` | `VkCommandBuffer` from a per-frame `VkCommandPool` |
 | `Swapchain` | `CA::MetalLayer` | `IDXGISwapChain4` | `VkSwapchainKHR` |
