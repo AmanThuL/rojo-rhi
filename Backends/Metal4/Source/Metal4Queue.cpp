@@ -110,9 +110,15 @@ namespace rojoRHI {
             {
                 queue.native->signalEvent(static_cast<const MTL::SharedEvent*>(core.pool<Fence>().native(entry.fence)), entry.value);
             }
-            if (!wait.empty() || !signal.empty())
+            // A frame's retirement covers every graphics submission made before its end and, as the frame joins them through a
+            // signal (VU-rojo-device-0006), the compute and copy submissions with lists and at most one signal, which only an
+            // open frame makes: the join orders all of such a submission's native calls. A fence-only compute or copy
+            // submission joins no frame, and a join through one of several signals leaves the later signals unordered, so
+            // after either the queue signals its progress: a destroyed fence's event is kept until the queue passes this point.
+            // The signal is a native queue call.
+            const bool joined = !lists.empty() && signal.size() <= 1;
+            if (queue.type != QueueType::Graphics && !joined && (!wait.empty() || !signal.empty()))
             {
-                // A destroyed fence's event is kept until the queue passes this point; the signal is a native queue call.
                 const uint64_t progress = queue.progressValue.load(std::memory_order_relaxed) + 1;
                 queue.progressValue.store(progress, std::memory_order_relaxed);
                 queue.native->signalEvent(queue.progress, progress);

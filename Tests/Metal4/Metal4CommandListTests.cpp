@@ -144,8 +144,8 @@ TEST_CASE("submit commits the lists' command buffers and their signal completes 
     const Counters before = device.counters();
     device.queue(QueueType::Graphics).submit(lists, {}, signal);
     const Counters after = device.counters();
-    // One commit of the three command buffers, the fence's signal and the queue's progress signal.
-    CHECK(after.nativeSubmitCalls == before.nativeSubmitCalls + 3);
+    // One commit of the three command buffers and the fence's signal; a submission with lists signals no queue progress.
+    CHECK(after.nativeSubmitCalls == before.nativeSubmitCalls + 2);
     CHECK(device.wait({ fence, 1 }, UINT64_MAX));
     // A submission with no list commits nothing.
     device.queue(QueueType::Graphics).submit({});

@@ -149,7 +149,7 @@ TEST_CASE("a copy and a Copy-to-Copy global barrier are two native calls and one
 }
 
 //======================================================================================================================
-TEST_CASE("a submission of one list signalling one fence is three native submit calls", "[metal4]")
+TEST_CASE("a submission of one list signalling one fence is two native submit calls", "[metal4]")
 {
     Fixture fixture;
     // K lists of one copy each are recorded first; the submissions alone are counted.
@@ -178,6 +178,6 @@ TEST_CASE("a submission of one list signalling one fence is three native submit 
     const uint64_t low = submitCount(kSubmitLow);
     const uint64_t high = submitCount(kLow);
     REQUIRE((high - low) % (kLow - kSubmitLow) == 0);
-    // The commit, the fence signal and the queue's progress signal.
-    CHECK((high - low) / (kLow - kSubmitLow) == 3);
+    // The commit and the fence signal; a submission with lists signals no queue progress.
+    CHECK((high - low) / (kLow - kSubmitLow) == 2);
 }

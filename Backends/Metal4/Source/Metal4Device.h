@@ -40,18 +40,21 @@ namespace rojoRHI {
     struct DeviceImpl;
 
     /// The Metal 4 backend's queue: its type, the device that owns it, which is how a queue used with another device is told
-    /// apart, the native queue it submits to, and a progress event only it signals: after each submission that names a fence,
-    /// and before and after the native updates of each tile mapping call. A native queue does not retain the events it waits
-    /// on or signals, so a destroyed fence's event is kept until every queue's progress passes the value it had at the
-    /// destruction (`metal4::releasePassedFences`).
+    /// apart, the native queue it submits to, and a progress event only it signals: on the compute and copy queues after each
+    /// submission that names a fence and has no lists or more than one signal, and on every queue before and after the native
+    /// updates of each tile mapping call. A native queue does not retain the events it waits on or signals. A fence's event
+    /// lives until its frame slot retires, which covers every graphics submission and every submission with lists and at most
+    /// one signal made before the fence's destruction; a destroyed fence's event is kept beyond that until every queue's
+    /// progress passes the value it had at the destruction (`metal4::releasePassedFences`), which covers the rest.
     struct QueueImpl
     {
         DeviceImpl* device = nullptr;         ///< The device that owns the queue.
         QueueType type = QueueType::Graphics; ///< The queue's type.
         MTL4::CommandQueue* native = nullptr; ///< The native queue, owned by the device.
-        /// Signalled by this queue alone, each time with the next progress value: after each submission that names a fence, and
-        /// before and after the native updates of each `mapTiles` call, each of those two signals followed by a wait on the
-        /// queue for it, which orders the updates against the queue's other work.
+        /// Signalled by this queue alone, each time with the next progress value: on the compute and copy queues after each
+        /// submission that names a fence and has no lists or more than one signal, and before and after the native updates of
+        /// each `mapTiles` call, each of those two signals followed by a wait on the queue for it, which orders the updates
+        /// against the queue's other work.
         MTL::SharedEvent* progress = nullptr;
         /// The last value submitted for signal on `progress`. Only `submit` and `mapTiles`, which the caller serialises per
         /// queue, write it; a fence's destruction reads it, after the submissions that named the fence.

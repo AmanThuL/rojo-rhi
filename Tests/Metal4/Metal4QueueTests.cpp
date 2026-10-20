@@ -9,6 +9,7 @@
 #include "Metal4Device.h"
 
 #include <catch2/catch_test_macros.hpp>
+#include <catch2/generators/catch_generators.hpp>
 
 #include <Metal/Metal.hpp>
 
@@ -358,5 +359,168 @@ TEST_CASE("fences destroyed without any frame keep a bounded number of events", 
         greatest = std::max(greatest, impl.retiringEvents.size());
     }
     CHECK(greatest <= 1);
+    destroyDevice(device);
+}
+
+//======================================================================================================================
+TEST_CASE("a fence-only submission signals queue progress on the compute and copy queues only", "[metal4]")
+{
+    const QueueType type = GENERATE(QueueType::Graphics, QueueType::Compute, QueueType::Copy);
+    CAPTURE(type);
+    Device device = *createDevice();
+    DeviceImpl& impl = DeviceImpl::of(device);
+    const Fence fence = *device.createFence(0, "test.fence");
+    const std::array<FenceValue, 1> signal{ FenceValue{ fence, 1 } };
+    const Counters before = device.counters();
+    signalOn(device, type, signal);
+    const uint64_t progress = type == QueueType::Graphics ? 0 : 1;
+    // The signal, then the progress signal of a queue no frame joins outside its lists.
+    CHECK(device.counters().nativeSubmitCalls == before.nativeSubmitCalls + 1 + progress);
+    CHECK(impl.queues[static_cast<size_t>(type)].progressValue.load() == progress);
+    CHECK(device.wait({ fence, 1 }, UINT64_MAX));
+    destroyDevice(device);
+}
+
+//======================================================================================================================
+TEST_CASE("submissions with lists signal no queue progress, whatever fences they name", "[metal4]")
+{
+    Device device = *createDevice();
+    DeviceImpl& impl = DeviceImpl::of(device);
+    const Fence computeDone = *device.createFence(0, "test.computeDone");
+    const Fence graphicsDone = *device.createFence(0, "test.graphicsDone");
+    device.beginFrame();
+    CommandList compute = device.acquireCommandList(QueueType::Compute, "test.compute");
+    compute.end();
+    CommandList graphics = device.acquireCommandList(QueueType::Graphics, "test.graphics");
+    graphics.end();
+    const std::array<CommandList, 1> computeLists{ compute };
+    const std::array<CommandList, 1> graphicsLists{ graphics };
+    const std::array<FenceValue, 1> computeSignal{ FenceValue{ computeDone, 1 } };
+    const std::array<FenceValue, 1> graphicsSignal{ FenceValue{ graphicsDone, 1 } };
+    const Counters before = device.counters();
+    device.queue(QueueType::Compute).submit(computeLists, {}, computeSignal);
+    const Counters computed = device.counters();
+    // The graphics submission joins the frame's compute work.
+    device.queue(QueueType::Graphics).submit(graphicsLists, computeSignal, graphicsSignal);
+    const Counters joined = device.counters();
+    device.endFrame();
+    // The commit and the signal, then the wait, the commit and the signal.
+    CHECK(computed.nativeSubmitCalls == before.nativeSubmitCalls + 2);
+    CHECK(joined.nativeSubmitCalls == computed.nativeSubmitCalls + 3);
+    for (const QueueImpl& queue : impl.queues)
+    {
+        CHECK(queue.progressValue.load() == 0);
+    }
+    CHECK(device.wait({ graphicsDone, 1 }, UINT64_MAX));
+    destroyDevice(device);
+}
+
+//======================================================================================================================
+TEST_CASE("a fence a frame's compute lists signal, destroyed in the frame, keeps its event until the frame retires", "[metal4]")
+{
+    Device device = *createDevice({ .framesInFlight = 2 });
+    DeviceImpl& impl = DeviceImpl::of(device);
+    const Fence fence = *device.createFence(0, "test.fence");
+    MTL::SharedEvent* event = eventOf(device, fence);
+    // The test's own reference, so the value reached can be read after the fence retires.
+    event->retain();
+    MTL::SharedEvent* raw = impl.device->newSharedEvent();
+    REQUIRE(raw != nullptr);
+    // The compute queue cannot run the frame's submission before the test releases it.
+    impl.queues[static_cast<size_t>(QueueType::Compute)].native->wait(raw, 1);
+    device.beginFrame();
+    CommandList list = device.acquireCommandList(QueueType::Compute, "test.list");
+    list.end();
+    const std::array<CommandList, 1> lists{ list };
+    // The submission's one signal is the one the frame joins through, so the join orders all its native calls.
+    const std::array<FenceValue, 1> signal{ FenceValue{ fence, 1 } };
+    device.queue(QueueType::Compute).submit(lists, {}, signal);
+    device.queue(QueueType::Graphics).submit({}, signal);
+    device.destroy(fence);
+    device.endFrame();
+    device.beginFrame();
+    device.endFrame();
+    // The fence retires with the first frame, which the held compute queue keeps from completing: no event is kept beside
+    // the fence's own reference.
+    {
+        std::lock_guard lock(impl.retiringMutex);
+        CHECK(impl.retiringEvents.empty());
+    }
+    CHECK(impl.core.pool<Fence>().native(fence) == event);
+    CHECK(event->signaledValue() == 0);
+    raw->setSignaledValue(1);
+    // The third frame waits for the first, whose graphics work waited for the compute signal, then retires the fence.
+    device.beginFrame();
+    CHECK(event->signaledValue() == 1);
+    CHECK(impl.core.pool<Fence>().native(fence) == nullptr);
+    device.endFrame();
+    destroyDevice(device);
+    const metal4::AutoreleasePool pool;
+    event->release();
+    raw->release();
+}
+
+//======================================================================================================================
+TEST_CASE("a fence a graphics submission outside a frame signals keeps its event until the next frame retires", "[metal4]")
+{
+    Device device = *createDevice({ .framesInFlight = 2 });
+    DeviceImpl& impl = DeviceImpl::of(device);
+    const Fence fence = *device.createFence(0, "test.fence");
+    MTL::SharedEvent* event = eventOf(device, fence);
+    // The test's own reference, so the value reached can be read after the fence retires.
+    event->retain();
+    MTL::SharedEvent* raw = impl.device->newSharedEvent();
+    REQUIRE(raw != nullptr);
+    // The graphics queue cannot signal the fence before the test releases it.
+    impl.queues[static_cast<size_t>(QueueType::Graphics)].native->wait(raw, 1);
+    const std::array<FenceValue, 1> signal{ FenceValue{ fence, 1 } };
+    signalOn(device, QueueType::Graphics, signal);
+    device.destroy(fence);
+    for (int frame = 0; frame < 2; ++frame)
+    {
+        device.beginFrame();
+        device.endFrame();
+    }
+    // The fence retires with the first frame, whose frame signal follows the held fence signal on the graphics queue.
+    {
+        std::lock_guard lock(impl.retiringMutex);
+        CHECK(impl.retiringEvents.empty());
+    }
+    CHECK(impl.core.pool<Fence>().native(fence) == event);
+    CHECK(event->signaledValue() == 0);
+    raw->setSignaledValue(1);
+    device.beginFrame();
+    CHECK(event->signaledValue() == 1);
+    CHECK(impl.core.pool<Fence>().native(fence) == nullptr);
+    device.endFrame();
+    destroyDevice(device);
+    const metal4::AutoreleasePool pool;
+    event->release();
+    raw->release();
+}
+
+//======================================================================================================================
+TEST_CASE("a compute or copy submission with lists and two signals signals queue progress", "[metal4]")
+{
+    const QueueType type = GENERATE(QueueType::Compute, QueueType::Copy);
+    CAPTURE(type);
+    Device device = *createDevice();
+    DeviceImpl& impl = DeviceImpl::of(device);
+    const Fence joined = *device.createFence(0, "test.joined");
+    const Fence other = *device.createFence(0, "test.other");
+    device.beginFrame();
+    CommandList list = device.acquireCommandList(type, "test.list");
+    list.end();
+    const std::array<CommandList, 1> lists{ list };
+    const std::array<FenceValue, 2> signal{ FenceValue{ joined, 1 }, FenceValue{ other, 1 } };
+    const Counters before = device.counters();
+    device.queue(type).submit(lists, {}, signal);
+    // The commit, the two signals and the progress signal: a join through the first signal leaves the second unordered.
+    CHECK(device.counters().nativeSubmitCalls == before.nativeSubmitCalls + 4);
+    CHECK(impl.queues[static_cast<size_t>(type)].progressValue.load() == 1);
+    const std::array<FenceValue, 1> join{ FenceValue{ joined, 1 } };
+    device.queue(QueueType::Graphics).submit({}, join);
+    device.endFrame();
+    CHECK(device.wait({ other, 1 }, UINT64_MAX));
     destroyDevice(device);
 }

@@ -195,7 +195,9 @@ namespace rojoRHI {
         // The handle rules fire before the payload is read.
         (void)impl.core.pool<Fence>().checked(fence, false);
         auto* event = static_cast<MTL::SharedEvent*>(impl.core.pool<Fence>().native(fence));
-        // Every submission that named the fence returned before this call, so each queue's progress value covers it.
+        // Every submission that named the fence returned before this call. The fence's retirement covers those a frame joins,
+        // and each queue's progress value covers the rest: the compute and copy queues' fence-only submissions and those with
+        // lists and more than one signal.
         metal4::RetiringEvent retiring{ event, {} };
         for (size_t i = 0; i < impl.queues.size(); ++i)
         {
