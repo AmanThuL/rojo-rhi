@@ -16,6 +16,7 @@
 #include "D3D12Common.h"
 #include "D3D12Fences.h"
 #include "D3D12Loader.h"
+#include "D3D12ShaderLibrary.h"
 #include "D3D12Textures.h"
 #include "D3D12Views.h"
 
@@ -177,6 +178,7 @@ namespace rojoRHI {
         hooks.texture = d3d12::retireTexture;
         hooks.view = d3d12::retireView;
         hooks.fence = d3d12::retireFence;
+        hooks.shaderLibrary = d3d12::retireShaderLibrary;
         hooks.frameSlot = d3d12::reuseSlot;
         hooks.waitFrame = d3d12::waitFrame;
         impl->core.setRetireHooks(hooks);
@@ -270,30 +272,6 @@ namespace rojoRHI {
     void Device::destroy(Upscaler upscaler)
     {
         DeviceImpl::of(*this).core.destroy(upscaler);
-    }
-
-    //==================================================================================================================
-    Result<ShaderLibrary> Device::loadShaderLibrary(std::span<const std::byte>, std::string_view)
-    {
-        return d3d12::unsupported("Device::loadShaderLibrary");
-    }
-
-    //==================================================================================================================
-    Result<Pipeline> Device::createPipeline(const GraphicsPipelineDesc&)
-    {
-        return d3d12::unsupported("Device::createPipeline(GraphicsPipelineDesc)");
-    }
-
-    //==================================================================================================================
-    Result<Pipeline> Device::createPipeline(const ComputePipelineDesc&)
-    {
-        return d3d12::unsupported("Device::createPipeline(ComputePipelineDesc)");
-    }
-
-    //==================================================================================================================
-    Result<std::vector<std::byte>> Device::pipelineCacheData()
-    {
-        return d3d12::unsupported("Device::pipelineCacheData");
     }
 
     //==================================================================================================================

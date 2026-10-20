@@ -60,10 +60,11 @@ Result<ShaderLibrary> Device::loadShaderLibrary(std::span<const std::byte> blob,
 
 Loads a precompiled shader library the xmake shader rule produced and stamped with
 `ROJORHI_SHADER_ABI_VERSION` ([shader ABI](05-shader-abi.md)): on Metal 4 a RojoRHI shader library
-around a metallib, on D3D12 a DXIL container. A blob stamped with another ABI version returns
-`ErrorCategory::ShaderAbiMismatch`; one not built for the active backend (another magic, or no
-container) or malformed returns `ErrorCategory::DriverFailure`, instead of loading a stale shader.
-RojoRHI never compiles shader source at run time. The bytes are consumed before return.
+around a metallib, on D3D12 a RojoRHI shader library around each entry's DXIL. A blob stamped with
+another ABI version returns `ErrorCategory::ShaderAbiMismatch`; one not built for the active backend
+(another magic, or no container) or malformed returns `ErrorCategory::DriverFailure`, instead of
+loading a stale shader. RojoRHI never compiles shader source at run time. The bytes are consumed
+before return.
 Free-threaded. Destroyed through `Device::destroy` ([device](02-device.md)).
 
 #### Valid usage
@@ -74,7 +75,7 @@ Free-threaded. Destroyed through `Device::destroy` ([device](02-device.md)).
 
 | | Metal 4 | D3D12 | Vulkan |
 |---|---|---|---|
-| Call | `MTL::Device::newLibrary` from the metallib bytes after the header, each entry checked with `MTL::Library::newFunction` | no native object: the backend keeps one DXIL shader per entry point | `vkCreateShaderModule` (SPIR-V) |
+| Call | `MTL::Device::newLibrary` from the metallib bytes after the header, each entry checked with `MTL::Library::newFunction` | parses the RojoRHI shader library and keeps each entry's DXIL; no native object | `vkCreateShaderModule` (SPIR-V) |
 | Cost | native | cheap: blob parsed and copied | native |
 
 ### `BlendState`
