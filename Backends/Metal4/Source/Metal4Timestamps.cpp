@@ -43,6 +43,16 @@ namespace rojoRHI::metal4 {
         {
             return *static_cast<DeviceImpl*>(list.device->retireHooks().context);
         }
+
+        //==============================================================================================================
+        /// Returns the begin entry the open pass of `list` still owes its first encoder and marks it written, or returns
+        /// `core::kNoTimestamp` when the pass owes none.
+        uint32_t takePassBegin(CommandListImpl& list)
+        {
+            const uint32_t index = list.draw.passBegin;
+            list.draw.passBegin = core::kNoTimestamp;
+            return index;
+        }
     } // namespace
 
     //==================================================================================================================
@@ -299,9 +309,35 @@ namespace rojoRHI::metal4 {
             return;
         }
         const Timestamps& timestamps = deviceOf(list.core).timestamps;
-        // Unlike the command buffer's write, the encoder's autoreleases nothing, with or without the validation layer, so it
+        // Unlike the command buffer's write, an encoder's autoreleases nothing, with or without the validation layer, so it
         // opens no pool.
-        encoder->writeTimestamp(kInPassGranularity, MTL::RenderStageFragment, timestamps.heapFor(slotOf(list.core), index), index % Timestamps::kHeapEntries);
+        encoder->writeTimestamp(kEncoderGranularity, MTL::RenderStageFragment, timestamps.heapFor(slotOf(list.core), index), index % Timestamps::kHeapEntries);
+        core::noteNativeCall(list.core);
+    }
+
+    //==================================================================================================================
+    void writePassBegin(CommandListImpl& list, MTL4::RenderCommandEncoder* encoder)
+    {
+        const uint32_t index = takePassBegin(list);
+        if (index == core::kNoTimestamp)
+        {
+            return;
+        }
+        const Timestamps& timestamps = deviceOf(list.core).timestamps;
+        encoder->writeTimestamp(kEncoderGranularity, MTL::RenderStageVertex, timestamps.heapFor(slotOf(list.core), index), index % Timestamps::kHeapEntries);
+        core::noteNativeCall(list.core);
+    }
+
+    //==================================================================================================================
+    void writePassBegin(CommandListImpl& list, MTL4::ComputeCommandEncoder* encoder)
+    {
+        const uint32_t index = takePassBegin(list);
+        if (index == core::kNoTimestamp)
+        {
+            return;
+        }
+        const Timestamps& timestamps = deviceOf(list.core).timestamps;
+        encoder->writeTimestamp(kEncoderGranularity, timestamps.heapFor(slotOf(list.core), index), index % Timestamps::kHeapEntries);
         core::noteNativeCall(list.core);
     }
 } // namespace rojoRHI::metal4

@@ -50,19 +50,36 @@ namespace {
     }
 
     //==================================================================================================================
-    // The first measured frame's native calls: for R the delta of nativeRecordCalls, nativeSubmitCalls and
-    // nativeHostCalls from Device::counters, for N its hand counts.
-    uint64_t frameCalls(std::string_view workload, uint32_t k, Arm arm)
+    // The result of one run of `workload` at `k` by `arm` with the count options.
+    ArmResult countRun(std::string_view workload, uint32_t k, Arm arm)
     {
         const std::string id = std::string(workload) + "-k" + std::to_string(k);
         const WorkloadEntry* entry = find(id);
         REQUIRE(entry != nullptr);
         REQUIRE(entry->runner(arm) != nullptr);
-        const ArmResult result = entry->runner(arm)(entry->config, countOptions());
+        ArmResult result = entry->runner(arm)(entry->config, countOptions());
         INFO(result.error);
         REQUIRE(result.ok);
+        return result;
+    }
+
+    //==================================================================================================================
+    // The first measured frame's native calls: for R the delta of nativeRecordCalls, nativeSubmitCalls and
+    // nativeHostCalls from Device::counters, for N its hand counts.
+    uint64_t frameCalls(std::string_view workload, uint32_t k, Arm arm)
+    {
+        const ArmResult result = countRun(workload, k, arm);
         REQUIRE(!result.nativeCalls.empty());
         return result.nativeCalls[0];
+    }
+
+    //==================================================================================================================
+    // The allocations of every thread during the first measured frame.
+    uint64_t frameAllocations(std::string_view workload, uint32_t k, Arm arm)
+    {
+        const ArmResult result = countRun(workload, k, arm);
+        REQUIRE(!result.allocations.empty());
+        return result.allocations[0];
     }
 } // namespace
 
@@ -85,4 +102,19 @@ TEST_CASE("every CPU operation makes at most the native arm's calls plus one per
             CHECK(rojo <= native + row.c);
         }
     }
+}
+
+//======================================================================================================================
+TEST_CASE("a C8 render pass allocates less on Metal 4 than the native arm's, which times it on the command buffer", "[metal4]")
+{
+    // Per pass, from the first measured frame at K 100 and 1,000. N writes the pass's two timestamps with
+    // writeTimestampIntoHeap on the command buffer, which allocates inside Metal; R writes them on the pass's encoders, which
+    // allocate nothing. Each such write allocates about two blocks (2026-10-19 diagnosis), so R stays at least two below.
+    const auto perPass = [](Arm arm) {
+        return (static_cast<double>(frameAllocations("C8", 1000, arm)) - static_cast<double>(frameAllocations("C8", 100, arm))) / 900.0;
+    };
+    const double rojo = perPass(Arm::Rojo);
+    const double native = perPass(Arm::Native);
+    CAPTURE(rojo, native);
+    CHECK(rojo <= native - 2.0);
 }

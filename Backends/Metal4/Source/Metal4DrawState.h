@@ -6,6 +6,7 @@
 
 #include <rojoRHI/RHI.h>
 
+#include "Core/ScopeRecord.h"
 #include "Metal4Icb.h"
 
 #include <Metal/Metal.hpp>
@@ -159,6 +160,9 @@ namespace rojoRHI::metal4 {
         /// The debug groups of the scopes open inside the pass, whose labels are the last entries of `ListState::scopeLabels`;
         /// they live on the render encoder, so a split pops them and the resuming encoder pushes them again.
         size_t passGroups = 0;
+        /// The begin entry of the open pass's timestamp pair, until the pass's first encoder writes it at its start;
+        /// `core::kNoTimestamp` once written, and for a pass that claimed no pair.
+        uint32_t passBegin = core::kNoTimestamp;
         /// The list's render pass descriptor: made at its first pass with alloc and init, kept for the list's life.
         MTL4::RenderPassDescriptor* descriptor = nullptr;
         uint32_t descriptorColors = 0; ///< The color attachments `descriptor` last held a texture for.

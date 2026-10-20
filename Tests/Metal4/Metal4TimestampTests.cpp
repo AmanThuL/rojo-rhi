@@ -621,7 +621,7 @@ TEST_CASE("a heap Metal refuses is asked for again after its slot's reuse, and c
 }
 
 //======================================================================================================================
-TEST_CASE("a render pass writes its two timestamps on the command buffer around all its encoders", "[metal4]")
+TEST_CASE("a render pass with a counted draw writes its begin timestamp on the kernels' encoder and its end on its render encoder", "[metal4]")
 {
     Device device = *createDevice({ .framesInFlight = 2 });
     const Drawing drawing(device);
@@ -630,36 +630,48 @@ TEST_CASE("a render pass writes its two timestamps on the command buffer around 
     claimArenaPage(list);
     const core::CommandListCore& state = core::coreOf(list);
     const metal4::ListState& native = CommandListImpl::of(list).state;
+    const metal4::DrawState& draw = CommandListImpl::of(list).draw;
     const uint64_t calls = state.counts.nativeRecordCalls;
     const uint64_t encoders = state.counts.encodersOpened;
     const std::array colors{ ColorAttachment{ .texture = drawing.target, .load = LoadOp::Clear } };
     list.beginRenderPass(RenderPassDesc{ .colors = colors, .area = { 0, 0, kEdge, kEdge }, .label = "test.pass" });
     // The pinned counts include the timestamp writes, so every scope must hold a pair.
     test::requireTimed(list);
-    // The pass's debug group, then its begin timestamp on the command buffer, before any encoder of the pass opens.
-    CHECK(state.counts.nativeRecordCalls == calls + 2);
+    // The pass's debug group alone: the pass claims its pair, and no encoder of the pass is open to write it on.
+    CHECK(state.counts.nativeRecordCalls == calls + 1);
     CHECK(state.counts.encodersOpened == encoders);
     REQUIRE(state.scopeLog.size() == 1);
     const uint32_t pair = state.scopeLog.back().timestamp;
     CHECK(pair != core::kNoTimestamp);
     CHECK(pair % 2 == 0);
+    // The begin entry waits for the pass's first encoder.
+    CHECK(draw.passBegin == pair);
     REQUIRE(native.scopeTimestamps.size() == 1);
     CHECK(native.scopeTimestamps.back() == pair);
     CHECK(timestampsOf(device).heapFor(slotOf(device, list), pair) != nullptr);
     list.setPipeline(drawing.pipeline);
     list.setViewport(Viewport{ .width = static_cast<float>(kEdge), .height = static_cast<float>(kEdge) });
     list.setScissor(Rect2D{ 0, 0, kEdge, kEdge });
-    // A counted draw first: its kernel's compute encoder opens after the begin timestamp, inside the pass's span.
+    // A counted draw first: its kernel's compute encoder is the pass's first encoder, and the begin timestamp goes on it,
+    // between the encoder's factory and label and the writer kernel's pipeline, kernel table, parameters and dispatch.
+    uint64_t before = state.counts.nativeRecordCalls;
     drawing.counted(device, list);
     CHECK(state.counts.encodersOpened == encoders + 1);
-    CHECK(native.scopeTimestamps.size() == 1);
+    CHECK(CommandListImpl::of(list).encoders.kind() == metal4::EncoderKind::Compute);
+    CHECK(state.counts.nativeRecordCalls == before + 2 + 1 + 4);
+    CHECK(draw.passBegin == core::kNoTimestamp);
+    // A second counted draw shares the kernels' encoder and writes no timestamp: its parameters and its dispatch.
+    before = state.counts.nativeRecordCalls;
+    drawing.counted(device, list);
+    CHECK(state.counts.encodersOpened == encoders + 1);
+    CHECK(state.counts.nativeRecordCalls == before + 2);
     const uint64_t beforeEnd = state.counts.nativeRecordCalls;
     list.endRenderPass();
-    // The kernels' encoder ends; the render encoder opens (factory, label, table) with the barrier that orders the kernel
-    // before the vertex stage, sets the pipeline, its winding, the viewport and the scissor, draws the record and ends; then
-    // the end timestamp and the pop follow its endEncoding.
+    // The kernels' encoder ends; the render encoder opens (factory, label, table) with the barrier that orders the kernels
+    // before the vertex stage, sets the pipeline, its winding, the viewport and the scissor and draws the two records; then
+    // the end timestamp on it, its endEncoding and the pop on the command buffer.
     CHECK(state.counts.encodersOpened == encoders + 2);
-    CHECK(state.counts.nativeRecordCalls == beforeEnd + 1 + 3 + 1 + 4 + 1 + 1 + 2);
+    CHECK(state.counts.nativeRecordCalls == beforeEnd + 1 + 3 + 1 + 4 + 2 + 1 + 1 + 1);
     CHECK(CommandListImpl::of(list).encoders.kind() == metal4::EncoderKind::None);
     CHECK(native.scopeTimestamps.empty());
     CHECK(native.scopeLabels.empty());
@@ -675,7 +687,7 @@ TEST_CASE("a render pass writes its two timestamps on the command buffer around 
 }
 
 //======================================================================================================================
-TEST_CASE("a pass whose encoder opens at endRenderPass writes its timestamps around that encoder", "[metal4]")
+TEST_CASE("a pass whose encoder opens at endRenderPass writes both its timestamps on that encoder", "[metal4]")
 {
     Device device = *createDevice({ .framesInFlight = 2 });
     const Drawing drawing(device);
@@ -683,16 +695,19 @@ TEST_CASE("a pass whose encoder opens at endRenderPass writes its timestamps aro
     CommandList list = device.acquireCommandList(QueueType::Graphics, "test.list");
     claimArenaPage(list);
     const core::CommandListCore& state = core::coreOf(list);
+    const uint64_t calls = state.counts.nativeRecordCalls;
     const std::array colors{ ColorAttachment{ .texture = drawing.target, .load = LoadOp::Clear } };
     list.beginRenderPass(RenderPassDesc{ .colors = colors, .area = { 0, 0, kEdge, kEdge }, .label = "test.empty" });
     // The pinned counts include the timestamp writes, so every scope must hold a pair.
     test::requireTimed(list);
-    const uint64_t calls = state.counts.nativeRecordCalls;
+    CHECK(state.counts.nativeRecordCalls == calls + 1);
+    // No encoder opened, so the begin entry still waits.
+    CHECK(CommandListImpl::of(list).draw.passBegin == state.scopeLog.back().timestamp);
     const uint64_t encoders = state.counts.encodersOpened;
     list.endRenderPass();
-    // renderCommandEncoder, setLabel, setArgumentTable and endEncoding for the pass's clear and store, then the end timestamp
-    // and popDebugGroup on the command buffer.
-    CHECK(state.counts.nativeRecordCalls == calls + 4 + 2);
+    // renderCommandEncoder, setLabel and setArgumentTable, the begin and end timestamps on the encoder, endEncoding for the
+    // pass's clear and store, then popDebugGroup on the command buffer.
+    CHECK(state.counts.nativeRecordCalls == calls + 1 + 3 + 2 + 1 + 1);
     CHECK(state.counts.encodersOpened == encoders + 1);
     CHECK(state.scopeLog.back().timestamp != core::kNoTimestamp);
     submitFrame(device, std::array{ list });
@@ -702,6 +717,97 @@ TEST_CASE("a pass whose encoder opens at endRenderPass writes its timestamps aro
     CHECK(report[0].label == "test.empty");
     CHECK(std::isfinite(report[0].gpuMilliseconds));
     CHECK(report[0].gpuMilliseconds >= 0.0);
+    device.endFrame();
+    destroyDevice(device);
+}
+
+//======================================================================================================================
+TEST_CASE("a pass that splits writes two timestamps, the begin on its first render encoder and the end on its last", "[metal4]")
+{
+    Device device = *createDevice({ .framesInFlight = 2 });
+    const Drawing drawing(device);
+    device.beginFrame();
+    CommandList list = device.acquireCommandList(QueueType::Graphics, "test.list");
+    claimArenaPage(list);
+    const core::CommandListCore& state = core::coreOf(list);
+    const uint64_t encoders = state.counts.encodersOpened;
+    const metal4::DrawState& draw = CommandListImpl::of(list).draw;
+    drawing.begin(list, "test.pass");
+    // The pinned counts include the timestamp writes, so every scope must hold a pair.
+    test::requireTimed(list);
+    CHECK(draw.passBegin == state.scopeLog.back().timestamp);
+    // The first draw opens the pass's render encoder: the factory, the label and the table, the begin timestamp, the
+    // pipeline with its winding, the viewport and the scissor, then the draw.
+    uint64_t calls = state.counts.nativeRecordCalls;
+    list.draw(3);
+    CHECK(state.counts.encodersOpened == encoders + 1);
+    CHECK(state.counts.nativeRecordCalls == calls + 3 + 1 + 4 + 1);
+    CHECK(draw.passBegin == core::kNoTimestamp);
+    // A counted draw splits the pass with no timestamp: the render encoder ends (its Store attachment costs no call), and the
+    // kernels' encoder opens (factory, label) and runs the writer kernel (pipeline, kernel table, parameters, dispatch).
+    calls = state.counts.nativeRecordCalls;
+    drawing.counted(device, list);
+    CHECK(state.counts.encodersOpened == encoders + 2);
+    CHECK(state.counts.nativeRecordCalls == calls + 1 + 2 + 4);
+    // The resumed render encoder writes none either.
+    list.draw(3);
+    CHECK(state.counts.encodersOpened == encoders + 3);
+    CHECK(draw.passBegin == core::kNoTimestamp);
+    calls = state.counts.nativeRecordCalls;
+    list.endRenderPass();
+    // The end timestamp on the resumed encoder, its endEncoding and the pop on the command buffer.
+    CHECK(state.counts.nativeRecordCalls == calls + 1 + 1 + 1);
+    submitFrame(device, std::array{ list });
+    retireOpenFrame(device);
+    const std::span<const ScopeTiming> report = device.scopeTimings();
+    REQUIRE(report.size() == 1);
+    CHECK(report[0].label == "test.pass");
+    CHECK(std::isfinite(report[0].gpuMilliseconds));
+    CHECK(report[0].gpuMilliseconds > 0.0);
+    device.endFrame();
+    destroyDevice(device);
+}
+
+//======================================================================================================================
+TEST_CASE("a scope that opens a pass's render encoder writes after the pass's begin timestamp, on the same encoder", "[metal4]")
+{
+    Device device = *createDevice({ .framesInFlight = 2 });
+    const Drawing drawing(device);
+    device.beginFrame();
+    CommandList list = device.acquireCommandList(QueueType::Graphics, "test.list");
+    claimArenaPage(list);
+    const core::CommandListCore& state = core::coreOf(list);
+    drawing.begin(list, "test.pass");
+    const uint32_t passPair = state.scopeLog.back().timestamp;
+    uint64_t calls = state.counts.nativeRecordCalls;
+    list.beginScope("test.inner");
+    // The pinned counts include the timestamp writes, so every scope must hold a pair.
+    test::requireTimed(list);
+    // The scope opened the render encoder (factory, label, table), which wrote the pass's begin timestamp and replayed the
+    // pipeline with its winding, the viewport and the scissor before the scope's group and begin timestamp.
+    CHECK(state.scopeLog.back().timestamp == passPair + 2);
+    CHECK(state.counts.nativeRecordCalls == calls + 3 + 1 + 4 + 1 + 1);
+    CHECK(CommandListImpl::of(list).draw.passBegin == core::kNoTimestamp);
+    list.draw(3);
+    calls = state.counts.nativeRecordCalls;
+    list.endScope();
+    // The scope's end timestamp and its pop, on the encoder.
+    CHECK(state.counts.nativeRecordCalls == calls + 2);
+    calls = state.counts.nativeRecordCalls;
+    list.endRenderPass();
+    // The pass's end timestamp, endEncoding and the pop on the command buffer.
+    CHECK(state.counts.nativeRecordCalls == calls + 3);
+    submitFrame(device, std::array{ list });
+    retireOpenFrame(device);
+    const std::span<const ScopeTiming> report = device.scopeTimings();
+    REQUIRE(report.size() == 2);
+    CHECK(report[0].label == "test.pass");
+    CHECK(report[1].label == "test.inner");
+    for (const ScopeTiming& timing : report)
+    {
+        CHECK(std::isfinite(timing.gpuMilliseconds));
+        CHECK(timing.gpuMilliseconds >= 0.0);
+    }
     device.endFrame();
     destroyDevice(device);
 }
@@ -902,14 +1008,15 @@ TEST_CASE("a pass, a scope inside it and an upscale past the slot's capacity wri
         const Buffer a = *device.createBuffer({ .size = 256, .label = "test.a" });
         const Buffer b = *device.createBuffer({ .size = 256, .label = "test.b" });
         const core::CommandListCore& state = core::coreOf(list);
-        // The native calls of each site: the pass's begin and end, the in-pass scope's begin and end, and the upscale.
+        // The native calls of each site: the upscale, the pass's begin through its first draw, whose encoder writes the
+        // begin timestamp, the in-pass scope's begin and end, and the pass's end.
         struct Sites
         {
+            uint64_t upscale = 0;
             uint64_t begin = 0;
             uint64_t scopeBegin = 0;
             uint64_t scopeEnd = 0;
             uint64_t end = 0;
-            uint64_t upscale = 0;
         };
         const auto record = [&](const char* suffix, Upscaler upscaler) {
             Sites sites;
@@ -918,26 +1025,26 @@ TEST_CASE("a pass, a scope inside it and an upscale past the slot's capacity wri
                 site = state.counts.nativeRecordCalls - calls;
                 calls = state.counts.nativeRecordCalls;
             };
+            kit.params.label = "test.upscale";
+            list.upscale(upscaler, kit.params);
+            delta(sites.upscale);
+            // The copy takes the compute wait the upscale owes and the pass's encoder its render wait, in both rounds, so the
+            // sites of the two rounds owe the same fences.
+            list.copyBuffer(a, 0, b, 0, 256);
+            calls = state.counts.nativeRecordCalls;
             const std::array colors{ ColorAttachment{ .texture = drawing.target, .load = LoadOp::Clear } };
             list.beginRenderPass(RenderPassDesc{ .colors = colors, .area = { 0, 0, kEdge, kEdge }, .label = std::string("test.pass") + suffix });
-            delta(sites.begin);
             list.setPipeline(drawing.pipeline);
             list.setViewport(Viewport{ .width = static_cast<float>(kEdge), .height = static_cast<float>(kEdge) });
             list.setScissor(Rect2D{ 0, 0, kEdge, kEdge });
             list.draw(3);
-            calls = state.counts.nativeRecordCalls;
+            delta(sites.begin);
             list.beginScope("test.inner");
             delta(sites.scopeBegin);
             list.endScope();
             delta(sites.scopeEnd);
             list.endRenderPass();
             delta(sites.end);
-            kit.params.label = "test.upscale";
-            list.upscale(upscaler, kit.params);
-            delta(sites.upscale);
-            // A copy takes the compute wait the upscale owes, as the pass after the next took its render wait, so the sites of
-            // the second round owe no fence either.
-            list.copyBuffer(a, 0, b, 0, 256);
             return sites;
         };
         const Sites timed = record(".timed", kit.upscaler);
@@ -960,9 +1067,11 @@ TEST_CASE("a pass, a scope inside it and an upscale past the slot's capacity wri
         retireOpenFrame(device);
         const std::span<const ScopeTiming> report = device.scopeTimings();
         REQUIRE(report.size() == kCapacity + 3);
-        CHECK(report[0].label == "test.pass.timed");
+        CHECK(report[0].label == "test.upscale");
         CHECK(report[0].gpuMilliseconds > 0.0);
-        const std::array<std::string_view, 3> labels{ "test.pass.untimed", "test.inner", "test.upscale" };
+        CHECK(report[1].label == "test.pass.timed");
+        CHECK(report[1].gpuMilliseconds > 0.0);
+        const std::array<std::string_view, 3> labels{ "test.upscale", "test.pass.untimed", "test.inner" };
         for (size_t i = 0; i < labels.size(); ++i)
         {
             const ScopeTiming& timing = report[kCapacity + i];

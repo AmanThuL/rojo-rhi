@@ -193,9 +193,11 @@ the string. Inside a pass a scope is a debug group on the render encoder
 encoder and measured no change in a pass's duration against `Relaxed`. A split pushes the open
 groups again on the resumed encoder but writes no timestamp, so the end timestamp may sit on a
 later encoder than the begin. A render pass claims its pair at `beginRenderPass` and writes it on
-the command buffer right after its debug group, before any encoder of the pass, and after its last
-`endEncoding`, before the pop: its counted draws' kernels and its splits fall inside it. An upscale
-writes its pair around its carrier and MetalFX's encoders (below).
+its encoders: the begin timestamp first on its first encoder (the kernels' compute encoder of its
+leading counted draws, else its render encoder), the end timestamp on its last render encoder just
+before `endEncoding`, so its counted draws' kernels and its splits fall inside it
+([drawing](metal4-drawing.md)). An upscale writes its pair around its carrier and MetalFX's
+encoders (below).
 
 A claim is one relaxed `fetch_add(2)` on the slot's cursor. A slot has up to eight
 `MTL4::CounterHeap`s of 4,096 timestamps, each created on the first claim that needs it and
@@ -205,7 +207,7 @@ whose heap Metal refuses (Metal allows 32 counter heaps per process or on the sy
 timestamp. A refusal holds until the slot's reuse, so while Metal keeps refusing, a frame makes one
 failed `newCounterHeap` per refused heap it needs (more only when threads race to create it). Metal
 autoreleases objects inside `writeTimestampIntoHeap` under the validation layer, so each write runs
-inside a command pool; the render encoder's `writeTimestamp` autoreleases nothing and opens none.
+inside a command pool; an encoder's `writeTimestamp` autoreleases nothing and opens none.
 
 At the frame wait the core calls the scope-time hook once per queue with records. The first call of
 the frame resolves each heap the slot used, once, with `resolveCounterRange` inside a pool, and

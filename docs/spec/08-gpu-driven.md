@@ -39,7 +39,8 @@ draw, a scope boundary or `endRenderPass`, so the kernels of a pass's leading co
 one compute encoder ahead of it. A counted draw recorded after the render encoder opened splits
 the pass: that encoder stores every attachment, resolving one that has a resolve target, the kernel
 runs, and a new encoder resumes the pass with `Load`. That path is `costly`: per batch of kernels,
-a compute encoder of five native calls and a backend barrier; per counted draw, two native calls
+a compute encoder of five native calls and a backend barrier, and the pass's begin timestamp when
+the batch opens the pass ([diagnostics](14-diagnostics.md)); per counted draw, two native calls
 (its parameters and its dispatch) ahead of the execute, as the native form makes; per split, a
 store and a load of every attachment; about 40 µs of fixed GPU time measured alone, then about
 48 ns per drawn record against 9.5 ns for a native indirect draw; and indirect-command-buffer

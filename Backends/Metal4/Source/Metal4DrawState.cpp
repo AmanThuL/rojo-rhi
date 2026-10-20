@@ -5,6 +5,7 @@
 
 #include "Metal4DrawState.h"
 
+#include "Core/ScopeRecord.h"
 #include "Metal4Common.h"
 
 #include <Metal/Metal.hpp>
@@ -32,6 +33,7 @@ namespace rojoRHI::metal4 {
         passOpen = false;
         resuming = false;
         passGroups = 0;
+        passBegin = core::kNoTimestamp;
         pipeline = nullptr;
         topology = MTL::PrimitiveTypeTriangle;
         bias = {};

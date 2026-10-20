@@ -125,6 +125,33 @@ namespace {
     }
 
     //==================================================================================================================
+    /// Records the barrier that orders one pass's writes to `target` before the next pass's.
+    void betweenPasses(CommandList list, Texture target)
+    {
+        transition(
+            list,
+            target,
+            Layout::ColorAttachment,
+            Layout::ColorAttachment,
+            Stage::ColorAttachment,
+            Access::ColorAttachmentWrite,
+            Stage::ColorAttachment,
+            Access::ColorAttachmentRead | Access::ColorAttachmentWrite
+        );
+    }
+
+    //==================================================================================================================
+    /// Creates an `IndirectArgs` buffer of `count` draw records of the full-target triangle, `instances` instances each.
+    Buffer drawRecords(Device device, uint32_t count, uint32_t instances)
+    {
+        const std::vector<DrawIndirectArgs> records(count, DrawIndirectArgs{ .drawId = 0, .vertexCount = 3, .instanceCount = instances });
+        return *device.createBuffer(
+            BufferDesc{ .size = records.size() * sizeof(DrawIndirectArgs), .usage = BufferUsage::IndirectArgs, .label = "test.records" },
+            std::as_bytes(std::span(records))
+        );
+    }
+
+    //==================================================================================================================
     /// Returns true when `timing` is finite and at least zero.
     bool finiteAndNonNegative(const ScopeTiming& timing)
     {
@@ -338,6 +365,142 @@ TEST_CASE("a pass, a scope inside it and an upscale are each reported with their
         CHECK(report[i].queue == QueueType::Graphics);
         CHECK(finiteAndNonNegative(report[i]));
     }
+    device.endFrame();
+    destroyDevice(device);
+}
+
+//======================================================================================================================
+TEST_CASE("a render pass that draws reports more than an empty pass", "[conformance]")
+{
+    test::requireGpu();
+    Device device = *createDevice({ .framesInFlight = kFramesInFlight });
+    const ShaderLibrary library = *device.loadShaderLibrary(test::shaderLibraryFile("DrawOracle"), "DrawOracle");
+    const Pipeline solid = solidPipeline(device, library);
+    const Texture target = square(device, Format::RGBA16Float, kDrawnEdge, TextureUsage::RenderTarget, "test.target");
+    device.beginFrame();
+    CommandList list = device.acquireCommandList(QueueType::Graphics, "test.list");
+    beginDrawing(list, target, kDrawnEdge, solid, "test.empty");
+    list.endRenderPass();
+    betweenPasses(list, target);
+    beginDrawing(list, target, kDrawnEdge, solid, "test.drawn");
+    list.draw(3, kInstances);
+    list.endRenderPass();
+    submit(device, std::array{ list }, std::array{ QueueType::Graphics });
+    retireOpenFrame(device);
+    // Chapter 14, `ScopeTiming`: a pass's duration is the GPU wall time between its two timestamps, which enclose its work,
+    // so a pass that draws the target whole many times over takes longer than one that only clears and stores it.
+    const std::span<const ScopeTiming> report = device.scopeTimings();
+    REQUIRE(report.size() == 2);
+    CHECK(report[0].label == "test.empty");
+    CHECK(report[1].label == "test.drawn");
+    CHECK(finiteAndNonNegative(report[0]));
+    CHECK(std::isfinite(report[1].gpuMilliseconds));
+    CHECK(report[1].gpuMilliseconds > report[0].gpuMilliseconds);
+    device.endFrame();
+    destroyDevice(device);
+}
+
+//======================================================================================================================
+TEST_CASE("a render pass of counted draws only reports a positive duration, more than an empty pass", "[conformance]")
+{
+    test::requireGpu();
+    Device device = *createDevice({ .framesInFlight = kFramesInFlight });
+    const ShaderLibrary library = *device.loadShaderLibrary(test::shaderLibraryFile("DrawOracle"), "DrawOracle");
+    const Pipeline solid = solidPipeline(device, library);
+    const Texture target = square(device, Format::RGBA16Float, kDrawnEdge, TextureUsage::RenderTarget, "test.target");
+    constexpr uint32_t kRecords = 4;
+    const Buffer records = drawRecords(device, kRecords, kInstances / kRecords);
+    device.beginFrame();
+    CommandList list = device.acquireCommandList(QueueType::Graphics, "test.list");
+    beginDrawing(list, target, kDrawnEdge, solid, "test.empty");
+    list.endRenderPass();
+    betweenPasses(list, target);
+    beginDrawing(list, target, kDrawnEdge, solid, "test.counted");
+    list.drawIndirect(device.address(records), kRecords);
+    list.endRenderPass();
+    submit(device, std::array{ list }, std::array{ QueueType::Graphics });
+    retireOpenFrame(device);
+    // Chapter 14, `ScopeTiming`: the pass's timestamps enclose all its work, its counted draws included, however the backend
+    // lowers them.
+    const std::span<const ScopeTiming> report = device.scopeTimings();
+    REQUIRE(report.size() == 2);
+    CHECK(report[0].label == "test.empty");
+    CHECK(report[1].label == "test.counted");
+    CHECK(finiteAndNonNegative(report[0]));
+    CHECK(std::isfinite(report[1].gpuMilliseconds));
+    CHECK(report[1].gpuMilliseconds > 0.0);
+    CHECK(report[1].gpuMilliseconds > report[0].gpuMilliseconds);
+    device.endFrame();
+    destroyDevice(device);
+}
+
+//======================================================================================================================
+TEST_CASE("a scope inside a render pass reports no more than its pass", "[conformance]")
+{
+    test::requireGpu();
+    Device device = *createDevice({ .framesInFlight = kFramesInFlight });
+    const ShaderLibrary library = *device.loadShaderLibrary(test::shaderLibraryFile("DrawOracle"), "DrawOracle");
+    const Pipeline solid = solidPipeline(device, library);
+    const Texture target = square(device, Format::RGBA16Float, kDrawnEdge, TextureUsage::RenderTarget, "test.target");
+    device.beginFrame();
+    CommandList list = device.acquireCommandList(QueueType::Graphics, "test.list");
+    beginDrawing(list, target, kDrawnEdge, solid, "test.pass");
+    list.draw(3, kInstances);
+    list.beginScope("test.inner");
+    list.draw(3, kInstances);
+    list.endScope();
+    list.draw(3, kInstances);
+    list.endRenderPass();
+    submit(device, std::array{ list }, std::array{ QueueType::Graphics });
+    retireOpenFrame(device);
+    // Chapter 14, `ScopeTiming`: nested scopes overlap their parent, and a scope inside a pass is nested in the pass's, so on
+    // one command buffer the pass's timestamps enclose the inner scope's.
+    const std::span<const ScopeTiming> report = device.scopeTimings();
+    REQUIRE(report.size() == 2);
+    CHECK(report[0].label == "test.pass");
+    CHECK(report[1].label == "test.inner");
+    CHECK(report[1].depth == 1);
+    CHECK(finiteAndNonNegative(report[1]));
+    CHECK(std::isfinite(report[0].gpuMilliseconds));
+    CHECK(report[0].gpuMilliseconds > 0.0);
+    CHECK(report[1].gpuMilliseconds <= report[0].gpuMilliseconds);
+    device.endFrame();
+    destroyDevice(device);
+}
+
+//======================================================================================================================
+TEST_CASE("a render pass a counted draw splits reports one duration, more than the pass without the split", "[conformance]")
+{
+    test::requireGpu();
+    Device device = *createDevice({ .framesInFlight = kFramesInFlight });
+    const ShaderLibrary library = *device.loadShaderLibrary(test::shaderLibraryFile("DrawOracle"), "DrawOracle");
+    const Pipeline solid = solidPipeline(device, library);
+    const Texture target = square(device, Format::RGBA16Float, kDrawnEdge, TextureUsage::RenderTarget, "test.target");
+    const Buffer records = drawRecords(device, 1, 1);
+    device.beginFrame();
+    CommandList list = device.acquireCommandList(QueueType::Graphics, "test.list");
+    beginDrawing(list, target, kDrawnEdge, solid, "test.single");
+    list.draw(3, kInstances);
+    list.endRenderPass();
+    betweenPasses(list, target);
+    // A counted draw after a direct one splits the pass on Metal 4 (chapter 08); the second direct draw follows it.
+    beginDrawing(list, target, kDrawnEdge, solid, "test.split");
+    list.draw(3, kInstances);
+    list.drawIndirect(device.address(records), 1);
+    list.draw(3, kInstances);
+    list.endRenderPass();
+    submit(device, std::array{ list }, std::array{ QueueType::Graphics });
+    retireOpenFrame(device);
+    // Chapter 14: every render pass forms its own scope, one record whatever its lowering, and its timestamps enclose all
+    // its work: the pass that draws the target twice as often takes longer than the one that draws it once.
+    const std::span<const ScopeTiming> report = device.scopeTimings();
+    REQUIRE(report.size() == 2);
+    CHECK(report[0].label == "test.single");
+    CHECK(report[1].label == "test.split");
+    CHECK(std::isfinite(report[0].gpuMilliseconds));
+    CHECK(report[0].gpuMilliseconds > 0.0);
+    CHECK(std::isfinite(report[1].gpuMilliseconds));
+    CHECK(report[1].gpuMilliseconds > report[0].gpuMilliseconds);
     device.endFrame();
     destroyDevice(device);
 }

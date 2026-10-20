@@ -35,6 +35,9 @@ namespace {
     /// The calls a pass's render encoder makes when it opens with no barrier owed: the factory, the label and the table.
     constexpr uint64_t kOpenCalls = 3;
 
+    /// The call of the begin timestamp a pass's first render encoder writes right after it opens.
+    constexpr uint64_t kPassBegin = 1;
+
     //==================================================================================================================
     /// The encoders of `list`.
     const metal4::Encoders& encodersOf(CommandList list)
@@ -179,11 +182,11 @@ TEST_CASE("state recorded before the first draw waits in the prefix and replays 
     CHECK(countsOf(list).encodersOpened == 0);
     using Kind = metal4::PrefixKind;
     CHECK(prefixKinds(list) == std::vector{ Kind::Pipeline, Kind::Viewport, Kind::Scissor, Kind::Root, Kind::StencilReference, Kind::BlendColor });
-    // The open, then each entry in order: the pipeline with its counter-clockwise winding (it has a fragment entry; the rest
-    // of its raster state is Metal's default), the viewport, the scissor, the table's root, the stencil reference and the
-    // blend color; then the draw.
+    // The open and the pass's begin timestamp, then each entry in order: the pipeline with its counter-clockwise winding (it
+    // has a fragment entry; the rest of its raster state is Metal's default), the viewport, the scissor, the table's root,
+    // the stencil reference and the blend color; then the draw.
     list.draw(3);
-    CHECK(callsOf(list) == base + kOpenCalls + 7 + 1);
+    CHECK(callsOf(list) == base + kOpenCalls + kPassBegin + 7 + 1);
     CHECK(drawOf(list).prefix.empty());
     const metal4::RenderHeld& held = drawOf(list).held;
     CHECK(held.pipeline == stateOf(list, a));
@@ -203,9 +206,10 @@ TEST_CASE("state recorded before the first draw waits in the prefix and replays 
     list.setViewport(Viewport{ .width = 8.0f, .height = 8.0f });
     CHECK(prefixKinds(list) == std::vector{ Kind::Pipeline, Kind::Viewport });
     const uint64_t before = callsOf(list);
-    // The open, the pipeline with its winding and the viewport, then endEncoding, the pass's end timestamp and its group.
+    // The open and the pass's begin timestamp, the pipeline with its winding and the viewport, then the pass's end timestamp,
+    // endEncoding and its group.
     list.endRenderPass();
-    CHECK(callsOf(list) == before + kOpenCalls + 3 + 3);
+    CHECK(callsOf(list) == before + kOpenCalls + kPassBegin + 3 + 3);
     finish(device, list);
     destroyDevice(device);
 }
@@ -342,10 +346,10 @@ TEST_CASE("a pipeline without depthBias applies zero bias and the next depthBias
     list.setDepthBias(1.0f, 2.0f, 3.0f);
     list.setViewport(kViewport);
     list.setScissor(kScissor);
-    // The open, the pipeline and its winding (its bias, still zero, equals the encoder's), the bias, the viewport, the
-    // scissor and the draw.
+    // The open and the pass's begin timestamp, the pipeline and its winding (its bias, still zero, equals the encoder's), the
+    // bias, the viewport, the scissor and the draw.
     list.draw(3);
-    CHECK(callsOf(list) - before == kOpenCalls + 5 + 1);
+    CHECK(callsOf(list) - before == kOpenCalls + kPassBegin + 5 + 1);
     const metal4::RenderHeld& held = drawOf(list).held;
     CHECK(held.bias == metal4::DepthBias{ 1.0f, 2.0f, 3.0f });
     // The pipeline and a zero bias.
@@ -366,9 +370,9 @@ TEST_CASE("a pipeline without depthBias applies zero bias and the next depthBias
     list.setViewport(kViewport);
     list.setScissor(kScissor);
     before = callsOf(list);
-    // The open, the pipeline and its winding, the viewport, the scissor and the draw.
+    // The open and the pass's begin timestamp, the pipeline and its winding, the viewport, the scissor and the draw.
     list.draw(3);
-    CHECK(callsOf(list) - before == kOpenCalls + 4 + 1);
+    CHECK(callsOf(list) - before == kOpenCalls + kPassBegin + 4 + 1);
     CHECK(drawOf(list).bias == metal4::DepthBias{});
     list.endRenderPass();
     finish(device, list);
@@ -488,9 +492,9 @@ TEST_CASE("setRoot outside a pass writes the table at once and an unchanged root
     list.setRoot(first);
     CHECK(callsOf(list) == before);
     CHECK(drawOf(list).tableRoot == gpuAddressOf(second));
-    // The open, the root, endEncoding, the pass's end timestamp and its group.
+    // The open and the pass's begin timestamp, the root, the pass's end timestamp, endEncoding and its group.
     list.endRenderPass();
-    CHECK(callsOf(list) - before == kOpenCalls + 1 + 3);
+    CHECK(callsOf(list) - before == kOpenCalls + kPassBegin + 1 + 3);
     CHECK(drawOf(list).tableRoot == gpuAddressOf(first));
     finish(device, list);
     destroyDevice(device);
@@ -598,9 +602,10 @@ TEST_CASE("direct mesh draws bind one zero record per recording", "[metal4]")
         list.setViewport(kViewport);
         list.setScissor(kScissor);
         uint64_t before = callsOf(list);
-        // The open, the pipeline and its winding, the viewport and the scissor, the zero record at buffer(3), then the draw.
+        // The open and the pass's begin timestamp, the pipeline and its winding, the viewport and the scissor, the zero record
+        // at buffer(3), then the draw.
         list.drawMeshTasks(1, 1, 1);
-        CHECK(callsOf(list) - before == kOpenCalls + 4 + 1 + 1);
+        CHECK(callsOf(list) - before == kOpenCalls + kPassBegin + 4 + 1 + 1);
         const uint64_t record = drawOf(list).zeroRecord;
         REQUIRE(record != 0);
         CHECK(record % 16 == 0);
@@ -624,7 +629,7 @@ TEST_CASE("direct mesh draws bind one zero record per recording", "[metal4]")
         list.setScissor(kScissor);
         before = callsOf(list);
         list.drawMeshTasks(1, 1, 1);
-        CHECK(callsOf(list) - before == kOpenCalls + 4 + 1);
+        CHECK(callsOf(list) - before == kOpenCalls + kPassBegin + 4 + 1);
         CHECK(drawOf(list).zeroRecord == record);
         list.endRenderPass();
         list.end();
