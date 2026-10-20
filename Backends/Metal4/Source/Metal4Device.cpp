@@ -258,6 +258,10 @@ namespace rojoRHI {
             {
                 return created;
             }
+            if (Result<void> created = impl.depthStencils.create(impl.device, impl.core.counts()); !created)
+            {
+                return created;
+            }
             if (Result<void> created = impl.residency.create(impl.device); !created)
             {
                 return created;

@@ -313,6 +313,7 @@ namespace rojoRHI {
                 );
             }
         }
+        state->boundDepthStencil = state->depthStencil != nullptr ? state->depthStencil : impl.depthStencils.untested();
         state->cull = metal4::cullMode(desc.raster.cull);
         state->winding = metal4::winding(desc.raster.frontFace);
         state->setsWinding = desc.raster.cull != CullMode::None || desc.depthStencil.stencilTest || desc.fragment.library.bits != 0;

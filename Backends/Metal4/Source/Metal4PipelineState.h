@@ -27,6 +27,7 @@ namespace rojoRHI::metal4 {
         MTL::RenderPipelineState* render = nullptr;               ///< The render or mesh state (+1); null for compute.
         MTL::ComputePipelineState* compute = nullptr;             ///< The compute state (+1); null for graphics.
         MTL::DepthStencilState* depthStencil = nullptr;           ///< Shared through the device cache, not owned; null when nothing is tested.
+        MTL::DepthStencilState* boundDepthStencil = nullptr;      ///< What a bind sends: `depthStencil`, or when null the device's untested state.
         MTL::CullMode cull = MTL::CullModeNone;                   ///< `RasterState::cull`.
         MTL::Winding winding = MTL::WindingCounterClockwise;      ///< `RasterState::frontFace`.
         bool setsWinding = false;                                 ///< A bind sets the winding: the pipeline culls, tests stencil or has a fragment entry.
@@ -94,6 +95,16 @@ namespace rojoRHI::metal4 {
         DepthStencilCache(const DepthStencilCache&) = delete;
         DepthStencilCache& operator=(const DepthStencilCache&) = delete;
 
+        /// Creates the untested state on `device`: depth compare `Always`, no depth write, no stencil, which is Metal's
+        /// default. Adds one to `counts.nativeCreateCalls`. The caller holds an autorelease pool.
+        Result<void> create(MTL::Device* device, core::DeviceCounts& counts);
+
+        /// Returns the untested state `create` made; null before it.
+        MTL::DepthStencilState* untested() const
+        {
+            return m_untested;
+        }
+
         /// Returns the state equal to `state`, created on `device` on first use, or null for a state that tests neither depth
         /// nor stencil (Metal's default). Null for a state that tests something means Metal made no object. A creation adds one
         /// to `counts.nativeCreateCalls`. The caller holds an autorelease pool.
@@ -102,13 +113,14 @@ namespace rojoRHI::metal4 {
         /// The number of states the cache holds.
         size_t size();
 
-        /// Releases every state, adding one to `counts.nativeCreateCalls` for each. Device teardown calls it inside a pool, after
-        /// every pipeline retired.
+        /// Releases every state, the untested one included, adding one to `counts.nativeCreateCalls` for each. Device teardown
+        /// calls it inside a pool, after every pipeline retired.
         void release(core::DeviceCounts& counts);
 
       private:
         std::mutex m_mutex;                                             ///< Guards `m_states`.
         std::unordered_map<uint64_t, MTL::DepthStencilState*> m_states; ///< By the packed fields Metal receives; each +1.
+        MTL::DepthStencilState* m_untested = nullptr;                   ///< The untested state (+1); null before `create`.
     };
 
     /// Releases the payload of a retiring pipeline and deletes it. `context` is the `DeviceImpl`; a null payload is skipped. It

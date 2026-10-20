@@ -59,15 +59,18 @@ namespace rojoRHI {
         }
 
         //==============================================================================================================
-        /// Sets `state` on `encoder` unless it holds it; equal states share one object, so a pointer compares them.
-        void setDepthStencil(CommandListImpl& list, MTL4::RenderCommandEncoder* encoder, const MTL::DepthStencilState* state)
+        /// Sets `state` on `encoder` unless it holds it; equal states share one object, so a pointer compares them. It sends
+        /// `bound`, which is `state` or, for a null `state`, the device's untested state that equals Metal's default.
+        void setDepthStencil(
+            CommandListImpl& list, MTL4::RenderCommandEncoder* encoder, const MTL::DepthStencilState* state, const MTL::DepthStencilState* bound
+        )
         {
             metal4::RenderHeld& held = list.draw.held;
             if (held.depthStencil == state)
             {
                 return;
             }
-            encoder->setDepthStencilState(state);
+            encoder->setDepthStencilState(bound);
             core::noteNativeCall(list.core);
             held.depthStencil = state;
         }
@@ -214,7 +217,7 @@ namespace rojoRHI {
             // The encoder is read once: the setters below leave it open.
             MTL4::RenderCommandEncoder* encoder = openEncoder(list);
             setRenderState(list, encoder, &pipeline);
-            setDepthStencil(list, encoder, pipeline.depthStencil);
+            setDepthStencil(list, encoder, pipeline.depthStencil, pipeline.boundDepthStencil);
             setCull(list, encoder, pipeline.cull);
             if (pipeline.setsWinding)
             {
@@ -283,7 +286,8 @@ namespace rojoRHI {
             {
                 setRenderState(list, encoder, previous.pipeline);
             }
-            setDepthStencil(list, encoder, previous.depthStencil);
+            // The new encoder holds Metal's default, so only a state that tests something is sent, and it is its own bound one.
+            setDepthStencil(list, encoder, previous.depthStencil, previous.depthStencil);
             setCull(list, encoder, previous.cull);
             setWinding(list, encoder, previous.winding);
             setFill(list, encoder, previous.fill);

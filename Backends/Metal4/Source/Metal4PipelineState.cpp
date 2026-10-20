@@ -300,6 +300,23 @@ namespace rojoRHI::metal4 {
     }
 
     //==================================================================================================================
+    Result<void> DepthStencilCache::create(MTL::Device* device, core::DeviceCounts& counts)
+    {
+        MTL::DepthStencilDescriptor* descriptor = MTL::DepthStencilDescriptor::alloc()->init();
+        descriptor->setDepthCompareFunction(MTL::CompareFunctionAlways);
+        descriptor->setDepthWriteEnabled(false);
+        descriptor->setLabel(makeString("rojorhi.depthStencil.untested"));
+        m_untested = device->newDepthStencilState(descriptor);
+        core::DeviceCounts::add(counts.nativeCreateCalls);
+        descriptor->release();
+        if (m_untested == nullptr)
+        {
+            return std::unexpected(Error{ ErrorCategory::DriverFailure, "the untested depth-stencil state was not created" });
+        }
+        return {};
+    }
+
+    //==================================================================================================================
     size_t DepthStencilCache::size()
     {
         std::lock_guard lock(m_mutex);
@@ -316,6 +333,12 @@ namespace rojoRHI::metal4 {
         }
         core::DeviceCounts::add(counts.nativeCreateCalls, m_states.size());
         m_states.clear();
+        if (m_untested != nullptr)
+        {
+            m_untested->release();
+            core::DeviceCounts::add(counts.nativeCreateCalls);
+            m_untested = nullptr;
+        }
     }
 
     //==================================================================================================================
