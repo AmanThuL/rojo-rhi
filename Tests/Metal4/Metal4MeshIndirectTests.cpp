@@ -270,13 +270,12 @@ TEST_CASE("a mesh draw with a count runs the writer kernel and one native indire
     CommandList list = kit.list(QueueType::Graphics, "test.meshIndirect");
     fixture.begin(list);
     uint64_t before = callsOf(list);
-    // The encoder's open, the pass's begin timestamp and the writer kernel: no indirect command buffer, so no residency set.
+    // The encoder's open, the pass's begin timestamp and the writer kernel: no indirect command buffer.
     list.drawMeshTasksIndirect(fixture.record(5), 1, fixture.counted());
     CHECK(callsOf(list) - before == batchOpenCalls(list) + kPassBegin + 4);
     CHECK(encodersOf(list).kind() == metal4::EncoderKind::Compute);
     CHECK(encodersOf(list).kernelPipeline() == DeviceImpl::of(kit.device).kernels.writeMesh);
     CHECK(drawOf(list).icbs.slots(metal4::IcbKind::Mesh) == 0);
-    CHECK(drawOf(list).icbs.residencySet() == nullptr);
     CHECK(prefixKinds(list) == std::vector{ Kind::Pipeline, Kind::Viewport, Kind::Scissor, Kind::MeshIndirect });
     const metal4::PrefixMesh& mesh = drawOf(list).prefix.back().mesh;
     CHECK(mesh.record == gpuAddressOf(fixture.record(5)));
@@ -308,16 +307,14 @@ TEST_CASE("a mesh batch encodes an ICB whose commands bind the reserved buffers 
     fixture.begin(list);
     list.setRoot(root);
     uint64_t before = callsOf(list);
-    // The encoder's open, the pass's begin timestamp, the list's residency set, then the pipeline, the kernel table, the
-    // parameters and the dispatch.
+    // The encoder's open, the pass's begin timestamp, then the pipeline, the kernel table, the parameters and the dispatch.
     list.drawMeshTasksIndirect(fixture.record(), kRecords, fixture.counted());
-    CHECK(callsOf(list) - before == batchOpenCalls(list) + kPassBegin + 1 + 4);
+    CHECK(callsOf(list) - before == batchOpenCalls(list) + kPassBegin + 4);
     CHECK(encodersOf(list).kernelPipeline() == impl.kernels.encodeMesh);
     const metal4::IcbPool& icbs = drawOf(list).icbs;
     REQUIRE(icbs.slots(metal4::IcbKind::Mesh) == 1);
     CHECK(icbs.capacity(metal4::IcbKind::Mesh, 0) == metal4::kIcbMinimumCommands);
     CHECK(icbs.buffer(metal4::IcbKind::Mesh, 0)->size() == metal4::kIcbMinimumCommands);
-    CHECK(icbs.attached());
     CHECK(prefixKinds(list) == std::vector{ Kind::Pipeline, Kind::Viewport, Kind::Scissor, Kind::Root, Kind::MeshExecute });
     const metal4::PrefixCommand& execute = drawOf(list).prefix.back();
     CHECK(execute.execute.buffer == icbs.buffer(metal4::IcbKind::Mesh, 0));
@@ -368,9 +365,9 @@ TEST_CASE("mesh ICBs are reused across frames like the others", "[metal4]")
         // The pinned creations include the counter heap the pass's timestamps need.
         test::requireTimed(list);
         const Counters after = device.counters();
-        // A new list makes its four objects, its first frame-arena page, its residency set and two indirect command buffers,
-        // and the pass's timestamps the frame slot's first counter heap; a reused list and slot make none.
-        CHECK(after.nativeCreateCalls - before.nativeCreateCalls == (frame < slots ? 4 + 1 + 1 + 2 + 1 : 0));
+        // A new list makes its four objects, its first frame-arena page and two indirect command buffers, and the pass's
+        // timestamps the frame slot's first counter heap; a reused list and slot make none.
+        CHECK(after.nativeCreateCalls - before.nativeCreateCalls == (frame < slots ? 4 + 1 + 2 + 1 : 0));
         const metal4::IcbPool& icbs = drawOf(list).icbs;
         REQUIRE(icbs.slots(metal4::IcbKind::Mesh) == 2);
         CHECK(icbs.slots(metal4::IcbKind::Draw) == 0);

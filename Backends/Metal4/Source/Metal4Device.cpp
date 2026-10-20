@@ -425,7 +425,7 @@ namespace rojoRHI {
                 for (const std::unique_ptr<CommandListImpl>& list : listPool.lists)
                 {
                     list->encoders.release();
-                    list->draw.release();
+                    list->draw.release(impl.residency);
                     list->state.release();
                 }
             }

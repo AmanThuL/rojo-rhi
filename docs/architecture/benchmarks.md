@@ -227,6 +227,10 @@ overhead and not a defect of the harness. In particular:
   barrier before the first dispatch, so its frame opens one compute encoder, as N's does, where it
   opened two. N's barrier after its fill is encoder-level only; the queue-level one is measured
   overhead. The per-repetition count is unchanged.
+- A list's indirect command buffers are resident through the device's residency set, which the
+  submission that follows their making updates, so a list with counted draws sends its command
+  buffer no `useResidencySet`: one native call and two Metal allocations fewer per such list, C10's
+  frame one and the composed frame two (`gbuffer`, `shadows`).
 - Allocator resets count in `nativeHostCalls`, outside every timed window and outside every
   per-operation count, though inside the composed frame's per-frame count; they are not native-call
   targets.

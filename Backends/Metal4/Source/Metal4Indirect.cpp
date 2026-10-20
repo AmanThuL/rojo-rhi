@@ -175,7 +175,6 @@ namespace rojoRHI {
             if (counted.maxCount > 1)
             {
                 const metal4::IcbSlot& icb = draw.icbs.take(impl.device, device, counted.kind, counted.maxCount);
-                draw.icbs.attach(list.core, list.state.commandBuffer);
                 std::memcpy(place.memory + kIcbIdOffset, &icb.id, sizeof(icb.id));
                 params.icb = base + kIcbIdOffset;
                 params.output = base + kRangeOffset;
@@ -247,7 +246,6 @@ namespace rojoRHI {
             if (maxCount > 1)
             {
                 const metal4::IcbSlot& icb = draw.icbs.take(impl.device, device, metal4::IcbKind::Mesh, maxCount);
-                draw.icbs.attach(list.core, list.state.commandBuffer);
                 std::memcpy(place.memory + metal4::kMeshOutputOffset, &icb.id, sizeof(icb.id));
                 params.icb = base + metal4::kMeshOutputOffset;
                 params.output = base + metal4::kMeshRangeOffset;

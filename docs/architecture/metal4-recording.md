@@ -52,15 +52,14 @@ factory, except where the next paragraph says.
 
 The Metal validation layer autoreleases inside the native commands it checks. The copy entries, the
 native `fillBuffer`, every backend kernel dispatch, dispatch and draw, a command buffer's timestamp
-write and the end of a render encoder therefore open a `CommandPool` around their native call, which
-pushes an autorelease pool only when the device is wrapped by the layer
-(`DeviceImpl::commandPools`, found once at creation) and costs one untaken branch otherwise. The
-render path of a clear opens an `AutoreleasePool` always, since it calls the encoder factory.
-Barriers and debug groups open none. Without the layer the driver still autoreleases one object the
-first time a copy shape builds its internal blit pipeline, under `copyBuffer` or the native
-`fillBuffer`. Without `OBJC_DEBUG_MISSING_POOLS` the runtime installs a page for an object
-autoreleased with no pool, so a thread that holds no pool keeps that object until the thread exits;
-it does not accumulate, since the driver caches the pipeline and builds it once per shape.
+write, the end of a render encoder and the end of a compute encoder after a carry-fence wait or
+update therefore open a `CommandPool` around their native call, which pushes an autorelease pool
+only when the device is wrapped by the layer (`DeviceImpl::commandPools`) and costs one untaken
+branch otherwise. The render path of a clear opens an `AutoreleasePool` always, for the encoder
+factory. Barriers open none; labels and debug-group pushes always open one. Without the layer the
+driver still autoreleases a bounded set of objects once, under copies and fills, `commitIfDirty`,
+`forgetTextures`, `end`, `Encoders::close` and `finish`, and `commit`; the count stays flat from 3
+to 200 samples and from K 10 to 1,000. A thread with no pool keeps such an object until it exits.
 
 ## Copies
 
@@ -265,7 +264,7 @@ encode, a timestamp and the pop.
 `nativeRecordCalls` counts every message a list sends after `beginList` to its command buffer, an
 encoder or an argument table: `beginCommandBuffer`, `setLabel`, the encoder factories,
 `setArgumentTable`, `setAddress`, `setTexture`, the pipeline, state and store-action setters, debug
-groups, timestamps, copies, fills, dispatches, draws, executes, `useResidencySet`, barriers,
+groups, timestamps, copies, fills, dispatches, draws, executes, barriers,
 `endEncoding` and `endCommandBuffer`; a command deferred to the render encoder's open counts when it
 is replayed. Getters and the setters of a pass descriptor count nothing. A render encoder counts in
 `encodersOpened` like any other, those of a split and the compute encoder of a counted draw's
