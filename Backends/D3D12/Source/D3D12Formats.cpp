@@ -7,11 +7,12 @@
 
 #include <rojoRHI/RHI.h>
 
+#include "Base/Assert.h"
 #include "Core/Formats.h"
 #include "D3D12Common.h"
 
 #include <cstdint>
-#include <vector>
+#include <span>
 
 namespace rojoRHI::d3d12 {
     namespace {
@@ -30,34 +31,38 @@ namespace rojoRHI::d3d12 {
         }
 
         //==============================================================================================================
-        /// Returns the format support `device` reports for `format`; a format the runtime refuses to describe supports nothing.
-        D3D12_FEATURE_DATA_FORMAT_SUPPORT supportOf(ID3D12Device12* device, DXGI_FORMAT format)
+        /// Returns the format support `device` reports for `format`, or the error of the query that failed.
+        Result<D3D12_FEATURE_DATA_FORMAT_SUPPORT> supportOf(ID3D12Device12* device, DXGI_FORMAT format)
         {
             D3D12_FEATURE_DATA_FORMAT_SUPPORT support = {};
             support.Format = format;
-            if (FAILED(device->CheckFeatureSupport(D3D12_FEATURE_FORMAT_SUPPORT, &support, static_cast<UINT>(sizeof(support)))))
+            if (const HRESULT result = device->CheckFeatureSupport(D3D12_FEATURE_FORMAT_SUPPORT, &support, static_cast<UINT>(sizeof(support))); FAILED(result))
             {
-                support.Support1 = D3D12_FORMAT_SUPPORT1_NONE;
-                support.Support2 = D3D12_FORMAT_SUPPORT2_NONE;
+                return std::unexpected(hresultError(result, "D3D12_FEATURE_FORMAT_SUPPORT"));
             }
             return support;
         }
 
         //==============================================================================================================
-        /// Returns true when `device` offers at least one quality level of `format` at `samples` samples.
-        bool multisampled(ID3D12Device12* device, DXGI_FORMAT format, uint32_t samples)
+        /// Returns whether `device` offers at least one quality level of `format` at `samples` samples, or the error of the
+        /// query that failed.
+        Result<bool> multisampled(ID3D12Device12* device, DXGI_FORMAT format, uint32_t samples)
         {
             D3D12_FEATURE_DATA_MULTISAMPLE_QUALITY_LEVELS levels = {};
             levels.Format = format;
             levels.SampleCount = samples;
             levels.Flags = D3D12_MULTISAMPLE_QUALITY_LEVELS_FLAG_NONE;
-            return SUCCEEDED(device->CheckFeatureSupport(D3D12_FEATURE_MULTISAMPLE_QUALITY_LEVELS, &levels, static_cast<UINT>(sizeof(levels)))) &&
-                   levels.NumQualityLevels > 0;
+            if (const HRESULT result = device->CheckFeatureSupport(D3D12_FEATURE_MULTISAMPLE_QUALITY_LEVELS, &levels, static_cast<UINT>(sizeof(levels)));
+                FAILED(result))
+            {
+                return std::unexpected(hresultError(result, "D3D12_FEATURE_MULTISAMPLE_QUALITY_LEVELS"));
+            }
+            return levels.NumQualityLevels > 0;
         }
 
         //==============================================================================================================
         /// Returns what `device` supports for `format`, never more than the core's ceiling.
-        FormatCapabilities queryFormat(ID3D12Device12* device, Format format)
+        Result<FormatCapabilities> queryFormat(ID3D12Device12* device, Format format)
         {
             const FormatCapabilities ceiling = core::formatCeiling(format);
             FormatCapabilities caps;
@@ -68,9 +73,23 @@ namespace rojoRHI::d3d12 {
             // A depth texture is sampled through its float view, so that view's support is what sampling needs.
             const bool depth = core::isDepthFormat(format);
             const DXGI_FORMAT native = dxgiFormat(format);
-            const D3D12_FEATURE_DATA_FORMAT_SUPPORT shader =
+            const Result<D3D12_FEATURE_DATA_FORMAT_SUPPORT> shaderSupport =
                 supportOf(device, depth ? viewFormat(format, Format::Undefined, TextureAspect::Depth, TextureUsage::Sampled) : native);
-            const D3D12_FEATURE_DATA_FORMAT_SUPPORT target = depth ? supportOf(device, native) : shader;
+            if (!shaderSupport)
+            {
+                return std::unexpected(shaderSupport.error());
+            }
+            const D3D12_FEATURE_DATA_FORMAT_SUPPORT shader = *shaderSupport;
+            D3D12_FEATURE_DATA_FORMAT_SUPPORT target = shader;
+            if (depth)
+            {
+                const Result<D3D12_FEATURE_DATA_FORMAT_SUPPORT> targetSupport = supportOf(device, native);
+                if (!targetSupport)
+                {
+                    return std::unexpected(targetSupport.error());
+                }
+                target = *targetSupport;
+            }
             const UINT shader1 = static_cast<UINT>(shader.Support1);
             const UINT shader2 = static_cast<UINT>(shader.Support2);
             const UINT target1 = static_cast<UINT>(target.Support1);
@@ -94,7 +113,16 @@ namespace rojoRHI::d3d12 {
             {
                 for (uint32_t bit = 1; bit < 4; ++bit)
                 {
-                    if (((ceiling.sampleCounts >> bit) & 1u) != 0 && multisampled(device, native, 1u << bit))
+                    if (((ceiling.sampleCounts >> bit) & 1u) == 0)
+                    {
+                        continue;
+                    }
+                    const Result<bool> counted = multisampled(device, native, 1u << bit);
+                    if (!counted)
+                    {
+                        return std::unexpected(counted.error());
+                    }
+                    if (*counted)
                     {
                         caps.sampleCounts |= 1u << bit;
                     }
@@ -143,14 +171,18 @@ namespace rojoRHI::d3d12 {
     }
 
     //==================================================================================================================
-    std::vector<DXGI_FORMAT> castableFormats(Format format)
+    std::span<const DXGI_FORMAT> castableFormats(Format format)
     {
-        const Format counterpart = core::srgbCounterpart(format);
-        if (counterpart == Format::Undefined)
+        static constexpr DXGI_FORMAT kRgba8[] = { DXGI_FORMAT_R8G8B8A8_UNORM_SRGB, DXGI_FORMAT_R8G8B8A8_UNORM };
+        static constexpr DXGI_FORMAT kBc1[] = { DXGI_FORMAT_BC1_UNORM_SRGB, DXGI_FORMAT_BC1_UNORM };
+        switch (format)
         {
-            return {};
+        case Format::RGBA8Unorm:
+        case Format::RGBA8Unorm_sRGB: return kRgba8;
+        case Format::BC1Unorm:
+        case Format::BC1Unorm_sRGB: return kBc1;
+        default: return {};
         }
-        return { dxgiFormat(format), dxgiFormat(counterpart) };
     }
 
     //==================================================================================================================
@@ -158,6 +190,7 @@ namespace rojoRHI::d3d12 {
     {
         if (aspect == TextureAspect::Stencil)
         {
+            ROJORHI_INTERNAL_ASSERT(core::hasStencilPlane(texture), "a stencil view needs a format with a stencil plane");
             return DXGI_FORMAT_X32_TYPELESS_G8X24_UINT;
         }
         if (aspect == TextureAspect::Depth)
@@ -165,7 +198,7 @@ namespace rojoRHI::d3d12 {
             return texture == Format::D32Float ? DXGI_FORMAT_R32_FLOAT : DXGI_FORMAT_R32_FLOAT_X8X24_TYPELESS;
         }
         Format chosen = view == Format::Undefined ? texture : view;
-        if (viewUsage == TextureUsage::Storage && isSrgb(chosen))
+        if ((viewUsage & TextureUsage::Storage) == TextureUsage::Storage && isSrgb(chosen))
         {
             chosen = core::srgbCounterpart(chosen);
         }
@@ -179,12 +212,17 @@ namespace rojoRHI::d3d12 {
     }
 
     //==================================================================================================================
-    core::FormatTable queryFormatTable(ID3D12Device12* device)
+    Result<core::FormatTable> queryFormatTable(ID3D12Device12* device)
     {
         core::FormatTable table;
         for (uint32_t value = 0; value < core::kFormatCount; ++value)
         {
-            table[value] = queryFormat(device, static_cast<Format>(value));
+            const Result<FormatCapabilities> caps = queryFormat(device, static_cast<Format>(value));
+            if (!caps)
+            {
+                return std::unexpected(caps.error());
+            }
+            table[value] = *caps;
         }
         return table;
     }

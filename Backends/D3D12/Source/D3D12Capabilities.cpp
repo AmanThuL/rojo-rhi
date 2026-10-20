@@ -12,9 +12,9 @@
 #include "D3D12Formats.h"
 
 #include <algorithm>
-#include <cstdint>
 #include <dxgi1_6.h>
 
+#include <cstdint>
 #include <format>
 #include <string>
 #include <utility>
@@ -122,15 +122,16 @@ namespace rojoRHI::d3d12 {
         {
             return std::unexpected(failure(impl, result, "D3D12_FEATURE_D3D12_OPTIONS3"));
         }
+        // The floor check already required these two to answer; a query that fails anyway reports its optional bits false.
         D3D12_FEATURE_DATA_D3D12_OPTIONS12 options12 = {};
-        if (const HRESULT result = query(device, D3D12_FEATURE_D3D12_OPTIONS12, options12); FAILED(result))
+        if (FAILED(query(device, D3D12_FEATURE_D3D12_OPTIONS12, options12)))
         {
-            return std::unexpected(failure(impl, result, "D3D12_FEATURE_D3D12_OPTIONS12"));
+            options12 = {};
         }
         D3D12_FEATURE_DATA_D3D12_OPTIONS16 options16 = {};
-        if (const HRESULT result = query(device, D3D12_FEATURE_D3D12_OPTIONS16, options16); FAILED(result))
+        if (FAILED(query(device, D3D12_FEATURE_D3D12_OPTIONS16, options16)))
         {
-            return std::unexpected(failure(impl, result, "D3D12_FEATURE_D3D12_OPTIONS16"));
+            options16 = {};
         }
         D3D12_FEATURE_DATA_GPU_VIRTUAL_ADDRESS_SUPPORT address = {};
         if (const HRESULT result = query(device, D3D12_FEATURE_GPU_VIRTUAL_ADDRESS_SUPPORT, address); FAILED(result))
@@ -199,7 +200,12 @@ namespace rojoRHI::d3d12 {
         limits.maxMeshTaskGroups = 65'535;
         limits.maxMeshTaskGroupsTotal = 4'194'304;
 
-        impl.core.setFormatTable(queryFormatTable(device));
+        const Result<core::FormatTable> table = queryFormatTable(device);
+        if (!table)
+        {
+            return std::unexpected(table.error());
+        }
+        impl.core.setFormatTable(*table);
         return {};
     }
 } // namespace rojoRHI::d3d12

@@ -14,10 +14,11 @@
 
 #include <dxgi1_6.h>
 
+#include <charconv>
 #include <cstdint>
+#include <span>
 #include <string>
 #include <string_view>
-#include <vector>
 
 using namespace rojoRHI;
 
@@ -43,7 +44,12 @@ TEST_CASE("the floor name gives feature level 12_2 and the highest shader model"
     INFO("floor " << std::string(floor));
     REQUIRE(floor.starts_with("FL 12_2, SM 6."));
     CHECK((impl.features.shaderModel >> 4) == 6u);
-    CHECK(static_cast<uint32_t>(floor[std::string_view("FL 12_2, SM 6.").size()] - '0') == (impl.features.shaderModel & 0xFu));
+    const std::string_view minor = floor.substr(std::string_view("FL 12_2, SM 6.").size());
+    uint32_t parsed = UINT32_MAX;
+    const std::from_chars_result parse = std::from_chars(minor.data(), minor.data() + minor.size(), parsed);
+    REQUIRE(parse.ec == std::errc());
+    CHECK(parse.ptr == minor.data() + minor.size());
+    CHECK(parsed == (impl.features.shaderModel & 0xFu));
     destroyDevice(*created);
 }
 
@@ -60,6 +66,41 @@ TEST_CASE("the adapter name is the adapter's description", "[d3d12]")
 #if defined(ROJORHI_D3D12_ADAPTER_WARP)
     CHECK(name.find("Microsoft Basic Render Driver") != std::string::npos);
 #endif
+    destroyDevice(*created);
+}
+
+//======================================================================================================================
+TEST_CASE("the limits are the D3D12 column of the reference", "[d3d12]")
+{
+    Result<Device> created = createDevice();
+    REQUIRE(created.has_value());
+    const Capabilities& capabilities = created->capabilities();
+    const Limits& limits = capabilities.limits;
+    CHECK(limits.maxViews >= 1'000'000u);
+    CHECK(limits.maxViews == capabilities.maxViews);
+    CHECK(limits.maxSamplers == 2'048u);
+    CHECK(limits.maxSamplers == capabilities.maxSamplers);
+    CHECK(limits.maxRootBlockSize == 65'536u);
+    CHECK(limits.rootAlignment == 256u);
+    CHECK(limits.frameDataAlignment == 256u);
+    CHECK(limits.maxBufferSize > 0u);
+    CHECK(limits.maxTextureDimension1D == 16'384u);
+    CHECK(limits.maxTextureDimension2D == 16'384u);
+    CHECK(limits.maxTextureDimension3D == 2'048u);
+    CHECK(limits.maxTextureDimensionCube == 16'384u);
+    CHECK(limits.maxTextureLayers == 2'048u);
+    CHECK(limits.maxColorAttachments == 8u);
+    CHECK(limits.maxColorBytesPerSample == 64u);
+    CHECK(limits.maxSamplerAnisotropy == 16u);
+    CHECK(limits.maxDrawIndirectCount == UINT32_MAX);
+    CHECK(limits.maxDispatchGroups == 65'535u);
+    CHECK(limits.maxThreadsPerGroup == 1'024u);
+    CHECK(limits.maxGroupSize[0] == 1'024u);
+    CHECK(limits.maxGroupSize[1] == 1'024u);
+    CHECK(limits.maxGroupSize[2] == 64u);
+    CHECK(limits.maxGroupSharedMemory == 32'768u);
+    CHECK(limits.maxMeshTaskGroups == 65'535u);
+    CHECK(limits.maxMeshTaskGroupsTotal == 4'194'304u);
     destroyDevice(*created);
 }
 
@@ -151,7 +192,7 @@ TEST_CASE("an sRGB format is created castable or typeless", "[d3d12]")
     CHECK(d3d12::resourceFormat(Format::RGBA8Unorm_sRGB, TextureUsage::Sampled, false) == DXGI_FORMAT_R8G8B8A8_TYPELESS);
     CHECK(d3d12::resourceFormat(Format::BC1Unorm_sRGB, TextureUsage::Sampled, false) == DXGI_FORMAT_BC1_TYPELESS);
     CHECK(d3d12::resourceFormat(Format::RGBA8Unorm_sRGB, TextureUsage::Sampled, true) == DXGI_FORMAT_R8G8B8A8_UNORM_SRGB);
-    const std::vector<DXGI_FORMAT> castable = d3d12::castableFormats(Format::RGBA8Unorm_sRGB);
+    const std::span<const DXGI_FORMAT> castable = d3d12::castableFormats(Format::RGBA8Unorm_sRGB);
     REQUIRE(castable.size() == 2);
     CHECK(castable[0] == DXGI_FORMAT_R8G8B8A8_UNORM_SRGB);
     CHECK(castable[1] == DXGI_FORMAT_R8G8B8A8_UNORM);
