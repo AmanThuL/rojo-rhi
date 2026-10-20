@@ -169,21 +169,23 @@ TEST_CASE("the sampler heap is shader-visible and holds 2,048 samplers", "[d3d12
 }
 
 //======================================================================================================================
-TEST_CASE("slot 0 is held for the device's life", "[d3d12]")
+TEST_CASE("slots 0 and 1 are held for the device's life", "[d3d12]")
 {
     Result<Device> created = createDevice();
     REQUIRE(created.has_value());
     core::DeviceCore& core = DeviceImpl::of(*created).core;
     const uint32_t capacity = DeviceImpl::of(*created).descriptors.viewCapacity();
     CHECK(core.views().state(0) == core::SlotState::Assigned);
+    CHECK(core.views().state(1) == core::SlotState::Assigned);
     for (uint32_t frame = 0; frame <= core.framesInFlight(); ++frame)
     {
         emptyFrame(*created);
     }
     CHECK(core.views().state(0) == core::SlotState::Assigned);
+    CHECK(core.views().state(1) == core::SlotState::Assigned);
     const std::optional<uint32_t> slot = core.views().allocate(capacity, 7);
     REQUIRE(slot.has_value());
-    CHECK(*slot != 0u);
+    CHECK(*slot >= d3d12::kHeldViewSlots);
     CHECK(core.views().release(*slot, [&] { return core.releaseFrame(); }).has_value());
     destroyDevice(*created);
 }
@@ -197,7 +199,7 @@ TEST_CASE("the ring is one range of framesInFlight x 1,024 slots", "[d3d12]")
     Result<Device> created = createDevice(desc);
     REQUIRE(created.has_value());
     INFO("framesInFlight " << framesInFlight);
-    CHECK(DeviceImpl::of(*created).core.views().holdsRange(1, framesInFlight * 1'024));
+    CHECK(DeviceImpl::of(*created).core.views().holdsRange(d3d12::kHeldViewSlots, framesInFlight * 1'024));
     destroyDevice(*created);
 }
 
@@ -235,7 +237,7 @@ TEST_CASE("a writable raw view pair is adjacent and a read-only one takes one sl
         const uint64_t before = created->counters().descriptorWrites;
         const Result<uint32_t> pair = d3d12::createRawViews(impl, buffer.get(), 256, true);
         REQUIRE(pair.has_value());
-        CHECK(*pair != 0u);
+        CHECK(*pair >= d3d12::kHeldViewSlots);
         CHECK(impl.core.views().holdsRange(*pair, 2));
         CHECK(created->counters().descriptorWrites == before + 2);
         const Result<uint32_t> single = d3d12::createRawViews(impl, buffer.get(), 256, false);

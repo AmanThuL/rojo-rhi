@@ -34,6 +34,17 @@ TEST_CASE("a published payload is found by its heap index and cleared", "[d3d12]
 }
 
 //======================================================================================================================
+TEST_CASE("an address encodes its buffer's raw SRV index and offset", "[d3d12]")
+{
+    d3d12::BufferPayload payload;
+    payload.viewIndex = 40;
+    payload.viewCount = 2;
+    const Addr address = d3d12::encodeAddr(payload, 100);
+    CHECK(address.lo == 40u);
+    CHECK(address.hi == 100u);
+}
+
+//======================================================================================================================
 TEST_CASE("an index with no entry decodes to slot 0", "[d3d12]")
 {
     Result<Device> created = createDevice();

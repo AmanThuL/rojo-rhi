@@ -1,12 +1,13 @@
 //----------------------------------------------------------------------------------------------------------------------
 /// @file D3D12Addr.cpp
-/// @brief Implements the D3D12 address lowering: the heap directory, the decode of an Addr and its offset arithmetic.
+/// @brief Implements the D3D12 address lowering: the heap directory and the encoding, decoding and offsetting of an Addr.
 //----------------------------------------------------------------------------------------------------------------------
 
 #include "D3D12Addr.h"
 
 #include <rojoRHI/RHI.h>
 
+#include "Base/Assert.h"
 #include "Core/Addresses.h"
 #include "Core/Buffers.h"
 #include "Core/DeviceCore.h"
@@ -22,8 +23,16 @@
 namespace rojoRHI {
     // The D3D12 encoding of an Addr is defined here and in the D3D12 branch of the shader module alone: `lo` is the
     // view-heap index of the buffer's raw SRV, whose raw UAV, when it has one, sits at `lo + 1`, and `hi` is the byte offset
-    // into the buffer. No other file of the backend decodes an address or offsets one.
+    // into the buffer. No other file of the backend encodes, decodes or offsets an address.
     namespace d3d12 {
+        //==============================================================================================================
+        Addr encodeAddr(const BufferPayload& payload, uint64_t offset)
+        {
+            ROJORHI_INTERNAL_ASSERT(payload.viewCount > 0, "an address of a buffer with no raw view");
+            ROJORHI_INTERNAL_ASSERT(offset < kMaxAddrOffset, "an address offset past maxAddrOffset");
+            return Addr{ payload.viewIndex, static_cast<uint32_t>(offset) };
+        }
+
         //==============================================================================================================
         void HeapDirectory::create(uint32_t capacity)
         {

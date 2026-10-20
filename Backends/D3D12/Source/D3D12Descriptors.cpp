@@ -133,12 +133,20 @@ namespace rojoRHI::d3d12 {
         m_viewCapacity = capacity;
         m_ringBlocks = blocks;
 
-        // Slot 0 is the first slot a fresh allocator hands out, and it is never released: the core's teardown drains it.
-        [[maybe_unused]] const std::optional<uint32_t> reserved = impl.core.views().allocate(capacity, 0);
-        ROJORHI_INTERNAL_ASSERT(reserved == 0u, "the view heap's first slot was not slot 0");
-        // A null raw SRV, described as a four-byte buffer, so a shader reading the zero Addr reads zeros.
-        const D3D12_SHADER_RESOURCE_VIEW_DESC nullView = rawSrv(4);
-        impl.device()->CreateShaderResourceView(nullptr, &nullView, viewCpu(0));
+        // Slots 0 and 1 are the first slots a fresh allocator hands out, and they are never released: the core's teardown
+        // drains them.
+        for (uint32_t held = 0; held < kHeldViewSlots; ++held)
+        {
+            [[maybe_unused]] const std::optional<uint32_t> reserved = impl.core.views().allocate(capacity, 0);
+            ROJORHI_INTERNAL_ASSERT(reserved == held, "the view heap's held slots are not its first slots");
+        }
+        // A null raw SRV and a null raw UAV, described as a four-byte buffer, so a load through the zero Addr reads zeros and
+        // a store through it is discarded.
+        const D3D12_SHADER_RESOURCE_VIEW_DESC nullSrv = rawSrv(4);
+        impl.device()->CreateShaderResourceView(nullptr, &nullSrv, viewCpu(0));
+        core::DeviceCounts::add(impl.core.counts().descriptorWrites);
+        const D3D12_UNORDERED_ACCESS_VIEW_DESC nullUav = rawUav(4);
+        impl.device()->CreateUnorderedAccessView(nullptr, nullptr, &nullUav, viewCpu(1));
         core::DeviceCounts::add(impl.core.counts().descriptorWrites);
 
         const std::optional<uint32_t> ring = impl.core.views().allocateRange(capacity, ringSize, 0);
@@ -261,7 +269,8 @@ namespace rojoRHI::d3d12 {
     void releaseRawViews(DeviceImpl& impl, uint32_t base, uint32_t count)
     {
         // The core's teardown passes buffers to their hooks before it drains the view allocator, so the range is held then
-        // too; a range the allocator no longer holds has nothing left to release.
-        static_cast<void>(impl.core.views().releaseRange(base, count, [&] { return impl.core.releaseFrame(); }));
+        // too.
+        [[maybe_unused]] const bool released = impl.core.views().releaseRange(base, count, [&] { return impl.core.releaseFrame(); }).has_value();
+        ROJORHI_INTERNAL_ASSERT(released, "raw views released that the view allocator does not hold as one range");
     }
 } // namespace rojoRHI::d3d12

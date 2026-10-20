@@ -40,17 +40,25 @@ namespace rojoRHI::d3d12 {
     /// The transient descriptors each frame slot's block of the ring holds.
     inline constexpr uint32_t kTransientPerSlot = 1'024;
 
+    /// The most frame slots a device has (VU-rojo-device-0001), so the most blocks the transient ring holds.
+    inline constexpr uint32_t kMaxFrameSlots = 3;
+
+    /// The view-heap slots held for the device's life: slot 0 holds a null raw SRV and slot 1 a null raw UAV, so a load or
+    /// a store through the zero `Addr` reaches a null descriptor. The transient ring starts after them.
+    inline constexpr uint32_t kHeldViewSlots = 2;
+
     /// The shader-visible heaps of a device: the view heap every buffer view, texture view and transient descriptor lives in,
     /// and the sampler heap. The core's view and sampler allocators hand out their slots, so a `ViewIndex` or `SamplerIndex`
     /// is the heap index a shader reads. Each heap holds its own reference, released with the device's other state.
     class DescriptorHeaps
     {
       public:
-        /// Creates both heaps, the reserved slot 0 and the transient ring on `impl`'s device. The view heap holds the
+        /// Creates both heaps, the held slots 0 and 1 and the transient ring on `impl`'s device. The view heap holds the
         /// `D3D12_FEATURE_D3D12_OPTIONS19` maximum, capped at `kMaxViewHeap`, or `kMinViewHeap` when the device does not
-        /// report it; a smaller maximum is `Unsupported`, naming `maxViews`. Slot 0 holds a null SRV for the device's life, so
-        /// the zero `Addr` names no buffer, and the ring is one range of `framesInFlight` blocks of `kTransientPerSlot` slots
-        /// right after it, each with a twin in a CPU-only heap. The core's teardown releases both ranges.
+        /// report it; a smaller maximum is `Unsupported`, naming `maxViews`. Slot 0 holds a null raw SRV and slot 1 a null raw
+        /// UAV for the device's life, so the zero `Addr` names no buffer, and the ring is one range of `framesInFlight` blocks
+        /// of `kTransientPerSlot` slots right after them, each with a twin in a CPU-only heap. The core's teardown releases
+        /// them all.
         Result<void> create(DeviceImpl& impl);
 
         /// Returns the number of descriptors of the view heap.
@@ -83,19 +91,19 @@ namespace rojoRHI::d3d12 {
         void resetTransient(uint32_t frameSlot);
 
       private:
-        Com<ID3D12DescriptorHeap> m_views;                      ///< The shader-visible view heap.
-        Com<ID3D12DescriptorHeap> m_samplers;                   ///< The shader-visible sampler heap.
-        Com<ID3D12DescriptorHeap> m_twins;                      ///< The CPU-only twins of the ring's descriptors.
-        D3D12_CPU_DESCRIPTOR_HANDLE m_viewCpu = {};             ///< The CPU handle of view-heap descriptor 0.
-        D3D12_GPU_DESCRIPTOR_HANDLE m_viewGpu = {};             ///< The GPU handle of view-heap descriptor 0.
-        D3D12_CPU_DESCRIPTOR_HANDLE m_samplerCpu = {};          ///< The CPU handle of sampler-heap descriptor 0.
-        D3D12_CPU_DESCRIPTOR_HANDLE m_twinCpu = {};             ///< The CPU handle of the first twin.
-        uint32_t m_viewIncrement = 0;                           ///< Bytes between two view descriptors.
-        uint32_t m_samplerIncrement = 0;                        ///< Bytes between two sampler descriptors.
-        uint32_t m_viewCapacity = 0;                            ///< Descriptors of the view heap.
-        uint32_t m_ringBase = 0;                                ///< The view-heap index of the ring's first slot.
-        uint32_t m_ringBlocks = 0;                              ///< Blocks of the ring, one per frame slot.
-        std::array<std::atomic<uint32_t>, 3> m_ringClaims = {}; ///< Slots claimed in each frame slot's block.
+        Com<ID3D12DescriptorHeap> m_views;                                   ///< The shader-visible view heap.
+        Com<ID3D12DescriptorHeap> m_samplers;                                ///< The shader-visible sampler heap.
+        Com<ID3D12DescriptorHeap> m_twins;                                   ///< The CPU-only twins of the ring's descriptors.
+        D3D12_CPU_DESCRIPTOR_HANDLE m_viewCpu = {};                          ///< The CPU handle of view-heap descriptor 0.
+        D3D12_GPU_DESCRIPTOR_HANDLE m_viewGpu = {};                          ///< The GPU handle of view-heap descriptor 0.
+        D3D12_CPU_DESCRIPTOR_HANDLE m_samplerCpu = {};                       ///< The CPU handle of sampler-heap descriptor 0.
+        D3D12_CPU_DESCRIPTOR_HANDLE m_twinCpu = {};                          ///< The CPU handle of the first twin.
+        uint32_t m_viewIncrement = 0;                                        ///< Bytes between two view descriptors.
+        uint32_t m_samplerIncrement = 0;                                     ///< Bytes between two sampler descriptors.
+        uint32_t m_viewCapacity = 0;                                         ///< Descriptors of the view heap.
+        uint32_t m_ringBase = 0;                                             ///< The view-heap index of the ring's first slot.
+        uint32_t m_ringBlocks = 0;                                           ///< Blocks of the ring, one per frame slot.
+        std::array<std::atomic<uint32_t>, kMaxFrameSlots> m_ringClaims = {}; ///< Slots claimed in each frame slot's block.
     };
 
     /// Creates the raw SRV of `resource`, a buffer `width` bytes wide (a multiple of 4), and its raw UAV after it when
@@ -108,7 +116,8 @@ namespace rojoRHI::d3d12 {
     /// elements (`D3D12_REQ_BUFFER_RESOURCE_TEXEL_COUNT_2_TO_EXP`), the first 512 MiB of a larger buffer.
     uint64_t rawViewElements(uint64_t width);
 
-    /// Releases the `count` raw views at `base` to the view allocator, reusable once the releasing frame retires. A range the
-    /// allocator no longer holds, after the core's teardown drained it, is ignored.
+    /// Releases the `count` raw views at `base`, a range `createRawViews` returned, to the view allocator, reusable once the
+    /// releasing frame retires. The core's teardown passes buffers to their retire hooks before it drains the allocator, so
+    /// the range is always held; a range that is not is an internal error.
     void releaseRawViews(DeviceImpl& impl, uint32_t base, uint32_t count);
 } // namespace rojoRHI::d3d12

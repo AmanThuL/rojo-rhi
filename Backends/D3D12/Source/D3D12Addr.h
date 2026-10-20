@@ -1,6 +1,6 @@
 //----------------------------------------------------------------------------------------------------------------------
 /// @file D3D12Addr.h
-/// @brief Declares the D3D12 lowering of an Addr: the buffer payload its raw views name and the heap directory that finds it.
+/// @brief Declares the D3D12 lowering of an Addr: its encoding, the buffer payload it names and the heap directory that finds it.
 //----------------------------------------------------------------------------------------------------------------------
 #pragma once
 
@@ -30,6 +30,11 @@ namespace rojoRHI::d3d12 {
         uint32_t viewCount = 0;             ///< The raw views the buffer holds: 0, 1 (SRV) or 2 (SRV and UAV).
         std::byte* host = nullptr;          ///< The mapped memory of an Upload or Readback buffer; null otherwise.
     };
+
+    /// Returns the address of byte `offset` of the buffer `payload` describes: its raw SRV's view-heap index and the offset.
+    /// The caller has checked the offset against the buffer and `kMaxAddrOffset`; every address the backend hands out is
+    /// encoded here.
+    Addr encodeAddr(const BufferPayload& payload, uint64_t offset);
 
     /// Finds the buffer whose raw SRV sits at a view-heap index, so an address decodes without a lock. An entry is published
     /// when its buffer is created, before the handle is returned, and cleared by the buffer's retire hook before the payload
