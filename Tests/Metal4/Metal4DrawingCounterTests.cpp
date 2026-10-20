@@ -12,6 +12,7 @@
 #include <array>
 #include <cstddef>
 #include <cstdint>
+#include <format>
 #include <functional>
 #include <span>
 #include <vector>
@@ -51,6 +52,7 @@ namespace {
     struct Fixture
     {
         Device device = *createDevice();
+        uint32_t measures = 0; ///< The measures run so far, which name each measure's list.
         ShaderLibrary library;
         Pipeline pipeline;     ///< A vertex and fragment pipeline over the target.
         Pipeline culled;       ///< The same with back-face culling and a depth test, for C3.
@@ -143,7 +145,8 @@ namespace {
         {
             device.beginFrame();
             const Counters before = device.counters();
-            CommandList list = device.acquireCommandList(QueueType::Graphics, "test.list");
+            // A label new to every measure makes every acquisition set it, so the fixed calls of a low and a high count match.
+            CommandList list = device.acquireCommandList(QueueType::Graphics, std::format("test.list.{}", measures++));
             open(list);
             for (uint32_t index = 0; index < count; ++index)
             {
@@ -288,6 +291,7 @@ TEST_CASE("C4: pushRoot then dispatch of one group is two native calls", "[metal
 TEST_CASE("C8: a pass from barrier to endRenderPass costs the registered native calls", "[metal4]")
 {
     Fixture fixture;
+    const uint64_t label = test::encoderLabel(fixture.device);
     const PerOperation per = fixture.perOperation(
         nothing,
         [&](CommandList list, uint32_t index) {
@@ -306,7 +310,7 @@ TEST_CASE("C8: a pass from barrier to endRenderPass costs the registered native 
     // encoder, the encoder's open, label, table and consumer barrier, the pipeline, viewport, scissor, the draw and
     // endEncoding. The pipeline's winding adds one call per encoder, so the pin is 14. N's 12 leaves out the argument table,
     // so the budget is N's 12 plus c (7), 19, a margin of 5.
-    CHECK(per.calls == 14);
+    CHECK(per.calls == 13 + label);
     CHECK(per.calls <= 12 + 7);
     CHECK(per.encoders == 1);
     CHECK(per.barriers == 1);
@@ -316,6 +320,7 @@ TEST_CASE("C8: a pass from barrier to endRenderPass costs the registered native 
 TEST_CASE("C10: a counted drawIndirect of 256 records is three native calls per draw and eighteen per pass", "[metal4]")
 {
     Fixture fixture;
+    const uint64_t label = test::encoderLabel(fixture.device);
     const Addr records = fixture.device.address(fixture.records);
     const Addr counts = fixture.device.address(fixture.counts);
     const Record open = [&](CommandList list) {
@@ -348,7 +353,7 @@ TEST_CASE("C10: a counted drawIndirect of 256 records is three native calls per 
     // Eighteen beyond the draw's three: both encoders' opens and ends, the pass's debug group and its two timestamps, the
     // kernels' pipeline, table and residency set, the barrier that orders the kernels before the vertex stage and the render
     // encoder's state.
-    CHECK(pass.calls == slope.calls + 18);
+    CHECK(pass.calls == slope.calls + 16 + 2 * label);
     CHECK(pass.barriers == 1);
     CHECK(pass.encoders == 2);
 }
@@ -357,6 +362,7 @@ TEST_CASE("C10: a counted drawIndirect of 256 records is three native calls per 
 TEST_CASE("C10 at maxCount 1 with a null count is the writer path", "[metal4]")
 {
     Fixture fixture;
+    const uint64_t label = test::encoderLabel(fixture.device);
     const Addr records = fixture.device.address(fixture.records);
     const PerOperation slope = fixture.perOperation(
         [&](CommandList list) {
@@ -384,7 +390,7 @@ TEST_CASE("C10 at maxCount 1 with a null count is the writer path", "[metal4]")
         nothing
     );
     INFO("the per-pass total with one draw: calls " << pass.calls << ", barriers " << pass.barriers << ", encoders " << pass.encoders);
-    CHECK(pass.calls == slope.calls + 18);
+    CHECK(pass.calls == slope.calls + 16 + 2 * label);
     CHECK(pass.barriers == 1);
     CHECK(pass.encoders == 2);
 }

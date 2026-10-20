@@ -271,9 +271,9 @@ the device in a debug class. `createDevice` decides once from the class name of 
 (`metal4::commandsMayAutorelease`) and keeps `DeviceImpl::commandPools`, copied into each list.
 Detection fails closed: only a bare driver class name (prefix `AGX`) turns pools off; any other,
 null or a wrapper included, opens them. Commands open a `metal4::CommandPool` on it. A label is +1,
-but the driver reads its text through an autoreleased container, so each call that passes one (list
-acquisition, scope and pass groups, encoder opens) has a pool whatever the flag. `new*` objects are
-+1, released once; an `NS::Error*` is reset before each call.
+but the driver reads its text through an autoreleased container, so each call that passes one (a
+list's new label, scope and pass groups, encoder opens) has a pool whatever the flag. `new*` objects
+are +1, released once; an `NS::Error*` is reset before each call.
 
 ## Tests
 

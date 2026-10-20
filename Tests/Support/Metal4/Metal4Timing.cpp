@@ -1,6 +1,6 @@
 //----------------------------------------------------------------------------------------------------------------------
 /// @file Metal4Timing.cpp
-/// @brief Implements the guard that Metal 4 count pins call before reading counts that include timestamp writes.
+/// @brief Implements what Metal 4 count pins call: the guard before counts that include timestamp writes, and the encoder labels.
 //----------------------------------------------------------------------------------------------------------------------
 
 #include "Support/Metal4/Metal4Timing.h"
@@ -8,6 +8,7 @@
 #include "Core/CommandLists.h"
 #include "Core/Counters.h"
 #include "Core/ScopeRecord.h"
+#include "Metal4Device.h"
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -47,5 +48,17 @@ namespace rojoRHI::test {
     {
         requireTimed(list);
         return core::coreOf(list).counts;
+    }
+
+    //==================================================================================================================
+    uint64_t encoderLabel(CommandList list)
+    {
+        return CommandListImpl::of(list).state.encoderLabels ? 1 : 0;
+    }
+
+    //==================================================================================================================
+    uint64_t encoderLabel(Device device)
+    {
+        return DeviceImpl::of(device).encoderLabels ? 1 : 0;
     }
 } // namespace rojoRHI::test

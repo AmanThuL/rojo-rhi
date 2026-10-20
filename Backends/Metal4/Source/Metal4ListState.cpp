@@ -36,9 +36,10 @@ namespace rojoRHI::metal4 {
     } // namespace
 
     //==================================================================================================================
-    Result<void> ListState::create(MTL::Device* device, uint64_t viewTableAddress, uint64_t samplerTableAddress, bool perCommandPools)
+    Result<void> ListState::create(MTL::Device* device, uint64_t viewTableAddress, uint64_t samplerTableAddress, bool perCommandPools, bool labelEncoders)
     {
         commandPools = perCommandPools;
+        encoderLabels = labelEncoders;
         // The tables' labels and the errors are autoreleased.
         const AutoreleasePool pool;
         allocator = device->newCommandAllocator();
@@ -93,11 +94,19 @@ namespace rojoRHI::metal4 {
         }
         scopeLabels.clear();
         scopeTimestamps.clear();
+        for (GroupLabel& group : groupLabels)
+        {
+            group.string->release();
+        }
+        groupLabels.clear();
+        groupCursor = 0;
         if (label != nullptr)
         {
             label->release();
             label = nullptr;
         }
+        labelText.clear();
+        labelSet = false;
         if (kernelTable != nullptr)
         {
             kernelTable->release();
@@ -123,12 +132,26 @@ namespace rojoRHI::metal4 {
     //==================================================================================================================
     NS::String* ListState::makeGroupLabel(std::string_view label, const char* fallback)
     {
+        const size_t index = groupCursor++;
+        if (index < groupLabels.size() && groupLabels[index].text == label)
+        {
+            return groupLabels[index].string->retain();
+        }
         scratch.assign(label);
         NS::String* string = NS::String::alloc()->init(scratch.c_str(), NS::UTF8StringEncoding);
         if (string == nullptr)
         {
             string = NS::String::alloc()->init(fallback, NS::UTF8StringEncoding);
         }
-        return string;
+        if (index < groupLabels.size())
+        {
+            groupLabels[index].string->release();
+            groupLabels[index] = GroupLabel{ .text = std::string(label), .string = string };
+        }
+        else
+        {
+            groupLabels.push_back(GroupLabel{ .text = std::string(label), .string = string });
+        }
+        return string->retain();
     }
 } // namespace rojoRHI::metal4

@@ -11,6 +11,7 @@
 #include "Support/Metal4/Metal4Timing.h"
 
 #include <catch2/catch_test_macros.hpp>
+#include <catch2/generators/catch_generators.hpp>
 
 #include <Metal/Metal.hpp>
 
@@ -312,5 +313,99 @@ TEST_CASE("destroyDevice releases every list after the queues drain", "[metal4]"
         endAndSubmit(device, lists);
         device.endFrame();
     }
+    destroyDevice(device);
+}
+
+//======================================================================================================================
+TEST_CASE("a list acquired again with the same label sends its command buffer no label, and a new label is set", "[metal4]")
+{
+    Device device = *createDevice({ .framesInFlight = 2 });
+    // With two frame slots, frames 1, 3 and 5 take the first list of one slot's pool, frames 2 and 4 that of the other.
+    struct Recorded
+    {
+        const CommandListImpl* list;
+        uint64_t acquireCalls;
+        std::string label;
+        NS::String* scope;
+        std::string scopeText;
+    };
+    const auto record = [&](std::string_view label, std::string_view scope) {
+        device.beginFrame();
+        CommandList list = device.acquireCommandList(QueueType::Graphics, label);
+        const uint64_t calls = CommandListImpl::of(list).core.counts.nativeRecordCalls;
+        list.beginScope(scope);
+        NS::String* string = stateOf(list).scopeLabels.back();
+        const std::string text = textOf(string);
+        list.endScope();
+        const std::array lists{ list };
+        endAndSubmit(device, lists);
+        device.endFrame();
+        return Recorded{ &CommandListImpl::of(list), calls, commandBufferLabel(list), string, text };
+    };
+    // Scope labels long enough not to be tagged-pointer strings, so equal pointers mean one object.
+    const Recorded first = record("test.a", "test.scope.with.a.long.label");
+    const Recorded second = record("test.a", "test.scope.with.a.long.label");
+    const Recorded third = record("test.a", "test.scope.with.a.long.label");
+    const Recorded fourth = record("test.b", "test.scope.with.a.long.label");
+    const Recorded fifth = record("test.b", "test.other.with.a.long.label");
+    REQUIRE(third.list == first.list);
+    REQUIRE(fifth.list == third.list);
+    REQUIRE(fourth.list == second.list);
+    // beginCommandBuffer and setLabel when the list is new or its label changed, beginCommandBuffer alone otherwise.
+    CHECK(first.acquireCalls == 2);
+    CHECK(second.acquireCalls == 2);
+    CHECK(third.acquireCalls == 1);
+    CHECK(fourth.acquireCalls == 2);
+    CHECK(fifth.acquireCalls == 2);
+    // The command buffer kept its label across the recordings, through commits and slot reuse.
+    CHECK(third.label == "test.a");
+    CHECK(fourth.label == "test.b");
+    CHECK(fifth.label == "test.b");
+    // A scope that begins in the same order with the same label reuses its string; a new label makes a new one.
+    CHECK(third.scope == first.scope);
+    CHECK(third.scopeText == "test.scope.with.a.long.label");
+    CHECK(fifth.scope != third.scope);
+    CHECK(fifth.scopeText == "test.other.with.a.long.label");
+    destroyDevice(device);
+}
+
+//======================================================================================================================
+TEST_CASE("encoders carry labels only on a device created for validation or capture, or under the validation layer", "[metal4]")
+{
+    const bool capture = GENERATE(false, true);
+    CAPTURE(capture);
+    DeviceDesc desc;
+    desc.enableCapture = capture;
+    Device device = *createDevice(desc);
+    const DeviceImpl& impl = DeviceImpl::of(device);
+    // commandPools is set under the validation layer and for any device class not positively the bare driver's.
+    const bool labelled = capture || impl.commandPools;
+    CHECK(impl.encoderLabels == labelled);
+    const Buffer a = *device.createBuffer({ .size = 256, .label = "test.a" });
+    const Buffer b = *device.createBuffer({ .size = 256, .label = "test.b" });
+    device.beginFrame();
+    CommandList list = device.acquireCommandList(QueueType::Graphics, "test.encoders");
+    const uint64_t before = CommandListImpl::of(list).core.counts.nativeRecordCalls;
+    list.copyBuffer(a, 0, b, 0, 16);
+    MTL4::ComputeCommandEncoder* encoder = CommandListImpl::of(list).encoders.computeEncoder();
+    REQUIRE(encoder != nullptr);
+    // computeCommandEncoder, setLabel when labelled, setArgumentTable, then the copy.
+    CHECK(CommandListImpl::of(list).core.counts.nativeRecordCalls - before == (labelled ? 4u : 3u));
+    {
+        const metal4::AutoreleasePool pool;
+        NS::String* label = encoder->label();
+        if (labelled)
+        {
+            REQUIRE(label != nullptr);
+            CHECK(metal4::toStdString(label) == "test.encoders");
+        }
+        else
+        {
+            CHECK((label == nullptr || label->length() == 0));
+        }
+    }
+    const std::array lists{ list };
+    endAndSubmit(device, lists);
+    device.endFrame();
     destroyDevice(device);
 }

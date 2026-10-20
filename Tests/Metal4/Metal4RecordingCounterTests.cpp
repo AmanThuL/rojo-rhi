@@ -9,6 +9,7 @@
 #include <array>
 #include <cstddef>
 #include <cstdint>
+#include <format>
 #include <functional>
 #include <span>
 #include <vector>
@@ -28,6 +29,7 @@ namespace {
     struct Fixture
     {
         Device device = *createDevice();
+        uint32_t measures = 0; ///< The measures run so far, which name each measure's list.
         Buffer source;
         Buffer target;
 
@@ -57,7 +59,8 @@ namespace {
         {
             device.beginFrame();
             const Counters before = device.counters();
-            CommandList list = device.acquireCommandList(type, "test.list");
+            // A label new to every measure makes every acquisition set it, so the fixed calls of a low and a high count match.
+            CommandList list = device.acquireCommandList(type, std::format("test.list.{}", measures++));
             for (uint32_t index = 0; index < count; ++index)
             {
                 record(list, index);

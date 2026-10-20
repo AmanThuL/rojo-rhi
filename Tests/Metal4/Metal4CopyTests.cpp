@@ -84,6 +84,7 @@ TEST_CASE("the first copy opens a compute encoder labelled after the list and bo
     const Buffer b = *device.createBuffer({ .size = 256, .label = "test.b" });
     device.beginFrame();
     const CommandList list = device.acquireCommandList(QueueType::Graphics, "test.list");
+    const uint64_t label = test::encoderLabel(list);
     CHECK(encodersOf(list).kind() == metal4::EncoderKind::None);
     CHECK_FALSE(encodersOf(list).holdsWork());
     CHECK(countsOf(list).nativeRecordCalls == 2);
@@ -93,8 +94,8 @@ TEST_CASE("the first copy opens a compute encoder labelled after the list and bo
     CHECK(encodersOf(list).holdsWork());
     CHECK(countsOf(list).encodersOpened == 1);
     // computeCommandEncoder, setLabel and setArgumentTable open it; copyFromBuffer is the copy.
-    CHECK(countsOf(list).nativeRecordCalls == 2 + 3 + 1);
-    CHECK(encoderLabel(list) == "test.list");
+    CHECK(countsOf(list).nativeRecordCalls == 2 + 2 + label + 1);
+    CHECK(encoderLabel(list) == std::string(label != 0 ? "test.list" : ""));
     finish(device, list);
     destroyDevice(device);
 }
@@ -107,27 +108,28 @@ TEST_CASE("copies share one encoder until a scope boundary closes it, and the ne
     const Buffer b = *device.createBuffer({ .size = 256, .label = "test.b" });
     device.beginFrame();
     CommandList list = device.acquireCommandList(QueueType::Compute, "test.list");
+    const uint64_t label = test::encoderLabel(list);
     list.copyBuffer(a, 0, b, 0, 64);
     list.copyBuffer(a, 64, b, 64, 64);
     CHECK(countsOf(list).encodersOpened == 1);
-    CHECK(countsOf(list).nativeRecordCalls == 2 + 3 + 2);
+    CHECK(countsOf(list).nativeRecordCalls == 2 + 2 + label + 2);
     // The scope closes the encoder (endEncoding) before its debug group and its begin timestamp.
     list.beginScope("test.scope");
     CHECK(encodersOf(list).kind() == metal4::EncoderKind::None);
     CHECK_FALSE(encodersOf(list).holdsWork());
-    CHECK(countsOf(list).nativeRecordCalls == 7 + 3);
+    CHECK(countsOf(list).nativeRecordCalls == 6 + label + 3);
     list.copyBuffer(a, 128, b, 128, 64);
     CHECK(countsOf(list).encodersOpened == 2);
-    CHECK(encoderLabel(list) == "test.scope");
+    CHECK(encoderLabel(list) == std::string(label != 0 ? "test.scope" : ""));
     list.copyBuffer(a, 192, b, 192, 64);
     CHECK(countsOf(list).encodersOpened == 2);
-    CHECK(countsOf(list).nativeRecordCalls == 10 + 3 + 2);
+    CHECK(countsOf(list).nativeRecordCalls == 9 + label + 2 + label + 2);
     list.endScope();
     CHECK(encodersOf(list).kind() == metal4::EncoderKind::None);
-    CHECK(countsOf(list).nativeRecordCalls == 15 + 3);
+    CHECK(countsOf(list).nativeRecordCalls == 13 + 2 * label + 3);
     list.copyBuffer(a, 0, b, 0, 64);
     CHECK(countsOf(list).encodersOpened == 3);
-    CHECK(encoderLabel(list) == "test.list");
+    CHECK(encoderLabel(list) == std::string(label != 0 ? "test.list" : ""));
     finish(device, list, QueueType::Compute);
     destroyDevice(device);
 }
@@ -139,12 +141,13 @@ TEST_CASE("an equal-byte fill is one native fillBuffer", "[metal4]")
     const Buffer buffer = *device.createBuffer({ .size = 256, .usage = BufferUsage::ShaderWrite, .label = "test.fill" });
     device.beginFrame();
     CommandList list = device.acquireCommandList(QueueType::Graphics, "test.list");
+    const uint64_t label = test::encoderLabel(list);
     list.fillBuffer(buffer, 0, 128, 0x5A5A5A5Au);
     CHECK(countsOf(list).encodersOpened == 1);
-    CHECK(countsOf(list).nativeRecordCalls == 2 + 3 + 1);
+    CHECK(countsOf(list).nativeRecordCalls == 2 + 2 + label + 1);
     list.fillBuffer(buffer, 128, 128, 0u);
     CHECK(countsOf(list).encodersOpened == 1);
-    CHECK(countsOf(list).nativeRecordCalls == 6 + 1);
+    CHECK(countsOf(list).nativeRecordCalls == 5 + label + 1);
     CHECK(encodersOf(list).holdsWork());
     finish(device, list);
     destroyDevice(device);
@@ -160,14 +163,15 @@ TEST_CASE("a three-layer buffer-to-texture copy is three native copies and a 3D 
     const Buffer readback = *device.createBuffer({ .size = 2 * 2048, .memory = Memory::Readback, .label = "test.readback" });
     device.beginFrame();
     CommandList list = device.acquireCommandList(QueueType::Graphics, "test.list");
+    const uint64_t label = test::encoderLabel(list);
     const BufferTextureLayout layout{ .offset = 0, .rowPitch = 256, .rowsPerImage = 8 };
     list.copyBufferToTexture(upload, layout, array, TextureRegion{ .layer = 0, .layers = 3, .extent = { 8, 8, 1 } });
-    CHECK(countsOf(list).nativeRecordCalls == 2 + 3 + 3);
+    CHECK(countsOf(list).nativeRecordCalls == 2 + 2 + label + 3);
     list.copyBufferToTexture(upload, layout, volume, TextureRegion{ .extent = { 8, 8, 4 } });
-    CHECK(countsOf(list).nativeRecordCalls == 8 + 1);
+    CHECK(countsOf(list).nativeRecordCalls == 7 + label + 1);
     // The texture-to-buffer direction splits the same way.
     list.copyTextureToBuffer(array, TextureRegion{ .layer = 1, .layers = 2, .extent = { 8, 8, 1 } }, readback, layout);
-    CHECK(countsOf(list).nativeRecordCalls == 9 + 2);
+    CHECK(countsOf(list).nativeRecordCalls == 8 + label + 2);
     CHECK(countsOf(list).encodersOpened == 1);
     finish(device, list);
     destroyDevice(device);
@@ -223,7 +227,7 @@ TEST_CASE("lists recorded on other threads than their acquisition each open thei
     for (CommandList list : lists)
     {
         CHECK(countsOf(list).encodersOpened == 1);
-        CHECK(countsOf(list).nativeRecordCalls == 2 + 3 + 16 + 2);
+        CHECK(countsOf(list).nativeRecordCalls == 2 + 2 + test::encoderLabel(list) + 16 + 2);
     }
     CHECK(encodersOf(lists[0]).computeEncoder() == nullptr);
     const Fence fence = *device.createFence(0, "test.done");

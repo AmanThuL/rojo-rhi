@@ -149,6 +149,12 @@ namespace rojoRHI {
         /// False only when `device` is positively a bare driver class, found once at creation (`commandsMayAutorelease`); any other
         /// device, the validation layer's included, makes each native draw, dispatch, copy, fill and encoder end open a pool.
         bool commandPools = false;
+        /// True when the encoders a list opens carry the innermost scope's label, else the list's: on a device created with
+        /// `DeviceDesc::validation` or `DeviceDesc::enableCapture`, or whenever `commandPools` is (the validation layer, or a
+        /// device class not positively the bare driver's), so a capture or a validation message names them. Elsewhere a short
+        /// label costs Metal a converted copy and an allocation at each encoder, so encoders carry none; the command buffer's
+        /// label and the scopes' and passes' debug groups name the work in every case.
+        bool encoderLabels = false;
         /// The serializer `compiler` records every pipeline into, and the archive of `DeviceDesc::pipelineCache`.
         metal4::PipelineCache pipelineCache;
         MTL4::Compiler* compiler = nullptr;      ///< The device's one compiler.

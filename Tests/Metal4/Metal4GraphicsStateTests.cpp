@@ -32,8 +32,13 @@ namespace {
     constexpr Viewport kViewport{ .width = 16.0f, .height = 16.0f };
     constexpr Rect2D kScissor{ 0, 0, 16, 16 };
 
-    /// The calls a pass's render encoder makes when it opens with no barrier owed: the factory, the label and the table.
-    constexpr uint64_t kOpenCalls = 3;
+    //==================================================================================================================
+    /// The calls a pass's render encoder makes when it opens with no barrier owed: the factory, the label when `list`'s
+    /// encoders carry one, and the table.
+    uint64_t openCalls(CommandList list)
+    {
+        return 2 + test::encoderLabel(list);
+    }
 
     /// The call of the begin timestamp a pass's first render encoder writes right after it opens.
     constexpr uint64_t kPassBegin = 1;
@@ -186,7 +191,7 @@ TEST_CASE("state recorded before the first draw waits in the prefix and replays 
     // has a fragment entry; the rest of its raster state is Metal's default), the viewport, the scissor, the table's root,
     // the stencil reference and the blend color; then the draw.
     list.draw(3);
-    CHECK(callsOf(list) == base + kOpenCalls + kPassBegin + 7 + 1);
+    CHECK(callsOf(list) == base + openCalls(list) + kPassBegin + 7 + 1);
     CHECK(drawOf(list).prefix.empty());
     const metal4::RenderHeld& held = drawOf(list).held;
     CHECK(held.pipeline == stateOf(list, a));
@@ -209,7 +214,7 @@ TEST_CASE("state recorded before the first draw waits in the prefix and replays 
     // The open and the pass's begin timestamp, the pipeline with its winding and the viewport, then the pass's end timestamp
     // and its group; the encoder stays open until the list ends.
     list.endRenderPass();
-    CHECK(callsOf(list) == before + kOpenCalls + kPassBegin + 3 + 2);
+    CHECK(callsOf(list) == before + openCalls(list) + kPassBegin + 3 + 2);
     finish(device, list);
     destroyDevice(device);
 }
@@ -311,7 +316,7 @@ TEST_CASE("dynamic state equal to the encoder's sends no call; a new encoder aft
     // The open, then the held state of the encoder the split ended: the pipeline, the cull mode, the winding, the fill mode,
     // the depth clip mode, the bias, the viewport, the scissor, the stencil reference and the blend color; then the draw.
     list.draw(3);
-    CHECK(callsOf(list) - before == kOpenCalls + 10 + 1);
+    CHECK(callsOf(list) - before == openCalls(list) + 10 + 1);
     CHECK(countsOf(list).encodersOpened == 2);
     const metal4::RenderHeld& replayed = drawOf(list).held;
     CHECK(replayed.pipeline == held.pipeline);
@@ -349,7 +354,7 @@ TEST_CASE("a pipeline without depthBias applies zero bias and the next depthBias
     // The open and the pass's begin timestamp, the pipeline and its winding (its bias, still zero, equals the encoder's), the
     // bias, the viewport, the scissor and the draw.
     list.draw(3);
-    CHECK(callsOf(list) - before == kOpenCalls + kPassBegin + 5 + 1);
+    CHECK(callsOf(list) - before == openCalls(list) + kPassBegin + 5 + 1);
     const metal4::RenderHeld& held = drawOf(list).held;
     CHECK(held.bias == metal4::DepthBias{ 1.0f, 2.0f, 3.0f });
     // The pipeline and a zero bias.
@@ -372,7 +377,7 @@ TEST_CASE("a pipeline without depthBias applies zero bias and the next depthBias
     before = callsOf(list);
     // The open and the pass's begin timestamp, the pipeline and its winding, the viewport, the scissor and the draw.
     list.draw(3);
-    CHECK(callsOf(list) - before == kOpenCalls + kPassBegin + 4 + 1);
+    CHECK(callsOf(list) - before == openCalls(list) + kPassBegin + 4 + 1);
     CHECK(drawOf(list).bias == metal4::DepthBias{});
     list.endRenderPass();
     finish(device, list);
@@ -494,7 +499,7 @@ TEST_CASE("setRoot outside a pass writes the table at once and an unchanged root
     CHECK(drawOf(list).tableRoot == gpuAddressOf(second));
     // The open and the pass's begin timestamp, the root, the pass's end timestamp and its group; the encoder stays open.
     list.endRenderPass();
-    CHECK(callsOf(list) - before == kOpenCalls + kPassBegin + 1 + 2);
+    CHECK(callsOf(list) - before == openCalls(list) + kPassBegin + 1 + 2);
     CHECK(drawOf(list).tableRoot == gpuAddressOf(first));
     finish(device, list);
     destroyDevice(device);
@@ -514,7 +519,7 @@ TEST_CASE("a compute pipeline bound before an unequal fill, or before a scope bo
     // Binding opens the lazy compute encoder (the factory, the label and the table) and sets the pipeline.
     uint64_t before = callsOf(list);
     list.setPipeline(pipeline);
-    CHECK(callsOf(list) - before == 3 + 1);
+    CHECK(callsOf(list) - before == openCalls(list) + 1);
     CHECK(encodersOf(list).kind() == metal4::EncoderKind::Compute);
     CHECK(encodersOf(list).kernelPipeline() == compute);
     CHECK(drawOf(list).compute == stateOf(list, pipeline));
@@ -538,7 +543,7 @@ TEST_CASE("a compute pipeline bound before an unequal fill, or before a scope bo
         before = callsOf(list);
         // The dispatch path opens the encoder again, waits on the carry fence and sets the pipeline.
         metal4::applyComputePipeline(impl);
-        CHECK(callsOf(list) - before == 3 + 1 + 1);
+        CHECK(callsOf(list) - before == openCalls(list) + 1 + 1);
         CHECK(encodersOf(list).kernelPipeline() == compute);
         before = callsOf(list);
         metal4::applyComputePipeline(impl);
@@ -606,7 +611,7 @@ TEST_CASE("direct mesh draws bind one zero record per recording", "[metal4]")
         // The open and the pass's begin timestamp, the pipeline and its winding, the viewport and the scissor, the zero record
         // at buffer(3), then the draw.
         list.drawMeshTasks(1, 1, 1);
-        CHECK(callsOf(list) - before == kOpenCalls + kPassBegin + 4 + 1 + 1);
+        CHECK(callsOf(list) - before == openCalls(list) + kPassBegin + 4 + 1 + 1);
         const uint64_t record = drawOf(list).zeroRecord;
         REQUIRE(record != 0);
         CHECK(record % 16 == 0);
@@ -630,7 +635,7 @@ TEST_CASE("direct mesh draws bind one zero record per recording", "[metal4]")
         list.setScissor(kScissor);
         before = callsOf(list);
         list.drawMeshTasks(1, 1, 1);
-        CHECK(callsOf(list) - before == kOpenCalls + kPassBegin + 4 + 1);
+        CHECK(callsOf(list) - before == openCalls(list) + kPassBegin + 4 + 1);
         CHECK(drawOf(list).zeroRecord == record);
         list.endRenderPass();
         list.end();
@@ -714,7 +719,7 @@ TEST_CASE("C8's sequence makes the calls the overhead note registers", "[metal4]
         // encoder and popDebugGroup. The winding call, one per encoder, is beyond the registered sequence: the pipeline has a
         // fragment entry, which may read the front face, and its counter-clockwise winding is not Metal's default.
         const uint64_t barrier = repetition > 0 ? 1 : 0;
-        CHECK(callsOf(list) - before == barrier + 2 + 3 + barrier + 5 + 2);
+        CHECK(callsOf(list) - before == barrier + 2 + openCalls(list) + barrier + 5 + 2);
         CHECK(countsOf(list).nativeBarriers - barriers == barrier);
     }
     finish(device, list);

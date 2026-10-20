@@ -11,6 +11,7 @@
 #include "Metal4Encoders.h"
 #include "Metal4PipelineState.h"
 #include "Support/Backend.h"
+#include "Support/Metal4/Metal4Timing.h"
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -24,8 +25,13 @@
 using namespace rojoRHI;
 
 namespace {
-    /// The calls the lazy compute encoder makes when it opens with no barrier owed: the factory, the label and the table.
-    constexpr uint64_t kOpenCalls = 3;
+    //==================================================================================================================
+    /// The calls the lazy compute encoder makes when it opens with no barrier owed: the factory, the label when `list`'s
+    /// encoders carry one, and the table.
+    uint64_t openCalls(CommandList list)
+    {
+        return 2 + test::encoderLabel(list);
+    }
 
     //==================================================================================================================
     /// The native calls `list` has recorded so far.
@@ -137,7 +143,7 @@ TEST_CASE("a dispatch on an encoder opened after a scope boundary sets the calle
     const uint64_t before = callsOf(list);
     list.dispatch(1, 1, 1);
     // The open, the wait on the carry fence, the pipeline, then the dispatch.
-    CHECK(callsOf(list) - before == kOpenCalls + 1 + 1 + 1);
+    CHECK(callsOf(list) - before == openCalls(list) + 1 + 1 + 1);
     CHECK(encodersOf(list).kernelPipeline() == stateOf(list, pipeline)->compute);
     list.endScope();
     finish(device, list);

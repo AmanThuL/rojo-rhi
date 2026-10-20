@@ -20,29 +20,29 @@ the view and sampler tables' GPU addresses from the start (ADR 0018); the kernel
 buffer bindings and one texture binding. Each creation counts one `nativeCreateCalls`, so a new list
 counts four, and the list counts one `cpuAllocations`.
 
-`acquireCommandList` runs the core's `beginList`, then `beginCommandBuffer(allocator)` and
-`setLabel` with an `NS::String` made by `alloc()->init` from the resolved label. The list keeps the
-string for its encoders' labels and releases it at the next acquisition. `end` runs the core's
-`endList`, carries a barrier still owed (below), ends the encoder and calls `endCommandBuffer`.
-`Queue::submit` commits every list's command buffer in one `commit(buffers, count)` between the
-waits and the signals, from a vector the queue reuses, and a submission with no lists commits
-nothing. When a frame slot is reused, the `frameSlot` hook resets the allocator of every list the
-slot took, one `nativeHostCalls` each, before returning them to the pool. `destroyDevice` releases
-every list's objects, in reverse order of creation inside a pool, after the queues drain; a drain
-ends with an empty commit that waits for its feedback handler, as the stager does, so a list's
-allocator is released for the last time on the destroying thread and not on Metal's completion
-thread, which holds no autorelease pool.
+`acquireCommandList` runs the core's `beginList`, then `beginCommandBuffer(allocator)`; the list's
+`NS::String`, made by `alloc()->init` from the resolved label, is kept while later acquisitions
+resolve the same text, and `setLabel` goes to the command buffer only when the string is new, since
+the command buffer keeps its label across recordings. `end` runs the core's `endList`, carries a
+barrier still owed (below), ends the encoder and calls `endCommandBuffer`. `Queue::submit` commits
+every list's command buffer in one `commit(buffers, count)` between the waits and the signals, from
+a vector the queue reuses, and a submission with no lists commits nothing. When a frame slot is
+reused, the `frameSlot` hook resets the allocator of every list the slot took, one `nativeHostCalls`
+each, before returning them to the pool. `destroyDevice` releases every list's objects, in reverse
+order of creation inside a pool, after the queues drain; a drain ends with an empty commit that
+waits for its feedback handler, as the stager does, so a list's allocator is released for the last
+time on the destroying thread and not on Metal's completion thread, which holds no autorelease pool.
 
 ## The open encoder
 
 A list has at most one open encoder (`metal4::Encoders`). The compute encoder opens lazily at the
 first copy, fill or kernel: the factory runs inside an `AutoreleasePool` and the encoder is
-retained; then `setLabel` (the innermost open scope's label, else the list's), `setArgumentTable`
-with the list table, and the part of the pending barrier that falls on its stages. It closes at a
-scope boundary, before a clear's render encoders, at a barrier that must order earlier work, and at
-`end`. A pass's last encoder lingers until the next encoder, a scope boundary or `end`
-([drawing](metal4-drawing.md)). The encoder records whether it holds work; a clear's and the
-trailing encoder bind no table.
+retained; then `setLabel` (the innermost open scope's label, else the list's) with `encoderLabels`
+(validation, capture or the layer), `setArgumentTable` with the list table, and the part of the
+pending barrier that falls on its stages. It closes at a scope boundary, before a clear's render
+encoders, at a barrier that must order earlier work, and at `end`. A pass's last encoder lingers
+until the next encoder, a scope boundary or `end` ([drawing](metal4-drawing.md)). The encoder
+records whether it holds work; a clear's and the trailing encoder bind no table.
 
 Recording reads native objects only through `HandlePool::native` and the list's own state, never a
 pool record, which is read under a lock. A texture's type, pixel format, usage, mip and layer counts
@@ -187,14 +187,14 @@ Worked sequence on a graphics list: copy A, buffer barrier (copy to copy), copy 
 
 Outside a pass, `beginScope` runs the core's `beginScope`, closes the open encoder and calls
 `pushDebugGroup` on the command buffer with an `NS::String` from `alloc()->init` over the scope's
-label, copied to a NUL-terminated scratch string first. A label that is not valid UTF-8 names its
-group `rojorhi.scope.unnamed`. The list keeps the string on a stack that names the encoders opened
-inside the scope. It then claims a timestamp pair for the list's frame slot from the device's
-`metal4::Timestamps` (`Metal4Timestamps.*`), stores the pair's index in the core's scope record and
-on a second stack, and writes the begin timestamp with `writeTimestampIntoHeap` on the command
-buffer. `endScope` closes the encoder, writes the end timestamp, calls `popDebugGroup` and releases
-the string. Inside a pass a scope is a debug group on the render encoder
-([drawing](metal4-drawing.md)) and claims a pair the same way; the encoder writes it with
+label, copied to a NUL-terminated scratch string first; a later recording reuses it while the text
+is the same. A label that is not valid UTF-8 names its group `rojorhi.scope.unnamed`. The list keeps
+the string on a stack that names the scope's encoders. It claims a timestamp pair for the list's
+frame slot from the device's `metal4::Timestamps` (`Metal4Timestamps.*`), stores the pair's index in
+the core's scope record and on a second stack, and writes the begin timestamp with
+`writeTimestampIntoHeap` on the buffer. `endScope` closes the encoder, writes the end timestamp,
+calls `popDebugGroup` and releases the string. Inside a pass a scope is a debug group on the render
+encoder ([drawing](metal4-drawing.md)) and claims a pair likewise; the encoder writes it with
 `writeTimestamp` at `TimestampGranularityPrecise` after `RenderStageFragment`, which adds no encoder
 and measured no change in a pass's duration against `Relaxed`. A split pushes the open groups again
 on the resumed encoder but writes no timestamp, so the end timestamp may sit on a later encoder than

@@ -48,11 +48,14 @@ namespace rojoRHI::metal4 {
             const AutoreleasePool pool;
             m_compute = state.commandBuffer->computeCommandEncoder();
             m_compute->retain();
-            m_compute->setLabel(state.scopeLabels.empty() ? state.label : state.scopeLabels.back());
+            if (state.encoderLabels)
+            {
+                m_compute->setLabel(state.scopeLabels.empty() ? state.label : state.scopeLabels.back());
+                core::noteNativeCall(list);
+            }
         }
         core::noteNativeCall(list);
         ++list.counts.encodersOpened;
-        core::noteNativeCall(list);
         if (!kernelsOnly)
         {
             m_compute->setArgumentTable(state.table);
@@ -123,12 +126,15 @@ namespace rojoRHI::metal4 {
             const AutoreleasePool pool;
             m_render = state.commandBuffer->renderCommandEncoder(descriptor);
             m_render->retain();
-            m_render->setLabel(state.scopeLabels.empty() ? state.label : state.scopeLabels.back());
+            if (state.encoderLabels)
+            {
+                m_render->setLabel(state.scopeLabels.empty() ? state.label : state.scopeLabels.back());
+                core::noteNativeCall(list);
+            }
         }
         m_commandPools = state.commandPools;
         core::noteNativeCall(list);
         ++list.counts.encodersOpened;
-        core::noteNativeCall(list);
         // The pending barrier's part on the fragment stage, where the load and store actions run, waits at queue level before
         // them. The other render stages stay owed to the next encoder that runs them, so a clear of many subresources emits
         // the barrier once.
@@ -152,12 +158,15 @@ namespace rojoRHI::metal4 {
             const AutoreleasePool pool;
             m_render = state.commandBuffer->renderCommandEncoder(descriptor);
             m_render->retain();
-            m_render->setLabel(state.scopeLabels.empty() ? state.label : state.scopeLabels.back());
+            if (state.encoderLabels)
+            {
+                m_render->setLabel(state.scopeLabels.empty() ? state.label : state.scopeLabels.back());
+                core::noteNativeCall(list);
+            }
         }
         m_commandPools = state.commandPools;
         core::noteNativeCall(list);
         ++list.counts.encodersOpened;
-        core::noteNativeCall(list);
         // Every shader of a draw reads the reserved bindings through the list's table (ADR 0018).
         m_render->setArgumentTable(state.table, MTL::RenderStageVertex | MTL::RenderStageFragment | MTL::RenderStageObject | MTL::RenderStageMesh);
         core::noteNativeCall(list);
@@ -182,8 +191,11 @@ namespace rojoRHI::metal4 {
         MTL4::ComputeCommandEncoder* carrier = state.commandBuffer->computeCommandEncoder();
         core::noteNativeCall(list);
         ++list.counts.encodersOpened;
-        carrier->setLabel(state.scopeLabels.empty() ? state.label : state.scopeLabels.back());
-        core::noteNativeCall(list);
+        if (state.encoderLabels)
+        {
+            carrier->setLabel(state.scopeLabels.empty() ? state.label : state.scopeLabels.back());
+            core::noteNativeCall(list);
+        }
         if (m_barriers.owedFenceStages != 0)
         {
             // An earlier upscale's fence still owed is waited on here too, so this upscale's fence, which replaces it, passes

@@ -166,14 +166,15 @@ TEST_CASE("beginRenderPass closes the compute encoder, pushes the pass's debug g
     const Texture target = makeTexture(device, Format::RGBA8Unorm);
     device.beginFrame();
     CommandList list = device.acquireCommandList(QueueType::Graphics, "test.list");
+    const uint64_t label = test::encoderLabel(list);
     list.copyBuffer(a, 0, b, 0, 256);
     REQUIRE(encodersOf(list).kind() == metal4::EncoderKind::Compute);
-    REQUIRE(countsOf(list).nativeRecordCalls == 2 + 3 + 1);
+    REQUIRE(countsOf(list).nativeRecordCalls == 2 + 2 + label + 1);
     const std::array colors{ ColorAttachment{ .texture = target } };
     list.beginRenderPass(passOf(colors, {}, "test.pass"));
     // The compute encoder ends (1), and the pass's group (1) goes on the command buffer; its begin timestamp waits for the
     // pass's first encoder.
-    CHECK(countsOf(list).nativeRecordCalls == 6 + 2);
+    CHECK(countsOf(list).nativeRecordCalls == 5 + label + 2);
     CHECK(countsOf(list).encodersOpened == 1);
     CHECK(encodersOf(list).kind() == metal4::EncoderKind::None);
     REQUIRE(stateOf(list).scopeLabels.size() == 1);
@@ -194,6 +195,7 @@ TEST_CASE("a pass with no command opens its render encoder at endRenderPass", "[
     const Texture target = makeTexture(device, Format::RGBA8Unorm);
     device.beginFrame();
     CommandList list = device.acquireCommandList(QueueType::Graphics, "test.list");
+    const uint64_t label = test::encoderLabel(list);
     const std::array colors{ ColorAttachment{ .texture = target, .load = LoadOp::Clear } };
     list.beginRenderPass(passOf(colors));
     CHECK(countsOf(list).nativeRecordCalls == 2 + 1);
@@ -201,7 +203,7 @@ TEST_CASE("a pass with no command opens its render encoder at endRenderPass", "[
     // The factory, the label and the table, the begin and end timestamps on the encoder, and the pass's group popped on the
     // command buffer; the encoder stays open, running no further command, until the next encoder or `end`.
     list.endRenderPass();
-    CHECK(countsOf(list).nativeRecordCalls == 3 + 6);
+    CHECK(countsOf(list).nativeRecordCalls == 3 + 5 + label);
     CHECK(countsOf(list).encodersOpened == 1);
     CHECK(countsOf(list).nativeBarriers == 0);
     CHECK(encodersOf(list).lingering());
@@ -219,20 +221,20 @@ TEST_CASE("a Store attachment costs no store-action call; DontCare and resolve a
     Device device = *createDevice();
     device.beginFrame();
     CommandList list = device.acquireCommandList(QueueType::Graphics, "test.list");
-    // An empty pass's encoder records its factory, label, table and the pass's two timestamps, then the pass's group pops; it
+    // An empty pass's encoder records its factory, label when encoders carry one, table and the pass's two timestamps, then the pass's group pops; it
     // ends at the next beginRenderPass.
-    constexpr uint64_t kBase = 6;
+    const uint64_t base = 5 + test::encoderLabel(list);
     const MTL::RenderPassColorAttachmentDescriptor* color = nullptr;
     SECTION("color attachments")
     {
         const std::array stored{ ColorAttachment{ .texture = makeTexture(device, Format::RGBA8Unorm), .load = LoadOp::Clear } };
         list.beginRenderPass(passOf(stored));
-        CHECK(endPassCalls(list) == kBase);
+        CHECK(endPassCalls(list) == base);
         color = colorOf(list, 0);
         CHECK(color->storeAction() == MTL::StoreActionStore);
         const std::array discarded{ ColorAttachment{ .texture = makeTexture(device, Format::RGBA8Unorm), .store = StoreOp::DontCare } };
         list.beginRenderPass(passOf(discarded));
-        CHECK(endPassCalls(list) == kBase + 1);
+        CHECK(endPassCalls(list) == base + 1);
         CHECK(color->storeAction() == MTL::StoreActionUnknown);
         for (const StoreOp store : { StoreOp::Store, StoreOp::DontCare })
         {
@@ -241,7 +243,7 @@ TEST_CASE("a Store attachment costs no store-action call; DontCare and resolve a
                                                         .store = store,
                                                         .resolve = makeTexture(device, Format::RGBA8Unorm) } };
             list.beginRenderPass(passOf(resolved));
-            CHECK(endPassCalls(list) == kBase + 1);
+            CHECK(endPassCalls(list) == base + 1);
             CHECK(color->storeAction() == MTL::StoreActionUnknown);
             CHECK(holdsResolve(color));
         }
@@ -252,26 +254,26 @@ TEST_CASE("a Store attachment costs no store-action call; DontCare and resolve a
             eight[i] = ColorAttachment{ .texture = makeTexture(device, Format::R8Unorm), .store = i % 4 == 1 ? StoreOp::DontCare : StoreOp::Store };
         }
         list.beginRenderPass(passOf(eight));
-        CHECK(endPassCalls(list) == kBase + 2);
+        CHECK(endPassCalls(list) == base + 2);
     }
     SECTION("depth and stencil attachments")
     {
         list.beginRenderPass(
             passOf({}, DepthAttachment{ .texture = makeTexture(device, Format::D32Float, TextureUsage::DepthStencil), .load = LoadOp::Clear })
         );
-        CHECK(endPassCalls(list) == kBase);
+        CHECK(endPassCalls(list) == base);
         CHECK(depthOf(list)->storeAction() == MTL::StoreActionStore);
         list.beginRenderPass(
             passOf({}, DepthAttachment{ .texture = makeTexture(device, Format::D32Float, TextureUsage::DepthStencil), .store = StoreOp::DontCare })
         );
-        CHECK(endPassCalls(list) == kBase + 1);
+        CHECK(endPassCalls(list) == base + 1);
         // A format without stencil ignores the stencil fields, whose defaults discard.
         CHECK_FALSE(holdsTexture(stencilOf(list)));
         // The stencil operations default to DontCare, so a depth-stencil pass that stores depth sets the stencil's alone.
         list.beginRenderPass(
             passOf({}, DepthAttachment{ .texture = makeTexture(device, Format::D32FloatS8, TextureUsage::DepthStencil), .load = LoadOp::Clear })
         );
-        CHECK(endPassCalls(list) == kBase + 1);
+        CHECK(endPassCalls(list) == base + 1);
         // Depth discarded and stencil stored.
         list.beginRenderPass(passOf(
             {},
@@ -281,7 +283,7 @@ TEST_CASE("a Store attachment costs no store-action call; DontCare and resolve a
                              .stencilLoad = LoadOp::Clear,
                              .stencilStore = StoreOp::Store }
         ));
-        CHECK(endPassCalls(list) == kBase + 1);
+        CHECK(endPassCalls(list) == base + 1);
         CHECK(depthOf(list)->storeAction() == MTL::StoreActionUnknown);
         CHECK(stencilOf(list)->storeAction() == MTL::StoreActionStore);
         list.beginRenderPass(passOf(
@@ -289,7 +291,7 @@ TEST_CASE("a Store attachment costs no store-action call; DontCare and resolve a
             DepthAttachment{
                 .texture = makeTexture(device, Format::D32FloatS8, TextureUsage::DepthStencil), .store = StoreOp::DontCare, .stencilStore = StoreOp::DontCare }
         ));
-        CHECK(endPassCalls(list) == kBase + 2);
+        CHECK(endPassCalls(list) == base + 2);
     }
     finish(device, list);
     destroyDevice(device);
@@ -302,22 +304,23 @@ TEST_CASE("the render encoder is labelled after the pass, or after the innermost
     const Texture target = makeTexture(device, Format::RGBA8Unorm);
     device.beginFrame();
     CommandList list = device.acquireCommandList(QueueType::Graphics, "test.list");
+    const uint64_t label = test::encoderLabel(list);
     const std::array colors{ ColorAttachment{ .texture = target } };
     list.beginScope("test.outer");
     list.beginRenderPass(passOf(colors, {}, "test.pass"));
     // The scope opens the encoder before its own group goes on it.
     list.beginScope("test.a");
-    CHECK(renderLabel(list) == "test.pass");
+    CHECK(renderLabel(list) == std::string(label != 0 ? "test.pass" : ""));
     metal4::splitPass(CommandListImpl::of(list));
     list.beginScope("test.b");
-    CHECK(renderLabel(list) == "test.a");
+    CHECK(renderLabel(list) == std::string(label != 0 ? "test.a" : ""));
     list.endScope();
     list.endScope();
     list.endRenderPass();
     // An unnamed pass takes the default label.
     list.beginRenderPass(passOf(colors));
     list.beginScope({});
-    CHECK(renderLabel(list) == "rojorhi.pass.unnamed");
+    CHECK(renderLabel(list) == std::string(label != 0 ? "rojorhi.pass.unnamed" : ""));
     list.endScope();
     list.endRenderPass();
     list.endScope();
@@ -332,13 +335,14 @@ TEST_CASE("a scope inside a pass opens the render encoder and its debug group go
     const Texture target = makeTexture(device, Format::RGBA8Unorm);
     device.beginFrame();
     CommandList list = device.acquireCommandList(QueueType::Graphics, "test.list");
+    const uint64_t label = test::encoderLabel(list);
     const std::array colors{ ColorAttachment{ .texture = target, .load = LoadOp::Clear } };
     list.beginRenderPass(passOf(colors, {}, "test.pass"));
     REQUIRE(countsOf(list).nativeRecordCalls == 3);
     // The factory, the label and the table, the pass's begin timestamp, then the group pushed on the encoder and the scope's
     // begin timestamp.
     list.beginScope("test.inner");
-    CHECK(countsOf(list).nativeRecordCalls == 3 + 6);
+    CHECK(countsOf(list).nativeRecordCalls == 3 + 5 + label);
     CHECK(countsOf(list).encodersOpened == 1);
     CHECK(encodersOf(list).kind() == metal4::EncoderKind::Render);
     CHECK(drawOf(list).passGroups == 1);
@@ -346,13 +350,13 @@ TEST_CASE("a scope inside a pass opens the render encoder and its debug group go
     CHECK(textOf(stateOf(list).scopeLabels.back()) == "test.inner");
     // The end timestamp, then the group pops from the encoder, which stays open.
     list.endScope();
-    CHECK(countsOf(list).nativeRecordCalls == 9 + 2);
+    CHECK(countsOf(list).nativeRecordCalls == 8 + label + 2);
     CHECK(encodersOf(list).kind() == metal4::EncoderKind::Render);
     CHECK(drawOf(list).passGroups == 0);
     CHECK(stateOf(list).scopeLabels.size() == 1);
     // endRenderPass finds the encoder open: the pass's end timestamp, endEncoding and its group.
     list.endRenderPass();
-    CHECK(countsOf(list).nativeRecordCalls == 11 + 2);
+    CHECK(countsOf(list).nativeRecordCalls == 10 + label + 2);
     CHECK(countsOf(list).encodersOpened == 1);
     finish(device, list);
     destroyDevice(device);
@@ -365,35 +369,36 @@ TEST_CASE("a split stores, ends and resumes with Load, re-pushing the open in-pa
     const Texture target = makeTexture(device, Format::RGBA8Unorm);
     device.beginFrame();
     CommandList list = device.acquireCommandList(QueueType::Graphics, "test.list");
+    const uint64_t label = test::encoderLabel(list);
     const std::array colors{ ColorAttachment{ .texture = target, .load = LoadOp::Clear, .store = StoreOp::DontCare } };
     list.beginRenderPass(passOf(colors, {}, "test.pass"));
     list.beginScope("test.a");
     list.beginScope("test.b");
-    REQUIRE(countsOf(list).nativeRecordCalls == 3 + 6 + 2);
+    REQUIRE(countsOf(list).nativeRecordCalls == 3 + 5 + label + 2);
     const MTL::RenderPassColorAttachmentDescriptor* color = colorOf(list, 0);
     CHECK(color->loadAction() == MTL::LoadActionClear);
     CHECK(color->storeAction() == MTL::StoreActionUnknown);
     // Both groups pop from the encoder, the attachment stores and the encoder ends.
     metal4::splitPass(CommandListImpl::of(list));
-    CHECK(countsOf(list).nativeRecordCalls == 11 + 2 + 1 + 1);
+    CHECK(countsOf(list).nativeRecordCalls == 10 + label + 2 + 1 + 1);
     CHECK(encodersOf(list).kind() == metal4::EncoderKind::None);
     CHECK(drawOf(list).resuming);
     CHECK(drawOf(list).passGroups == 2);
     // Nothing is open, so a second split does nothing.
     metal4::splitPass(CommandListImpl::of(list));
-    CHECK(countsOf(list).nativeRecordCalls == 15);
+    CHECK(countsOf(list).nativeRecordCalls == 14 + label);
     // The scope boundary resumes the pass: the factory, the label and the table, both groups again, then the end timestamp
     // and the pop. The split wrote no timestamp.
     list.endScope();
-    CHECK(countsOf(list).nativeRecordCalls == 15 + 3 + 2 + 2);
+    CHECK(countsOf(list).nativeRecordCalls == 14 + label + 2 + label + 2 + 2);
     CHECK(countsOf(list).encodersOpened == 2);
     CHECK(color->loadAction() == MTL::LoadActionLoad);
-    CHECK(renderLabel(list) == "test.b");
+    CHECK(renderLabel(list) == std::string(label != 0 ? "test.b" : ""));
     list.endScope();
     // The outer scope's end timestamp and pop; the caller's DontCare at the end, the pass's end timestamp, endEncoding and
     // its group.
     list.endRenderPass();
-    CHECK(countsOf(list).nativeRecordCalls == 22 + 2 + 1 + 1 + 1);
+    CHECK(countsOf(list).nativeRecordCalls == 20 + 2 * label + 2 + 1 + 1 + 1);
     CHECK_FALSE(drawOf(list).resuming);
     // The next pass loads as its caller asks.
     list.beginRenderPass(passOf(colors));

@@ -31,8 +31,8 @@ RojoRHI creates for itself, such as frame arenas, are labelled `rojorhi.<subsyst
 #### Mapping
 | | Metal 4 | D3D12 | Vulkan |
 |---|---|---|---|
-| Call | `setLabel` on the object or, for pipelines and samplers, on its descriptor before creation | `ID3D12Object::SetName` | `vkSetDebugUtilsObjectNameEXT` |
-| Cost | native | native: one UTF-16 conversion | native |
+| Call | `setLabel` on the object or, for pipelines and samplers, on its descriptor before creation; a command list's label goes on its command buffer, which keeps it, so a list acquired again with the same label sends none; its scopes and passes are debug groups; the encoders it opens take the innermost scope's label, else the list's, only on a device created with `validation` or `enableCapture`, or whose device class is not positively the bare driver's (the validation layer) | `ID3D12Object::SetName` | `vkSetDebugUtilsObjectNameEXT` |
+| Cost | native: a short label costs Metal a converted copy and an allocation per call, which an unchanged list label and unlabelled encoders avoid | native: one UTF-16 conversion | native |
 
 ### `MessageCallback`
 ```cpp

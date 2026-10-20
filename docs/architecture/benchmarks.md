@@ -242,12 +242,13 @@ overhead and not a defect of the harness. In particular:
 Where the Metal 4 backend departs from N today, each difference is measured overhead and not a
 defect:
 
-- An encoder's open runs in an autorelease pool, as do a new label string per list and per pass and
-  the pass descriptor configured for each encoder. Every native draw, dispatch, copy and fill, the
-  end of a render encoder and each timestamp written on a command buffer run in a pool only when
-  the Metal validation layer wraps the device, so a run without the layer pays none per command.
-  A pool is not a message to a command buffer, encoder, argument table or scaler, so it is no
-  native call and changes no count above; it shows only in CPU time.
+- An encoder's open runs in an autorelease pool, as do the label a list sets when its text changes
+and each pass's debug group. Without the validation layer, encoders carry no label: one native call
+and one Metal allocation less per encoder. Every native draw, dispatch, copy and fill, the end of a
+render encoder and each timestamp written on a command buffer run in a pool only when the Metal
+validation layer wraps the device, so a run without the layer pays none per command. A pool is not a
+message to a command buffer, encoder, argument table or scaler, so it is no native call and changes
+no count above; it shows only in CPU time.
 - Every render pass of R is a timed scope, so C1 to C3 and C10 pay a debug group and two
   timestamps per frame that their N arms do not write; N mirrors them in C8 and the composed frame
   only, as the note registers. R writes a pass's pair on its encoders, the begin timestamp first on
@@ -256,9 +257,10 @@ defect:
   encoders. R's sequence for C8 and the composed frame therefore has the begin timestamp after the
   encoder's open and the end timestamp before its `endEncoding`; its counts are unchanged.
 - A pipeline that culls, tests stencil or has a fragment entry makes the backend set the winding
-  once per encoder it opens, one native call more than N's sequence. C8 therefore makes 14 native
-  calls per repetition, the registered 13 plus that call, against N's 12 and the budget of 12 plus
-  `c` of 7.
+  once per encoder it opens, one native call more than N's sequence. An encoder carries a label only
+  under the validation layer (or on a device created with `validation` or `enableCapture`), one call
+  the registered 13 includes, so C8 makes 13 native calls per repetition in a timed run and 14 under
+  the layer, against N's 12 and the budget of 12 plus `c` of 7.
 - The correctness gate of 2026-10-19 (Release and Debug, validation on in Debug) measured, as
   calls per repetition, R and N, and the budget N plus `c`: C1 2 and 2 (5), C2 2 and 2 (5), C3 4
   and 4 (6), C4 2 and 2 (5), C5 0 and 0 (1), C6 2 and 2 (4), C7 1 and 1 (2), C8 14 and 12 (19),

@@ -36,12 +36,21 @@ namespace {
     constexpr Viewport kViewport{ .width = 16.0f, .height = 16.0f };
     constexpr Rect2D kScissor{ 0, 0, 16, 16 };
 
-    /// The calls a pass's render encoder makes when it opens with no barrier owed: the factory, the label and the list's table.
-    constexpr uint64_t kOpenCalls = 3;
+    //==================================================================================================================
+    /// The calls a pass's render encoder makes when it opens with no barrier owed: the factory, the label when
+    /// `list`'s encoders carry one, and the list's table.
+    uint64_t openCalls(CommandList list)
+    {
+        return 2 + test::encoderLabel(list);
+    }
 
+    //==================================================================================================================
     /// The calls the compute encoder of a pass's counted draws makes when it opens with no barrier owed: the factory and the
-    /// label. It runs only kernels, which bind the kernel table, so it binds no list table.
-    constexpr uint64_t kBatchOpenCalls = 2;
+    /// label when `list`'s encoders carry one. It runs only kernels, which bind the kernel table, so it binds no list table.
+    uint64_t batchOpenCalls(CommandList list)
+    {
+        return 1 + test::encoderLabel(list);
+    }
 
     /// The calls a pass's render encoder makes for a pipeline of the standard library and the viewport and scissor: the
     /// pipeline with its counter-clockwise winding, the viewport and the scissor.
@@ -366,7 +375,7 @@ TEST_CASE("a counted draw after a direct draw splits the pass", "[metal4]")
     fixture.drawIndirect(list);
     // The split stores the attachment and ends the render encoder; then the kernel's encoder opens, the list's residency set
     // is used, and the kernel runs.
-    CHECK(callsOf(list) - before == 2 + kBatchOpenCalls + 1 + 4);
+    CHECK(callsOf(list) - before == 2 + batchOpenCalls(list) + 1 + 4);
     CHECK(encodersOf(list).kind() == metal4::EncoderKind::Compute);
     CHECK(drawOf(list).resuming);
     CHECK(countsOf(list).encodersOpened == 2);
@@ -411,7 +420,7 @@ TEST_CASE("a kernel makes four calls on a new encoder, two once the encoder hold
     // The encoder's open, the pass's begin timestamp, the list's residency set, then the pipeline, the kernel table, the
     // parameters and the dispatch.
     fixture.drawIndirect(list);
-    CHECK(callsOf(list) - before == kBatchOpenCalls + kPassBegin + 1 + 4);
+    CHECK(callsOf(list) - before == batchOpenCalls(list) + kPassBegin + 1 + 4);
     // The encoder holds the pipeline and the kernel table: the parameters and the dispatch, as the native arm's two.
     before = callsOf(list);
     fixture.drawIndirect(list);
@@ -427,7 +436,7 @@ TEST_CASE("a kernel makes four calls on a new encoder, two once the encoder hold
     // the pass's end timestamp, endEncoding and its group.
     before = callsOf(list);
     list.endRenderPass();
-    CHECK(callsOf(list) - before == 1 + kOpenCalls + 1 + kStateCalls + 4 + 2);
+    CHECK(callsOf(list) - before == 1 + openCalls(list) + 1 + kStateCalls + 4 + 2);
     kit.run(std::array{ list });
 }
 
@@ -441,7 +450,7 @@ TEST_CASE("maxCount 1 runs the writer kernel and one native indirect draw", "[me
     uint64_t before = callsOf(list);
     // The encoder's open, the pass's begin timestamp and the writer kernel: no indirect command buffer, so no residency set.
     fixture.drawIndirect(list, 1);
-    CHECK(callsOf(list) - before == kBatchOpenCalls + kPassBegin + 4);
+    CHECK(callsOf(list) - before == batchOpenCalls(list) + kPassBegin + 4);
     CHECK(encodersOf(list).kernelPipeline() == kernelsOf(kit.device).writeDraw);
     fixture.drawIndexedIndirect(list, 1);
     CHECK(encodersOf(list).kernelPipeline() == kernelsOf(kit.device).writeIndexed);
@@ -459,7 +468,7 @@ TEST_CASE("maxCount 1 runs the writer kernel and one native indirect draw", "[me
     // the pass's end timestamp, endEncoding and its group.
     before = callsOf(list);
     list.endRenderPass();
-    CHECK(callsOf(list) - before == 1 + kOpenCalls + 1 + kStateCalls + 2 + 2);
+    CHECK(callsOf(list) - before == 1 + openCalls(list) + 1 + kStateCalls + 2 + 2);
     kit.run(std::array{ list });
 }
 
@@ -508,7 +517,7 @@ TEST_CASE("a counted draw after a scope opened in the pass splits it and the res
     uint64_t before = callsOf(list);
     fixture.drawIndirect(list);
     // The split pops the group and ends the encoder (the attachment is stored at no cost); then the kernel's encoder.
-    CHECK(callsOf(list) - before == 1 + 1 + kBatchOpenCalls + 1 + 4);
+    CHECK(callsOf(list) - before == 1 + 1 + batchOpenCalls(list) + 1 + 4);
     CHECK(drawOf(list).passGroups == 1);
     before = callsOf(list);
     // The scope's end ends the kernels' encoder and opens the resumed encoder with its barrier, which sets the held state
@@ -516,7 +525,7 @@ TEST_CASE("a counted draw after a scope opened in the pass splits it and the res
     // split wrote no timestamp.
     list.endScope();
     CHECK(encodersOf(list).kind() == metal4::EncoderKind::Render);
-    CHECK(callsOf(list) - before == 1 + kOpenCalls + 1 + kStateCalls + 1 + 1 + 2);
+    CHECK(callsOf(list) - before == 1 + openCalls(list) + 1 + kStateCalls + 1 + 1 + 2);
     CHECK(drawOf(list).passGroups == 0);
     list.endRenderPass();
     CHECK(countsOf(list).encodersOpened == 3);
