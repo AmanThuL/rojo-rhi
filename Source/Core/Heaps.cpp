@@ -109,6 +109,7 @@ namespace rojoRHI::core {
         ROJORHI_VU(
             status != LookupStatus::Ok || mapped == 0, "VU-rojo-device-0009", "the heap \"{}\" is destroyed with {} tiles still mapped from it", label, mapped
         );
+        core.aliasing().forgetHeap(heap);
         forgetHeap(core, heap);
         core.destroy(heap);
     }

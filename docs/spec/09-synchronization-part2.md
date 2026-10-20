@@ -184,13 +184,19 @@ empty batch records nothing.
 | | Metal 4 | D3D12 | Vulkan |
 |---|---|---|---|
 | Batch | one stage barrier from the union of source stages to the union of destination stages, each intersected with the stages the queue's encoders run: compute and render stages on `Graphics`, `MTL::StageDispatch \| MTL::StageBlit` on `Compute`, and `MTL::StageBlit` on `Copy`, whose commands are all blits; a batch left with no source or no destination stage emits nothing. While the open encoder holds work, the sources lie within those its opening barrier waited for, and the destination stages it has within those that barrier held back, the batch stays in the encoder: `MTL4::ComputeCommandEncoder::barrierAfterEncoderStages` from the sources it has to a destination stage it has, when both stage sets are non-empty, emitted just before the encoder's next command in that stage, since it orders only later commands of its own encoder; its other destination stages stay held for a later command in them, consecutive batches merge, and if the encoder ends first what is still held becomes pending instead. The destination stages the encoder lacks become pending. Otherwise the open encoder ends and the batch becomes pending. A compute encoder that opens while a barrier is pending first emits `barrierAfterQueueStages` from the pending source stages to the pending destination stages it has, its opening barrier, and those stop pending; a render encoder that a `clearTexture` opens emits it only for `MTL::StageFragment`, where its load and store actions run, and the other render stages stay pending; this orders sources in earlier encoders and earlier command lists (the NRI lowering). When an encoder ends, the stages its opening barrier held back in which it ran no command become pending again, since the barrier ordered only its own work. A barrier still pending at [`CommandList::end`](07-command-recording.md) is emitted on a compute encoder that holds no command: `barrierAfterQueueStages` from the pending source stages to its stages, then `barrierAfterStages` from its stages to the pending destination stages, which holds back every later encoder on the queue, in this list or a later one | one `ID3D12GraphicsCommandList7::Barrier` call with one `D3D12_BARRIER_GROUP` per non-empty kind | one `vkCmdPipelineBarrier2` with one `VkDependencyInfo` |
-| Visibility | `MTL4::VisibilityOptionDevice` when any access is named; `MTL4::VisibilityOptionResourceAlias` added when the batch holds a global barrier or a texture barrier from `Undefined` on a placed texture; both are tuning points for measurement | per barrier | per barrier |
+| Visibility | `MTL4::VisibilityOptionDevice` when any access is named; `MTL4::VisibilityOptionResourceAlias` added only while memory aliases: to a batch with a global barrier while a live placed resource has overlapped another placed resource's bytes, living or destroyed, or a Sparse resource is live, and to a texture barrier from `Undefined` on a placed texture that has, or on any placed texture while a Sparse resource is live; `Device` selection is a tuning point for measurement | per barrier | per barrier |
 | Cost | native: a batch inside the open encoder is at most one encoder-level barrier per destination stage the encoder's later commands run in; a pending batch emits nothing itself, each encoder that opens while a barrier is pending emits one queue-level barrier, and the encoder `end` adds for a barrier still pending emits two | native | native |
 
-The Metal 4 visibility rules are deliberately conservative. Selecting `Device` visibility for any
-named access, where NRI selects it only when a source access writes, and adding `ResourceAlias` to
-every batch with a global barrier, are tuning points measured under
-[ADR 0014](../decisions/0014-overhead-measurement.md) before they are narrowed.
+The Metal 4 visibility rules are conservative in one place. Selecting `Device` visibility for any
+named access, where NRI selects it only when a source access writes, is a tuning point measured
+under [ADR 0014](../decisions/0014-overhead-measurement.md) before it is narrowed. `ResourceAlias`
+is not a tuning point but a cost: on the composed barrier workload C6 it added 32% to the GPU time
+over native code when every global barrier carried it, and none when it is left off (a paired
+diagnostic on an M-series Mac, 1,000 barriers per submission, unjudged). The core therefore tracks,
+as placed resources are created and destroyed, which of them have overlapped the bytes of another
+placed resource, one that lives or lived there, and the backend reads two or three relaxed loads
+(the aliased and sparse counts, a texture's flag) while recording. A resource stays aliased until it
+is destroyed.
 
 ## Cross-queue handoff
 

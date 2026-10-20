@@ -69,13 +69,6 @@ namespace {
         CHECK(device.wait({ fence, 1 }, UINT64_MAX));
         device.endFrame();
     }
-
-    //==================================================================================================================
-    /// The native texture `texture` wraps.
-    MTL::Texture* nativeOf(Device device, Texture texture)
-    {
-        return static_cast<MTL::Texture*>(DeviceImpl::of(device).core.pool<Texture>().native(texture));
-    }
 } // namespace
 
 //======================================================================================================================
@@ -136,7 +129,7 @@ TEST_CASE("a barrier at the start of a list is emitted by the first encoder at q
     CHECK(countsOf(list).globalBarriers == 1);
     CHECK(barriersOf(list).pendingSource == MTL::StageBlit);
     CHECK(barriersOf(list).pendingDestination == MTL::StageBlit);
-    CHECK(barriersOf(list).pendingVisibility == (MTL4::VisibilityOptionDevice | MTL4::VisibilityOptionResourceAlias));
+    CHECK(barriersOf(list).pendingVisibility == MTL4::VisibilityOptionDevice);
     list.copyBuffer(a, 0, b, 0, 256);
     // The opening adds computeCommandEncoder, setLabel, setArgumentTable and barrierAfterQueueStages; then the copy.
     CHECK(countsOf(list).encodersOpened == 1);
@@ -390,7 +383,7 @@ TEST_CASE("an encoder that ran no command in a stage its opening barrier held re
     list.beginScope("test.scope");
     CHECK(barriersOf(list).pendingSource == metal4::kComputeStages);
     CHECK(barriersOf(list).pendingDestination == MTL::StageDispatch);
-    CHECK(barriersOf(list).pendingVisibility == (MTL4::VisibilityOptionDevice | MTL4::VisibilityOptionResourceAlias));
+    CHECK(barriersOf(list).pendingVisibility == MTL4::VisibilityOptionDevice);
     list.copyBuffer(b, 0, a, 0, 128);
     CHECK(countsOf(list).encodersOpened == 2);
     CHECK(countsOf(list).nativeBarriers == 2);
@@ -467,38 +460,23 @@ TEST_CASE("a batch with a None source records no native barrier, and an empty ba
 }
 
 //======================================================================================================================
-TEST_CASE("visibility is Device for named accesses and adds ResourceAlias for a global barrier or a placed texture's discard", "[metal4]")
+TEST_CASE("visibility is Device for named accesses and none for an execution-only batch", "[metal4]")
 {
     Device device = *createDevice();
     const Buffer buffer = *device.createBuffer({ .size = 256, .label = "test.buffer" });
     const TextureDesc desc{ .format = Format::RGBA8Unorm, .extent = { 16, 16, 1 }, .usage = TextureUsage::Sampled, .label = "test.texture" };
-    const PlacementRequirements requirements = device.placementRequirements(desc);
-    const Heap heap = *device.createHeap({ .size = requirements.size, .label = "test.heap" });
-    const Texture placed = *device.createTexture(desc, {}, { heap, 0 });
     const Texture dedicated = *device.createTexture(desc);
-    // Only placed textures are untracked, which is how the lowering tells them apart.
-    REQUIRE(nativeOf(device, placed)->hazardTrackingMode() == MTL::HazardTrackingModeUntracked);
-    REQUIRE(nativeOf(device, dedicated)->hazardTrackingMode() != MTL::HazardTrackingModeUntracked);
     const BufferBarrier copyRead{
         .buffer = buffer, .srcStage = Stage::Copy, .srcAccess = Access::CopyWrite, .dstStage = Stage::Copy, .dstAccess = Access::CopyRead
     };
     const BufferBarrier executionOnly{ .buffer = buffer, .srcStage = Stage::Copy, .dstStage = Stage::Copy };
     const GlobalBarrier globalOnly{ .srcStage = Stage::Copy, .dstStage = Stage::Copy };
-    const auto discard = [](Texture texture) {
-        return TextureBarrier{ .texture = texture,
-                               .srcStage = Stage::Copy,
-                               .dstStage = Stage::Copy,
-                               .dstAccess = Access::CopyWrite,
-                               .oldLayout = Layout::Undefined,
-                               .newLayout = Layout::CopyDst };
-    };
-    const TextureBarrier keep{ .texture = placed,
-                               .srcStage = Stage::Copy,
-                               .srcAccess = Access::CopyRead,
-                               .dstStage = Stage::Copy,
-                               .dstAccess = Access::CopyWrite,
-                               .oldLayout = Layout::CopySrc,
-                               .newLayout = Layout::CopyDst };
+    const TextureBarrier discard{ .texture = dedicated,
+                                  .srcStage = Stage::Copy,
+                                  .dstStage = Stage::Copy,
+                                  .dstAccess = Access::CopyWrite,
+                                  .oldLayout = Layout::Undefined,
+                                  .newLayout = Layout::CopyDst };
     device.beginFrame();
     std::vector<CommandList> lists;
     const auto visibilityOf = [&](std::span<const GlobalBarrier> globals, std::span<const BufferBarrier> buffers, std::span<const TextureBarrier> textures) {
@@ -509,17 +487,184 @@ TEST_CASE("visibility is Device for named accesses and adds ResourceAlias for a 
     };
     CHECK(visibilityOf({}, std::array{ copyRead }, {}) == MTL4::VisibilityOptionDevice);
     CHECK(visibilityOf({}, std::array{ executionOnly }, {}) == MTL4::VisibilityOptionNone);
-    CHECK(visibilityOf(std::array{ globalOnly }, {}, {}) == MTL4::VisibilityOptionResourceAlias);
-    CHECK(visibilityOf(std::array{ copyToCopy() }, {}, {}) == (MTL4::VisibilityOptionDevice | MTL4::VisibilityOptionResourceAlias));
-    CHECK(visibilityOf({}, {}, std::array{ discard(dedicated) }) == MTL4::VisibilityOptionDevice);
-    CHECK(visibilityOf({}, {}, std::array{ discard(placed) }) == (MTL4::VisibilityOptionDevice | MTL4::VisibilityOptionResourceAlias));
-    CHECK(visibilityOf({}, {}, std::array{ keep }) == MTL4::VisibilityOptionDevice);
-    CHECK(visibilityOf({}, std::array{ executionOnly }, std::array{ discard(placed) }) == (MTL4::VisibilityOptionDevice | MTL4::VisibilityOptionResourceAlias));
+    CHECK(visibilityOf(std::array{ globalOnly }, {}, {}) == MTL4::VisibilityOptionNone);
+    CHECK(visibilityOf(std::array{ copyToCopy() }, {}, {}) == MTL4::VisibilityOptionDevice);
+    CHECK(visibilityOf({}, {}, std::array{ discard }) == MTL4::VisibilityOptionDevice);
     for (CommandList list : lists)
     {
         list.end();
     }
     submitAndWait(device, lists);
+    destroyDevice(device);
+}
+
+//======================================================================================================================
+TEST_CASE("a global barrier adds ResourceAlias only while placed memory aliases", "[metal4]")
+{
+    Device device = *createDevice();
+    const BufferDesc desc{ .size = 256, .label = "test.placed" };
+    const PlacementRequirements requirements = device.placementRequirements(desc);
+    const Heap heap = *device.createHeap({ .size = requirements.size * 4, .label = "test.heap" });
+    device.beginFrame();
+    std::vector<CommandList> lists;
+    const auto visibility = [&] {
+        CommandList list = device.acquireCommandList(QueueType::Graphics, "test.list");
+        list.barrier(std::array{ copyToCopy() });
+        lists.push_back(list);
+        return barriersOf(list).pendingVisibility;
+    };
+    const MTL4::VisibilityOptions plain = MTL4::VisibilityOptionDevice;
+    const MTL4::VisibilityOptions aliasing = MTL4::VisibilityOptionDevice | MTL4::VisibilityOptionResourceAlias;
+    CHECK(visibility() == plain);
+    const Buffer a = *device.createBuffer(desc, {}, { heap, 0 });
+    const Buffer apart = *device.createBuffer(desc, {}, { heap, requirements.size });
+    CHECK(visibility() == plain);
+    const Buffer b = *device.createBuffer(desc, {}, { heap, 0 });
+    CHECK(visibility() == aliasing);
+    device.destroy(b);
+    // The resource that stays was overlapped while it lived, and its first use may follow a resource that held its memory.
+    CHECK(visibility() == aliasing);
+    device.destroy(a);
+    CHECK(visibility() == plain);
+    // A buffer placed where a destroyed one was takes its memory over.
+    const Buffer c = *device.createBuffer(desc, {}, { heap, 0 });
+    CHECK(visibility() == aliasing);
+    device.destroy(c);
+    device.destroy(apart);
+    CHECK(visibility() == plain);
+    for (CommandList list : lists)
+    {
+        list.end();
+    }
+    submitAndWait(device, lists);
+    device.destroy(heap);
+    destroyDevice(device);
+}
+
+//======================================================================================================================
+TEST_CASE("a resource placed where a destroyed one was is aliased with no other live resource", "[metal4]")
+{
+    Device device = *createDevice();
+    const BufferDesc bufferDesc{ .size = 256, .label = "test.placed" };
+    const TextureDesc textureDesc{ .format = Format::RGBA8Unorm, .extent = { 16, 16, 1 }, .usage = TextureUsage::Sampled, .label = "test.texture" };
+    const Heap bufferHeap = *device.createHeap({ .size = device.placementRequirements(bufferDesc).size, .label = "test.buffers" });
+    const Heap textureHeap = *device.createHeap({ .size = device.placementRequirements(textureDesc).size, .label = "test.textures" });
+    const Buffer oldBuffer = *device.createBuffer(bufferDesc, {}, { bufferHeap, 0 });
+    const Texture oldTexture = *device.createTexture(textureDesc, {}, { textureHeap, 0 });
+    device.destroy(oldBuffer);
+    device.destroy(oldTexture);
+    const Buffer buffer = *device.createBuffer(bufferDesc, {}, { bufferHeap, 0 });
+    const Texture texture = *device.createTexture(textureDesc, {}, { textureHeap, 0 });
+    device.beginFrame();
+    CommandList globalList = device.acquireCommandList(QueueType::Graphics, "test.global");
+    globalList.barrier(std::array{ copyToCopy() });
+    CHECK(barriersOf(globalList).pendingVisibility == (MTL4::VisibilityOptionDevice | MTL4::VisibilityOptionResourceAlias));
+    CommandList textureList = device.acquireCommandList(QueueType::Graphics, "test.texture");
+    textureList.barrier(
+        {},
+        {},
+        std::array{ TextureBarrier{ .texture = texture,
+                                    .srcStage = Stage::Copy,
+                                    .dstStage = Stage::Copy,
+                                    .dstAccess = Access::CopyWrite,
+                                    .oldLayout = Layout::Undefined,
+                                    .newLayout = Layout::CopyDst } }
+    );
+    CHECK(barriersOf(textureList).pendingVisibility == (MTL4::VisibilityOptionDevice | MTL4::VisibilityOptionResourceAlias));
+    globalList.end();
+    textureList.end();
+    submitAndWait(device, std::array{ globalList, textureList });
+    device.destroy(buffer);
+    device.destroy(texture);
+    device.destroy(bufferHeap);
+    device.destroy(textureHeap);
+    destroyDevice(device);
+}
+
+//======================================================================================================================
+TEST_CASE("a global barrier adds ResourceAlias while a sparse buffer lives", "[metal4]")
+{
+    Device device = *createDevice();
+    if (!device.capabilities().placementSparse)
+    {
+        destroyDevice(device);
+        SKIP("the device reports no sparse resources");
+    }
+    device.beginFrame();
+    std::vector<CommandList> lists;
+    const auto visibility = [&] {
+        CommandList list = device.acquireCommandList(QueueType::Graphics, "test.list");
+        list.barrier(std::array{ copyToCopy() });
+        lists.push_back(list);
+        return barriersOf(list).pendingVisibility;
+    };
+    CHECK(visibility() == MTL4::VisibilityOptionDevice);
+    const Buffer sparse = *device.createBuffer({ .size = 1 << 17, .usage = BufferUsage::Sparse, .label = "test.sparse" });
+    CHECK(visibility() == (MTL4::VisibilityOptionDevice | MTL4::VisibilityOptionResourceAlias));
+    device.destroy(sparse);
+    CHECK(visibility() == MTL4::VisibilityOptionDevice);
+    for (CommandList list : lists)
+    {
+        list.end();
+    }
+    submitAndWait(device, lists);
+    destroyDevice(device);
+}
+
+//======================================================================================================================
+TEST_CASE("a texture barrier from Undefined adds ResourceAlias only for a placed texture whose memory aliases", "[metal4]")
+{
+    Device device = *createDevice();
+    const TextureDesc desc{ .format = Format::RGBA8Unorm, .extent = { 16, 16, 1 }, .usage = TextureUsage::Sampled, .label = "test.texture" };
+    const PlacementRequirements requirements = device.placementRequirements(desc);
+    const Heap heap = *device.createHeap({ .size = requirements.size * 4, .label = "test.heap" });
+    const Texture first = *device.createTexture(desc, {}, { heap, 0 });
+    const Texture apart = *device.createTexture(desc, {}, { heap, requirements.size });
+    device.beginFrame();
+    std::vector<CommandList> lists;
+    const auto visibility = [&](Texture texture, Layout oldLayout = Layout::Undefined) {
+        CommandList list = device.acquireCommandList(QueueType::Graphics, "test.list");
+        list.barrier(
+            {},
+            {},
+            std::array{ TextureBarrier{ .texture = texture,
+                                        .srcStage = Stage::Copy,
+                                        .srcAccess = oldLayout == Layout::Undefined ? Access::None : Access::CopyRead,
+                                        .dstStage = Stage::Copy,
+                                        .dstAccess = Access::CopyWrite,
+                                        .oldLayout = oldLayout,
+                                        .newLayout = Layout::CopyDst } }
+        );
+        lists.push_back(list);
+        return barriersOf(list).pendingVisibility;
+    };
+    const MTL4::VisibilityOptions plain = MTL4::VisibilityOptionDevice;
+    const MTL4::VisibilityOptions aliasing = MTL4::VisibilityOptionDevice | MTL4::VisibilityOptionResourceAlias;
+    CHECK(visibility(first) == plain);
+    CHECK(visibility(apart) == plain);
+    const Texture over = *device.createTexture(desc, {}, { heap, 0 });
+    CHECK(visibility(first) == aliasing);
+    CHECK(visibility(over) == aliasing);
+    CHECK(visibility(apart) == plain);
+    CHECK(visibility(over, Layout::CopySrc) == plain);
+    for (CommandList list : lists)
+    {
+        list.end();
+    }
+    submitAndWait(device, lists);
+    lists.clear();
+    device.destroy(over);
+    device.destroy(first);
+    // The texture that does not overlap stays plain after the others are gone.
+    device.beginFrame();
+    CHECK(visibility(apart) == plain);
+    for (CommandList list : lists)
+    {
+        list.end();
+    }
+    submitAndWait(device, lists);
+    device.destroy(apart);
+    device.destroy(heap);
     destroyDevice(device);
 }
 

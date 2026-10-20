@@ -120,13 +120,17 @@ both usages takes the render path. A `Compute` list only ever clears `Storage`-o
 ## Barriers
 
 Chapter 09's table lowers stages to Metal stages, with `Copy` as `StageBlit | StageDispatch |
-StageFragment` and `All` as every stage of the queue's encoders. Both sides of a batch are masked
-by the queue: graphics lists keep compute and render stages, compute lists `StageDispatch |
-StageBlit`, and copy lists `StageBlit`, since those queues never run another encoder
-(`VU-rojo-sync-0001`). Visibility is `VisibilityOptionDevice` when any access is not `None`, with
-`ResourceAlias` added for a global barrier and for a texture barrier from `Undefined` on a placed
-texture (the native texture is `Untracked`, which only placed textures are). A batch with an empty
-source or destination side emits nothing.
+StageFragment` and `All` as every stage of the queue's encoders. Both sides of a batch are masked by
+the queue: graphics lists keep compute and render stages, compute lists `StageDispatch | StageBlit`,
+and copy lists `StageBlit`, since those queues never run another encoder (`VU-rojo-sync-0001`).
+Visibility is `VisibilityOptionDevice` when any access is not `None`, with `ResourceAlias` added
+only while memory aliases (chapter 09): for a global barrier while the core's alias tracker
+(`Source/Core/AliasTracker.h`) counts a live placed resource that has overlapped another placed
+range or a live Sparse resource, and for a texture barrier from `Undefined` on a placed texture the
+tracker flags, or on a placed texture (the native texture is `Untracked`, which only placed textures
+are) while a Sparse resource is live. Placement and destruction update the tracker under its lock;
+recording reads two or three relaxed atomic loads (the counts and a texture's flag). A batch with an
+empty source or destination side emits nothing.
 
 The list keeps a pending barrier (source stages P, destination stages D still owed, visibility V)
 and, for the open encoder, what the queue-level barrier at its opening covered (sources `S_open`,

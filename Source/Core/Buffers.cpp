@@ -88,12 +88,12 @@ namespace rojoRHI::core {
         {
             addPlacedResource(core, heap);
         }
-#ifndef NDEBUG
-        // The tracker copies what it follows before the record moves into the pool.
-        const std::string label = record.label;
+        // The alias tracker and the validation tracker copy what they follow before the record moves into the pool.
         const uint64_t size = record.size;
         const uint64_t heapOffset = record.heapOffset;
         const bool sparse = (record.usage & BufferUsage::Sparse) != BufferUsage::None;
+#ifndef NDEBUG
+        const std::string label = record.label;
 #endif
         const Buffer buffer = core.pool<Buffer>().allocate(std::move(record));
         if (buffer.bits == 0)
@@ -103,6 +103,14 @@ namespace rojoRHI::core {
                 removePlacedResource(core, heap);
             }
             return std::unexpected(tableFull("buffer", core.pool<Buffer>().capacity()));
+        }
+        if (heap.bits != 0)
+        {
+            core.aliasing().placeBuffer(buffer, heap, heapOffset, size);
+        }
+        if (sparse)
+        {
+            core.aliasing().addSparse();
         }
 #ifndef NDEBUG
         trackBuffer(core, buffer, label, size, heap, heapOffset, sparse);
@@ -126,9 +134,11 @@ namespace rojoRHI::core {
     {
         // A bad handle is left to the destroy below, which reports VU-rojo-core-0001 to 0003 and releases nothing.
         Heap heap = {};
+        bool sparse = false;
         TileMap tiles;
         core.pool<Buffer>().update(buffer, [&](BufferRecord& record) {
             heap = record.heap;
+            sparse = (record.usage & BufferUsage::Sparse) != BufferUsage::None;
             tiles = std::move(record.mapped);
         });
         core.destroy(buffer);
@@ -137,7 +147,12 @@ namespace rojoRHI::core {
         releaseTiles(core, tiles);
         if (heap.bits != 0)
         {
+            core.aliasing().unplace(heap, buffer.bits);
             removePlacedResource(core, heap);
+        }
+        if (sparse)
+        {
+            core.aliasing().removeSparse();
         }
     }
 
