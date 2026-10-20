@@ -9,6 +9,7 @@
 #include "Core/Tracker/Aliasing.h"
 #include "Core/Tracker/ByteSegments.h"
 #include "Core/Tracker/Clocks.h"
+#include "Core/Tracker/FirstUse.h"
 #include "Core/Tracker/Hazards.h"
 #include "Core/Tracker/Tiles.h"
 #include "Core/Tracker/TrackerLog.h"
@@ -129,8 +130,9 @@ namespace rojoRHI::core {
         /// Checks `changes`, the mapping changes of one `Queue::mapTiles` call on `queue`, against the uses of their tiles on
         /// every other queue: each use must be covered by the queue's clock, through its earlier submissions' waits, or by the
         /// host clock (VU-rojo-sparse-0013). Then notes them as one event at the next position on the queue, which later uses on
-        /// other queues must be ordered after. A resource the tracker does not follow as sparse is ignored. `held` must be a
-        /// lock `lock` returned.
+        /// other queues must be ordered after, and marks the tiles each change maps as new, or clears the marks of those it
+        /// unmaps (VU-rojo-sparse-0014). A resource the tracker does not follow as sparse is ignored. `held` must be a lock
+        /// `lock` returned.
         void mapTiles(const TrackerLock& held, QueueType queue, std::span<const TileChange> changes);
 
         /// Notes that the submission to `queue` just replayed signals `value` of `fence`, created at `initial`: the value records
@@ -215,6 +217,10 @@ namespace rojoRHI::core {
             /// For a sparse texture, per subresource indexed as `layouts` and per queue type, the latest mapping changes of its
             /// tiles; empty for a texture that is not sparse.
             std::vector<std::array<TileEvents, 3>> tileMaps;
+            /// For a sparse texture, per subresource indexed as `layouts`, the tiles newly mapped since its last texture barrier
+            /// from `Undefined`, whose next event must be such a barrier (VU-rojo-sparse-0014); empty for a texture that is not
+            /// sparse.
+            std::vector<TileMarks> newTiles;
         };
 
         /// The tracker's view of one buffer.
@@ -228,6 +234,8 @@ namespace rojoRHI::core {
             bool sparse = false;                ///< The buffer is sparse: the uses and mapping changes of its tiles are followed.
             std::array<ByteEvents, 3> byteUses; ///< For a sparse buffer, per queue type, the latest use of each byte range.
             std::array<ByteEvents, 3> byteMaps; ///< For a sparse buffer, per queue type, the latest mapping change of each range.
+            /// For a sparse buffer, the byte ranges newly mapped whose first use must follow a global barrier (VU-rojo-sparse-0014).
+            ByteMarks newBytes;
         };
 
         /// The tracker's view of one heap that holds or held a followed placed resource.
@@ -338,7 +346,8 @@ namespace rojoRHI::core {
         /// subresource whose latest layout event is on another queue that no fence orders before is left to VU-rojo-queue-0005.
         /// Then, for a sparse texture or buffer, the mapping changes of its tiles on other queues (VU-rojo-sparse-0013); then,
         /// for a texture or a buffer, its hazards on the queue (VU-rojo-sync-0021, then VU-rojo-sync-0024) and against every
-        /// other queue (VU-rojo-queue-0005).
+        /// other queue (VU-rojo-queue-0005); then, for a sparse texture or buffer, the newly mapped tiles it reaches, which a
+        /// texture's discard or a buffer's global barrier must order it after (VU-rojo-sparse-0014).
         void replayUse(const TrackerLock& held, const UseEvent& use, QueueType queue, std::string_view list, uint64_t position);
 
         /// Judges the hazards of `use`, a use of a texture, against every subresource of `texture` it names, on its queue and
@@ -350,7 +359,7 @@ namespace rojoRHI::core {
         void replayBufferUse(const TrackerLock& held, const UseEvent& use, QueueType queue, std::string_view list, uint64_t position);
 
         /// Replays one global barrier recorded at `position`: every subresource of every texture and every segment of every
-        /// buffer on `queue` gains its reach.
+        /// buffer on `queue` gains its reach, and so does every newly mapped byte range it follows (VU-rojo-sparse-0014).
         void replayGlobal(const GlobalBarrier& barrier, QueueType queue, uint64_t position);
 
         /// Replays one buffer barrier recorded at `position`: exactly the segments of its range gain its reach.
@@ -361,8 +370,10 @@ namespace rojoRHI::core {
         /// layout the two queues do not share; then VU-rojo-sync-0013), then, for a transition, its source against the uses before it
         /// (VU-rojo-sync-0024) and, as a write of every tile, against the mapping changes of a sparse texture on other queues
         /// (VU-rojo-sparse-0013), the uses of every other queue and, for a placed texture, other resources' uses of its heap
-        /// bytes there (VU-rojo-queue-0005), then its transition, the subresource's new layout event.
-        /// A barrier that keeps the layout sets no layout event and gains its reach over exactly its subresources.
+        /// bytes there (VU-rojo-queue-0005), then, for a sparse texture, the newly mapped tiles of the subresource, which only a
+        /// discard from `Undefined` may reach and which it clears (VU-rojo-sparse-0014), then its transition, the subresource's
+        /// new layout event. A barrier that keeps the layout sets no layout event and gains its reach over exactly its
+        /// subresources.
         void replayTexture(const TrackerLock& held, const TextureBarrier& barrier, QueueType queue, std::string_view list, uint64_t position);
 
         std::mutex m_mutex;

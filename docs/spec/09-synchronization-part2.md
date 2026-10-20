@@ -222,4 +222,5 @@ belongs to the caller's graph. The first use of a placed texture is a barrier fr
 (`VU-rojo-sync-0017`), which discards whatever the earlier resource left and, on D3D12,
 initializes compression metadata. The first use of a placed buffer is a global barrier
 (`VU-rojo-sync-0009`). Either barrier's source covers the last use of the resource that held the
-memory before.
+memory before. A tile `Queue::mapTiles` newly maps follows the same rule (`VU-rojo-sparse-0014`,
+[sparse resources](13-sparse.md)).

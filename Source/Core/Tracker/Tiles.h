@@ -96,5 +96,6 @@ namespace rojoRHI::core {
         Buffer buffer = {};          ///< The sparse buffer; null for a texture change.
         uint64_t offset = 0;         ///< The first byte of the buffer range.
         uint64_t size = 0;           ///< Bytes of the buffer range.
+        bool unmap = false;          ///< The change removes the mapping; it marks nothing.
     };
 } // namespace rojoRHI::core

@@ -1,6 +1,6 @@
 //----------------------------------------------------------------------------------------------------------------------
 /// @file SparseOrderDeathTests.cpp
-/// @brief Death tests for work on one queue that accesses tiles whose mapping changes on another, with no fence between.
+/// @brief Death tests for tile uses a mapping change leaves unordered: on another queue with no fence, or a first use.
 //----------------------------------------------------------------------------------------------------------------------
 #include <rojoRHI/RHI.h>
 
@@ -194,5 +194,116 @@ TEST_CASE("VU-rojo-sparse-0013 a copy on Compute targets a texture tile Graphics
         CommandList compute = kit.device.acquireCommandList(QueueType::Compute, "test.compute");
         compute.copyBufferToTexture(source, { .rowPitch = set.shape.width * 4 }, set.texture, firstTile(set));
         submitTo(kit.device, compute, QueueType::Compute);
+    });
+}
+
+//======================================================================================================================
+TEST_CASE("VU-rojo-sparse-0014 a newly mapped buffer tile is copied to with no global barrier", "[contract][death]")
+{
+    ROJORHI_EXPECT_DEATH("VU-rojo-sparse-0014", [] {
+        PassKit kit(QueueType::Graphics, true);
+        const SparseSet set = sparse(kit);
+        const Buffer source = kit.buffer(BufferUsage::None, kBytes);
+        kit.device.queue(QueueType::Graphics).mapTiles(std::array{ bufferTile(set) });
+        kit.list.copyBuffer(source, 0, set.buffer, 0, kBytes);
+        submitTo(kit.device, kit.list, QueueType::Graphics);
+    });
+}
+
+//======================================================================================================================
+TEST_CASE("VU-rojo-sparse-0014 a newly mapped texture tile is copied to without a discard", "[contract][death]")
+{
+    // The texture holds defined contents in General before the mapping, so the move to CopyDst keeps them: no discard.
+    ROJORHI_EXPECT_DEATH("VU-rojo-sparse-0014", [] {
+        PassKit kit(QueueType::Graphics, true);
+        const SparseSet set = sparse(kit);
+        const Buffer source = kit.buffer(BufferUsage::None, 65536);
+        test::transition(kit.list, set.texture, Layout::Undefined, Layout::General);
+        submitTo(kit.device, kit.list, QueueType::Graphics);
+        kit.device.queue(QueueType::Graphics).mapTiles(std::array{ textureTile(set) });
+        CommandList graphics = kit.device.acquireCommandList(QueueType::Graphics, "test.graphics");
+        test::transition(graphics, set.texture, Layout::General, Layout::CopyDst);
+        graphics.copyBufferToTexture(source, { .rowPitch = set.shape.width * 4 }, set.texture, firstTile(set));
+        submitTo(kit.device, graphics, QueueType::Graphics);
+    });
+}
+
+//======================================================================================================================
+TEST_CASE("VU-rojo-sparse-0014 a texture tile remapped after a discard is used without another", "[contract][death]")
+{
+    ROJORHI_EXPECT_DEATH("VU-rojo-sparse-0014", [] {
+        PassKit kit(QueueType::Graphics, true);
+        const SparseSet set = sparse(kit);
+        const Buffer source = kit.buffer(BufferUsage::None, 65536);
+        kit.device.queue(QueueType::Graphics).mapTiles(std::array{ textureTile(set) });
+        test::transition(kit.list, set.texture, Layout::Undefined, Layout::CopyDst);
+        kit.list.copyBufferToTexture(source, { .rowPitch = set.shape.width * 4 }, set.texture, firstTile(set));
+        submitTo(kit.device, kit.list, QueueType::Graphics);
+        // The tile moves to other heap memory: the copy below is its first use there.
+        TileMapping moved = textureTile(set);
+        moved.heapOffset = 65536;
+        kit.device.queue(QueueType::Graphics).mapTiles(std::array{ moved });
+        CommandList graphics = kit.device.acquireCommandList(QueueType::Graphics, "test.graphics");
+        // A global barrier orders the two copies (sync-0021) and discards nothing.
+        graphics.barrier(std::array{ GlobalBarrier{ Stage::Copy, Access::CopyWrite, Stage::Copy, Access::CopyWrite } });
+        graphics.copyBufferToTexture(source, { .rowPitch = set.shape.width * 4 }, set.texture, firstTile(set));
+        submitTo(kit.device, graphics, QueueType::Graphics);
+    });
+}
+
+//======================================================================================================================
+TEST_CASE("VU-rojo-sparse-0014 a newly mapped buffer tile is first used on another queue, after a fence, with no global barrier", "[contract][death]")
+{
+    // The fence orders the mapping before the copy (no sparse-0013); only the global barrier is missing.
+    ROJORHI_EXPECT_DEATH("VU-rojo-sparse-0014", [] {
+        PassKit kit(QueueType::Graphics, true);
+        const SparseSet set = sparse(kit);
+        const Buffer source = kit.buffer(BufferUsage::None, kBytes);
+        const Fence fence = *kit.device.createFence(0, "test.fence");
+        const std::array<FenceValue, 1> mapped{ FenceValue{ fence, 1 } };
+        kit.device.queue(QueueType::Graphics).mapTiles(std::array{ bufferTile(set) });
+        kit.device.queue(QueueType::Graphics).submit({}, {}, mapped);
+        CommandList compute = kit.device.acquireCommandList(QueueType::Compute, "test.compute");
+        compute.copyBuffer(source, 0, set.buffer, 0, kBytes);
+        submitTo(kit.device, compute, QueueType::Compute, mapped);
+    });
+}
+
+//======================================================================================================================
+TEST_CASE("VU-rojo-sparse-0014 a newly mapped mip tail is moved from a defined layout and copied to", "[contract][death]")
+{
+    // A tail mapping marks every tail mip of its layer as a whole, so a barrier that keeps the contents reaches it.
+    ROJORHI_EXPECT_DEATH("VU-rojo-sparse-0014", [] {
+        PassKit kit(QueueType::Graphics, true);
+        const SparseSet set = sparse(kit);
+        const Buffer source = kit.buffer(BufferUsage::None, kBytes);
+        test::transition(kit.list, set.texture, Layout::Undefined, Layout::General);
+        submitTo(kit.device, kit.list, QueueType::Graphics);
+        const TileMapping tail{ .texture = set.texture, .region = { .mip = set.shape.mipTailFirst }, .mipTail = true, .heap = set.heap };
+        kit.device.queue(QueueType::Graphics).mapTiles(std::array{ tail });
+        CommandList graphics = kit.device.acquireCommandList(QueueType::Graphics, "test.graphics");
+        test::transition(graphics, set.texture, Layout::General, Layout::CopyDst);
+        graphics.copyBufferToTexture(source, { .rowPitch = 256 }, set.texture, TextureRegion{ .mip = set.shape.mipTailFirst, .extent = { 1, 1, 1 } });
+        submitTo(kit.device, graphics, QueueType::Graphics);
+    });
+}
+
+//======================================================================================================================
+TEST_CASE("VU-rojo-sparse-0014 a shader read of a texture with a newly mapped tile reaches it", "[contract][death]")
+{
+    // A declared shader access names no texel box, so it reaches every mark of the subresources it names.
+    ROJORHI_EXPECT_DEATH("VU-rojo-sparse-0014", [] {
+        PassKit kit(QueueType::Graphics, true);
+        const SparseSet set = sparse(kit);
+        test::transition(kit.list, set.texture, Layout::Undefined, Layout::General);
+        submitTo(kit.device, kit.list, QueueType::Graphics);
+        kit.device.queue(QueueType::Graphics).mapTiles(std::array{ textureTile(set) });
+        CommandList graphics = kit.device.acquireCommandList(QueueType::Graphics, "test.graphics");
+        const std::array<ResourceAccess, 1> reads{ ResourceAccess{
+            .texture = set.texture, .range = { .mipCount = 1, .layerCount = 1 }, .stage = Stage::ComputeShader, .access = Access::ShaderRead } };
+        graphics.setPipeline(kit.compute());
+        graphics.declareAccess(reads);
+        graphics.dispatch(1, 1, 1);
+        submitTo(kit.device, graphics, QueueType::Graphics);
     });
 }

@@ -1,6 +1,6 @@
 //----------------------------------------------------------------------------------------------------------------------
 /// @file SparseOrderTests.cpp
-/// @brief Tests that the validation tracker accepts tile mapping changes that fences, the CPU or queue order order against work.
+/// @brief Tests that the tracker accepts mapping changes fences, the CPU or queue order order, and ordered first uses of new tiles.
 //----------------------------------------------------------------------------------------------------------------------
 #include <rojoRHI/RHI.h>
 
@@ -123,6 +123,7 @@ TEST_CASE("a sparse buffer remapped on Graphics is copied to on Compute after a 
     kit.device.queue(QueueType::Graphics).mapTiles(std::array{ bufferTile(set) });
     kit.device.queue(QueueType::Graphics).submit({}, {}, mapped);
     CommandList compute = kit.device.acquireCommandList(QueueType::Compute, "test.compute");
+    compute.barrier(std::array{ GlobalBarrier{ Stage::Copy, Access::None, Stage::Copy, Access::CopyWrite } });
     compute.copyBuffer(source, 0, set.buffer, 0, kBytes);
     submitTo(kit.device, compute, QueueType::Compute, mapped, copied);
     submitTo(kit.device, kit.list, QueueType::Graphics, copied);
@@ -238,9 +239,133 @@ TEST_CASE("a sparse buffer remapped and copied to on one queue is ordered by que
     const SparseSet set = sparse(kit);
     const Buffer source = kit.buffer(BufferUsage::None, kBytes);
     kit.device.queue(QueueType::Graphics).mapTiles(std::array{ bufferTile(set) });
+    kit.list.barrier(std::array{ GlobalBarrier{ Stage::Copy, Access::None, Stage::Copy, Access::CopyWrite } });
     kit.list.copyBuffer(source, 0, set.buffer, 0, kBytes);
     submitTo(kit.device, kit.list, QueueType::Graphics);
     kit.device.queue(QueueType::Graphics).mapTiles(std::array{ TileMapping{ .buffer = set.buffer, .bufferSize = 65536, .unmap = true } });
+    kit.device.endFrame();
+    destroyDevice(kit.device);
+#endif
+}
+
+//======================================================================================================================
+TEST_CASE("a newly mapped texture tile discarded from Undefined is copied to", "[contract]")
+{
+#ifdef NDEBUG
+    SKIP("validation exists only in a Debug build");
+#else
+    PassKit kit(QueueType::Graphics, true);
+    const SparseSet set = sparse(kit);
+    const Buffer source = kit.buffer(BufferUsage::None, 65536);
+    kit.device.queue(QueueType::Graphics).mapTiles(std::array{ TileMapping{ .texture = set.texture, .region = tileRegion(set, 0), .heap = set.heap } });
+    test::transition(kit.list, set.texture, Layout::Undefined, Layout::CopyDst);
+    kit.list.copyBufferToTexture(source, { .rowPitch = set.shape.width * 4 }, set.texture, tileRegion(set, 0));
+    submitTo(kit.device, kit.list, QueueType::Graphics);
+    kit.device.endFrame();
+    destroyDevice(kit.device);
+#endif
+}
+
+//======================================================================================================================
+TEST_CASE("a newly mapped buffer tile is copied to after a global barrier", "[contract]")
+{
+#ifdef NDEBUG
+    SKIP("validation exists only in a Debug build");
+#else
+    PassKit kit(QueueType::Graphics, true);
+    const SparseSet set = sparse(kit);
+    const Buffer source = kit.buffer(BufferUsage::None, kBytes);
+    kit.device.queue(QueueType::Graphics).mapTiles(std::array{ bufferTile(set) });
+    kit.list.barrier(std::array{ GlobalBarrier{ Stage::Copy, Access::None, Stage::Copy, Access::CopyWrite } });
+    kit.list.copyBuffer(source, 0, set.buffer, 0, kBytes);
+    submitTo(kit.device, kit.list, QueueType::Graphics);
+    kit.device.endFrame();
+    destroyDevice(kit.device);
+#endif
+}
+
+//======================================================================================================================
+TEST_CASE("a copy to an old tile of a subresource whose other tile was newly mapped needs no discard", "[contract]")
+{
+#ifdef NDEBUG
+    SKIP("validation exists only in a Debug build");
+#else
+    PassKit kit(QueueType::Graphics, true);
+    const SparseSet set = sparse(kit);
+    const Buffer source = kit.buffer(BufferUsage::None, 65536);
+    kit.device.queue(QueueType::Graphics).mapTiles(std::array{ TileMapping{ .texture = set.texture, .region = tileRegion(set, 0), .heap = set.heap } });
+    test::transition(kit.list, set.texture, Layout::Undefined, Layout::CopyDst);
+    kit.list.copyBufferToTexture(source, { .rowPitch = set.shape.width * 4 }, set.texture, tileRegion(set, 0));
+    submitTo(kit.device, kit.list, QueueType::Graphics);
+    // Only tile 1 is new; the copy's box misses it, so tile 0 keeps its contents and needs no discard.
+    const TileMapping other{ .texture = set.texture, .region = tileRegion(set, 1), .heap = set.heap, .heapOffset = 65536 };
+    kit.device.queue(QueueType::Graphics).mapTiles(std::array{ other });
+    CommandList graphics = kit.device.acquireCommandList(QueueType::Graphics, "test.graphics");
+    graphics.barrier(std::array{ GlobalBarrier{ Stage::Copy, Access::CopyWrite, Stage::Copy, Access::CopyWrite } });
+    graphics.copyBufferToTexture(source, { .rowPitch = set.shape.width * 4 }, set.texture, tileRegion(set, 0));
+    submitTo(kit.device, graphics, QueueType::Graphics);
+    kit.device.endFrame();
+    destroyDevice(kit.device);
+#endif
+}
+
+//======================================================================================================================
+TEST_CASE("an unmapped tile leaves no first use to order", "[contract]")
+{
+#ifdef NDEBUG
+    SKIP("validation exists only in a Debug build");
+#else
+    PassKit kit(QueueType::Graphics, true);
+    const SparseSet set = sparse(kit);
+    test::transition(kit.list, set.texture, Layout::Undefined, Layout::General);
+    submitTo(kit.device, kit.list, QueueType::Graphics);
+    const TileMapping tile{ .texture = set.texture, .region = tileRegion(set, 0), .heap = set.heap };
+    kit.device.queue(QueueType::Graphics).mapTiles(std::array{ tile });
+    kit.device.queue(QueueType::Graphics).mapTiles(std::array{ TileMapping{ .texture = set.texture, .region = tileRegion(set, 0), .unmap = true } });
+    // No tile of the texture is newly mapped any more, so a barrier that keeps the contents is no first use.
+    CommandList graphics = kit.device.acquireCommandList(QueueType::Graphics, "test.graphics");
+    test::transition(graphics, set.texture, Layout::General, Layout::CopySrc);
+    submitTo(kit.device, graphics, QueueType::Graphics);
+    kit.device.endFrame();
+    destroyDevice(kit.device);
+#endif
+}
+
+//======================================================================================================================
+TEST_CASE("a mapping on Compute is first used on Graphics after a fence and a global barrier there", "[contract]")
+{
+#ifdef NDEBUG
+    SKIP("validation exists only in a Debug build");
+#else
+    PassKit kit(QueueType::Graphics, true);
+    const SparseSet set = sparse(kit);
+    const Buffer source = kit.buffer(BufferUsage::None, kBytes);
+    const Fence fence = *kit.device.createFence(0, "test.fence");
+    const std::array<FenceValue, 1> mapped{ FenceValue{ fence, 1 } };
+    kit.device.queue(QueueType::Compute).mapTiles(std::array{ bufferTile(set) });
+    kit.device.queue(QueueType::Compute).submit({}, {}, mapped);
+    kit.list.barrier(std::array{ GlobalBarrier{ Stage::Copy, Access::None, Stage::Copy, Access::CopyWrite } });
+    kit.list.copyBuffer(source, 0, set.buffer, 0, kBytes);
+    submitTo(kit.device, kit.list, QueueType::Graphics, mapped);
+    kit.device.endFrame();
+    destroyDevice(kit.device);
+#endif
+}
+
+//======================================================================================================================
+TEST_CASE("bytes of a buffer tile mapped and then unmapped are copied to with no global barrier", "[contract]")
+{
+#ifdef NDEBUG
+    SKIP("validation exists only in a Debug build");
+#else
+    PassKit kit(QueueType::Graphics, true);
+    const SparseSet set = sparse(kit);
+    const Buffer source = kit.buffer(BufferUsage::None, kBytes);
+    kit.device.queue(QueueType::Graphics).mapTiles(std::array{ bufferTile(set) });
+    kit.device.queue(QueueType::Graphics).mapTiles(std::array{ TileMapping{ .buffer = set.buffer, .bufferSize = 65536, .unmap = true } });
+    // The tile is unmapped, so the copy's writes are discarded and there is no first use of new memory to order.
+    kit.list.copyBuffer(source, 0, set.buffer, 0, kBytes);
+    submitTo(kit.device, kit.list, QueueType::Graphics);
     kit.device.endFrame();
     destroyDevice(kit.device);
 #endif
