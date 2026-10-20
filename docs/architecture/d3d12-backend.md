@@ -16,12 +16,13 @@ are in [the build record](d3d12-build.md).
 
 | Chapter | State |
 |---|---|
-| 01 fundamentals, 02 device | implemented, `createDevice` and `destroyDevice`; `loadShaderLibrary`, `createPipeline`, `pipelineCacheData` and `createUpscaler` return `Unsupported` |
+| 01 fundamentals, 02 device | implemented, `createDevice` and `destroyDevice`; `createUpscaler` returns `Unsupported` |
 | 03 memory and buffers, 04 textures and heaps | implemented, with views and samplers |
 | 15 formats and limits | implemented: the format table and the limits |
 | 10 queues and frames (with the fences of 09) | implemented: fences, `submit`, frames; `Queue::present` and `Queue::mapTiles` abort |
 | 07 command recording | `acquireCommandList`, `end` and `uploadFrameData` only; every other recording entry aborts |
-| 06 pipelines, 08 GPU-driven work, 11 presentation, 12 upscaling, 13 sparse | not implemented: entries return `Unsupported` or abort, and `createSwapchain` is `Unsupported` |
+| 06 pipelines | implemented: shader libraries, graphics, mesh and compute pipelines and the pipeline cache ([drawing](d3d12-drawing.md)) |
+| 08 GPU-driven work, 11 presentation, 12 upscaling, 13 sparse | not implemented: entries return `Unsupported` or abort, and `createSwapchain` is `Unsupported` |
 | 14 diagnostics | the core's counters and checks; no capture hook, so `beginCapture` is `Unsupported` |
 
 An entry the backend does not implement logs its name and aborts in every build, or returns
@@ -74,17 +75,16 @@ none shares a factory or a debug configuration.
 `DeviceImpl` (`D3D12Device.h`) declares its members in creation order: the core (`DeviceCore`),
 `loaded`, the message router, the optional `features`, the three `QueueImpl` (one per `QueueType`),
 the frame state, the descriptor heaps, the heap directory, the root signatures, the stager, the
-per-slot list pools and the two name strings behind `Capabilities`. `createDevice` validates the
-description in the core, calls `loadDevice`, registers the retire hooks (buffer, heap, texture,
-view, fence, frame slot, frame wait) and creates the native state in that order. A failure part
-way runs the same teardown.
+pipeline cache, the per-slot list pools and the two name strings behind `Capabilities`.
+`createDevice` validates the description in the core, calls `loadDevice`, registers the retire hooks
+(buffer, heap, texture, view, fence, pipeline, shader library, frame slot, frame wait) and creates
+the native state in that order. A failure part way runs the same teardown.
 
-`destroyDevice` idles the queues, idles the stager, has the core pass every remaining record to
-the retire hooks, releases the kept fences, deletes the `DeviceImpl` (which releases every other
-native object in reverse order of declaration) and releases the device last. The device's
-reference count must then reach 0: `ROJORHI_INTERNAL_ASSERT` checks it in Debug builds, so a child
-object that outlives the device is a defect. The factory that made the device is released
-after it.
+`destroyDevice` idles the queues, idles the stager, has the core pass every remaining record to the
+retire hooks, releases the pipeline library and its bytes, releases the kept fences, deletes the
+`DeviceImpl` (which releases every other native object in reverse order of declaration) and releases
+the device last. Its reference count must then reach 0, which `ROJORHI_INTERNAL_ASSERT` checks in
+Debug builds: a child object that outlives the device is a defect. The factory goes after it.
 
 ## Capabilities and formats
 
@@ -181,7 +181,8 @@ address reach is a core defect recorded in issue #89.
 | mesh | constant then `DISPATCH_MESH`, stride 16 |
 | dispatch | `DISPATCH`, stride 12, no root signature |
 
-The serialized global signature is kept for the device's life. No pipeline uses them yet.
+The serialized global signature lives as long as the device and names every pipeline stream; no
+list binds the command signatures yet.
 
 ## Initial data
 
@@ -218,8 +219,10 @@ When the build enables the layer, `MessageRouter` registers an `ID3D12InfoQueue1
 forwards each message with its severity (info and message as `Info`, warning as `Warning`, error
 and corruption as `Error`), on whatever thread the runtime raises it, and aborts after an error
 or corruption message. Messages are dropped only by the deny list `kFiltered` in `D3D12Debug.cpp`,
-which holds the runtime's per-object create and destroy notices at information severity; every
-error, warning and application message passes, and so does a live-object report. On
+which holds the runtime's per-object create and destroy notices at information severity and six
+pipeline-library outcomes the cache reads from the HRESULT (not found, duplicate name, invalid
+blob, driver or adapter mismatch, unsupported; see [drawing](d3d12-drawing.md)); message 972 passes.
+Every other error, warning and application message passes, and so does a live-object report. On
 `DXGI_ERROR_DEVICE_REMOVED`, `_RESET` or `_HUNG`, `d3d12::failure` reports the removal reason, the
 auto-breadcrumb nodes and the page-fault data as `Error` messages, then the entry fails as its
 contract says: a `Result` error, or a logged abort in an entry with no `Result`. Every native
@@ -232,7 +235,20 @@ and queue type (acquisition only); the frame-arena claim, then the core's view a
 directory's mutex. The heap directory mutex, the stager mutex, the kept-fence mutex and a list
 pool's mutex are leaves. The tracker lock in `submit` is held from the check to the last native
 call. Release recording reads the directory and each texture's target heap without a lock and
-claims transient slots with an atomic.
+claims transient slots with an atomic. The pipeline cache's mutex is a leaf: creation holds it
+only around `LoadPipeline` and `StorePipeline`, never while compiling, and `pipelineCacheData`
+around `Serialize`; no pool lock is held when it is taken, and recording never takes it.
+
+## Shader libraries and pipelines
+
+[Drawing on the D3D12 backend](d3d12-drawing.md) describes the container, the loader, the
+pipelines and the cache. The files are:
+
+- `D3D12ShaderLibrary.{h,cpp}`: the `.d3d12lib` parser, the library payload and its retire hook.
+- `D3D12PipelineState.{h,cpp}`: the pipeline payload, the state conversions and the state stream.
+- `D3D12PipelineKey.{h,cpp}`: the canonical key, its hash and the cache blob header.
+- `D3D12PipelineCache.{h,cpp}`: the device's pipeline library and its mutex.
+- `D3D12Pipelines.cpp`: `loadShaderLibrary`, `createPipeline` and `pipelineCacheData`.
 
 ## Counting
 
