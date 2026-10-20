@@ -330,8 +330,8 @@ TEST_CASE("C10: a counted drawIndirect of 256 records is three native calls per 
     const auto each = [&](CommandList list, uint32_t) { list.drawIndirect(records, kRecords, counts); };
     const Record close = [](CommandList list) { list.endRenderPass(); };
     const PerOperation slope = fixture.perOperation(open, each, close);
-    // The setAddress of the kernel's record, its dispatch and the execute: arm E's three. The kernel table, the pipeline and
-    // the residency set come once per encoder.
+    // The setAddress of the kernel's record, its dispatch and the execute: arm E's three. The kernel table and the pipeline
+    // come once per encoder.
     CHECK(slope.calls == 3);
     CHECK(slope.barriers == 0);
     CHECK(slope.encoders == 0);
@@ -350,9 +350,9 @@ TEST_CASE("C10: a counted drawIndirect of 256 records is three native calls per 
         nothing
     );
     INFO("the per-pass total with one draw: calls " << pass.calls << ", barriers " << pass.barriers << ", encoders " << pass.encoders);
-    // Eighteen beyond the draw's three: both encoders' opens and ends, the pass's debug group and its two timestamps, the
-    // kernels' pipeline, table and residency set, the barrier that orders the kernels before the vertex stage and the render
-    // encoder's state.
+    // Sixteen beyond the draw's three, and an encoder label each where encoders carry one: both encoders' opens and
+    // ends, the pass's debug group and its two timestamps, the kernels' pipeline and table, the barrier that orders
+    // the kernels before the vertex stage and the render encoder's state.
     CHECK(pass.calls == slope.calls + 16 + 2 * label);
     CHECK(pass.barriers == 1);
     CHECK(pass.encoders == 2);

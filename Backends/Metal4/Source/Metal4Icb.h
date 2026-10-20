@@ -1,11 +1,12 @@
 //----------------------------------------------------------------------------------------------------------------------
 /// @file Metal4Icb.h
-/// @brief Declares the indirect command buffers a Metal 4 command list keeps for its counted draws, and the list's own residency set.
+/// @brief Declares the indirect command buffers a Metal 4 command list keeps for its counted draws, resident through the device's set.
 //----------------------------------------------------------------------------------------------------------------------
 #pragma once
 
 #include "Core/CommandLists.h"
 #include "Core/DeviceCore.h"
+#include "Metal4Residency.h"
 
 #include <Metal/Metal.hpp>
 
@@ -38,35 +39,38 @@ namespace rojoRHI::metal4 {
         uint32_t capacity = 0;                        ///< Its commands.
     };
 
-    /// The indirect command buffers of one command list and the residency set that keeps them resident. Per kind, slot `i`
-    /// serves the `i`-th counted draw of that kind in a recording; the slots outlive the recording, so a list that records
-    /// the same counted draws again makes no native object. A slot whose capacity is below a draw's `maxCount` is replaced by
-    /// one of `bit_ceil(max(maxCount, kIcbMinimumCommands))` commands: the list is acquired again only once its frame slot's
-    /// work has retired, so the replaced buffer is no longer in use. The buffers join the list's residency set, which the list's
-    /// command buffer uses from the recording's first counted draw and which is committed at `CommandList::end` when it
-    /// changed. Only the list's recording thread touches it.
+    /// The indirect command buffers of one command list. Per kind, slot `i` serves the `i`-th counted draw of that kind in a
+    /// recording; the slots outlive the recording, so a list that records the same counted draws again makes no native object.
+    /// A slot whose capacity is below a draw's `maxCount` is replaced by one of `bit_ceil(max(maxCount, kIcbMinimumCommands))`
+    /// commands: the list is acquired again only once its frame slot's work has retired, so the replaced buffer is no longer in
+    /// use. The buffers are resident through the device's residency set, which every queue keeps: recording only notes the
+    /// buffers made and replaced, since it takes no lock (ADR 0020), and `Queue::submit` hands them over, so a buffer joins the
+    /// set before the command buffer that uses it commits and a replaced one leaves it at the list's next submission, after its
+    /// last use retired. Only the list's recording thread touches it until the list is submitted.
     class IcbPool
     {
       public:
         /// Returns the next slot of `kind` for a counted draw of `maxCount` records, making its buffer on `device` when the
-        /// slot is new or too small: the growth path opens an autorelease pool, makes the list's residency set at its first
-        /// buffer, and counts each native object it makes in `core`'s `nativeCreateCalls`. A buffer Metal refuses is fatal.
+        /// slot is new or too small: the growth path opens an autorelease pool and counts each native object it makes in
+        /// `core`'s `nativeCreateCalls`. A buffer Metal refuses is fatal.
         const IcbSlot& take(MTL::Device* device, core::DeviceCore& core, IcbKind kind, uint32_t maxCount);
 
-        /// Makes `commandBuffer` use the list's residency set, once per recording; counts the call on `list`. A buffer must
-        /// have been taken.
-        void attach(core::CommandListCore& list, MTL4::CommandBuffer* commandBuffer);
+        /// Adds the buffers made since the last hand-over to `residency`, and removes and releases those they replaced.
+        /// Nothing to hand over costs two tests. `Queue::submit` calls it for each list before it commits the set.
+        void handOver(Residency& residency)
+        {
+            if (!m_joining.empty() || !m_leaving.empty())
+            {
+                handOverChanges(residency);
+            }
+        }
 
-        /// Commits the residency set, inside an autorelease pool, when a buffer joined or left it since the last commit;
-        /// returns true when it committed.
-        bool commit();
-
-        /// Starts a new recording: every slot is free again and the residency set is not yet used.
+        /// Starts a new recording: every slot is free again.
         void reset();
 
-        /// Releases every buffer and the residency set. The caller holds an autorelease pool and no queue holds work that uses
-        /// them.
-        void release();
+        /// Releases every buffer, removing from `residency` each one that joined it. The caller holds an autorelease pool and
+        /// no queue holds work that uses them.
+        void release(Residency& residency);
 
         /// Returns how many slots of `kind` exist.
         size_t slots(IcbKind kind) const
@@ -86,23 +90,13 @@ namespace rojoRHI::metal4 {
             return m_slots[static_cast<size_t>(kind)][index].capacity;
         }
 
-        /// Returns the list's residency set, or null before its first buffer.
-        const MTL::ResidencySet* residencySet() const
-        {
-            return m_set;
-        }
-
-        /// Returns true when the recording's command buffer uses the residency set.
-        bool attached() const
-        {
-            return m_attached;
-        }
-
       private:
+        /// `handOver` when there is something to hand over: the set's lock is taken once for each buffer that joins or leaves.
+        void handOverChanges(Residency& residency);
+
         std::array<std::vector<IcbSlot>, kIcbKinds> m_slots; ///< Per kind, the slots in the order a recording takes them.
         std::array<uint32_t, kIcbKinds> m_cursor = {};       ///< Per kind, the next slot this recording takes.
-        MTL::ResidencySet* m_set = nullptr;                  ///< The list's residency set, one retained reference.
-        bool m_attached = false;                             ///< This recording's command buffer uses `m_set`.
-        bool m_changed = false;                              ///< A buffer joined or left `m_set` since its last commit.
+        std::vector<MTL::IndirectCommandBuffer*> m_joining;  ///< Buffers made since the last hand-over; the slots own them.
+        std::vector<MTL::IndirectCommandBuffer*> m_leaving;  ///< Buffers replaced since the last hand-over, one reference each.
     };
 } // namespace rojoRHI::metal4

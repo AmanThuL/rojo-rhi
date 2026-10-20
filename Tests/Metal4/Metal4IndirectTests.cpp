@@ -373,9 +373,8 @@ TEST_CASE("a counted draw after a direct draw splits the pass", "[metal4]")
     REQUIRE(encodersOf(list).kind() == metal4::EncoderKind::Render);
     const uint64_t before = callsOf(list);
     fixture.drawIndirect(list);
-    // The split stores the attachment and ends the render encoder; then the kernel's encoder opens, the list's residency set
-    // is used, and the kernel runs.
-    CHECK(callsOf(list) - before == 2 + batchOpenCalls(list) + 1 + 4);
+    // The split stores the attachment and ends the render encoder; then the kernel's encoder opens and the kernel runs.
+    CHECK(callsOf(list) - before == 2 + batchOpenCalls(list) + 4);
     CHECK(encodersOf(list).kind() == metal4::EncoderKind::Compute);
     CHECK(drawOf(list).resuming);
     CHECK(countsOf(list).encodersOpened == 2);
@@ -417,10 +416,9 @@ TEST_CASE("a kernel makes four calls on a new encoder, two once the encoder hold
     CommandList list = kit.list(QueueType::Graphics, "test.indirect");
     fixture.begin(list);
     uint64_t before = callsOf(list);
-    // The encoder's open, the pass's begin timestamp, the list's residency set, then the pipeline, the kernel table, the
-    // parameters and the dispatch.
+    // The encoder's open, the pass's begin timestamp, then the pipeline, the kernel table, the parameters and the dispatch.
     fixture.drawIndirect(list);
-    CHECK(callsOf(list) - before == batchOpenCalls(list) + kPassBegin + 1 + 4);
+    CHECK(callsOf(list) - before == batchOpenCalls(list) + kPassBegin + 4);
     // The encoder holds the pipeline and the kernel table: the parameters and the dispatch, as the native arm's two.
     before = callsOf(list);
     fixture.drawIndirect(list);
@@ -448,7 +446,7 @@ TEST_CASE("maxCount 1 runs the writer kernel and one native indirect draw", "[me
     CommandList list = kit.list(QueueType::Graphics, "test.indirect");
     fixture.begin(list);
     uint64_t before = callsOf(list);
-    // The encoder's open, the pass's begin timestamp and the writer kernel: no indirect command buffer, so no residency set.
+    // The encoder's open, the pass's begin timestamp and the writer kernel: no indirect command buffer.
     fixture.drawIndirect(list, 1);
     CHECK(callsOf(list) - before == batchOpenCalls(list) + kPassBegin + 4);
     CHECK(encodersOf(list).kernelPipeline() == kernelsOf(kit.device).writeDraw);
@@ -456,8 +454,6 @@ TEST_CASE("maxCount 1 runs the writer kernel and one native indirect draw", "[me
     CHECK(encodersOf(list).kernelPipeline() == kernelsOf(kit.device).writeIndexed);
     CHECK(drawOf(list).icbs.slots(metal4::IcbKind::Draw) == 0);
     CHECK(drawOf(list).icbs.slots(metal4::IcbKind::Indexed) == 0);
-    CHECK(drawOf(list).icbs.residencySet() == nullptr);
-    CHECK_FALSE(drawOf(list).icbs.attached());
     CHECK(prefixKinds(list) == std::vector{ Kind::Pipeline, Kind::Viewport, Kind::Scissor, Kind::DrawIndirect, Kind::IndexedIndirect });
     const metal4::PrefixIndirect& indexed = drawOf(list).prefix.back().indirect;
     CHECK(indexed.primitive == MTL::PrimitiveTypeTriangle);
@@ -517,7 +513,7 @@ TEST_CASE("a counted draw after a scope opened in the pass splits it and the res
     uint64_t before = callsOf(list);
     fixture.drawIndirect(list);
     // The split pops the group and ends the encoder (the attachment is stored at no cost); then the kernel's encoder.
-    CHECK(callsOf(list) - before == 1 + 1 + batchOpenCalls(list) + 1 + 4);
+    CHECK(callsOf(list) - before == 1 + 1 + batchOpenCalls(list) + 4);
     CHECK(drawOf(list).passGroups == 1);
     before = callsOf(list);
     // The scope's end ends the kernels' encoder and opens the resumed encoder with its barrier, which sets the held state
@@ -552,9 +548,9 @@ TEST_CASE("ICBs are made once per list and reused when its slot comes round; a l
         // The pinned creations include the counter heap the pass's timestamps need.
         test::requireTimed(list);
         const Counters after = device.counters();
-        // A new list makes its four objects, its first frame-arena page, its residency set and three indirect command buffers,
-        // and the pass's timestamps the frame slot's first counter heap; a reused list and slot make none.
-        CHECK(after.nativeCreateCalls - before.nativeCreateCalls == (frame < slots ? 4 + 1 + 1 + 3 + 1 : 0));
+        // A new list makes its four objects, its first frame-arena page and three indirect command buffers, and the pass's
+        // timestamps the frame slot's first counter heap; a reused list and slot make none.
+        CHECK(after.nativeCreateCalls - before.nativeCreateCalls == (frame < slots ? 4 + 1 + 3 + 1 : 0));
         const metal4::IcbPool& icbs = drawOf(list).icbs;
         REQUIRE(icbs.slots(metal4::IcbKind::Draw) == 2);
         REQUIRE(icbs.slots(metal4::IcbKind::Indexed) == 1);
@@ -590,34 +586,68 @@ TEST_CASE("ICBs are made once per list and reused when its slot comes round; a l
 }
 
 //======================================================================================================================
-TEST_CASE("the list attaches its residency set once per recording and commits it only after a change", "[metal4]")
+TEST_CASE("a list's indirect command buffers join the device's residency set at submission, and a replaced one leaves it", "[metal4]")
 {
     Device device = *createDevice();
     const uint32_t slots = core::coreOf(device).framesInFlight();
     const Fixture fixture(device);
+    metal4::Residency& residency = DeviceImpl::of(device).residency;
+    std::vector<const MTL::IndirectCommandBuffer*> made;
     for (uint32_t frame = 0; frame < 2 * slots; ++frame)
     {
         device.beginFrame();
         CommandList list = device.acquireCommandList(QueueType::Graphics, "test.indirect");
-        CHECK_FALSE(drawOf(list).icbs.attached());
         fixture.begin(list);
         fixture.drawIndirect(list);
-        CHECK(drawOf(list).icbs.attached());
-        // A later counted draw of the recording does not use the set again: its parameters and its dispatch.
+        // A later counted draw of the recording sends its parameters and its dispatch, and no residency set.
         const uint64_t calls = callsOf(list);
         fixture.drawIndirect(list);
         CHECK(callsOf(list) - calls == 2);
         list.endRenderPass();
-        // A new set, or one a buffer joined, is committed at end; a reused list's is not.
+        const metal4::IcbPool& icbs = drawOf(list).icbs;
+        REQUIRE(icbs.slots(metal4::IcbKind::Draw) == 2);
+        const MTL::IndirectCommandBuffer* buffer = icbs.buffer(metal4::IcbKind::Draw, 0);
+        // end commits nothing; the submission adds a new list's buffers to the device's set and commits it, once.
         const Counters before = device.counters();
         list.end();
-        const Counters after = device.counters();
-        CHECK(after.nativeHostCalls - before.nativeHostCalls == (frame < slots ? 1 : 0));
+        CHECK(device.counters().nativeHostCalls == before.nativeHostCalls);
         const Fence fence = *device.createFence(0, "test.done");
+        const Counters submitted = device.counters();
         device.queue(QueueType::Graphics).submit(std::array{ list }, {}, std::array{ FenceValue{ fence, 1 } });
+        CHECK(device.counters().nativeHostCalls - submitted.nativeHostCalls == (frame < slots ? 1 : 0));
+        CHECK(residency.contains(buffer));
+        CHECK(residency.contains(icbs.buffer(metal4::IcbKind::Draw, 1)));
+        if (frame < slots)
+        {
+            made.push_back(buffer);
+        }
         CHECK(device.wait({ fence, 1 }, UINT64_MAX));
         device.endFrame();
     }
+    // A counted draw of more records than a slot holds replaces its buffer; the replaced one leaves the set at the list's
+    // next submission, its last use having retired before the list was acquired again.
+    std::vector<DrawIndirectArgs> many(100, DrawIndirectArgs{ .vertexCount = 3, .instanceCount = 1 });
+    const Buffer manyRecords = *device.createBuffer(
+        BufferDesc{ .size = sizeof(DrawIndirectArgs) * many.size(), .usage = BufferUsage::IndirectArgs, .label = "test.many" }, std::as_bytes(std::span(many))
+    );
+    // The frame after the loop reuses the slot, and so the list, of the loop's first frame. The case keeps a reference to
+    // the buffer that will be replaced, which the hand-over releases.
+    MTL::IndirectCommandBuffer* replaced = const_cast<MTL::IndirectCommandBuffer*>(made.front())->retain();
+    device.beginFrame();
+    CommandList list = device.acquireCommandList(QueueType::Graphics, "test.indirect");
+    fixture.begin(list);
+    list.drawIndirect(device.address(manyRecords), static_cast<uint32_t>(many.size()));
+    list.endRenderPass();
+    const MTL::IndirectCommandBuffer* grown = drawOf(list).icbs.buffer(metal4::IcbKind::Draw, 0);
+    REQUIRE(grown != replaced);
+    list.end();
+    const Fence fence = *device.createFence(0, "test.done");
+    device.queue(QueueType::Graphics).submit(std::array{ list }, {}, std::array{ FenceValue{ fence, 1 } });
+    CHECK(residency.contains(grown));
+    CHECK_FALSE(residency.contains(replaced));
+    replaced->release();
+    CHECK(device.wait({ fence, 1 }, UINT64_MAX));
+    device.endFrame();
     destroyDevice(device);
 }
 

@@ -176,12 +176,6 @@ namespace rojoRHI {
         // The list may wait in its pool long after its textures are destroyed; its descriptor must not keep them alive.
         list.draw.forgetTextures();
         metal4::emitTrailing(list.core, list.state, list.encoders.barriers(), list.encoders.carryFence());
-        // An indirect command buffer made or replaced while recording joins the list's residency set before the command buffer
-        // that uses the set is committed; a list recording the same counted draws again changes nothing.
-        if (list.draw.icbs.commit())
-        {
-            core::DeviceCounts::add(list.core.device->counts().nativeHostCalls);
-        }
         list.state.commandBuffer->endCommandBuffer();
         core::noteNativeCall(list.core);
     }

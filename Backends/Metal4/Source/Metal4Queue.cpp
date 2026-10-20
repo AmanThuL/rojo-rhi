@@ -79,8 +79,14 @@ namespace rojoRHI {
             const core::TrackerLock tracked = core::lockTracker(core);
             core::checkSubmit(core, wait, signal);
             core::replayLists(core, queue.type, lists, wait, signal, tracked);
-            // A clean residency set is seen without a lock; a dirty one is committed under its mutex, which serialises the
-            // queues that submit concurrently.
+            // The indirect command buffers the lists made join the device's set, and those they replaced leave it, before the
+            // set is committed. A clean set is seen without a lock; a dirty one is committed under its mutex, which serialises
+            // the queues that submit concurrently.
+            for (const CommandList& list : lists)
+            {
+                // commitIfDirty below reads the set's own dirty flag.
+                CommandListImpl::of(list).draw.icbs.handOver(device.residency);
+            }
             if (device.residency.commitIfDirty())
             {
                 core::DeviceCounts::add(core.counts().nativeHostCalls);

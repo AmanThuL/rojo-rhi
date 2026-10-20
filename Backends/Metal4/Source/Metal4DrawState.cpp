@@ -70,7 +70,7 @@ namespace rojoRHI::metal4 {
     }
 
     //==================================================================================================================
-    void DrawState::release()
+    void DrawState::release(Residency& residency)
     {
         reset();
         for (MTL::RenderPassColorAttachmentDescriptor* attachment : colorAttachments)
@@ -95,7 +95,7 @@ namespace rojoRHI::metal4 {
         }
         descriptorColors = 0;
         descriptorDepth = false;
-        icbs.release();
+        icbs.release(residency);
     }
 
     //==================================================================================================================

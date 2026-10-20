@@ -231,10 +231,13 @@ kernel reads the count and either encodes the draws into an indirect command buf
   Apple M3 Max. The descriptor inherits the pipeline state and every `inherit*` state, and inherits
   the buffers for draw and indexed kinds. The slots outlive a recording, so a list that records the
   same counted draws again makes no native object.
-- **The list residency set.** The ICBs join the list's own `MTL::ResidencySet`,
-  `rojorhi.list.residency`, made with the first ICB. The command buffer uses it from the
-  recording's first counted draw, once per recording, and `end` commits it when an ICB joined or
-  left since the last commit, counting a `nativeHostCalls`. Teardown releases it with the ICBs.
+- **Residency.** The ICBs are resident through the device's residency set, which every queue keeps.
+  Recording takes no lock (ADR 0020), so the list only notes the ICBs it made and replaced;
+  `Queue::submit` adds the new ones to the device's set and removes and releases the replaced ones,
+  under the set's mutex, before it commits the set: an ICB joins the set before the command buffer
+  that uses it commits, and a replaced one leaves at the list's next submission, after its last use
+  retired. A list recording the same counted draws again hands over nothing. Teardown removes the
+  ICBs from the set and releases them.
 - **The kernels.** `Backends/Metal4/Kernels/Metal4DrawIndirect.metal` holds six functions,
   `rojorhi_encode_draw`, `rojorhi_encode_indexed`, `rojorhi_encode_mesh`, `rojorhi_write_draw`,
   `rojorhi_write_indexed` and `rojorhi_write_mesh`, whose pipelines the device makes with the fill
@@ -252,10 +255,9 @@ kernel reads the count and either encodes the draws into an indirect command buf
   `executeCommandsInBuffer(icb, rangeAddress)` or the native indirect draw of the record.
 - **Counts.** A counted draw's kernel costs two native messages once the compute encoder holds its
   pipeline (the parameters' address and the dispatch), three when the kind changes, four on a new
-  encoder (pipeline, kernel table, address, dispatch), and its execute one more at replay. The
-  batch adds the compute encoder's open, `endEncoding`, the residency set's use once per recording
-  and one barrier at the render encoder's open, and the pass's begin timestamp when it opens the
-  pass. Dispatches and executes each run in their own
+  encoder (pipeline, kernel table, address, dispatch), and its execute one more at replay. The batch
+  adds the compute encoder's open, `endEncoding` and one barrier at the render encoder's open, and
+  the pass's begin timestamp when it opens the pass. Dispatches and executes each run in their own
   pool.
 
 ## Mesh paths

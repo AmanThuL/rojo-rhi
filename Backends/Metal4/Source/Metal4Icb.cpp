@@ -1,6 +1,6 @@
 //----------------------------------------------------------------------------------------------------------------------
 /// @file Metal4Icb.cpp
-/// @brief Implements the indirect command buffers of a Metal 4 command list's counted draws and the list's residency set.
+/// @brief Implements the indirect command buffers of a Metal 4 command list's counted draws, resident through the device's set.
 //----------------------------------------------------------------------------------------------------------------------
 
 #include "Metal4Icb.h"
@@ -82,23 +82,9 @@ namespace rojoRHI::metal4 {
         {
             return slots[cursor++];
         }
-        // The growth path, which a list that records the same counted draws again never takes. The factories and the label
+        // The growth path, which a list that records the same counted draws again never takes. The factory and the label
         // autorelease.
         const AutoreleasePool pool;
-        if (m_set == nullptr)
-        {
-            MTL::ResidencySetDescriptor* descriptor = MTL::ResidencySetDescriptor::alloc()->init();
-            descriptor->setLabel(makeString("rojorhi.list.residency"));
-            NS::Error* error = nullptr;
-            m_set = device->newResidencySet(descriptor, &error);
-            descriptor->release();
-            if (m_set == nullptr)
-            {
-                ROJORHI_LOG_ERROR("a command list's residency set rojorhi.list.residency was not created: {}", describe(error));
-                std::abort();
-            }
-            core::DeviceCounts::add(core.counts().nativeCreateCalls);
-        }
         const uint32_t capacity = std::bit_ceil(std::max(maxCount, kIcbMinimumCommands));
         MTL::IndirectCommandBuffer* buffer = newIcb(device, kind, capacity);
         if (buffer == nullptr)
@@ -107,73 +93,79 @@ namespace rojoRHI::metal4 {
             std::abort();
         }
         core::DeviceCounts::add(core.counts().nativeCreateCalls);
-        m_set->addAllocation(buffer);
         if (cursor < slots.size())
         {
-            // The slot's last use retired before the list was acquired again.
-            m_set->removeAllocation(slots[cursor].buffer);
-            slots[cursor].buffer->release();
+            // The slot's last use retired before the list was acquired again. A buffer that never reached the set, from a
+            // recording never submitted, goes at once; one in the set leaves it at the hand-over.
+            MTL::IndirectCommandBuffer* replaced = slots[cursor].buffer;
+            if (const auto joining = std::find(m_joining.begin(), m_joining.end(), replaced); joining != m_joining.end())
+            {
+                m_joining.erase(joining);
+                replaced->release();
+            }
+            else
+            {
+                m_leaving.push_back(replaced);
+            }
             slots[cursor] = IcbSlot{ buffer, buffer->gpuResourceID(), capacity };
         }
         else
         {
             slots.push_back(IcbSlot{ buffer, buffer->gpuResourceID(), capacity });
         }
-        m_changed = true;
+        m_joining.push_back(buffer);
         return slots[cursor++];
     }
 
     //==================================================================================================================
-    void IcbPool::attach(core::CommandListCore& list, MTL4::CommandBuffer* commandBuffer)
+    void IcbPool::handOverChanges(Residency& residency)
     {
-        if (m_attached)
+        for (const MTL::IndirectCommandBuffer* buffer : m_joining)
         {
-            return;
+            residency.add(buffer);
         }
-        commandBuffer->useResidencySet(m_set);
-        core::noteNativeCall(list);
-        m_attached = true;
-    }
-
-    //==================================================================================================================
-    bool IcbPool::commit()
-    {
-        if (!m_changed)
+        m_joining.clear();
+        if (!m_leaving.empty())
         {
-            return false;
+            // A release may autorelease, and a submission holds no pool of its own.
+            const AutoreleasePool pool;
+            for (MTL::IndirectCommandBuffer* buffer : m_leaving)
+            {
+                residency.remove(buffer);
+                buffer->release();
+            }
+            m_leaving.clear();
         }
-        // The commit autoreleases.
-        const AutoreleasePool pool;
-        m_set->commit();
-        m_changed = false;
-        return true;
     }
 
     //==================================================================================================================
     void IcbPool::reset()
     {
         m_cursor = {};
-        m_attached = false;
     }
 
     //==================================================================================================================
-    void IcbPool::release()
+    void IcbPool::release(Residency& residency)
     {
         for (std::vector<IcbSlot>& slots : m_slots)
         {
             for (const IcbSlot& slot : slots)
             {
+                if (std::find(m_joining.begin(), m_joining.end(), slot.buffer) == m_joining.end())
+                {
+                    residency.remove(slot.buffer);
+                }
                 slot.buffer->release();
             }
             slots.clear();
         }
-        if (m_set != nullptr)
+        for (MTL::IndirectCommandBuffer* buffer : m_leaving)
         {
-            m_set->release();
-            m_set = nullptr;
+            residency.remove(buffer);
+            buffer->release();
         }
+        m_joining.clear();
+        m_leaving.clear();
         m_cursor = {};
-        m_attached = false;
-        m_changed = false;
     }
 } // namespace rojoRHI::metal4

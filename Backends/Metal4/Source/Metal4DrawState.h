@@ -197,7 +197,7 @@ namespace rojoRHI::metal4 {
         /// The compute pipeline the caller bound, which a dispatch sets again when the open compute encoder holds another;
         /// null when none is bound.
         const PipelineState* compute = nullptr;
-        /// The indirect command buffers of the list's counted draws and the residency set that keeps them resident.
+        /// The indirect command buffers of the list's counted draws.
         IcbPool icbs;
         /// The GPU addresses of the device's view and sampler tables, which a counted mesh draw's commands bind themselves:
         /// fixed from the device's creation, so read once per list and kept across recordings; 0 before the first.
@@ -224,9 +224,9 @@ namespace rojoRHI::metal4 {
         /// Empties the prefix after its replay, keeping its capacity.
         void clearPrefix();
 
-        /// Releases the descriptor, the indirect command buffers and the list's residency set. The caller holds an autorelease
-        /// pool.
-        void release();
+        /// Releases the descriptor and the indirect command buffers, removing those that joined `residency` from it. The caller
+        /// holds an autorelease pool.
+        void release(Residency& residency);
 
         /// Empties the descriptor's attachments, which hold strong references to the last pass's textures, so a list waiting
         /// in its pool keeps no destroyed texture's memory alive. It sets them through the attachment descriptors the list
