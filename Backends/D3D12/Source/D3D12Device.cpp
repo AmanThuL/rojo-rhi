@@ -69,14 +69,16 @@ namespace rojoRHI {
 
         //==============================================================================================================
         /// Tears down `impl`, made by `createDevice` whether or not all of its state was created: the queues finish their work,
-        /// the core passes every remaining record to the retire hooks, the kept fences go, and then every native object is
-        /// released in reverse order of creation, the device last. A Debug build checks that no reference to the device
-        /// outlives it.
+        /// the core passes every remaining record to the retire hooks, the pipeline library and the kept fences go, and then
+        /// every native object is released in reverse order of creation, the device last. A Debug build checks that no
+        /// reference to the device outlives it.
         void teardown(DeviceImpl* impl)
         {
             d3d12::idleQueues(*impl);
             impl->stager.idle();
             impl->core.beginDestroy();
+            // Every pipeline has retired, so the library and the bytes it reads go now.
+            impl->pipelineCache.release();
             impl->frames.releaseAll();
             // The factory that made the device outlives it, and the device's reference is the last one released.
             d3d12::Com<ID3D12DeviceFactory> factory = impl->loaded.factory;
@@ -163,8 +165,7 @@ namespace rojoRHI {
         {
             return std::unexpected(std::move(valid.error()));
         }
-        // DeviceDesc::enableCapture and DeviceDesc::pipelineCache are not read: the backend has no capture tool and no
-        // pipeline library yet.
+        // DeviceDesc::enableCapture is not read: the backend has no capture tool.
         Result<d3d12::Loaded> loaded = d3d12::loadDevice();
         if (!loaded)
         {
@@ -189,6 +190,8 @@ namespace rojoRHI {
             teardown(impl.release());
             return std::unexpected(std::move(created.error()));
         }
+        // The cache copies the bytes it keeps, so the caller's blob is read only here.
+        impl->pipelineCache.open(*impl, desc.pipelineCache);
         impl->core.setSurfaceCheck(isWindow);
         impl->core.setArenaSource(d3d12::createArenaPage);
         return DeviceImpl::wrap(impl.release());

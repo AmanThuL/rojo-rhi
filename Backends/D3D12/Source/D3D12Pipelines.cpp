@@ -10,8 +10,9 @@
 #include "Core/Pipelines.h"
 #include "Core/Records.h"
 #include "D3D12Common.h"
-#include "D3D12Debug.h"
 #include "D3D12Device.h"
+#include "D3D12PipelineCache.h"
+#include "D3D12PipelineKey.h"
 #include "D3D12PipelineState.h"
 #include "D3D12ShaderLibrary.h"
 
@@ -20,6 +21,7 @@
 #include <initializer_list>
 #include <memory>
 #include <span>
+#include <string>
 #include <string_view>
 #include <utility>
 #include <vector>
@@ -79,20 +81,36 @@ namespace rojoRHI {
         }
 
         //==============================================================================================================
-        /// Creates the pipeline state `stream` describes on the calling thread, adding the compile time to the device's
-        /// counter, names it with `record`'s label and publishes `state` with it in `record`. The pool counts the creation.
+        /// Returns the bytes of `bytecode`, empty for an absent stage.
+        std::span<const std::byte> dxilOf(const D3D12_SHADER_BYTECODE& bytecode)
+        {
+            return { static_cast<const std::byte*>(bytecode.pShaderBytecode), bytecode.BytecodeLength };
+        }
+
+        //==============================================================================================================
+        /// Takes the pipeline state `stream` describes from the device's pipeline cache under the name of `canonical`, the
+        /// key bytes of its description, or creates it on the calling thread, adding the time to the device's counter; names
+        /// it with `record`'s label and publishes `state` with it in `record`. The pool counts the creation, and a pipeline the
+        /// cache served counts a hit once it is published; the core counts every other creation as a miss.
         Result<Pipeline> publish(
-            DeviceImpl& impl, core::PipelineRecord&& record, const d3d12::PipelineStream& stream, std::unique_ptr<d3d12::PipelineState> state
+            DeviceImpl& impl,
+            core::PipelineRecord&& record,
+            const d3d12::PipelineStream& stream,
+            std::span<const std::byte> canonical,
+            std::unique_ptr<d3d12::PipelineState> state
         )
         {
-            const D3D12_PIPELINE_STATE_STREAM_DESC desc = stream.desc();
+            const std::wstring name = d3d12::keyName(d3d12::pipelineKey(canonical));
+            bool hit = false;
             d3d12::Com<ID3D12PipelineState> pso;
             {
                 const core::ScopedNanoseconds timer(impl.core.counts().pipelineCompileNanoseconds);
-                if (const HRESULT created = impl.device()->CreatePipelineState(&desc, IID_PPV_ARGS(pso.put())); FAILED(created))
+                Result<ID3D12PipelineState*> created = impl.pipelineCache.create(impl, stream, name, record.label, hit);
+                if (!created)
                 {
-                    return std::unexpected(d3d12::failure(impl, created, std::format("ID3D12Device2::CreatePipelineState for pipeline \"{}\"", record.label)));
+                    return std::unexpected(std::move(created.error()));
                 }
+                pso = d3d12::Com<ID3D12PipelineState>(*created);
             }
             d3d12::setName(pso.get(), record.label);
             state->pso = pso.get();
@@ -105,6 +123,11 @@ namespace rojoRHI {
             // The record owns the payload and the pipeline state's reference now; the retire hook releases both.
             (void)pso.detach();
             (void)state.release();
+            if (hit)
+            {
+                // Counted once the pipeline exists, so a refused creation counts no hit.
+                core::DeviceCounts::add(impl.core.counts().pipelineCacheHits);
+            }
             return pipeline;
         }
     } // namespace
@@ -151,7 +174,12 @@ namespace rojoRHI {
         state->kind = mesh ? d3d12::PipelineKind::Mesh : d3d12::PipelineKind::Graphics;
         state->listTopology = mesh ? D3D_PRIMITIVE_TOPOLOGY_UNDEFINED : d3d12::listTopology(desc.primitive);
         state->depthBias = desc.raster.depthBias;
-        return publish(impl, std::move(record), d3d12::graphicsStream(impl.roots.global(), desc, *shaders), std::move(state));
+        const std::vector<std::byte> key = d3d12::canonicalKey(
+            desc,
+            d3d12::StageDxil{
+                .vertex = dxilOf(shaders->vertex), .task = dxilOf(shaders->task), .mesh = dxilOf(shaders->mesh), .fragment = dxilOf(shaders->fragment) }
+        );
+        return publish(impl, std::move(record), d3d12::graphicsStream(impl.roots.global(), desc, *shaders), key, std::move(state));
     }
 
     //==================================================================================================================
@@ -166,12 +194,14 @@ namespace rojoRHI {
         }
         auto state = std::make_unique<d3d12::PipelineState>();
         state->kind = d3d12::PipelineKind::Compute;
-        return publish(impl, std::move(record), d3d12::computeStream(impl.roots.global(), *compute), std::move(state));
+        const std::vector<std::byte> key = d3d12::canonicalKey(desc, dxilOf(*compute));
+        return publish(impl, std::move(record), d3d12::computeStream(impl.roots.global(), *compute), key, std::move(state));
     }
 
     //==================================================================================================================
     Result<std::vector<std::byte>> Device::pipelineCacheData()
     {
-        return d3d12::unsupported("Device::pipelineCacheData");
+        DeviceImpl& impl = DeviceImpl::of(*this);
+        return impl.pipelineCache.data(impl);
     }
 } // namespace rojoRHI
