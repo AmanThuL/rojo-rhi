@@ -161,6 +161,26 @@ local function unreachable_after_stubs()
     end
 end
 
+-- The adapter and debug features a d3d12 build selects, as private defines of the calling target: the
+-- library acts on them, and the D3D12 cases check the device against them.
+local function d3d12_selection()
+    add_options("rojorhi_d3d12_adapter", "rojorhi_d3d12_debug")
+    if is_config("rojorhi_d3d12_adapter", "warp") then
+        add_defines("ROJORHI_D3D12_ADAPTER_WARP")
+    else
+        add_defines("ROJORHI_D3D12_ADAPTER_HARDWARE")
+    end
+    if is_config("rojorhi_d3d12_debug", "off") then
+        add_defines("ROJORHI_D3D12_DEBUG_OFF")
+    elseif is_config("rojorhi_d3d12_debug", "layer") then
+        add_defines("ROJORHI_D3D12_DEBUG_LAYER")
+    elseif is_config("rojorhi_d3d12_debug", "gbv") then
+        add_defines("ROJORHI_D3D12_DEBUG_GBV")
+    else
+        add_defines("ROJORHI_D3D12_DEBUG_MODE")
+    end
+end
+
 -- The D3D12 runtime an executable loads from its own directory, copied there after each build:
 -- the Agility SDK's D3D12Core.dll and d3d12SDKLayers.dll into D3D12/, and WARP's d3d10warp.dll
 -- beside the executable. The FidelityFX loader and upscaler DLLs are copied only when the
@@ -228,22 +248,9 @@ target("RojoRHI")
         -- A system include, so the Agility headers shadow the Windows SDK's older d3d12.h and /external:W0 covers them.
         add_sysincludedirs(path.join(thirdparty, "agility/include"))
         add_defines("WIN32_LEAN_AND_MEAN", "NOMINMAX")
-        add_options("rojorhi_d3d12_adapter", "rojorhi_d3d12_debug")
-        if is_config("rojorhi_d3d12_adapter", "warp") then
-            add_defines("ROJORHI_D3D12_ADAPTER_WARP")
-        else
-            add_defines("ROJORHI_D3D12_ADAPTER_HARDWARE")
-        end
-        if is_config("rojorhi_d3d12_debug", "off") then
-            add_defines("ROJORHI_D3D12_DEBUG_OFF")
-        elseif is_config("rojorhi_d3d12_debug", "layer") then
-            add_defines("ROJORHI_D3D12_DEBUG_LAYER")
-        elseif is_config("rojorhi_d3d12_debug", "gbv") then
-            add_defines("ROJORHI_D3D12_DEBUG_GBV")
-        else
-            add_defines("ROJORHI_D3D12_DEBUG_MODE")
-        end
-        add_syslinks("d3d12", "dxgi", "dxguid", {public = true})
+        d3d12_selection()
+        -- user32 for IsWindow, the surface check.
+        add_syslinks("d3d12", "dxgi", "dxguid", "user32", {public = true})
     -- The Null backend directory holds no source until a part adds one, and xmake warns on an empty glob.
     elseif #os.files(path.join(component_dir, "Backends/Null/Source/*.cpp")) > 0 then
         add_files(path.join(component, "Backends/Null/Source/*.cpp"))
@@ -271,20 +278,59 @@ target("RojoRHITests")
         -- The contract files whose chapters the D3D12 backend does not implement yet. A file leaves the list when it
         -- passes whole on WARP under the debug layer and GPU-based validation, and the list ends empty.
         local d3d12_pending = {
-            "AliasingDeathTests.cpp", "AliasingTests.cpp", "BarrierDeathTests.cpp", "BarrierTests.cpp",
-            "BufferDeathTests.cpp", "BufferTests.cpp", "CommandListDeathTests.cpp", "CommandListTests.cpp",
-            "CopyDeathTests.cpp", "CopyTests.cpp", "CounterTests.cpp", "DeviceDeathTests.cpp", "DeviceTests.cpp",
-            "DiagnosticsDeathTests.cpp", "DiagnosticsTests.cpp", "DrawDeathTests.cpp", "DrawTests.cpp",
-            "FormatDeathTests.cpp", "FormatTests.cpp", "FrameJoinDeathTests.cpp", "FrameJoinTests.cpp",
-            "FundamentalsTests.cpp", "HandoffDeathTests.cpp", "HandoffTests.cpp", "HazardDeathTests.cpp",
-            "HazardTests.cpp", "HeapDeathTests.cpp", "HeapTests.cpp", "IndirectHazardDeathTests.cpp",
-            "IndirectHazardTests.cpp", "LifetimeDeathTests.cpp", "LifetimeTests.cpp", "MessageDeathTests.cpp",
-            "PipelineDeathTests.cpp", "PipelineTests.cpp", "QueueDeathTests.cpp", "QueueHazardDeathTests.cpp",
-            "QueueHazardTests.cpp", "QueueTests.cpp", "RenderPassDeathTests.cpp", "RenderPassTests.cpp",
-            "SamplerDeathTests.cpp", "SamplerTests.cpp", "SparseDeathTests.cpp", "SparseOrderDeathTests.cpp",
-            "SparseOrderTests.cpp", "SparseTests.cpp", "SwapchainDeathTests.cpp", "SwapchainTests.cpp",
-            "TextureDeathTests.cpp", "TextureTests.cpp", "TrackerDeathTests.cpp", "TrackerTests.cpp",
-            "UpscaleDeathTests.cpp", "UpscalerTests.cpp",
+            "AliasingDeathTests.cpp",
+            "AliasingTests.cpp",
+            "BarrierDeathTests.cpp",
+            "BarrierTests.cpp",
+            "BufferDeathTests.cpp",
+            "BufferTests.cpp",
+            "CommandListDeathTests.cpp",
+            "CommandListTests.cpp",
+            "CopyDeathTests.cpp",
+            "CopyTests.cpp",
+            "CounterTests.cpp",
+            "DeviceDeathTests.cpp",
+            "DeviceTests.cpp",
+            "DiagnosticsDeathTests.cpp",
+            "DiagnosticsTests.cpp",
+            "DrawDeathTests.cpp",
+            "DrawTests.cpp",
+            "FormatDeathTests.cpp",
+            "FormatTests.cpp",
+            "FrameJoinDeathTests.cpp",
+            "FrameJoinTests.cpp",
+            "HandoffDeathTests.cpp",
+            "HandoffTests.cpp",
+            "HazardDeathTests.cpp",
+            "HazardTests.cpp",
+            "HeapDeathTests.cpp",
+            "HeapTests.cpp",
+            "IndirectHazardDeathTests.cpp",
+            "IndirectHazardTests.cpp",
+            "LifetimeDeathTests.cpp",
+            "LifetimeTests.cpp",
+            "PipelineDeathTests.cpp",
+            "PipelineTests.cpp",
+            "QueueDeathTests.cpp",
+            "QueueHazardDeathTests.cpp",
+            "QueueHazardTests.cpp",
+            "QueueTests.cpp",
+            "RenderPassDeathTests.cpp",
+            "RenderPassTests.cpp",
+            "SamplerDeathTests.cpp",
+            "SamplerTests.cpp",
+            "SparseDeathTests.cpp",
+            "SparseOrderDeathTests.cpp",
+            "SparseOrderTests.cpp",
+            "SparseTests.cpp",
+            "SwapchainDeathTests.cpp",
+            "SwapchainTests.cpp",
+            "TextureDeathTests.cpp",
+            "TextureTests.cpp",
+            "TrackerDeathTests.cpp",
+            "TrackerTests.cpp",
+            "UpscaleDeathTests.cpp",
+            "UpscalerTests.cpp",
         }
         local pending = {}
         for _, name in ipairs(d3d12_pending) do
@@ -338,6 +384,7 @@ target("RojoRHITests")
         add_files(path.join(component, "Tests/Support/D3D12/*.cpp"))
         add_includedirs(path.join(component, "Backends/D3D12/Source"))
         add_defines("WIN32_LEAN_AND_MEAN", "NOMINMAX")
+        d3d12_selection()
         add_sysincludedirs(path.join(thirdparty, "agility/include"))
         add_rules("rojorhi.d3d12_runtime")
         set_values("rojorhi.thirdparty", thirdparty_dir)
@@ -360,9 +407,10 @@ target("RojoRHITests")
         add_tests("death", {runargs = {"[death]"}, runenvs = layer, realtime_output = true, run_timeout = 300000})
         add_tests("conformance", {runargs = {"[conformance]"}, runenvs = layer, realtime_output = true})
     elseif is_config("rojorhi_backend", "d3d12") then
-        -- No death or conformance entry: while the backend creates no device, each would match no case, and Catch2
-        -- fails a filter that matches none.
+        -- No conformance entry yet: its cases need resources the backend does not create.
         add_tests("contract", {runargs = {"[contract]~[death],[d3d12]~[death]"}, realtime_output = true})
+        -- Each case spawns this executable again, so keep Catch2's summary in the log and bound a hang.
+        add_tests("death", {runargs = {"[death]"}, realtime_output = true, run_timeout = 300000})
     else
         add_tests("contract", {runargs = {"[contract]~[death],[core]~[death],[null]~[death]"}, realtime_output = true})
         -- Each case spawns this executable again, so keep Catch2's summary in the log and bound a hang.

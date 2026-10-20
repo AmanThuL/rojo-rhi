@@ -1,17 +1,43 @@
 //----------------------------------------------------------------------------------------------------------------------
 /// @file D3D12Addr.cpp
-/// @brief Defines address arithmetic for the D3D12 backend, which creates no device, so no address exists to decode or offset.
+/// @brief Stubs the D3D12 address lowering: the backend creates no buffer yet, so no address exists to decode or offset.
 //----------------------------------------------------------------------------------------------------------------------
 
-#include "D3D12Common.h"
+#include "D3D12Addr.h"
 
 #include <rojoRHI/RHI.h>
 
 #include "Core/Addresses.h"
+#include "D3D12Common.h"
 
 #include <cstdint>
 
 namespace rojoRHI {
+    namespace d3d12 {
+        //==============================================================================================================
+        void HeapDirectory::create(uint32_t)
+        {
+        }
+
+        //==============================================================================================================
+        void HeapDirectory::publish(uint32_t, const BufferPayload*)
+        {
+            notImplemented("HeapDirectory::publish");
+        }
+
+        //==============================================================================================================
+        void HeapDirectory::clear(uint32_t)
+        {
+            notImplemented("HeapDirectory::clear");
+        }
+
+        //==============================================================================================================
+        const BufferPayload* HeapDirectory::find(uint32_t) const
+        {
+            notImplemented("HeapDirectory::find");
+        }
+    } // namespace d3d12
+
     namespace core {
         //==============================================================================================================
         DecodedAddr decodeAddr(DeviceCore&, Addr)

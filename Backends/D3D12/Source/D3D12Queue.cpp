@@ -1,6 +1,6 @@
 //----------------------------------------------------------------------------------------------------------------------
 /// @file D3D12Queue.cpp
-/// @brief Defines the queue entries of the D3D12 backend, which creates no device, so no queue exists to submit to.
+/// @brief Stubs the queue entries of the D3D12 backend: submission, presentation and tile mapping abort until they are implemented.
 //----------------------------------------------------------------------------------------------------------------------
 
 #include "D3D12Common.h"

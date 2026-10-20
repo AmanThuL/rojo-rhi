@@ -1,6 +1,6 @@
 //----------------------------------------------------------------------------------------------------------------------
 /// @file D3D12Swapchain.cpp
-/// @brief Defines the swapchain entries of the D3D12 backend, which creates no device, so no swapchain exists to present.
+/// @brief Stubs the swapchain entries of the D3D12 backend: it creates no swapchain until presentation is implemented.
 //----------------------------------------------------------------------------------------------------------------------
 
 #include "D3D12Common.h"
