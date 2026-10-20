@@ -541,9 +541,10 @@ TEST_CASE("a compute pipeline bound before an unequal fill, or before a scope bo
         list.beginScope("test.scope");
         CHECK(encodersOf(list).kind() == metal4::EncoderKind::None);
         before = callsOf(list);
-        // The dispatch path opens the encoder again, waits on the carry fence and sets the pipeline.
+        // The dispatch path opens the encoder again and sets the pipeline; the list uses no carry fence, since no counted
+        // draw has run on the device.
         metal4::applyComputePipeline(impl);
-        CHECK(callsOf(list) - before == openCalls(list) + 1 + 1);
+        CHECK(callsOf(list) - before == openCalls(list) + 1);
         CHECK(encodersOf(list).kernelPipeline() == compute);
         before = callsOf(list);
         metal4::applyComputePipeline(impl);
@@ -573,11 +574,11 @@ TEST_CASE("setPipeline with a compute pipeline, then a barrier, emits the barrie
     const metal4::BarrierState& barriers = encodersOf(list).barriers();
     CHECK(countsOf(list).nativeBarriers == 0);
     CHECK(barriers.pendingDestination == MTL::StageDispatch);
-    // The dispatch path emits it on the open encoder, which keeps its pipeline: the barrier, and the wait on the carry fence
-    // before the encoder's first dispatch.
+    // The dispatch path emits it on the open encoder, which keeps its pipeline: the barrier alone, since the list uses no
+    // carry fence (no counted draw has run on the device).
     const uint64_t before = callsOf(list);
     metal4::applyComputePipeline(CommandListImpl::of(list));
-    CHECK(callsOf(list) - before == 2);
+    CHECK(callsOf(list) - before == 1);
     CHECK(countsOf(list).nativeBarriers == 1);
     CHECK(barriers.pendingDestination == 0);
     CHECK((barriers.openDestination & MTL::StageDispatch) != 0);

@@ -108,7 +108,8 @@ namespace rojoRHI::metal4 {
     };
 
     /// Returns the stages of the barrier `barriers` still owes at `CommandList::end` that the carry fence `carry` carries rather
-    /// than a barrier: the dispatch stage when the barrier holds it, the list's queue has a carry fence (a graphics list), no
+    /// than a barrier: the dispatch stage when the barrier holds it, the list uses the carry fence (a graphics list acquired
+    /// once a counted draw's kernels ran in an earlier frame), no
     /// barrier of the list named `IndirectArgs` as a destination, whose records a counted draw's kernels read, and the
     /// pending visibility has no `ResourceAlias`, which a fence, carrying no visibility option, cannot flush; else none.
     inline MTL::Stages fencedStages(const BarrierState& barriers, const MTL::Fence* carry)
@@ -137,6 +138,6 @@ namespace rojoRHI::metal4 {
     /// queue. When the list upscaled, the encoder first waits on the last upscale's fence and holds back every stage of
     /// every later encoder, with or without a barrier pending, so the work held back follows MetalFX's. Counts the
     /// encoder, its native calls, the wait and its barriers on `list`; does nothing when no barrier is pending and the
-    /// list did not upscale. `carry` is null on a compute or copy list.
+    /// list did not upscale. `carry` is null on a list that uses no carry fence, every compute and copy list among them.
     void emitTrailing(core::CommandListCore& list, ListState& state, BarrierState& barriers, MTL::Fence* carry);
 } // namespace rojoRHI::metal4

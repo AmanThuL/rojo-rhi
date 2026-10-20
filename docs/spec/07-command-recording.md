@@ -106,7 +106,7 @@ carries a barrier still pending on the open encoder, or else on an encoder of it
 
 | | Metal 4 | D3D12 | Vulkan |
 |---|---|---|---|
-| Call | for a barrier still pending, `MTL4::CommandEncoder::updateFence` of the graphics queue's carry fence and `barrierAfterStages` on the open encoder when it waited for every source stage, else on a compute encoder that holds no command after `barrierAfterQueueStages` ([synchronization](09-synchronization-part2.md#commandlistbarrier)); `endEncoding` on each; then `MTL4::CommandBuffer::endCommandBuffer` | `Close` | `vkEndCommandBuffer` |
+| Call | for a barrier still pending, `MTL4::CommandEncoder::updateFence` of the graphics queue's carry fence on a `Graphics` list that uses it (chapter 09) and `barrierAfterStages` on the open encoder when it waited for every source stage, else on a compute encoder that holds no command after `barrierAfterQueueStages` ([synchronization](09-synchronization-part2.md#commandlistbarrier)); `endEncoding` on each; then `MTL4::CommandBuffer::endCommandBuffer` | `Close` | `vkEndCommandBuffer` |
 | Cost | native | native | native |
 
 ### `LoadOp`

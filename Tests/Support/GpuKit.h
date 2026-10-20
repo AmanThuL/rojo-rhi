@@ -38,6 +38,9 @@ namespace rojoRHI::test {
         /// host for the last value.
         void run(std::span<const CommandList> lists, std::span<const FenceValue> wait = {});
 
+        /// Ends the open frame and opens the next. Every list acquired in the frame has been run.
+        void nextFrame();
+
         /// Creates a buffer of `size` bytes in `memory` with `usage`, holding `initial` from its start when it is not empty, at
         /// `placement` (a dedicated allocation by default).
         Buffer buffer(uint64_t size, Memory memory, BufferUsage usage = BufferUsage::None, std::span<const std::byte> initial = {}, Placement placement = {});
