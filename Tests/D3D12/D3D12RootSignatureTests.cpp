@@ -91,6 +91,8 @@ TEST_CASE("the global root signature holds the root SRV at t0 and one root const
     CHECK(constant.Constants.ShaderRegister == 1);
     CHECK(constant.Constants.RegisterSpace == 0);
     CHECK(constant.Constants.Num32BitValues == 1);
+    deserializer.reset();
+    destroyDevice(*created);
 }
 
 //======================================================================================================================
@@ -111,6 +113,7 @@ TEST_CASE("the root signatures and command signatures exist and carry their labe
     CHECK(nameOf(roots.drawIndexed()) == "rojorhi.signature.indexed");
     CHECK(nameOf(roots.mesh()) == "rojorhi.signature.mesh");
     CHECK(nameOf(roots.dispatch()) == "rojorhi.signature.dispatch");
+    destroyDevice(*created);
 }
 
 //======================================================================================================================
@@ -127,6 +130,8 @@ TEST_CASE("the root parameters fit the root budget", "[d3d12]")
     }
     CHECK(cost == 3);
     CHECK(cost < 64);
+    deserializer.reset();
+    destroyDevice(*created);
 }
 
 //======================================================================================================================
