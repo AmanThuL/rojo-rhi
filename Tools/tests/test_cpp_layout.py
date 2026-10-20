@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 import sys
 import tempfile
 import unittest
@@ -267,6 +268,81 @@ class CppLayoutTests(unittest.TestCase):
             argv = ["check_cpp_layout.py", "--root", directory]
             with mock.patch.object(sys, "argv", argv), mock.patch("sys.stderr"):
                 self.assertNotEqual(layout.main(), 0)
+
+    def test_only_keeps_files_under_the_named_directories(self) -> None:
+        root = Path("/r")
+        files = [root / "Source/A.cpp", root / "Backends/D3D12/B.cpp", root / "Tests/C.cpp"]
+        self.assertEqual(layout.select_scope(files, root, ["Backends/D3D12", "Tests"], []), files[1:])
+
+    def test_exclude_drops_files_under_the_named_directories(self) -> None:
+        root = Path("/r")
+        files = [root / "Source/A.cpp", root / "Backends/D3D12/B.cpp", root / "Tests/C.cpp"]
+        self.assertEqual(layout.select_scope(files, root, [], ["Backends/D3D12"]), [files[0], files[2]])
+
+    def test_exclude_applies_after_only(self) -> None:
+        root = Path("/r")
+        files = [root / "Tests/A.cpp", root / "Tests/D3D12/B.cpp", root / "Source/C.cpp"]
+        self.assertEqual(layout.select_scope(files, root, ["Tests"], ["Tests/D3D12"]), [files[0]])
+
+    def test_a_path_matches_whole_components_only(self) -> None:
+        root = Path("/r")
+        files = [root / "Tools/D3D12Probe/Probe.cpp"]
+        self.assertEqual(layout.select_scope(files, root, ["Tools/D3D12"], []), [])
+        self.assertEqual(layout.select_scope(files, root, [], ["Tools/D3D12"]), files)
+
+    def test_a_file_path_selects_that_file(self) -> None:
+        root = Path("/r")
+        files = [root / "Source/A.cpp", root / "Source/B.cpp"]
+        self.assertEqual(layout.select_scope(files, root, ["Source/B.cpp"], []), [files[1]])
+
+    def test_an_excluded_file_need_not_be_in_any_database(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory).resolve()
+            core, backend = root / "Source/Core.cpp", root / "Backends/D3D12/Device.cpp"
+            database = self.write_database(root, "null", [core])
+            files = layout.select_scope([core, backend], root, [], ["Backends/D3D12"])
+            layout.ensure_database_covers(files, [database], root)
+
+    def test_an_only_that_selects_nothing_fails(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            source = Path(directory) / "Source" / "Core.cpp"
+            source.parent.mkdir()
+            source.write_text("", encoding="utf-8")
+            argv = ["check_cpp_layout.py", "--root", directory, "--clangd", "clangd", "--only", "Backends/D3D12"]
+            with mock.patch.object(sys, "argv", argv), mock.patch("sys.stderr"):
+                self.assertEqual(layout.main(), 1)
+
+
+    def test_selectors_are_normalized(self) -> None:
+        root = Path("/r")
+        files = [root / "Tools/D3D12Probe/P.cpp", root / "Source/A.cpp"]
+        for selector in ("Tools/D3D12Probe/", "./Tools/D3D12Probe", "Tools\\D3D12Probe"):
+            with self.subTest(selector=selector):
+                self.assertEqual(layout.select_scope(files, root, [selector], []), [files[0]])
+                self.assertEqual(layout.select_scope(files, root, [], [selector]), [files[1]])
+
+    def test_without_options_every_file_is_kept(self) -> None:
+        files = [Path("/r/Source/A.cpp"), Path("/r/Tests/B.cpp")]
+        self.assertEqual(layout.select_scope(files, Path("/r"), [], []), files)
+
+    def test_each_only_must_select_a_file(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            source = Path(directory) / "Source" / "Core.cpp"
+            source.parent.mkdir()
+            source.write_text("", encoding="utf-8")
+            argv = ["check_cpp_layout.py", "--root", directory, "--clangd", "clangd",
+                    "--only", "Source", "--only", "Backends/D3D12"]
+            with mock.patch.object(sys, "argv", argv), mock.patch("sys.stderr") as stderr:
+                self.assertEqual(layout.main(), 1)
+            written = "".join(call.args[0] for call in stderr.write.call_args_list)
+            self.assertIn("--only selects no C++ source: Backends/D3D12", written)
+
+    def test_the_ci_jobs_name_the_same_d3d12_directories(self) -> None:
+        text = (layout.ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8")
+        excluded = set(re.findall(r"--exclude (\S+)", text))
+        selected = set(re.findall(r"--only (\S+)", text))
+        self.assertTrue(selected)
+        self.assertEqual(excluded, selected)
 
 
 if __name__ == "__main__":

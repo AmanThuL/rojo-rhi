@@ -4,6 +4,10 @@
 Several compilation databases may be given: each backend's build compiles only its own sources,
 so no single database lists every file. The union must cover every file, and each file is checked
 with clangd started on the first database that lists it.
+
+`--only` and `--exclude` narrow the checked sources to some directories of the component, so a host
+checks the part its databases compile: the macOS jobs exclude the D3D12 sources, which only Windows
+compiles, and the Windows job checks only them.
 """
 
 from __future__ import annotations
@@ -35,6 +39,32 @@ class LayoutSetupError(RuntimeError):
 
 def project_cpp_files(root: Path) -> list[Path]:
     return sorted(path for name in CPP_ROOTS for path in (root / name).rglob("*.cpp"))
+
+
+def normalize_selector(selector: str) -> str:
+    """Spell a selector with `/`, without a leading `./` or trailing `/`."""
+    name = selector.replace("\\", "/")
+    while name.startswith("./"):
+        name = name[2:]
+    return name.rstrip("/")
+
+
+def is_under(path: Path, root: Path, selector: str) -> bool:
+    """True when the root-relative path equals the selector or lies below it, by whole components."""
+    selector = normalize_selector(selector)
+    relative = path.relative_to(root).as_posix()
+    return relative == selector or relative.startswith(selector + "/")
+
+
+def select_scope(files: list[Path], root: Path, only: list[str], exclude: list[str]) -> list[Path]:
+    """Keep the files under any `only` path (all when none), then drop those under any `exclude`."""
+    kept = [path for path in files if not only or any(is_under(path, root, name) for name in only)]
+    return [path for path in kept if not any(is_under(path, root, name) for name in exclude)]
+
+
+def empty_selectors(files: list[Path], root: Path, only: list[str]) -> list[str]:
+    """The `only` selectors under which no file lies."""
+    return [name for name in only if not any(is_under(path, root, name) for path in files)]
 
 
 def compilation_database_files(database: Path) -> set[Path]:
@@ -343,8 +373,20 @@ def parse_args() -> argparse.Namespace:
         "--compile-commands",
         type=Path,
         action="append",
-        help="path to a compile_commands.json, repeatable; the union must cover every source "
+        help="path to a compile_commands.json, repeatable; the union must cover every selected source "
         "(default: <component root>/compile_commands.json)",
+    )
+    parser.add_argument(
+        "--only",
+        action="append",
+        default=[],
+        help="check only the sources under this directory or file, relative to the component root; repeatable",
+    )
+    parser.add_argument(
+        "--exclude",
+        action="append",
+        default=[],
+        help="skip the sources under this directory or file, relative to the component root; repeatable",
     )
     parser.add_argument("--clangd", help="clangd executable (defaults to CLANGD/PATH)")
     return parser.parse_args()
@@ -359,7 +401,13 @@ def main() -> int:
         print("C++ layout check could not run: clangd is not on PATH", file=sys.stderr)
         return 2
 
-    files = project_cpp_files(root)
+    all_files = project_cpp_files(root)
+    empty = empty_selectors(all_files, root, args.only)
+    if empty:
+        print(f"error: --only selects no C++ source: {', '.join(empty)}", file=sys.stderr)
+        print(f"C++ layout check failed with {len(empty)} error(s)", file=sys.stderr)
+        return 1
+    files = select_scope(all_files, root, args.only, args.exclude)
     if not files:
         print(f"error: {', '.join(CPP_ROOTS)}: no C++ sources found", file=sys.stderr)
         print("C++ layout check failed with 1 error(s)", file=sys.stderr)
