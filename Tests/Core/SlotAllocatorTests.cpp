@@ -331,3 +331,40 @@ TEST_CASE("drain hands over every held and pending payload once and empties the 
     CHECK(handed.payloads.size() == 4);
     CHECK(slots.allocate(8, 1) == 0);
 }
+
+//======================================================================================================================
+TEST_CASE("a reserved leading block is never handed out and capacity counts the slots after it", "[core]")
+{
+    SlotAllocator slots;
+    const auto frame = [] { return uint64_t{ 1 }; };
+    slots.reserveLeading(3);
+    CHECK(slots.empty());
+    CHECK(slots.state(0) == SlotState::Reserved);
+    CHECK(slots.state(2) == SlotState::Reserved);
+    CHECK(slots.assignedCount() == 0);
+    CHECK(slots.allocate(2, 1) == 3);
+    CHECK(slots.allocateRange(3, 1, 0) == 4);
+    CHECK_FALSE(slots.allocate(2, 1).has_value());
+    CHECK_FALSE(slots.allocateRange(3, 2, 0).has_value());
+    CHECK(slots.assignedCount() == 2);
+    CHECK_FALSE(slots.release(0, frame).has_value());
+    CHECK_FALSE(slots.releaseRange(0, 3, frame).has_value());
+    CHECK_FALSE(slots.replace(1, 1, nullptr, frame).has_value());
+    REQUIRE(slots.release(3, frame).has_value());
+    slots.retire(1);
+    CHECK(slots.state(0) == SlotState::Reserved);
+    CHECK(slots.allocate(2, 1) == 3);
+}
+
+//======================================================================================================================
+TEST_CASE("drain ends a reservation", "[core]")
+{
+    SlotAllocator slots;
+    slots.reserveLeading(2);
+    REQUIRE(slots.allocate(4, 1) == 2);
+    Handed handed;
+    slots.drain(handed.sink());
+    CHECK(slots.empty());
+    CHECK(slots.state(0) == SlotState::Free);
+    CHECK(slots.allocate(4, 1) == 0);
+}

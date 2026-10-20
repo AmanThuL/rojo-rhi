@@ -7,6 +7,15 @@
 
 namespace rojoRHI::core {
     //==================================================================================================================
+    void SlotAllocator::reserveLeading(uint32_t count)
+    {
+        std::lock_guard lock(m_mutex);
+        ROJORHI_INTERNAL_ASSERT(m_slots.empty() && m_pending.empty(), "slots reserved on an allocator that has handed some out");
+        m_slots.assign(count, Slot{ SlotState::Reserved, 0, 0, false, nullptr });
+        m_reserved = count;
+    }
+
+    //==================================================================================================================
     std::optional<uint32_t> SlotAllocator::allocate(uint32_t capacity, uint64_t owner, void* native)
     {
         std::lock_guard lock(m_mutex);
@@ -16,7 +25,7 @@ namespace rojoRHI::core {
             index = m_free.back();
             m_free.pop_back();
         }
-        else if (m_slots.size() < capacity)
+        else if (m_slots.size() < uint64_t{ m_reserved } + capacity)
         {
             index = static_cast<uint32_t>(m_slots.size());
             m_slots.emplace_back();
@@ -50,7 +59,8 @@ namespace rojoRHI::core {
         {
             // Every slot from `handedOut` on was never handed out, so the run continues into them up to the capacity.
             start = run == 0 ? handedOut : start;
-            if (start > capacity || count > capacity - start)
+            const uint64_t limit = uint64_t{ m_reserved } + capacity;
+            if (start > limit || count > limit - start)
             {
                 return std::nullopt;
             }
@@ -81,7 +91,7 @@ namespace rojoRHI::core {
     bool SlotAllocator::empty()
     {
         std::lock_guard lock(m_mutex);
-        return m_slots.empty() && m_pending.empty();
+        return m_slots.size() == m_reserved && m_pending.empty();
     }
 
     //==================================================================================================================
