@@ -113,12 +113,14 @@ TEST_CASE("a device with every resource type releases every native object at des
     device.endFrame();
     CHECK(device.wait({ fence, 1 }, UINT64_MAX));
 
-    // Half of the objects go before the device does; the device releases the rest.
+    // Half of the objects go before the device does; the device releases the rest. The view and the range slot that hold
+    // views of the textured texture go before it (VU-rojo-texture-0028).
     device.destroy(gpu);
     device.destroy(readback);
     device.destroy(placedInHeap);
-    device.destroy(textured);
     device.destroy(view);
+    device.release(range);
+    device.destroy(textured);
     device.destroy(fence);
     (void)upload;
     (void)textureInHeap;
