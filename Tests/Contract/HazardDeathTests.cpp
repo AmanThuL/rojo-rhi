@@ -51,7 +51,8 @@ TEST_CASE("VU-rojo-sync-0021 a texture is written after a read with no barrier b
         PassKit kit(QueueType::Graphics, true);
         const Texture texture = kit.target();
         const Buffer buffer = kit.buffer(BufferUsage::None);
-        // The transition orders the read and the clear after it; nothing orders the clear after the read.
+        const Buffer source = kit.buffer(BufferUsage::None);
+        // The transition orders the read and the copy after it; nothing orders the copy after the read.
         const std::array<TextureBarrier, 1> barriers{ TextureBarrier{ .texture = texture,
                                                                       .srcStage = Stage::Copy,
                                                                       .dstStage = Stage::Copy,
@@ -60,7 +61,7 @@ TEST_CASE("VU-rojo-sync-0021 a texture is written after a read with no barrier b
                                                                       .newLayout = Layout::General } };
         kit.list.barrier({}, {}, barriers);
         kit.list.copyTextureToBuffer(texture, kRegion, buffer, kLayout);
-        kit.list.clearTexture(texture, {}, {});
+        kit.list.copyBufferToTexture(source, kLayout, texture, kRegion);
         kit.finish();
     });
 }

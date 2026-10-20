@@ -209,7 +209,7 @@ TEST_CASE("VU-rojo-queue-0005 a placed texture is used on Compute over bytes a b
         const std::array<FenceValue, 1> cleared{ FenceValue{ fence, 1 } };
         // Compute starts the texture, and Graphics fills the buffer over it only after that, as aliasing needs.
         CommandList first = kit.device.acquireCommandList(QueueType::Compute, "test.compute.first");
-        move(first, placed, Layout::Undefined, Layout::General);
+        move(first, placed, Layout::Undefined, Layout::CopyDst, Access::CopyWrite);
         first.clearTexture(placed, {}, {});
         submitTo(kit.device, first, QueueType::Compute, {}, cleared);
         kit.list.fillBuffer(buffer, 0, kBytes, 0);

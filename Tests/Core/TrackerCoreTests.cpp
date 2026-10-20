@@ -556,12 +556,11 @@ TEST_CASE("every logging entry gives its events one command ordinal, distinct fr
     const Buffer read = kit.buffer(BufferUsage::None);
     const Buffer written = kit.buffer(BufferUsage::ShaderWrite);
     command("barrier", [&] {
-        constexpr Access kCopies = Access::CopyRead | Access::CopyWrite;
         const std::array<TextureBarrier, 5> barriers{
             TextureBarrier{ .texture = source, .dstStage = Stage::Copy, .dstAccess = Access::CopyRead, .newLayout = Layout::CopySrc },
             TextureBarrier{ .texture = destination, .dstStage = Stage::Copy, .dstAccess = Access::CopyWrite, .newLayout = Layout::CopyDst },
             TextureBarrier{ .texture = copied, .dstStage = Stage::Copy, .dstAccess = Access::CopyWrite, .newLayout = Layout::CopyDst },
-            TextureBarrier{ .texture = cleared, .dstStage = Stage::Copy, .dstAccess = kCopies, .newLayout = Layout::General },
+            TextureBarrier{ .texture = cleared, .dstStage = Stage::Copy, .dstAccess = Access::CopyWrite, .newLayout = Layout::CopyDst },
             TextureBarrier{ .texture = color,
                             .dstStage = Stage::ColorAttachment,
                             .dstAccess = Access::ColorAttachmentRead | Access::ColorAttachmentWrite,

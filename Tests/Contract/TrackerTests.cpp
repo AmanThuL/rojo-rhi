@@ -240,14 +240,14 @@ TEST_CASE("correct layouts pass the checks of every copy, clear and upscale entr
     copiesDone(kit.list);
     kit.list.copyTextureToBuffer(source, region, buffer, layout);
     const Texture target = kit.target();
-    test::transition(kit.list, target, Layout::Undefined, Layout::General);
+    test::transition(kit.list, target, Layout::Undefined, Layout::CopyDst);
     kit.list.clearTexture(target, {}, {});
     kit.finish();
 #endif
 }
 
 //======================================================================================================================
-TEST_CASE("General permits a copy, a clear and a copy on a Copy list", "[contract]")
+TEST_CASE("General permits a copy to and from a texture on a Copy list", "[contract]")
 {
 #ifndef NDEBUG
     PassKit kit(QueueType::Copy, true);
