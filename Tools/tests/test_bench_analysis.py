@@ -203,8 +203,22 @@ class RuleTests(unittest.TestCase):
             self.assertEqual((result["judged"], result["miss"]), (True, None))
 
     def test_allocations_equal_pass_and_one_more_misses(self) -> None:
-        self.assertFalse(analysis.allocation_rule(cmp(3, 3, 0, 0, 0))["miss"])
-        self.assertTrue(analysis.allocation_rule(cmp(4, 3, 1, 1, 1))["miss"])
+        self.assertFalse(analysis.allocation_rule("C1", cmp(3, 3, 0, 0, 0))["miss"])
+        self.assertTrue(analysis.allocation_rule("C1", cmp(4, 3, 1, 1, 1))["miss"])
+
+    def test_allocations_of_c10_at_max_count_1_over_n_are_reported_only(self) -> None:
+        # The round-3 amendment: C10m1's one compute encoder a frame more than N is reported
+        result = analysis.allocation_rule("C10m1", cmp(15, 14, 1, 1, 1))
+        self.assertEqual((result["judged"], result["miss"]), (False, None))
+        self.assertIn("round-3 amendment", result["reason"])
+
+    def test_allocations_of_c10_over_n_still_miss(self) -> None:
+        result = analysis.allocation_rule("C10", cmp(17, 16, 1, 1, 1))
+        self.assertEqual((result["judged"], result["miss"]), (True, True))
+
+    def test_allocations_of_c10_at_max_count_1_not_run_are_reported_only(self) -> None:
+        result = analysis.allocation_rule("C10m1", None)
+        self.assertEqual((result["judged"], result["miss"]), (False, None))
 
     def test_pipeline_after_warmup_misses(self) -> None:
         self.assertFalse(analysis.pipeline_rule([0, 0])["miss"])
@@ -313,6 +327,21 @@ class SummaryTests(unittest.TestCase):
         entry = {e["id"]: e for e in result["configurations"]}["C1-k1000"]
         self.assertEqual((entry["rules"]["cpu"]["miss"], entry["rules"]["cpu"]["fivePercentMiss"]),
                          (False, True))
+
+    def test_c10_at_max_count_1_allocating_over_n_is_within_budget(self) -> None:
+        config = [configuration("C10m1-k100", "C10m1", K=100)]
+        r = arm(cpu=[300.0 * 100] * 3, allocations=[15, 15, 15], calls=[400] * 3,
+                cpu_allocations=[0, 0, 0], counters=counters(7, 7))
+        n = arm(cpu=[100.0 * 100] * 3, allocations=[14, 14, 14], calls=[300] * 3)
+        result = analysis.summary(config, {"C10m1-k100": processes_of(r, n)}, {},
+                                  {"C10m1": {"passed": True}})
+        self.assertEqual(result["verdict"], "within budget")
+        rules = result["configurations"][0]["rules"]
+        self.assertEqual((rules["allocations"]["judged"], rules["pipelines"]["judged"]),
+                         (False, True))
+        row = next(line for line in analysis.format_report(result).splitlines()
+                   if line.startswith("C10m1-k100") and "15.0" in line)
+        self.assertEqual(row.split()[1], "reported")
 
     def test_report_shows_the_five_percent_verdict_beside_the_rule(self) -> None:
         text = analysis.format_report(self.run_summary(self.good_processes(112.0)))
