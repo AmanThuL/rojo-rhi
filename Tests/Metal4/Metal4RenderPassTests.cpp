@@ -177,7 +177,7 @@ namespace {
 //======================================================================================================================
 TEST_CASE("beginRenderPass closes the compute encoder, pushes the pass's debug group and opens no encoder", "[metal4]")
 {
-    Device device = *createDevice();
+    Device device = *createDevice({ .scopeTimings = true });
     const Buffer a = *device.createBuffer({ .size = 256, .label = "test.a" });
     const Buffer b = *device.createBuffer({ .size = 256, .label = "test.b" });
     const Texture target = makeTexture(device, Format::RGBA8Unorm);
@@ -208,7 +208,7 @@ TEST_CASE("beginRenderPass closes the compute encoder, pushes the pass's debug g
 //======================================================================================================================
 TEST_CASE("a pass with no command opens its render encoder at endRenderPass", "[metal4]")
 {
-    Device device = *createDevice();
+    Device device = *createDevice({ .scopeTimings = true });
     const Texture target = makeTexture(device, Format::RGBA8Unorm);
     device.beginFrame();
     CommandList list = device.acquireCommandList(QueueType::Graphics, "test.list");
@@ -235,7 +235,7 @@ TEST_CASE("a pass with no command opens its render encoder at endRenderPass", "[
 //======================================================================================================================
 TEST_CASE("a Store attachment costs no store-action call; DontCare and resolve attachments set theirs at the end", "[metal4]")
 {
-    Device device = *createDevice();
+    Device device = *createDevice({ .scopeTimings = true });
     device.beginFrame();
     CommandList list = device.acquireCommandList(QueueType::Graphics, "test.list");
     // An empty pass's encoder records its factory, label when encoders carry one, table and the pass's two timestamps, then the pass's group pops; it
@@ -317,7 +317,7 @@ TEST_CASE("a Store attachment costs no store-action call; DontCare and resolve a
 //======================================================================================================================
 TEST_CASE("the render encoder is labelled after the pass, or after the innermost scope open inside it", "[metal4]")
 {
-    Device device = *createDevice();
+    Device device = *createDevice({ .scopeTimings = true });
     const Texture target = makeTexture(device, Format::RGBA8Unorm);
     device.beginFrame();
     CommandList list = device.acquireCommandList(QueueType::Graphics, "test.list");
@@ -348,7 +348,7 @@ TEST_CASE("the render encoder is labelled after the pass, or after the innermost
 //======================================================================================================================
 TEST_CASE("a scope inside a pass opens the render encoder and its debug group goes on the encoder", "[metal4]")
 {
-    Device device = *createDevice();
+    Device device = *createDevice({ .scopeTimings = true });
     const Texture target = makeTexture(device, Format::RGBA8Unorm);
     device.beginFrame();
     CommandList list = device.acquireCommandList(QueueType::Graphics, "test.list");
@@ -382,7 +382,7 @@ TEST_CASE("a scope inside a pass opens the render encoder and its debug group go
 //======================================================================================================================
 TEST_CASE("a split stores, ends and resumes with Load, re-pushing the open in-pass groups", "[metal4]")
 {
-    Device device = *createDevice();
+    Device device = *createDevice({ .scopeTimings = true });
     const Texture target = makeTexture(device, Format::RGBA8Unorm);
     device.beginFrame();
     CommandList list = device.acquireCommandList(QueueType::Graphics, "test.list");
@@ -428,7 +428,7 @@ TEST_CASE("a split stores, ends and resumes with Load, re-pushing the open in-pa
 //======================================================================================================================
 TEST_CASE("a barrier pending before the pass is emitted by the render encoder for the render stages", "[metal4]")
 {
-    Device device = *createDevice();
+    Device device = *createDevice({ .scopeTimings = true });
     const Texture target = makeTexture(device, Format::RGBA8Unorm);
     device.beginFrame();
     CommandList list = device.acquireCommandList(QueueType::Graphics, "test.list");
@@ -465,7 +465,7 @@ TEST_CASE("a barrier pending before the pass is emitted by the render encoder fo
 //======================================================================================================================
 TEST_CASE("a second pass reuses the list's descriptor and clears attachments the first had", "[metal4]")
 {
-    Device device = *createDevice();
+    Device device = *createDevice({ .scopeTimings = true });
     device.beginFrame();
     CommandList list = device.acquireCommandList(QueueType::Graphics, "test.list");
     CHECK(drawOf(list).descriptor == nullptr);
@@ -513,7 +513,7 @@ TEST_CASE("a second pass reuses the list's descriptor and clears attachments the
 //======================================================================================================================
 TEST_CASE("a split keeps the attachment's cleared and drawn contents across the resumed encoder", "[metal4]")
 {
-    test::GpuKit kit;
+    test::GpuKit kit(2, true);
     const ShaderLibrary library = *kit.device.loadShaderLibrary(test::standardLibrary(), "test.standard");
     const ClearColor clear{ 1.0f, 0.0f, 0.2f, 0.6f };
     const std::array<std::byte, 4> texel{ std::byte{ 255 }, std::byte{ 0 }, std::byte{ 51 }, std::byte{ 153 } };
@@ -587,7 +587,7 @@ TEST_CASE("a split keeps the attachment's cleared and drawn contents across the 
 //======================================================================================================================
 TEST_CASE("the descriptor takes each pass's attachment values though it is set only where they change", "[metal4]")
 {
-    Device device = *createDevice();
+    Device device = *createDevice({ .scopeTimings = true });
     const Texture first = makeTexture(device, Format::RGBA8Unorm);
     const Texture second = makeTexture(device, Format::RGBA8Unorm);
     const Texture depth = makeTexture(device, Format::D32Float, TextureUsage::DepthStencil);
@@ -689,7 +689,7 @@ TEST_CASE("the descriptor takes each pass's attachment values though it is set o
 //======================================================================================================================
 TEST_CASE("end empties the list's descriptor so it keeps no texture alive in the pool", "[metal4]")
 {
-    Device device = *createDevice();
+    Device device = *createDevice({ .scopeTimings = true });
     device.beginFrame();
     CommandList list = device.acquireCommandList(QueueType::Graphics, "test.list");
     const std::array colors{ ColorAttachment{ .texture = makeTexture(device, Format::RGBA8Unorm, TextureUsage::RenderTarget, 4),

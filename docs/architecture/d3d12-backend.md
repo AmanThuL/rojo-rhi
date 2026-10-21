@@ -5,10 +5,10 @@
 This page describes the D3D12 backend as it stands. `createDevice` opens a device on the Agility
 runtime and the backend owns the device-wide native state: queues, fences and frames, shader-visible
 descriptor heaps, root and command signatures, memory, buffers, heaps, textures, views, samplers and
-the debug layer. Command lists record copies, fills, clears, barriers and timed scopes
-([recording](d3d12-recording.md)), passes, dispatches and draws ([drawing](d3d12-drawing.md)).
-Everything below is "implemented, verified on WARP only, not on hardware": the backend is not a
-capability until a hardware run says so ([ADR 0009](
+the debug layer. Command lists record copies, fills, clears, barriers and scopes, timed on a device
+created with `DeviceDesc::scopeTimings` ([recording](d3d12-recording.md)), passes, dispatches and
+draws ([drawing](d3d12-drawing.md)). Everything below is "implemented, verified on WARP only, not on
+hardware": the backend is not a capability until a hardware run says so ([ADR 0009](
 ../decisions/0009-conformance-and-valid-usage.md), [documentation](
 ../conventions/documentation.md)). `docs/spec/` stays the authority on every entry's semantics; [the
 Null backend](null-backend.md) describes the shared core it translates to. [The build

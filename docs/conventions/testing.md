@@ -125,9 +125,10 @@ commands a kernel encodes into an indirect command buffer runs under API validat
 a case that leaks a device keeps its counter heaps, and Metal allows 32 per process or on the
 system, so timed cases after it may report 0; a case destroys its devices on every path, as the
 fixtures do. For the same reason no other GPU test process may run while timed cases, or the
-`[metal4]` count pins that include timestamp writes, are checked. Those pins read a list's counts
+`[metal4]` count pins that include timestamp writes, are checked. Those pins create their devices
+with `DeviceDesc::scopeTimings` (the test kits take it as an argument) and read a list's counts
 through `test::timedCounts` or call `test::requireTimed` (`Tests/Support/Metal4/Metal4Timing.h`)
-first, which fails the case, naming the refusal, when a scope the list recorded holds no timestamp
+first, which fails the case, naming the reason, when a scope the list recorded holds no timestamp
 pair, rather than reporting a count two calls short.
 
 **Validation tests (v1)** pin what the interface rejects. The predicates behind each

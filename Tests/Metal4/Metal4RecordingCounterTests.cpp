@@ -28,7 +28,7 @@ namespace {
     /// What the operations of one case record into: two buffers of `kHigh` slices of `kBytes` bytes.
     struct Fixture
     {
-        Device device = *createDevice();
+        Device device = *createDevice({ .scopeTimings = true });
         uint32_t measures = 0; ///< The measures run so far, which name each measure's list.
         Buffer source;
         Buffer target;

@@ -32,9 +32,9 @@ namespace rojoRHI::test {
         {
             FAIL(
                 std::format(
-                    "{} of the {} scopes of list \"{}\" hold no timestamp pair, so its counts lack their timestamp writes: Metal "
-                    "refused a counter heap, whose limit holds per process or on the system (run no other GPU test process "
-                    "meanwhile), or the frame slot's capacity was passed",
+                    "{} of the {} scopes of list \"{}\" hold no timestamp pair, so its counts lack their timestamp writes: the "
+                    "device was created without DeviceDesc::scopeTimings, Metal refused a counter heap, whose limit holds per "
+                    "process or on the system (run no other GPU test process meanwhile), or the frame slot's capacity was passed",
                     untimed,
                     state.scopeLog.size(),
                     state.label

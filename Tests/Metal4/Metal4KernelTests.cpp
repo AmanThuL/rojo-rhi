@@ -58,8 +58,8 @@ namespace {
 //======================================================================================================================
 TEST_CASE("createDevice loads the embedded kernel library and the fill pipeline", "[metal4]")
 {
-    Device first = *createDevice();
-    Device second = *createDevice();
+    Device first = *createDevice({ .scopeTimings = true });
+    Device second = *createDevice({ .scopeTimings = true });
     const metal4::Kernels& kernels = DeviceImpl::of(first).kernels;
     REQUIRE(kernels.library != nullptr);
     REQUIRE(kernels.fill != nullptr);
@@ -82,7 +82,7 @@ TEST_CASE("createDevice loads the embedded kernel library and the fill pipeline"
 //======================================================================================================================
 TEST_CASE("a new list creates its kernel table with its other objects", "[metal4]")
 {
-    Device device = *createDevice();
+    Device device = *createDevice({ .scopeTimings = true });
     device.beginFrame();
     const Counters before = device.counters();
     const CommandList list = device.acquireCommandList(QueueType::Graphics, "test.list");
@@ -102,7 +102,7 @@ TEST_CASE("a new list creates its kernel table with its other objects", "[metal4
 //======================================================================================================================
 TEST_CASE("an unequal-pattern fill runs the fill kernel on the open encoder and sets the list's table back", "[metal4]")
 {
-    Device device = *createDevice();
+    Device device = *createDevice({ .scopeTimings = true });
     const Buffer a = *device.createBuffer({ .size = 256, .label = "test.a" });
     const Buffer buffer = *device.createBuffer({ .size = 256, .usage = BufferUsage::ShaderWrite, .label = "test.fill" });
     device.beginFrame();
@@ -135,7 +135,7 @@ TEST_CASE("an unequal-pattern fill runs the fill kernel on the open encoder and 
 //======================================================================================================================
 TEST_CASE("fill parameters take arena space but count as no frame data upload", "[metal4]")
 {
-    Device device = *createDevice();
+    Device device = *createDevice({ .scopeTimings = true });
     const Buffer buffer = *device.createBuffer({ .size = 256, .usage = BufferUsage::ShaderWrite, .label = "test.fill" });
     device.beginFrame();
     const Counters before = device.counters();
@@ -178,7 +178,7 @@ TEST_CASE("device creation time with the kernel library", "[metal4]")
     for (double& elapsed : milliseconds)
     {
         const auto start = std::chrono::steady_clock::now();
-        Device device = *createDevice();
+        Device device = *createDevice({ .scopeTimings = true });
         elapsed = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - start).count();
         destroyDevice(device);
     }
@@ -192,7 +192,7 @@ TEST_CASE("device creation time with the kernel library", "[metal4]")
 //======================================================================================================================
 TEST_CASE("a kernel fill runs in the dispatch stage after an encoder-level barrier held for a dispatch", "[metal4]")
 {
-    Device device = *createDevice();
+    Device device = *createDevice({ .scopeTimings = true });
     const Buffer a = *device.createBuffer({ .size = 256, .label = "test.a" });
     const Buffer b = *device.createBuffer({ .size = 256, .label = "test.b" });
     const Buffer c = *device.createBuffer({ .size = 256, .usage = BufferUsage::ShaderWrite, .label = "test.c" });
@@ -228,7 +228,7 @@ TEST_CASE("a kernel fill runs in the dispatch stage after an encoder-level barri
 //======================================================================================================================
 TEST_CASE("a kernel pipeline is set once per open encoder and forgotten when the encoder closes", "[metal4]")
 {
-    Device device = *createDevice();
+    Device device = *createDevice({ .scopeTimings = true });
     const metal4::Kernels& kernels = DeviceImpl::of(device).kernels;
     const Buffer buffer = *device.createBuffer({ .size = 256, .usage = BufferUsage::ShaderWrite, .label = "test.fill" });
     const Texture texture =

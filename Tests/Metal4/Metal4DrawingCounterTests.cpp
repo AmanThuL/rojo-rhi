@@ -51,7 +51,7 @@ namespace {
     /// operations, all on one device.
     struct Fixture
     {
-        Device device = *createDevice();
+        Device device = *createDevice({ .scopeTimings = true });
         uint32_t measures = 0; ///< The measures run so far, which name each measure's list.
         ShaderLibrary library;
         Pipeline pipeline;     ///< A vertex and fragment pipeline over the target.

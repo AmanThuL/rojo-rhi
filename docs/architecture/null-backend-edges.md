@@ -115,6 +115,9 @@ checked at `end` (`0007`).
 `Device::scopeTimings` reports the scopes of the latest retired frame: label, frame, queue type and
 depth, in queue type order and submission order within a queue, each with a duration of zero.
 Scopes come from `beginScope`, render passes (default label `rojorhi.pass.unnamed`) and upscales.
+The report is kept only for a device created with `DeviceDesc::scopeTimings`, which
+`DeviceCore::timesScopes` returns; on any other the lists still record their scopes, which a backend
+names its debug groups after, but nothing reaches the log and the report stays empty.
 
 - **Recording.** `recordScope` copies the label into the list's frame-arena page, through the
   cursor `uploadFrameData` shares, and keeps a view of it in the list. A page is claimed only
@@ -122,7 +125,8 @@ Scopes come from `beginScope`, render passes (default label `rojorhi.pass.unname
   any labelled scope claims at least one page per frame. An empty label takes a static default, so
   no copy is made.
 - **Submit.** `Queue::submit` adds the list's scopes to the slot's record in the `ScopeLog`, under
-  the log's mutex. That is a queue-class call, not recording, so the rule of ADR 0020 holds.
+  the log's mutex, on a device that times scopes; on any other it adds nothing and takes no lock.
+  That is a queue-class call, not recording, so the rule of ADR 0020 holds.
 - **Retire.** The arena rewinds a slot at `beginFrame`, and the lists of the new frame then
   overwrite those pages, so views into them do not live as long as the report. Before the rewind,
   `ScopeLog::retire` copies each label into a string the log owns and builds the report from them.

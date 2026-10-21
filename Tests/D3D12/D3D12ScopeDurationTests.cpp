@@ -72,7 +72,7 @@ namespace {
 //======================================================================================================================
 TEST_CASE("a scope around fills reports a positive duration", "[d3d12]")
 {
-    Device device = *createDevice({ .framesInFlight = kFramesInFlight });
+    Device device = *createDevice({ .scopeTimings = true, .framesInFlight = kFramesInFlight });
     const Buffer target = *device.createBuffer({ .size = kBig, .usage = BufferUsage::ShaderWrite, .label = "test.target" });
     device.beginFrame();
     CommandList list = device.acquireCommandList(QueueType::Graphics, "test.list");
@@ -96,7 +96,7 @@ TEST_CASE("a scope around fills reports a positive duration", "[d3d12]")
 //======================================================================================================================
 TEST_CASE("nested scopes around fills report parents before children with finite non-negative durations", "[d3d12]")
 {
-    Device device = *createDevice({ .framesInFlight = kFramesInFlight });
+    Device device = *createDevice({ .scopeTimings = true, .framesInFlight = kFramesInFlight });
     const Buffer target = *device.createBuffer({ .size = kBig, .usage = BufferUsage::ShaderWrite, .label = "test.target" });
     device.beginFrame();
     CommandList list = device.acquireCommandList(QueueType::Graphics, "test.list");
@@ -138,7 +138,7 @@ TEST_CASE("nested scopes around fills report parents before children with finite
 //======================================================================================================================
 TEST_CASE("scopes around fills on the Compute queue are timed and reported with their queue", "[d3d12]")
 {
-    Device device = *createDevice({ .framesInFlight = kFramesInFlight });
+    Device device = *createDevice({ .scopeTimings = true, .framesInFlight = kFramesInFlight });
     const Buffer target = *device.createBuffer({ .size = kBig, .usage = BufferUsage::ShaderWrite, .label = "test.target" });
     device.beginFrame();
     std::array<CommandList, 2> lists{ device.acquireCommandList(QueueType::Graphics, "test.graphics"),
@@ -173,7 +173,7 @@ TEST_CASE("scopes around fills on the Compute queue are timed and reported with 
 //======================================================================================================================
 TEST_CASE("an empty scope reports a finite duration of at least zero on D3D12", "[d3d12]")
 {
-    Device device = *createDevice({ .framesInFlight = kFramesInFlight });
+    Device device = *createDevice({ .scopeTimings = true, .framesInFlight = kFramesInFlight });
     device.beginFrame();
     CommandList list = device.acquireCommandList(QueueType::Graphics, "test.list");
     list.beginScope("test.empty");

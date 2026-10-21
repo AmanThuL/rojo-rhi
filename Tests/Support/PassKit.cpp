@@ -12,9 +12,10 @@
 
 namespace rojoRHI::test {
     //==================================================================================================================
-    PassKit::PassKit(QueueType listType, bool validation) : type(listType), m_validation(validation), m_moveTargets(!validation && layoutsAreNative())
+    PassKit::PassKit(QueueType listType, bool validation, bool scopeTimings)
+        : type(listType), m_validation(validation), m_moveTargets(!validation && layoutsAreNative())
     {
-        device = *createDevice(DeviceDesc{ .validation = validation });
+        device = *createDevice(DeviceDesc{ .validation = validation, .scopeTimings = scopeTimings });
         device.beginFrame();
         list = device.acquireCommandList(type, "kit.list");
     }

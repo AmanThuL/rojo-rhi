@@ -96,7 +96,7 @@ TEST_CASE("every Stage bit lowers to chapter 09's Metal stages", "[metal4]")
 //======================================================================================================================
 TEST_CASE("the compute encoder runs its copies in a stage the lowering gives it", "[metal4]")
 {
-    Device device = *createDevice();
+    Device device = *createDevice({ .scopeTimings = true });
     const Buffer a = *device.createBuffer({ .size = 256, .label = "test.a" });
     const Buffer b = *device.createBuffer({ .size = 256, .label = "test.b" });
     device.beginFrame();
@@ -116,7 +116,7 @@ TEST_CASE("the compute encoder runs its copies in a stage the lowering gives it"
 //======================================================================================================================
 TEST_CASE("a barrier at the start of a list is emitted by the first encoder at queue level", "[metal4]")
 {
-    Device device = *createDevice();
+    Device device = *createDevice({ .scopeTimings = true });
     const Buffer a = *device.createBuffer({ .size = 256, .label = "test.a" });
     const Buffer b = *device.createBuffer({ .size = 256, .label = "test.b" });
     device.beginFrame();
@@ -154,7 +154,7 @@ TEST_CASE("a barrier at the start of a list is emitted by the first encoder at q
 //======================================================================================================================
 TEST_CASE("a barrier whose sources the opening barrier covered stays in the open encoder", "[metal4]")
 {
-    Device device = *createDevice();
+    Device device = *createDevice({ .scopeTimings = true });
     const Buffer a = *device.createBuffer({ .size = 256, .label = "test.a" });
     const Buffer b = *device.createBuffer({ .size = 256, .label = "test.b" });
     device.beginFrame();
@@ -192,7 +192,7 @@ TEST_CASE("a barrier whose sources the opening barrier covered stays in the open
 //======================================================================================================================
 TEST_CASE("an encoder-level barrier with no command after it is carried at end by its encoder", "[metal4]")
 {
-    Device device = *createDevice();
+    Device device = *createDevice({ .scopeTimings = true });
     const Buffer a = *device.createBuffer({ .size = 256, .label = "test.a" });
     const Buffer b = *device.createBuffer({ .size = 256, .label = "test.b" });
     device.beginFrame();
@@ -218,7 +218,7 @@ TEST_CASE("an encoder-level barrier with no command after it is carried at end b
 //======================================================================================================================
 TEST_CASE("an encoder-level barrier closed by a scope boundary is emitted by the next encoder at queue level", "[metal4]")
 {
-    Device device = *createDevice();
+    Device device = *createDevice({ .scopeTimings = true });
     const Buffer a = *device.createBuffer({ .size = 256, .label = "test.a" });
     const Buffer b = *device.createBuffer({ .size = 256, .label = "test.b" });
     device.beginFrame();
@@ -249,7 +249,7 @@ TEST_CASE("an encoder-level barrier closed by a scope boundary is emitted by the
 //======================================================================================================================
 TEST_CASE("a barrier after uncovered work closes the encoder and the next encoder emits it", "[metal4]")
 {
-    Device device = *createDevice();
+    Device device = *createDevice({ .scopeTimings = true });
     const Buffer a = *device.createBuffer({ .size = 256, .label = "test.a" });
     const Buffer b = *device.createBuffer({ .size = 256, .label = "test.b" });
     device.beginFrame();
@@ -282,7 +282,7 @@ TEST_CASE("a barrier after uncovered work closes the encoder and the next encode
 //======================================================================================================================
 TEST_CASE("a graphics list owes the fragment part of a Copy barrier and emits it at end on a closing encoder", "[metal4]")
 {
-    Device device = *createDevice();
+    Device device = *createDevice({ .scopeTimings = true });
     const Buffer a = *device.createBuffer({ .size = 256, .label = "test.a" });
     const Buffer b = *device.createBuffer({ .size = 256, .label = "test.b" });
     device.beginFrame();
@@ -329,7 +329,7 @@ TEST_CASE("Compute and Copy lists owe no render stage", "[metal4]")
     CAPTURE(static_cast<int>(type));
     // A Compute list runs the compute encoder's stages; a Copy list runs blits only.
     const MTL::Stages stages = type == QueueType::Compute ? metal4::kComputeStages : MTL::Stages{ MTL::StageBlit };
-    Device device = *createDevice();
+    Device device = *createDevice({ .scopeTimings = true });
     const Buffer a = *device.createBuffer({ .size = 256, .label = "test.a" });
     const Buffer b = *device.createBuffer({ .size = 256, .label = "test.b" });
     device.beginFrame();
@@ -364,7 +364,7 @@ TEST_CASE("Compute and Copy lists owe no render stage", "[metal4]")
 //======================================================================================================================
 TEST_CASE("Stage::All on a graphics list names only the stages of compute and render encoders", "[metal4]")
 {
-    Device device = *createDevice();
+    Device device = *createDevice({ .scopeTimings = true });
     device.beginFrame();
     CommandList list = device.acquireCommandList(QueueType::Graphics, "test.list");
     list.barrier(std::array{ GlobalBarrier{ .srcStage = Stage::All, .dstStage = Stage::All } });
@@ -378,7 +378,7 @@ TEST_CASE("Stage::All on a graphics list names only the stages of compute and re
 //======================================================================================================================
 TEST_CASE("an encoder that ran no command in a stage its opening barrier held returns that stage to the pending barrier", "[metal4]")
 {
-    Device device = *createDevice();
+    Device device = *createDevice({ .scopeTimings = true });
     const Buffer a = *device.createBuffer({ .size = 256, .label = "test.a" });
     const Buffer b = *device.createBuffer({ .size = 256, .label = "test.b" });
     device.beginFrame();
@@ -409,7 +409,7 @@ TEST_CASE("an encoder that ran no command in a stage its opening barrier held re
 //======================================================================================================================
 TEST_CASE("an encoder-level barrier waits for a command in its destination stages", "[metal4]")
 {
-    Device device = *createDevice();
+    Device device = *createDevice({ .scopeTimings = true });
     const Buffer a = *device.createBuffer({ .size = 256, .label = "test.a" });
     const Buffer b = *device.createBuffer({ .size = 256, .label = "test.b" });
     device.beginFrame();
@@ -437,7 +437,7 @@ TEST_CASE("an encoder-level barrier waits for a command in its destination stage
 //======================================================================================================================
 TEST_CASE("a batch with a None source records no native barrier, and an empty batch records nothing", "[metal4]")
 {
-    Device device = *createDevice();
+    Device device = *createDevice({ .scopeTimings = true });
     const Buffer a = *device.createBuffer({ .size = 256, .label = "test.a" });
     const Buffer b = *device.createBuffer({ .size = 256, .label = "test.b" });
     device.beginFrame();
@@ -471,7 +471,7 @@ TEST_CASE("a batch with a None source records no native barrier, and an empty ba
 //======================================================================================================================
 TEST_CASE("visibility is Device for named accesses and none for an execution-only batch", "[metal4]")
 {
-    Device device = *createDevice();
+    Device device = *createDevice({ .scopeTimings = true });
     const Buffer buffer = *device.createBuffer({ .size = 256, .label = "test.buffer" });
     const TextureDesc desc{ .format = Format::RGBA8Unorm, .extent = { 16, 16, 1 }, .usage = TextureUsage::Sampled, .label = "test.texture" };
     const Texture dedicated = *device.createTexture(desc);
@@ -510,7 +510,7 @@ TEST_CASE("visibility is Device for named accesses and none for an execution-onl
 //======================================================================================================================
 TEST_CASE("a discard of a Sparse texture carries alias visibility", "[metal4]")
 {
-    Device device = *createDevice();
+    Device device = *createDevice({ .scopeTimings = true });
     if (!device.capabilities().placementSparse)
     {
         destroyDevice(device);
@@ -551,7 +551,7 @@ TEST_CASE("a discard of a Sparse texture carries alias visibility", "[metal4]")
 //======================================================================================================================
 TEST_CASE("a global barrier adds ResourceAlias only while placed memory aliases", "[metal4]")
 {
-    Device device = *createDevice();
+    Device device = *createDevice({ .scopeTimings = true });
     const BufferDesc desc{ .size = 256, .label = "test.placed" };
     const PlacementRequirements requirements = device.placementRequirements(desc);
     const Heap heap = *device.createHeap({ .size = requirements.size * 4, .label = "test.heap" });
@@ -594,7 +594,7 @@ TEST_CASE("a global barrier adds ResourceAlias only while placed memory aliases"
 //======================================================================================================================
 TEST_CASE("a resource placed where a destroyed one was is aliased with no other live resource", "[metal4]")
 {
-    Device device = *createDevice();
+    Device device = *createDevice({ .scopeTimings = true });
     const BufferDesc bufferDesc{ .size = 256, .label = "test.placed" };
     const TextureDesc textureDesc{ .format = Format::RGBA8Unorm, .extent = { 16, 16, 1 }, .usage = TextureUsage::Sampled, .label = "test.texture" };
     const Heap bufferHeap = *device.createHeap({ .size = device.placementRequirements(bufferDesc).size, .label = "test.buffers" });
@@ -634,7 +634,7 @@ TEST_CASE("a resource placed where a destroyed one was is aliased with no other 
 //======================================================================================================================
 TEST_CASE("a global barrier adds ResourceAlias while a sparse buffer lives", "[metal4]")
 {
-    Device device = *createDevice();
+    Device device = *createDevice({ .scopeTimings = true });
     if (!device.capabilities().placementSparse)
     {
         destroyDevice(device);
@@ -664,7 +664,7 @@ TEST_CASE("a global barrier adds ResourceAlias while a sparse buffer lives", "[m
 //======================================================================================================================
 TEST_CASE("a texture barrier from Undefined adds ResourceAlias only for a placed texture whose memory aliases", "[metal4]")
 {
-    Device device = *createDevice();
+    Device device = *createDevice({ .scopeTimings = true });
     const TextureDesc desc{ .format = Format::RGBA8Unorm, .extent = { 16, 16, 1 }, .usage = TextureUsage::Sampled, .label = "test.texture" };
     const PlacementRequirements requirements = device.placementRequirements(desc);
     const Heap heap = *device.createHeap({ .size = requirements.size * 4, .label = "test.heap" });
@@ -721,7 +721,7 @@ TEST_CASE("a texture barrier from Undefined adds ResourceAlias only for a placed
 //======================================================================================================================
 TEST_CASE("an encoder-level barrier keeps the destination stages no command has run in yet for later encoders", "[metal4]")
 {
-    Device device = *createDevice();
+    Device device = *createDevice({ .scopeTimings = true });
     const Buffer a = *device.createBuffer({ .size = 256, .label = "test.a" });
     const Buffer b = *device.createBuffer({ .size = 256, .label = "test.b" });
     const Buffer x = *device.createBuffer({ .size = 256, .usage = BufferUsage::ShaderWrite, .label = "test.x" });
@@ -763,7 +763,7 @@ TEST_CASE("an encoder-level barrier keeps the destination stages no command has 
 //======================================================================================================================
 TEST_CASE("an IndirectArgs barrier is emitted in its dispatch part by a counted draw's kernel and the rest by the pass", "[metal4]")
 {
-    test::PassKit kit;
+    test::PassKit kit(QueueType::Graphics, false, true);
     CommandList list = kit.list;
     const std::vector<std::byte> zeroes(16 * sizeof(DrawIndirectArgs), std::byte{ 0 });
     const Buffer args = *kit.device.createBuffer(
@@ -855,7 +855,7 @@ TEST_CASE("an IndirectArgs barrier is emitted in its dispatch part by a counted 
 //======================================================================================================================
 TEST_CASE("a barrier from a pass into Copy followed only by copies owes its fragment part until end", "[metal4]")
 {
-    test::PassKit kit;
+    test::PassKit kit(QueueType::Graphics, false, true);
     CommandList list = kit.list;
     const Texture target = kit.target();
     const std::array colors{ ColorAttachment{ .texture = target, .load = LoadOp::Clear } };
@@ -904,7 +904,7 @@ TEST_CASE("a barrier from a pass into Copy followed only by copies owes its frag
 //======================================================================================================================
 TEST_CASE("a barrier after a fill stays on the open compute encoder for the dispatches that follow", "[metal4]")
 {
-    test::PassKit kit;
+    test::PassKit kit(QueueType::Graphics, false, true);
     CommandList list = kit.list;
     const Buffer counter = kit.buffer(BufferUsage::ShaderWrite, 256);
     list.fillBuffer(counter, 0, 256, 0);
@@ -960,7 +960,7 @@ TEST_CASE("a barrier after a fill stays on the open compute encoder for the disp
 //======================================================================================================================
 TEST_CASE("a barrier after a dispatch whose sources lie outside the encoder still ends it", "[metal4]")
 {
-    test::PassKit kit;
+    test::PassKit kit(QueueType::Graphics, false, true);
     CommandList list = kit.list;
     list.setPipeline(kit.compute());
     list.dispatch(1, 1, 1);
@@ -982,7 +982,7 @@ TEST_CASE("a barrier after a dispatch whose sources lie outside the encoder stil
 //======================================================================================================================
 TEST_CASE("each batch of one global barrier lowers its own record, whether or not it repeats the last", "[metal4]")
 {
-    Device device = *createDevice();
+    Device device = *createDevice({ .scopeTimings = true });
     const Buffer a = *device.createBuffer({ .size = 256, .label = "test.a" });
     const Buffer b = *device.createBuffer({ .size = 256, .label = "test.b" });
     const GlobalBarrier executionOnly{ .srcStage = Stage::Copy, .dstStage = Stage::Copy };
@@ -1018,7 +1018,7 @@ TEST_CASE("each batch of one global barrier lowers its own record, whether or no
 //======================================================================================================================
 TEST_CASE("a batch of one global barrier that names IndirectArgs after one that does not marks the list as naming it", "[metal4]")
 {
-    Device device = *createDevice();
+    Device device = *createDevice({ .scopeTimings = true });
     device.beginFrame();
     CommandList list = device.acquireCommandList(QueueType::Graphics, "test.list");
     list.barrier(std::array{ copyToCopy() });

@@ -19,8 +19,9 @@ namespace rojoRHI::test {
     class GpuKit
     {
       public:
-        /// Creates the device with `framesInFlight` frame slots and opens a frame.
-        explicit GpuKit(uint32_t framesInFlight = 2);
+        /// Creates the device with `framesInFlight` frame slots, and with `DeviceDesc::scopeTimings` when `scopeTimings` is
+        /// set, and opens a frame.
+        explicit GpuKit(uint32_t framesInFlight = 2, bool scopeTimings = false);
 
         /// Ends the frame and destroys the device.
         ~GpuKit();

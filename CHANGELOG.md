@@ -289,3 +289,9 @@
   the copy queue uploads into a new texture with no graphics or compute barrier first. A placed or
   `Sparse` texture is still discarded from `Undefined` on the graphics or compute queue first, and
   `VU-rojo-sync-0006` reports one a Copy list uses before that.
+- Interface change: GPU scope timing is opt-in through the new `DeviceDesc::scopeTimings`, false by
+  default. A device created without it keeps the debug group and label of every scope, render pass
+  and upscale but writes no timestamp, makes no counter heap, query heap or readback buffer,
+  resolves nothing at the frame wait, and returns an empty `Device::scopeTimings`; with it, scopes
+  are timed as before. No valid-usage rule is added. The version stays 0.1.0, unreleased
+  ([ADR 0022](docs/decisions/0022-versioning-in-the-single-header.md)).

@@ -13,7 +13,7 @@ using namespace rojoRHI;
 //======================================================================================================================
 TEST_CASE("Null reports every scope with a duration of zero", "[null]")
 {
-    Device device = *createDevice(DeviceDesc{ .framesInFlight = 2 });
+    Device device = *createDevice(DeviceDesc{ .scopeTimings = true, .framesInFlight = 2 });
     device.beginFrame();
     CommandList list = device.acquireCommandList(QueueType::Graphics, "null.list");
     list.beginScope("scope");

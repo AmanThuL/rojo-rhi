@@ -49,8 +49,8 @@ namespace rojoRHI::core {
     {
       public:
         /// Creates the core of a device from a description `validateDeviceDesc` accepted: it resolves the label (VU-rojo-core-0006,
-        /// VU-rojo-core-0007), records `validation` and opens no frame. Each pool holds `poolCapacity` slots, slot zero
-        /// included; a backend passes none, and a test passes a small value to fill a pool.
+        /// VU-rojo-core-0007), records `validation` and `scopeTimings` and opens no frame. Each pool holds `poolCapacity` slots,
+        /// slot zero included; a backend passes none, and a test passes a small value to fill a pool.
         explicit DeviceCore(const DeviceDesc& desc, uint32_t poolCapacity = NativeTable::kCapacity);
 
         /// Requires that `beginDestroy` drained every pool and slot allocator, and calls no hook: the backend's state is already
@@ -103,11 +103,12 @@ namespace rojoRHI::core {
         /// Sets the capture state in one atomic step and returns the state it replaced.
         bool exchangeCapturing(bool capturing);
 
-        /// Adds the scopes of the submitted `list` to the record of its frame slot. Free-threaded.
+        /// Adds the scopes of the submitted `list` to the record of its frame slot; does nothing on a device that times no
+        /// scope, so its report stays empty and the scope-time hook never runs. Free-threaded.
         void submitScopes(const CommandListCore& list);
 
-        /// Returns the scopes of the frame the latest `beginFrame` waited for; the next `beginFrame` invalidates the span. Counts
-        /// nothing: the backend counts the native reads its timings take.
+        /// Returns the scopes of the frame the latest `beginFrame` waited for, always empty on a device that times no scope; the
+        /// next `beginFrame` invalidates the span. Counts nothing: the backend counts the native reads its timings take.
         std::span<const ScopeTiming> scopeTimings() const;
 
         /// Returns a snapshot of the device's counters, built from relaxed loads and the pools' and arena's own tallies.
@@ -203,6 +204,10 @@ namespace rojoRHI::core {
         /// Returns true when the device was created with the validation tracker selected.
         bool validation() const;
 
+        /// Returns true when the device was created with `DeviceDesc::scopeTimings`: a backend writes timestamps at scope
+        /// boundaries only then, and claims no timestamp storage otherwise.
+        bool timesScopes() const;
+
         /// Returns the validation tracker's state; only a device created with validation fills it, and only in a Debug build.
         Tracker& tracker();
 
@@ -250,6 +255,7 @@ namespace rojoRHI::core {
         std::atomic<bool> m_capturing = false;
         uint32_t m_framesInFlight;
         bool m_validation;
+        bool m_timesScopes;
         std::string m_label;
         ScopeLog m_scopes;
         FrameArena m_arena;

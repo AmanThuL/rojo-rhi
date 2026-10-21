@@ -132,15 +132,15 @@ list's argument table to the vertex and fragment stages (ADR 0018), emits the re
 pending barrier, and replays the prefix (next section). Its first mesh pipeline binds the table to
 the object and mesh stages too: each bound stage costs every draw that follows a table write
 (about 2 ns per draw for the two mesh stages on C1 and C2, Release, Apple M3 Max).
-- `beginRenderPass` claims the pass's timestamp pair and keeps its begin entry in
-  `DrawState::passBegin`; the pass's first encoder writes it with `writePassBegin` right after it
-  opens, before any command: the compute encoder of the pass's leading counted draws, when their
-  kernels run first, else the render encoder, after `RenderStageVertex`. `endRenderPass` opens the
-  encoder when nothing did, sets the deferred store actions, writes the end timestamp on it after
-  `RenderStageFragment` and pops the pass's debug group; the encoder then lingers, running no
-  further command and hidden from the draw state, until the next encoder, a scope boundary or `end`
-  ends it, so a barrier the list still owes at `end` can be carried on it
-  ([command recording](metal4-recording.md#barriers)). Both are written at
+- `beginRenderPass` claims the pass's timestamp pair (none without `DeviceDesc::scopeTimings`) and
+  keeps its begin entry in `DrawState::passBegin`; the pass's first encoder writes it with
+  `writePassBegin` right after it opens, before any command: the compute encoder of the pass's
+  leading counted draws, when their kernels run first, else the render encoder, after
+  `RenderStageVertex`. `endRenderPass` opens the encoder when nothing did, sets the deferred store
+  actions, writes the end timestamp on it after `RenderStageFragment` and pops the pass's debug
+  group; the encoder then lingers, running no further command and hidden from the draw state, until
+  the next encoder, a scope boundary or `end` ends it, so a barrier the list still owes at `end` can
+  be carried on it ([command recording](metal4-recording.md#barriers)). Both are written at
   `TimestampGranularityPrecise`, which adds no encoder at an encoder's start or end; the kernels of
   counted draws and the encoders splits resume fall between the two. A command buffer's
   `writeTimestampIntoHeap` around a render encoder costs CPU and allocations per write and slows
@@ -149,8 +149,8 @@ the object and mesh stages too: each bound stage costs every draw that follows a
 - A scope that begins or ends inside a pass opens the render encoder and pushes or pops a debug
   group on it. A split pops the open groups first and the resumed encoder pushes them again,
   outermost first. Such a scope writes its timestamps on the render encoder after the fragment
-  stage, at `TimestampGranularityPrecise`; a split writes none
-  ([command recording](metal4-recording.md)).
+  stage, at `TimestampGranularityPrecise`; a split writes none ([command
+  recording](metal4-recording.md)).
 - Ending a render encoder opens a command pool, once per encoder and never per command, because
   the validation layer autoreleases when a stencil attachment ends.
 
@@ -265,7 +265,7 @@ kernel reads the count and either encodes the draws into an indirect command buf
   pipeline (the parameters' address and the dispatch), three when the kind changes, four on a new
   encoder (pipeline, kernel table, address, dispatch), and its execute one more at replay. The batch
   adds the compute encoder's open, `endEncoding` and one barrier at the render encoder's open, and
-  the pass's begin timestamp when it opens the pass. Dispatches and executes each run in a pool.
+  the pass's begin timestamp when it opens a timed pass. Dispatches and executes each run in a pool.
 
 ## Mesh paths
 

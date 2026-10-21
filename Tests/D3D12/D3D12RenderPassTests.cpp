@@ -97,10 +97,11 @@ namespace {
     }
 
     //==================================================================================================================
-    /// Returns a new device with the default description.
+    /// Returns a new device with the default description, except that it times scopes, so a pass's counts include its two
+    /// queries.
     Device makeDevice()
     {
-        Result<Device> created = createDevice();
+        Result<Device> created = createDevice({ .scopeTimings = true });
         REQUIRE(created.has_value());
         return *created;
     }

@@ -166,7 +166,10 @@ namespace rojoRHI::d3d12 {
     uint32_t ListTimestamps::claimPair(CommandListImpl& list)
     {
         const ListState& state = list.state;
-        if (next + 2 > kMaxQueries || state.ordinal > kMaxOrdinal || !writesTimestamps(deviceOf(list), state.type))
+        // A device created without scope timings claims nothing, so its lists make no query heap or readback buffer and
+        // resolve nothing at `end`.
+        const DeviceImpl& device = deviceOf(list);
+        if (!device.core.timesScopes() || next + 2 > kMaxQueries || state.ordinal > kMaxOrdinal || !writesTimestamps(device, state.type))
         {
             return core::kNoTimestamp;
         }

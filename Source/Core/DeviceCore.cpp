@@ -74,8 +74,8 @@ namespace rojoRHI::core {
               PoolCapacity{ poolCapacity },
               PoolCapacity{ poolCapacity }
           ),
-          m_framesInFlight(desc.framesInFlight), m_validation(desc.validation), m_label(resolveLabel(desc.label, "rojorhi.device.unnamed")),
-          m_scopes(desc.framesInFlight), m_arena(desc.framesInFlight)
+          m_framesInFlight(desc.framesInFlight), m_validation(desc.validation), m_timesScopes(desc.scopeTimings),
+          m_label(resolveLabel(desc.label, "rojorhi.device.unnamed")), m_scopes(desc.framesInFlight), m_arena(desc.framesInFlight)
     {
         std::get<HandlePool<Buffer, BufferRecord>>(m_pools).countInto(&m_counts.nativeCreateCalls, &m_counts.gpuAllocations);
         std::get<HandlePool<Texture, TextureRecord>>(m_pools).countInto(&m_counts.nativeCreateCalls, &m_counts.gpuAllocations);
@@ -294,6 +294,10 @@ namespace rojoRHI::core {
     //==================================================================================================================
     void DeviceCore::submitScopes(const CommandListCore& list)
     {
+        if (!m_timesScopes)
+        {
+            return;
+        }
         m_scopes.submit(static_cast<uint32_t>(list.frame % m_framesInFlight), list.type, list.scopeLog);
     }
 
@@ -467,6 +471,12 @@ namespace rojoRHI::core {
     bool DeviceCore::validation() const
     {
         return m_validation;
+    }
+
+    //==================================================================================================================
+    bool DeviceCore::timesScopes() const
+    {
+        return m_timesScopes;
     }
 
     //==================================================================================================================

@@ -64,7 +64,7 @@ namespace {
 //======================================================================================================================
 TEST_CASE("a list records into its own command buffer, labelled with the list's label", "[metal4]")
 {
-    Device device = *createDevice();
+    Device device = *createDevice({ .scopeTimings = true });
     device.beginFrame();
     const std::array<CommandList, 2> lists{ device.acquireCommandList(QueueType::Graphics, "test.a"),
                                             device.acquireCommandList(QueueType::Graphics, "test.b") };
@@ -93,7 +93,7 @@ TEST_CASE("a list records into its own command buffer, labelled with the list's 
 //======================================================================================================================
 TEST_CASE("a new list creates its allocator, command buffer and tables once and a reused list creates none", "[metal4]")
 {
-    Device device = *createDevice();
+    Device device = *createDevice({ .scopeTimings = true });
     const uint32_t slots = core::coreOf(device).framesInFlight();
     for (uint32_t frame = 0; frame < 2 * slots; ++frame)
     {
@@ -114,7 +114,7 @@ TEST_CASE("a new list creates its allocator, command buffer and tables once and 
 //======================================================================================================================
 TEST_CASE("acquire and end count beginCommandBuffer, setLabel and endCommandBuffer", "[metal4]")
 {
-    Device device = *createDevice();
+    Device device = *createDevice({ .scopeTimings = true });
     device.beginFrame();
     const CommandList list = device.acquireCommandList(QueueType::Copy, "test.list");
     CHECK(core::coreOf(list).counts.nativeRecordCalls == 2);
@@ -132,7 +132,7 @@ TEST_CASE("acquire and end count beginCommandBuffer, setLabel and endCommandBuff
 //======================================================================================================================
 TEST_CASE("submit commits the lists' command buffers and their signal completes on the GPU", "[metal4]")
 {
-    Device device = *createDevice();
+    Device device = *createDevice({ .scopeTimings = true });
     const Fence fence = *device.createFence(0, "test.fence");
     device.beginFrame();
     std::array<CommandList, 3> lists{};
@@ -158,7 +158,7 @@ TEST_CASE("submit commits the lists' command buffers and their signal completes 
 //======================================================================================================================
 TEST_CASE("a reused slot resets the allocator of every list it took", "[metal4]")
 {
-    Device device = *createDevice();
+    Device device = *createDevice({ .scopeTimings = true });
     const uint32_t slots = core::coreOf(device).framesInFlight();
     for (uint32_t frame = 0; frame < slots; ++frame)
     {
@@ -191,7 +191,7 @@ TEST_CASE("a reused slot resets the allocator of every list it took", "[metal4]"
 //======================================================================================================================
 TEST_CASE("a list keeps the encoders it ended until its slot is reused and frees none while it records", "[metal4]")
 {
-    Device device = *createDevice();
+    Device device = *createDevice({ .scopeTimings = true });
     const Buffer buffer = *device.createBuffer({ .size = 256, .usage = BufferUsage::ShaderWrite, .label = "test.buffer" });
     const uint32_t slots = core::coreOf(device).framesInFlight();
     device.beginFrame();
@@ -220,7 +220,7 @@ TEST_CASE("a list keeps the encoders it ended until its slot is reused and frees
 //======================================================================================================================
 TEST_CASE("nested scopes push and pop debug groups on the command buffer", "[metal4]")
 {
-    Device device = *createDevice();
+    Device device = *createDevice({ .scopeTimings = true });
     device.beginFrame();
     CommandList list = device.acquireCommandList(QueueType::Compute, "test.list");
     const metal4::ListState& state = stateOf(list);
@@ -255,7 +255,7 @@ TEST_CASE("nested scopes push and pop debug groups on the command buffer", "[met
 //======================================================================================================================
 TEST_CASE("a scope label that is not valid UTF-8 names its debug group with the default label", "[metal4]")
 {
-    Device device = *createDevice();
+    Device device = *createDevice({ .scopeTimings = true });
     device.beginFrame();
     CommandList list = device.acquireCommandList(QueueType::Graphics, "test.list");
     const metal4::ListState& state = stateOf(list);
@@ -274,7 +274,7 @@ TEST_CASE("a scope label that is not valid UTF-8 names its debug group with the 
 TEST_CASE("declareAccess makes no native call", "[metal4]")
 {
     // Without validation the core keeps no declaration, so the list ends with none pending.
-    Device device = *createDevice();
+    Device device = *createDevice({ .scopeTimings = true });
     const Buffer buffer = *device.createBuffer({ .size = 64, .usage = BufferUsage::ShaderWrite });
     device.beginFrame();
     CommandList list = device.acquireCommandList(QueueType::Graphics, "test.list");
@@ -288,7 +288,7 @@ TEST_CASE("declareAccess makes no native call", "[metal4]")
 //======================================================================================================================
 TEST_CASE("four threads record lists of one frame at once", "[metal4]")
 {
-    Device device = *createDevice();
+    Device device = *createDevice({ .scopeTimings = true });
     const Fence fence = *device.createFence(0, "test.fence");
     device.beginFrame();
     std::array<CommandList, 4> lists{};
@@ -330,7 +330,7 @@ TEST_CASE("four threads record lists of one frame at once", "[metal4]")
 //======================================================================================================================
 TEST_CASE("destroyDevice releases every list after the queues drain", "[metal4]")
 {
-    Device device = *createDevice();
+    Device device = *createDevice({ .scopeTimings = true });
     const uint32_t slots = core::coreOf(device).framesInFlight();
     // Every slot holds lists, the last frame's still on the GPU when the device is destroyed.
     for (uint32_t frame = 0; frame < slots + 1; ++frame)
@@ -348,7 +348,7 @@ TEST_CASE("destroyDevice releases every list after the queues drain", "[metal4]"
 //======================================================================================================================
 TEST_CASE("a list acquired again with the same label sends its command buffer no label, and a new label is set", "[metal4]")
 {
-    Device device = *createDevice({ .framesInFlight = 2 });
+    Device device = *createDevice({ .scopeTimings = true, .framesInFlight = 2 });
     // With two frame slots, frames 1, 3 and 5 take the first list of one slot's pool, frames 2 and 4 that of the other.
     struct Recorded
     {

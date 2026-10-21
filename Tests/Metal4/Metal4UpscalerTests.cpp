@@ -108,7 +108,7 @@ namespace {
 //======================================================================================================================
 TEST_CASE("the device lists MetalFX when MetalFX supports it", "[metal4]")
 {
-    Device device = *createDevice();
+    Device device = *createDevice({ .scopeTimings = true });
     const std::span<const UpscalerKind> upscalers = device.capabilities().upscalers;
     if (MTLFX::TemporalScalerDescriptor::supportsMetal4FX(DeviceImpl::of(device).device))
     {
@@ -125,7 +125,7 @@ TEST_CASE("the device lists MetalFX when MetalFX supports it", "[metal4]")
 //======================================================================================================================
 TEST_CASE("Auto creates a MetalFX upscaler", "[metal4]")
 {
-    Device device = *createDevice();
+    Device device = *createDevice({ .scopeTimings = true });
     if (device.capabilities().upscalers.empty())
     {
         SKIP("MetalFX does not support this device");
@@ -167,7 +167,7 @@ TEST_CASE("Auto creates a MetalFX upscaler", "[metal4]")
 //======================================================================================================================
 TEST_CASE("ReversedDepth sets the scaler's depthReversed", "[metal4]")
 {
-    Device device = *createDevice();
+    Device device = *createDevice({ .scopeTimings = true });
     if (device.capabilities().upscalers.empty())
     {
         SKIP("MetalFX does not support this device");
@@ -183,7 +183,7 @@ TEST_CASE("createUpscaler runs on several threads at once", "[metal4]")
 {
     // MetalFX fills a process-wide table of Metal's at a scaler's creation without a lock of its own; two creations at once
     // corrupt it, so the backend creates scalers one at a time. A first creation in a fresh process races widest.
-    Device device = *createDevice();
+    Device device = *createDevice({ .scopeTimings = true });
     if (device.capabilities().upscalers.empty())
     {
         SKIP("MetalFX does not support this device");
@@ -217,7 +217,7 @@ TEST_CASE("createUpscaler runs on several threads at once", "[metal4]")
 //======================================================================================================================
 TEST_CASE("an extent ratio beyond the device's scale range is Unsupported and allocates nothing", "[metal4]")
 {
-    Device device = *createDevice();
+    Device device = *createDevice({ .scopeTimings = true });
     if (device.capabilities().upscalers.empty())
     {
         SKIP("MetalFX does not support this device");
@@ -236,7 +236,7 @@ TEST_CASE("an extent ratio beyond the device's scale range is Unsupported and al
 //======================================================================================================================
 TEST_CASE("a kind Metal cannot create is Unsupported and allocates nothing", "[metal4]")
 {
-    Device device = *createDevice();
+    Device device = *createDevice({ .scopeTimings = true });
     const uint64_t live = DeviceImpl::of(device).core.pool<Upscaler>().liveCount();
     for (const UpscalerKind kind : { UpscalerKind::DLSS, UpscalerKind::FSR, UpscalerKind::XeSS })
     {
@@ -251,7 +251,7 @@ TEST_CASE("a kind Metal cannot create is Unsupported and allocates nothing", "[m
 //======================================================================================================================
 TEST_CASE("an upscale sends its debug group, a carrier encoder with the fence update, the scaler's setters and one encode", "[metal4]")
 {
-    UpscaleKit kit;
+    UpscaleKit kit(QueueType::Graphics, UpscaleKit::defaultDesc(), false, true);
     const core::RecordCounts before = countsOf(kit.kit.list);
     kit.upscale();
     CHECK(countsOf(kit.kit.list).nativeRecordCalls == before.nativeRecordCalls + upscaleCalls(kit.kit.list));
@@ -283,7 +283,7 @@ TEST_CASE("the encoder after an upscale waits on its fence, once", "[metal4]")
 {
     SECTION("a copy")
     {
-        UpscaleKit kit;
+        UpscaleKit kit(QueueType::Graphics, UpscaleKit::defaultDesc(), false, true);
         const Buffer a = *kit.kit.device.createBuffer({ .size = 256, .label = "test.a" });
         const Buffer b = *kit.kit.device.createBuffer({ .size = 256, .label = "test.b" });
         kit.upscale();
@@ -304,7 +304,7 @@ TEST_CASE("the encoder after an upscale waits on its fence, once", "[metal4]")
     SECTION("a kernel fill")
     {
         // The same fill on a list with no upscale before it is the baseline.
-        UpscaleKit kit;
+        UpscaleKit kit(QueueType::Graphics, UpscaleKit::defaultDesc(), false, true);
         const Buffer target = *kit.kit.device.createBuffer({ .size = 256, .usage = BufferUsage::ShaderWrite, .label = "test.target" });
         const core::RecordCounts plain = countsOf(kit.kit.list);
         kit.kit.list.fillBuffer(target, 0, 256, 0x01020304u);
@@ -321,7 +321,7 @@ TEST_CASE("the encoder after an upscale waits on its fence, once", "[metal4]")
     }
     SECTION("a list that ends right after")
     {
-        UpscaleKit kit;
+        UpscaleKit kit(QueueType::Graphics, UpscaleKit::defaultDesc(), false, true);
         kit.upscale();
         const core::RecordCounts before = countsOf(kit.kit.list);
         kit.kit.list.end();
@@ -339,7 +339,7 @@ TEST_CASE("the encoder after an upscale waits on its fence, once", "[metal4]")
     }
     SECTION("a list whose encoders took both waits")
     {
-        UpscaleKit kit;
+        UpscaleKit kit(QueueType::Graphics, UpscaleKit::defaultDesc(), false, true);
         const Buffer a = *kit.kit.device.createBuffer({ .size = 256, .label = "test.a" });
         const Buffer b = *kit.kit.device.createBuffer({ .size = 256, .label = "test.b" });
         const Texture c = kit.make(Format::RGBA8Unorm, kit.desc.input, TextureUsage::RenderTarget);
@@ -360,7 +360,7 @@ TEST_CASE("the encoder after an upscale waits on its fence, once", "[metal4]")
     }
     SECTION("a list that ends with a barrier pending")
     {
-        UpscaleKit kit;
+        UpscaleKit kit(QueueType::Graphics, UpscaleKit::defaultDesc(), false, true);
         kit.upscale();
         const GlobalBarrier after{ .srcStage = Stage::ComputeShader, .srcAccess = Access::ShaderWrite, .dstStage = Stage::Copy, .dstAccess = Access::CopyRead };
         kit.kit.list.barrier(std::array{ after });
@@ -380,7 +380,7 @@ TEST_CASE("the encoder after an upscale waits on its fence, once", "[metal4]")
 //======================================================================================================================
 TEST_CASE("the first compute and the first render encoder after an upscale each wait on its fence", "[metal4]")
 {
-    UpscaleKit kit;
+    UpscaleKit kit(QueueType::Graphics, UpscaleKit::defaultDesc(), false, true);
     const Buffer b = *kit.kit.device.createBuffer({ .size = 256, .usage = BufferUsage::ShaderWrite, .label = "test.b" });
     const Buffer d = *kit.kit.device.createBuffer({ .size = 256, .label = "test.d" });
     const Texture c = kit.make(Format::RGBA8Unorm, kit.desc.input, TextureUsage::RenderTarget);
@@ -411,7 +411,7 @@ TEST_CASE("the first compute and the first render encoder after an upscale each 
 //======================================================================================================================
 TEST_CASE("a render pass after an upscale waits on its fence on the render encoder, once", "[metal4]")
 {
-    UpscaleKit kit;
+    UpscaleKit kit(QueueType::Graphics, UpscaleKit::defaultDesc(), false, true);
     kit.upscale();
     // The same pass twice: the first render encoder after the upscale waits on its fence for every render stage, the second
     // owes nothing.
@@ -438,7 +438,7 @@ TEST_CASE(
     "a barrier pending before an upscale is covered by the carrier's barrier for its stages and stays pending for later encoders' other stages", "[metal4]"
 )
 {
-    UpscaleKit kit;
+    UpscaleKit kit(QueueType::Graphics, UpscaleKit::defaultDesc(), false, true);
     const GlobalBarrier before{ .srcStage = Stage::ColorAttachment | Stage::Copy,
                                 .srcAccess = Access::ColorAttachmentWrite | Access::CopyWrite,
                                 .dstStage = Stage::ComputeShader | Stage::FragmentShader,
@@ -460,7 +460,7 @@ TEST_CASE(
 //======================================================================================================================
 TEST_CASE("a null reactive binds the cleared mask, a given one binds itself", "[metal4]")
 {
-    UpscaleKit kit;
+    UpscaleKit kit(QueueType::Graphics, UpscaleKit::defaultDesc(), false, true);
     const metal4::UpscalerState& state = stateOf(kit.kit.device, kit.upscaler);
     kit.upscale();
     CHECK(state.scaler->reactiveMaskTexture() == state.mask);
@@ -493,7 +493,7 @@ TEST_CASE("a null reactive binds the cleared mask, a given one binds itself", "[
 //======================================================================================================================
 TEST_CASE("a destroyed upscaler releases its objects when its frame slot retires", "[metal4]")
 {
-    Device device = *createDevice({ .framesInFlight = 2 });
+    Device device = *createDevice({ .scopeTimings = true, .framesInFlight = 2 });
     if (device.capabilities().upscalers.empty())
     {
         destroyDevice(device);
@@ -531,7 +531,7 @@ TEST_CASE("a destroyed upscaler releases its objects when its frame slot retires
 //======================================================================================================================
 TEST_CASE("a content extent below the scaler's range is raised to the smallest it takes", "[metal4]")
 {
-    UpscaleKit kit;
+    UpscaleKit kit(QueueType::Graphics, UpscaleKit::defaultDesc(), false, true);
     const metal4::UpscalerState& state = stateOf(kit.kit.device, kit.upscaler);
     const float maxScale = state.scaler->inputContentMaxScale();
     // The smallest content whose scale to the output stays within the scaler's maximum, in each axis.

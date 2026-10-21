@@ -229,7 +229,7 @@ namespace {
 //======================================================================================================================
 TEST_CASE("a lone mesh record with a null count is one native indirect draw that binds the record and opens no compute encoder", "[metal4]")
 {
-    test::GpuKit kit;
+    test::GpuKit kit(2, true);
     const Fixture fixture(kit.device);
     CommandList list = kit.list(QueueType::Graphics, "test.meshIndirect");
     fixture.begin(list);
@@ -265,7 +265,7 @@ TEST_CASE("a lone mesh record with a null count is one native indirect draw that
 //======================================================================================================================
 TEST_CASE("a mesh draw with a count runs the writer kernel and one native indirect draw", "[metal4]")
 {
-    test::GpuKit kit;
+    test::GpuKit kit(2, true);
     const Fixture fixture(kit.device);
     CommandList list = kit.list(QueueType::Graphics, "test.meshIndirect");
     fixture.begin(list);
@@ -298,7 +298,7 @@ TEST_CASE("a mesh draw with a count runs the writer kernel and one native indire
 //======================================================================================================================
 TEST_CASE("a counted mesh draw that splits a pass leaves the resumed encoder to bind the mesh stages again", "[metal4]")
 {
-    test::GpuKit kit;
+    test::GpuKit kit(2, true);
     const Fixture fixture(kit.device);
     CommandList list = kit.list(QueueType::Graphics, "test.meshIndirect");
     fixture.begin(list);
@@ -329,7 +329,7 @@ TEST_CASE("a counted mesh draw that splits a pass leaves the resumed encoder to 
 //======================================================================================================================
 TEST_CASE("a mesh batch encodes an ICB whose commands bind the reserved buffers on each stage", "[metal4]")
 {
-    test::GpuKit kit;
+    test::GpuKit kit(2, true);
     const Fixture fixture(kit.device);
     const DeviceImpl& impl = DeviceImpl::of(kit.device);
     CommandList list = kit.list(QueueType::Graphics, "test.meshIndirect");
@@ -380,7 +380,7 @@ TEST_CASE("a mesh batch encodes an ICB whose commands bind the reserved buffers 
 //======================================================================================================================
 TEST_CASE("mesh ICBs are reused across frames like the others", "[metal4]")
 {
-    Device device = *createDevice();
+    Device device = *createDevice({ .scopeTimings = true });
     const uint32_t slots = core::coreOf(device).framesInFlight();
     const Fixture fixture(device);
     std::vector<const MTL::IndirectCommandBuffer*> first;

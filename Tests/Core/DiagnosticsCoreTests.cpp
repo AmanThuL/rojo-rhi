@@ -200,7 +200,7 @@ TEST_CASE("a scope's label is copied while recording", "[core]")
 //======================================================================================================================
 TEST_CASE("the reported labels live in device storage that outlives the frame arena until the next beginFrame", "[core]")
 {
-    Device device = *createDevice(DeviceDesc{ .framesInFlight = 2 });
+    Device device = *createDevice(DeviceDesc{ .scopeTimings = true, .framesInFlight = 2 });
     device.beginFrame();
     CommandList list = device.acquireCommandList(QueueType::Graphics, "core.list");
     list.beginScope("kept.label");
@@ -227,7 +227,7 @@ TEST_CASE("the reported labels live in device storage that outlives the frame ar
 //======================================================================================================================
 TEST_CASE("a scope recorded on a list of each queue type is reported with that queue", "[core]")
 {
-    Device device = *createDevice(DeviceDesc{ .framesInFlight = 2 });
+    Device device = *createDevice(DeviceDesc{ .scopeTimings = true, .framesInFlight = 2 });
     device.beginFrame();
     for (const QueueType type : { QueueType::Copy, QueueType::Compute, QueueType::Graphics })
     {
@@ -273,7 +273,7 @@ TEST_CASE("the scope-time hook sees each queue's records with the report entries
 {
     const ScopeTimesRecorder recorder;
     const std::vector<ScopeTimesCall>& calls = recorder.calls;
-    Device device = *createDevice(DeviceDesc{ .framesInFlight = 2 });
+    Device device = *createDevice(DeviceDesc{ .scopeTimings = true, .framesInFlight = 2 });
     hookScopeTimes(device);
     device.beginFrame();
     // The compute list is submitted first; the report still puts Graphics first.
@@ -351,7 +351,7 @@ TEST_CASE("the hook runs before the slot's arena is rewound", "[core]")
 {
     const ScopeTimesRecorder recorder;
     const std::vector<ScopeTimesCall>& calls = recorder.calls;
-    Device device = *createDevice(DeviceDesc{ .framesInFlight = 2 });
+    Device device = *createDevice(DeviceDesc{ .scopeTimings = true, .framesInFlight = 2 });
     hookScopeTimes(device);
     device.beginFrame();
     CommandList list = device.acquireCommandList(QueueType::Graphics, "core.list");
@@ -364,6 +364,30 @@ TEST_CASE("the hook runs before the slot's arena is rewound", "[core]")
     retireFirstFrame(device);
     REQUIRE(calls.size() == 1);
     CHECK(calls[0].recordLabels == std::vector<std::string>{ "label.in.the.arena" });
+    device.endFrame();
+    destroyDevice(device);
+}
+
+//======================================================================================================================
+TEST_CASE("a device without scope timings still records its lists' scopes but calls no scope-time hook", "[core]")
+{
+    const ScopeTimesRecorder recorder;
+    const std::vector<ScopeTimesCall>& calls = recorder.calls;
+    Device device = *createDevice(DeviceDesc{ .framesInFlight = 2 });
+    hookScopeTimes(device);
+    device.beginFrame();
+    CommandList list = device.acquireCommandList(QueueType::Graphics, "core.list");
+    list.beginScope("untimed.label");
+    // The backend names its debug group after the record, so the list keeps it with its label.
+    REQUIRE(core::coreOf(list).scopeLog.size() == 1);
+    CHECK(core::coreOf(list).scopeLog.back().label == "untimed.label");
+    CHECK(core::coreOf(list).scopeLog.back().timestamp == core::kNoTimestamp);
+    list.endScope();
+    submit(device, list);
+    device.endFrame();
+    retireFirstFrame(device);
+    CHECK(calls.empty());
+    CHECK(device.scopeTimings().empty());
     device.endFrame();
     destroyDevice(device);
 }

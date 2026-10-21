@@ -62,7 +62,9 @@ namespace rojoRHI::bench {
     //==================================================================================================================
     std::expected<void, std::string> RojoContext::open(const RunOptions& options)
     {
-        const DeviceDesc desc{ .validation = options.validation, .enableCapture = false, .framesInFlight = 3, .pipelineCache = {}, .label = "bench" };
+        const DeviceDesc desc{
+            .validation = options.validation, .enableCapture = false, .scopeTimings = true, .framesInFlight = 3, .pipelineCache = {}, .label = "bench"
+        };
         Result<Device> device = createDevice(desc);
         if (!device)
         {

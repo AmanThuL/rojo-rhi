@@ -183,7 +183,7 @@ viewport, scissor, draw, end) costs 14 calls in a list's first pass and 8 in eac
 
 1. The pass's scope, through the native half that `beginScope` uses ([scopes](
    d3d12-recording.md#scopes-and-timestamps); `D3D12Scopes.h`); `endRenderPass` ends it the same
-   way, so every pass is timed like a scope.
+   way, so every pass is timed like a scope, on a device created with `DeviceDesc::scopeTimings`.
 2. One enhanced `Barrier` call that moves mip 0 and layer 0 of every resolve target from
    `RENDER_TARGET` to `RESOLVE_DEST` (sync `RENDER_TARGET` to `RESOLVE`). The backend owns it
    because VU-rojo-cmd-0007 puts a resolve target in `ColorAttachment` at the call, and D3D12

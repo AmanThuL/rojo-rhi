@@ -31,6 +31,7 @@ queue: work on compute and copy queues is ordered by caller fences. Outside the 
 struct DeviceDesc {
     bool validation = false;                    // run the validation tracker
     bool enableCapture = false;                 // prepare programmatic GPU capture before creation
+    bool scopeTimings = false;                  // write GPU timestamps at scope boundaries
     uint32_t framesInFlight = 3;                // frame slots: 2 or 3
     std::span<const std::byte> pipelineCache;   // blob from Device::pipelineCacheData; empty for none
     std::string_view label;                     // "rojorhi.device.unnamed" when empty
@@ -46,6 +47,10 @@ struct DeviceDesc {
 - `enableCapture` prepares the process for `Device::beginCapture` ([diagnostics](14-diagnostics.md))
   where the native capture tool must be loaded before the device exists. Without it, a capture
   request on such a backend fails as specified there.
+- `scopeTimings` makes the device write GPU timestamps at the boundaries of every scope, render pass
+  and upscale, read through `Device::scopeTimings` ([diagnostics](14-diagnostics.md)). Without it
+  scopes, passes and upscales keep their debug groups and labels but write no timestamp, the device
+  makes no timestamp storage and reads none at the frame wait, and `Device::scopeTimings` is empty.
 - `framesInFlight` is the number of frame slots, which bounds how many frames the CPU records ahead
   of the GPU. Three, the default, keeps the GPU fed when CPU frame times vary; two lowers latency.
 - `pipelineCache` is a blob the caller saved from `Device::pipelineCacheData` on an earlier device
@@ -62,8 +67,9 @@ struct DeviceDesc {
 |---|---|---|---|
 | `validation` | backend-neutral tracker; independent of `MTL_DEBUG_LAYER` | backend-neutral tracker; independent of `ID3D12Debug::EnableDebugLayer` | backend-neutral tracker; independent of the validation layers |
 | `enableCapture` | makes the encoders a list opens carry labels; capture availability is fixed at launch by `MTL_CAPTURE_ENABLED` and read through `MTL::CaptureManager::supportsDestination` | `PIXLoadLatestWinPixGpuCapturerLibrary` before `D3D12CreateDevice` | RenderDoc in-application API loaded before `vkCreateInstance` (reserved) |
+| `scopeTimings` | the frame slots' `MTL4::CounterHeap`s, the timestamp writes and their resolve at the frame wait; without it none of them | each list's timestamp query heaps and readback buffers, the queries and their resolve at `end`; without it none of them | `VK_QUERY_TYPE_TIMESTAMP` query pools, the queries and their read at the frame wait |
 | `pipelineCache` | a RojoRHI header around a Metal 4 archive: `MTL::Device::newArchive` from an `NS::URL`, looked up through `MTL4::CompilerTaskOptions::setLookupArchives`; saved with `MTL4::PipelineDataSetSerializer::serializeAsArchiveAndFlushToURL`. Both are URL-based, so a caller blob takes a temporary file, kept while the device lives | a RojoRHI header around an `ID3D12PipelineLibrary1`: `ID3D12Device1::CreatePipelineLibrary` on a copy of the library bytes, kept while the device lives | `VkPipelineCacheCreateInfo::pInitialData`, or `VK_KHR_pipeline_binary` data |
-| Cost | costly: tracking when `validation` is set; native otherwise | costly: same | costly: same |
+| Cost | costly: tracking when `validation` is set; native otherwise, `scopeTimings` adding its writes and resolves | costly: same | costly: same |
 
 ### `createDevice`
 ```cpp

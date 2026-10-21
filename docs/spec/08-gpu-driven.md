@@ -39,18 +39,18 @@ draw, a scope boundary or `endRenderPass`, so the kernels of a pass's leading co
 one compute encoder ahead of it. A counted draw recorded after the render encoder opened splits
 the pass: that encoder stores every attachment, resolving one that has a resolve target, the kernel
 runs, and a new encoder resumes the pass with `Load`. That path is `costly`: per batch of kernels,
-a compute encoder of five native calls and a backend barrier, and the pass's begin timestamp when
-the batch opens the pass ([diagnostics](14-diagnostics.md)); per counted draw, two native calls
-(its parameters and its dispatch) ahead of the execute, as the native form makes; per split, a
-store and a load of every attachment; about 40 µs of fixed GPU time measured alone, then about
-48 ns per drawn record against 9.5 ns for a native indirect draw; and indirect-command-buffer
-memory sized by `maxCount` rounded up to a power of two, at least 64 commands. With a `maxCount`
-of 1 the kernel writes one native record instead, empty when the count is 0, for one plain
-indirect draw; only a lone mesh record with a null count skips the kernel. Metal's shader
-validation silently drops commands such a kernel encodes, so conformance checks their images under
-API validation only. [Spike 3](../research/2026-10-12-spike-3-multi-draw-indirect.md) measured
-these lowerings against a `maxCount` loop of plain indirect draws, which fails the budget by
-`maxCount`.
+a compute encoder of five native calls and a backend barrier, and, on a device with scope timings,
+the pass's begin timestamp when the batch opens the pass ([diagnostics](14-diagnostics.md)); per
+counted draw, two native calls (its parameters and its dispatch) ahead of the execute, as the native
+form makes; per split, a store and a load of every attachment; about 40 µs of fixed GPU time
+measured alone, then about 48 ns per drawn record against 9.5 ns for a native indirect draw; and
+indirect-command-buffer memory sized by `maxCount` rounded up to a power of two, at least 64
+commands. With a `maxCount` of 1 the kernel writes one native record instead, empty when the count
+is 0, for one plain indirect draw; only a lone mesh record with a null count skips the kernel.
+Metal's shader validation silently drops commands such a kernel encodes, so conformance checks their
+images under API validation only. [Spike 3](../research/2026-10-12-spike-3-multi-draw-indirect.md)
+measured these lowerings against a `maxCount` loop of plain indirect draws, which fails the budget
+by `maxCount`.
 
 ## Argument records
 

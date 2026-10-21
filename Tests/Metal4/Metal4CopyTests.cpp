@@ -79,7 +79,7 @@ namespace {
 //======================================================================================================================
 TEST_CASE("the first copy opens a compute encoder labelled after the list and bound to its table", "[metal4]")
 {
-    Device device = *createDevice();
+    Device device = *createDevice({ .scopeTimings = true });
     const Buffer a = *device.createBuffer({ .size = 256, .label = "test.a" });
     const Buffer b = *device.createBuffer({ .size = 256, .label = "test.b" });
     device.beginFrame();
@@ -103,7 +103,7 @@ TEST_CASE("the first copy opens a compute encoder labelled after the list and bo
 //======================================================================================================================
 TEST_CASE("copies share one encoder until a scope boundary closes it, and the next encoder takes the scope's label", "[metal4]")
 {
-    Device device = *createDevice();
+    Device device = *createDevice({ .scopeTimings = true });
     const Buffer a = *device.createBuffer({ .size = 256, .label = "test.a" });
     const Buffer b = *device.createBuffer({ .size = 256, .label = "test.b" });
     device.beginFrame();
@@ -137,7 +137,7 @@ TEST_CASE("copies share one encoder until a scope boundary closes it, and the ne
 //======================================================================================================================
 TEST_CASE("an equal-byte fill is one native fillBuffer", "[metal4]")
 {
-    Device device = *createDevice();
+    Device device = *createDevice({ .scopeTimings = true });
     const Buffer buffer = *device.createBuffer({ .size = 256, .usage = BufferUsage::ShaderWrite, .label = "test.fill" });
     device.beginFrame();
     CommandList list = device.acquireCommandList(QueueType::Graphics, "test.list");
@@ -156,7 +156,7 @@ TEST_CASE("an equal-byte fill is one native fillBuffer", "[metal4]")
 //======================================================================================================================
 TEST_CASE("a three-layer buffer-to-texture copy is three native copies and a 3D copy is one", "[metal4]")
 {
-    Device device = *createDevice();
+    Device device = *createDevice({ .scopeTimings = true });
     const Texture array = texture8(device, TextureType::Tex2DArray, 3);
     const Texture volume = texture8(device, TextureType::Tex3D, 1, 4);
     const Buffer upload = *device.createBuffer({ .size = 4 * 2048, .memory = Memory::Upload, .label = "test.upload" });
@@ -180,7 +180,7 @@ TEST_CASE("a three-layer buffer-to-texture copy is three native copies and a 3D 
 //======================================================================================================================
 TEST_CASE("end closes the open encoder before it ends the command buffer", "[metal4]")
 {
-    Device device = *createDevice();
+    Device device = *createDevice({ .scopeTimings = true });
     const Buffer a = *device.createBuffer({ .size = 256, .label = "test.a" });
     const Buffer b = *device.createBuffer({ .size = 256, .label = "test.b" });
     device.beginFrame();
@@ -199,7 +199,7 @@ TEST_CASE("end closes the open encoder before it ends the command buffer", "[met
 //======================================================================================================================
 TEST_CASE("lists recorded on other threads than their acquisition each open their own encoder", "[metal4]")
 {
-    Device device = *createDevice();
+    Device device = *createDevice({ .scopeTimings = true });
     const Buffer a = *device.createBuffer({ .size = 4096, .label = "test.a" });
     const Buffer b = *device.createBuffer({ .size = 4096, .label = "test.b" });
     device.beginFrame();

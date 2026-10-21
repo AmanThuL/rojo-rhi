@@ -212,11 +212,12 @@ of 256 queries (`TIMESTAMP`; `COPY_QUEUE_TIMESTAMP` on a Copy list), each with a
 needs one (two `nativeCreateCalls`, one `gpuAllocations`, one `nativeHostCalls` for the map; no
 lock), kept across recordings and named after the list.
 
-A scope's record stores `(ordinal << 16) | pair`. A scope is untimed (`core::kNoTimestamp`) after
-the list has claimed 2^16 queries, for a pool ordinal above 0xFFFF, and on a Copy list of a device
-with no copy-queue timestamps (`OPTIONS3`); an untimed scope records its event pair only (1 call
-each end). `end` records one `ResolveQueryData` per heap the recording used, over the used range,
-into that heap's readback buffer.
+A scope's record stores `(ordinal << 16) | pair`. A scope is untimed (`core::kNoTimestamp`) on a
+device created without `DeviceDesc::scopeTimings`, whose lists make no heap or readback buffer and
+resolve nothing, after the list has claimed 2^16 queries, for a pool ordinal above 0xFFFF, and on a
+Copy list of a device with no copy-queue timestamps (`OPTIONS3`); an untimed scope records its event
+pair only (1 call each end). `end` records one `ResolveQueryData` per heap the recording used, over
+the used range, into that heap's readback buffer.
 
 The `scopeTimes` hook runs at the frame wait, after the slot's work completed. For each record it
 finds the list through `lists.at(slot, queue, ordinal)` (the pool mutex: a retire hook, never
