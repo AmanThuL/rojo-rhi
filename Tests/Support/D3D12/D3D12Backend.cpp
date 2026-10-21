@@ -167,6 +167,17 @@ namespace rojoRHI::test {
     }
 
     //==================================================================================================================
+    std::string_view misplacedClearEndsRecording()
+    {
+#if defined(ROJORHI_D3D12_DEBUG_LAYER) || defined(ROJORHI_D3D12_DEBUG_GBV) || (defined(ROJORHI_D3D12_DEBUG_MODE) && !defined(NDEBUG))
+        return "the D3D12 debug layer checks the clear's own barrier out of CopyDst against the layout the list moved the texture "
+               "to and ends the process (STATE_SETTING 1334, CI run 39598465192)";
+#else
+        return {};
+#endif
+    }
+
+    //==================================================================================================================
     bool layoutsAreNative()
     {
         return true;

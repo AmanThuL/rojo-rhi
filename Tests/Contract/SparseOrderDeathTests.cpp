@@ -269,9 +269,36 @@ TEST_CASE("VU-rojo-sparse-0014 a newly mapped buffer tile is first used on anoth
     });
 }
 
+namespace {
+    //==================================================================================================================
+    /// Returns whether the device packs a mip tail for the texture of `sparse`, whose tile shape then names a level below the
+    /// mip count.
+    bool packsMipTail()
+    {
+        Device device = *createDevice();
+        const Texture texture = *device.createTexture(
+            TextureDesc{ .type = TextureType::Tex2DArray,
+                         .format = Format::RGBA8Unorm,
+                         .extent = { 512, 512, 1 },
+                         .mips = 10,
+                         .layers = 2,
+                         .usage = TextureUsage::Sampled | TextureUsage::Sparse,
+                         .label = "test.sparse.probe" }
+        );
+        const bool packs = device.tileShape(texture).mipTailFirst < 10;
+        device.destroy(texture);
+        destroyDevice(device);
+        return packs;
+    }
+} // namespace
+
 //======================================================================================================================
 TEST_CASE("VU-rojo-sparse-0014 a newly mapped mip tail is moved from a defined layout and copied to", "[contract][death]")
 {
+    if (!packsMipTail())
+    {
+        SKIP("the device packs no mip tail for the sparse texture, so there is no tail to map");
+    }
     // A tail mapping marks every tail mip of its layer as a whole, so a barrier that keeps the contents reaches it.
     ROJORHI_EXPECT_DEATH("VU-rojo-sparse-0014", [] {
         PassKit kit(QueueType::Graphics, true);

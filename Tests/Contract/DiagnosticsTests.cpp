@@ -199,6 +199,8 @@ TEST_CASE("every render pass forms a scope labeled with the pass label, defaulte
         *device.createTexture(TextureDesc{ .format = Format::RGBA8Unorm, .extent = { 8, 8, 1 }, .usage = TextureUsage::RenderTarget, .label = "test.target" });
     device.beginFrame();
     CommandList list = device.acquireCommandList(QueueType::Graphics, "test.list");
+    // A new texture is Undefined, which a pass cannot render to where layouts are native (chapter 09).
+    test::transition(list, target, Layout::Undefined, Layout::ColorAttachment);
     const std::array<ColorAttachment, 1> colors{ ColorAttachment{ .texture = target } };
     list.beginRenderPass(RenderPassDesc{ .colors = colors, .area = { 0, 0, 8, 8 }, .label = "named.pass" });
     list.beginScope("inside");

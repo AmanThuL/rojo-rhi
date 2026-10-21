@@ -12,6 +12,7 @@
 
 using namespace rojoRHI;
 using test::PassKit;
+using test::transition;
 
 namespace {
     constexpr uint64_t kBig = 1 << 20;
@@ -20,6 +21,15 @@ namespace {
     TextureRegion box(uint32_t width, uint32_t height, uint32_t depth = 1)
     {
         return TextureRegion{ .extent = { width, height, depth } };
+    }
+
+    //==================================================================================================================
+    /// Moves every subresource of the new `texture` from `Undefined` to `CopyDst`, where a clear needs it (VU-rojo-cmd-0072),
+    /// and returns it.
+    Texture inCopyDst(PassKit& kit, Texture texture)
+    {
+        transition(kit.list, texture, Layout::Undefined, Layout::CopyDst);
+        return texture;
     }
 } // namespace
 
@@ -152,11 +162,15 @@ TEST_CASE("fillBuffer fills a ShaderWrite buffer on a Graphics and a Compute lis
 TEST_CASE("clearTexture clears color, depth-stencil and storage textures", "[contract]")
 {
     PassKit kit;
-    kit.list.clearTexture(kit.target(Format::RGBA8Unorm, 1, 3, 2), {}, { .color = { 1, 0, 0, 1 } });
-    kit.list.clearTexture(kit.target(), SubresourceRange{ .baseMip = 0, .mipCount = 1, .baseLayer = 0, .layerCount = 1 }, {});
-    kit.list.clearTexture(kit.depthTarget(), {}, { .depth = 1.0f });
-    kit.list.clearTexture(kit.depthTarget(Format::D32FloatS8), {}, { .depth = 0.0f, .stencil = 255 });
-    kit.list.clearTexture(kit.texture(Format::RGBA16Float, TextureUsage::Storage), {}, {});
+    kit.list.clearTexture(inCopyDst(kit, kit.texture(Format::RGBA8Unorm, TextureUsage::RenderTarget, 3, 2)), {}, { .color = { 1, 0, 0, 1 } });
+    kit.list.clearTexture(
+        inCopyDst(kit, kit.texture(Format::RGBA8Unorm, TextureUsage::RenderTarget)),
+        SubresourceRange{ .baseMip = 0, .mipCount = 1, .baseLayer = 0, .layerCount = 1 },
+        {}
+    );
+    kit.list.clearTexture(inCopyDst(kit, kit.texture(Format::D32Float, TextureUsage::DepthStencil)), {}, { .depth = 1.0f });
+    kit.list.clearTexture(inCopyDst(kit, kit.texture(Format::D32FloatS8, TextureUsage::DepthStencil)), {}, { .depth = 0.0f, .stencil = 255 });
+    kit.list.clearTexture(inCopyDst(kit, kit.texture(Format::RGBA16Float, TextureUsage::Storage)), {}, {});
     kit.finish();
 }
 
@@ -164,7 +178,7 @@ TEST_CASE("clearTexture clears color, depth-stencil and storage textures", "[con
 TEST_CASE("clearTexture on a Compute list clears a Storage texture", "[contract]")
 {
     PassKit kit(QueueType::Compute);
-    kit.list.clearTexture(kit.texture(Format::RGBA8Unorm, TextureUsage::Storage), {}, {});
+    kit.list.clearTexture(inCopyDst(kit, kit.texture(Format::RGBA8Unorm, TextureUsage::Storage)), {}, {});
     kit.finish();
 }
 
