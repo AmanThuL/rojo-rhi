@@ -25,6 +25,16 @@ namespace rojoRHI::d3d12 {
         uint32_t targetIncrement = 0;                     ///< Bytes between two descriptors of `targets`.
         uint32_t targetLayers = 1;                        ///< Array layers, faces for cube types; 1 for a 3D texture.
         uint32_t targetDepth = 1;                         ///< Depth slices of mip 0 for a 3D texture; 1 otherwise.
+        Format format = Format::Undefined;                ///< The texture's format.
+        TextureType type = TextureType::Tex2D;            ///< The texture's type.
+        TextureUsage usage = TextureUsage::None;          ///< The texture's usage.
+        uint32_t mips = 1;                                ///< Mip levels.
+        uint32_t layers = 1;                              ///< Array layers, faces for cube types; 1 for a 3D texture.
+        uint32_t depth = 1;                               ///< Depth slices of mip 0 for a 3D texture; 1 otherwise.
+        uint32_t samples = 1;                             ///< Samples per texel.
+        /// The format of subresource 0's footprint as `GetCopyableFootprints1` reports it, read once at creation, so a copy
+        /// names it without querying the device while recording.
+        DXGI_FORMAT copyFormat = DXGI_FORMAT_UNKNOWN;
     };
 
     /// Returns the CPU handle of the render-target or depth-stencil view of `payload`'s subresource at `mip` and `layer`, the

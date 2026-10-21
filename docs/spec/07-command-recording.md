@@ -82,7 +82,7 @@ that frame's `Device::endFrame`, as `VU-rojo-device-0005` of
 
 | | Metal 4 | D3D12 | Vulkan |
 |---|---|---|---|
-| Call | pooled `MTL4::CommandBuffer`, `MTL4::CommandBuffer::beginCommandBuffer` with the list's own `MTL4::CommandAllocator` of its frame slot, reset when the slot is reused | `Reset` with a per-frame allocator of the list type; for `Graphics` and `Compute` lists, then the descriptor heaps and the global root signature | `vkBeginCommandBuffer` from a per-frame pool; for `Graphics` and `Compute` lists, then the descriptor heaps |
+| Call | pooled `MTL4::CommandBuffer`, `MTL4::CommandBuffer::beginCommandBuffer` with the list's own `MTL4::CommandAllocator` of its frame slot, reset when the slot is reused | `Reset` with the list's own `ID3D12CommandAllocator` of its frame slot, reset when the slot is reused; a `Graphics` list then sets both descriptor heaps and the global root signature for graphics and compute, a `Compute` list the heaps and the compute root signature | `vkBeginCommandBuffer` from a per-frame pool; for `Graphics` and `Compute` lists, then the descriptor heaps |
 | Cost | native | native | native |
 
 ### `CommandList::end`

@@ -70,7 +70,8 @@ void setMessageCallback(MessageCallback callback, void* user);
 Installs the process-wide message sink. `nullptr` restores the default, which writes each message
 to stderr. The new callback receives every message emitted after the call returns. A message the
 shared core aborts after (a failed valid-usage check, an internal error or a fatal core failure)
-goes to stderr as well once the callback returns. A callback it replaces may still be running on
+goes to stderr as well once the callback returns, and so does one the D3D12 backend aborts after (a
+debug-layer error or a fatal native failure). A callback it replaces may still be running on
 another thread when the call returns, so that callback's `user` stays valid until the running call
 ends. Free-threaded.
 

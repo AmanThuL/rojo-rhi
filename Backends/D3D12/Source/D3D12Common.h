@@ -124,9 +124,13 @@ namespace rojoRHI::d3d12 {
     /// with the message "<what> failed with HRESULT 0x<8 hex digits>".
     Error hresultError(HRESULT result, std::string_view what);
 
-    /// Names `object` with `label`, converted from UTF-8 to UTF-16 once, so the debug layer, DRED and captures show it. The
-    /// label is never empty: the core defaults every label. Logs and aborts, in every build, when the runtime refuses the
-    /// name.
+    /// Converts `label` from UTF-8 to UTF-16 into `out`, which it resizes: once `out`'s capacity holds as many code units as
+    /// `label` has bytes, it allocates nothing. Logs and aborts, in every build, when a non-empty label converts to nothing.
+    void widen(std::string_view label, std::wstring& out);
+
+    /// Names `object` with `label`, converted from UTF-8 to UTF-16 once by `widen`, so the debug layer, DRED and captures
+    /// show it. The label is never empty: the core defaults every label. Logs and aborts, in every build, when the runtime
+    /// refuses the name.
     void setName(ID3D12Object* object, std::string_view label);
 
     /// What `waitForFence` saw of a fence.

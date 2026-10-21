@@ -86,7 +86,7 @@ namespace rojoRHI {
             const D3D12_RESOURCE_ALLOCATION_INFO info = impl.device()->GetResourceAllocationInfo3(0, 1, &desc, nullptr, nullptr, nullptr);
             if (info.SizeInBytes == UINT64_MAX)
             {
-                ROJORHI_LOG_ERROR("ID3D12Device12::GetResourceAllocationInfo3 refused a buffer of {} bytes", desc.Width);
+                ROJORHI_LOG_FATAL("ID3D12Device12::GetResourceAllocationInfo3 refused a buffer of {} bytes", desc.Width);
                 std::abort();
             }
             return PlacementRequirements{ info.SizeInBytes, info.Alignment };

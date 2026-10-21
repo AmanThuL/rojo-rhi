@@ -1,6 +1,6 @@
 //----------------------------------------------------------------------------------------------------------------------
 /// @file D3D12Queue.cpp
-/// @brief Implements submission on the D3D12 queues, which waits and signals fences; presentation and tile mapping abort.
+/// @brief Implements submission on the D3D12 queues, which executes lists between fence waits and signals; presentation and tile mapping abort.
 //----------------------------------------------------------------------------------------------------------------------
 
 #include "D3D12Device.h"
@@ -50,7 +50,18 @@ namespace rojoRHI {
                 auto* fence = static_cast<ID3D12Fence*>(core.pool<Fence>().native(entry.fence));
                 d3d12::requireSucceeded(device, queue.native->Wait(fence, entry.value), "ID3D12CommandQueue::Wait in Queue::submit");
             }
-            // A list encodes no native command, so nothing is executed between the waits and the signals.
+            // Every list of the submission goes in one call, between the waits and the signals; the queue's vector keeps its
+            // storage, and calls on one queue are serialized by the caller.
+            if (!lists.empty())
+            {
+                queue.executing.clear();
+                for (const CommandList list : lists)
+                {
+                    queue.executing.push_back(CommandListImpl::of(list).state.list.get());
+                }
+                queue.native->ExecuteCommandLists(static_cast<UINT>(queue.executing.size()), queue.executing.data());
+                core::DeviceCounts::add(core.counts().nativeSubmitCalls);
+            }
             for (const FenceValue& entry : signal)
             {
                 auto* fence = static_cast<ID3D12Fence*>(core.pool<Fence>().native(entry.fence));

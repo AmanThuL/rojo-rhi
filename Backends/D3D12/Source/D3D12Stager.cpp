@@ -326,7 +326,7 @@ namespace rojoRHI::d3d12 {
             // then is undefined. Only a removed device, whose work no longer runs, returns the error.
             if (!deviceRemoved(signalled))
             {
-                ROJORHI_LOG_ERROR(
+                ROJORHI_LOG_FATAL(
                     "ID3D12CommandQueue::Signal for {} failed with HRESULT 0x{:08X} after its copy was submitted", kQueueLabel, hresultBits(signalled)
                 );
                 std::abort();

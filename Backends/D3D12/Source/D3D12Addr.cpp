@@ -60,6 +60,13 @@ namespace rojoRHI {
             // The table wraps an index past its directory, so an index past the heap is refused here instead.
             return index < m_table->capacity() ? static_cast<const BufferPayload*>(m_table->load(index)) : nullptr;
         }
+
+        //==============================================================================================================
+        D3D12_GPU_VIRTUAL_ADDRESS rootAddress(const HeapDirectory& directory, Addr addr)
+        {
+            const BufferPayload* payload = directory.find(addr.lo);
+            return payload == nullptr ? 0 : payload->base + addr.hi;
+        }
     } // namespace d3d12
 
     namespace core {

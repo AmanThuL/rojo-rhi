@@ -19,6 +19,7 @@
 #include "D3D12PipelineState.h"
 #include "D3D12ShaderLibrary.h"
 #include "D3D12Textures.h"
+#include "D3D12Timestamps.h"
 #include "D3D12Views.h"
 
 #include <cstddef>
@@ -61,6 +62,14 @@ namespace rojoRHI {
                 return reported;
             }
             if (Result<void> created = impl.roots.create(impl); !created)
+            {
+                return created;
+            }
+            if (Result<void> created = impl.timestamps.create(impl); !created)
+            {
+                return created;
+            }
+            if (Result<void> created = impl.kernels.create(*impl.device(), *impl.roots.kernel()); !created)
             {
                 return created;
             }
@@ -184,6 +193,7 @@ namespace rojoRHI {
         hooks.shaderLibrary = d3d12::retireShaderLibrary;
         hooks.frameSlot = d3d12::reuseSlot;
         hooks.waitFrame = d3d12::waitFrame;
+        hooks.scopeTimes = d3d12::scopeTimes;
         impl->core.setRetireHooks(hooks);
         if (Result<void> created = createState(*impl); !created)
         {

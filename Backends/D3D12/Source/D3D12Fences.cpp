@@ -48,7 +48,7 @@ namespace rojoRHI {
             if (const HRESULT reason = impl.device()->GetDeviceRemovedReason(); reason != S_OK)
             {
                 d3d12::reportRemoval(impl, entry);
-                ROJORHI_LOG_ERROR("{} found the D3D12 device removed with reason 0x{:08X}", entry, d3d12::hresultBits(reason));
+                ROJORHI_LOG_FATAL("{} found the D3D12 device removed with reason 0x{:08X}", entry, d3d12::hresultBits(reason));
                 std::abort();
             }
         }
@@ -214,7 +214,7 @@ namespace rojoRHI {
                         reportRemoval(impl, "destroyDevice");
                         return;
                     }
-                    ROJORHI_LOG_ERROR(
+                    ROJORHI_LOG_FATAL(
                         "ID3D12CommandQueue::Signal on \"{}\" at destroyDevice failed with HRESULT 0x{:08X}", kQueueLabels[i], hresultBits(signalled)
                     );
                     std::abort();
@@ -252,7 +252,7 @@ namespace rojoRHI {
         {
             // The frame wait before it has proven the slot's work complete, the compute and copy work the frame joined included.
             DeviceImpl& impl = *static_cast<DeviceImpl*>(context);
-            impl.lists.reset(slot);
+            impl.lists.reset(impl, slot);
             impl.descriptors.resetTransient(slot);
             impl.frames.releasePassed(impl);
         }

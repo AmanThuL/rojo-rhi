@@ -229,7 +229,7 @@ namespace rojoRHI::d3d12 {
         const uint32_t claimed = m_ringClaims[frameSlot].fetch_add(1, std::memory_order_relaxed);
         if (claimed >= kTransientPerSlot)
         {
-            ROJORHI_LOG_ERROR("frame slot {} claimed transient descriptor {}: at most 1,024 storage-texture clears per frame slot", frameSlot, claimed + 1);
+            ROJORHI_LOG_FATAL("frame slot {} claimed transient descriptor {}: at most 1,024 storage-texture clears per frame slot", frameSlot, claimed + 1);
             std::abort();
         }
         const uint32_t offset = frameSlot * kTransientPerSlot + claimed;
