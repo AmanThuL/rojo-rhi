@@ -34,9 +34,7 @@ namespace rojoRHI::core {
         }
         if (minSize > maxPageBytes)
         {
-            base::emitMessage(
-                MessageSeverity::Error, std::format("the frame arena cannot hold {} bytes of frame data: a page is at most {} bytes", minSize, maxPageBytes)
-            );
+            base::emitFatal(std::format("the frame arena cannot hold {} bytes of frame data: a page is at most {} bytes", minSize, maxPageBytes));
             std::abort();
         }
         uint64_t pageSize = std::max(kFrameArenaPageBytes, minSize);
@@ -47,7 +45,7 @@ namespace rojoRHI::core {
         Result<ArenaPage> created = source(context, pageSize);
         if (!created)
         {
-            base::emitMessage(MessageSeverity::Error, std::format("the frame arena could not grow by {} bytes: {}", pageSize, created.error().message));
+            base::emitFatal(std::format("the frame arena could not grow by {} bytes: {}", pageSize, created.error().message));
             std::abort();
         }
         m_growths.fetch_add(1, std::memory_order_relaxed);

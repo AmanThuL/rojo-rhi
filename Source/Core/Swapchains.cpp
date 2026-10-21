@@ -123,7 +123,7 @@ namespace rojoRHI::core {
         if (image.texture.bits == 0)
         {
             // Acquire cannot fail by the reference, so an image that finds the texture table full ends the process in every build.
-            ROJORHI_LOG_ERROR(
+            ROJORHI_LOG_FATAL(
                 "the swapchain \"{}\" cannot acquire an image: the texture table of {} objects is full", swapchain.label, core.pool<Texture>().capacity() - 1
             );
             std::abort();

@@ -56,7 +56,9 @@ the condition nor the message arguments:
 
 - Logging is three macros — `ROJORHI_LOG_INFO`, `ROJORHI_LOG_WARN` and `ROJORHI_LOG_ERROR` — that
   format with `std::format` and hand severity plus the formatted message to one public message
-  callback. When no callback is installed, messages go to stderr. RojoRHI takes no logging
+  callback. When no callback is installed, messages go to stderr. The two check macros, and
+  `ROJORHI_LOG_FATAL` where the shared core logs before an abort, also write to stderr when a
+  callback took the message, so those aborts leave their reason there. RojoRHI takes no logging
   dependency and knows nothing about a consumer's log sinks.
 - v1's `ROJORHI_ASSERT(cond, msg)` logs the failed condition, file, line and message at error
   severity, then aborts. It is unconditional: a release build asserts too, because a violated
