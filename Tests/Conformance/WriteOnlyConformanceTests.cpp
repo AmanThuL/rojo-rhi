@@ -6,6 +6,7 @@
 
 #include "Support/Conformance.h"
 #include "Support/GpuKit.h"
+#include "Support/PassKit.h"
 
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/generators/catch_generators.hpp>
@@ -69,7 +70,9 @@ namespace {
     {
         const Texture texture = *kit.device.createTexture(desc);
         CommandList clear = kit.list(QueueType::Graphics, "test.sentinel");
+        test::transition(clear, texture, Layout::Undefined, Layout::CopyDst);
         clear.clearTexture(texture, {}, ClearValue{ .color = sentinel });
+        test::transition(clear, texture, Layout::CopyDst, Layout::ShaderWrite);
         kit.run(std::array{ clear });
 
         const ViewIndex view = *kit.device.createView(
@@ -84,6 +87,7 @@ namespace {
         list.setPipeline(pipeline);
         list.pushRoot(WriteRoot{ .view = static_cast<uint32_t>(view), .pad0 = 0, .pad1 = 0, .pad2 = 0, .value = value });
         list.dispatch(1, 1, 1);
+        test::transition(list, texture, Layout::ShaderWrite, Layout::CopySrc);
         kit.run(std::array{ list });
         return kit.readTexture(texture, TextureRegion{ .layers = desc.layers, .extent = desc.extent }, desc.format);
     }

@@ -6,6 +6,7 @@
 
 #include "Support/Conformance.h"
 #include "Support/GpuKit.h"
+#include "Support/PassKit.h"
 
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/generators/catch_generators.hpp>
@@ -262,9 +263,11 @@ namespace {
         }
 
         //==============================================================================================================
-        /// Begins a pass on `list` that clears `texture` to zero, then binds `bound`, the full viewport and the full scissor.
+        /// Moves `texture`, a new oracle target, to `ColorAttachment` on `list` and begins a pass that clears it to zero, then
+        /// binds `bound`, the full viewport and the full scissor.
         static void begin(CommandList list, Texture texture, Pipeline bound)
         {
+            test::transition(list, texture, Layout::Undefined, Layout::ColorAttachment);
             const std::array colors{ ColorAttachment{ .texture = texture, .load = LoadOp::Clear } };
             list.beginRenderPass(RenderPassDesc{ .colors = colors, .area = kFullRect, .label = "test.pass" });
             list.setPipeline(bound);
@@ -352,6 +355,7 @@ TEST_CASE("a lone mesh record draws with its drawId", "[conformance]")
     Oracle::begin(list, target, pipeline);
     list.drawMeshTasksIndirect(kit.device.address(args), 1);
     list.endRenderPass();
+    test::transition(list, target, Layout::ColorAttachment, Layout::CopySrc);
     kit.run(std::array{ list });
     const std::string difference = differences(oracle.read(target, format), drawnImage(records, 1, Image(format)));
     INFO(difference);
@@ -379,6 +383,7 @@ TEST_CASE("drawMeshTasksIndirect draws min(count, maxCount) records of groups va
     Oracle::begin(list, target, pipeline);
     list.drawMeshTasksIndirect(kit.device.address(args), maxCount, kind == CountKind::Null ? Addr{} : kit.device.address(counted));
     list.endRenderPass();
+    test::transition(list, target, Layout::ColorAttachment, Layout::CopySrc);
     kit.run(std::array{ list });
     const std::string difference = differences(oracle.read(target, format), drawnImage(records, std::min(count, maxCount), Image(format)));
     INFO(difference);
@@ -423,6 +428,7 @@ TEST_CASE("mesh records written by the GPU earlier in the list are read after th
     Oracle::begin(list, target, pipeline);
     list.drawMeshTasksIndirect(kit.device.address(args), maxCount, withCount ? kit.device.address(counted) : Addr{});
     list.endRenderPass();
+    test::transition(list, target, Layout::ColorAttachment, Layout::CopySrc);
     kit.run(std::array{ list });
     const uint32_t drawn = withCount ? std::min(count, maxCount) : maxCount;
     const std::string difference = differences(oracle.read(target, format), drawnImage(records, drawn, Image(format)));
@@ -460,6 +466,7 @@ TEST_CASE("a direct mesh draw after a counted one in the same pass keeps drawId 
     list.drawMeshTasksIndirect(kit.device.address(afterArgs), maxCount, count);
     list.drawMeshTasks(1, 2, 1);
     list.endRenderPass();
+    test::transition(list, target, Layout::ColorAttachment, Layout::CopySrc);
     kit.run(std::array{ list });
     Image expected = drawnImage(before, maxCount, Image(format));
     expected = drawnImage(after, maxCount, expected);
@@ -532,6 +539,7 @@ TEST_CASE("each stage of an indirect mesh draw reads the root recorded before it
     // A root bound before the pass, which the draw must not see: the one recorded inside the pass replaces it.
     list.pushRoot(MeshRoot{ .view = root.view, .sampler = root.sampler, .taskBias = 7, .meshShift = 3, .fragmentBias = 9, .pad = {} });
     const std::array colors{ ColorAttachment{ .texture = target, .load = LoadOp::Clear } };
+    test::transition(list, target, Layout::Undefined, Layout::ColorAttachment);
     list.beginRenderPass(RenderPassDesc{ .colors = colors, .area = kFullRect, .label = "test.pass" });
     list.setPipeline(pipeline);
     list.setViewport(kFull);
@@ -542,6 +550,7 @@ TEST_CASE("each stage of an indirect mesh draw reads the root recorded before it
         list.drawMeshTasksIndirect(kit.device.address(args[i]), maxCount, withCount ? kit.device.address(counted) : Addr{});
     }
     list.endRenderPass();
+    test::transition(list, target, Layout::ColorAttachment, Layout::CopySrc);
     kit.run(std::array{ list });
     Image expected(format);
     for (size_t i = 0; i < roots.size(); ++i)
@@ -589,6 +598,7 @@ TEST_CASE("a mesh pipeline without a task entry draws its counted records", "[co
     Oracle::begin(list, target, pipeline);
     list.drawMeshTasksIndirect(kit.device.address(args), maxCount, withCount ? kit.device.address(counted) : Addr{});
     list.endRenderPass();
+    test::transition(list, target, Layout::ColorAttachment, Layout::CopySrc);
     kit.run(std::array{ list });
     const std::string difference = differences(oracle.read(target, format), drawnImage(records, withCount ? count : maxCount, Image(format)));
     INFO(difference);
@@ -621,6 +631,7 @@ TEST_CASE("a mesh record with no groups in x, y or z draws nothing where the lis
         Oracle::begin(list, target, pipeline);
         list.drawMeshTasksIndirect(kit.device.address(args), kRecords);
         list.endRenderPass();
+        test::transition(list, target, Layout::ColorAttachment, Layout::CopySrc);
         kit.run(std::array{ list });
     };
     record(oracle.target(format), drawn);

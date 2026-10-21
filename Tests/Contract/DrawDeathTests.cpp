@@ -367,6 +367,13 @@ TEST_CASE("VU-rojo-indirect-0003 drawIndirect is given a maxCount of zero", "[co
 //======================================================================================================================
 TEST_CASE("VU-rojo-indirect-0003 drawIndirect is given a maxCount above the limit", "[contract][death]")
 {
+    Device device = *createDevice();
+    const uint32_t limit = device.capabilities().limits.maxDrawIndirectCount;
+    destroyDevice(device);
+    if (limit == UINT32_MAX)
+    {
+        SKIP("maxDrawIndirectCount is UINT32_MAX, so no maxCount lies above it");
+    }
     ROJORHI_EXPECT_DEATH("VU-rojo-indirect-0003", [] {
         PassKit kit;
         kit.readyToDraw();
