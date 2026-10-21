@@ -281,12 +281,6 @@ target("RojoRHITests")
     local contract_left_out = {}
     local conformance_left_out = {}
     if is_config("rojorhi_backend", "d3d12") then
-        -- The conformance files that assert the base-including vertexIndex, which D3D12 does not produce (#100).
-        conformance_left_out = {
-            "AbiGraphicsConformanceTests.cpp", -- draws with firstVertex and baseVertex assert the base-including vertexIndex, which D3D12 does not produce
-            "DrawConformanceTests.cpp", -- draws with firstVertex and baseVertex assert the base-including vertexIndex, which D3D12 does not produce
-            "IndirectConformanceTests.cpp", -- baseVertex records assert the base-including vertexIndex, which D3D12 does not produce
-        }
         -- WARP+GBV: WARP never completes a FidelityFX upscale dispatch under GPU-based validation, while the debug layer alone
         -- runs it, so the two files whose cases submit upscales are left out of that configuration and every other one runs
         -- them; evidence: the floor probe's fsr section, CI run 39463099719.

@@ -288,9 +288,8 @@ starting values, pipeline and topology binds, depth bias at every `setPipeline`,
 filter, zero-count draws, `b1` after an indirect draw for vertex and mesh pipelines, `maxCount` 0,
 and counts of 0 or above `maxCount` read back from the target.
 
-Every contract and conformance file runs on WARP, except the draw, indirect and graphics ABI
-conformance files, whose cases expect the base vertex in `vertexIndex` (#100), and the two upscale
-files under GPU-based validation ([edges](d3d12-backend-edges.md#the-t1-run-on-warp)). Two
-multisample cases of the ABI compute file expect the value
-`multisampleReadsSize()` of `Tests/Support/Backend.h` names: Metal 4's exact value, the cleared
-colour on Null and D3D12.
+Every contract and conformance file runs on WARP, the draw, indirect and graphics ABI conformance
+files with `vertexIndex` excluding the base vertex, except the two upscale files under GPU-based
+validation ([edges](d3d12-backend-edges.md#the-t1-run-on-warp)). Two multisample cases of the ABI
+compute file expect the value `multisampleReadsSize()` of `Tests/Support/Backend.h` names: Metal 4's
+exact value, the cleared colour on Null and D3D12.
