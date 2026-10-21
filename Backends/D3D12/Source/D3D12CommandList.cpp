@@ -110,12 +110,6 @@ namespace rojoRHI {
     }
 
     //==================================================================================================================
-    void CommandList::setPipeline(Pipeline)
-    {
-        d3d12::notImplemented("CommandList::setPipeline");
-    }
-
-    //==================================================================================================================
     void CommandList::setViewport(const Viewport&)
     {
         d3d12::notImplemented("CommandList::setViewport");
@@ -182,12 +176,6 @@ namespace rojoRHI {
     }
 
     //==================================================================================================================
-    void CommandList::dispatch(uint32_t, uint32_t, uint32_t)
-    {
-        d3d12::notImplemented("CommandList::dispatch");
-    }
-
-    //==================================================================================================================
     void CommandList::drawIndirect(Addr, uint32_t, Addr)
     {
         d3d12::notImplemented("CommandList::drawIndirect");
@@ -203,12 +191,6 @@ namespace rojoRHI {
     void CommandList::drawMeshTasksIndirect(Addr, uint32_t, Addr)
     {
         d3d12::notImplemented("CommandList::drawMeshTasksIndirect");
-    }
-
-    //==================================================================================================================
-    void CommandList::dispatchIndirect(Addr)
-    {
-        d3d12::notImplemented("CommandList::dispatchIndirect");
     }
 
     //==================================================================================================================
