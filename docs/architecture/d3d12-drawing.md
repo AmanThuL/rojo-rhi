@@ -2,14 +2,15 @@
 
 **Status**: Accepted
 
-This page describes how the D3D12 backend loads shader libraries, creates pipelines and caches
-them. It is implemented, verified on WARP only, not on hardware, and the backend is not a
-capability ([ADR 0009](../decisions/0009-conformance-and-valid-usage.md),
-[documentation](../conventions/documentation.md)). [The D3D12 backend](d3d12-backend.md)
-describes the build and the device around it. Chapters 05 and 06 of the API reference stay the
-authority on semantics; every check lives in `Source/Core`, so no `ROJORHI_VU` appears under
-`Backends/D3D12/`. A recording entry reads native objects through `HandlePool::native` and the
-list's own state, never a pool record (ADR 0020).
+This page describes how the D3D12 backend loads shader libraries, creates pipelines and caches them,
+and how it binds them, records passes, draws and dispatches. It is implemented, verified on WARP
+only, not on hardware, and the backend is not a capability ([ADR
+0009](../decisions/0009-conformance-and-valid-usage.md),
+[documentation](../conventions/documentation.md)). [The D3D12 backend](d3d12-backend.md) describes
+the device around it and [recording](d3d12-recording.md) lists, copies, barriers and scopes. The API
+reference stays the authority on semantics; every check lives in `Source/Core`, so no `ROJORHI_VU`
+appears under `Backends/D3D12/`. A recording entry reads native objects through `HandlePool::native`
+and the list's own state, never a pool record (ADR 0020).
 
 ## Shader libraries
 
@@ -27,16 +28,14 @@ dxil <total>
 
 The stage word is the spelling of `core::stageName`; the size is the `LocalSize` of the SPIR-V
 module and `0 0 0` for vertex and fragment entries; `<total>` is the sum of the `<bytes>`. The
-closing `dxil` line ends the text, so a reader never reads DXIL as text.
-
-The ABI stamp lives in this container and not in the DXIL, which stays exactly what the compiler
-signed and the runtime validates.
+closing `dxil` line ends the text, so a reader never reads DXIL as text. The ABI stamp lives in this
+container, not in the DXIL, which stays as the compiler signed it.
 
 The writer checks every `--dxil NAME=PATH` file and refuses one that does not start `DXBC`,
 whose size field (a little-endian `uint32` at byte 24) differs from the file's length, or whose
-16-byte digest (bytes 4 to 19) is all zero, which is unsigned DXIL the runtime refuses. It names
-the file. The `.dxil` of an entry is the one the shader rule already writes: `<name>.dxil` for
-a shader with one entry, `<name>.<entry>.dxil` for several.
+16-byte digest (bytes 4 to 19) is all zero, which is unsigned DXIL the runtime refuses, naming the
+file. An entry's `.dxil` is the shader rule's own: `<name>.dxil`, or `<name>.<entry>.dxil` for a
+shader with several entries.
 
 `d3d12::parseShaderLibrary` is a pure function with no Windows header, and reads in this order:
 
@@ -85,17 +84,16 @@ which MSVC refuses under `/WX` (C4324). The subobjects are:
 
 Line rasterization is aliased, there is no strip cut and no depth bounds test.
 
-`d3d12::PipelineState` is the payload. It holds the pipeline state object (one reference), the
-kind (graphics, mesh or compute), the list form of a vertex pipeline's topology class (undefined
-for the other kinds) and whether depth bias is enabled. A bind reads these through
-`pool<Pipeline>().native`, one load without a lock; recording a pipeline into a list arrives with
-command recording, and `setPipeline` aborts until then. The time of the creation, a cache hit
-included, adds to `pipelineCompileNanoseconds`, and the pipeline is named from its label.
+`d3d12::PipelineState` is the payload. It holds the pipeline state object (one reference), the kind
+(graphics, mesh or compute), the list form of a vertex pipeline's topology class (undefined for the
+other kinds) and whether depth bias is enabled. A bind reads these through
+`pool<Pipeline>().native`, one load without a lock; `setPipeline` binds them (see Lazy binding). The
+time of the creation, a cache hit included, adds to `pipelineCompileNanoseconds`, and the pipeline
+is named from its label.
 
 A refused native creation is `d3d12::failure`: `OutOfMemory` or `DriverFailure` from the
 HRESULT, naming the call and the pipeline's label, with the removal report when the device was
-removed. An entry name the library lacks, which only a Release build lets past the core, is
-`DriverFailure` naming the entry.
+removed. An entry name the library lacks, which only Release lets past the core, is `DriverFailure`.
 
 ## The pipeline cache
 
@@ -137,21 +135,166 @@ created minus the hits. Two threads that miss one key both compile.
 
 The cache's mutex guards only `LoadPipeline`, `StorePipeline`, and `GetSerializedSize` with
 `Serialize`; `CreatePipelineState` runs outside it, so creations compile side by side. It is a
-leaf taken only while a pipeline is created or the blob is read, never while a list records. The
-lock order is in [the D3D12 backend](d3d12-backend.md#threading-and-lock-order).
+leaf, never taken while a list records ([lock order](d3d12-backend.md#threading-and-lock-order)).
 
 The library's outcomes arrive twice, as an HRESULT the cache reads and as a debug-layer message.
-The router's deny list drops six of them: a name not found, a duplicate name, an invalid
-library blob, a driver version mismatch, an adapter version mismatch and an unsupported library.
-The cache reports a refused blob as its one `Warning`. `LOADPIPELINE_INVALIDDESC` (972) passes.
+The router's deny list drops six of them (not found, duplicate name, invalid blob, driver or
+adapter mismatch, unsupported); the cache reports a refused blob as its one `Warning`, and
+`LOADPIPELINE_INVALIDDESC` (972) passes.
+
+## Lazy binding
+
+A native list has one pipeline slot for graphics and compute alike. `setPipeline` keeps the caller's
+pipeline payload in the list's `Binding` and calls `SetPipelineState` only when its own side does
+not already hold that state, for a compute, a graphics or a mesh pipeline. `Binding` records the
+state the slot holds from each side, and any `SetPipelineState` clears the other side's record.
+`setRoot` only stores the root block's address and marks both sides dirty ([root
+binding](d3d12-recording.md#root-binding)); the next dispatch or draw flushes what is stale.
+
+The compute flush, in this order, each call only where the list holds something else:
+
+- The global root signature, when a backend kernel left its own there. The switch drops the root
+  arguments, so the root becomes dirty again.
+- The pipeline state.
+- `SetComputeRootShaderResourceView(0, root)` when the side is dirty and a root was set; a list
+  that never set one binds none.
+
+The graphics flush is the pipeline state (with the recorded depth bias when the pipeline enables
+it), then `SetGraphicsRootShaderResourceView(0, root)` on the same terms. It never switches the
+graphics root signature, which no backend kernel changes. A direct draw adds `b1`,
+`SetGraphicsRoot32BitConstant(1, 0, 0)`, the draw record index that `drawId` reads. `b1` is dirty
+at acquisition and after every `ExecuteIndirect` of a draw signature, because each command writes
+its record's index there, so the next direct draw writes 0 again and a second writes nothing. A pass
+does not reset it, and an indirect draw writes no `b1` itself.
+
+A [fill](d3d12-recording.md#fills) leaves the kernel's root signature and pipeline on the compute
+side with the root dirty, so the next caller dispatch costs a root signature, a pipeline state,
+the root and the dispatch (four calls) and the one after it one. A fill never touches the graphics
+side. Each entry costs its native minimum plus at most one call in the steady state, each counted
+once in `nativeRecordCalls`. The `[d3d12]` cases pin it: a compute `setPipeline`, a `dispatch`
+after `setRoot`, the same again and a third cost 1, 2, 0 and 1; the first draw after `setRoot`
+costs 3 (root, `b1`, draw) and the next 1; an indirect draw after `setRoot` costs 2, the direct
+draw after it 2 and the next 1. The registered C8 sequence (barrier, pass, `setPipeline`,
+viewport, scissor, draw, end) costs 14 calls in a list's first pass and 8 in each later one.
+
+## Render passes
+
+`beginRenderPass` runs the core's check, then in order:
+
+1. The pass's scope, through the native half that `beginScope` uses ([scopes](
+   d3d12-recording.md#scopes-and-timestamps); `D3D12Scopes.h`); `endRenderPass` ends it the same
+   way, so every pass is timed like a scope.
+2. One enhanced `Barrier` call that moves mip 0 and layer 0 of every resolve target from
+   `RENDER_TARGET` to `RESOLVE_DEST` (sync `RENDER_TARGET` to `RESOLVE`). The backend owns it
+   because VU-rojo-cmd-0007 puts a resolve target in `ColorAttachment` at the call, and D3D12
+   resolves from a different layout ([barriers](d3d12-recording.md#barriers)).
+3. `BeginRenderPass` with one render-target description per colour attachment, from the texture's
+   cached RTV, and a depth-stencil description from its cached DSV. Load `Load`, `Clear` and
+   `DontCare` become `PRESERVE`, `CLEAR` and `DISCARD`; store `Store` and `DontCare` become
+   `PRESERVE` and `DISCARD`. A named resolve target makes the ending access `RESOLVE` with mode
+   `AVERAGE`, one subresource parameter that takes the attachment's mip and layer into mip 0 and
+   layer 0 of the target, and the source preserved exactly when the store op is `Store`. A format
+   with no stencil plane uses `NO_ACCESS` for stencil. The flag is `ALLOW_UAV_WRITES`, since any
+   stage may store through an address.
+4. The starting dynamic state, filtered (next section). The pass also unbinds the caller's pipeline
+   in the list's record; the native slot keeps its state, so a repeated `setPipeline` sends nothing.
+
+`endRenderPass` calls `EndRenderPass`, then one `Barrier` that returns each resolve target to
+`RENDER_TARGET`, then ends the scope. The descriptions, the resolve parameters and the barriers
+live in a fixed `PassStorage` on the list, which the runtime reads until `EndRenderPass`, so a
+pass allocates nothing. Each `Barrier` adds one to `nativeBarriers`, each pass one to
+`encodersOpened`. A pass with no resolve costs `BeginRenderPass`, `EndRenderPass`, its scope's four
+calls and at most the two starting values.
+
+## Dynamic state
+
+The list holds the stencil reference, the blend factor, the recorded depth-bias triple, the
+viewport, the scissor, the topology and the index buffer view. All are unknown at
+acquisition, since the state a native list keeps across `Reset` is not relied on. Passes leave
+them as they are, and a setter sends a native call only when the value differs from the held one.
+
+- A pass writes `OMSetStencilRef(0)` and `OMSetBlendFactor(0, 0, 0, 0)` only where the held value
+  differs, so a list's first pass writes both and a second pass writes neither. It resets the
+  depth-bias triple to zero without a call. It sets no viewport or scissor: the reference leaves
+  them unset at a pass's start and requires them before a draw.
+- A pipeline created with depth bias uses `DYNAMIC_DEPTH_BIAS`. `setPipeline` of one issues
+  `RSSetDepthBias` with the recorded triple every time, unfiltered, because whether the runtime
+  keeps the value across `SetPipelineState` is not established. `setDepthBias` records the triple,
+  sends nothing when it equals the record, and issues it only while such a pipeline is bound.
+  D3D12 takes the clamp before the slope-scaled term.
+- `setPrimitiveTopology` and the topology that `setPipeline` restores for a vertex pipeline pass
+  through the same filter. A mesh pipeline sets none.
+
+## Draws and dispatches
+
+A zero-count draw or mesh draw and a dispatch with a zero dimension record nothing. A direct draw
+is the graphics flush, `b1` when dirty, then the call. `draw` is `DrawInstanced`, and
+`firstInstance` is `StartInstanceLocation`, which `SV_InstanceID` excludes, so shaders cannot see
+it, as chapter 05 requires. `drawMeshTasks` is `DispatchMesh` with `b1` too, because the task and
+mesh entries read `drawId` as the vertex stage does (ADR 0018). `dispatch` flushes the compute side
+and calls `Dispatch`; `dispatchIndirect` finds the arguments buffer in the heap directory with one
+acquire load and calls `ExecuteIndirect` on the dispatch signature with a count of one.
+
+An indexed draw sets one `D3D12_INDEX_BUFFER_VIEW` of the whole buffer from offset 0, its size the
+buffer's width capped at `UINT32_MAX` and rounded down to the index size, unless the held
+location, size and format are equal. `firstIndex` is `StartIndexLocation` and `baseVertex` is
+`BaseVertexLocation`; direct and indirect indexed draws call the same function.
+
+`vertexIndex` on D3D12 lacks the base vertex: `SV_VertexID` excludes `firstVertex` and `baseVertex`,
+which the reference includes, and [ADR 0011](../decisions/0011-shader-abi.md) names the fallback
+that excludes them on every target. The cases that read `vertexIndex` with a nonzero base stay out
+of the D3D12 run (see Tests); the `[d3d12]` cases draw with base 0.
+
+## Indirect drawing
+
+The four command signatures (draw, indexed draw, mesh and dispatch) are made once per device, the
+draw ones with the global root signature, and each draw signature writes the record's `drawId` to
+`b1` (ADR 0018). An indirect draw flushes the graphics side, sets the index buffer view for the
+indexed form, calls `ExecuteIndirect(signature, maxCount, arguments, arguments.hi, count, count.hi)`
+and marks `b1` dirty. The arguments and count resources come from the heap directory, one acquire
+load each, and the count resource is null when the entry names no count buffer.
+
+With no count buffer exactly `maxCount` records run; with one, the `uint32` it holds caps them,
+which is `ExecuteIndirect`'s own rule. A `maxCount` of 0 records nothing in Release, where nothing
+checks it. Nothing is split or hoisted: `ExecuteIndirect` takes a count buffer natively and runs
+inside the render pass, so a counted draw is one call. Metal 4 has no such call and splits the pass
+around a compute encoder that fills a command buffer
+([drawing on Metal 4](metal4-drawing.md#counted-draws)).
+
+## Files
+
+- `D3D12GraphicsState.cpp`: `setPipeline`, the dynamic-state setters and the graphics flush.
+- `D3D12Dispatches.cpp`: the compute flush, `dispatch` and `dispatchIndirect`.
+- `D3D12RenderPasses.cpp`: the passes; `D3D12Scopes.h` is the native half of a scope they share.
+- `D3D12Draws.cpp`, `D3D12Indirect.cpp`: the direct and the indirect draws.
+- `D3D12ListState.h`: `Binding`, `DynamicState`, `PassStorage` and the flush declarations.
 
 ## Tests
 
-The D3D12 cases of the `abi` entry check, for each ABI shader library, the header, the entry
-byte sums, the `DXBC` prefix of every entry and its equality with the rule's `.dxil`. Nothing runs
-on the GPU. `[d3d12]` cases cover the parser on hand-built blobs (a truncated header, a count past
-the end, an entry that does not start `DXBC`, a foreign magic, a mismatched stamp), the loader and
-its retirement, the stream contents and state conversions, a pipeline for each entry of the ABI
-libraries, the key (hash vectors, one key for equal descriptions, a different one for any field),
-the blob header rules, a second device that hits every pipeline of the first, and concurrent
-creation. They run on WARP under the debug layer and GPU-based validation.
+The D3D12 cases of the `abi` entry check each ABI shader library's header, entry byte sums,
+`DXBC` prefixes and equality with the rule's `.dxil`, with nothing on the GPU. `[d3d12]` cases
+cover the parser on hand-built blobs, the loader and its retirement, the stream and state
+conversions, a pipeline for each entry of the ABI libraries, the key (hash vectors, one key for
+equal descriptions, a different one for any field), the blob header rules, a second device that
+hits every pipeline of the first, and concurrent creation. They run on WARP under the debug layer
+and GPU-based validation.
+
+The recording cases (`D3D12DispatchTests.cpp`, `D3D12RenderPassTests.cpp`,
+`D3D12GraphicsStateTests.cpp`, `D3D12IndirectTests.cpp`) count the native calls of each entry and
+assert that the debug layer and GPU-based validation raise no message. They cover the compute
+flush and a fill between dispatches, passes with and without a resolve, a `DontCare` resolve store,
+a resolve target resolved twice and read, stencil `NO_ACCESS`, `encodersOpened`, the filtered
+starting values, pipeline and topology binds, depth bias at every `setPipeline`, the index buffer
+filter, zero-count draws, `b1` after an indirect draw for vertex and mesh pipelines, `maxCount` 0,
+and counts of 0 or above `maxCount` read back from the target.
+
+A conformance file runs on WARP unless `d3d12_conformance_pending` in `xmake/targets.lua` lists it,
+and it leaves the list whole. Still listed: the draw, indirect and graphics ABI files, whose cases
+expect the base vertex in `vertexIndex`; the scope file, for its upscale case; and the presentation,
+sparse and upscaling files, which wait for their entries. The contract list `d3d12_pending` holds
+the diagnostics files (capture, upscalers), the handoff, lifetime and tracker files (swapchains),
+the sparse, swapchain and upscale files, `CopyTests` (two clears of textures never moved out of
+`Undefined`), and `AliasingTests` and `AliasingDeathTests` (placements below the 64 KiB a D3D12
+placement needs). Two multisample cases of the ABI compute file expect the value
+`multisampleReadsSize()` of `Tests/Support/Backend.h` names: Metal 4's exact value, the cleared
+colour on Null and D3D12.

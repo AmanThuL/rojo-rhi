@@ -286,12 +286,11 @@ counters and `DeviceImpl`, read bytes back through native copies on a queue of t
 
 `Tests/Conformance` files run on this backend unless `d3d12_conformance_pending` in
 `xmake/targets.lua` lists them; a file leaves the list only when every case in it passes on WARP
-under GPU-based validation. The copy, initial-data, barrier, fill, clear and handoff files run,
-and so do the contract files for frame joins and queue hazards (`FrameJoinTests`,
-`FrameJoinDeathTests`, `QueueHazardTests`, `QueueHazardDeathTests`). Still listed:
-`ScopeConformanceTests.cpp`, because six of its cases need render passes, draws or an upscaler
-(the `[d3d12]` duration cases above cover the rest), and the contract files `BarrierTests`,
-`BarrierDeathTests`, `CopyTests` and `CopyDeathTests`, which reach render-pass entries that abort.
+under GPU-based validation. The copy, initial-data, barrier, fill, clear and handoff files run, and
+so do the contract files for frame joins and queue hazards (`FrameJoinTests`, `FrameJoinDeathTests`,
+`QueueHazardTests`, `QueueHazardDeathTests`). Still listed: `ScopeConformanceTests.cpp` (one case
+upscales) and the contract file `CopyTests` (two clears of textures never moved out of `Undefined`);
+[drawing](d3d12-drawing.md#tests) lists the rest.
 
 All of this is WARP evidence under the debug layer and GPU-based validation. It is not hardware
 evidence and not T1 acceptance, which needs a hardware run ([ADR 0009](
