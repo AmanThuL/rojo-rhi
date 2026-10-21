@@ -14,6 +14,8 @@
 #include <array>
 #include <cstddef>
 #include <cstdint>
+#include <cstring>
+#include <format>
 #include <vector>
 
 using namespace rojoRHI;
@@ -79,6 +81,41 @@ namespace {
     uint32_t pitchOf(uint32_t width)
     {
         return (width * 4 + 255) / 256 * 256;
+    }
+    //==================================================================================================================
+    /// Maps a sparse buffer onto the first tile of `heap` and fills the tile with a pattern, so the memory holds another
+    /// resource's data when a texture is mapped over it.
+    void dirtyFirstTile(test::GpuKit& kit, Heap heap)
+    {
+        const Buffer sparse = makeSparseBuffer(kit, 1);
+        kit.device.queue(QueueType::Graphics).mapTiles(std::array{ TileMapping{ .buffer = sparse, .bufferSize = kTile, .heap = heap } });
+        const std::vector<std::byte> bytes = test::pattern(kTile, 43);
+        const Buffer upload = kit.buffer(kTile, Memory::Upload, BufferUsage::None, bytes);
+        CommandList list = kit.list(QueueType::Graphics, "test.dirty");
+        list.barrier(std::array{ GlobalBarrier{ .srcStage = Stage::Copy, .dstStage = Stage::Copy, .dstAccess = Access::CopyWrite } });
+        list.copyBuffer(upload, 0, sparse, 0, kTile);
+        kit.run(std::array{ list });
+    }
+
+    //==================================================================================================================
+    /// Returns a sparse 2D texture of `format`, `kEdge` square texels, one mip and one layer, with `usage` and `Sparse`.
+    Texture makeSparseTarget(test::GpuKit& kit, Format format, TextureUsage usage)
+    {
+        return *kit.device.createTexture(
+            TextureDesc{ .type = TextureType::Tex2D,
+                         .format = format,
+                         .extent = { kEdge, kEdge, 1 },
+                         .usage = usage | TextureUsage::Sparse,
+                         .label = "test.sparse.target" }
+        );
+    }
+
+    //==================================================================================================================
+    /// Returns the draw oracle library on the kit's device.
+    ShaderLibrary loadOracle(test::GpuKit& kit)
+    {
+        const std::vector<std::byte> blob = test::shaderLibraryFile("DrawOracle");
+        return *kit.device.loadShaderLibrary(blob, "DrawOracle");
     }
 } // namespace
 
@@ -351,4 +388,128 @@ TEST_CASE("work submitted after a mapping on its queue writes the mapped tiles",
         kit.device.destroy(texture);
     }
     CHECK(mismatches == 0);
+}
+
+//======================================================================================================================
+TEST_CASE("a render target tile newly mapped over another resource's memory renders after a discard", "[conformance]")
+{
+    test::requireGpu();
+    test::GpuKit kit;
+    requirePlacementSparse(kit);
+    if (!kit.device.formatCapabilities(Format::RGBA8Unorm).sparse)
+    {
+        SKIP("RGBA8Unorm is not sparse on this device");
+    }
+    const Heap heap = makeHeap(kit);
+    dirtyFirstTile(kit, heap);
+    const Texture texture = makeSparseTarget(kit, Format::RGBA8Unorm, TextureUsage::RenderTarget);
+    const TileShape shape = kit.device.tileShape(texture);
+    const TextureRegion tile{ .extent = { shape.width, shape.height, 1 } };
+    kit.device.queue(QueueType::Graphics).mapTiles(std::array{ TileMapping{ .texture = texture, .region = tile, .heap = heap } });
+    const ShaderLibrary library = loadOracle(kit);
+    const std::array targets{ ColorTarget{ .format = Format::RGBA8Unorm } };
+    const Pipeline solid = *kit.device.createPipeline(
+        GraphicsPipelineDesc{
+            .vertex = { library, "fullscreenVertexMain" }, .fragment = { library, "solidFragmentMain" }, .colors = targets, .label = "test.solid" }
+    );
+    const Rect2D area{ 0, 0, shape.width, shape.height };
+    CommandList list = kit.list(QueueType::Graphics, "test.render");
+    // The discard is the tile's first use, and it comes before the pass.
+    test::transition(list, texture, Layout::Undefined, Layout::ColorAttachment);
+    const std::array colors{ ColorAttachment{ .texture = texture, .load = LoadOp::Clear, .clear = { 1.0f, 0.0f, 0.0f, 1.0f } } };
+    list.beginRenderPass(RenderPassDesc{ .colors = colors, .area = area, .label = "test.pass" });
+    list.setPipeline(solid);
+    list.setViewport(Viewport{ .width = static_cast<float>(shape.width), .height = static_cast<float>(shape.height) });
+    list.setScissor(Rect2D{ 0, 0, shape.width / 2, shape.height });
+    list.draw(3);
+    list.endRenderPass();
+    test::transition(list, texture, Layout::ColorAttachment, Layout::CopySrc);
+    kit.run(std::array{ list });
+    const std::vector<std::byte> got = kit.readTexture(texture, tile, Format::RGBA8Unorm);
+    REQUIRE(got.size() == size_t{ shape.width } * shape.height * 4);
+    // The clear colour on the right half, the solid colour on the left; a unorm conversion may round either way by one.
+    constexpr std::array<int, 4> kClear{ 255, 0, 0, 255 };
+    constexpr std::array<int, 4> kDrawn{ 64, 128, 191, 255 };
+    uint32_t wrong = 0;
+    for (uint32_t y = 0; y < shape.height; ++y)
+    {
+        for (uint32_t x = 0; x < shape.width; ++x)
+        {
+            const std::array<int, 4>& want = x < shape.width / 2 ? kDrawn : kClear;
+            for (size_t channel = 0; channel < 4; ++channel)
+            {
+                const int have = std::to_integer<int>(got[(size_t{ y } * shape.width + x) * 4 + channel]);
+                if (have < want[channel] - 1 || have > want[channel] + 1)
+                {
+                    if (wrong == 0)
+                    {
+                        UNSCOPED_INFO(std::format("first difference at ({}, {}) channel {}: {}, expected {}", x, y, channel, have, want[channel]));
+                    }
+                    ++wrong;
+                }
+            }
+        }
+    }
+    CHECK(wrong == 0);
+}
+
+//======================================================================================================================
+TEST_CASE("a depth tile newly mapped renders after a discard", "[conformance]")
+{
+    test::requireGpu();
+    test::GpuKit kit;
+    requirePlacementSparse(kit);
+    if (!kit.device.formatCapabilities(Format::D32Float).sparse)
+    {
+        SKIP("D32Float is not sparse on this device");
+    }
+    const Heap heap = makeHeap(kit);
+    dirtyFirstTile(kit, heap);
+    const Texture texture = makeSparseTarget(kit, Format::D32Float, TextureUsage::DepthStencil);
+    const TileShape shape = kit.device.tileShape(texture);
+    const TextureRegion tile{ .extent = { shape.width, shape.height, 1 } };
+    kit.device.queue(QueueType::Graphics).mapTiles(std::array{ TileMapping{ .texture = texture, .region = tile, .heap = heap } });
+    const ShaderLibrary library = loadOracle(kit);
+    const Pipeline write = *kit.device.createPipeline(
+        GraphicsPipelineDesc{ .vertex = { library, "fullscreenVertexMain" },
+                              .depthStencil = { .depthTest = true, .depthWrite = true, .depthCompare = CompareOp::Always },
+                              .depthFormat = Format::D32Float,
+                              .label = "test.depth" }
+    );
+    const Rect2D area{ 0, 0, shape.width, shape.height };
+    CommandList list = kit.list(QueueType::Graphics, "test.render");
+    test::transition(list, texture, Layout::Undefined, Layout::DepthStencilWrite);
+    list.beginRenderPass(
+        RenderPassDesc{ .depth = DepthAttachment{ .texture = texture, .load = LoadOp::Clear, .clearDepth = 1.0f }, .area = area, .label = "test.pass" }
+    );
+    list.setPipeline(write);
+    list.setViewport(Viewport{ .width = static_cast<float>(shape.width), .height = static_cast<float>(shape.height) });
+    list.setScissor(Rect2D{ 0, 0, shape.width / 2, shape.height });
+    list.draw(3);
+    list.endRenderPass();
+    test::transition(list, texture, Layout::DepthStencilWrite, Layout::CopySrc);
+    kit.run(std::array{ list });
+    const std::vector<std::byte> got = kit.readTexture(texture, tile, Format::D32Float);
+    REQUIRE(got.size() == size_t{ shape.width } * shape.height * sizeof(float));
+    std::vector<float> depths(size_t{ shape.width } * shape.height);
+    std::memcpy(depths.data(), got.data(), got.size());
+    // The cleared depth on the right half, the fullscreen triangle's depth of 0.5 on the left.
+    uint32_t wrong = 0;
+    for (uint32_t y = 0; y < shape.height; ++y)
+    {
+        for (uint32_t x = 0; x < shape.width; ++x)
+        {
+            const float want = x < shape.width / 2 ? 0.5f : 1.0f;
+            const float have = depths[size_t{ y } * shape.width + x];
+            if (have != want)
+            {
+                if (wrong == 0)
+                {
+                    UNSCOPED_INFO(std::format("first difference at ({}, {}): {}, expected {}", x, y, have, want));
+                }
+                ++wrong;
+            }
+        }
+    }
+    CHECK(wrong == 0);
 }
