@@ -148,11 +148,17 @@ TEST_CASE("VU-rojo-queue-0005 a texture written on Copy is read on Graphics with
         const Texture uploaded = texture(kit, TextureUsage::Sampled);
         const Buffer staging = storage(kit);
         const Buffer readback = kit.buffer(BufferUsage::ShaderWrite, 64 * 1024);
+        const Fence fence = *kit.device.createFence(0, "test.fence");
+        const std::array<FenceValue, 1> prepared{ FenceValue{ fence, 1 } };
+        // A Copy list keeps its textures in General and takes no barrier out of Undefined, so Graphics moves the texture first,
+        // and the fence orders the move before the copy alone.
+        CommandList prepare = kit.device.acquireCommandList(QueueType::Graphics, "test.prepare");
+        move(prepare, uploaded, Layout::Undefined, Layout::General);
         CommandList copy = kit.device.acquireCommandList(QueueType::Copy, "test.copy");
-        move(copy, uploaded, Layout::Undefined, Layout::General);
         copy.copyBufferToTexture(staging, BufferTextureLayout{ .rowPitch = 256 }, uploaded, TextureRegion{ .extent = { PassKit::kSize, 1, 1 } });
         kit.list.copyTextureToBuffer(uploaded, TextureRegion{ .extent = { PassKit::kSize, 1, 1 } }, readback, BufferTextureLayout{ .rowPitch = 256 });
-        submitTo(kit.device, copy, QueueType::Copy);
+        submitTo(kit.device, prepare, QueueType::Graphics, {}, prepared);
+        submitTo(kit.device, copy, QueueType::Copy, prepared);
         submitTo(kit.device, kit.list, QueueType::Graphics);
     });
 }

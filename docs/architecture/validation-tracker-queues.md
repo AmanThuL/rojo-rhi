@@ -96,7 +96,9 @@ or lies below a later one.
   created with data in `ShaderRead` and sampled on Graphics is handed over to Copy in that layout.
 - **Present.** `VU-rojo-present-0018` is judged at `presentImage` from the graphics queue's view:
   the latest event must set `Present` and be on Graphics, covered by its clock, or have no queue.
-  An image moved to `Present` on Copy and presented with no fence reports.
+  An image presented without a barrier to `Present` reports. Only a Graphics list can move an image
+  to `Present` (`VU-rojo-sync-0007` and `0026` keep it off the other queues), so a later event on
+  another queue that no fence orders before the present reports with the layout it set.
 - **Aliasing.** Another resource's use of a placed texture's bytes sets every subresource of the
   texture to an `Undefined` event on that queue, visible to the others. A later use with no
   discard sees `Undefined` and the entry's rule reports (for example `VU-rojo-cmd-0007`), not

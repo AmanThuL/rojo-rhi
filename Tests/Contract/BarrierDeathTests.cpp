@@ -93,6 +93,24 @@ TEST_CASE("VU-rojo-sync-0007 a barrier on a Compute list uses a layout the queue
 }
 
 //======================================================================================================================
+TEST_CASE("VU-rojo-sync-0026 a barrier on a Copy list moves a texture out of General", "[contract][death]")
+{
+    ROJORHI_EXPECT_DEATH("VU-rojo-sync-0026", [] {
+        PassKit kit(QueueType::Copy);
+        recordTexture(kit, TextureBarrier{ .texture = kit.texture(), .oldLayout = Layout::General, .newLayout = Layout::CopyDst });
+    });
+}
+
+//======================================================================================================================
+TEST_CASE("VU-rojo-sync-0026 a barrier on a Copy list discards a texture from Undefined", "[contract][death]")
+{
+    ROJORHI_EXPECT_DEATH("VU-rojo-sync-0026", [] {
+        PassKit kit(QueueType::Copy);
+        recordTexture(kit, TextureBarrier{ .texture = kit.texture(), .oldLayout = Layout::Undefined, .newLayout = Layout::General });
+    });
+}
+
+//======================================================================================================================
 TEST_CASE("VU-rojo-sync-0008 a global barrier has no stage on either side", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-sync-0008", [] {

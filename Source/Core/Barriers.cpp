@@ -320,6 +320,16 @@ namespace rojoRHI::core {
                 static_cast<int>(entry.oldLayout),
                 static_cast<int>(entry.newLayout)
             );
+            ROJORHI_VU(
+                list.type != QueueType::Copy || (entry.oldLayout == Layout::General && entry.newLayout == Layout::General),
+                "VU-rojo-sync-0026",
+                "a barrier on the Copy list \"{}\" moves the texture \"{}\" from layout {} to {}; a Copy list keeps a texture in General on "
+                "both sides",
+                list.label,
+                record->label,
+                static_cast<int>(entry.oldLayout),
+                static_cast<int>(entry.newLayout)
+            );
         }
         for (size_t later = 1; later < textures.size(); ++later)
         {

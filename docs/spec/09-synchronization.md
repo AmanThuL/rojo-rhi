@@ -222,12 +222,15 @@ one layout.
   Checked by the validation tracker.
 - `VU-rojo-sync-0007` A barrier recorded on a `QueueType::Compute` list uses no layouts other than
   `Undefined`, `General`, `ShaderRead`, `ShaderWrite`, `CopySrc` and `CopyDst` (*unverified*).
+- `VU-rojo-sync-0026` A texture barrier recorded on a `QueueType::Copy` list has `General` as both
+  `oldLayout` and `newLayout`: a copy queue takes no layout barrier, so a Copy list neither moves a
+  texture to another layout nor discards one from `Undefined`.
 
 #### Mapping
 | | Metal 4 | D3D12 | Vulkan |
 |---|---|---|---|
 | `Undefined` | ignored | `D3D12_BARRIER_LAYOUT_UNDEFINED` | `VK_IMAGE_LAYOUT_UNDEFINED` |
-| `General` | ignored | `LAYOUT_COMMON`; on a `Copy` list, whose queue takes no layout barrier, every texture barrier lowers to a global barrier with its stages and accesses | `GENERAL` |
+| `General` | ignored | `LAYOUT_COMMON`; on a `Copy` list, whose queue takes no layout barrier, every texture barrier, which keeps `General` on both sides (`VU-rojo-sync-0026`), lowers to a global barrier with its stages and accesses | `GENERAL` |
 | `ShaderRead` | ignored | `LAYOUT_SHADER_RESOURCE`, valid on direct and compute queues | `SHADER_READ_ONLY_OPTIMAL` |
 | `ShaderWrite` | ignored | `LAYOUT_UNORDERED_ACCESS`, valid on direct and compute queues | `GENERAL` |
 | `ColorAttachment` | ignored | `LAYOUT_RENDER_TARGET`; a resolve target passes through `LAYOUT_RESOLVE_DEST` by a backend transition | `COLOR_ATTACHMENT_OPTIMAL` |

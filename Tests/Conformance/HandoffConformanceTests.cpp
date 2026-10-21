@@ -55,12 +55,15 @@ TEST_CASE("a texture written on the Copy queue in General is read back on the Gr
     );
     const BufferTextureLayout layout{ .offset = 0, .rowPitch = static_cast<uint32_t>(kRowPitch), .rowsPerImage = kEdge };
     const TextureRegion whole{ .extent = { kEdge, kEdge, 1 } };
+    // A Copy list keeps its textures in General and takes no barrier out of Undefined, so the Graphics queue moves the new
+    // texture to General first.
+    CommandList prepare = kit.list(QueueType::Graphics, "test.prepare");
+    test::transition(prepare, texture, Layout::Undefined, Layout::General);
     CommandList copy = kit.list(QueueType::Copy, "test.copy");
-    test::transition(copy, texture, Layout::Undefined, Layout::General);
     copy.copyBufferToTexture(upload, layout, texture, whole);
     CommandList graphics = kit.list(QueueType::Graphics, "test.graphics");
     graphics.copyTextureToBuffer(texture, whole, readback, layout);
-    kit.run(std::array{ copy, graphics });
+    kit.run(std::array{ prepare, copy, graphics });
     const std::vector<std::byte> got = kit.read(readback);
     for (uint32_t row = 0; row < kEdge; ++row)
     {

@@ -203,9 +203,10 @@ is destroyed.
 
 A texture handed between queues is, at the handoff, in a layout both queues accept
 (`VU-rojo-sync-0025`), unless the acquiring queue discards it from `Undefined` first; a discard
-names no earlier layout on any backend (*unverified* on D3D12). Between the graphics and compute
-queues that is `General`, `ShaderRead`, `ShaderWrite`, `CopySrc` or `CopyDst`: on D3D12 they lower
-to `LAYOUT_COMMON` and the generic `LAYOUT_SHADER_RESOURCE`, `LAYOUT_UNORDERED_ACCESS`,
+names no earlier layout on any backend (*unverified* on D3D12), and the copy queue cannot discard,
+since a Copy list keeps a texture barrier in `General` (`VU-rojo-sync-0026`). Between the graphics
+and compute queues that is `General`, `ShaderRead`, `ShaderWrite`, `CopySrc` or `CopyDst`: on D3D12
+they lower to `LAYOUT_COMMON` and the generic `LAYOUT_SHADER_RESOURCE`, `LAYOUT_UNORDERED_ACCESS`,
 `LAYOUT_COPY_SOURCE` and `LAYOUT_COPY_DEST`, which direct and compute queues both accept, so a
 texture created with initial data in `ShaderRead` is read on either queue without a transition. A
 handoff to or from the copy queue is in `General`, which maps to `D3D12_BARRIER_LAYOUT_COMMON`,
@@ -223,5 +224,7 @@ belongs to the caller's graph. The first use of a placed texture is a barrier fr
 (`VU-rojo-sync-0017`), which discards whatever the earlier resource left and, on D3D12,
 initializes compression metadata. The first use of a placed buffer is a global barrier
 (`VU-rojo-sync-0009`). Either barrier's source covers the last use of the resource that held the
-memory before. A tile `Queue::mapTiles` newly maps follows the same rule (`VU-rojo-sparse-0014`,
-[sparse resources](13-sparse.md)).
+memory before. A placed texture's first use after another resource used its memory is therefore not
+on a Copy list, which cannot discard (`VU-rojo-sync-0026`): a Graphics or Compute list discards it,
+and a fence orders that barrier before the Copy list. A tile `Queue::mapTiles` newly maps follows
+the same rule (`VU-rojo-sparse-0014`, [sparse resources](13-sparse.md)).

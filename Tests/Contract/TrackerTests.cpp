@@ -253,7 +253,15 @@ TEST_CASE("General permits a copy to and from a texture on a Copy list", "[contr
     PassKit kit(QueueType::Copy, true);
     const Texture texture = kit.texture();
     const Buffer buffer = kit.buffer(BufferUsage::None, 4096);
-    test::transition(kit.list, texture, Layout::Undefined, Layout::General);
+    // A Copy list keeps its textures in General and takes no barrier out of Undefined, so Graphics moves the texture first,
+    // and the Copy queue waits for the move before the kit submits its list.
+    const Fence fence = *kit.device.createFence(0, "test.fence");
+    const std::array<FenceValue, 1> moved{ FenceValue{ fence, 1 } };
+    CommandList prepare = kit.device.acquireCommandList(QueueType::Graphics, "test.prepare");
+    test::transition(prepare, texture, Layout::Undefined, Layout::General);
+    prepare.end();
+    kit.device.queue(QueueType::Graphics).submit(std::array{ prepare }, {}, moved);
+    kit.device.queue(QueueType::Copy).submit({}, moved);
     kit.list.copyBufferToTexture(buffer, { .rowPitch = 256 }, texture, TextureRegion{ .extent = { 4, 4, 1 } });
     copiesDone(kit.list);
     kit.list.copyTextureToBuffer(texture, TextureRegion{ .extent = { 4, 4, 1 } }, buffer, { .rowPitch = 256 });
