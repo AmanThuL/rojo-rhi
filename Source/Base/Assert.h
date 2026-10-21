@@ -11,13 +11,13 @@
 
 #ifndef NDEBUG
 /// Checks a valid-usage rule: when `cond` is false, sends "<id>: <formatted text>" to the message callback at error
-/// severity and aborts. `cond` is evaluated once.
+/// severity, and to stderr as well, and aborts. `cond` is evaluated once.
 #define ROJORHI_VU(cond, id, ...)                                                                                                                              \
     do                                                                                                                                                         \
     {                                                                                                                                                          \
         if (!(cond))                                                                                                                                           \
         {                                                                                                                                                      \
-            ::rojoRHI::base::emitMessage(::rojoRHI::MessageSeverity::Error, std::format("{}: {}", id, std::format(__VA_ARGS__)));                              \
+            ::rojoRHI::base::emitFatal(std::format("{}: {}", id, std::format(__VA_ARGS__)));                                                                   \
             std::abort();                                                                                                                                      \
         }                                                                                                                                                      \
     } while (0)
@@ -28,13 +28,13 @@
 
 #ifndef NDEBUG
 /// Checks an invariant of the library's own code, never a rule a caller can break: when `cond` is false, reports `msg` at
-/// error severity and aborts. Release expands to nothing and does not evaluate `cond`.
+/// error severity, on stderr as well, and aborts. Release expands to nothing and does not evaluate `cond`.
 #define ROJORHI_INTERNAL_ASSERT(cond, msg)                                                                                                                     \
     do                                                                                                                                                         \
     {                                                                                                                                                          \
         if (!(cond))                                                                                                                                           \
         {                                                                                                                                                      \
-            ::rojoRHI::base::emitMessage(::rojoRHI::MessageSeverity::Error, std::format("internal error: {} ({}:{})", msg, __FILE__, __LINE__));               \
+            ::rojoRHI::base::emitFatal(std::format("internal error: {} ({}:{})", msg, __FILE__, __LINE__));                                                    \
             std::abort();                                                                                                                                      \
         }                                                                                                                                                      \
     } while (0)

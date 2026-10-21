@@ -7,9 +7,12 @@
 
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/interfaces/catch_interfaces_capture.hpp>
+#include <catch2/reporters/catch_reporter_event_listener.hpp>
+#include <catch2/reporters/catch_reporter_registrars.hpp>
 
 #include <cerrno>
 #include <cstdint>
+#include <cstdio>
 #include <cstdlib>
 #include <cwchar>
 #include <filesystem>
@@ -43,6 +46,47 @@ extern char** environ;
 
 namespace rojoRHI::test {
     namespace {
+        //==============================================================================================================
+        /// Makes an abort, a failed CRT check or a crash end the process with its message on standard error, never with a
+        /// modal dialog, which would hang a runner until its step times out. Only Windows shows such dialogs; elsewhere it
+        /// does nothing.
+        void quietAborts()
+        {
+#if defined(_WIN32)
+            _set_abort_behavior(0, _WRITE_ABORT_MSG | _CALL_REPORTFAULT);
+            for ([[maybe_unused]] const int kind : { _CRT_WARN, _CRT_ERROR, _CRT_ASSERT })
+            {
+                _CrtSetReportMode(kind, _CRTDBG_MODE_FILE);
+                _CrtSetReportFile(kind, _CRTDBG_FILE_STDERR);
+            }
+            SetErrorMode(SEM_FAILCRITICALERRORS | SEM_NOGPFAULTERRORBOX);
+#endif
+        }
+
+        /// Quiets aborts once the test run starts, so an abort outside a death test fails the run at once, its message in
+        /// the log; a death child quiets them again before it runs its body. On Windows it also leaves standard output and
+        /// standard error unbuffered: an abort flushes neither, and a pipe would hold back the report of every case before it.
+        class QuietAborts final : public Catch::EventListenerBase
+        {
+          public:
+            using Catch::EventListenerBase::EventListenerBase;
+
+            void testRunStarting(const Catch::TestRunInfo&) override;
+        };
+
+        //==============================================================================================================
+        void QuietAborts::testRunStarting(const Catch::TestRunInfo&)
+        {
+            quietAborts();
+#if defined(_WIN32)
+            for (std::FILE* stream : { stdout, stderr })
+            {
+                std::fflush(stream);
+                std::setvbuf(stream, nullptr, _IONBF, 0);
+            }
+#endif
+        }
+
         struct ChildResult
         {
             bool launched = false;
@@ -361,16 +405,8 @@ namespace rojoRHI::test {
             }
             if (role == DeathRole::Child)
             {
-#if defined(_WIN32)
                 // A crash must end the child without a modal dialog that would hang a runner.
-                _set_abort_behavior(0, _WRITE_ABORT_MSG | _CALL_REPORTFAULT);
-                for ([[maybe_unused]] const int kind : { _CRT_WARN, _CRT_ERROR, _CRT_ASSERT })
-                {
-                    _CrtSetReportMode(kind, _CRTDBG_MODE_FILE);
-                    _CrtSetReportFile(kind, _CRTDBG_FILE_STDERR);
-                }
-                SetErrorMode(SEM_FAILCRITICALERRORS | SEM_NOGPFAULTERRORBOX);
-#endif
+                quietAborts();
                 body();
                 std::exit(0);
             }
@@ -407,3 +443,5 @@ namespace rojoRHI::test {
         runDeathCase(body, [&](const std::string& text) { return text.find(marker) != std::string::npos; });
     }
 } // namespace rojoRHI::test
+
+CATCH_REGISTER_LISTENER(rojoRHI::test::QuietAborts)

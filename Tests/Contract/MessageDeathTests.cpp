@@ -16,6 +16,11 @@ namespace {
     {
         rojoRHI::setMessageCallback(nullptr, nullptr);
     }
+
+    //==================================================================================================================
+    void keepEveryMessage(rojoRHI::MessageSeverity, std::string_view, void*)
+    {
+    }
 } // namespace
 
 //======================================================================================================================
@@ -24,6 +29,19 @@ TEST_CASE("VU-rojo-core-0008 a message callback calls setMessageCallback", "[con
     ROJORHI_EXPECT_DEATH("VU-rojo-core-0008", [] {
         rojoRHI::setMessageCallback(callSetMessageCallbackFromCallback, nullptr);
         rojoRHI::base::emitMessage(rojoRHI::MessageSeverity::Info, "trigger");
+    });
+}
+
+//======================================================================================================================
+TEST_CASE("VU-rojo-cmd-0002 reaches stderr while a callback keeps every message", "[contract][death]")
+{
+    ROJORHI_EXPECT_DEATH("VU-rojo-cmd-0002", [] {
+        rojoRHI::setMessageCallback(keepEveryMessage, nullptr);
+        rojoRHI::Device device = *rojoRHI::createDevice();
+        device.beginFrame();
+        rojoRHI::CommandList list = device.acquireCommandList(rojoRHI::QueueType::Graphics, "test.list");
+        list.end();
+        list.end();
     });
 }
 
