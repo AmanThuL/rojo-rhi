@@ -24,6 +24,8 @@ namespace rojoRHI {
 } // namespace rojoRHI
 
 namespace rojoRHI::d3d12 {
+    struct PipelineState;
+
     /// The root signature the compute side of a list holds: the global one of caller pipelines, or the backend kernels' one.
     enum class ComputeRoot : uint8_t
     {
@@ -42,6 +44,7 @@ namespace rojoRHI::d3d12 {
         ComputeRoot computeRoot = ComputeRoot::Global;   ///< The root signature the compute side holds.
         ID3D12PipelineState* computePipeline = nullptr;  ///< The pipeline the compute side holds; null for none.
         ID3D12PipelineState* graphicsPipeline = nullptr; ///< The pipeline the graphics side holds; null for none.
+        const PipelineState* pipeline = nullptr;         ///< The payload of the caller's bound pipeline; null for none.
     };
 
     /// The native objects and recording state of one command list, created when its frame slot's pool grows and kept while
@@ -93,4 +96,9 @@ namespace rojoRHI::d3d12 {
 
     /// Returns the device that acquired `list`, read from the list's core without a lock.
     DeviceImpl& deviceOf(const CommandListImpl& list);
+
+    /// Brings the compute side of `list` to what the caller bound before a dispatch, each call only where the native list
+    /// holds something else: the global root signature after a backend kernel switched it, the bound pipeline after another
+    /// displaced it, and the root block after `setRoot` or a root signature switch. A compute pipeline must be bound.
+    void flushCompute(CommandListImpl& list);
 } // namespace rojoRHI::d3d12
