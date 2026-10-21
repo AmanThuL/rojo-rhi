@@ -209,7 +209,7 @@ without re-uploading it.
 
 | | Metal 4 | D3D12 | Vulkan |
 |---|---|---|---|
-| Call | `MTL4::ArgumentTable::setAddress(root, 0)` on the table bound to every stage | `SetGraphicsRootShaderResourceView` or `SetComputeRootShaderResourceView` on `t0` of the one global root signature, with the GPU virtual address looked up from the `Addr`'s heap index plus its offset | `vkCmdPushDataEXT` of the address, or a push-constant `Addr` |
+| Call | `MTL4::ArgumentTable::setAddress(root, 0)` on the table bound to every stage | stores the GPU virtual address looked up from the `Addr`'s heap index plus its offset; the next draw binds it with `SetGraphicsRootShaderResourceView` and the next dispatch with `SetComputeRootShaderResourceView` on `t0` of the one global root signature | `vkCmdPushDataEXT` of the address, or a push-constant `Addr` |
 | Cost | native: one table write | cheap: index→GPU VA lookup | native |
 | Constraint | none | 256-byte alignment of the root address; 65536-byte cap | none: the root is read through the pushed address |
 

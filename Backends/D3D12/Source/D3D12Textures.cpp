@@ -123,7 +123,7 @@ namespace rojoRHI {
                 impl.device()->GetResourceAllocationInfo3(0, 1, &native, count == 0 ? nullptr : &count, count == 0 ? nullptr : &formats, nullptr);
             if (info.SizeInBytes == UINT64_MAX)
             {
-                ROJORHI_LOG_ERROR("ID3D12Device12::GetResourceAllocationInfo3 refused a texture of format {}", static_cast<uint32_t>(native.Format));
+                ROJORHI_LOG_FATAL("ID3D12Device12::GetResourceAllocationInfo3 refused a texture of format {}", static_cast<uint32_t>(native.Format));
                 std::abort();
             }
             return PlacementRequirements{ info.SizeInBytes, info.Alignment };
@@ -411,6 +411,17 @@ namespace rojoRHI {
         auto payload = std::make_unique<d3d12::TexturePayload>();
         core::DeviceCounts::add(impl.core.counts().cpuAllocations);
         payload->resourceFormat = native.Format;
+        payload->format = record.format;
+        payload->type = record.type;
+        payload->usage = record.usage;
+        payload->mips = record.mips;
+        const bool volume = record.type == TextureType::Tex3D;
+        payload->layers = volume ? 1 : record.layers;
+        payload->depth = volume ? record.extent.depth : 1;
+        payload->samples = record.samples;
+        D3D12_PLACED_SUBRESOURCE_FOOTPRINT footprint = {};
+        impl.device()->GetCopyableFootprints1(&native, 0, 1, 0, &footprint, nullptr, nullptr, nullptr);
+        payload->copyFormat = footprint.Footprint.Format;
         const bool renderTarget = hasUsage(desc.usage, TextureUsage::RenderTarget);
         if (renderTarget || hasUsage(desc.usage, TextureUsage::DepthStencil))
         {

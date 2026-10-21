@@ -130,7 +130,7 @@ namespace rojoRHI::d3d12 {
         /// cannot route its messages must not run silently.
         [[noreturn]] void abortOn(std::string_view call, HRESULT result)
         {
-            ROJORHI_LOG_ERROR("{} failed with HRESULT 0x{:08x}", call, hresultBits(result));
+            ROJORHI_LOG_FATAL("{} failed with HRESULT 0x{:08x}", call, hresultBits(result));
             std::abort();
         }
 
@@ -157,7 +157,7 @@ namespace rojoRHI::d3d12 {
 
         //==============================================================================================================
         /// Receives one debug-layer message on whatever thread the runtime raises it from and forwards it with the matching
-        /// severity; after an error or corruption message it aborts the process.
+        /// severity; an error or corruption message also goes to stderr, and then it aborts the process.
         void __stdcall onMessage(D3D12_MESSAGE_CATEGORY category, D3D12_MESSAGE_SEVERITY severity, D3D12_MESSAGE_ID id, LPCSTR description, void*)
         {
             MessageSeverity mapped = MessageSeverity::Info;
@@ -170,15 +170,17 @@ namespace rojoRHI::d3d12 {
                 mapped = MessageSeverity::Error;
             }
             const std::string text = std::format("D3D12 {} {}: {}", categoryName(category), static_cast<int>(id), description != nullptr ? description : "");
-            base::emitMessage(mapped, text);
             // The backend reports a removal itself, with the reason and the extended data, and fails the entry that found it, so
             // the runtime's own removal errors are forwarded and the process runs on to that report.
             const bool removal = id == D3D12_MESSAGE_ID_DEVICE_REMOVAL_PROCESS_AT_FAULT || id == D3D12_MESSAGE_ID_DEVICE_REMOVAL_PROCESS_POSSIBLY_AT_FAULT ||
                                  id == D3D12_MESSAGE_ID_DEVICE_REMOVAL_PROCESS_NOT_AT_FAULT;
             if (mapped == MessageSeverity::Error && !removal)
             {
+                // The message reaches stderr even when a callback keeps it, so the abort never hides its cause.
+                base::emitFatal(text);
                 std::abort();
             }
+            base::emitMessage(mapped, text);
         }
 
         //==============================================================================================================

@@ -54,7 +54,7 @@ namespace rojoRHI::d3d12 {
                     m_event = CreateEventW(nullptr, FALSE, FALSE, nullptr);
                     if (m_event == nullptr)
                     {
-                        ROJORHI_LOG_ERROR("CreateEventW for a wait on {} failed with error {}", what, GetLastError());
+                        ROJORHI_LOG_FATAL("CreateEventW for a wait on {} failed with error {}", what, GetLastError());
                         std::abort();
                     }
                 }
@@ -97,7 +97,7 @@ namespace rojoRHI::d3d12 {
     //==================================================================================================================
     void notImplemented(std::string_view entry)
     {
-        ROJORHI_LOG_ERROR("{} is not implemented by the D3D12 backend", entry);
+        ROJORHI_LOG_FATAL("{} is not implemented by the D3D12 backend", entry);
         std::abort();
     }
 
@@ -115,17 +115,33 @@ namespace rojoRHI::d3d12 {
     }
 
     //==================================================================================================================
+    void widen(std::string_view label, std::wstring& out)
+    {
+        // A UTF-8 sequence never takes fewer bytes than the UTF-16 code units it decodes to, so one call fills the string.
+        out.resize(label.size());
+        if (label.empty())
+        {
+            return;
+        }
+        const int written = MultiByteToWideChar(CP_UTF8, 0, label.data(), static_cast<int>(label.size()), out.data(), static_cast<int>(out.size()));
+        if (written <= 0)
+        {
+            ROJORHI_LOG_FATAL("MultiByteToWideChar for \"{}\" failed with error {}", label, GetLastError());
+            std::abort();
+        }
+        out.resize(static_cast<size_t>(written));
+    }
+
+    //==================================================================================================================
     void setName(ID3D12Object* object, std::string_view label)
     {
         ROJORHI_INTERNAL_ASSERT(object != nullptr, "setName was given no object");
         ROJORHI_INTERNAL_ASSERT(!label.empty(), "setName was given an empty label; the core defaults every label");
-        // A UTF-8 sequence never takes fewer bytes than the UTF-16 code units it decodes to, so one call fills the string.
-        std::wstring name(label.size(), L'\0');
-        const int written = MultiByteToWideChar(CP_UTF8, 0, label.data(), static_cast<int>(label.size()), name.data(), static_cast<int>(name.size()));
-        name.resize(static_cast<size_t>(written > 0 ? written : 0));
+        std::wstring name;
+        widen(label, name);
         if (const HRESULT named = object->SetName(name.c_str()); FAILED(named))
         {
-            ROJORHI_LOG_ERROR("ID3D12Object::SetName for \"{}\" failed with HRESULT 0x{:08X}", label, hresultBits(named));
+            ROJORHI_LOG_FATAL("ID3D12Object::SetName for \"{}\" failed with HRESULT 0x{:08X}", label, hresultBits(named));
             std::abort();
         }
     }
@@ -146,7 +162,7 @@ namespace rojoRHI::d3d12 {
         ++wait.hostCalls;
         if (FAILED(armed))
         {
-            ROJORHI_LOG_ERROR("ID3D12Fence::SetEventOnCompletion for {} at {} failed with HRESULT 0x{:08X}", what, value, hresultBits(armed));
+            ROJORHI_LOG_FATAL("ID3D12Fence::SetEventOnCompletion for {} at {} failed with HRESULT 0x{:08X}", what, value, hresultBits(armed));
             std::abort();
         }
         const bool endless = timeoutNs == UINT64_MAX;
@@ -174,7 +190,7 @@ namespace rojoRHI::d3d12 {
             }
             else if (waited != WAIT_TIMEOUT)
             {
-                ROJORHI_LOG_ERROR("WaitForSingleObject for {} at {} returned {} with error {}", what, value, waited, GetLastError());
+                ROJORHI_LOG_FATAL("WaitForSingleObject for {} at {} returned {} with error {}", what, value, waited, GetLastError());
                 std::abort();
             }
             else if (endless)
@@ -209,7 +225,7 @@ namespace rojoRHI::d3d12 {
         {
             reportRemoval(impl, what);
         }
-        ROJORHI_LOG_ERROR("{} failed with HRESULT 0x{:08X}", what, hresultBits(result));
+        ROJORHI_LOG_FATAL("{} failed with HRESULT 0x{:08X}", what, hresultBits(result));
         std::abort();
     }
 } // namespace rojoRHI::d3d12

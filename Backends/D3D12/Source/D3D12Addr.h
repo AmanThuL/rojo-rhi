@@ -59,4 +59,8 @@ namespace rojoRHI::d3d12 {
         std::unique_ptr<core::NativeTable> m_table; ///< The payload of each view-heap index; null until `create`.
         std::mutex m_mutex;                         ///< Serialises `publish` and `clear`.
     };
+
+    /// Returns the GPU virtual address `addr` names: the base of the buffer whose raw SRV sits at its heap index, found in
+    /// `directory` without a lock, plus its byte offset; 0 when no buffer is there.
+    D3D12_GPU_VIRTUAL_ADDRESS rootAddress(const HeapDirectory& directory, Addr addr);
 } // namespace rojoRHI::d3d12

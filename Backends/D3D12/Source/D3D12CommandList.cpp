@@ -1,6 +1,6 @@
 //----------------------------------------------------------------------------------------------------------------------
 /// @file D3D12CommandList.cpp
-/// @brief Implements D3D12 command list acquisition, `end` and frame data on the core's state; other recording entries abort.
+/// @brief Implements D3D12 command list acquisition into native lists, `end`, frame data and the lazy root; other entries abort.
 //----------------------------------------------------------------------------------------------------------------------
 
 #include "D3D12Device.h"
@@ -8,13 +8,17 @@
 #include <rojoRHI/RHI.h>
 
 #include "Core/CommandLists.h"
+#include "Core/Counters.h"
 #include "Core/DeviceCore.h"
+#include "Core/Draws.h"
 #include "Core/FrameArena.h"
 #include "Core/HandlePool.h"
 #include "Core/Records.h"
 #include "D3D12Addr.h"
 #include "D3D12Buffers.h"
 #include "D3D12Common.h"
+#include "D3D12ListState.h"
+#include "D3D12Timestamps.h"
 
 #include <cstddef>
 #include <cstdint>
@@ -36,17 +40,49 @@ namespace rojoRHI {
     {
         DeviceImpl& impl = DeviceImpl::of(*this);
         core::checkAcquire(impl.core);
-        // A list is the core's state alone: it encodes no native command, so acquisition makes no native call.
         const uint32_t slot = static_cast<uint32_t>(impl.core.frameNumber() % impl.core.framesInFlight());
-        CommandListImpl& list = impl.lists.acquire(slot, type, impl.core.counts());
+        CommandListImpl& list = impl.lists.acquire(impl, slot, type);
         core::beginList(list.core, impl.core, type, label);
+        d3d12::ListState& state = list.state;
+        // The allocator is the list's own and was reset when the slot was reused, so no other list records into it.
+        d3d12::requireSucceeded(impl, state.list->Reset(state.allocator.get(), nullptr), "ID3D12GraphicsCommandList::Reset in Device::acquireCommandList");
+        core::noteNativeCall(list.core);
+        state.timestamps.reset();
+        state.binding = {};
+        if (type != QueueType::Copy)
+        {
+            // Shaders index both heaps directly, so they are set once per recording, before any root signature.
+            ID3D12DescriptorHeap* const heaps[] = { impl.descriptors.views(), impl.descriptors.samplers() };
+            state.list->SetDescriptorHeaps(2, heaps);
+            core::noteNativeCall(list.core);
+            if (type == QueueType::Graphics)
+            {
+                state.list->SetGraphicsRootSignature(impl.roots.global());
+                core::noteNativeCall(list.core);
+            }
+            state.list->SetComputeRootSignature(impl.roots.global());
+            core::noteNativeCall(list.core);
+        }
+        // The native list keeps its name across recordings, so a list acquired again with the same label sends none.
+        if (state.label != list.core.label)
+        {
+            d3d12::widen(list.core.label, state.scratch);
+            d3d12::requireSucceeded(impl, state.list->SetName(state.scratch.c_str()), "ID3D12Object::SetName in Device::acquireCommandList");
+            core::DeviceCounts::add(impl.core.counts().nativeHostCalls);
+            state.label = list.core.label;
+        }
         return CommandListImpl::wrap(&list);
     }
 
     //==================================================================================================================
     void CommandList::end()
     {
-        core::endList(CommandListImpl::of(*this).core);
+        CommandListImpl& list = CommandListImpl::of(*this);
+        // The core's checks run before any native call.
+        core::endList(list.core);
+        d3d12::resolveTimestamps(list);
+        d3d12::requireSucceeded(d3d12::deviceOf(list), list.state.list->Close(), "ID3D12GraphicsCommandList::Close in CommandList::end");
+        core::noteNativeCall(list.core);
     }
 
     //==================================================================================================================
@@ -71,18 +107,6 @@ namespace rojoRHI {
     void CommandList::endRenderPass()
     {
         d3d12::notImplemented("CommandList::endRenderPass");
-    }
-
-    //==================================================================================================================
-    void CommandList::beginScope(std::string_view)
-    {
-        d3d12::notImplemented("CommandList::beginScope");
-    }
-
-    //==================================================================================================================
-    void CommandList::endScope()
-    {
-        d3d12::notImplemented("CommandList::endScope");
     }
 
     //==================================================================================================================
@@ -128,9 +152,15 @@ namespace rojoRHI {
     }
 
     //==================================================================================================================
-    void CommandList::setRoot(Addr)
+    void CommandList::setRoot(Addr root)
     {
-        d3d12::notImplemented("CommandList::setRoot");
+        CommandListImpl& list = CommandListImpl::of(*this);
+        core::setRoot(list.core, root);
+        // The address is bound lazily: the next draw binds it on the graphics side and the next dispatch on the compute side.
+        d3d12::Binding& binding = list.state.binding;
+        binding.root = d3d12::rootAddress(d3d12::deviceOf(list).directory, root);
+        binding.graphicsRootDirty = true;
+        binding.computeRootDirty = true;
     }
 
     //==================================================================================================================
@@ -179,48 +209,6 @@ namespace rojoRHI {
     void CommandList::dispatchIndirect(Addr)
     {
         d3d12::notImplemented("CommandList::dispatchIndirect");
-    }
-
-    //==================================================================================================================
-    void CommandList::copyBuffer(Buffer, uint64_t, Buffer, uint64_t, uint64_t)
-    {
-        d3d12::notImplemented("CommandList::copyBuffer");
-    }
-
-    //==================================================================================================================
-    void CommandList::copyBufferToTexture(Buffer, const BufferTextureLayout&, Texture, const TextureRegion&)
-    {
-        d3d12::notImplemented("CommandList::copyBufferToTexture");
-    }
-
-    //==================================================================================================================
-    void CommandList::copyTextureToBuffer(Texture, const TextureRegion&, Buffer, const BufferTextureLayout&)
-    {
-        d3d12::notImplemented("CommandList::copyTextureToBuffer");
-    }
-
-    //==================================================================================================================
-    void CommandList::copyTexture(Texture, const TextureRegion&, Texture, const TextureRegion&)
-    {
-        d3d12::notImplemented("CommandList::copyTexture");
-    }
-
-    //==================================================================================================================
-    void CommandList::fillBuffer(Buffer, uint64_t, uint64_t, uint32_t)
-    {
-        d3d12::notImplemented("CommandList::fillBuffer");
-    }
-
-    //==================================================================================================================
-    void CommandList::clearTexture(Texture, const SubresourceRange&, const ClearValue&)
-    {
-        d3d12::notImplemented("CommandList::clearTexture");
-    }
-
-    //==================================================================================================================
-    void CommandList::barrier(std::span<const GlobalBarrier>, std::span<const BufferBarrier>, std::span<const TextureBarrier>)
-    {
-        d3d12::notImplemented("CommandList::barrier");
     }
 
     //==================================================================================================================

@@ -10,6 +10,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <set>
+#include <span>
 #include <thread>
 #include <utility>
 #include <vector>
@@ -40,12 +41,12 @@ namespace {
     }
 
     //==================================================================================================================
-    /// Ends `list` and submits it to the queue of its type.
-    void endAndSubmit(Device device, CommandList list, QueueType type = QueueType::Graphics)
+    /// Ends `list` and submits it to the queue of its type, signalling `signal`.
+    void endAndSubmit(Device device, CommandList list, QueueType type = QueueType::Graphics, std::span<const FenceValue> signal = {})
     {
         list.end();
         const std::array<CommandList, 1> lists{ list };
-        device.queue(type).submit(lists);
+        device.queue(type).submit(lists, {}, signal);
     }
 } // namespace
 
@@ -53,12 +54,17 @@ namespace {
 TEST_CASE("a list acquired for each queue type ends and submits to that queue", "[contract]")
 {
     Device device = makeDevice();
+    const Fence computeDone = *device.createFence(0, "test.computeDone");
+    const Fence copyDone = *device.createFence(0, "test.copyDone");
+    const std::array<FenceValue, 2> joined{ FenceValue{ computeDone, 1 }, FenceValue{ copyDone, 1 } };
     device.beginFrame();
-    for (const QueueType type : { QueueType::Graphics, QueueType::Compute, QueueType::Copy })
-    {
-        endAndSubmit(device, device.acquireCommandList(type, "test.list"), type);
-    }
+    endAndSubmit(device, device.acquireCommandList(QueueType::Graphics, "test.list"), QueueType::Graphics);
+    endAndSubmit(device, device.acquireCommandList(QueueType::Compute, "test.list"), QueueType::Compute, std::span(joined).first(1));
+    endAndSubmit(device, device.acquireCommandList(QueueType::Copy, "test.list"), QueueType::Copy, std::span(joined).last(1));
+    device.queue(QueueType::Graphics).submit({}, joined);
     device.endFrame();
+    device.destroy(computeDone);
+    device.destroy(copyDone);
     destroyDevice(device);
 }
 
@@ -107,7 +113,8 @@ TEST_CASE("lists are acquired again in every frame across slot reuse", "[contrac
     for (const uint32_t framesInFlight : { 2u, 3u })
     {
         Device device = makeDevice(framesInFlight);
-        for (int frame = 0; frame < 8; ++frame)
+        const Fence joined = *device.createFence(0, "test.joined");
+        for (uint64_t frame = 1; frame <= 8; ++frame)
         {
             device.beginFrame();
             std::array<CommandList, 4> lists;
@@ -116,9 +123,12 @@ TEST_CASE("lists are acquired again in every frame across slot reuse", "[contrac
                 list = device.acquireCommandList(QueueType::Compute, "test.list");
                 list.end();
             }
-            device.queue(QueueType::Compute).submit(lists);
+            const std::array<FenceValue, 1> signal{ FenceValue{ joined, frame } };
+            device.queue(QueueType::Compute).submit(lists, {}, signal);
+            device.queue(QueueType::Graphics).submit({}, signal);
             device.endFrame();
         }
+        device.destroy(joined);
         destroyDevice(device);
     }
 }
@@ -154,13 +164,17 @@ TEST_CASE("two uploads of one frame return different addresses", "[contract]")
 TEST_CASE("lists of one frame never receive the same address", "[contract]")
 {
     Device device = makeDevice();
+    const Fence computeDone = *device.createFence(0, "test.computeDone");
+    const std::array<FenceValue, 1> joined{ FenceValue{ computeDone, 1 } };
     device.beginFrame();
     CommandList graphics = device.acquireCommandList(QueueType::Graphics, "test.graphics");
     CommandList compute = device.acquireCommandList(QueueType::Compute, "test.compute");
     CHECK_FALSE(sameAddress(graphics.uploadFrameData(kBytes), compute.uploadFrameData(kBytes)));
     endAndSubmit(device, graphics);
-    endAndSubmit(device, compute, QueueType::Compute);
+    endAndSubmit(device, compute, QueueType::Compute, joined);
+    device.queue(QueueType::Graphics).submit({}, joined);
     device.endFrame();
+    device.destroy(computeDone);
     destroyDevice(device);
 }
 

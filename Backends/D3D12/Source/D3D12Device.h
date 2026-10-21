@@ -15,16 +15,19 @@
 #include "D3D12Debug.h"
 #include "D3D12Descriptors.h"
 #include "D3D12Fences.h"
+#include "D3D12Kernels.h"
 #include "D3D12ListState.h"
 #include "D3D12Loader.h"
 #include "D3D12PipelineCache.h"
 #include "D3D12RootSignature.h"
 #include "D3D12Stager.h"
+#include "D3D12Timestamps.h"
 
 #include <array>
 #include <cstddef>
 #include <string>
 #include <utility>
+#include <vector>
 
 namespace rojoRHI {
     struct DeviceImpl;
@@ -37,6 +40,8 @@ namespace rojoRHI {
         QueueType type = QueueType::Graphics;  ///< The queue's type.
         d3d12::Com<ID3D12CommandQueue> native; ///< The native queue; null until `d3d12::createQueues` makes it.
         d3d12::QueueProgress progress;         ///< The fence only this queue signals, and its last submitted value.
+        /// The native lists of the submission being made, kept so the next submission reuses the storage.
+        std::vector<ID3D12CommandList*> executing;
 
         /// Returns the state `queue` wraps; checks VU-rojo-core-0004.
         static QueueImpl& of(Queue queue);
@@ -45,10 +50,11 @@ namespace rojoRHI {
         static Queue wrap(QueueImpl* impl);
     };
 
-    /// The D3D12 backend's command list: the core's recording state and the device that acquired it.
+    /// The D3D12 backend's command list: the core's recording state, the device that acquired it, and the native list.
     struct CommandListImpl
     {
         core::CommandListCore core; ///< The state machine the recording rules read, and the device that acquired the list.
+        d3d12::ListState state;     ///< The native list, its allocator and what recording keeps between commands.
 
         /// Returns the state `list` wraps; checks VU-rojo-core-0004.
         static CommandListImpl& of(CommandList list);
@@ -93,6 +99,8 @@ namespace rojoRHI {
         d3d12::DescriptorHeaps descriptors;   ///< The shader-visible view and sampler heaps.
         d3d12::HeapDirectory directory;       ///< The buffer of each raw SRV, by view-heap index.
         d3d12::RootSignatures roots;          ///< The root and command signatures every pipeline shares.
+        d3d12::Timestamps timestamps;         ///< The device-wide timestamp state.
+        d3d12::Kernels kernels;               ///< The pipelines of the backend's own kernels.
         d3d12::Stager stager;                 ///< Copies initial data on the internal upload queue.
         d3d12::PipelineCache pipelineCache;   ///< The pipeline library every pipeline creation looks up first.
         d3d12::ListPools lists;               ///< The command lists of each frame slot.
