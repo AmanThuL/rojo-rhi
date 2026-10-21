@@ -5,11 +5,11 @@
 
 A pipeline holds only the state that at least one backend must bake at creation. There is no
 vertex-input state, because vertices are always pulled by the shader, and no pipeline layout:
-Metal 4 and the planned D3D12 backend use one fixed global layout, an argument table on Metal 4
-and one global root signature on D3D12, and the Vulkan oracle would use one descriptor heap pair
-(see [shader ABI](05-shader-abi.md)). Metal 4 columns describe the implemented backend; D3D12
-columns describe the planned backend; Vulkan columns are the design oracle. Cost classes are
-defined in [conventions](00-conventions.md).
+Metal 4 and the D3D12 backend use one fixed global layout, an argument table on Metal 4 and one
+global root signature on D3D12, and the Vulkan oracle would use one descriptor heap pair (see
+[shader ABI](05-shader-abi.md)). Metal 4 columns describe the implemented backend; D3D12 columns
+describe the backend, implemented, verified on WARP only, not on hardware; Vulkan columns are the
+design oracle. Cost classes are defined in [conventions](00-conventions.md).
 
 - **Depth-stencil and blend stay in the pipeline.** The No Graphics API proposal makes both
   dynamic, and Metal 4 could follow cheaply, but on D3D12 both are part of the pipeline state

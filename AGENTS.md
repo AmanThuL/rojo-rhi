@@ -2,25 +2,28 @@
 
 RojoRHI is a dependency-free C++23 rendering hardware interface (RHI) library, thin, explicit and
 honest over the shared conceptual core of Metal 4, D3D12 and Vulkan. Metal 4 through metal-cpp is
-the only native backend implemented today; D3D12 is planned and Vulkan is a design oracle with no
-code (ADR 0008). The v1 interface is what the code implements now and what Luminex uses; v2 is
-specified in the decisions and the API reference below. The test-only Null backend implements it in
-full, chapters 01 to 15, the C++ entries of 05 included (devices, resources, pipelines, command
-recording, queues and fences, swapchains, upscalers, sparse tiles, diagnostics and counters), with
-the validation tracker (ADR 0021): every valid-usage identifier of the API reference is checked and
-has a death test. The Metal 4 backend of v2 is complete and is the default on macOS: it implements
-the device, capabilities, formats, buffers, heaps, textures, views, samplers, queues, fences and
-frames, shader libraries and pipelines with an archive cache, command lists (copies, fills,
-clears, barriers, scopes, render passes, dynamic state, dispatches, direct, indirect and counted
-draws, mesh tasks and MetalFX upscales), swapchains and presentation on a Metal layer, sparse tiles
-and capture, with every scope, render pass and upscale timed on a device created with
-`DeviceDesc::scopeTimings`. ADR 0001 owns the identity spelling every document here applies.
-Luminex is its required consumer: it will mount the library as a submodule at `RojoRHI/` and drive
-every change through a RojoRHI branch and pull request first ([commits](docs/conventions/commits.md)
-owns that workflow). The repository is public and licensed under the Apache License, Version 2.0
-([`LICENSE`](LICENSE)); it holds the library itself — public headers, shared implementation, the
-Metal 4 backend, the optional ImGui adapter, tests and shaders — alongside its founding documents
-(see [architecture](docs/architecture/overview.md) for directory responsibilities).
+the native backend of macOS; D3D12 is also implemented, verified on WARP only, not on hardware;
+Vulkan is a design oracle with no code (ADR 0008, ADR 0026). The v1 interface is what the code
+implements now and what Luminex uses; v2 is specified in the decisions and the API reference below.
+The test-only Null backend implements it in full, chapters 01 to 15, the C++ entries of 05 included
+(devices, resources, pipelines, command recording, queues and fences, swapchains, upscalers, sparse
+tiles, diagnostics and counters), with the validation tracker (ADR 0021): every valid-usage
+identifier of the API reference is checked and has a death test. The Metal 4 backend of v2 is
+complete and is the default on macOS: it implements the device, capabilities, formats, buffers,
+heaps, textures, views, samplers, queues, fences and frames, shader libraries and pipelines with an
+archive cache, command lists (copies, fills, clears, barriers, scopes, render passes, dynamic state,
+dispatches, direct, indirect and counted draws, mesh tasks and MetalFX upscales), swapchains and
+presentation on a Metal layer, sparse tiles and capture, with every scope, render pass and upscale
+timed on a device created with `DeviceDesc::scopeTimings`. The D3D12 backend implements every entry
+too, refusing with `Unsupported` only what the reference lets it refuse (DLSS and XeSS are not
+compiled in); it has run on WARP only ([the hardware run](docs/guides/d3d12-hardware-run.md)). ADR
+0001 owns the identity spelling every document here applies. Luminex is its required consumer: it
+will mount the library as a submodule at `RojoRHI/` and drive every change through a RojoRHI branch
+and pull request first ([commits](docs/conventions/commits.md) owns that workflow). The repository
+is public and licensed under the Apache License, Version 2.0 ([`LICENSE`](LICENSE)); it holds the
+library itself — public headers, shared implementation, the Metal 4 and D3D12 backends, the optional
+ImGui adapter, tests and shaders — alongside its founding documents (see
+[architecture](docs/architecture/overview.md) for directory responsibilities).
 
 ## Golden sources
 
@@ -47,14 +50,19 @@ Metal 4 backend, the optional ImGui adapter, tests and shaders — alongside its
   docs/decisions/0021-validation-tracker-replays-at-submission.md),
   [0022 versioning, with the version in the single public header](
   docs/decisions/0022-versioning-in-the-single-header.md),
+  [0023 the D3D12 store marks its index](docs/decisions/0023-d3d12-store-marks-its-index.md),
+  [0024 vertexIndex excludes the base](docs/decisions/0024-vertex-index-excludes-the-base.md),
   [0025 the per-operation CPU budget has a floor of 5 ns per RojoRHI call](
-  docs/decisions/0025-cpu-budget-per-call-floor.md)
+  docs/decisions/0025-cpu-budget-per-call-floor.md),
+  [0026 D3D12 before hardware](docs/decisions/0026-d3d12-implemented-before-hardware.md)
 - API reference: [docs/spec/](docs/spec/00-conventions.md), entered through its conventions
   chapter
 - Research: [docs/research/](docs/research/2026-10-11-rhi-redesign/01-nographicsapi.md), the
-  evidence notes behind the decisions
+  evidence notes behind the decisions, [D3D12 on WARP](
+  docs/research/2026-10-21-d3d12-warp-evidence.md) among them
 - Guides: [extracting RojoRHI from Luminex](docs/guides/luminex-extraction.md),
-  [recording GPU evidence](docs/guides/gpu-evidence.md)
+  [recording GPU evidence](docs/guides/gpu-evidence.md),
+  [the Windows GPU run](docs/guides/d3d12-hardware-run.md)
 - Architecture: [overview](docs/architecture/overview.md),
   [the Null backend](docs/architecture/null-backend.md),
   [command recording on it](docs/architecture/null-backend-recording.md),
@@ -67,14 +75,16 @@ Metal 4 backend, the optional ImGui adapter, tests and shaders — alongside its
   [drawing on it: libraries, pipelines, passes, draws](docs/architecture/metal4-drawing.md),
   [its edges: presentation, sparse, capture](docs/architecture/metal4-backend-edges.md),
   [the benchmark harness](docs/architecture/benchmarks.md),
-  [the D3D12 backend's wiring and floor probe](docs/architecture/d3d12-backend.md)
+  [the D3D12 backend](docs/architecture/d3d12-backend.md),
+  [build](docs/architecture/d3d12-build.md), [recording](docs/architecture/d3d12-recording.md),
+  [drawing](docs/architecture/d3d12-drawing.md), [edges](docs/architecture/d3d12-backend-edges.md)
 
 ## Commands
 
 Standalone:
 
 ```
-xmake setup   # fetches pinned metal-cpp and Slang on macOS; Slang, Agility, WARP, DXC on Windows
+xmake setup   # fetches metal-cpp, Slang on macOS; Slang, Agility, WARP, DXC, FidelityFX on Windows
 xmake         # builds the frozen v1 library, RojoRHILegacy
 xmake test RojoRHILegacyTests/unit   # runs the v1 CPU contract cases
 xmake test RojoRHITests/contract     # runs the v2 contract cases on the default backend
@@ -126,16 +136,23 @@ On a Metal 4 configure the same `-P .` applies to its entries, `conformance` inc
 backend is `metal4` on macOS, so a consumer's hosted macOS CI, which has no GPU, passes
 `--rojorhi_backend=null` to `xmake f`.
 
-The D3D12 backend builds on Windows only: `xmake f -m debug -y --rojorhi_backend=d3d12` selects it,
-with `--rojorhi_d3d12_adapter=hardware` (the default) or `warp` (the software rasterizer) and
-`--rojorhi_d3d12_debug=mode` (the default: the debug layer in Debug, nothing in Release), `off`,
-`layer` or `gbv` (the layer with GPU-based validation). Its own cases are tagged `[d3d12]`; the
-`contract`, `death`, `abi` and `conformance` entries above run on it, on WARP in the hosted `d3d12`
-CI job: a Debug configure with `warp` and `gbv`, a Release one with `mode` that runs `contract` and
-`conformance` only, and a Debug one with `layer` for the upscale cases WARP cannot complete under
-`gbv`; a per-case step re-runs a failed
-entry one case per process. D3D12 is implemented, verified on WARP only, not on hardware
-([the edges page](docs/architecture/d3d12-backend-edges.md#the-t1-run-on-warp)).
+The D3D12 backend builds on Windows only; run `xmake setup` first.
+`--rojorhi_d3d12_adapter` is `hardware` (the default) or `warp`, and `--rojorhi_d3d12_debug` is
+`mode` (the default: the debug layer in Debug, nothing in Release), `off`, `layer` or `gbv`
+(GPU-based validation). Its cases are tagged `[d3d12]`:
+
+```
+xmake f -m debug -y --rojorhi_backend=d3d12 --rojorhi_d3d12_adapter=warp --rojorhi_d3d12_debug=gbv
+xmake test RojoRHITests/abi   # then contract, death and conformance
+```
+
+The hosted `d3d12` CI job runs them on WARP in three configures: Debug with `gbv`, Release with
+`mode` (`contract` and `conformance` only), and Debug with `layer` for the upscale cases WARP cannot
+complete under `gbv`. The `tracker-stress` job builds the Null backend under MSVC AddressSanitizer
+and runs the two hidden `[stress][.]` cases of `Tests/Core/TrackerStressTests.cpp` with
+`RojoRHITests.exe "[stress]"` from the test build directory. D3D12 is implemented, verified on
+WARP only, not on hardware ([the run](docs/architecture/d3d12-backend-edges.md#the-t1-run-on-warp));
+it has no benchmark arm yet, and timing waits for the Windows GPU machine (#21).
 
 The benchmark harness (macOS only, [architecture](docs/architecture/benchmarks.md)):
 
@@ -174,7 +191,7 @@ v1 GPU conformance is checkpoint A, the cases tagged `[checkpoint-a]`
 ([ADR 0005](docs/decisions/0005-conformance-checkpoint.md)). The v2 interface's T1 conformance
 cases of ADR 0009 are the `[conformance]` entry on Metal 4, one file for each category. Both need
 `MTL_DEBUG_LAYER=1` and a real device on Metal 4 Apple Silicon, and there is no CPU-only substitute
-for either.
+for either. The `d3d12` CI job also runs `[conformance]` on WARP, which is not T1 acceptance.
 
 The shader ABI module `Shaders/RojoRHI/RojoRHI.slang` and its hosted checks exist: the conformance
 shaders under `Shaders/Tests/` compile to MSL, SPIR-V and HLSL on every host, and the build checks
@@ -195,14 +212,14 @@ recording](docs/architecture/null-backend-recording.md)).
   `ROJORHI_ASSERT` ([C++ style](docs/conventions/cpp-style.md), ADR 0009).
 - Every GPU object is created with a label, defaulted to the `rojorhi.` prefix when the caller
   supplies none.
-- Metal 4 is the only native backend implemented today, and the v2 one implements every entry:
-  device, resources, queues, fences and frames, shader libraries, pipelines, command lists (copies,
-  fills, clears, barriers, scopes, timed on request, render passes, dispatches, draws and MetalFX
-  upscales), presentation, sparse resources and capture, refusing with `Unsupported` only what the
-  reference lets it refuse. It is the default on macOS (`rojorhi_backend` is `null` elsewhere).
-  D3D12 is planned and Vulkan is a design oracle with no code; no document claims either as a
-  capability until it is real. The Null backend is test-only and implements every chapter (ADR
-  0008).
+- The Metal 4 backend of v2 implements every entry: device, resources, queues, fences and frames,
+  shader libraries, pipelines, command lists (copies, fills, clears, barriers, scopes, timed on
+  request, render passes, dispatches, draws and MetalFX upscales), presentation, sparse resources
+  and capture, refusing with `Unsupported` only what the reference lets it refuse. It is the default
+  on macOS (`rojorhi_backend` is `null` elsewhere). D3D12 is implemented, verified on WARP only, not
+  on hardware; Vulkan is a design oracle with no code. A backend is a capability only when T1 passes
+  unchanged on hardware, and no document claims one before then (ADR 0026). The Null backend is
+  test-only and implements every chapter (ADR 0008).
 - Every check lives in `Source/Core`; a backend entry calls the core's check first, then
   translates, and holds no `ROJORHI_VU`. A Metal 4 entry that calls an autoreleasing factory opens
   an autorelease pool, and so does every retire hook ([Metal 4 backend](

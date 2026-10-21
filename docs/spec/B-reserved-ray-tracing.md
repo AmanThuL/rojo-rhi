@@ -44,11 +44,11 @@ Callable shaders, intersection shaders and recursion depth fall with them.
 | Acceleration structure | `MTL::AccelerationStructure` created from an `MTL::Heap` at an offset, built by `MTL4::ComputeCommandEncoder` | buffer in the acceleration-structure layout, built by `BuildRaytracingAccelerationStructure` | `VkAccelerationStructureKHR` over a buffer, built by `vkCmdBuildAccelerationStructuresKHR` |
 | Shader reference | `gpuResourceID` in the hidden ID table, one extra 8-byte load | shader-resource view in `ResourceDescriptorHeap` | acceleration-structure descriptor in the resource heap, or its device address |
 | Inline query | `intersection_query` in MSL | `RayQuery` (DXR 1.1) | `VK_KHR_ray_query` |
-| Hardware | Apple6 and newer, inside the Apple7 floor | DirectX 12 Ultimate (DXR 1.1), inside the planned floor | optional extensions |
+| Hardware | Apple6 and newer, inside the Apple7 floor | DirectX 12 Ultimate (DXR 1.1), inside the D3D12 floor | optional extensions |
 | Cost of inline queries | cheap: the structure is reached through an ID-table entry | native | native |
 | Ray-tracing pipelines | costly: no binding-table pipeline, emulation only | native, not exposed | native, not exposed |
 
-The Metal 4 floor and the planned D3D12 floor of [ADR 0010](../decisions/0010-hardware-floor.md)
+The Metal 4 floor and the D3D12 floor of [ADR 0010](../decisions/0010-hardware-floor.md)
 already include inline ray queries, so adding them needs no new floor; on Vulkan the oracle
 mapping assumes `VK_KHR_acceleration_structure` and `VK_KHR_ray_query`. Exact Metal 4
 build-descriptor names are *unverified* until an entry is written against the shipping headers.

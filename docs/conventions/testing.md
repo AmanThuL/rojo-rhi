@@ -167,7 +167,15 @@ run on WARP shows the lowering functionally right on the D3D reference implement
 "implemented, verified on WARP only, not on hardware" until a hardware run, and no WARP run counts
 as T1 acceptance ([the run](../architecture/d3d12-backend-edges.md#the-t1-run-on-warp)). An abort
 ends the whole Catch2 process, and every case after it goes unrun, so a case that may abort is a
-death test; the per-case failure step then names the case.
+death test; the per-case failure step then names the case. No case is limited to hardware: the
+cases that skip print their reason, and [the hardware run](../guides/d3d12-hardware-run.md) is the
+checklist for the first Windows GPU machine.
+
+**Stress cases** are tagged `[stress][.]`, hidden from every default run, and live in
+`Tests/Core/TrackerStressTests.cpp`: a long frame loop and every queue submitting from its own
+thread, on the Null backend in Debug. The `tracker-stress` CI job builds them under MSVC
+AddressSanitizer, which stands in for ThreadSanitizer there, checks the binary imports the
+sanitizer runtime and runs `RojoRHITests.exe "[stress]"`; on macOS the same filter runs by hand.
 
 ## The conformance filter
 

@@ -314,3 +314,13 @@
 - `rojoRHI::vertexIndex` excludes the first vertex and base vertex on every target, as D3D12's
   `SV_VertexID` does, and the shader ABI version is 2
   ([ADR 0024](docs/decisions/0024-vertex-index-excludes-the-base.md)).
+- The D3D12 backend implements every entry of chapters 01 to 15, refusing with `Unsupported` only
+  what the reference lets it refuse; DLSS and XeSS are not compiled in. Implemented, verified on
+  WARP only, not on hardware: the T1 conformance cases pass on WARP in Debug under the debug layer
+  and GPU-based validation, except the upscale files, which run in a third Debug configure with the
+  layer alone (#100's CI run 39660621919: `conformance` 173 cases, `contract` 578, `death` 555,
+  `abi` 10), and WARP is not T1 acceptance. `rojorhi_backend` stays `null` by default on
+  Windows until a hardware run and the owner's decision; the checklist for that run is
+  [the hardware run](docs/guides/d3d12-hardware-run.md) and the findings are in
+  [the evidence note](docs/research/2026-10-21-d3d12-warp-evidence.md)
+  ([ADR 0026](docs/decisions/0026-d3d12-implemented-before-hardware.md)).

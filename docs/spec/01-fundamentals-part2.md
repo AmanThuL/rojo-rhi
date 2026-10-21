@@ -93,8 +93,8 @@ ends. Free-threaded.
 ```
 The version of the interface the headers declare, following Semantic Versioning 2.0 for source
 compatibility; RojoRHI is built from source, so no binary compatibility is promised. Version 2 of
-the interface ships as `0.y.z` until the Metal 4 backend and the planned D3D12 backend both pass
-conformance and the driving consumer has moved to it; a breaking change bumps the minor version.
+the interface ships as `0.y.z` until the Metal 4 backend and the D3D12 backend both pass conformance
+on hardware and the driving consumer has moved to it; a breaking change bumps the minor version.
 `1.0.0` follows, after which a break needs a major version and a superseding decision record.
 Releases are to be tagged `vX.Y.Z`, so a consumer can pin a tag rather than a commit, and a
 `CHANGELOG.md` arriving with the first v2 code records breaking changes per minor version.
