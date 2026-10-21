@@ -27,8 +27,8 @@ namespace rojoRHI {
             ROJORHI_INTERNAL_ASSERT(binding.pipeline != nullptr, "a dispatch is recorded with no compute pipeline bound");
             if (binding.computeRoot != ComputeRoot::Global)
             {
-                // A backend kernel left its own root signature; switching back drops every root argument, so the root is
-                // bound again below.
+                // A backend kernel or vendor work left its own root signature; switching back drops every root argument, so
+                // the root is bound again below.
                 state.list->SetComputeRootSignature(deviceOf(list).roots.global());
                 core::noteNativeCall(list.core);
                 binding.computeRoot = ComputeRoot::Global;

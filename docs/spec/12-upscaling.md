@@ -19,11 +19,10 @@ build time. `Upscaler` is a resource handle ([fundamentals](01-fundamentals.md))
 the backend.
 
 **Unverified identifiers.** The DLSS (NGX) and XeSS identifiers in this chapter's mapping tables,
-the FSR (FidelityFX) identifiers of the Vulkan column and of the `UpscaleParams` and
-`CommandList::upscale` rows, and the FidelityFX SDK's Vulkan support are unverified against the
-SDK headers; cells that name them say so. The FSR identifiers of the D3D12 `UpscalerKind`,
-`UpscalerFlags`, `UpscalerDesc` and `Device::createUpscaler` rows are checked against the headers
-of FidelityFX SDK v2.3.0. The others are confirmed when the backend integrates each SDK.
+the FSR (FidelityFX) identifiers of the Vulkan column, and the FidelityFX SDK's Vulkan support are
+unverified against the SDK headers; cells that name them say so. The FSR identifiers of the D3D12
+column are checked against the headers of FidelityFX SDK v2.3.0. The others are confirmed when the
+backend integrates each SDK.
 
 ### `UpscalerKind`
 ```cpp
@@ -131,7 +130,7 @@ refuses the object. Creation is free-threaded and synchronous.
 #### Mapping
 | | Metal 4 | D3D12 | Vulkan |
 |---|---|---|---|
-| Call | `MTLFX::TemporalScalerDescriptor::newTemporalScaler(device, compiler)`, one at a time in the process under a backend mutex, because MetalFX creation fills a table of Metal's without a lock; an extent ratio above `supportedInputContentMaxScale` or an output under 4 texels in an axis is refused first | FSR `ffxCreateContext`, one at a time in the process under a backend mutex, because the FidelityFX loader is one per process and documents no thread safety; a device that does not list FSR refuses it with `Unsupported` first; unverified: DLSS `NVSDK_NGX_D3D12_CreateFeature`; XeSS `xessD3D12CreateContext` and `xessD3D12Init` | unverified: FSR `ffxCreateContext`; DLSS `NVSDK_NGX_VULKAN_CreateFeature`; XeSS `xessVKCreateContext` and `xessVKInit` |
+| Call | `MTLFX::TemporalScalerDescriptor::newTemporalScaler(device, compiler)`, one at a time in the process under a backend mutex, because MetalFX creation fills a table of Metal's without a lock; an extent ratio above `supportedInputContentMaxScale` or an output under 4 texels in an axis is refused first | FSR `ffxCreateContext`, one at a time in the process under a backend mutex, because the FidelityFX loader is one per process and documents no thread safety; a device that does not list FSR refuses it with `Unsupported` first, and so does an input under 2 texels in an axis, because FidelityFX makes surfaces at half the input extent (a 1x1 input made a zero-sized resource on WARP); unverified: DLSS `NVSDK_NGX_D3D12_CreateFeature`; XeSS `xessD3D12CreateContext` and `xessD3D12Init` | unverified: FSR `ffxCreateContext`; DLSS `NVSDK_NGX_VULKAN_CreateFeature`; XeSS `xessVKCreateContext` and `xessVKInit` |
 | Cost | native | cheap: DLSS feature creation records into a backend-owned command list | cheap: DLSS feature creation records into a backend-owned command buffer |
 
 ### `UpscaleParams`
@@ -171,10 +170,10 @@ struct UpscaleParams {
 #### Mapping
 | | Metal 4 | D3D12 | Vulkan |
 |---|---|---|---|
-| Inputs | `colorTexture`, `depthTexture`, `motionTexture`, `exposureTexture`, `reactiveMaskTexture`, `outputTexture` | unverified: FSR `ffxDispatchDescUpscale`; DLSS `NVSDK_NGX_D3D12_DLSS_Eval_Params`; XeSS `xess_d3d12_execute_params_t` | unverified: the Vulkan counterparts of the same SDK structures |
-| Frame values | `inputContentWidth` and `inputContentHeight`, `jitterOffsetX` and `jitterOffsetY`, `motionVectorScaleX` and `motionVectorScaleY`, `preExposure`, `reset` | render size, jitter offset, motion vector scale, pre-exposure, reset and sharpness fields of the same structures | the same as D3D12 |
-| Sharpness | ignored: the temporal scaler has no sharpening pass | honoured by FSR; ignored by DLSS and XeSS | the same as D3D12 |
-| Reactive mask | enabled at creation; a null `reactive` binds a backend-owned cleared mask | unverified: FSR reactive mask; DLSS bias-current-color mask; XeSS responsive pixel mask | the same as D3D12 |
+| Inputs | `colorTexture`, `depthTexture`, `motionTexture`, `exposureTexture`, `reactiveMaskTexture`, `outputTexture` | FSR `ffxDispatchDescUpscale` `color`, `depth`, `motionVectors`, `exposure`, `reactive` and `output`, each an `FfxApiResource` of mip 0 of layer 0 with the format its view reads (the output's sRGB format as its linear counterpart); a `D32Float` depth is `R32_FLOAT` with `FFX_API_RESOURCE_USAGE_DEPTHTARGET`, and a `D32FloatS8` depth is read through `R32_FLOAT_X8X24_TYPELESS` as `R32_FLOAT` with `DEPTHTARGET` and `STENCILTARGET` (unverified on WARP; the reference has no 24-bit depth format); the inputs in `FFX_API_RESOURCE_STATE_PIXEL_COMPUTE_READ`, the legacy `NON_PIXEL_SHADER_RESOURCE \| PIXEL_SHADER_RESOURCE` that `LAYOUT_SHADER_RESOURCE` maps to, and the output in `FFX_API_RESOURCE_STATE_UNORDERED_ACCESS`, which `LAYOUT_UNORDERED_ACCESS` maps to; a null `exposure` or `reactive` is an empty `FfxApiResource`; unverified: DLSS `NVSDK_NGX_D3D12_DLSS_Eval_Params`; XeSS `xess_d3d12_execute_params_t` | unverified: the Vulkan counterparts of the same SDK structures |
+| Frame values | `inputContentWidth` and `inputContentHeight`, `jitterOffsetX` and `jitterOffsetY`, `motionVectorScaleX` and `motionVectorScaleY`, `preExposure`, `reset` | FSR `renderSize` (`inputContent`, or the input extent when it is zero), `upscaleSize` (the output extent), `jitterOffset`, `motionVectorScale`, `preExposure` and `reset`; `jitterOffset` takes `jitterX` and `jitterY` unchanged, in input texels with y down (unverified on WARP: uniform inputs cannot show the sign); `frameTimeDelta` is 1000/60 ms and the camera is fixed (`cameraNear` 0.1, `cameraFar` 100, `cameraFovAngleVertical` 1 radian, `viewSpaceToMetersFactor` 1), since `UpscaleParams` carries neither; unverified: the render size, jitter offset, motion vector scale, pre-exposure and reset fields of the DLSS and XeSS structures | render size, jitter offset, motion vector scale, pre-exposure, reset and sharpness fields of the same structures |
+| Sharpness | ignored: the temporal scaler has no sharpening pass | honoured by FSR: `sharpness`, with `enableSharpening` set when it is above zero; ignored by DLSS and XeSS | honoured by FSR; ignored by DLSS and XeSS |
+| Reactive mask | enabled at creation; a null `reactive` binds a backend-owned cleared mask | FSR `reactive`, empty when `reactive` is null; unverified: DLSS bias-current-color mask; XeSS responsive pixel mask | unverified: FSR reactive mask; DLSS bias-current-color mask; XeSS responsive pixel mask |
 | Cost | native | native | native |
 
 ### `CommandList::upscale`
@@ -210,5 +209,5 @@ operation forms its own debug group named `params.label`, defaulted to `rojorhi.
 #### Mapping
 | | Metal 4 | D3D12 | Vulkan |
 |---|---|---|---|
-| Call | set the scaler's inputs, then `MTL4FX::TemporalScaler::encodeToCommandBuffer` between encoders | unverified: FSR `ffxDispatch`; DLSS `NGX_D3D12_EVALUATE_DLSS_EXT`; XeSS `xessD3D12Execute` | unverified: FSR `ffxDispatch`; DLSS `NGX_VULKAN_EVALUATE_DLSS_EXT`; XeSS `xessVKExecute` |
-| Cost | cheap: ends the open compute encoder; a carrier encoder waits at queue level for every earlier stage and an `MTL::Fence` carries that into MetalFX's own encoders, and the list's end waits on the fence and holds back every later stage | cheap: the backend rebinds its global root signature and descriptor heaps after the vendor call | cheap: the backend rebinds its descriptor heap and push data after the vendor call |
+| Call | set the scaler's inputs, then `MTL4FX::TemporalScaler::encodeToCommandBuffer` between encoders | FSR `ffxDispatch` with `ffxDispatchDescUpscale` on the Graphics list, inside the upscale's PIX event and, when timed, its timestamp pair; FidelityFX records its own legacy barriers from the states the inputs name and back. Then `SetDescriptorHeaps` sets the backend's heaps again, and the global root signature of each side, the root block, `b1`, the pipeline and the topology are left for the next dispatch, draw or `setPipeline` to set again; no lock; unverified: DLSS `NGX_D3D12_EVALUATE_DLSS_EXT`; XeSS `xessD3D12Execute` | unverified: FSR `ffxDispatch`; DLSS `NGX_VULKAN_EVALUATE_DLSS_EXT`; XeSS `xessVKExecute` |
+| Cost | cheap: ends the open compute encoder; a carrier encoder waits at queue level for every earlier stage and an `MTL::Fence` carries that into MetalFX's own encoders, and the list's end waits on the fence and holds back every later stage | cheap: one `SetDescriptorHeaps` after the vendor call; the next dispatch or draw sets its side's global root signature, root block and `b1` again, and the pipeline and topology are set again | cheap: the backend rebinds its descriptor heap and push data after the vendor call |
