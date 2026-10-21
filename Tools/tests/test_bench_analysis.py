@@ -202,6 +202,21 @@ class RuleTests(unittest.TestCase):
             result = analysis.count_rule("C1", r, n)
             self.assertEqual((result["judged"], result["miss"]), (True, None))
 
+    def test_native_columns_are_per_backend(self) -> None:
+        self.assertEqual(analysis.native_calls_per_repetition("metal4"),
+                         analysis.NATIVE_CALLS_PER_REPETITION)
+        self.assertEqual(analysis.native_calls_per_repetition("d3d12"), {
+            "C1": 2, "C2": 2, "C3": 2, "C4": 2, "C5": 0, "C6": 2, "C7": 1, "C8": 8, "C9": 2})
+
+    def test_c8_on_d3d12_has_eight_native_calls_and_a_limit_of_fifteen(self) -> None:
+        n = {"value": 8.0, "unstable": False}
+        within = analysis.count_rule("C8", {"value": 15.0, "unstable": False}, n, "d3d12")
+        self.assertEqual((within["limit"], within["miss"]), (15, False))
+        self.assertTrue(analysis.count_rule("C8", {"value": 16.0, "unstable": False}, n,
+                                            "d3d12")["miss"])
+        metal = analysis.count_rule("C8", {"value": 15.0, "unstable": False}, n)
+        self.assertIsNone(metal["miss"])  # 8 is not Metal's registered 12
+
     def test_allocations_equal_pass_and_one_more_misses(self) -> None:
         self.assertFalse(analysis.allocation_rule("C1", cmp(3, 3, 0, 0, 0))["miss"])
         self.assertTrue(analysis.allocation_rule("C1", cmp(4, 3, 1, 1, 1))["miss"])

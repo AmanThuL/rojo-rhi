@@ -1,12 +1,15 @@
 from __future__ import annotations
 
 import contextlib
+import ctypes
 import io
 import json
+import shutil
 import subprocess
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 from Tools import bench
 
@@ -407,6 +410,151 @@ class CorrectnessTests(DriverCase):
         self.assertEqual(sorted(self.summary()), ["C1", "frame"])
 
 
+class D3d12Case(DriverCase):
+    """A driver over a d3d12 build record; nvidia-smi answers from a script."""
+
+    def write_d3d12(self, adapter: str) -> None:
+        (self.out / "bench-environment.json").write_text(
+            json.dumps({"backend": "d3d12", "adapter": adapter}))
+
+    def with_smi(self, fake: FakeBench, readings: list[str | None], default: str = "60, 1800"):
+        """Return a run hook: nvidia-smi pops `readings` (None means the CLI is missing), anything
+        else goes to the fake harness."""
+        queue = list(readings)
+        self.smi_calls: list[list[str]] = []
+
+        def run(argv, cwd=None, env=None):
+            if argv[0] != "nvidia-smi":
+                return fake(argv, cwd, env)
+            self.smi_calls.append(list(argv))
+            reading = queue.pop(0) if queue else default
+            if reading is None:
+                raise FileNotFoundError("nvidia-smi")
+            return subprocess.CompletedProcess(argv, 0, reading + "\n", "")
+        return run
+
+    def passing(self, *workloads: str) -> None:
+        (self.out / "correctness").mkdir(exist_ok=True)
+        (self.out / "correctness" / "summary.json").write_text(
+            json.dumps({w: {"passed": True, "failures": []} for w in workloads}))
+
+    def kept(self, name: str) -> dict:
+        return json.loads((self.out / "timing" / name).read_text())
+
+
+class D3d12CorrectnessTests(D3d12Case):
+    def setUp(self) -> None:
+        super().setUp()
+        self.write_d3d12("warp")
+
+    def summary(self) -> dict:
+        return json.loads((self.out / "correctness" / "summary.json").read_text())
+
+    def test_d3d12_correctness_sets_no_metal_variable_and_validates_r(self) -> None:
+        self.driver().correctness(arms="R,N", only=["C1"])
+        self.assertEqual(self.summary()["C1"], {"passed": True, "failures": [], "gate": "compared"})
+        for argv, env in self.fake.calls:
+            self.assertEqual(env, {"PATH": "/bin"})
+            self.assertTrue(argv[0].endswith("RojoRHIBench.exe"))
+            self.assertEqual("--validation" in argv, "/debug/" in argv[0])
+
+    def test_d3d12_native_column_is_the_registered_one(self) -> None:
+        configs = [{"id": f"C8-k{k}", "workload": "C8", "params": {"K": k}, "arms": ["R", "N"]}
+                   for k in (100, 1000)]
+        (self.out / "configurations.json").write_text(json.dumps(configs))
+
+        def n_makes(per_pass: int):
+            original = self.fake.__call__
+
+            def patched(argv, cwd=None, env=None):
+                result = original(argv, cwd, env)
+                out = Path(argv[argv.index("--out") + 1])
+                data = json.loads(out.read_text())
+                k = 100 if argv[2].endswith("k100") else 1000
+                data["arms"]["N"]["nativeCalls"] = [per_pass * k + 7] * 3
+                out.write_text(json.dumps(data))
+                return result
+            return patched
+
+        self.driver(n_makes(8)).correctness(arms="R,N", only=["C8"])
+        self.assertEqual(self.summary()["C8"]["failures"], [])
+        shutil.rmtree(self.out / "correctness" / "dumps")
+        for kept in (self.out / "correctness").glob("C8-*.json"):
+            kept.unlink()
+        self.driver(n_makes(9)).correctness(arms="R,N", only=["C8"])
+        entry = self.summary()["C8"]
+        self.assertFalse(entry["passed"])
+        self.assertTrue(any("registered minimum is 8" in failure for failure in entry["failures"]))
+
+
+class D3d12TimingTests(D3d12Case):
+    def setUp(self) -> None:
+        super().setUp()
+        self.write_d3d12("hardware")
+        self.passing("C1")
+
+    def run_timing(self, readings: list[str | None]) -> None:
+        self.driver(self.with_smi(self.fake, readings)).timing(only=["C1"])
+
+    def test_timing_refuses_warp(self) -> None:
+        self.write_d3d12("warp")
+        message = "timing on WARP measures a software rasterizer, not a cost (ADR 0014)"
+        with self.assertRaises(bench.BenchError) as raised:
+            self.driver(self.with_smi(self.fake, [])).timing(only=None)
+        self.assertEqual(str(raised.exception), message)
+        self.assertEqual(self.fake.calls, [])
+        self.assertEqual(self.smi_calls, [])
+
+    def test_d3d12_timing_runs_the_exe_and_records_the_readings(self) -> None:
+        self.run_timing([])
+        self.assertTrue(self.fake.calls[0][0][0].endswith("bin/release/RojoRHIBench.exe"))
+        thermal = self.kept("C1-k100-p00.json")["thermal"]
+        self.assertEqual(thermal, {"startC": 60.0, "endC": 60.0,
+                                   "startClockMHz": 1800.0, "endClockMHz": 1800.0})
+        self.assertEqual(self.sleeps, [])
+
+    def test_d3d12_timing_discards_a_process_that_warms_by_more_than_ten_degrees(self) -> None:
+        self.run_timing(["60, 1800", "71, 1800"])
+        self.assertTrue((self.out / "timing" / "C1-k100-p00.discarded1.json").exists())
+        self.assertTrue((self.out / "timing" / "C1-k100-p00.json").exists())
+        self.assertEqual(self.sleeps, [120])
+
+    def test_d3d12_timing_keeps_a_process_that_warms_by_exactly_ten_degrees(self) -> None:
+        self.run_timing(["60, 1800", "70, 1800"])
+        self.assertFalse(list((self.out / "timing").glob("*.discarded*")))
+
+    def test_d3d12_timing_discards_a_process_whose_clock_drops_below_95_percent(self) -> None:
+        self.run_timing(["60, 1800", "60, 1709"])
+        self.assertTrue((self.out / "timing" / "C1-k100-p00.discarded1.json").exists())
+        self.assertEqual(self.sleeps, [120])
+
+    def test_d3d12_timing_keeps_a_clock_at_95_percent_of_the_rounds_median(self) -> None:
+        self.run_timing(["60, 1800", "60, 1710"])
+        self.assertFalse(list((self.out / "timing").glob("*.discarded*")))
+
+    def test_d3d12_clock_median_counts_kept_results_only(self) -> None:
+        (self.out / "timing").mkdir()
+        for name, clock in (("X-p00.json", 2000), ("X-p01.discarded1.json", 100)):
+            (self.out / "timing" / name).write_text(json.dumps({"thermal": {"startClockMHz": clock}}))
+        self.run_timing(["60, 1800", "60, 1750"])  # floor 0.95 * 1900 = 1805
+        self.assertTrue((self.out / "timing" / "C1-k100-p00.discarded1.json").exists())
+
+    def test_d3d12_timing_stops_after_four_hot_attempts(self) -> None:
+        self.run_timing(["60, 1800", "80, 1800"] * 4)
+        self.assertTrue((self.out / "timing" / "C1-k100.notrun.json").exists())
+        self.assertEqual(self.sleeps[:3], [120, 120, 120])
+
+    def test_d3d12_timing_without_nvidia_smi_records_not_monitored_and_sleeps_30s(self) -> None:
+        self.run_timing([None] * 200)
+        self.assertEqual(self.kept("C1-k100-p00.json")["thermal"], "not monitored")
+        self.assertEqual(self.sleeps, [30] * 39)
+
+    def test_d3d12_timing_ignores_the_harness_thermal_field(self) -> None:
+        fake = FakeBench(thermal=lambda id_, previous: "serious")
+        self.driver(self.with_smi(fake, [])).timing(only=["C1"])
+        self.assertTrue((self.out / "timing" / "C1-k100-p00.json").exists())
+
+
 class BuildAndMainTests(DriverCase):
     def test_build_copies_both_modes_and_reconfigures_to_null_debug(self) -> None:
         repo = Path(self.temp.name) / "repo"
@@ -440,6 +588,78 @@ class BuildAndMainTests(DriverCase):
         found = (environment["backend"], environment["power"], environment["bench"]["metal4"])
         self.assertEqual(found, ("metal4", "AC Power", True))
         self.assertEqual(len(json.loads((self.out / "configurations.json").read_text())), 3)
+
+    def d3d12_build(self, adapter: str | None) -> tuple[list[str], list[list[str]]]:
+        repo = Path(self.temp.name) / "repo"
+        for mode in ("release", "debug"):
+            tree = repo / "build" / "windows" / "x64" / mode / "rojorhi-bench"
+            for name in ("RojoRHIBench.exe", "Shaders/x.d3d12lib", "D3D12/D3D12Core.dll",
+                         "D3D12/d3d12SDKLayers.dll", "d3d10warp.dll"):
+                (tree / name).parent.mkdir(parents=True, exist_ok=True)
+                (tree / name).write_text(name)
+        steps: list[list[str]] = []
+
+        def run(argv, cwd=None, env=None):
+            steps.append(list(argv))
+            text = ""
+            if argv[1:2] == ["list"]:
+                text = "".join(json.dumps(c) + "\n" for c in CONFIGS)
+            if argv[1:2] == ["environment"]:
+                Path(argv[2]).write_text(json.dumps({"device": "d"}))
+            return subprocess.CompletedProcess(argv, 0, text, "")
+
+        hooks = bench.Hooks(run=run, sleep=lambda s: None, clock=lambda: 0.0,
+                            power=lambda: "AC Power", environment=lambda: {"device": "test"},
+                            base_env={})
+        bench.Driver(self.out, hooks, repo).build("d3d12", adapter)
+        return [" ".join(s) for s in steps if s[0] == "xmake"], steps
+
+    def test_build_copies_the_d3d12_runtime(self) -> None:
+        self.d3d12_build("warp")
+        for mode in ("release", "debug"):
+            for name in ("RojoRHIBench.exe", "Shaders/x.d3d12lib", "D3D12/D3D12Core.dll",
+                         "D3D12/d3d12SDKLayers.dll", "d3d10warp.dll"):
+                self.assertTrue((self.out / "bin" / mode / name).exists(), f"{mode}/{name}")
+
+    def test_build_configures_d3d12_debug_with_the_layer_and_release_with_mode(self) -> None:
+        xmake, steps = self.d3d12_build("warp")
+        prefix = "--rojorhi_backend=d3d12 --rojorhi_d3d12_adapter=warp"
+        self.assertEqual(xmake, [
+            f"xmake f -m release -y {prefix} --rojorhi_d3d12_debug=mode", "xmake build RojoRHIBench",
+            f"xmake f -m debug -y {prefix} --rojorhi_d3d12_debug=layer", "xmake build RojoRHIBench",
+            "xmake f -m debug -y --rojorhi_backend=null"])
+        listed = next(s for s in steps if s[1:2] == ["list"])
+        self.assertTrue(listed[0].endswith("bin/release/RojoRHIBench.exe"))
+
+    def test_build_records_the_adapter_and_debug_and_defaults_to_hardware(self) -> None:
+        xmake, _ = self.d3d12_build(None)
+        self.assertIn("--rojorhi_d3d12_adapter=hardware", xmake[0])
+        record = json.loads((self.out / "bench-environment.json").read_text())
+        self.assertEqual((record["backend"], record["adapter"]), ("d3d12", "hardware"))
+        self.assertEqual(record["debug"], {"release": "mode", "debug": "layer"})
+
+    def test_adapter_needs_the_d3d12_backend(self) -> None:
+        arguments = ["--root", str(self.out.parents[1]), "--topic", "t2", "--date", "2026-10-18",
+                     "build", "--backend", "metal4", "--adapter", "warp"]
+        with contextlib.redirect_stderr(io.StringIO()) as errors, self.assertRaises(SystemExit):
+            bench.main(arguments, None)
+        self.assertIn("--adapter", errors.getvalue())
+        with self.assertRaises(bench.BenchError):
+            self.driver().build("metal4", "warp")
+
+    def test_power_on_windows_reads_get_system_power_status(self) -> None:
+        def status_of(line: int):
+            def call(reference):
+                reference._obj.ACLineStatus = line
+                return 1
+            return call
+
+        for line, expected in ((1, "AC Power"), (0, "Battery Power"), (255, "unknown")):
+            windll = mock.MagicMock()
+            windll.kernel32.GetSystemPowerStatus.side_effect = status_of(line)
+            with mock.patch.object(bench.sys, "platform", "win32"), \
+                    mock.patch.object(ctypes, "windll", windll, create=True):
+                self.assertEqual(bench.probe_power(), expected)
 
     def test_a_rejected_configure_fails_with_the_message(self) -> None:
         def run(argv, cwd=None, env=None):

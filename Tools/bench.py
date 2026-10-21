@@ -14,6 +14,7 @@ a result that exists is never run again.
 from __future__ import annotations
 
 import argparse
+import ctypes
 import datetime
 import json
 import os
@@ -35,6 +36,7 @@ from Tools import gpu_evidence  # noqa: E402
 
 ROOT = Path(__file__).resolve().parents[1]
 EXECUTABLE = "RojoRHIBench"
+D3D12_EXECUTABLE = "RojoRHIBench.exe"
 MODES = ("release", "debug")
 
 # Statistics, recorded per run: a process above the nominal thermal state is discarded and rerun
@@ -45,6 +47,20 @@ REST_SECONDS = 120
 
 # Metrics 1, standard error: the validation layer's banner is the only line a run may print.
 STDERR_ALLOWLIST = ("Validation Enabled",)
+
+# Statistics, thermal state on Windows (D3D12): there is no thermalState, so a vendor CLI is read
+# before and after each timed process. A process is discarded when the temperature rose by more than
+# TEMPERATURE_RISE_LIMIT degrees or the end clock fell below CLOCK_FLOOR of the round's median start
+# clock; without the CLI the record says so and the driver rests between processes.
+GPU_QUERY = ["nvidia-smi", "--query-gpu=temperature.gpu,clocks.sm", "--format=csv,noheader,nounits"]
+TEMPERATURE_RISE_LIMIT = 10
+CLOCK_FLOOR = 0.95
+NOT_MONITORED = "not monitored"
+UNMONITORED_REST_SECONDS = 30
+WARP_REFUSAL = "timing on WARP measures a software rasterizer, not a cost (ADR 0014)"
+
+# Build, d3d12: the debug features each mode configures (the layer in Debug, nothing in Release).
+D3D12_DEBUG = {"release": "mode", "debug": "layer"}
 
 # Statistics, power: timed processes run on mains power only.
 MAINS_POWER = "AC Power"
@@ -78,8 +94,31 @@ def run_process(argv, cwd=None, env=None) -> subprocess.CompletedProcess:
                           stderr=subprocess.PIPE)
 
 
+class SystemPowerStatus(ctypes.Structure):
+    """The Win32 SYSTEM_POWER_STATUS record `GetSystemPowerStatus` fills."""
+
+    _fields_ = [("ACLineStatus", ctypes.c_ubyte), ("BatteryFlag", ctypes.c_ubyte),
+                ("BatteryLifePercent", ctypes.c_ubyte), ("SystemStatusFlag", ctypes.c_ubyte),
+                ("BatteryLifeTime", ctypes.c_uint32), ("BatteryFullLifeTime", ctypes.c_uint32)]
+
+
+def probe_windows_power() -> str:
+    """Return the power source `GetSystemPowerStatus` reports, as `probe_power` does."""
+    status = SystemPowerStatus()
+    try:
+        kernel32 = ctypes.windll.kernel32  # type: ignore[attr-defined]
+        read = kernel32.GetSystemPowerStatus(ctypes.byref(status))
+    except (AttributeError, OSError):
+        return "unknown"
+    if not read:
+        return "unknown"
+    return {1: MAINS_POWER, 0: "Battery Power"}.get(status.ACLineStatus, "unknown")
+
+
 def probe_power() -> str:
-    """Return the power source `pmset -g batt` reports: "AC Power", "Battery Power" or "unknown"."""
+    """Return the power source the machine reports: "AC Power", "Battery Power" or "unknown"."""
+    if sys.platform == "win32":
+        return probe_windows_power()
     try:
         result = run_process(["pmset", "-g", "batt"])
     except OSError:
@@ -134,13 +173,15 @@ class Driver:
         self.out = out
         self.hooks = hooks
         self.repo = repo
+        self.rest_pending = False
         out.mkdir(parents=True, exist_ok=True)
 
     # Helpers.
 
-    def executable(self, mode: str) -> Path:
-        """Return the copied harness binary of a build mode."""
-        return self.out / "bin" / mode / EXECUTABLE
+    def executable(self, mode: str, backend: str | None = None) -> Path:
+        """Return the copied harness binary of a build mode, named for the recorded backend."""
+        name = D3D12_EXECUTABLE if (backend or self.backend()) == "d3d12" else EXECUTABLE
+        return self.out / "bin" / mode / name
 
     def configurations(self) -> list[dict]:
         """Return the configurations `list` printed at build time."""
@@ -155,6 +196,10 @@ class Driver:
         if not path.exists():
             raise BenchError(f"{path} is missing: run the build command first")
         return read_json(path)["backend"]
+
+    def adapter(self) -> str | None:
+        """Return the adapter a d3d12 build selects, None for the other backends."""
+        return read_json(self.out / RECORD_FILE).get("adapter")
 
     def selected(self, only: list[str] | None) -> list[dict]:
         """Return the configurations of the requested workloads, in list order."""
@@ -192,18 +237,31 @@ class Driver:
             text = (result.stderr or result.stdout).strip()
             raise BenchError(f"xmake {' '.join(arguments)} failed:\n{text}")
 
-    def build(self, backend: str) -> None:
+    def build(self, backend: str, adapter: str | None = None) -> None:
         """Build both modes, copy the binaries and record the configurations and environment."""
+        if adapter is not None and backend != "d3d12":
+            raise BenchError("--adapter applies to the d3d12 backend only")
+        adapter = adapter or ("hardware" if backend == "d3d12" else None)
         for mode in MODES:
-            self.xmake("f", "-m", mode, "-y", f"--rojorhi_backend={backend}")
+            if backend == "d3d12":
+                debug = D3D12_DEBUG[mode]
+                self.xmake("f", "-m", mode, "-y", f"--rojorhi_backend={backend}",
+                           f"--rojorhi_d3d12_adapter={adapter}", f"--rojorhi_d3d12_debug={debug}")
+            else:
+                self.xmake("f", "-m", mode, "-y", f"--rojorhi_backend={backend}")
             self.xmake("build", EXECUTABLE)
-            source = self.repo / "build" / "macosx" / "arm64" / mode / "rojorhi-bench"
             target = self.out / "bin" / mode
             target.mkdir(parents=True, exist_ok=True)
-            shutil.copy2(source / EXECUTABLE, target / EXECUTABLE)
-            shutil.copytree(source / "Shaders", target / "Shaders", dirs_exist_ok=True)
+            if backend == "d3d12":
+                # The executable needs the Agility runtime, the shader libraries and WARP beside it.
+                source = self.repo / "build" / "windows" / "x64" / mode / "rojorhi-bench"
+                shutil.copytree(source, target, dirs_exist_ok=True)
+            else:
+                source = self.repo / "build" / "macosx" / "arm64" / mode / "rojorhi-bench"
+                shutil.copy2(source / EXECUTABLE, target / EXECUTABLE)
+                shutil.copytree(source / "Shaders", target / "Shaders", dirs_exist_ok=True)
         self.xmake("f", "-m", "debug", "-y", "--rojorhi_backend=null")
-        release = str(self.executable("release"))
+        release = str(self.executable("release", backend))
         listed = self.hooks.run([release, "list"], cwd=self.repo)
         if listed.returncode:
             raise BenchError(f"{release} list failed:\n{listed.stderr.strip()}")
@@ -217,6 +275,7 @@ class Driver:
         scratch.unlink()
         write_json(self.out / RECORD_FILE, {
             **self.hooks.environment(), "bench": bench_environment, "backend": backend,
+            **({"adapter": adapter, "debug": D3D12_DEBUG} if backend == "d3d12" else {}),
             "power": self.hooks.power(),
             "strippedEnvironment": stripped_names(self.hooks.base_env),
         })
@@ -234,7 +293,8 @@ class Driver:
         arguments = [str(self.executable(mode)), "run", config["id"], "--mode", "correctness",
                      "--order", "RN", "--arms", arms, "--dump", str(directory / "dumps" / mode)]
         if mode == "debug":
-            env["MTL_DEBUG_LAYER"] = "1"
+            if self.backend() != "d3d12":  # the D3D12 debug layer is built in
+                env["MTL_DEBUG_LAYER"] = "1"
             if "R" in arms.split(","):
                 arguments.append("--validation")
         partial = directory / f"{name}.partial"
@@ -276,7 +336,7 @@ class Driver:
 
     def native_count_failures(self, workload: str, configs: list[dict]) -> list[str]:
         """Return a failure when N's calls per repetition differ from the registered column."""
-        registered = analysis.NATIVE_CALLS_PER_REPETITION.get(workload)
+        registered = analysis.native_calls_per_repetition(self.backend()).get(workload)
         if registered is None:
             return []
         k_hi, k_lo = analysis.K_PAIRS.get(workload, analysis.DEFAULT_K_PAIR)
@@ -339,6 +399,8 @@ class Driver:
         """Run the timed processes of every workload whose correctness passed."""
         if self.backend() == "null":
             raise BenchError("timing is refused on a Null build: it measures nothing")
+        if self.backend() == "d3d12" and self.adapter() == "warp":
+            raise BenchError(WARP_REFUSAL)
         self.record_stripped()
         gate_path = self.out / "correctness" / "summary.json"
         gate = read_json(gate_path) if gate_path.exists() else {}
@@ -351,6 +413,10 @@ class Driver:
             members = [c for c in configs if c["workload"] == workload]
             for process in range(analysis.PROCESSES):
                 for config in members:
+                    # Unmonitored: rest before the next process, never after the last.
+                    if self.rest_pending:
+                        self.rest_pending = False
+                        self.hooks.sleep(UNMONITORED_REST_SECONDS)
                     self.timed_process(config, process)
 
     def timed_process(self, config: dict, process: int) -> None:
@@ -393,8 +459,11 @@ class Driver:
         partial = timing / f"{stem}.partial"
         arguments = [str(self.executable("release")), "run", config["id"], "--mode", "timing",
                      "--order", order, "--arms", ",".join(config["arms"]), "--out", str(partial)]
+        d3d12 = self.backend() == "d3d12"
+        before = self.read_gpu() if d3d12 else None
         started = self.hooks.clock()
         result = self.hooks.run(arguments, cwd=self.repo, env=strip_metal(self.hooks.base_env))
+        after = self.read_gpu() if d3d12 else None
         log = timing / f"{stem}.log"
         log.write_text(result.stderr or "")
         if result.returncode or not partial.exists():
@@ -414,16 +483,64 @@ class Driver:
                              f"see {log}")
         data["power"] = power
         data["attempt"] = attempt
+        if d3d12:
+            hot = self.judge_gpu(data, before, after)
+        else:
+            hot = next((state for state in (data["thermalStart"], data["thermalEnd"])
+                        if state != THERMAL_NOMINAL), THERMAL_NOMINAL)
         write_json(partial, data)
-        hot = next((state for state in (data["thermalStart"], data["thermalEnd"])
-                    if state != THERMAL_NOMINAL), THERMAL_NOMINAL)
         if hot == THERMAL_NOMINAL:
             partial.rename(timing / f"{stem}.json")
         else:
             partial.rename(timing / f"{stem}.discarded{attempt}.json")
             log.rename(timing / f"{stem}.discarded{attempt}.log")
         self.say(f"{stem} attempt {attempt}: {hot}, {self.hooks.clock() - started:.0f}s")
+        if data.get("thermal") == NOT_MONITORED:
+            self.rest_pending = True
         return hot
+
+    def read_gpu(self) -> tuple[float, float] | None:
+        """Return the GPU's (temperature in degrees, shader clock in MHz) from the vendor CLI, or
+        None when it is missing, fails or prints something else."""
+        # The timing machine has one NVIDIA GPU (the round records it): its reading is line one.
+        try:
+            result = self.hooks.run(GPU_QUERY, cwd=self.repo)
+        except OSError:
+            return None
+        lines = (result.stdout or "").strip().splitlines()
+        if result.returncode or not lines:
+            return None
+        try:
+            temperature, clock = (float(field) for field in lines[0].split(","))
+        except ValueError:
+            return None
+        return temperature, clock
+
+    def round_start_clocks(self) -> list[float]:
+        """Return the start clock of every kept, monitored process of the round."""
+        clocks = []
+        for path in (self.out / "timing").glob("*.json"):
+            if ".discarded" in path.name:
+                continue
+            thermal = read_json(path).get("thermal")
+            if isinstance(thermal, dict):
+                clocks.append(thermal["startClockMHz"])
+        return clocks
+
+    def judge_gpu(self, data: dict, before: tuple[float, float] | None,
+                  after: tuple[float, float] | None) -> str:
+        """Record the GPU readings in the result and return "nominal" or why it is discarded."""
+        if before is None or after is None:
+            data["thermal"] = NOT_MONITORED
+            return THERMAL_NOMINAL
+        data["thermal"] = {"startC": before[0], "endC": after[0],
+                           "startClockMHz": before[1], "endClockMHz": after[1]}
+        if after[0] - before[0] > TEMPERATURE_RISE_LIMIT:
+            return "temperature rise"
+        clocks = self.round_start_clocks() + [before[1]]
+        if after[1] < CLOCK_FLOOR * analysis.median(clocks):
+            return "clock drop"
+        return THERMAL_NOMINAL
 
     # Analysis.
 
@@ -442,7 +559,7 @@ class Driver:
                     notruns[path.name.removesuffix(".notrun.json")] = read_json(path)["reason"]
         gate_path = self.out / "correctness" / "summary.json"
         gate = read_json(gate_path) if gate_path.exists() else {}
-        result = analysis.summary(configs, processes, notruns, gate)
+        result = analysis.summary(configs, processes, notruns, gate, self.backend())
         write_json(self.out / "summary.json", result)
         report = analysis.format_report(result)
         (self.out / "analysis.txt").write_text(report)
@@ -458,13 +575,18 @@ def parse_arguments(argv: list[str] | None) -> argparse.Namespace:
     parser.add_argument("--date", default=datetime.date.today().isoformat(), help="YYYY-MM-DD")
     commands = parser.add_subparsers(dest="command", required=True)
     build = commands.add_parser("build", help="build and copy the Release and Debug binaries")
-    build.add_argument("--backend", choices=["metal4", "null"], default="metal4")
+    build.add_argument("--backend", choices=["metal4", "null", "d3d12"], default="metal4")
+    build.add_argument("--adapter", choices=["hardware", "warp"],
+                       help="d3d12 only: the adapter the build selects (default hardware)")
     correctness = commands.add_parser("correctness", help="run the correctness gate")
     correctness.add_argument("--arms", default="R,N", help="arms to run, such as N on a Null build")
     for command in (correctness, commands.add_parser("timing", help="run the timed processes")):
         command.add_argument("--only", help="comma-separated workloads, such as C1,G2")
     commands.add_parser("analyze", help="write summary.json and analysis.txt")
-    return parser.parse_args(argv)
+    args = parser.parse_args(argv)
+    if args.command == "build" and args.adapter and args.backend != "d3d12":
+        parser.error("--adapter applies to the d3d12 backend only")
+    return args
 
 
 def main(argv: list[str] | None = None, hooks: Hooks | None = None) -> int:
@@ -475,7 +597,7 @@ def main(argv: list[str] | None = None, hooks: Hooks | None = None) -> int:
     only = args.only.split(",") if getattr(args, "only", None) else None
     try:
         if args.command == "build":
-            driver.build(args.backend)
+            driver.build(args.backend, args.adapter)
         elif args.command == "correctness":
             driver.correctness(args.arms, only)
         elif args.command == "timing":

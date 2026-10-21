@@ -45,6 +45,18 @@ NATIVE_CALLS_PER_REPETITION = {
     "C1": 2, "C2": 2, "C3": 4, "C4": 2, "C5": 0, "C6": 2, "C7": 1, "C8": 12, "C9": 2,
 }
 
+# Workloads, CPU operations: the same column for the D3D12 native arm, which makes fewer calls where
+# pipeline state, topology and render-pass state persist on one command list.
+D3D12_NATIVE_CALLS_PER_REPETITION = {
+    "C1": 2, "C2": 2, "C3": 2, "C4": 2, "C5": 0, "C6": 2, "C7": 1, "C8": 8, "C9": 2,
+}
+
+
+def native_calls_per_repetition(backend: str) -> dict[str, int]:
+    """Return the registered native call column of a backend: d3d12's, else Metal's."""
+    return D3D12_NATIVE_CALLS_PER_REPETITION if backend == "d3d12" else NATIVE_CALLS_PER_REPETITION
+
+
 # Metrics, native calls: the K pair of the difference, (1,000, 100) and for C9 (100, 10).
 DEFAULT_K_PAIR = (1000, 100)
 K_PAIRS = {"C9": (100, 10)}
@@ -179,13 +191,14 @@ def gpu_rule(workload: str, comparison: dict | None) -> dict:
     return rule(True, miss, "over budget" if miss else "within budget")
 
 
-def count_rule(workload: str, r_count: dict | None, n_count: dict | None) -> dict:
+def count_rule(workload: str, r_count: dict | None, n_count: dict | None,
+               backend: str = "metal4") -> dict:
     """Decision rules, counts: R's calls per repetition at most N's registered count plus c.
 
     The limit is the registered column, not the measured N. A measured N that differs from the
     column is a defect of the native arm: the rule cannot be judged and is not run.
     """
-    registered = NATIVE_CALLS_PER_REPETITION.get(workload)
+    registered = native_calls_per_repetition(backend).get(workload)
     if registered is None:
         return rule(False, None, "reported only")
     if r_count is None or n_count is None:
@@ -273,7 +286,7 @@ def complete(processes: Mapping[int, dict] | None) -> bool:
 
 
 def workload_counts(workload: str, configurations: Sequence[dict],
-                    processes: Mapping[str, Mapping[int, dict]]) -> dict:
+                    processes: Mapping[str, Mapping[int, dict]], backend: str = "metal4") -> dict:
     """Return R's and N's native calls per repetition, and the rule, for one workload."""
     k_hi, k_lo = K_PAIRS.get(workload, DEFAULT_K_PAIR)
     by_k = {config["params"].get("K"): config["id"]
@@ -286,8 +299,8 @@ def workload_counts(workload: str, configurations: Sequence[dict],
             pair.append(flat_counts(held, name) if complete(held) else [])
         result[name] = per_operation_count(pair[0], pair[1], k_hi, k_lo) if all(pair) else None
     result["c"] = CALLS_PER_REPETITION.get(workload)
-    result["registeredN"] = NATIVE_CALLS_PER_REPETITION.get(workload)
-    result["rule"] = count_rule(workload, result["R"], result["N"])
+    result["registeredN"] = native_calls_per_repetition(backend).get(workload)
+    result["rule"] = count_rule(workload, result["R"], result["N"], backend)
     return result
 
 
@@ -359,7 +372,8 @@ def decisions(configurations: Sequence[dict], workloads: Mapping[str, dict]) -> 
 
 
 def summary(configurations: Sequence[dict], processes: Mapping[str, Mapping[int, dict]],
-            notruns: Mapping[str, str], correctness: Mapping[str, dict]) -> dict:
+            notruns: Mapping[str, str], correctness: Mapping[str, dict],
+            backend: str = "metal4") -> dict:
     """Return the round's summary: values and rule results per configuration, then the verdict.
 
     `processes` maps a configuration id to its kept results keyed by process number, `notruns`
@@ -372,7 +386,7 @@ def summary(configurations: Sequence[dict], processes: Mapping[str, Mapping[int,
             config, processes.get(config["id"]), notruns.get(config["id"]),
             None if gate is None else gate.get("passed")))
     names = list(dict.fromkeys(config["workload"] for config in configurations))
-    workloads = {name: workload_counts(name, configurations, processes)
+    workloads = {name: workload_counts(name, configurations, processes, backend)
                  for name in names if name in CALLS_PER_REPETITION or name == "C10m1"}
     found = decisions(entries, workloads)
     gpu_missed = any(item["rule"] == "gpu" for item in found["misses"])
