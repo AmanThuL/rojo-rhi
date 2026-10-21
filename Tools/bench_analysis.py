@@ -3,7 +3,8 @@
 
 Every function is pure: it reads the per-process results it is given and returns plain data. The
 numbers and rules come from the round's pre-registration
-(docs/research/2026-10-18-metal4-overhead.md). `Tools/bench.py` reads the files and calls
+(docs/research/2026-10-18-metal4-overhead.md), with the CPU budget of ADR 0025
+(docs/decisions/0025-cpu-budget-per-call-floor.md). `Tools/bench.py` reads the files and calls
 `summary`.
 """
 
@@ -23,8 +24,10 @@ SEED = 20261018
 LOW_INDEX = 250
 HIGH_INDEX = 9749
 
-# Question, budget table: CPU tax at most 5%, GPU frame-time tax at most 1%.
+# Question, budget table: CPU tax at most 5%, GPU frame-time tax at most 1%. ADR 0025: the CPU
+# budget is the larger of 5% of N and 5 ns per RojoRHI call in the operation.
 CPU_BUDGET = 0.05
+CPU_FLOOR_NS_PER_CALL = 5.0
 GPU_BUDGET = 0.01
 
 # Decision rules, CPU: judged at K of 100 and above.
@@ -136,16 +139,30 @@ def excludes_zero(comparison: dict) -> bool:
     return comparison["low"] > 0 or comparison["high"] < 0
 
 
+def cpu_budget(workload: str, n_median: float) -> float:
+    """ADR 0025: the larger of 5% of N's time per operation and 5 ns per RojoRHI call in it."""
+    return max(CPU_BUDGET * n_median, CPU_FLOOR_NS_PER_CALL * CALLS_PER_REPETITION[workload])
+
+
 def cpu_rule(workload: str, k: int | None, comparison: dict | None) -> dict:
-    """Decision rules, CPU: C1 to C10 at K of 100 and above, never C10 at maxCount 1."""
+    """Decision rules, CPU: C1 to C10 at K of 100 and above, never C10 at maxCount 1.
+
+    The verdict uses ADR 0025's budget. `fivePercentMiss` is ADR 0014's 5%-only verdict, reported
+    beside it and never judged; rounds 1 and 2, judged before ADR 0025, are read from it, the
+    report's "5% rule" column.
+    """
     if workload not in CPU_WORKLOADS:
         return rule(False, None, "reported only")
     if k is None or k < CPU_MIN_K:
         return rule(False, None, f"K below {CPU_MIN_K}, reported only")
     if comparison is None:
         return rule(True, None, "not run")
-    miss = excludes_zero(comparison) and comparison["delta"] > CPU_BUDGET * comparison["nMedian"]
-    return rule(True, miss, "over budget" if miss else "within budget")
+    budget = cpu_budget(workload, comparison["nMedian"])
+    off_zero = excludes_zero(comparison)
+    miss = off_zero and comparison["delta"] > budget
+    five_percent_miss = off_zero and comparison["delta"] > CPU_BUDGET * comparison["nMedian"]
+    return rule(True, miss, "over budget" if miss else "within budget", budget=budget,
+                fivePercentMiss=five_percent_miss)
 
 
 def gpu_rule(workload: str, comparison: dict | None) -> dict:
@@ -385,6 +402,12 @@ def verdict_word(result: dict) -> str:
     return "not run" if result["miss"] is None else ("MISS" if result["miss"] else "pass")
 
 
+def five_percent_word(result: dict) -> str:
+    """Return the one-word state of the reported 5%-only CPU verdict."""
+    miss = result.get("fivePercentMiss")
+    return "-" if miss is None else ("MISS" if miss else "pass")
+
+
 def comparison_cells(comparison: dict | None, digits: int = 1) -> list[str]:
     """Return R median, N median, delta, interval and relative delta as table cells."""
     if comparison is None:
@@ -409,10 +432,12 @@ def format_report(result: Mapping[str, Any]) -> str:
     entries = result["configurations"]
     comparison_header = ["R", "N", "delta", "95% interval", "relative"]
     lines = [f"verdict: {result['verdict']}"]
-    lines += table("CPU per operation, ns (miss: interval excludes zero and delta over 5%)",
-                   ["id", "rule", *comparison_header],
-                   [[e["id"], verdict_word(e["rules"]["cpu"]),
-                     *comparison_cells(e.get("cpuPerOperationNs"), 2)] for e in entries])
+    lines += table("CPU per operation, ns (miss: interval excludes zero and delta over the "
+                   "larger of 5% and 5 ns per call; the 5% rule is reported)",
+                   ["id", "rule", "5% rule", *comparison_header, "budget"],
+                   [[e["id"], verdict_word(e["rules"]["cpu"]), five_percent_word(e["rules"]["cpu"]),
+                     *comparison_cells(e.get("cpuPerOperationNs"), 2),
+                     number(e["rules"]["cpu"].get("budget"), 2)] for e in entries])
     lines += table("GPU time, ns (judged on the composed frame; over 1%)",
                    ["id", "rule", *comparison_header],
                    [[e["id"], verdict_word(e["rules"]["gpu"]), *comparison_cells(e.get("gpuNs"), 0)]

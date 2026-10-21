@@ -174,8 +174,7 @@ python3 Tools/bench.py analyze                         writes summary.json and a
   validation and `MTL_DEBUG_LAYER=1`, compares R's dumped bytes with N's, and fails on any standard
   error line other than the validation layer's banner. A configuration passes only when R and N were
   both compared; a run of one arm is a smoke. N's per-operation count must equal the registered
-  column. On a Null build `--arms N` is required. A workload with any failing configuration is
-  not timed.
+  column. A Null build requires `--arms N`. A workload with a failing configuration is not timed.
 - **Timing** refuses a Null build and battery power, removes `MTL_*`, `METAL_*` and `Malloc*`
   variables from the children's environment, skips results that exist (resume), renames a process
   whose thermal state was not nominal to `.discarded<k>.json`, rests 120 s before a retry, and marks
@@ -184,10 +183,12 @@ python3 Tools/bench.py analyze                         writes summary.json and a
   counter heap was refused means a scope went untimed and R did less work than the gate measured
   (issue #64). It follows ADR 0014 and runs on local hardware only.
 - **Analysis** takes a process value as the median of its measured frames and the reported value as
-  the median of the process values. The delta is the median of the paired per-process deltas R
-  minus N, with a bootstrap interval of 10,000 resamples from a fresh `random.Random(20261018)` per
-  comparison. The count rule uses the registered N column; a count that differs between frames or
-  processes is reported unstable and judged on its maximum.
+  the median of the process values. The delta is the median of the paired per-process deltas R minus
+  N, with a bootstrap interval of 10,000 resamples from a fresh `random.Random(20261018)` per
+  comparison. A CPU miss is an interval off zero with a median delta above the larger of 5% of N and
+  5 ns times `c` ([ADR 0025](../decisions/0025-cpu-budget-per-call-floor.md)); the 5% verdict is
+  reported beside it, in the "5% rule" column, which is how rounds 1 and 2 read. The count rule uses
+  the registered N column; a count varying across frames or processes is judged on its maximum.
 
 The note's owner amended two rules and the harness implements the amended form: C8 registers a
 barrier between passes, with `c` 7 and K up to 10,000, and the composed frame's depth and shadow
@@ -207,14 +208,13 @@ out of the timed round's `t2` directory. The native arm runs on this Mac, and it
 The first timed round ran on 2026-10-19 under the `t2` topic and missed the CPU, GPU and allocation
 budgets ([results](../research/2026-10-18-metal4-overhead-results.md)); a report-only diagnosis of
 the misses is kept under `t2-diagnosis`. Round 2, registered by the note's amendment of 2026-10-20
-([round 2](../research/2026-10-20-metal4-overhead-round2.md)) with every R sequence and count that
-changed, measured the fixed backend on 2026-10-20 from a clean checkout of 0a0b53f into
+([round 2](../research/2026-10-20-metal4-overhead-round2.md)), measured the fixed backend into
 `t2/2026-10-20-round2/` ([round 2 results](
-../research/2026-10-20-metal4-overhead-round2-results.md)). It met the GPU budget (−2.40% on the
-composed frame), the pipeline and the native-call budgets, and missed CPU per operation in 15 of 34
-judged configurations (C1 to C3 at `K` 100, C2 and C3 above, C5-k10000, C6, and C1-k100000
-narrowly) and allocations in 57 of 63, by 2 to 7 a frame; those misses are defects for the next
-round. Keep the obligations the N arm encodes (next section) in view.
+../research/2026-10-20-metal4-overhead-round2-results.md)). It met the GPU (−2.40% on the composed
+frame), pipeline and native-call budgets, and missed CPU per operation in 15 of 34 judged
+configurations (C1 to C3 at `K` 100, C2 and C3 above, C5-k10000, C6, and C1-k100000 narrowly) and
+allocations in 57 of 63, by 2 to 7 a frame. Both rounds stand as judged at 5%; later rounds use
+ADR 0025. The allocation misses remain defects for the next round.
 
 ## Backend obligations the N arm encodes
 
