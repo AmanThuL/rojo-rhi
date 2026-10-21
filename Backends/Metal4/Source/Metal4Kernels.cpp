@@ -18,6 +18,7 @@
 
 #include <dispatch/dispatch.h>
 
+#include <algorithm>
 #include <array>
 #include <cstddef>
 #include <cstdint>
@@ -237,6 +238,22 @@ namespace rojoRHI::metal4 {
             // The validation layer autoreleases in each dispatch it checks, as for dispatchKernel.
             const CommandPool pool(state.commandPools);
             encoder->dispatchThreadgroups(groups, threads);
+        }
+        core::noteNativeCall(list);
+    }
+
+    //==================================================================================================================
+    void dispatchKernelRun(core::CommandListCore& list, Encoders& encoders, const KernelRun& run)
+    {
+        MTL4::ComputeCommandEncoder* encoder = encoders.computeEncoder();
+        bindKernelBatch(list, *run.state, encoders, run.kernel);
+        run.state->kernelTable->setAddress(run.params, 0);
+        core::noteNativeCall(list);
+        {
+            // The validation layer autoreleases in each dispatch it checks, as for dispatchKernel. Apple GPUs take a grid that
+            // is no multiple of the threadgroup, so the run's last threadgroup holds only its last draws.
+            const CommandPool pool(run.state->commandPools);
+            encoder->dispatchThreads(MTL::Size(run.count, 1, 1), MTL::Size(std::min(run.count, kDrawGroupThreads), 1, 1));
         }
         core::noteNativeCall(list);
     }

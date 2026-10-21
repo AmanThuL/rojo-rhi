@@ -174,3 +174,23 @@ TEST_CASE("C1 to C3 and C10 write and resolve no timestamp in R, as N writes non
         }
     }
 }
+
+//======================================================================================================================
+TEST_CASE("C10m1's counted draws cost R one native call and no allocation more per draw than N's native draws", "[metal4]")
+{
+    // At maxCount 1 each counted draw's writer kernel joins one run, which the kernels' encoder dispatches once, so R's
+    // per-draw cost is its replayed native indirect draw, as N's. A dispatch per draw allocated inside Metal once its
+    // command data outgrew its first block, from about 100 draws a frame (2026-10-21 probe), where N's draws still fit.
+    // Per draw from K 10 to 100, steady after nine warm-up frames, so the slopes hold with and without the validation layer.
+    const auto perDraw = [](Arm arm, auto measure) { return (static_cast<double>(measure(100, arm)) - static_cast<double>(measure(10, arm))) / 90.0; };
+    const auto calls = [](uint32_t k, Arm arm) { return frameCalls("C10m1", k, arm); };
+    const auto allocations = [](uint32_t k, Arm arm) { return frameAllocations("C10m1", k, arm, steadyOptions()); };
+    const double rojoCalls = perDraw(Arm::Rojo, calls);
+    const double nativeCalls = perDraw(Arm::Native, calls);
+    CAPTURE(rojoCalls, nativeCalls);
+    CHECK(rojoCalls == nativeCalls);
+    const double rojoAllocations = perDraw(Arm::Rojo, allocations);
+    const double nativeAllocations = perDraw(Arm::Native, allocations);
+    CAPTURE(rojoAllocations, nativeAllocations);
+    CHECK(rojoAllocations <= nativeAllocations);
+}

@@ -208,16 +208,15 @@ command of any compute stage.
 
 ## Counted draws
 
-Every `drawIndirect` and `drawIndexedIndirect` is counted, and so is a mesh draw with a count or
-with more than one record. A counted draw has no native form that reads a GPU count, so a backend
-kernel reads the count and either encodes the draws into an indirect command buffer (ICB) or, at
-`maxCount` 1, writes one native record. Chapter 08 states the cost.
+Every `drawIndirect` and `drawIndexedIndirect` is counted, as is a mesh draw with a count or more
+than one record. With no native form that reads a GPU count, a backend kernel reads the count and
+encodes the draws into an indirect command buffer (ICB) or, at `maxCount` 1, writes one native
+record. Chapter 08 states the cost.
 
 - **Hoisting.** While the render encoder is closed, the kernel goes on a compute encoder ahead of
-  it. The kernels of one batch share that encoder, which holds only kernels, so the batch form
-  `bindKernelBatch` sets the pipeline when it differs and the kernel table once, and
-  `dispatchKernelBatch` does not set the list table back. The draw's execute joins the prefix, after
-  the state recorded before it.
+  it, which the batch's kernels share and which holds only kernels: `bindKernelBatch` sets the
+  pipeline when it differs and the kernel table once, and no list table is set back. The draw's
+  execute joins the prefix, after the state recorded before it.
 - **The owed barrier.** A backend barrier from `StageDispatch` to `StageVertex` with
   `VisibilityOptionDevice` joins the pending barrier through `BarrierState::merge`, and the render
   encoder emits it when it opens. Metal reads the ICB, the execution range and the native records
@@ -229,8 +228,8 @@ kernel reads the count and either encodes the draws into an indirect command buf
   pass is marked resuming. The next open loads, replays the held state, pushes the groups again and
   replays the prefix. A split also orders the closed encoder's fragment stores before the resumed
   encoder's loads, with `StageFragment` as source and destination merged into the barrier the
-  resumed open emits. A split costs a store and a load per attachment, one more resolve for a
-  resolving attachment, and the cost of the compute encoder the batch needs.
+  resumed open emits. It costs a store and a load per attachment, one more resolve per resolving
+  attachment, and the batch's compute encoder.
 - **ICB pools.** Per list and per kind (draw, indexed, mesh) the list keeps a vector of slots and a
   cursor that resets at acquisition. Slot `i` serves the `i`-th counted draw of that kind in a
   recording and is reused while its capacity reaches `maxCount`; otherwise it is replaced by one of
@@ -249,11 +248,11 @@ kernel reads the count and either encodes the draws into an indirect command buf
 - **The kernels.** `Backends/Metal4/Kernels/Metal4DrawIndirect.metal` holds six functions,
   `rojorhi_encode_draw`, `rojorhi_encode_indexed`, `rojorhi_encode_mesh`, `rojorhi_write_draw`,
   `rojorhi_write_indexed` and `rojorhi_write_mesh`, whose pipelines the device makes with the fill
-  and clear ones. The topology and the index type are run-time parameters, since they vary per call.
-  The encode kernels run one thread per command in groups of 64, encode the record when it lies
-  below the count and reset the command otherwise; a record with no vertices or instances encodes an
-  empty command. They write the execution range of the commands to run. The writer kernel, one
-  thread at `maxCount` 1, writes a native record, with no instances when the count is 0.
+  and clear ones. Topology and index type are run-time parameters, since they vary per call. The
+  encode kernels run one thread per command in groups of 64, encode the record when it lies below
+  the count and reset the command otherwise (a record with no vertices or instances is an empty
+  command), and write the execution range. A writer, one thread per draw at `maxCount` 1, writes a
+  native record, with no instances when the count is 0.
 - **The parameters.** One 96-byte reservation in the list's frame-arena page, claimed through
   `core::bumpArenaPage` and counted as no frame data, holds the kernel's `DrawParams` (64 bytes) and
   either the ICB's resource ID and the execution range or the writer's native record. A counted
@@ -261,11 +260,12 @@ kernel reads the count and either encodes the draws into an indirect command buf
   recorded with the draw and the addresses of the view and sampler tables that each mesh command
   bakes in, then the same ICB ID and range or native record. Replay runs
   `executeCommandsInBuffer(icb, rangeAddress)` or the native indirect draw of the record.
-- **Counts.** A counted draw's kernel costs two native messages once the compute encoder holds its
-  pipeline (the parameters' address and the dispatch), three when the kind changes, four on a new
-  encoder (pipeline, kernel table, address, dispatch), and its execute one more at replay. The batch
-  adds the compute encoder's open, `endEncoding` and one barrier at the render encoder's open, and
-  the pass's begin timestamp when it opens a timed pass. Dispatches and executes each run in a pool.
+- **Counts.** An encode kernel costs two native messages (address, dispatch) once its pipeline is
+  set, three when the kind changes, four on a new encoder, and its execute one at replay. Writers of
+  consecutive draws of one kind, reserved back to back, form one run (`Encoders::queueKernel`) that
+  the next encode kernel or the encoder's close dispatches at those costs, a thread per draw, so a
+  writer's draw costs only its replay. The batch adds its encoder's open and end, a barrier at the
+  render open and a timed pass's begin timestamp. Dispatches and executes each run in a pool.
 
 ## Mesh paths
 

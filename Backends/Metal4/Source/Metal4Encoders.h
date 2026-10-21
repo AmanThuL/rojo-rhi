@@ -24,6 +24,17 @@ namespace rojoRHI::metal4 {
         Render,  ///< A render encoder: a clear's, which clears one subresource by its load actions, or a render pass's.
     };
 
+    /// Writer kernels of consecutive counted draws queued on a kernels-only compute encoder, which run as one dispatch of a
+    /// thread per draw: each draw's parameters lie `stride` bytes after the last's.
+    struct KernelRun
+    {
+        const MTL::ComputePipelineState* kernel = nullptr; ///< The writer kernel every draw of the run runs.
+        const ListState* state = nullptr;                  ///< The list's native objects: its kernel table and pool setting.
+        uint64_t params = 0;                               ///< The GPU address of the first draw's parameters.
+        uint64_t stride = 0;                               ///< The bytes from one draw's parameters to the next's.
+        uint32_t count = 0;                                ///< The draws queued; none when no run is open.
+    };
+
     /// The one encoder a command list may have open. The compute encoder opens on the first command that needs it and stays
     /// open until a scope boundary, a queue-level barrier, a clear's render encoder, a render pass or `CommandList::end`
     /// closes it, so consecutive copies and fills share it. A render pass's last encoder stays open after the pass ends
@@ -57,6 +68,16 @@ namespace rojoRHI::metal4 {
             }
             return prepareCompute(list, state, command, kernelsOnly);
         }
+
+        /// Queues the writer kernel `kernel` over the parameters at `params` on the open kernels-only compute encoder: it joins
+        /// the open run when that run runs `kernel` and its next draw's parameters would lie at `params`, `stride` bytes after
+        /// its last's; otherwise the open run is dispatched (`dispatchRun`) and a run of this draw opens. Counts nothing until
+        /// the run is dispatched: when another kernel is dispatched on the encoder, or when the encoder closes.
+        void queueKernel(core::CommandListCore& list, const ListState& state, const MTL::ComputePipelineState* kernel, uint64_t params, uint64_t stride);
+
+        /// Dispatches the open run of writer kernels, if any, as one dispatch (`dispatchKernelRun`), counting its calls on
+        /// `list`, and closes it.
+        void dispatchRun(core::CommandListCore& list);
 
         /// Holds back a barrier from `source` to `destination` with `visibility`, already intersected with the queue's stages,
         /// in the open encoder when it holds work, does not linger, every source lies among those its opening barrier waited
@@ -144,8 +165,9 @@ namespace rojoRHI::metal4 {
         /// level, and it ran a command in a stage that barrier held. The encoder then updates the carry fence after the stages
         /// it ran, for the dispatch stage of the destination of a list that uses the fence, unless a barrier of the list named `IndirectArgs`,
         /// and emits `barrierAfterStages` from those stages to the destination stages left, which holds them back in every
-        /// later encoder on the queue. Counts its calls and barrier on `list`. A list that upscaled carries nothing here;
-        /// `emitTrailing` emits what is owed. Does nothing when no encoder is open.
+        /// later encoder on the queue. The open run of writer kernels is dispatched first (`dispatchRun`). Counts its calls
+        /// and barrier on `list`. A list that upscaled carries nothing here; `emitTrailing` emits what is owed. Does nothing
+        /// when no encoder is open.
         void finish(core::CommandListCore& list);
 
         /// Sets, at the list's acquisition, the fence later dispatches wait on and a closing encoder updates: the graphics
@@ -256,12 +278,12 @@ namespace rojoRHI::metal4 {
             return m_barriers;
         }
 
-        /// Ends the open encoder, counting its `endEncoding` on `list`, and keeps it for `releaseEnded`; an encoder-level
-        /// barrier still held back joins the pending barrier, as do the stages its opening barrier held back in which it ran no
-        /// command (for a render encoder, those `markRan` did not name besides the fragment stage); what that barrier covered,
-        /// and the kernel pipeline set on it, are then forgotten. A render encoder ends inside an autorelease pool, because the
-        /// validation layer autoreleases there. A lingering encoder added those stages when it began to linger. Does nothing
-        /// when none is open.
+        /// Ends the open encoder, counting its `endEncoding` on `list`, and keeps it for `releaseEnded`, first dispatching the
+        /// open run of writer kernels (`dispatchRun`); an encoder-level barrier still held back joins the pending barrier, as
+        /// do the stages its opening barrier held back in which it ran no command (for a render encoder, those `markRan` did
+        /// not name besides the fragment stage); what that barrier covered, and the kernel pipeline set on it, are then
+        /// forgotten. A render encoder ends inside an autorelease pool, because the validation layer autoreleases there. A
+        /// lingering encoder added those stages when it began to linger. Does nothing when none is open.
         void close(core::CommandListCore& list);
 
         /// Releases an encoder still open without ending it, releases the ended ones (`releaseEnded`) and forgets every
@@ -322,6 +344,8 @@ namespace rojoRHI::metal4 {
         /// again while the encoder holds it, which the validation layer reports as redundant. Reset when an encoder opens or
         /// closes. Every entry that sets a compute pipeline on the encoder records it with `setKernelPipeline`.
         const MTL::ComputePipelineState* m_kernelPipeline = nullptr;
+        /// The writer kernels queued on the open kernels-only compute encoder and not yet dispatched.
+        KernelRun m_run;
         /// The encoders `close` ended, each still retained, until `releaseEnded`; the vector keeps its capacity.
         std::vector<MTL4::CommandEncoder*> m_ended;
     };

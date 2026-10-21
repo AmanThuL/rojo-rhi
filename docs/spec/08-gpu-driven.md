@@ -46,11 +46,13 @@ form makes; per split, a store and a load of every attachment; about 40 µs of f
 measured alone, then about 48 ns per drawn record against 9.5 ns for a native indirect draw; and
 indirect-command-buffer memory sized by `maxCount` rounded up to a power of two, at least 64
 commands. With a `maxCount` of 1 the kernel writes one native record instead, empty when the count
-is 0, for one plain indirect draw; only a lone mesh record with a null count skips the kernel.
-Metal's shader validation silently drops commands such a kernel encodes, so conformance checks their
-images under API validation only. [Spike 3](../research/2026-10-12-spike-3-multi-draw-indirect.md)
-measured these lowerings against a `maxCount` loop of plain indirect draws, which fails the budget
-by `maxCount`.
+is 0, for one plain indirect draw; the writers of consecutive such draws of one kind, with no frame
+data uploaded between them, run as one dispatch, a thread each, so each draw costs one native call,
+as the native indirect draw alone does, and the batch costs the compute encoder and that dispatch.
+Only a lone mesh record with a null count skips the kernel. Metal's shader validation silently drops
+commands such a kernel encodes, so conformance checks their images under API validation only.
+[Spike 3](../research/2026-10-12-spike-3-multi-draw-indirect.md) measured these lowerings against a
+`maxCount` loop of plain indirect draws, which fails the budget by `maxCount`.
 
 ## Argument records
 
@@ -207,7 +209,7 @@ the bound pipeline and root. Draws execute in record order.
 | | Metal 4 | D3D12 | Vulkan |
 |---|---|---|---|
 | Call | a backend kernel ahead of the render encoder encodes the records below `min(count, maxCount)` into an indirect command buffer, which `MTL4::RenderCommandEncoder::executeCommandsInBuffer` runs with the range the kernel wrote; recorded after the render encoder opened, it splits the pass, which resumes with `Load`; when `maxCount` is 1, the kernel writes one native record instead, with no instances when `count` is 0, for one `MTL4::RenderCommandEncoder::drawPrimitives` with an indirect buffer address | `ExecuteIndirect` with a root constant and `D3D12_INDIRECT_ARGUMENT_TYPE_DRAW` in the command signature; `count` as the count buffer; the resource and offset are looked up from each `Addr`'s heap index | the device-address forms of `vkCmdDrawIndirect` and `vkCmdDrawIndirectCount` from `VK_KHR_device_address_commands`, which the oracle assumes ([ADR 0010](../decisions/0010-hardware-floor.md)) (entry-point names unverified) |
-| Cost | costly: two native calls per draw ahead of the execute, a compute encoder and a barrier per batch, a store and a load of every attachment per split, about 48 ns of GPU time per drawn record against 9.5 ns native, and about 670 bytes of indirect-command-buffer memory per command ([spike 3](../research/2026-10-12-spike-3-multi-draw-indirect.md)) | cheap: index→resource lookup for `args` and `count` | native: entry points unverified |
+| Cost | costly: two native calls per draw ahead of the execute (none at `maxCount` 1 for consecutive draws of one kind with no frame data between them, whose writers share one dispatch of two to four calls), a compute encoder and a barrier per batch, a store and a load of every attachment per split, about 48 ns of GPU time per drawn record against 9.5 ns native, and about 670 bytes of indirect-command-buffer memory per command ([spike 3](../research/2026-10-12-spike-3-multi-draw-indirect.md)) | cheap: index→resource lookup for `args` and `count` | native: entry points unverified |
 
 ### `CommandList::drawIndexedIndirect`
 

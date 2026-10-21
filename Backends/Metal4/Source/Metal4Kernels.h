@@ -126,6 +126,17 @@ namespace rojoRHI::metal4 {
     static_assert(offsetof(MeshParams, objectThreads) == 60);
     static_assert(offsetof(MeshParams, meshThreads) == 72);
 
+    /// The bytes a counted draw reserves in its list's frame-arena page: its kernel's `DrawParams`, then either the indirect
+    /// command buffer's resource ID and the execution range, or the native record the writer kernel writes. A run of writer
+    /// kernels reads its draws' parameters this far apart (Metal4DrawIndirect.metal's `kDrawStride`).
+    constexpr uint64_t kDrawReservation = 96;
+
+    /// The bytes a counted mesh draw reserves: its kernel's `MeshParams`, then either the indirect command buffer's resource ID
+    /// and the execution range, or the native record the writer kernel writes. A run of mesh writer kernels reads its draws'
+    /// parameters this far apart (Metal4DrawIndirect.metal's `kMeshStride`).
+    constexpr uint64_t kMeshReservation = 128;
+    static_assert(kDrawReservation == 96 && kMeshReservation == 128, "must match kDrawStride/kMeshStride in Metal4DrawIndirect.metal");
+
     /// Where, in the frame-arena reservation of a counted mesh draw that starts with its `MeshParams`, the indirect command
     /// buffer's resource ID or the writer kernel's native record lies.
     constexpr uint64_t kMeshOutputOffset = sizeof(MeshParams);
@@ -193,4 +204,9 @@ namespace rojoRHI::metal4 {
     /// Dispatches `groups` threadgroups of `threads` threads of the kernel `bindKernelBatch` set, counting the call on `list`;
     /// the kernel table stays bound for the next kernel of the batch.
     void dispatchKernelBatch(core::CommandListCore& list, const ListState& state, MTL4::ComputeCommandEncoder* encoder, MTL::Size groups, MTL::Size threads);
+
+    /// Dispatches `run` on the open kernels-only compute encoder of `encoders`, as `bindKernelBatch`, the parameters' address
+    /// and one thread per draw do, counting each call on `list`: thread `i` reads the parameters at `run.params` plus `i`
+    /// times `run.stride`.
+    void dispatchKernelRun(core::CommandListCore& list, Encoders& encoders, const KernelRun& run);
 } // namespace rojoRHI::metal4

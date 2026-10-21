@@ -29,10 +29,6 @@
 
 namespace rojoRHI {
     namespace {
-        /// The bytes a counted draw reserves in the list's frame-arena page: its kernel's `DrawParams`, then either the
-        /// indirect command buffer's resource ID and the execution range, or the native record the writer kernel writes.
-        constexpr uint64_t kReservationBytes = 96;
-
         /// The alignment of the reservation.
         constexpr uint32_t kReservationAlignment = 16;
 
@@ -45,15 +41,13 @@ namespace rojoRHI {
         /// Where the writer kernel's native record lies in the reservation.
         constexpr uint64_t kRecordOffset = sizeof(metal4::DrawParams);
 
-        static_assert(kRangeOffset + sizeof(MTL::IndirectCommandBufferExecutionRange) <= kReservationBytes);
-        static_assert(kRecordOffset + sizeof(MTL::DrawIndexedPrimitivesIndirectArguments) <= kReservationBytes);
+        static_assert(kRangeOffset + sizeof(MTL::IndirectCommandBufferExecutionRange) <= metal4::kDrawReservation);
+        static_assert(kRecordOffset + sizeof(MTL::DrawIndexedPrimitivesIndirectArguments) <= metal4::kDrawReservation);
+        // A run of writer kernels finds each draw's parameters one reservation after the last's in the page.
+        static_assert(metal4::kDrawReservation % kReservationAlignment == 0 && metal4::kMeshReservation % kReservationAlignment == 0);
 
-        /// The bytes a counted mesh draw reserves: its kernel's `MeshParams`, then either the indirect command buffer's
-        /// resource ID and the execution range, or the native record the writer kernel writes.
-        constexpr uint64_t kMeshReservationBytes = 128;
-
-        static_assert(metal4::kMeshRangeOffset + sizeof(MTL::IndirectCommandBufferExecutionRange) <= kMeshReservationBytes);
-        static_assert(metal4::kMeshOutputOffset + sizeof(MTL::DispatchThreadgroupsIndirectArguments) <= kMeshReservationBytes);
+        static_assert(metal4::kMeshRangeOffset + sizeof(MTL::IndirectCommandBufferExecutionRange) <= metal4::kMeshReservation);
+        static_assert(metal4::kMeshOutputOffset + sizeof(MTL::DispatchThreadgroupsIndirectArguments) <= metal4::kMeshReservation);
 
         /// The stages that read what a counted draw's kernel wrote: Metal reads the indirect command buffer, the range and a
         /// native record before vertex shading.
@@ -99,14 +93,24 @@ namespace rojoRHI {
         }
 
         //==============================================================================================================
-        /// Runs a counted draw's `kernel` over the parameters at `params` in `groups` threadgroups of `threads` threads, on the
-        /// compute encoder ahead of the render encoder: the kernels of a pass's leading counted draws share it, and it binds the
-        /// kernel table once. A barrier the caller recorded for the records and the count reaches the dispatch stage when the
-        /// encoder opens. A backend barrier from the dispatch stage to `reads`, where the execute reads what the kernel wrote,
-        /// joins the pending barrier, which the render encoder emits when it opens; after a split (`split`) it also orders the
-        /// ended encoder's fragment-stage stores before the resumed encoder's loads.
+        /// Runs a counted draw's `kernel` over the parameters at `params` on the compute encoder ahead of the render encoder:
+        /// the kernels of a pass's leading counted draws share it, and it binds the kernel table once. An encode kernel runs
+        /// in `groups` threadgroups of `threads` threads, after the open run of writer kernels is dispatched; a writer kernel
+        /// (`stride` nonzero, the bytes its reservation spans) joins that run, so consecutive writers whose parameters lie
+        /// `stride` apart run as one dispatch of a thread each when the run ends. A barrier the caller recorded for the records
+        /// and the count reaches the dispatch stage when the encoder opens. A backend barrier from the dispatch stage to `reads`,
+        /// where the execute reads what the kernel wrote, joins the pending barrier, which the render encoder emits when it
+        /// opens; after a split (`split`) it also orders the ended encoder's fragment-stage stores before the resumed encoder's
+        /// loads.
         void runKernel(
-            CommandListImpl& list, const MTL::ComputePipelineState* kernel, uint64_t params, MTL::Size groups, MTL::Size threads, MTL::Stages reads, bool split
+            CommandListImpl& list,
+            const MTL::ComputePipelineState* kernel,
+            uint64_t params,
+            MTL::Size groups,
+            MTL::Size threads,
+            uint64_t stride,
+            MTL::Stages reads,
+            bool split
         )
         {
             // The encoder runs only kernels, which bind the kernel table, so it binds no list table.
@@ -114,10 +118,18 @@ namespace rojoRHI {
             // Opened ahead of the pass's first render encoder, the kernels' encoder is the pass's first and writes its begin
             // timestamp before the first kernel.
             metal4::writePassBegin(list, encoder);
-            metal4::bindKernelBatch(list.core, list.state, list.encoders, kernel);
-            list.state.kernelTable->setAddress(params, 0);
-            core::noteNativeCall(list.core);
-            metal4::dispatchKernelBatch(list.core, list.state, encoder, groups, threads);
+            if (stride != 0)
+            {
+                list.encoders.queueKernel(list.core, list.state, kernel, params, stride);
+            }
+            else
+            {
+                list.encoders.dispatchRun(list.core);
+                metal4::bindKernelBatch(list.core, list.state, list.encoders, kernel);
+                list.state.kernelTable->setAddress(params, 0);
+                core::noteNativeCall(list.core);
+                metal4::dispatchKernelBatch(list.core, list.state, encoder, groups, threads);
+            }
             list.encoders.markWork();
             list.encoders.barriers().merge(MTL::StageDispatch, reads, MTL4::VisibilityOptionDevice);
             if (split)
@@ -153,7 +165,7 @@ namespace rojoRHI {
             // The retire hooks' context is the device that owns the core; its kernels and native device are fixed from its
             // creation to its destruction.
             const DeviceImpl& impl = *static_cast<const DeviceImpl*>(device.retireHooks().context);
-            const Reservation place = reserve(list, kReservationBytes);
+            const Reservation place = reserve(list, metal4::kDrawReservation);
             const uint64_t base = place.address;
             const bool indexed = counted.kind == metal4::IcbKind::Indexed;
             // A record's payload is fixed from creation to retirement, so it is read with one load and no lock (ADR 0020), and it
@@ -196,7 +208,7 @@ namespace rojoRHI {
                                                            .indexLength = indexed ? indices->length : 0 };
             }
             std::memcpy(place.memory, &params, sizeof(params));
-            runKernel(list, kernel, base, groups, threads, kDrawReads, split);
+            runKernel(list, kernel, base, groups, threads, counted.maxCount > 1 ? 0 : metal4::kDrawReservation, kDrawReads, split);
             // The execute observes the state recorded before it, so no later entry merges across it.
             draw.appendBarrierEntry(command);
         }
@@ -222,7 +234,7 @@ namespace rojoRHI {
                 draw.samplerTableAddress = impl.samplerTable->gpuAddress();
             }
             const metal4::PipelineState& pipeline = *draw.pipeline;
-            const Reservation place = reserve(list, kMeshReservationBytes);
+            const Reservation place = reserve(list, metal4::kMeshReservation);
             const uint64_t base = place.address;
             metal4::MeshParams params{ .icb = 0,
                                        .records = records,
@@ -261,7 +273,7 @@ namespace rojoRHI {
                 command.mesh = metal4::PrefixMesh{ .record = records, .native = base + metal4::kMeshOutputOffset, .pipeline = &pipeline };
             }
             std::memcpy(place.memory, &params, sizeof(params));
-            runKernel(list, kernel, base, groups, threads, kMeshReads, split);
+            runKernel(list, kernel, base, groups, threads, maxCount > 1 ? 0 : metal4::kMeshReservation, kMeshReads, split);
             // The execute observes the state recorded before it, so no later entry merges across it.
             draw.appendBarrierEntry(command);
         }

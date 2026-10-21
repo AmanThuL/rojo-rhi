@@ -1,6 +1,6 @@
 //----------------------------------------------------------------------------------------------------------------------
 /// @file Metal4DrawIndirect.metal
-/// @brief Defines the counted-draw kernels: three encode records into an indirect command buffer, three write one native record.
+/// @brief Defines the counted-draw kernels: three encode records into an indirect command buffer, three write native records.
 //----------------------------------------------------------------------------------------------------------------------
 #include <metal_stdlib>
 
@@ -108,6 +108,27 @@ namespace rojoRHI {
     }
 
     //==================================================================================================================
+    /// The draws a counted draw whose parameters a writer kernel reads from its run issues, as `drawCount` above.
+    template<typename Params> static uint drawCount(const device Params& p)
+    {
+        return p.count != 0 ? metal::min(*reinterpret_cast<const device uint*>(p.count), p.maxCount) : p.maxCount;
+    }
+
+    /// The bytes from one draw's parameters to the next's in a run of `rojorhi_write_draw` or `rojorhi_write_indexed`:
+    /// `metal4::kDrawReservation`.
+    constant ulong kDrawStride = 96;
+
+    /// The bytes from one draw's parameters to the next's in a run of `rojorhi_write_mesh`: `metal4::kMeshReservation`.
+    constant ulong kMeshStride = 128;
+
+    //==================================================================================================================
+    /// The parameters of draw `index` of a writer kernel's run, which starts at `params` and steps `stride` bytes a draw.
+    template<typename Params> static const device Params& runParams(const device uchar* params, uint index, ulong stride)
+    {
+        return *reinterpret_cast<const device Params*>(params + index * stride);
+    }
+
+    //==================================================================================================================
     /// The primitive type `value`, an `MTL::PrimitiveType`, names.
     static metal::primitive_type primitiveOf(uint value)
     {
@@ -187,18 +208,22 @@ kernel void rojorhi_encode_indexed(constant rojoRHI::DrawParams& p [[buffer(0)]]
 
 //======================================================================================================================
 /// Writes the one record of a counted draw of `maxCount` 1 as a native record, its drawId as the base instance and no
-/// instances when the count is 0. One thread.
-kernel void rojorhi_write_draw(constant rojoRHI::DrawParams& p [[buffer(0)]])
+/// instances when the count is 0. One thread per draw of a run of consecutive such draws, whose parameters start at
+/// `params`.
+kernel void rojorhi_write_draw(const device uchar* params [[buffer(0)]], uint index [[thread_position_in_grid]])
 {
+    const device rojoRHI::DrawParams& p = rojoRHI::runParams<rojoRHI::DrawParams>(params, index, rojoRHI::kDrawStride);
     const rojoRHI::DrawArgs args = *reinterpret_cast<const device rojoRHI::DrawArgs*>(p.records);
     *reinterpret_cast<device rojoRHI::NativeDraw*>(p.output) = rojoRHI::NativeDraw{
         args.vertexCount, rojoRHI::drawCount(p) != 0 ? args.instanceCount : 0u, args.firstVertex, args.drawId };
 }
 
 //======================================================================================================================
-/// Writes the one record of a counted indexed draw of `maxCount` 1 as a native record, as `rojorhi_write_draw` does.
-kernel void rojorhi_write_indexed(constant rojoRHI::DrawParams& p [[buffer(0)]])
+/// Writes the one record of a counted indexed draw of `maxCount` 1 as a native record, as `rojorhi_write_draw` does, one
+/// thread per draw of a run.
+kernel void rojorhi_write_indexed(const device uchar* params [[buffer(0)]], uint index [[thread_position_in_grid]])
 {
+    const device rojoRHI::DrawParams& p = rojoRHI::runParams<rojoRHI::DrawParams>(params, index, rojoRHI::kDrawStride);
     const rojoRHI::IndexedArgs args = *reinterpret_cast<const device rojoRHI::IndexedArgs*>(p.records);
     *reinterpret_cast<device rojoRHI::NativeIndexed*>(p.output) = rojoRHI::NativeIndexed{
         args.indexCount, rojoRHI::drawCount(p) != 0 ? args.instanceCount : 0u, args.firstIndex, args.baseVertex, args.drawId };
@@ -245,9 +270,10 @@ kernel void rojorhi_encode_mesh(constant rojoRHI::MeshParams& p [[buffer(0)]], u
 
 //======================================================================================================================
 /// Writes the one record of a counted mesh draw of `maxCount` 1 as a native record, with no groups when the count is 0. The
-/// draw binds the record itself at `buffer(3)`. One thread.
-kernel void rojorhi_write_mesh(constant rojoRHI::MeshParams& p [[buffer(0)]])
+/// draw binds the record itself at `buffer(3)`. One thread per draw of a run of consecutive such draws.
+kernel void rojorhi_write_mesh(const device uchar* params [[buffer(0)]], uint index [[thread_position_in_grid]])
 {
+    const device rojoRHI::MeshParams& p = rojoRHI::runParams<rojoRHI::MeshParams>(params, index, rojoRHI::kMeshStride);
     const rojoRHI::MeshArgs args = *reinterpret_cast<const device rojoRHI::MeshArgs*>(p.records);
     const bool drawn = rojoRHI::drawCount(p) != 0;
     *reinterpret_cast<device rojoRHI::NativeMesh*>(p.output) =

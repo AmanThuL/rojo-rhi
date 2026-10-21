@@ -129,7 +129,7 @@ the call sequence and the counts are. `RojoRHIBench check` is a Catch2 session o
 | `[host]` | everywhere | the clock, the JSON writer, the allocation counter, the runner, the comparison of outputs |
 | `[null]` | Null builds | every R workload's `Counters` delta at the note's K pair, the per-operation delta, the traced call sequence at K 1 and 2; in Debug with validation on, so the tracker accepts every barrier |
 | `[native]` | local Apple Silicon | N's outputs against CPU oracles for C1 to C10, G1 and G2, its frame event's two calls a frame, and the composed frame's determinism across frames |
-| `[metal4]` | `metal4` builds | R's per-operation count is at most N's plus `c`, and N's equals the note's column, for C1 to C9; R's steady frame allocates no more than N's in C4 to C7, and less per C8 pass; R's C1 to C3 and C10 frames, untimed, make four native calls and at least three allocations fewer than timed |
+| `[metal4]` | `metal4` builds | R's per-operation count is at most N's plus `c`, and N's equals the note's column, for C1 to C9; R's steady frame allocates no more than N's in C4 to C7, and less per C8 pass; R's C1 to C3 and C10 frames, untimed, make four native calls and at least three allocations fewer than timed; R's C10m1 costs per draw N's native calls and allocations |
 
 `xmake test RojoRHIBench/null` runs `[null],[host]`, `RojoRHIBench/native` runs `[native]` under
 `MTL_DEBUG_LAYER=1`, and `RojoRHIBench/metal4` exists only with that backend. The `[metal4]` case is
@@ -289,8 +289,8 @@ defect:
 - The correctness gate of 2026-10-19 (Release and Debug, validation on in Debug) measured, as
   calls per repetition, R and N, and the budget N plus `c`: C1 2 and 2 (5), C2 2 and 2 (5), C3 4
   and 4 (6), C4 2 and 2 (5), C5 0 and 0 (1), C6 2 and 2 (4), C7 1 and 1 (2), C8 14 and 12 (19),
-  C9 3 and 2 (3), C10 3 and 3 (4). C10 at `maxCount` 1 (R 3, N 1) is outside the pre-registered
-  budget table; the gate passes it and it is reported only.
+  C9 3 and 2 (3), C10 3 and 3 (4). C10 at `maxCount` 1 (R 3, N 1; R 1 since its writer kernels run
+  as one dispatch a pass) is outside the pre-registered budget table, and reported only.
 - C9 made three native calls per submit in that gate, the third the queue's own progress
   `signalEvent`. A submission with lists and at most one signal no longer signals progress, since
   the frame's retirement covers it, so R makes two per submit, the commit and the fence's
