@@ -243,7 +243,7 @@ namespace rojoRHI {
             list.encoders.close(list.core);
             MTL4::RenderCommandEncoder* encoder = nullptr;
             {
-                // The attachment getters may autorelease, and the encoder factory does.
+                // The attachment getters may autorelease, and the encoder factory does: one pool covers both.
                 const AutoreleasePool pool;
                 if (draw.descriptor == nullptr)
                 {

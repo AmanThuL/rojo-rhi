@@ -102,12 +102,12 @@ namespace rojoRHI::metal4 {
         /// on `list`. The caller closes it with `close`. A lingering render encoder ends first.
         MTL4::RenderCommandEncoder* openRender(core::CommandListCore& list, ListState& state, const MTL4::RenderPassDescriptor* descriptor);
 
-        /// Opens a render pass's encoder from `descriptor` when no encoder is open: the factory runs inside an autorelease pool
-        /// and the encoder is retained; it takes the innermost open scope's label, else the list's, and binds the list's argument
-        /// table to the vertex, fragment, object and mesh stages (ADR 0018), then emits the pending barrier's part on every
-        /// render stage. The opening counts its native calls, its barrier and one encoder on `list`. The encoder has run its
-        /// fragment stage, where its load and store actions run; `markRan` adds the stages its commands run in. A lingering
-        /// render encoder ends first.
+        /// Opens a render pass's encoder from `descriptor` when no encoder is open: the factory runs inside the autorelease pool
+        /// the caller holds, which `metal4::openRender` opens around the descriptor's configuration too, and the encoder is
+        /// retained; it takes the innermost open scope's label, else the list's, and binds the list's argument table to the
+        /// vertex and fragment stages (ADR 0018), then emits the pending barrier's part on every render stage. The opening
+        /// counts its native calls, its barrier and one encoder on `list`. The encoder has run its fragment stage, where its
+        /// load and store actions run; `markRan` adds the stages its commands run in. A lingering render encoder ends first.
         MTL4::RenderCommandEncoder* openPass(core::CommandListCore& list, ListState& state, const MTL4::RenderPassDescriptor* descriptor);
 
         /// Notes that the open render encoder ran a command in `stages`, so its opening barrier's hold on them is spent.
