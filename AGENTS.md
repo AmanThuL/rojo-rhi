@@ -46,7 +46,9 @@ Metal 4 backend, the optional ImGui adapter, tests and shaders — alongside its
   [0021 the validation tracker records while recording and judges at submission](
   docs/decisions/0021-validation-tracker-replays-at-submission.md),
   [0022 versioning, with the version in the single public header](
-  docs/decisions/0022-versioning-in-the-single-header.md)
+  docs/decisions/0022-versioning-in-the-single-header.md),
+  [0025 the per-operation CPU budget has a floor of 5 ns per RojoRHI call](
+  docs/decisions/0025-cpu-budget-per-call-floor.md)
 - API reference: [docs/spec/](docs/spec/00-conventions.md), entered through its conventions
   chapter
 - Research: [docs/research/](docs/research/2026-10-11-rhi-redesign/01-nographicsapi.md), the

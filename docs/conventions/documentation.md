@@ -55,6 +55,8 @@ Every file under `docs/` carries one explicit `**Status**:` field within its fir
 - `In progress`: the single accepted plan being executed.
 - `Implemented`: shipped current behaviour; update it when the behaviour changes.
 - `Superseded by <link>`: replaced, retained only for provenance.
+- `Accepted (<date>); its <clause> superseded by <link>`: one clause replaced by a later ADR, the
+  rest binding.
 
 At most one file under `docs/plans/` may be `In progress`; zero means nothing is in execution. When
 a plan closes, extract its durable decisions to ADRs and its current behaviour to an architecture
