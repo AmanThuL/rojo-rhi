@@ -289,3 +289,7 @@
   the copy queue uploads into a new texture with no graphics or compute barrier first. A placed or
   `Sparse` texture is still discarded from `Undefined` on the graphics or compute queue first, and
   `VU-rojo-sync-0006` reports one a Copy list uses before that.
+- The D3D12 backend presents through DXGI flip-model swapchains, maps tiles of reserved
+  resources on any queue, captures through the PIX GPU capturer and creates FSR upscalers through
+  the FidelityFX runtime that sits beside the executable. Implemented, verified on WARP only, not
+  on hardware ([architecture](docs/architecture/d3d12-backend-edges.md)).

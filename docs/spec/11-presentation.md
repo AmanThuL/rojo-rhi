@@ -20,7 +20,7 @@ One frame of presentation runs in this order:
 
 Presentation setup, meaning creation, resizing and release, sits outside the frame loop and may
 wait. The image extent is fixed between those calls: a new swapchain takes the surface's extent at
-creation (the layer's `drawableSize` on Metal 4, the window's client extent on the planned D3D12
+creation (the layer's `drawableSize` on Metal 4, the window's client extent on the D3D12
 backend), and only `Swapchain::resize` changes it afterwards; `acquire` never resizes. Because the
 swapchain owns the extent, the consumer does not set the layer's `drawableSize` itself once the
 swapchain exists. A swapchain is released with `Device::destroy` ([device](02-device.md)),
