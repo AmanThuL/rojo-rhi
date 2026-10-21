@@ -576,6 +576,24 @@ TEST_CASE("createUpscaler refuses DLSS, XeSS and MetalFX with Unsupported", "[d3
 }
 
 //======================================================================================================================
+TEST_CASE("createUpscaler refuses an input under two texels in an axis with Unsupported", "[d3d12]")
+{
+    // FidelityFX would make a zero-sized surface for such an input, an error the debug layer reports and the backend aborts on,
+    // so the refusal comes before the runtime is called.
+    Result<Device> created = createDevice();
+    REQUIRE(created.has_value());
+    for (const Extent2D input : { Extent2D{ 1, 1 }, Extent2D{ 1, 64 }, Extent2D{ 64, 1 } })
+    {
+        const Result<Upscaler> upscaler = created->createUpscaler(UpscalerDesc{ .input = input, .output = { 64, 64 }, .label = "test.small" });
+        REQUIRE_FALSE(upscaler.has_value());
+        CHECK(upscaler.error().category == ErrorCategory::Unsupported);
+        CHECK(upscaler.error().message.find("test.small") != std::string::npos);
+    }
+    CHECK(DeviceImpl::of(*created).core.pool<Upscaler>().liveCount() == 0u);
+    destroyDevice(*created);
+}
+
+//======================================================================================================================
 TEST_CASE("a device whose runtime is absent refuses Auto with Unsupported", "[d3d12]")
 {
     Result<Device> created = createDevice();

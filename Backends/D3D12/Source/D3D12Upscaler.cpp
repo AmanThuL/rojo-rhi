@@ -51,6 +51,10 @@ namespace rojoRHI {
         /// The return code of a FidelityFX call that succeeded, as the type the calls return.
         constexpr ffxReturnCode_t kOk = FFX_API_RETURN_OK;
 
+        /// The smallest input extent, in texels per axis, an FSR upscaler is created for. FidelityFX makes internal surfaces at
+        /// half the largest render size, so a one-texel axis gives one of zero texels, which the runtime refuses.
+        constexpr uint32_t kMinInput = 2;
+
         /// The legacy state an upscale's inputs are passed in: `Layout::ShaderRead` is `LAYOUT_SHADER_RESOURCE`, which the
         /// enhanced-barrier mapping of legacy states gives `NON_PIXEL_SHADER_RESOURCE | PIXEL_SHADER_RESOURCE`.
         constexpr uint32_t kInputState = static_cast<uint32_t>(FFX_API_RESOURCE_STATE_PIXEL_COMPUTE_READ);
@@ -443,6 +447,20 @@ namespace rojoRHI {
         ROJORHI_INTERNAL_ASSERT(
             record.kind == UpscalerKind::FSR && impl.fsr.fidelityFx.has_value(), "the D3D12 device listed an upscaler kind it has no runtime for"
         );
+        if (record.input.width < kMinInput || record.input.height < kMinInput)
+        {
+            return std::unexpected(
+                Error{ ErrorCategory::Unsupported,
+                       std::format(
+                           "FSR upscaler \"{}\" has an input of {}x{}; FidelityFX makes surfaces at half the input extent, so an "
+                           "input under {} texels in an axis is refused",
+                           record.label,
+                           record.input.width,
+                           record.input.height,
+                           kMinInput
+                       ) }
+            );
+        }
         Result<ffxContext> context = createContext(impl, record);
         if (!context)
         {
