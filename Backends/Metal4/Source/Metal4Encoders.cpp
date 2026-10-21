@@ -9,6 +9,7 @@
 #include "Core/CommandLists.h"
 #include "Metal4Barriers.h"
 #include "Metal4Common.h"
+#include "Metal4Kernels.h"
 #include "Metal4ListState.h"
 
 #include <Foundation/Foundation.hpp>
@@ -78,6 +79,30 @@ namespace rojoRHI::metal4 {
         m_commandPools = state.commandPools;
         waitCarry(list, command);
         return m_compute;
+    }
+
+    //==================================================================================================================
+    void Encoders::queueKernel(core::CommandListCore& list, const ListState& state, const MTL::ComputePipelineState* kernel, uint64_t params, uint64_t stride)
+    {
+        ROJORHI_INTERNAL_ASSERT(m_kind == EncoderKind::Compute && m_kernelsOnly, "a writer kernel is queued with no kernels-only encoder open");
+        if (m_run.count != 0 && m_run.kernel == kernel && m_run.stride == stride && params == m_run.params + m_run.count * stride)
+        {
+            ++m_run.count;
+            return;
+        }
+        dispatchRun(list);
+        m_run = KernelRun{ .kernel = kernel, .state = &state, .params = params, .stride = stride, .count = 1 };
+    }
+
+    //==================================================================================================================
+    void Encoders::dispatchRun(core::CommandListCore& list)
+    {
+        if (m_run.count == 0)
+        {
+            return;
+        }
+        dispatchKernelRun(list, *this, m_run);
+        m_run = KernelRun{};
     }
 
     //==================================================================================================================
@@ -262,6 +287,7 @@ namespace rojoRHI::metal4 {
         {
             return;
         }
+        dispatchRun(list);
         if (!m_lingering)
         {
             settle();
@@ -312,6 +338,8 @@ namespace rojoRHI::metal4 {
         {
             return;
         }
+        // The run's dispatch is the encoder's last command, so the encoder's stages and barriers see it.
+        dispatchRun(list);
         if (!m_lingering)
         {
             settle();
@@ -385,6 +413,7 @@ namespace rojoRHI::metal4 {
         m_carryWaited = false;
         m_syncsAtEnd = false;
         m_kernelPipeline = nullptr;
+        m_run = KernelRun{};
         m_barriers.reset();
     }
 } // namespace rojoRHI::metal4

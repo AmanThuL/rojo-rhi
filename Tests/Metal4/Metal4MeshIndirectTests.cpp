@@ -270,11 +270,12 @@ TEST_CASE("a mesh draw with a count runs the writer kernel and one native indire
     CommandList list = kit.list(QueueType::Graphics, "test.meshIndirect");
     fixture.begin(list);
     uint64_t before = callsOf(list);
-    // The encoder's open, the pass's begin timestamp and the writer kernel: no indirect command buffer.
+    // The encoder's open and the pass's begin timestamp; the writer kernel waits for the run it starts to end. No indirect
+    // command buffer.
     list.drawMeshTasksIndirect(fixture.record(5), 1, fixture.counted());
-    CHECK(callsOf(list) - before == batchOpenCalls(list) + kPassBegin + 4);
+    CHECK(callsOf(list) - before == batchOpenCalls(list) + kPassBegin);
     CHECK(encodersOf(list).kind() == metal4::EncoderKind::Compute);
-    CHECK(encodersOf(list).kernelPipeline() == DeviceImpl::of(kit.device).kernels.writeMesh);
+    CHECK(encodersOf(list).kernelPipeline() == nullptr);
     CHECK(drawOf(list).icbs.slots(metal4::IcbKind::Mesh) == 0);
     CHECK(prefixKinds(list) == std::vector{ Kind::Pipeline, Kind::Viewport, Kind::Scissor, Kind::MeshIndirect });
     const metal4::PrefixMesh& mesh = drawOf(list).prefix.back().mesh;
@@ -284,11 +285,11 @@ TEST_CASE("a mesh draw with a count runs the writer kernel and one native indire
     const MTL::Stages meshStages = MTL::StageObject | MTL::StageMesh;
     CHECK((encodersOf(list).barriers().pendingSource & MTL::StageDispatch) != 0);
     CHECK((encodersOf(list).barriers().pendingDestination & meshStages) == meshStages);
-    // The kernels' encoder ends; the render encoder's open with its barrier, the state, the record's binding, the native
-    // indirect draw, the pass's end timestamp, endEncoding and its group.
+    // The run's pipeline, kernel table, parameters and dispatch; the kernels' encoder ends; the render encoder's open with its
+    // barrier, the state, the record's binding, the native indirect draw, the pass's end timestamp, endEncoding and its group.
     before = callsOf(list);
     list.endRenderPass();
-    CHECK(callsOf(list) - before == 1 + openCalls(list) + 1 + kStateCalls + 2 + 2);
+    CHECK(callsOf(list) - before == 4 + 1 + openCalls(list) + 1 + kStateCalls + 2 + 2);
     CHECK(drawOf(list).tableDrawRecord == gpuAddressOf(fixture.record(5)));
     // The draw ran in the stages its barrier covered, so nothing is owed after the pass.
     CHECK(encodersOf(list).barriers().pendingDestination == 0);
@@ -311,11 +312,11 @@ TEST_CASE("a counted mesh draw that splits a pass leaves the resumed encoder to 
     CHECK(encodersOf(list).kind() == metal4::EncoderKind::Compute);
     CHECK(prefixKinds(list) == std::vector{ Kind::MeshIndirect });
     uint64_t before = callsOf(list);
-    // The kernels' encoder ends; the resumed render encoder opens with its barrier and restores the held state, the table at
-    // the object and mesh stages first, as kStateCalls counts; then the counted draw's record and draw, and the direct
-    // draw's zero record and draw.
+    // The writer kernel's run dispatches (pipeline, kernel table, parameters, dispatch) and the kernels' encoder ends; the
+    // resumed render encoder opens with its barrier and restores the held state, the table at the object and mesh stages
+    // first, as kStateCalls counts; then the counted draw's record and draw, and the direct draw's zero record and draw.
     list.drawMeshTasks(1, 1, 1);
-    CHECK(callsOf(list) - before == 1 + openCalls(list) + 1 + kStateCalls + 2 + 2);
+    CHECK(callsOf(list) - before == 4 + 1 + openCalls(list) + 1 + kStateCalls + 2 + 2);
     CHECK(drawOf(list).held.meshStages);
     // A mesh pipeline set again on the resumed encoder sends only the pipelines.
     before = callsOf(list);

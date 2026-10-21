@@ -359,7 +359,7 @@ TEST_CASE("C10: a counted drawIndirect of 256 records is three native calls per 
 }
 
 //======================================================================================================================
-TEST_CASE("C10 at maxCount 1 with a null count is the writer path", "[metal4]")
+TEST_CASE("C10 at maxCount 1 with a null count is the writer path, one native call per draw", "[metal4]")
 {
     Fixture fixture;
     const uint64_t label = test::encoderLabel(fixture.device);
@@ -372,7 +372,9 @@ TEST_CASE("C10 at maxCount 1 with a null count is the writer path", "[metal4]")
         [&](CommandList list, uint32_t) { list.drawIndirect(records, 1); },
         [](CommandList list) { list.endRenderPass(); }
     );
-    CHECK(slope.calls == 3);
+    // The native indirect draw, as N's one: the writer kernels of consecutive draws run as one dispatch, whose pipeline,
+    // table, parameters and dispatch come once per pass.
+    CHECK(slope.calls == 1);
     CHECK(slope.barriers == 0);
     CHECK(slope.encoders == 0);
     const PerOperation pass = fixture.perOperation(
@@ -390,7 +392,7 @@ TEST_CASE("C10 at maxCount 1 with a null count is the writer path", "[metal4]")
         nothing
     );
     INFO("the per-pass total with one draw: calls " << pass.calls << ", barriers " << pass.barriers << ", encoders " << pass.encoders);
-    CHECK(pass.calls == slope.calls + 16 + 2 * label);
+    CHECK(pass.calls == slope.calls + 18 + 2 * label);
     CHECK(pass.barriers == 1);
     CHECK(pass.encoders == 2);
 }

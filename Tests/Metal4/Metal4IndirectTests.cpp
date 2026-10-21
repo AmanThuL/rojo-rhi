@@ -446,12 +446,16 @@ TEST_CASE("maxCount 1 runs the writer kernel and one native indirect draw", "[me
     CommandList list = kit.list(QueueType::Graphics, "test.indirect");
     fixture.begin(list);
     uint64_t before = callsOf(list);
-    // The encoder's open, the pass's begin timestamp and the writer kernel: no indirect command buffer.
+    // The encoder's open and the pass's begin timestamp; the writer kernel waits for the run it starts to end. No indirect
+    // command buffer.
     fixture.drawIndirect(list, 1);
-    CHECK(callsOf(list) - before == batchOpenCalls(list) + kPassBegin + 4);
-    CHECK(encodersOf(list).kernelPipeline() == kernelsOf(kit.device).writeDraw);
+    CHECK(callsOf(list) - before == batchOpenCalls(list) + kPassBegin);
+    CHECK(encodersOf(list).kernelPipeline() == nullptr);
+    // Another writer kernel ends the run: its pipeline, the kernel table, the parameters and the dispatch.
+    before = callsOf(list);
     fixture.drawIndexedIndirect(list, 1);
-    CHECK(encodersOf(list).kernelPipeline() == kernelsOf(kit.device).writeIndexed);
+    CHECK(callsOf(list) - before == 4);
+    CHECK(encodersOf(list).kernelPipeline() == kernelsOf(kit.device).writeDraw);
     CHECK(drawOf(list).icbs.slots(metal4::IcbKind::Draw) == 0);
     CHECK(drawOf(list).icbs.slots(metal4::IcbKind::Indexed) == 0);
     CHECK(prefixKinds(list) == std::vector{ Kind::Pipeline, Kind::Viewport, Kind::Scissor, Kind::DrawIndirect, Kind::IndexedIndirect });
@@ -460,11 +464,39 @@ TEST_CASE("maxCount 1 runs the writer kernel and one native indirect draw", "[me
     CHECK(indexed.indexType == MTL::IndexTypeUInt32);
     CHECK(indexed.indices == gpuAddressOf(kit.device.address(fixture.indices)));
     CHECK(indexed.indexLength == 3 * sizeof(uint32_t));
-    // The kernels' encoder ends; the render encoder's open with its barrier, the state, two native indirect draws,
-    // the pass's end timestamp, endEncoding and its group.
+    // The indexed run's pipeline, parameters and dispatch; the kernels' encoder ends; the render encoder's open with its
+    // barrier, the state, two native indirect draws, the pass's end timestamp, endEncoding and its group.
     before = callsOf(list);
     list.endRenderPass();
-    CHECK(callsOf(list) - before == 1 + openCalls(list) + 1 + kStateCalls + 2 + 2);
+    CHECK(callsOf(list) - before == 3 + 1 + openCalls(list) + 1 + kStateCalls + 2 + 2);
+    kit.run(std::array{ list });
+}
+
+//======================================================================================================================
+TEST_CASE("consecutive writer kernels of one kind run as one dispatch, and an encode kernel ends the run", "[metal4]")
+{
+    test::GpuKit kit(2, true);
+    const Fixture fixture(kit.device);
+    CommandList list = kit.list(QueueType::Graphics, "test.indirect");
+    fixture.begin(list);
+    uint64_t before = callsOf(list);
+    // Each draw's parameters follow the last in the list's page, so the run grows by a thread and makes no call.
+    fixture.drawIndirect(list, 1);
+    fixture.drawIndirect(list, 1);
+    fixture.drawIndirect(list, 1);
+    CHECK(callsOf(list) - before == batchOpenCalls(list) + kPassBegin);
+    // The encode kernel first dispatches the run (pipeline, kernel table, parameters, dispatch), then itself (pipeline,
+    // parameters, dispatch).
+    before = callsOf(list);
+    fixture.drawIndirect(list);
+    CHECK(callsOf(list) - before == 4 + 3);
+    CHECK(encodersOf(list).kernelPipeline() == kernelsOf(kit.device).encodeDraw);
+    // A writer after it starts a new run, dispatched when the kernels' encoder ends: its pipeline, parameters and dispatch.
+    fixture.drawIndirect(list, 1);
+    before = callsOf(list);
+    list.endRenderPass();
+    CHECK(callsOf(list) - before == 3 + 1 + openCalls(list) + 1 + kStateCalls + 5 + 2);
+    CHECK(countsOf(list).encodersOpened == 2);
     kit.run(std::array{ list });
 }
 
