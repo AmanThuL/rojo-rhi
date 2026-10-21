@@ -72,7 +72,9 @@ page or guide, then remove the plan from the published baseline.
 - Prose wraps at 100 columns; tables and code blocks are exempt.
 - Line budgets: `README.md` and `AGENTS.md` at most 250 lines; each API reference chapter,
   convention, architecture page, guide, research note, design document and the active plan at most
-  300. These are line budgets, not word limits.
+  300. These are line budgets, not word limits. A pre-registration note whose registered text must
+  not change may exceed its budget by its dated amendment pointers and results paragraphs, and
+  `Tools/check_project_policy.py` names each such note with its own budget.
 - Keep raw captures, temporary measurements and recovery bundles outside the published tree.
 
 ## Differences from Luminex

@@ -57,6 +57,24 @@ class ProjectPolicyTests(unittest.TestCase):
         self.assertEqual(len(errors), 1)
         self.assertIn("outside metadata", errors[0])
 
+    def test_a_named_preregistration_note_takes_its_own_budget_over_the_docs_one(self) -> None:
+        note = Path("docs/research/2026-10-18-metal4-overhead.md")
+        budget = policy.PREREGISTRATION_BUDGETS[note.as_posix()]
+        for lines, failures in ((budget, 0), (budget + 1, 1)):
+            errors: list[str] = []
+            with mock.patch.object(policy, "read_text", return_value="line\n" * lines):
+                policy.check_line_budgets([note], errors)
+            self.assertEqual(len(errors), failures)
+        self.assertGreater(budget, 300)
+        self.assertIn(f"{budget}-line budget", errors[0])
+
+    def test_other_research_notes_keep_the_docs_budget(self) -> None:
+        errors: list[str] = []
+        with mock.patch.object(policy, "read_text", return_value="line\n" * 301):
+            policy.check_line_budgets([Path("docs/research/2026-10-20-other.md")], errors)
+        self.assertEqual(len(errors), 1)
+        self.assertIn("300-line budget", errors[0])
+
     def test_markdown_check_rejects_unknown_status(self) -> None:
         path = Path("docs/specs/example.md")
         errors: list[str] = []
