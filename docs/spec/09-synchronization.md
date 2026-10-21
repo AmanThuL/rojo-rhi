@@ -108,7 +108,7 @@ A bit set of pipeline stages, modelled on D3D12 enhanced barriers and Vulkan syn
 #### Mapping
 | | Metal 4 | D3D12 | Vulkan |
 |---|---|---|---|
-| `None` | no stage: an execution-only barrier is dropped | `D3D12_BARRIER_SYNC_NONE` | `VK_PIPELINE_STAGE_2_NONE` |
+| `None` | no stage: an execution-only barrier is dropped | `D3D12_BARRIER_SYNC_NONE`; as the source of a buffer barrier or of a texture barrier from `Undefined`, the destination's sync, or `SYNC_ALL` when the destination names no stage either, and as the source of a texture barrier out of another layout, that layout's own scope, because GPU-based validation rejects `SYNC_NONE` before a resource an earlier command touched | `VK_PIPELINE_STAGE_2_NONE` |
 | `IndirectArgs` | `MTL::StageDispatch`, `MTL::StageVertex`, `MTL::StageObject` and `MTL::StageMesh`: the stages that consume arguments, since Metal has no argument stage | `SYNC_EXECUTE_INDIRECT` | `DRAW_INDIRECT` |
 | `IndexInput` | `MTL::StageVertex` | `SYNC_INDEX_INPUT` | `INDEX_INPUT` |
 | `VertexShader` | `MTL::StageVertex` | `SYNC_VERTEX_SHADING` | `VERTEX_SHADER` |
@@ -118,8 +118,8 @@ A bit set of pipeline stages, modelled on D3D12 enhanced barriers and Vulkan syn
 | `ComputeShader` | `MTL::StageDispatch` | `SYNC_COMPUTE_SHADING` | `COMPUTE_SHADER` |
 | `ColorAttachment` | `MTL::StageFragment` | `SYNC_RENDER_TARGET` | `COLOR_ATTACHMENT_OUTPUT` |
 | `DepthStencil` | `MTL::StageFragment` | `SYNC_DEPTH_STENCIL` | `EARLY_FRAGMENT_TESTS \| LATE_FRAGMENT_TESTS` |
-| `Copy` | `MTL::StageBlit \| MTL::StageDispatch \| MTL::StageFragment`: blits, the backend kernels of `fillBuffer` and `clearTexture`, and a `clearTexture` run as a render-pass load action | `SYNC_COPY`, plus `SYNC_COMPUTE_SHADING` for the `fillBuffer` kernel and `SYNC_RENDER_TARGET`, `SYNC_DEPTH_STENCIL` or `SYNC_CLEAR_UNORDERED_ACCESS_VIEW` for `clearTexture`, which the backend brackets with transitions from `CopyDst` into the render-target, depth-stencil-write or unordered-access layout and back | `COPY \| CLEAR` |
-| `Resolve` | `MTL::StageFragment` (store-action resolve) | `SYNC_RESOLVE` | `COLOR_ATTACHMENT_OUTPUT` (render-pass resolve) |
+| `Copy` | `MTL::StageBlit \| MTL::StageDispatch \| MTL::StageFragment`: blits, the backend kernels of `fillBuffer` and `clearTexture`, and a `clearTexture` run as a render-pass load action | `SYNC_COPY`, plus `SYNC_COMPUTE_SHADING` for the `fillBuffer` kernel and `SYNC_RENDER_TARGET`, `SYNC_DEPTH_STENCIL` or `SYNC_CLEAR_UNORDERED_ACCESS_VIEW` for `clearTexture`, which the backend brackets with transitions from `CopyDst` into the render-target, depth-stencil-write or unordered-access layout and back; on a `Compute` list without `SYNC_RENDER_TARGET` and `SYNC_DEPTH_STENCIL`, on a `Copy` list `SYNC_COPY` alone | `COPY \| CLEAR` |
+| `Resolve` | `MTL::StageFragment` (store-action resolve) | `SYNC_RENDER_TARGET \| SYNC_RESOLVE`: a resolve target stays in `LAYOUT_RENDER_TARGET` outside the backend's resolve transitions, whose render-target scope the barrier chains with | `COLOR_ATTACHMENT_OUTPUT` (render-pass resolve) |
 | `AllGraphics` | the union of its bits: `MTL::StageDispatch \| MTL::StageVertex \| MTL::StageObject \| MTL::StageMesh \| MTL::StageFragment`, with `MTL::StageDispatch` from `IndirectArgs` for the argument-encoding kernel | `SYNC_DRAW \| SYNC_EXECUTE_INDIRECT \| SYNC_RESOLVE` | `ALL_GRAPHICS` |
 | `All` | `MTL::StageAll` | `SYNC_ALL` | `ALL_COMMANDS` |
 | Cost | native | cheap: `clearTexture` adds a backend transition into and out of its clear layout; every other stage is native | native |
@@ -168,16 +168,16 @@ A bit set of memory accesses. Each bit is performed at the stages named after it
 #### Mapping
 | | Metal 4 | D3D12 | Vulkan |
 |---|---|---|---|
-| Lowering | barriers carry no access: any access other than `None` selects `MTL4::VisibilityOptionDevice` | `D3D12_BARRIER_ACCESS` bits | `VK_ACCESS_2` bits |
+| Lowering | barriers carry no access: any access other than `None` selects `MTL4::VisibilityOptionDevice` | `D3D12_BARRIER_ACCESS` bits, less those the list's queue never performs, which a side naming `Stage::All` may name: a `Copy` list keeps copy accesses, a `Compute` list drops render-target, depth-stencil, resolve and index accesses, and a side left with none is `ACCESS_NO_ACCESS`; a side's sync then keeps only the bits compatible with one of its access bits (the `Copy` stage into `CopyDst` is `SYNC_COPY`), widening to `SYNC_ALL` if none is, and a side with no access keeps its sync but `SYNC_CLEAR_UNORDERED_ACCESS_VIEW`; a texture side with no access in a layout other than `Undefined`, which the layer accepts only with `SYNC_NONE`, names the accesses that layout admits that its sync runs, or all of them with `SYNC_ALL` when its sync runs none or runs scopes they do not | `VK_ACCESS_2` bits |
 | `None` | execution-only barrier | `ACCESS_NO_ACCESS` | `NONE` |
 | `IndirectArgs` | `Device` visibility | `ACCESS_INDIRECT_ARGUMENT` | `INDIRECT_COMMAND_READ` |
 | `IndexRead` | `Device` visibility | `ACCESS_INDEX_BUFFER` | `INDEX_READ` |
-| `ShaderRead` | `Device` visibility | `ACCESS_SHADER_RESOURCE \| ACCESS_CONSTANT_BUFFER`; `ACCESS_UNORDERED_ACCESS` for `Storage` view reads | `SHADER_READ` |
+| `ShaderRead` | `Device` visibility | `ACCESS_SHADER_RESOURCE \| ACCESS_CONSTANT_BUFFER` on global and buffer barriers; on a texture barrier `ACCESS_SHADER_RESOURCE`, or `ACCESS_UNORDERED_ACCESS` for `Storage` view reads when that side's layout is `ShaderWrite` | `SHADER_READ` |
 | `ShaderWrite` | `Device` visibility | `ACCESS_UNORDERED_ACCESS` | `SHADER_WRITE` |
 | `ColorAttachmentRead`, `ColorAttachmentWrite` | `Device` visibility | `ACCESS_RENDER_TARGET` | `COLOR_ATTACHMENT_READ`, `COLOR_ATTACHMENT_WRITE` |
 | `DepthStencilRead`, `DepthStencilWrite` | `Device` visibility | `ACCESS_DEPTH_STENCIL_READ`, `ACCESS_DEPTH_STENCIL_WRITE` | `DEPTH_STENCIL_ATTACHMENT_READ`, `DEPTH_STENCIL_ATTACHMENT_WRITE` |
-| `CopyRead`, `CopyWrite` | `Device` visibility | `ACCESS_COPY_SOURCE`, `ACCESS_COPY_DEST`; a `clearTexture` destination is cleared with `ACCESS_RENDER_TARGET`, `ACCESS_DEPTH_STENCIL_WRITE` or `ACCESS_UNORDERED_ACCESS` inside the backend's transitions | `TRANSFER_READ`, `TRANSFER_WRITE` |
-| `Resolve` | `Device` visibility | `ACCESS_RESOLVE_DEST` | `COLOR_ATTACHMENT_WRITE` |
+| `CopyRead`, `CopyWrite` | `Device` visibility | `ACCESS_COPY_SOURCE`, `ACCESS_COPY_DEST`; a `clearTexture` destination is cleared with `ACCESS_RENDER_TARGET`, `ACCESS_DEPTH_STENCIL_WRITE` or `ACCESS_UNORDERED_ACCESS` inside the backend's transitions; a `CopyWrite` on a global barrier, or on a buffer barrier of a `ShaderWrite` buffer, adds `ACCESS_UNORDERED_ACCESS` for the `fillBuffer` kernel, except on a `Copy` list, which runs no fill | `TRANSFER_READ`, `TRANSFER_WRITE` |
+| `Resolve` | `Device` visibility | `ACCESS_RENDER_TARGET`: a resolve target is in `ColorAttachment`, and only the backend's transitions around the resolve name `ACCESS_RESOLVE_DEST` | `COLOR_ATTACHMENT_WRITE` |
 | Cost | native | native | native |
 
 ### `Layout`
@@ -227,12 +227,12 @@ one layout.
 | | Metal 4 | D3D12 | Vulkan |
 |---|---|---|---|
 | `Undefined` | ignored | `D3D12_BARRIER_LAYOUT_UNDEFINED` | `VK_IMAGE_LAYOUT_UNDEFINED` |
-| `General` | ignored | `LAYOUT_COMMON` | `GENERAL` |
+| `General` | ignored | `LAYOUT_COMMON`; on a `Copy` list, whose queue takes no layout barrier, every texture barrier lowers to a global barrier with its stages and accesses | `GENERAL` |
 | `ShaderRead` | ignored | `LAYOUT_SHADER_RESOURCE`, valid on direct and compute queues | `SHADER_READ_ONLY_OPTIMAL` |
 | `ShaderWrite` | ignored | `LAYOUT_UNORDERED_ACCESS`, valid on direct and compute queues | `GENERAL` |
 | `ColorAttachment` | ignored | `LAYOUT_RENDER_TARGET`; a resolve target passes through `LAYOUT_RESOLVE_DEST` by a backend transition | `COLOR_ATTACHMENT_OPTIMAL` |
 | `DepthStencilWrite` | ignored | `LAYOUT_DEPTH_STENCIL_WRITE` | `DEPTH_STENCIL_ATTACHMENT_OPTIMAL` |
-| `DepthStencilRead` | ignored | `LAYOUT_DEPTH_STENCIL_READ` | `DEPTH_STENCIL_READ_ONLY_OPTIMAL` |
+| `DepthStencilRead` | ignored | `LAYOUT_SHADER_RESOURCE`: the layout permits shader reads alone, and `LAYOUT_DEPTH_STENCIL_READ` admits no shader-resource access | `DEPTH_STENCIL_READ_ONLY_OPTIMAL` |
 | `CopySrc` | ignored | `LAYOUT_COPY_SOURCE` | `TRANSFER_SRC_OPTIMAL` |
 | `CopyDst` | ignored | `LAYOUT_COPY_DEST`; a `clearTexture` destination passes through the render-target, depth-stencil-write or unordered-access layout by a backend transition | `TRANSFER_DST_OPTIMAL` |
 | `Present` | ignored | `LAYOUT_PRESENT` | `PRESENT_SRC_KHR` |
