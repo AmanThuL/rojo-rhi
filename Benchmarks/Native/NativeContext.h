@@ -47,10 +47,12 @@ namespace rojoRHI::bench {
         uint64_t arenaBytes = 0; ///< Frame data per frame; 0 creates no arena.
     };
 
-    // The system device with a graphics and a compute MTL4::CommandQueue sharing one residency set, an MTL4::Compiler
-    // and three frame slots; every commit carries MTL4::CommitOptions feedback reporting to the collector. It owns every
-    // object created through it and releases them in reverse order of creation; a frame is waited to completion before
-    // the next begins, so teardown never releases an object the GPU still uses.
+    // The system device with a graphics and a compute MTL4::CommandQueue sharing one residency set, an MTL4::Compiler,
+    // a frame event and three frame slots; every commit carries MTL4::CommitOptions feedback reporting to the collector.
+    // Frames are paced as a renderer with three frames in flight paces them: the graphics queue signals the frame event
+    // after each frame's commits, and a frame waits on the CPU for the value of the slot's last frame before reusing the
+    // slot. It owns every object created through it and releases them in reverse order of creation, after the frame
+    // event holds the last frame's value, so teardown never releases an object the GPU still uses.
     class NativeContext
     {
       public:
@@ -69,6 +71,7 @@ namespace rojoRHI::bench {
             uint64_t arenaAddress = 0;
             uint64_t arenaSize = 0;
             uint64_t arenaUsed = 0;
+            uint64_t frameValue = 0; ///< The frame event's value at the end of the slot's last frame; 0 before its first.
 
             // Copies bytes into the arena at the next 256-byte boundary and returns their GPU address. Overrunning the
             // size fixed at setup is a harness defect and aborts.
@@ -107,6 +110,8 @@ namespace rojoRHI::bench {
         NativeCalls& calls();
         CallSnapshot callSnapshot() const;
         FeedbackCollector& collector();
+        // Signalled on the graphics queue with 1, 2, 3 and so on, once at the end of each frame.
+        MTL::SharedEvent* frameEvent() const;
 
         // Setup. Each object is owned by the context; resources join the residency set at creation.
         // Takes ownership of a +1 object.
@@ -128,8 +133,11 @@ namespace rojoRHI::bench {
         // Creates the three frame slots and commits the residency set; called once, after every resource exists.
         std::expected<void, std::string> prepareFrames(const NativeFrameShape& shape);
 
-        // Frames. beginFrame opens an autorelease pool, resets the slot's allocators (uncounted) and arena, expects `commits`
-        // feedback reports; endFrame waits for them, closes the pool and returns the frame's GPU span.
+        // Frames. beginFrame opens an autorelease pool, waits until the frame event holds the slot's frameValue (one counted
+        // host call, made for a slot's first frame too), resets the slot's allocators (uncounted) and arena, and expects
+        // `commits` feedback reports. endFrame signals the frame event on the graphics queue after the frame's commits (one
+        // counted queue call), waits for the reports, closes the pool and returns the frame's GPU span. A frame's work on
+        // the compute queue must be joined by a later graphics commit of the frame, which the signal follows.
         Slot& beginFrame(uint32_t index, uint32_t commits);
         // Commits with new MTL4::CommitOptions whose feedback reports to the collector, kept until the frame's wait: an
         // options object reports only the first commit it is given. One counted queue call.
@@ -152,6 +160,10 @@ namespace rojoRHI::bench {
         MTL4::Compiler* m_compiler = nullptr;
         MTL4::CommandAllocator* m_setupAllocator = nullptr;
         MTL4::CommandBuffer* m_setupList = nullptr;
+        MTL::SharedEvent* m_frameEvent = nullptr;
+        uint64_t m_frameValue = 0;   ///< The frame event's value signalled last.
+        Slot* m_frameSlot = nullptr; ///< The slot of the frame open now.
+        std::string m_frameError;    ///< A failed slot wait of the frame open now, which its endFrame returns.
         std::vector<NS::Object*> m_owned;
         std::vector<Slot> m_slots;
         std::vector<MTL4::CommitOptions*> m_pendingOptions; ///< Reserved at open, so a commit does not grow it.

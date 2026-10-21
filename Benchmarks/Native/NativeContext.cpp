@@ -9,6 +9,7 @@
 #include <algorithm>
 #include <filesystem>
 #include <format>
+#include <utility>
 
 // The two calls @autoreleasepool lowers to. A pushed pool allocates nothing on the heap, unlike an NSAutoreleasePool
 // object, so a frame's pool adds no allocation to N's count.
@@ -17,6 +18,9 @@ extern "C" void objc_autoreleasePoolPop(void*);
 
 namespace rojoRHI::bench {
     namespace {
+        // How long a wait on the frame event may take, as long as the collector's wait for a frame's feedback.
+        constexpr uint64_t kFrameWaitMilliseconds = 60'000;
+
         // An autorelease pool around one setup function, so the autoreleasing factories it calls leave nothing behind.
         class PoolScope
         {
@@ -63,6 +67,17 @@ namespace rojoRHI::bench {
         if (m_framePool != nullptr)
         {
             objc_autoreleasePoolPop(m_framePool);
+        }
+        // The last frame's signal may still be queued behind its commits, whose feedback has already reported.
+        if (!m_abandoned && m_frameValue > 0 && !m_frameEvent->waitUntilSignaledValue(m_frameValue, kFrameWaitMilliseconds))
+        {
+            std::fprintf(
+                stderr,
+                "native teardown: the frame event did not reach %llu within %llu ms; no object is released\n",
+                static_cast<unsigned long long>(m_frameValue),
+                static_cast<unsigned long long>(kFrameWaitMilliseconds)
+            );
+            m_abandoned = true;
         }
         // After a failed wait the GPU may still read any of these objects, and the process is about to report and exit.
         if (m_abandoned)
@@ -112,6 +127,15 @@ namespace rojoRHI::bench {
             return std::unexpected("compute queue: " + describe(error));
         }
         own(m_compute);
+
+        m_frameEvent = m_device->newSharedEvent();
+        ++m_calls.host;
+        if (m_frameEvent == nullptr)
+        {
+            return std::unexpected(std::string("frame event"));
+        }
+        own(m_frameEvent);
+        m_frameEvent->setLabel(temporaryString("bench.frame"));
 
         error = nullptr;
         MTL::ResidencySetDescriptor* residencyDescriptor = MTL::ResidencySetDescriptor::alloc()->init();
@@ -198,6 +222,12 @@ namespace rojoRHI::bench {
     FeedbackCollector& NativeContext::collector()
     {
         return *m_collector;
+    }
+
+    //==================================================================================================================
+    MTL::SharedEvent* NativeContext::frameEvent() const
+    {
+        return m_frameEvent;
     }
 
     //==================================================================================================================
@@ -431,10 +461,24 @@ namespace rojoRHI::bench {
         }
         m_framePool = objc_autoreleasePoolPush();
         Slot& slot = m_slots[index % kFrameSlots];
-        // The slot's last frame completed before the frame after it began, so its memory is free to reuse.
-        for (MTL4::CommandAllocator* allocator : slot.allocators)
+        m_frameSlot = &slot;
+        // Once the event holds the value the slot's last frame signalled at its end, that frame's command buffers and arena
+        // are free to reuse; a slot not used yet waits for 0, which the event holds from creation. After a failed wait the
+        // GPU may still use them, so the allocators are not reset, nothing is released at teardown, and endFrame fails.
+        const bool completed = m_frameEvent->waitUntilSignaledValue(slot.frameValue, kFrameWaitMilliseconds);
+        ++m_calls.host;
+        if (!completed)
         {
-            allocator->reset();
+            m_frameError =
+                std::format("frame slot {}: the frame event did not reach {} within {} ms", index % kFrameSlots, slot.frameValue, kFrameWaitMilliseconds);
+            m_abandoned = true;
+        }
+        else
+        {
+            for (MTL4::CommandAllocator* allocator : slot.allocators)
+            {
+                allocator->reset();
+            }
         }
         slot.arenaUsed = 0;
         m_collector->begin(commits);
@@ -462,9 +506,17 @@ namespace rojoRHI::bench {
     //==================================================================================================================
     std::expected<std::optional<double>, std::string> NativeContext::endFrame()
     {
+        m_graphics->signalEvent(m_frameEvent, ++m_frameValue);
+        ++m_calls.submit;
+        m_frameSlot->frameValue = m_frameValue;
+        m_frameSlot = nullptr;
         const std::expected<double, std::string> span = waitForCommits();
         objc_autoreleasePoolPop(m_framePool);
         m_framePool = nullptr;
+        if (!m_frameError.empty())
+        {
+            return std::unexpected(std::exchange(m_frameError, std::string()));
+        }
         if (!span)
         {
             return std::unexpected(span.error());

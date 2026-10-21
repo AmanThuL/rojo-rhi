@@ -719,3 +719,30 @@ TEST_CASE("a native shader library that was not built is reported with its path"
     REQUIRE(!library.has_value());
     CHECK(library.error().find("Shaders/BenchMissing.metallib") != std::string::npos);
 }
+
+//======================================================================================================================
+TEST_CASE("the native arm signals its frame event at each frame's end and waits on it before reusing a frame slot", "[native]")
+{
+    // Every frame makes the same two calls, its first use of a slot included: the wait for a value the event already holds
+    // returns at once. Frame index signals index + 1, and no later signal is queued before the check, so a repeated or
+    // skipped value fails it.
+    NativeContext context;
+    REQUIRE(context.open(runOptions(Mode::Correctness)).has_value());
+    REQUIRE(context.prepareFrames(NativeFrameShape{}).has_value());
+    REQUIRE(context.frameEvent() != nullptr);
+    constexpr uint32_t kFrames = 2 * NativeContext::kFrameSlots;
+    for (uint32_t index = 0; index < kFrames; ++index)
+    {
+        CAPTURE(index);
+        const NativeCalls before = context.calls();
+        (void)context.beginFrame(index, 0);
+        CHECK(context.calls().host == before.host + 1);
+        REQUIRE(context.endFrame().has_value());
+        CHECK(context.calls().submit == before.submit + 1);
+        CHECK(context.calls().host == before.host + 1);
+        CHECK(context.calls().record == before.record);
+        const uint64_t value = uint64_t{ index } + 1;
+        REQUIRE(context.frameEvent()->waitUntilSignaledValue(value, 10'000));
+        CHECK(context.frameEvent()->signaledValue() == value);
+    }
+}
