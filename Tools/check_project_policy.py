@@ -22,7 +22,10 @@ STATUS_DIRS = {
     "architecture", "conventions", "decisions", "design", "guides", "milestones", "plans",
     "postmortems", "research", "roadmap", "spec", "specs",
 }
-LINE_BUDGETS = {"AGENTS.md": 250, "README.md": 250, "docs/": 300}
+# Pre-registration notes whose registered text must not change: each may exceed the docs budget by
+# its dated amendment pointers and results paragraphs (docs/conventions/documentation.md).
+PREREGISTRATION_BUDGETS = {"docs/research/2026-10-18-metal4-overhead.md": 310}
+LINE_BUDGETS = {**PREREGISTRATION_BUDGETS, "AGENTS.md": 250, "README.md": 250, "docs/": 300}
 HOME_PATH = re.compile(
     r"(?i)(?:/" + r"Users/[^/\s`]+|/" + r"home/[^/\s`]+|[A-Z]:\\Users\\[^\\\s`]+)"
 )
@@ -280,18 +283,25 @@ def check_markdown(files: list[Path], errors: list[str]) -> None:
         errors.append(f"docs/plans: expected at most one In progress plan, found {len(active)}")
 
 
+def line_budget(name: str) -> int | None:
+    """Return the budget of a file: its own entry, else that of the longest directory holding it."""
+    if name in LINE_BUDGETS:
+        return LINE_BUDGETS[name]
+    prefixes = [key for key in LINE_BUDGETS if key.endswith("/") and name.startswith(key)]
+    return LINE_BUDGETS[max(prefixes, key=len)] if prefixes else None
+
+
 def check_line_budgets(files: list[Path], errors: list[str]) -> None:
     for path in files:
+        budget = line_budget(path.as_posix())
+        if budget is None:
+            continue
         text = read_text(path)
         if text is None:
             continue
-        name = path.as_posix()
-        for prefix, budget in LINE_BUDGETS.items():
-            if name == prefix or (prefix.endswith("/") and name.startswith(prefix)):
-                lines = len(text.splitlines())
-                if lines > budget:
-                    errors.append(f"{path}: {lines} lines exceeds {budget}-line budget")
-                break
+        lines = len(text.splitlines())
+        if lines > budget:
+            errors.append(f"{path}: {lines} lines exceeds {budget}-line budget")
 
 
 def check_process_narration(files: list[Path], errors: list[str]) -> None:
