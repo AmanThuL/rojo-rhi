@@ -61,7 +61,7 @@ struct DeviceDesc {
 | | Metal 4 | D3D12 | Vulkan |
 |---|---|---|---|
 | `validation` | backend-neutral tracker; independent of `MTL_DEBUG_LAYER` | backend-neutral tracker; independent of `ID3D12Debug::EnableDebugLayer` | backend-neutral tracker; independent of the validation layers |
-| `enableCapture` | makes the encoders a list opens carry labels; capture availability is fixed at launch by `MTL_CAPTURE_ENABLED` and read through `MTL::CaptureManager::supportsDestination` | `PIXLoadLatestWinPixGpuCapturerLibrary` before `D3D12CreateDevice` | RenderDoc in-application API loaded before `vkCreateInstance` (reserved) |
+| `enableCapture` | makes the encoders a list opens carry labels; capture availability is fixed at launch by `MTL_CAPTURE_ENABLED` and read through `MTL::CaptureManager::supportsDestination` | `LoadLibraryExW` of the newest `%ProgramFiles%\Microsoft PIX\<version>\WinPixGpuCapturer.dll` (the search `PIXLoadLatestWinPixGpuCapturerLibrary` makes) before the device factory; a machine without PIX creates the device and `Device::beginCapture` returns `Unsupported` | RenderDoc in-application API loaded before `vkCreateInstance` (reserved) |
 | `pipelineCache` | a RojoRHI header around a Metal 4 archive: `MTL::Device::newArchive` from an `NS::URL`, looked up through `MTL4::CompilerTaskOptions::setLookupArchives`; saved with `MTL4::PipelineDataSetSerializer::serializeAsArchiveAndFlushToURL`. Both are URL-based, so a caller blob takes a temporary file, kept while the device lives | a RojoRHI header around an `ID3D12PipelineLibrary1`: `ID3D12Device1::CreatePipelineLibrary` on a copy of the library bytes, kept while the device lives | `VkPipelineCacheCreateInfo::pInitialData`, or `VK_KHR_pipeline_binary` data |
 | Cost | costly: tracking when `validation` is set; native otherwise | costly: same | costly: same |
 
@@ -164,10 +164,10 @@ on a device that reports `false` is a valid-usage violation of the owning chapte
 | `adapterName` | `MTL::Device::name` | `IDXGIAdapter1::GetDesc1` | `VkPhysicalDeviceProperties::deviceName` |
 | `maxViews`, `maxSamplers` | views from the Metal feature set tables by GPU family; samplers from `MTL::Device::maxArgumentBufferSamplerCount`. Research figures of 1,000,000 textures and 996 (Apple7, Apple8) or 500,000 (Apple9 and later) samplers are unverified | resource binding tier 3: 1,000,000 views and 2,048 samplers; `D3D12_FEATURE_D3D12_OPTIONS19` where reported (unverified shipping values) | `VkPhysicalDeviceDescriptorHeapPropertiesEXT` (unverified structure name) |
 | `uploadInDeviceMemory` | always true: unified memory | `D3D12_FEATURE_D3D12_OPTIONS16::GPUUploadHeapSupported` | a memory type with `DEVICE_LOCAL` and `HOST_VISIBLE` from `vkGetPhysicalDeviceMemoryProperties` |
-| `placementSparse` | `MTL::Device::supportsPlacementSparse` | `D3D12_FEATURE_D3D12_OPTIONS::TiledResourcesTier` | `VkPhysicalDeviceFeatures::sparseBinding` and the sparse residency features |
+| `placementSparse` | `MTL::Device::supportsPlacementSparse` | `D3D12_FEATURE_D3D12_OPTIONS::TiledResourcesTier`: tier 2 or higher; 3D textures at tier 3 | `VkPhysicalDeviceFeatures::sparseBinding` and the sparse residency features |
 | `meshTasksIndirect` | `MTL::Device::supportsFamily` with `MTL::GPUFamilyApple9`, the family the feature tables list for indirect mesh draws (*unverified*) | always true at the floor: `ExecuteIndirect` with `D3D12_INDIRECT_ARGUMENT_TYPE_DISPATCH_MESH` | `VkPhysicalDeviceMeshShaderFeaturesEXT::meshShader` |
 | `conservativeRaster` | always false: Metal 4 has no conservative rasterization | `D3D12_FEATURE_D3D12_OPTIONS::ConservativeRasterizationTier` | `VK_EXT_conservative_rasterization` |
-| `upscalers` | `MTLFX::TemporalScalerDescriptor::supportsMetal4FX` | FSR always; DLSS and XeSS when built in and their runtime accepts the adapter | as D3D12: FSR, DLSS and XeSS have Vulkan variants |
+| `upscalers` | `MTLFX::TemporalScalerDescriptor::supportsMetal4FX` | FSR when the FidelityFX runtime it loads is present beside the executable; DLSS and XeSS when built in and their runtime accepts the adapter | as D3D12: FSR, DLSS and XeSS have Vulkan variants |
 | Cost | native: queried once at creation | native: queried once at creation | native: queried once at creation |
 
 ### `Device::capabilities`

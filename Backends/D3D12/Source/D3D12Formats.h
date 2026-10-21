@@ -38,6 +38,7 @@ namespace rojoRHI::d3d12 {
     DXGI_FORMAT dsvFormat(Format format);
 
     /// Returns what `device` supports for each format: the core's ceiling for the format, narrowed by what the device
-    /// reports. No format reports a sparse capability. A query the runtime fails is an error, never a narrower table.
+    /// reports; a format is sparse when it has no stencil plane and reports `D3D12_FORMAT_SUPPORT2_TILED`. A query the runtime
+    /// fails is an error, never a narrower table.
     Result<core::FormatTable> queryFormatTable(ID3D12Device12* device);
 } // namespace rojoRHI::d3d12

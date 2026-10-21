@@ -105,8 +105,10 @@ namespace rojoRHI::d3d12 {
             caps.depthAttachment = ceiling.depthAttachment && has(target1, D3D12_FORMAT_SUPPORT1_DEPTH_STENCIL);
             caps.blend = caps.colorAttachment && ceiling.blend && has(target1, D3D12_FORMAT_SUPPORT1_BLENDABLE);
             caps.resolve = caps.colorAttachment && ceiling.resolve && has(target1, D3D12_FORMAT_SUPPORT1_MULTISAMPLE_RESOLVE);
-            // Sparse stays clear until the backend places tiles.
-            caps.sparse = false;
+            // TILED (Support2) is what a reserved texture of the format needs; the device-wide tier gates Sparse as a whole. A
+            // format with a stencil plane tiles each plane as its own subresources, which a TileMapping cannot name, so it is
+            // never sparse.
+            caps.sparse = ceiling.sparse && !core::hasStencilPlane(format) && has(static_cast<UINT>(target.Support2), D3D12_FORMAT_SUPPORT2_TILED);
             // One sample always works; D3D12_FEATURE_MULTISAMPLE_QUALITY_LEVELS answers 2, 4 and 8 for an attachment.
             caps.sampleCounts = 1;
             if (caps.colorAttachment || caps.depthAttachment)

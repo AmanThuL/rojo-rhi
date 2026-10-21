@@ -21,6 +21,7 @@
 #include "D3D12Descriptors.h"
 #include "D3D12Device.h"
 #include "D3D12Memory.h"
+#include "D3D12Sparse.h"
 
 #include <cstddef>
 #include <cstdint>
@@ -45,7 +46,8 @@ namespace rojoRHI {
             Memory memory = Memory::Gpu; ///< The memory class.
             bool writable = false;       ///< Shaders write it: unordered access and a raw UAV.
             bool views = false;          ///< It takes raw views; a Readback buffer takes none.
-            ID3D12Heap* heap = nullptr;  ///< The heap it is placed in; null for a committed buffer.
+            bool sparse = false;         ///< A Sparse buffer: a reserved resource whose tiles are mapped later.
+            ID3D12Heap* heap = nullptr;  ///< The heap it is placed in; null for a committed or reserved buffer.
             uint64_t offset = 0;         ///< The byte offset in `heap`.
             std::string_view label;      ///< The resolved label.
         };
@@ -119,9 +121,10 @@ namespace rojoRHI {
         }
 
         //==============================================================================================================
-        /// Creates the native half of a buffer on `impl`'s device: the committed or placed resource, named `desc.label`, the
-        /// mapping of an Upload or Readback buffer, `initial` copied through the mapping or staged for a Gpu buffer, and the raw
-        /// views. Returns the payload that owns them, or the error of the failing call with nothing left behind.
+        /// Creates the native half of a buffer on `impl`'s device: the committed, placed or reserved resource, named
+        /// `desc.label`, the mapping of an Upload or Readback buffer, `initial` copied through the mapping or staged for a Gpu
+        /// buffer, and the raw views. Returns the payload that owns them, or the error of the failing call with nothing left
+        /// behind.
         Result<d3d12::BufferPayload*> createPayload(DeviceImpl& impl, const NativeBufferDesc& desc, std::span<const std::byte> initial)
         {
             const D3D12_RESOURCE_DESC1 native = resourceDesc(desc.size, desc.writable);
@@ -137,6 +140,15 @@ namespace rojoRHI {
                         std::format("ID3D12Device10::CreatePlacedResource2 of buffer \"{}\" ({} bytes at heap offset {})", desc.label, desc.size, desc.offset);
                     return std::unexpected(d3d12::failure(impl, created, what));
                 }
+            }
+            else if (desc.sparse)
+            {
+                Result<d3d12::Com<ID3D12Resource>> reserved = d3d12::createReservedBuffer(impl, native, desc.label);
+                if (!reserved)
+                {
+                    return std::unexpected(std::move(reserved.error()));
+                }
+                resource = std::move(*reserved);
             }
             else
             {
@@ -293,12 +305,12 @@ namespace rojoRHI {
             requirements = bufferRequirements(impl, resourceDesc(desc.size, writable));
         }
         core::BufferRecord record = core::prepareBuffer(impl.core, desc, initial, placement, requirements);
-        // Sparse never reaches here in a Debug build: the device reports no sparse resources (VU-rojo-buffer-0005).
         const NativeBufferDesc native{
             .size = desc.size,
             .memory = desc.memory,
             .writable = writable,
             .views = desc.memory != Memory::Readback,
+            .sparse = (desc.usage & BufferUsage::Sparse) != BufferUsage::None,
             .heap = placed ? static_cast<ID3D12Heap*>(core::checkedHeap(impl.core, placement.heap).native) : nullptr,
             .offset = placed ? placement.offset : 0,
             .label = record.label,
