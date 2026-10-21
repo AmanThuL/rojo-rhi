@@ -57,8 +57,9 @@ namespace rojoRHI::core {
         BufferUsage usage = BufferUsage::None; ///< The usage flags.
         Heap heap = {};                        ///< The heap the buffer is placed in; null for a dedicated allocation.
         uint64_t heapOffset = 0;               ///< The byte offset of the buffer in `heap`; zero for a dedicated allocation.
-        /// For a frame-arena page, the frame of the list that claimed it last; zero for any other buffer. It changes under
-        /// the pool's lock when a list claims the page (VU-rojo-buffer-0020).
+        /// For a frame-arena page, the frame of the list that claimed it last; zero for any other buffer, and in a Release
+        /// build, since only Debug-tier code reads it (VU-rojo-buffer-0020 and the tracker's references). It changes under the
+        /// pool's lock when a list claims the page.
         uint64_t arenaFrame = 0;
         ListReferences refs = {}; ///< The unsubmitted lists that reference the buffer.
         TileMap mapped = {};      ///< The mapped tiles of a Sparse buffer (VU-rojo-sparse-0012); empty for any other buffer.

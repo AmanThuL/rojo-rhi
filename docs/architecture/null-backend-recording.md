@@ -81,10 +81,11 @@ a growth event. A new page has max(1 MiB, request) bytes, falling back to exactl
 when that maximum exceeds `Limits::maxBufferSize`. A request above `maxBufferSize`, or a page the
 backend cannot create, is fatal in every build, as the reference says. `rewind(slot)`, called from
 `beginFrame` when the slot is reused, makes every page claimable again; pages keep their memory.
-Claiming is the one place Release recording takes locks (ADR 0020): the arena's mutex, the buffer
-pool's inside it when a page is created, and the buffer pool's again afterwards to stamp the page's
-`BufferRecord::arenaFrame` with the claiming list's frame. A scope label claims through the same
-path as an upload ([the edges](null-backend-edges.md) describe it).
+Claiming is the one place Release recording takes locks (ADR 0020): the arena's mutex and the
+buffer pool's inside it when a page is created. A Debug build then takes the buffer pool's lock
+again to stamp the page's `BufferRecord::arenaFrame` with the claiming list's frame, which only
+Debug-tier code reads: the check below and the tracker's references. A scope label claims through
+the same path as an upload ([the edges](null-backend-edges.md) describe it).
 
 `VU-rojo-buffer-0020` (an address of frame data is passed only to a list of the frame that produced
 it) is checked in `resolveAddr`, which compares the list's frame with the page's `arenaFrame`; no

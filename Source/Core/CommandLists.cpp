@@ -118,7 +118,11 @@ namespace rojoRHI::core {
     {
         const uint32_t slot = static_cast<uint32_t>(list.frame % core.framesInFlight());
         list.page = core.arena().claim(slot, size, core.capabilities().limits.maxBufferSize, source, context);
+#ifndef NDEBUG
+        // Only Debug-tier code reads the claiming frame (VU-rojo-buffer-0020 and the tracker's references), so a Release claim
+        // takes no buffer-pool lock to write it (ADR 0020).
         core.pool<Buffer>().update(list.page.buffer, [&](BufferRecord& record) { record.arenaFrame = list.frame; });
+#endif
         ROJORHI_INTERNAL_ASSERT(
             reinterpret_cast<uintptr_t>(list.page.host) % kArenaPageAlignment == 0, "an arena page's host memory is not aligned to kArenaPageAlignment"
         );

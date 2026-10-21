@@ -138,8 +138,8 @@ namespace rojoRHI::core {
     };
 
     /// Claims a page of at least `size` bytes from the arena slot of `list`'s frame, through `source`, stamps its record with
-    /// the list's frame for VU-rojo-buffer-0020 and makes it the list's page, with its cursor at zero. The claim is the one
-    /// place Release recording takes a lock (ADR 0020), so it stays out of line.
+    /// the list's frame for VU-rojo-buffer-0020 in a Debug build and makes it the list's page, with its cursor at zero. The
+    /// claim is the one place Release recording takes a lock (ADR 0020), so it stays out of line.
     void claimArenaPage(DeviceCore& core, CommandListCore& list, uint64_t size, ArenaPageSource source, void* context);
 
     /// The alignment every arena page's host memory has, so rounding the cursor up to an alignment up to this one rounds
