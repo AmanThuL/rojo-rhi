@@ -23,10 +23,12 @@ namespace rojoRHI::test {
         /// Release build refuses, so only Debug-only tests pass true.
         explicit PassKit(QueueType type = QueueType::Graphics, bool validation = false);
 
-        /// Creates a `kSize` square `RenderTarget` texture.
+        /// Creates a `kSize` square `RenderTarget` texture. Where layouts are native and the kit does not validate, a Graphics
+        /// kit first records the barrier that moves it to `ColorAttachment`, which a pass needs and the case does not record.
         Texture target(Format format = Format::RGBA8Unorm, uint32_t samples = 1, uint32_t mips = 1, uint32_t layers = 1);
 
-        /// Creates a `kSize` square `DepthStencil` texture.
+        /// Creates a `kSize` square `DepthStencil` texture. Where layouts are native and the kit does not validate, a Graphics
+        /// kit first records the barrier that moves it to `DepthStencilWrite`.
         Texture depthTarget(Format format = Format::D32Float, uint32_t samples = 1);
 
         /// Creates a graphics pipeline over `colors`, `depth` and `samples`; a mesh pipeline when `mesh` is set.
@@ -47,7 +49,8 @@ namespace rojoRHI::test {
         Pipeline compute();
 
         /// Begins a pass over one `RGBA8Unorm` color attachment of the whole texture. A validating kit first records the barrier
-        /// that moves the texture to `ColorAttachment`.
+        /// that moves the texture to `ColorAttachment`. Where layouts are native and the kit does not validate, every call
+        /// renders to one texture `target` moved once, so a call inside an open pass records no barrier there.
         void beginSimplePass();
 
         /// Creates a buffer of `size` bytes with `usage` in `memory`.
@@ -77,9 +80,11 @@ namespace rojoRHI::test {
         /// Loads the standard library on the first call and returns it.
         ShaderLibrary ensureLibrary();
 
-        bool m_validation;     ///< The device was created with validation.
-        Fence m_join;          ///< The fence `joinQueues` signals and waits on; null until its first call.
-        uint64_t m_joined = 0; ///< The last value `joinQueues` signalled on `m_join`.
+        bool m_validation;      ///< The device was created with validation.
+        bool m_moveTargets;     ///< `target` and `depthTarget` move what they create out of `Undefined` (`layoutsAreNative`).
+        Texture m_simpleTarget; ///< The texture `beginSimplePass` renders to while `m_moveTargets`; null until its first call.
+        Fence m_join;           ///< The fence `joinQueues` signals and waits on; null until its first call.
+        uint64_t m_joined = 0;  ///< The last value `joinQueues` signalled on `m_join`.
     };
 
     /// Returns a pass description of the color attachments `colors` that renders to the whole `PassKit::kSize` square.

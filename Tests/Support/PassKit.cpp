@@ -12,7 +12,7 @@
 
 namespace rojoRHI::test {
     //==================================================================================================================
-    PassKit::PassKit(QueueType listType, bool validation) : type(listType), m_validation(validation)
+    PassKit::PassKit(QueueType listType, bool validation) : type(listType), m_validation(validation), m_moveTargets(!validation && layoutsAreNative())
     {
         device = *createDevice(DeviceDesc{ .validation = validation });
         device.beginFrame();
@@ -33,7 +33,7 @@ namespace rojoRHI::test {
     //==================================================================================================================
     Texture PassKit::target(Format format, uint32_t samples, uint32_t mips, uint32_t layers)
     {
-        return *device.createTexture(
+        const Texture texture = *device.createTexture(
             TextureDesc{ .type = layers > 1 ? TextureType::Tex2DArray : TextureType::Tex2D,
                          .format = format,
                          .extent = { kSize, kSize, 1 },
@@ -43,14 +43,26 @@ namespace rojoRHI::test {
                          .usage = TextureUsage::RenderTarget,
                          .label = "kit.target" }
         );
+        if (m_moveTargets && type == QueueType::Graphics)
+        {
+            // A new texture is Undefined (chapter 09). The cases that only begin and end passes record no barrier, which
+            // Metal and the Null backend ignore and the D3D12 runtime rejects, so the kit moves the texture for them.
+            transition(list, texture, Layout::Undefined, Layout::ColorAttachment);
+        }
+        return texture;
     }
 
     //==================================================================================================================
     Texture PassKit::depthTarget(Format format, uint32_t samples)
     {
-        return *device.createTexture(
+        const Texture texture = *device.createTexture(
             TextureDesc{ .format = format, .extent = { kSize, kSize, 1 }, .samples = samples, .usage = TextureUsage::DepthStencil, .label = "kit.depth" }
         );
+        if (m_moveTargets && type == QueueType::Graphics)
+        {
+            transition(list, texture, Layout::Undefined, Layout::DepthStencilWrite);
+        }
+        return texture;
     }
 
     //==================================================================================================================
@@ -95,7 +107,11 @@ namespace rojoRHI::test {
     //==================================================================================================================
     void PassKit::beginSimplePass()
     {
-        const Texture color = target();
+        if (m_moveTargets && m_simpleTarget.bits == 0)
+        {
+            m_simpleTarget = target();
+        }
+        const Texture color = m_moveTargets ? m_simpleTarget : target();
         if (m_validation)
         {
             // The tracker judges the attachment's layout and the barrier before it at submission, so a validating kit moves it

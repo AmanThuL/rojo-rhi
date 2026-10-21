@@ -137,4 +137,10 @@ namespace rojoRHI::test {
     {
         return true;
     }
+
+    //==================================================================================================================
+    bool layoutsAreNative()
+    {
+        return false;
+    }
 } // namespace rojoRHI::test

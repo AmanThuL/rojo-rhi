@@ -68,4 +68,10 @@ namespace rojoRHI::test {
     {
         return false;
     }
+
+    //==================================================================================================================
+    bool layoutsAreNative()
+    {
+        return false;
+    }
 } // namespace rojoRHI::test
