@@ -98,18 +98,21 @@ namespace rojoRHI {
         }
 
         //==============================================================================================================
-        /// Returns the command lists of a reused frame slot to its pool, each list's allocator reset, frees the swapchains
-        /// destroyed in the slot's frames, readies the slot's timestamps, which the scope-time hook has read, and releases the
-        /// events of destroyed fences every queue has passed. The frame wait before it has proven the slot's work complete, the
-        /// compute and copy work included, which the frame's graphics work joins.
+        /// Returns the command lists of a reused frame slot to its pool, each list's ended encoders released and its allocator
+        /// reset, frees the swapchains destroyed in the slot's frames, readies the slot's timestamps, which the scope-time hook
+        /// has read, and releases the events of destroyed fences every queue has passed. The frame wait before it has proven
+        /// the slot's work complete, the compute and copy work included, which the frame's graphics work joins.
         void reuseSlot(void* context, uint32_t slot)
         {
             DeviceImpl& impl = *static_cast<DeviceImpl*>(context);
             {
                 ListPool& pool = impl.listPools[slot];
                 std::lock_guard lock(pool.mutex);
+                // Freeing an encoder may autorelease; the hook runs on the caller's thread, whose pools RojoRHI does not fill.
+                const metal4::AutoreleasePool autorelease;
                 for (size_t i = 0; i < pool.used; ++i)
                 {
+                    pool.lists[i]->encoders.releaseEnded();
                     pool.lists[i]->state.allocator->reset();
                     core::DeviceCounts::add(impl.core.counts().nativeHostCalls);
                 }

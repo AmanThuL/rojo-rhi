@@ -189,6 +189,35 @@ TEST_CASE("a reused slot resets the allocator of every list it took", "[metal4]"
 }
 
 //======================================================================================================================
+TEST_CASE("a list keeps the encoders it ended until its slot is reused and frees none while it records", "[metal4]")
+{
+    Device device = *createDevice();
+    const Buffer buffer = *device.createBuffer({ .size = 256, .usage = BufferUsage::ShaderWrite, .label = "test.buffer" });
+    const uint32_t slots = core::coreOf(device).framesInFlight();
+    device.beginFrame();
+    CommandList list = device.acquireCommandList(QueueType::Graphics, "test.list");
+    const metal4::Encoders& encoders = CommandListImpl::of(list).encoders;
+    // A scope boundary ends the fill's compute encoder; the second fill opens another, which end ends.
+    list.fillBuffer(buffer, 0, 256, 1);
+    list.beginScope("test.scope");
+    CHECK(encoders.endedCount() == 1);
+    list.fillBuffer(buffer, 0, 256, 2);
+    list.endScope();
+    list.end();
+    CHECK(encoders.endedCount() == 2);
+    device.queue(QueueType::Graphics).submit(std::array{ list });
+    device.endFrame();
+    // The frame wait of the slot's reuse proves the encoders' work done; the hook releases them before the list is handed out.
+    for (uint32_t frame = 0; frame < slots; ++frame)
+    {
+        device.beginFrame();
+        device.endFrame();
+    }
+    CHECK(encoders.endedCount() == 0);
+    destroyDevice(device);
+}
+
+//======================================================================================================================
 TEST_CASE("nested scopes push and pop debug groups on the command buffer", "[metal4]")
 {
     Device device = *createDevice();
