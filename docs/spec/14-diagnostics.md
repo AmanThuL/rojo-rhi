@@ -221,8 +221,8 @@ for a frame with no scopes. It is owned by the device, labels included, and inva
 #### Mapping
 | | Metal 4 | D3D12 | Vulkan |
 |---|---|---|---|
-| Call | `MTL4::CounterHeap::resolveCounterRange` once per heap the retired frame used, at `beginFrame`, then `invalidateCounterRange` over the used range | `ResolveQueryData` into a readback buffer, read at `beginFrame` | `vkGetQueryPoolResults` at `beginFrame` |
-| Cost | native: timestamps resolved at the frame wait | native: timestamps resolved at the frame wait | native: timestamps resolved at the frame wait |
+| Call | `MTL4::CounterHeap::resolveCounterRange` once per heap the retired frame used, at `beginFrame`, then `invalidateCounterRange` over the used range | each list resolves its queries at `CommandList::end` with `ResolveQueryData` into its own readback buffers, read at the frame wait in `beginFrame` | `vkGetQueryPoolResults` at `beginFrame` |
+| Cost | native: timestamps resolved at the frame wait | native: timestamps resolved at each list's `end`, read at the frame wait | native: timestamps resolved at the frame wait |
 
 ## Programmatic capture
 

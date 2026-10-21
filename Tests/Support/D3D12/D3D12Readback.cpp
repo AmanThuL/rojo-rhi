@@ -87,16 +87,37 @@ namespace rojoRHI::test {
         }
 
         //==============================================================================================================
-        /// Returns a barrier on subresource `subresource` of `texture` from `before` to `after`: one that waits for nothing
-        /// and makes the subresource a copy source when `after` is `D3D12_BARRIER_LAYOUT_COPY_SOURCE`, else one that waits for
-        /// the copy and leaves no access behind.
+        /// Returns the accesses a subresource in `layout` admits, the ones a barrier out of it names; none for an undefined
+        /// layout.
+        D3D12_BARRIER_ACCESS layoutAccess(D3D12_BARRIER_LAYOUT layout)
+        {
+            switch (layout)
+            {
+            case D3D12_BARRIER_LAYOUT_COMMON: return D3D12_BARRIER_ACCESS_SHADER_RESOURCE | D3D12_BARRIER_ACCESS_COPY_SOURCE | D3D12_BARRIER_ACCESS_COPY_DEST;
+            case D3D12_BARRIER_LAYOUT_SHADER_RESOURCE: return D3D12_BARRIER_ACCESS_SHADER_RESOURCE;
+            case D3D12_BARRIER_LAYOUT_UNORDERED_ACCESS: return D3D12_BARRIER_ACCESS_UNORDERED_ACCESS;
+            case D3D12_BARRIER_LAYOUT_RENDER_TARGET: return D3D12_BARRIER_ACCESS_RENDER_TARGET;
+            case D3D12_BARRIER_LAYOUT_DEPTH_STENCIL_WRITE: return D3D12_BARRIER_ACCESS_DEPTH_STENCIL_READ | D3D12_BARRIER_ACCESS_DEPTH_STENCIL_WRITE;
+            case D3D12_BARRIER_LAYOUT_DEPTH_STENCIL_READ: return D3D12_BARRIER_ACCESS_DEPTH_STENCIL_READ;
+            case D3D12_BARRIER_LAYOUT_COPY_SOURCE: return D3D12_BARRIER_ACCESS_COPY_SOURCE;
+            case D3D12_BARRIER_LAYOUT_COPY_DEST: return D3D12_BARRIER_ACCESS_COPY_DEST;
+            default: return D3D12_BARRIER_ACCESS_NO_ACCESS;
+            }
+        }
+
+        //==============================================================================================================
+        /// Returns a barrier on subresource `subresource` of `texture` from `before` to `after`: one that makes the subresource
+        /// a copy source when `after` is `D3D12_BARRIER_LAYOUT_COPY_SOURCE`, else one that waits for the copy and leaves no
+        /// access behind. The first waits on every scope for the accesses `before` admits: GPU-based validation rejects
+        /// `SYNC_NONE` before a subresource an earlier command list touched, and the layer accepts no access in a defined
+        /// layout only with `SYNC_NONE`.
         D3D12_TEXTURE_BARRIER layoutBarrier(ID3D12Resource* texture, uint32_t subresource, D3D12_BARRIER_LAYOUT before, D3D12_BARRIER_LAYOUT after)
         {
             const bool toCopy = after == D3D12_BARRIER_LAYOUT_COPY_SOURCE;
             D3D12_TEXTURE_BARRIER barrier = {};
-            barrier.SyncBefore = toCopy ? D3D12_BARRIER_SYNC_NONE : D3D12_BARRIER_SYNC_COPY;
+            barrier.SyncBefore = toCopy ? D3D12_BARRIER_SYNC_ALL : D3D12_BARRIER_SYNC_COPY;
             barrier.SyncAfter = toCopy ? D3D12_BARRIER_SYNC_COPY : D3D12_BARRIER_SYNC_NONE;
-            barrier.AccessBefore = toCopy ? D3D12_BARRIER_ACCESS_NO_ACCESS : D3D12_BARRIER_ACCESS_COPY_SOURCE;
+            barrier.AccessBefore = toCopy ? layoutAccess(before) : D3D12_BARRIER_ACCESS_COPY_SOURCE;
             barrier.AccessAfter = toCopy ? D3D12_BARRIER_ACCESS_COPY_SOURCE : D3D12_BARRIER_ACCESS_NO_ACCESS;
             barrier.LayoutBefore = before;
             barrier.LayoutAfter = after;
