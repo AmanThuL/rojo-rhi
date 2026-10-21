@@ -22,6 +22,7 @@
 #include <Metal/Metal.hpp>
 
 #include <array>
+#include <cmath>
 #include <cstddef>
 #include <cstdint>
 #include <span>
@@ -109,6 +110,22 @@ namespace {
     {
         const metal4::AutoreleasePool pool;
         return attachment->texture() != nullptr;
+    }
+
+    //==================================================================================================================
+    /// The texture `attachment` names, read inside a pool.
+    const MTL::Texture* textureOf(const MTL::RenderPassAttachmentDescriptor* attachment)
+    {
+        const metal4::AutoreleasePool pool;
+        return attachment->texture();
+    }
+
+    //==================================================================================================================
+    /// The resolve texture of color attachment `index` of `list`'s render pass descriptor, read inside a pool.
+    const MTL::Texture* resolveOf(CommandList list, NS::UInteger index)
+    {
+        const metal4::AutoreleasePool pool;
+        return drawOf(list).descriptor->colorAttachments()->object(index)->resolveTexture();
     }
 
     //==================================================================================================================
@@ -565,6 +582,108 @@ TEST_CASE("a split keeps the attachment's cleared and drawn contents across the 
         }
     }
     CHECK(kit.readTexture(read, TextureRegion{ .extent = { 16, 16, 1 } }, Format::RGBA8Unorm) == expected);
+}
+
+//======================================================================================================================
+TEST_CASE("the descriptor takes each pass's attachment values though it is set only where they change", "[metal4]")
+{
+    Device device = *createDevice();
+    const Texture first = makeTexture(device, Format::RGBA8Unorm);
+    const Texture second = makeTexture(device, Format::RGBA8Unorm);
+    const Texture depth = makeTexture(device, Format::D32Float, TextureUsage::DepthStencil);
+    const auto* firstNative = static_cast<const MTL::Texture*>(core::coreOf(device).pool<Texture>().native(first));
+    const auto* depthNative = static_cast<const MTL::Texture*>(core::coreOf(device).pool<Texture>().native(depth));
+    const std::array red{ ColorAttachment{ .texture = first, .load = LoadOp::Clear, .clear = { 1.0f, 0.0f, 0.0f, 1.0f } } };
+    const std::array loaded{ ColorAttachment{ .texture = first, .load = LoadOp::Load, .clear = { 1.0f, 0.0f, 0.0f, 1.0f } } };
+    const std::array green{ ColorAttachment{ .texture = second, .load = LoadOp::Clear, .store = StoreOp::DontCare, .clear = { 0.0f, 1.0f, 0.0f, 1.0f } } };
+    const DepthAttachment cleared{ .texture = depth, .load = LoadOp::Clear, .clearDepth = 0.5f };
+    const Texture depthStencil = makeTexture(device, Format::D32FloatS8, TextureUsage::DepthStencil);
+    const auto* depthStencilNative = static_cast<const MTL::Texture*>(core::coreOf(device).pool<Texture>().native(depthStencil));
+    const DepthAttachment zeroed{ .texture = depthStencil, .load = LoadOp::Clear, .clearDepth = 0.0f, .stencilLoad = LoadOp::Clear };
+    const DepthAttachment stenciled{ .texture = depthStencil, .load = LoadOp::Clear, .clearDepth = -0.0f, .stencilLoad = LoadOp::Clear, .clearStencil = 7 };
+    const Texture multiA = makeTexture(device, Format::RGBA8Unorm, TextureUsage::RenderTarget, 4);
+    const Texture multiB = makeTexture(device, Format::RGBA8Unorm, TextureUsage::RenderTarget, 4);
+    const Texture resolved = makeTexture(device, Format::RGBA8Unorm);
+    const auto* resolvedNative = static_cast<const MTL::Texture*>(core::coreOf(device).pool<Texture>().native(resolved));
+    const std::array two{ ColorAttachment{ .texture = multiA, .load = LoadOp::Clear }, ColorAttachment{ .texture = multiB, .load = LoadOp::Clear } };
+    const std::array resolving{ ColorAttachment{ .texture = multiA, .load = LoadOp::Clear, .store = StoreOp::DontCare, .resolve = resolved } };
+    const uint32_t slots = core::coreOf(device).framesInFlight();
+    for (int recording = 0; recording < 2; ++recording)
+    {
+        CAPTURE(recording);
+        device.beginFrame();
+        CommandList list = device.acquireCommandList(QueueType::Graphics, "test.list");
+        // Each pass opens its encoder at endRenderPass, from the values it configured.
+        list.beginRenderPass(passOf(red, cleared));
+        list.endRenderPass();
+        CHECK(textureOf(colorOf(list, 0)) == firstNative);
+        CHECK(colorOf(list, 0)->loadAction() == MTL::LoadActionClear);
+        CHECK(colorOf(list, 0)->clearColor().red == 1.0);
+        CHECK(colorOf(list, 0)->storeAction() == MTL::StoreActionStore);
+        CHECK(textureOf(depthOf(list)) == depthNative);
+        CHECK(depthOf(list)->clearDepth() == 0.5);
+        CHECK(drawOf(list).colorHeld[0].texture == firstNative);
+        // Only the load action differs from what the descriptor holds, and the pass has no depth attachment.
+        list.beginRenderPass(passOf(loaded));
+        list.endRenderPass();
+        CHECK(textureOf(colorOf(list, 0)) == firstNative);
+        CHECK(colorOf(list, 0)->loadAction() == MTL::LoadActionLoad);
+        CHECK(colorOf(list, 0)->clearColor().red == 1.0);
+        CHECK_FALSE(holdsTexture(depthOf(list)));
+        CHECK(drawOf(list).depthHeld.texture == nullptr);
+        // Another texture, clear color and store action.
+        list.beginRenderPass(passOf(green));
+        list.endRenderPass();
+        CHECK(textureOf(colorOf(list, 0)) != firstNative);
+        CHECK(colorOf(list, 0)->loadAction() == MTL::LoadActionClear);
+        CHECK(colorOf(list, 0)->clearColor().red == 0.0);
+        CHECK(colorOf(list, 0)->clearColor().green == 1.0);
+        CHECK(colorOf(list, 0)->storeAction() == MTL::StoreActionUnknown);
+        // A depth-stencil texture takes both attachments, and a negative zero after a zero is a clear depth of its own.
+        list.beginRenderPass(passOf(red, zeroed));
+        list.endRenderPass();
+        CHECK_FALSE(std::signbit(depthOf(list)->clearDepth()));
+        list.beginRenderPass(passOf(red, stenciled));
+        list.endRenderPass();
+        CHECK(textureOf(depthOf(list)) == depthStencilNative);
+        CHECK(std::signbit(depthOf(list)->clearDepth()));
+        CHECK(textureOf(stencilOf(list)) == depthStencilNative);
+        CHECK(stencilOf(list)->clearStencil() == 7);
+        CHECK(stencilOf(list)->loadAction() == MTL::LoadActionClear);
+        // A narrower pass after a wider one nulls the slot it no longer names, and the depth and stencil it lacks.
+        list.beginRenderPass(passOf(two));
+        list.endRenderPass();
+        CHECK(holdsTexture(colorOf(list, 1)));
+        list.beginRenderPass(passOf(resolving));
+        list.endRenderPass();
+        CHECK(holdsTexture(colorOf(list, 0)));
+        CHECK(resolveOf(list, 0) == resolvedNative);
+        CHECK_FALSE(holdsTexture(colorOf(list, 1)));
+        CHECK(drawOf(list).colorHeld[1].texture == nullptr);
+        CHECK_FALSE(holdsTexture(depthOf(list)));
+        CHECK_FALSE(holdsTexture(stencilOf(list)));
+        // end lets go of the textures, and the descriptor's record of them follows.
+        list.end();
+        CHECK_FALSE(holdsTexture(colorOf(list, 0)));
+        CHECK_FALSE(holdsResolve(colorOf(list, 0)));
+        CHECK(drawOf(list).colorHeld[0].resolve == nullptr);
+        CHECK_FALSE(holdsTexture(depthOf(list)));
+        CHECK_FALSE(holdsTexture(stencilOf(list)));
+        CHECK(drawOf(list).colorHeld[0].texture == nullptr);
+        CHECK(drawOf(list).depthHeld.texture == nullptr);
+        CHECK(drawOf(list).stencilHeld.texture == nullptr);
+        const Fence fence = *device.createFence(0, "test.done");
+        device.queue(QueueType::Graphics).submit(std::array{ list }, {}, std::array{ FenceValue{ fence, 1 } });
+        CHECK(device.wait({ fence, 1 }, UINT64_MAX));
+        device.endFrame();
+        // The next recording takes the same list from the same slot.
+        for (uint32_t frame = 1; frame < slots; ++frame)
+        {
+            device.beginFrame();
+            device.endFrame();
+        }
+    }
+    destroyDevice(device);
 }
 
 //======================================================================================================================

@@ -100,10 +100,9 @@ every pipeline; so is a blob of the Null backend, garbage, or an archive Metal r
   overlap one another but never a flush: Metal crashes in
   `-[_MTLBinaryArchive newArchiverIdWithBinaryKey:...]` when the serializer is flushed while a
   compilation records into it. A pipeline is therefore in the archive of one harvest or the next,
-  never lost between them. A device that created no pipeline returns a blob a later device
-  accepts, about 170 KB, since the backend's own kernel pipelines are compiled on the same
-  compiler, inside `createDevice`, before any harvest can run. Those kernels use no archive lookup
-  and count no hit.
+  never lost between them. A device that created no pipeline returns a blob a later device accepts,
+  about 170 KB, since the backend's own kernel pipelines are compiled on the same compiler in
+  `createDevice`, before any harvest. Those kernels use no archive lookup and count no hit.
 
 The Null backend never counts a hit. A hit costs about 0.5 ms and a miss about 8 ms with the
 validation layer off; under `MTL_DEBUG_LAYER=1` the debug compiler serves repeat compiles itself
@@ -120,7 +119,9 @@ at its first pass and reuses, with its attachment descriptors, which the list ke
 configuring them and emptying them at `end` call no getter and need no pool.
 
 - The first encoder of a pass takes the caller's load actions and clear values; an encoder that
-  resumes after a split takes `Load`. Slots beyond the pass's attachments are nulled.
+  resumes after a split takes `Load`. Slots beyond the pass's attachments are nulled. A value an
+  attachment descriptor holds (`DrawState::colorHeld`, `depthHeld`, `stencilHeld`: textures it
+  retains, clear values bit for bit) is not set again, about 70 ns a pass (C1, K 1, M3 Max).
 - A store action that is `Store` without a resolve is set on the descriptor at once, which costs no
   call. Every other one is `StoreActionUnknown` on the descriptor and is set on the encoder before
   `endEncoding`: the caller's action, or its resolve form, at `endRenderPass`, and `Store` at a
@@ -143,9 +144,8 @@ the object and mesh stages too: each bound stage costs every draw that follows a
   `TimestampGranularityPrecise`, which adds no encoder at an encoder's start or end; the kernels of
   counted draws and the encoders splits resume fall between the two. A command buffer's
   `writeTimestampIntoHeap` around a render encoder costs CPU and allocations per write and slows
-  that encoder's draws on the GPU, so no pass writes one. `end` clears the descriptor's texture
-  references, so an idle list keeps no destroyed target alive. Descriptor setters are not native
-  messages and are not counted.
+  that encoder's draws on the GPU, so no pass writes one. `end` nulls the textures the descriptor
+  holds, so an idle list keeps no destroyed target alive; descriptor setters are not counted.
 - A scope that begins or ends inside a pass opens the render encoder and pushes or pops a debug
   group on it. A split pops the open groups first and the resumed encoder pushes them again,
   outermost first. Such a scope writes its timestamps on the render encoder after the fragment

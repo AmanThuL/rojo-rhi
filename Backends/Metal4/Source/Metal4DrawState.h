@@ -160,6 +160,24 @@ namespace rojoRHI::metal4 {
         uint32_t clearStencil = 0;                ///< The clear stencil value.
     };
 
+    /// The values one attachment descriptor of a list's render pass descriptor holds, as the list last set them, so a pass
+    /// sets only those that differ. A new attachment descriptor holds no texture, no resolve texture, mip 0 and slice 0; its
+    /// load action, store action and clear value are not assumed, so the list sets them all the first time (`actionsKnown`).
+    /// A color attachment uses `clearColor` and `resolve`, a depth attachment `clearDepth` and a stencil one `clearStencil`.
+    struct HeldAttachment
+    {
+        const MTL::Texture* texture = nullptr;            ///< The texture.
+        uint32_t mip = 0;                                 ///< The level.
+        uint32_t layer = 0;                               ///< The slice.
+        bool actionsKnown = false;                        ///< The list has set the load action, store action and clear value.
+        MTL::LoadAction load = MTL::LoadActionDontCare;   ///< The load action, when `actionsKnown`.
+        MTL::StoreAction store = MTL::StoreActionStore;   ///< The store action, when `actionsKnown`.
+        MTL::ClearColor clearColor{ 0.0, 0.0, 0.0, 0.0 }; ///< A color attachment's clear color, when `actionsKnown`.
+        double clearDepth = 0.0;                          ///< A depth attachment's clear depth, when `actionsKnown`.
+        uint32_t clearStencil = 0;                        ///< A stencil attachment's clear value, when `actionsKnown`.
+        const MTL::Texture* resolve = nullptr;            ///< A color attachment's resolve texture.
+    };
+
     /// What a command list keeps of its open render pass and of the state its draws and dispatches read. `beginRenderPass`
     /// copies the attachments and opens no encoder; the render encoder opens at the first command that needs it
     /// (`ensureRender`), from the list's one render pass descriptor. Until then the pass's state commands wait in the prefix,
@@ -182,12 +200,14 @@ namespace rojoRHI::metal4 {
         /// The list's render pass descriptor: made at its first pass with alloc and init, kept for the list's life.
         MTL4::RenderPassDescriptor* descriptor = nullptr;
         uint32_t descriptorColors = 0; ///< The color attachments `descriptor` last held a texture for.
-        bool descriptorDepth = false;  ///< `descriptor` holds a depth texture, and a stencil one for a stencil format.
         /// The color attachment descriptors of `descriptor`, each retained, by index, as passes first used them: configuring and
         /// emptying them then calls none of the descriptor's getters, which may autorelease.
         std::vector<MTL::RenderPassColorAttachmentDescriptor*> colorAttachments;
         MTL::RenderPassDepthAttachmentDescriptor* depthAttachment = nullptr;     ///< Its depth attachment descriptor, retained.
         MTL::RenderPassStencilAttachmentDescriptor* stencilAttachment = nullptr; ///< Its stencil attachment descriptor, retained.
+        std::vector<HeldAttachment> colorHeld;                                   ///< What each of `colorAttachments` holds, at the same index.
+        HeldAttachment depthHeld;                                                ///< What `depthAttachment` holds.
+        HeldAttachment stencilHeld;                                              ///< What `stencilAttachment` holds.
 
         /// The graphics pipeline bound last, as recorded; null when none is bound.
         const PipelineState* pipeline = nullptr;
@@ -247,9 +267,10 @@ namespace rojoRHI::metal4 {
         void release(Residency& residency);
 
         /// Empties the descriptor's attachments, which hold strong references to the last pass's textures, so a list waiting
-        /// in its pool keeps no destroyed texture's memory alive. It sets them through the attachment descriptors the list
-        /// keeps, so it calls no getter and opens no autorelease pool. The setters are no message to a command buffer, encoder
-        /// or argument table, so they are not counted.
+        /// in its pool keeps no destroyed texture's memory alive: it sets null on each texture and resolve texture an
+        /// attachment holds (`colorHeld`, `depthHeld`, `stencilHeld`) and on no other. It sets them through the attachment
+        /// descriptors the list keeps, so it calls no getter and opens no autorelease pool. The setters are no message to a
+        /// command buffer, encoder or argument table, so they are not counted.
         void forgetTextures();
     };
 
