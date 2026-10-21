@@ -1,6 +1,7 @@
 # ADR 0014: Overhead is measured against native code, to budgets fixed in advance
 
-**Status**: Accepted (2026-10-12)
+**Status**: Accepted (2026-10-12); its per-operation CPU budget superseded by
+[ADR 0025](0025-cpu-budget-per-call-floor.md)
 
 ## Context
 
