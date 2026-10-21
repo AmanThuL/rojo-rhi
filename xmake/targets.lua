@@ -6,7 +6,7 @@
 -- The shader rules the test targets opt into, and the rule that compiles the Metal 4 backend's own
 -- kernels, are part of that interface, so this file includes them rather than leaving a host to
 -- remember more includes.
-includes("shaders.lua", "slang.lua", "metal.lua", "kernels.lua")
+includes("shaders.lua", "slang.lua", "metal.lua", "hlsl.lua", "kernels.lua")
 
 -- Two values a host may set as plain globals before the include, because xmake evaluates an
 -- included description script in the same interpreter as the including one:
@@ -471,6 +471,10 @@ if is_plat("macosx") or is_config("rojorhi_backend", "d3d12") then
             add_syslinks("d3d12", "dxgi", "dxguid", "bcrypt", "version")
             add_rules("rojorhi.d3d12_runtime")
             set_values("rojorhi.thirdparty", thirdparty_dir)
+            -- The native arm's hand-written kernels, compiled into Shaders/ beside the Slang libraries.
+            add_rules("rojorhi.hlsl")
+            add_files(path.join(component, "Benchmarks/NativeD3D12/Kernels/*.hlsl"))
+            set_values("rojorhi.dxc", path.join(thirdparty_dir, "dxc/bin/x64/dxc.exe"))
         else
             -- The native arm's metal-cpp calls link the one shared metal-cpp unit, the same one a metal4 RojoRHI links.
             add_deps("RojoRHI", "RojoRHIMetalCpp")

@@ -56,7 +56,8 @@ namespace rojoRHI::bench {
 
         //==============================================================================================================
         // The output holds one region per frame slot, so no two frames write the same bytes: the validation tracker
-        // reports two writes to one range with no barrier between them (VU-rojo-sync-0021).
+        // reports two writes to one range with no barrier between them (VU-rojo-sync-0021). The kernel stores through
+        // its Addr, so the output is ShaderWrite, which gives it its raw UAV on D3D12.
         std::expected<void, std::string> RojoG1::create()
         {
             const std::vector<DataEntry> table = dataTable();
@@ -68,8 +69,9 @@ namespace rojoRHI::bench {
                 return std::unexpected(data.error());
             }
             m_data = *data;
-            const std::expected<Buffer, std::string> output =
-                m_context.buffer(BufferDesc{ .size = kRegions * kRegionBytes, .memory = Memory::Gpu, .label = "bench.g1.output" });
+            const std::expected<Buffer, std::string> output = m_context.buffer(
+                BufferDesc{ .size = kRegions * kRegionBytes, .memory = Memory::Gpu, .usage = BufferUsage::ShaderWrite, .label = "bench.g1.output" }
+            );
             if (!output)
             {
                 return std::unexpected(output.error());
