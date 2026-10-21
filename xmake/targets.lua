@@ -285,20 +285,14 @@ target("RojoRHITests")
             "AliasingDeathTests.cpp", -- two VU-rojo-sync-0017 cases place resources at offset 16384, below the 64 KiB a D3D12 placement needs, so VU-rojo-heap-0004 fires first
             "AliasingTests.cpp", -- one case places a buffer at offset 256, below the 64 KiB a D3D12 buffer placement needs
             "CopyTests.cpp", -- two cases clear textures they never moved out of Undefined, which a D3D12 clear needs in CopyDst
-            "DiagnosticsDeathTests.cpp", -- needs capture
-            "DiagnosticsTests.cpp", -- needs capture and upscalers
-            "HandoffDeathTests.cpp", -- needs swapchains
-            "HandoffTests.cpp", -- needs swapchains
-            "LifetimeDeathTests.cpp", -- needs swapchains
-            "LifetimeTests.cpp", -- needs swapchains
+            "DiagnosticsTests.cpp", -- one case upscales, which D3D12 does not record (#111); one renders into Undefined (#109)
+            "LifetimeDeathTests.cpp", -- one case upscales, which D3D12 does not record (#111)
             "SparseDeathTests.cpp",
             "SparseOrderDeathTests.cpp",
             "SparseOrderTests.cpp",
             "SparseTests.cpp",
-            "SwapchainDeathTests.cpp",
-            "SwapchainTests.cpp",
-            "TrackerDeathTests.cpp", -- needs swapchains
-            "TrackerTests.cpp", -- needs swapchains
+            "TrackerDeathTests.cpp", -- one case upscales (#111); the layer stops one clear in General before the tracker (#109)
+            "TrackerTests.cpp", -- one case upscales, which D3D12 does not record (#111)
             "UpscaleDeathTests.cpp",
             "UpscalerTests.cpp",
         }
@@ -334,7 +328,6 @@ target("RojoRHITests")
             "AbiGraphicsConformanceTests.cpp", -- draws with firstVertex and baseVertex assert the base-including vertexIndex, which D3D12 does not produce
             "DrawConformanceTests.cpp", -- draws with firstVertex and baseVertex assert the base-including vertexIndex, which D3D12 does not produce
             "IndirectConformanceTests.cpp", -- baseVertex records assert the base-including vertexIndex, which D3D12 does not produce
-            "PresentationConformanceTests.cpp",
             "ScopeConformanceTests.cpp", -- one case upscales
             "SparseConformanceTests.cpp",
             "UpscaleConformanceTests.cpp",

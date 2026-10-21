@@ -278,5 +278,5 @@ Caller-reserved index ranges are released through `Device::release` instead
 #### Mapping
 | | Metal 4 | D3D12 | Vulkan |
 |---|---|---|---|
-| Release | `MTL::ResidencySet::removeAllocation`, then `release` on the object; the set is committed later, at the next submission or staged upload | `Release` on the `ID3D12Resource`, `ID3D12PipelineState`, `ID3D12Heap`, `ID3D12Fence` or `IDXGISwapChain4`; slot returned to the descriptor-heap free list | `vkDestroyBuffer`, `vkDestroyImage`, `vkDestroyImageView`, `vkDestroySampler`, `vkDestroyPipeline`, `vkFreeMemory`, `vkDestroySemaphore`, `vkDestroySwapchainKHR` |
+| Release | `MTL::ResidencySet::removeAllocation`, then `release` on the object; the set is committed later, at the next submission or staged upload | `Release` on the `ID3D12Resource`, `ID3D12PipelineState`, `ID3D12Heap`, `ID3D12Fence` or `IDXGISwapChain3`; slot returned to the descriptor-heap free list | `vkDestroyBuffer`, `vkDestroyImage`, `vkDestroyImageView`, `vkDestroySampler`, `vkDestroyPipeline`, `vkFreeMemory`, `vkDestroySemaphore`, `vkDestroySwapchainKHR` |
 | Cost | cheap: one deferred-release queue entry, released at slot retirement | cheap: same | cheap: same |

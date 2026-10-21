@@ -49,7 +49,7 @@ the formats listed, named in [formats and limits](15-formats-and-limits.md).
 | `SRGB` | `CA::MetalLayer::setColorspace` with `kCGColorSpaceSRGB` | `DXGI_COLOR_SPACE_RGB_FULL_G22_NONE_P709` | `VK_COLOR_SPACE_SRGB_NONLINEAR_KHR` |
 | `ExtendedLinear` | `kCGColorSpaceExtendedLinearSRGB` with the layer's `wantsExtendedDynamicRangeContent` (set through the Objective-C runtime: metal-cpp has no wrapper) | `DXGI_COLOR_SPACE_RGB_FULL_G10_NONE_P709` (scRGB) | `VK_COLOR_SPACE_EXTENDED_SRGB_LINEAR_EXT` |
 | `HDR10` | `kCGColorSpaceITUR_2100_PQ` with the layer's `wantsExtendedDynamicRangeContent` (set through the Objective-C runtime: metal-cpp has no wrapper) | `DXGI_COLOR_SPACE_RGB_FULL_G2084_NONE_P2020` | `VK_COLOR_SPACE_HDR10_ST2084_EXT` |
-| Cost | native | native: set through `SetColorSpace1` after `CheckColorSpaceSupport` | native: the non-sRGB spaces need `VK_EXT_swapchain_colorspace` |
+| Cost | native | native: set through `IDXGISwapChain3::SetColorSpace1` after `CheckColorSpaceSupport`; a space it does not report with `DXGI_SWAP_CHAIN_COLOR_SPACE_SUPPORT_FLAG_PRESENT` makes creation return `Unsupported` naming it | native: the non-sRGB spaces need `VK_EXT_swapchain_colorspace` |
 
 ### `PresentMode`
 ```cpp
@@ -74,7 +74,7 @@ A mode the surface or display cannot provide makes `Device::createSwapchain` ret
 | `Fifo` | `CA::MetalLayer::setDisplaySyncEnabled(true)` | `Present(1, 0)` | `VK_PRESENT_MODE_FIFO_KHR` |
 | `Mailbox` | `CA::MetalLayer::setDisplaySyncEnabled(false)` while the window server composites the layer | `Present(0, 0)` on the flip model | `VK_PRESENT_MODE_MAILBOX_KHR` |
 | `Immediate` | `CA::MetalLayer::setDisplaySyncEnabled(false)` | `Present(0, DXGI_PRESENT_ALLOW_TEARING)`, swapchain created with `DXGI_SWAP_CHAIN_FLAG_ALLOW_TEARING` | `VK_PRESENT_MODE_IMMEDIATE_KHR` |
-| Cost | native: `Mailbox` and `Immediate` share one setting, and a layer presented direct to the display can tear in `Mailbox` | native: `Immediate` needs `DXGI_FEATURE_PRESENT_ALLOW_TEARING` | native: `Mailbox` and `Immediate` are optional per surface |
+| Cost | native: `Mailbox` and `Immediate` share one setting, and a layer presented direct to the display can tear in `Mailbox` | native: `Immediate` needs `DXGI_FEATURE_PRESENT_ALLOW_TEARING` from `IDXGIFactory5::CheckFeatureSupport`; without it creation returns `Unsupported` | native: `Mailbox` and `Immediate` are optional per surface |
 
 ### `SwapchainDesc`
 ```cpp
@@ -111,7 +111,7 @@ struct SwapchainDesc {
 |---|---|---|---|
 | Surface | `CA::MetalLayer` | `HWND` | `VkSurfaceKHR` |
 | Image count | `CA::MetalLayer::setMaximumDrawableCount` | `BufferCount` | `minImageCount` |
-| Latency | the backend counts pending presents: `Queue::present` adds one, and the presented handler it adds with `MTL::Drawable::addPresentedHandler`, which runs once the drawable is displayed or dropped, takes it away | `SetMaximumFrameLatency` | `vkWaitForPresentKHR`, which needs `VK_KHR_present_wait` |
+| Latency | the backend counts pending presents: `Queue::present` adds one, and the presented handler it adds with `MTL::Drawable::addPresentedHandler`, which runs once the drawable is displayed or dropped, takes it away | `IDXGISwapChain2::SetMaximumFrameLatency` on a swapchain created with `DXGI_SWAP_CHAIN_FLAG_FRAME_LATENCY_WAITABLE_OBJECT` | `vkWaitForPresentKHR`, which needs `VK_KHR_present_wait` |
 | Cost | cheap: `maxLatency` is enforced by the backend, since a layer has no latency setting | native | cheap: `maxLatency` is enforced by the backend through present waits |
 
 ### `Device::createSwapchain`
@@ -131,7 +131,7 @@ Creation is free-threaded.
 #### Mapping
 | | Metal 4 | D3D12 | Vulkan |
 |---|---|---|---|
-| Call | configure the `CA::MetalLayer`: `setDevice`, `setPixelFormat`, `setColorspace`, `setMaximumDrawableCount`, `setDisplaySyncEnabled`, `setFramebufferOnly`, `setAllowsNextDrawableTimeout(true)`, and `wantsExtendedDynamicRangeContent` (set through the Objective-C runtime: metal-cpp has no wrapper) | `IDXGIFactory2::CreateSwapChainForHwnd` with `DXGI_SWAP_EFFECT_FLIP_DISCARD` and `DXGI_SWAP_CHAIN_FLAG_FRAME_LATENCY_WAITABLE_OBJECT`, then `SetMaximumFrameLatency` and `SetColorSpace1` | `vkCreateSwapchainKHR` |
+| Call | configure the `CA::MetalLayer`: `setDevice`, `setPixelFormat`, `setColorspace`, `setMaximumDrawableCount`, `setDisplaySyncEnabled`, `setFramebufferOnly`, `setAllowsNextDrawableTimeout(true)`, and `wantsExtendedDynamicRangeContent` (set through the Objective-C runtime: metal-cpp has no wrapper) | `IDXGIFactory2::CreateSwapChainForHwnd` on the graphics queue at the window's client extent, with `DXGI_SWAP_EFFECT_FLIP_DISCARD`, `BufferCount` `imageCount` and `DXGI_SWAP_CHAIN_FLAG_FRAME_LATENCY_WAITABLE_OBJECT`, plus `DXGI_SWAP_CHAIN_FLAG_ALLOW_TEARING` for `Immediate`; then `CheckColorSpaceSupport` and `SetColorSpace1`, `SetMaximumFrameLatency`, and `IDXGIFactory::MakeWindowAssociation` with `DXGI_MWA_NO_ALT_ENTER`; each back buffer from `GetBuffer` gets one render-target view in a CPU-only heap of the swapchain. A destroyed swapchain on the same window is released first, once the graphics queue signals a fence after its presents. | `vkCreateSwapchainKHR` |
 | Cost | native | native | native |
 
 ### `Swapchain::resize`
@@ -153,7 +153,7 @@ presentation while the window has a zero extent.
 #### Mapping
 | | Metal 4 | D3D12 | Vulkan |
 |---|---|---|---|
-| Call | `CA::MetalLayer::setDrawableSize` after waiting on the frame event of the last ended frame, which the graphics queue signals after every list that used the images | `IDXGISwapChain::ResizeBuffers` after the swapchain's images retire | swapchain re-creation with `oldSwapchain` |
+| Call | `CA::MetalLayer::setDrawableSize` after waiting on the frame event of the last ended frame, which the graphics queue signals after every list that used the images | `IDXGISwapChain::ResizeBuffers` with the count, format and flags of creation, after waiting on the frame fence of the last ended frame, which the graphics queue signals after every list that used the images, and releasing every back-buffer reference; the back buffers are fetched again with `GetBuffer` | swapchain re-creation with `oldSwapchain` |
 | Cost | native | native | native |
 
 ### `Swapchain::acquire`
@@ -190,7 +190,7 @@ it.
 #### Mapping
 | | Metal 4 | D3D12 | Vulkan |
 |---|---|---|---|
-| Call | `CA::MetalLayer::nextDrawable`; the next `Queue::submit` or `Queue::present` on the graphics queue calls `MTL4::CommandQueue::wait` with the drawable | wait on `GetFrameLatencyWaitableObject`, then `GetCurrentBackBufferIndex` | `vkAcquireNextImageKHR` signalling a binary semaphore |
+| Call | `CA::MetalLayer::nextDrawable`; the next `Queue::submit` or `Queue::present` on the graphics queue calls `MTL4::CommandQueue::wait` with the drawable | a wait of at most one second on `GetFrameLatencyWaitableObject`, then `GetCurrentBackBufferIndex`; the texture borrows that back buffer and its render-target view, which its retirement does not release | `vkAcquireNextImageKHR` signalling a binary semaphore |
 | Cost | cheap: the backend enforces `maxLatency` (one load below the limit, a wait at it) and files the drawable for the graphics queue's wait; one deadline of one second from the call bounds the latency wait, and `nextDrawable` keeps Core Animation's own one-second timeout, which hand-written code pays as well, so a null result takes about two seconds at worst; a swapchain of zero extent returns null without calling `nextDrawable` | native | native: the semaphore joins the next graphics submission |
 
 ### `Queue::present`
@@ -215,5 +215,5 @@ Presentation is serialized with submission on the queue.
 #### Mapping
 | | Metal 4 | D3D12 | Vulkan |
 |---|---|---|---|
-| Call | `MTL4::CommandQueue::signalDrawable`, then `MTL::Drawable::present` | `IDXGISwapChain::Present` with the mode's sync interval and flags | `vkQueuePresentKHR` waiting on a binary semaphore the last submission signals |
+| Call | `MTL4::CommandQueue::signalDrawable`, then `MTL::Drawable::present` | `IDXGISwapChain::Present` with the mode's sync interval and flags; `DXGI_STATUS_OCCLUDED`, returned for a window the display does not show, is a successful present | `vkQueuePresentKHR` waiting on a binary semaphore the last submission signals |
 | Cost | native | native | native |
