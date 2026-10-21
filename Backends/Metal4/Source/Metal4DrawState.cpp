@@ -79,6 +79,9 @@ namespace rojoRHI::metal4 {
             attachment->release();
         }
         colorAttachments.clear();
+        colorHeld.clear();
+        depthHeld = {};
+        stencilHeld = {};
         if (depthAttachment != nullptr)
         {
             depthAttachment->release();
@@ -95,28 +98,39 @@ namespace rojoRHI::metal4 {
             descriptor = nullptr;
         }
         descriptorColors = 0;
-        descriptorDepth = false;
         icbs.release(residency);
     }
 
     //==================================================================================================================
     void DrawState::forgetTextures()
     {
-        if (descriptorColors == 0 && !descriptorDepth)
-        {
-            return;
-        }
         // Every attachment the descriptor held a texture in was configured through a kept attachment descriptor. The setters
         // only drop the descriptor's references: each texture's pool record keeps its own until the texture's deferred
         // destruction, which retires after `end`, so no texture is freed here and nothing here needs an autorelease pool.
         for (uint32_t i = 0; i < descriptorColors; ++i)
         {
-            colorAttachments[i]->setTexture(nullptr);
-            colorAttachments[i]->setResolveTexture(nullptr);
+            HeldAttachment& held = colorHeld[i];
+            if (held.texture != nullptr)
+            {
+                colorAttachments[i]->setTexture(nullptr);
+                held.texture = nullptr;
+            }
+            if (held.resolve != nullptr)
+            {
+                colorAttachments[i]->setResolveTexture(nullptr);
+                held.resolve = nullptr;
+            }
         }
-        depthAttachment->setTexture(nullptr);
-        stencilAttachment->setTexture(nullptr);
         descriptorColors = 0;
-        descriptorDepth = false;
+        if (depthHeld.texture != nullptr)
+        {
+            depthAttachment->setTexture(nullptr);
+            depthHeld.texture = nullptr;
+        }
+        if (stencilHeld.texture != nullptr)
+        {
+            stencilAttachment->setTexture(nullptr);
+            stencilHeld.texture = nullptr;
+        }
     }
 } // namespace rojoRHI::metal4

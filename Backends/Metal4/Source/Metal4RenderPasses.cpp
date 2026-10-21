@@ -23,6 +23,7 @@
 #include <Foundation/Foundation.hpp>
 #include <Metal/Metal.hpp>
 
+#include <bit>
 #include <cstddef>
 #include <cstdint>
 
@@ -78,11 +79,78 @@ namespace rojoRHI {
         }
 
         //==============================================================================================================
+        /// Sets on `attachment` the texture, level and slice among `texture`, `mip` and `layer` that `held` does not hold, and
+        /// records them in `held`.
+        void setPlace(MTL::RenderPassAttachmentDescriptor* attachment, metal4::HeldAttachment& held, const MTL::Texture* texture, uint32_t mip, uint32_t layer)
+        {
+            if (held.texture != texture)
+            {
+                attachment->setTexture(texture);
+                held.texture = texture;
+            }
+            if (held.mip != mip)
+            {
+                attachment->setLevel(mip);
+                held.mip = mip;
+            }
+            if (held.layer != layer)
+            {
+                // A cube face is a slice, as it is a RojoRHI layer.
+                attachment->setSlice(layer);
+                held.layer = layer;
+            }
+        }
+
+        //==============================================================================================================
+        /// Sets on `attachment` the load action `load` and the store action `store` unless `held` holds them, and records them
+        /// in `held`; the caller sets the clear value next and then marks the actions known.
+        void setActions(MTL::RenderPassAttachmentDescriptor* attachment, metal4::HeldAttachment& held, MTL::LoadAction load, MTL::StoreAction store)
+        {
+            if (!held.actionsKnown || held.load != load)
+            {
+                attachment->setLoadAction(load);
+                held.load = load;
+            }
+            if (!held.actionsKnown || held.store != store)
+            {
+                attachment->setStoreAction(store);
+                held.store = store;
+            }
+        }
+
+        //==============================================================================================================
+        /// True when `a` and `b` hold the same bits, so a negative zero or a NaN payload is a value of its own, as the texel a
+        /// clear writes is.
+        bool sameBits(double a, double b)
+        {
+            return std::bit_cast<uint64_t>(a) == std::bit_cast<uint64_t>(b);
+        }
+
+        //==============================================================================================================
+        /// True when `a` and `b` are the same clear color, bit for bit.
+        bool sameClear(const MTL::ClearColor& a, const MTL::ClearColor& b)
+        {
+            return sameBits(a.red, b.red) && sameBits(a.green, b.green) && sameBits(a.blue, b.blue) && sameBits(a.alpha, b.alpha);
+        }
+
+        //==============================================================================================================
+        /// Sets null on the texture of `attachment` unless `held` holds none.
+        void emptyTexture(MTL::RenderPassAttachmentDescriptor* attachment, metal4::HeldAttachment& held)
+        {
+            if (held.texture != nullptr)
+            {
+                attachment->setTexture(nullptr);
+                held.texture = nullptr;
+            }
+        }
+
+        //==============================================================================================================
         /// Points the list's render pass descriptor at the open pass's attachments: the caller's load actions on the pass's
         /// first encoder, `Load` on one resuming it, and the store actions they are created with; it empties the attachments the
-        /// previous pass named that this one does not. It sets them through the attachment descriptors the list keeps, taking
-        /// an index's from the descriptor the first time a pass uses it, so the caller holds an autorelease pool, because the
-        /// getters may autorelease.
+        /// previous pass named that this one does not. A value the attachment descriptor already holds is not set again
+        /// (`DrawState::colorHeld`, `depthHeld`, `stencilHeld`), so a pass like the list's last sets only its textures. It sets
+        /// them through the attachment descriptors the list keeps, taking an index's from the descriptor the first time a pass
+        /// uses it, so the caller holds an autorelease pool, because the getters may autorelease.
         void configure(metal4::DrawState& draw)
         {
             MTL4::RenderPassDescriptor* descriptor = draw.descriptor;
@@ -91,48 +159,75 @@ namespace rojoRHI {
             {
                 const auto index = static_cast<NS::UInteger>(draw.colorAttachments.size());
                 draw.colorAttachments.push_back(descriptor->colorAttachments()->object(index)->retain());
+                draw.colorHeld.emplace_back();
             }
             for (uint32_t i = 0; i < count; ++i)
             {
                 const metal4::PassColor& color = draw.colors[i];
                 MTL::RenderPassColorAttachmentDescriptor* attachment = draw.colorAttachments[i];
-                attachment->setTexture(color.texture);
-                attachment->setLevel(color.mip);
-                // A cube face is a slice, as it is a RojoRHI layer.
-                attachment->setSlice(color.layer);
-                attachment->setLoadAction(draw.resuming ? MTL::LoadActionLoad : loadAction(color.load));
-                attachment->setClearColor(color.clear);
-                attachment->setResolveTexture(color.resolve);
-                attachment->setStoreAction(createdStore(color.store, color.resolve != nullptr));
+                metal4::HeldAttachment& held = draw.colorHeld[i];
+                setPlace(attachment, held, color.texture, color.mip, color.layer);
+                const bool known = held.actionsKnown;
+                setActions(attachment, held, draw.resuming ? MTL::LoadActionLoad : loadAction(color.load), createdStore(color.store, color.resolve != nullptr));
+                if (!known || !sameClear(held.clearColor, color.clear))
+                {
+                    attachment->setClearColor(color.clear);
+                    held.clearColor = color.clear;
+                }
+                held.actionsKnown = true;
+                if (held.resolve != color.resolve)
+                {
+                    attachment->setResolveTexture(color.resolve);
+                    held.resolve = color.resolve;
+                }
             }
             for (uint32_t i = count; i < draw.descriptorColors; ++i)
             {
-                MTL::RenderPassColorAttachmentDescriptor* attachment = draw.colorAttachments[i];
-                attachment->setTexture(nullptr);
-                attachment->setResolveTexture(nullptr);
+                metal4::HeldAttachment& held = draw.colorHeld[i];
+                emptyTexture(draw.colorAttachments[i], held);
+                if (held.resolve != nullptr)
+                {
+                    draw.colorAttachments[i]->setResolveTexture(nullptr);
+                    held.resolve = nullptr;
+                }
             }
             draw.descriptorColors = count;
-            draw.descriptorDepth = draw.depth.texture != nullptr;
             const metal4::PassDepth& pass = draw.depth;
             MTL::RenderPassDepthAttachmentDescriptor* depth = draw.depthAttachment;
-            depth->setTexture(pass.texture);
+            metal4::HeldAttachment& depthHeld = draw.depthHeld;
             if (pass.texture != nullptr)
             {
-                depth->setLevel(pass.mip);
-                depth->setSlice(pass.layer);
-                depth->setLoadAction(draw.resuming ? MTL::LoadActionLoad : loadAction(pass.load));
-                depth->setClearDepth(pass.clearDepth);
-                depth->setStoreAction(createdStore(pass.store, false));
+                setPlace(depth, depthHeld, pass.texture, pass.mip, pass.layer);
+                const bool known = depthHeld.actionsKnown;
+                setActions(depth, depthHeld, draw.resuming ? MTL::LoadActionLoad : loadAction(pass.load), createdStore(pass.store, false));
+                if (!known || !sameBits(depthHeld.clearDepth, pass.clearDepth))
+                {
+                    depth->setClearDepth(pass.clearDepth);
+                    depthHeld.clearDepth = pass.clearDepth;
+                }
+                depthHeld.actionsKnown = true;
+            }
+            else
+            {
+                emptyTexture(depth, depthHeld);
             }
             MTL::RenderPassStencilAttachmentDescriptor* stencil = draw.stencilAttachment;
-            stencil->setTexture(pass.stencil ? pass.texture : nullptr);
+            metal4::HeldAttachment& stencilHeld = draw.stencilHeld;
             if (pass.stencil)
             {
-                stencil->setLevel(pass.mip);
-                stencil->setSlice(pass.layer);
-                stencil->setLoadAction(draw.resuming ? MTL::LoadActionLoad : loadAction(pass.stencilLoad));
-                stencil->setClearStencil(pass.clearStencil);
-                stencil->setStoreAction(createdStore(pass.stencilStore, false));
+                setPlace(stencil, stencilHeld, pass.texture, pass.mip, pass.layer);
+                const bool known = stencilHeld.actionsKnown;
+                setActions(stencil, stencilHeld, draw.resuming ? MTL::LoadActionLoad : loadAction(pass.stencilLoad), createdStore(pass.stencilStore, false));
+                if (!known || stencilHeld.clearStencil != pass.clearStencil)
+                {
+                    stencil->setClearStencil(pass.clearStencil);
+                    stencilHeld.clearStencil = pass.clearStencil;
+                }
+                stencilHeld.actionsKnown = true;
+            }
+            else
+            {
+                emptyTexture(stencil, stencilHeld);
             }
         }
     } // namespace
