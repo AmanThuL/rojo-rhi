@@ -9,6 +9,8 @@ Metal 4, through metal-cpp, is its backend, and requires Apple Silicon macOS wit
 `MTLGPUFamilyMetal4` device family; there is no Metal 3 fallback. An optional ImGui adapter builds
 as a separate target.
 
+A D3D12 backend is also implemented, verified on WARP only, not on hardware.
+
 Luminex is this library's required consumer: RojoRHI has no standalone application or sample
 beyond its own conformance tests, and every change is driven by a Luminex branch through a RojoRHI
 pull request before it reaches Luminex.

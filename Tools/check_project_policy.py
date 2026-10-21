@@ -53,7 +53,12 @@ NON_IMPERATIVE_START = re.compile(
 )
 PUBLIC_COPY = {Path("README.md")}
 PUBLIC_PLANNING_LANGUAGE = re.compile(r"(?i)\bmilestones?\b|\bM\d+(?:\.\d+)?\b")
-PUBLIC_UNSHIPPED_BACKEND = re.compile(r"(?i)\b(?:D3D12|Direct3D\s*12|Vulkan)\b")
+PUBLIC_VULKAN = re.compile(r"(?i)\bVulkan\b")
+PUBLIC_D3D12 = re.compile(r"(?i)\b(?:D3D12|Direct3D\s*12)\b")
+PUBLIC_D3D12_PHRASE = "verified on WARP only, not on hardware"
+PUBLIC_D3D12_CLAIM = re.compile(r"(?i)support|accept")
+# A sentence ends at . ; ! ? before whitespace or the end of the text, or at a blank line.
+SENTENCE_END = re.compile(r"[.;!?](?=\s|\Z)|\n[ \t]*\n")
 
 
 def git(*args: str) -> str:
@@ -372,11 +377,37 @@ def check_public_copy(files: list[Path], errors: list[str]) -> None:
             continue
         for pattern, description in (
             (PUBLIC_PLANNING_LANGUAGE, "internal milestone language"),
-            (PUBLIC_UNSHIPPED_BACKEND, "unimplemented backend"),
+            (PUBLIC_VULKAN, "unimplemented backend"),
         ):
             match = pattern.search(text)
             if match:
                 errors.append(f"{path}:{line_number(text, match.start())}: {description} in public copy")
+        errors.extend(d3d12_copy_errors(path, text))
+
+
+def sentences(text: str) -> list[tuple[int, str]]:
+    """Return each sentence of text with the offset where it starts."""
+    result: list[tuple[int, str]] = []
+    start = 0
+    for end in SENTENCE_END.finditer(text):
+        result.append((start, text[start : end.end()]))
+        start = end.end()
+    result.append((start, text[start:]))
+    return result
+
+
+def d3d12_copy_errors(path: Path, text: str) -> list[str]:
+    errors: list[str] = []
+    for start, sentence in sentences(text):
+        match = PUBLIC_D3D12.search(sentence)
+        if not match:
+            continue
+        where = f"{path}:{line_number(text, start + match.start())}"
+        if PUBLIC_D3D12_PHRASE.lower() not in re.sub(r"\s+", " ", sentence).lower():
+            errors.append(f"{where}: D3D12 named without '{PUBLIC_D3D12_PHRASE}' in public copy")
+        if PUBLIC_D3D12_CLAIM.search(sentence):
+            errors.append(f"{where}: D3D12 described as supported or accepted in public copy")
+    return errors
 
 
 def parse_args() -> argparse.Namespace:
