@@ -328,7 +328,9 @@ TEST_CASE("every queue type maps and unmaps a tile", "[d3d12]")
     const WarningCount warnings;
     SparseKit kit;
     // The debug layer counts a mapping as a write of the resource, so each queue's mappings are ordered after the previous
-    // queue's by a fence, as the application orders other work on a resource across queues.
+    // queue's by a fence, as the application orders other work on a resource across queues. The layer's synchronized queue
+    // validation can also replay a held queue's mappings after a later queue's, so each queue's mappings complete on the CPU
+    // before the next queue maps.
     Result<Fence> order = kit.device.createFence(0, "test.sparse.order");
     REQUIRE(order.has_value());
     uint64_t value = 0;
@@ -344,6 +346,7 @@ TEST_CASE("every queue type maps and unmaps a tile", "[d3d12]")
         queue.mapTiles(std::array{ SparseKit::removal(kit.firstTile()), SparseKit::removal(kit.bufferTiles(1, kTile)) });
         ++value;
         queue.submit({}, {}, std::array{ FenceValue{ *order, value } });
+        REQUIRE(kit.device.wait(FenceValue{ *order, value }, UINT64_MAX));
     }
     // Device destruction idles every queue, so a message the mappings raised on the GPU timeline is counted too.
     destroyDevice(kit.device);
