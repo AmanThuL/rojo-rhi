@@ -4,30 +4,32 @@
 
 This page describes the D3D12 backend as it stands. `createDevice` opens a device on the Agility
 runtime and the backend owns the device-wide native state: queues, fences and frames, shader-visible
-descriptor heaps, root and command signatures, memory, buffers, heaps, textures, views, samplers and
-the debug layer. Command lists record copies, fills, clears, barriers and scopes, timed on a device
-created with `DeviceDesc::scopeTimings` ([recording](d3d12-recording.md)), passes, dispatches and
-draws ([drawing](d3d12-drawing.md)). Everything below is "implemented, verified on WARP only, not on
-hardware": the backend is not a capability until a hardware run says so ([ADR 0009](
-../decisions/0009-conformance-and-valid-usage.md), [documentation](
-../conventions/documentation.md)). `docs/spec/` stays the authority on every entry's semantics; [the
-Null backend](null-backend.md) describes the shared core it translates to. [The build
-record](d3d12-build.md) holds the pins, runtime layout, floor probe and toolchain record.
+descriptor heaps, root and command signatures, memory, buffers, heaps, textures, views, samplers,
+swapchains, reserved resources, capture, FSR upscaler contexts and the debug layer. Command lists
+record copies, fills, clears, barriers and scopes, timed on a device created with
+`DeviceDesc::scopeTimings` ([recording](d3d12-recording.md)), passes, dispatches and draws
+([drawing](d3d12-drawing.md)); [the edges page](d3d12-backend-edges.md) describes presentation,
+sparse resources, capture and FSR. Everything below is "implemented, verified on WARP only, not on
+hardware": the backend is not a capability until a hardware run says so ([ADR
+0009](../decisions/0009-conformance-and-valid-usage.md),
+[documentation](../conventions/documentation.md)). `docs/spec/` stays the authority on every entry's
+semantics; [the Null backend](null-backend.md) describes the shared core it translates to. [The
+build record](d3d12-build.md) holds the pins, runtime layout, floor probe and toolchain record.
 
 | Chapter | State |
 |---|---|
-| 01 fundamentals, 02 device | implemented, `createDevice` and `destroyDevice`; `createUpscaler` returns `Unsupported` |
+| 01 fundamentals, 02 device | implemented, `createDevice` and `destroyDevice` |
 | 03 memory and buffers, 04 textures and heaps | implemented, with views and samplers |
 | 15 formats and limits | implemented: the format table and the limits |
-| 10 queues and frames (with the fences of 09) | implemented: fences, `submit`, frames; `Queue::present` and `Queue::mapTiles` abort |
+| 10 queues and frames (with the fences of 09) | implemented: fences, `submit`, frames, `Queue::present` and `Queue::mapTiles` ([edges](d3d12-backend-edges.md)) |
 | 07 command recording, 08 GPU-driven work | lists, `setRoot`, copies, fills, clears, scopes, barriers (09), passes, dispatches, direct and indirect draws record ([recording](d3d12-recording.md), [drawing](d3d12-drawing.md)); `declareAccess` records for the tracker alone; `upscale` aborts |
 | 06 pipelines | implemented: shader libraries, graphics, mesh and compute pipelines and the pipeline cache ([drawing](d3d12-drawing.md)) |
-| 11 presentation, 12 upscaling, 13 sparse | not implemented: entries return `Unsupported` or abort, and `createSwapchain` is `Unsupported` |
-| 14 diagnostics | the core's counters and checks; no capture hook, so `beginCapture` is `Unsupported` |
+| 11 presentation, 13 sparse | implemented: swapchains, `acquire`, `present`, `resize`; reserved resources, tile shapes and `mapTiles` ([edges](d3d12-backend-edges.md)) |
+| 12 upscaling | `createUpscaler` and `upscalers` ([edges](d3d12-backend-edges.md#fsr)); `CommandList::upscale` aborts |
+| 14 diagnostics | the core's counters and checks, and `beginCapture` and `endCapture` through the PIX GPU capturer ([edges](d3d12-backend-edges.md#capture)) |
 
-An entry the backend does not implement logs its name and aborts in every build, or returns
-`Unsupported` when it returns a `Result`. Each entry calls the core's check first and then
-translates; the backend holds no `ROJORHI_VU`.
+`CommandList::upscale`, the one entry not implemented, logs its name and aborts in every build.
+Each entry calls the core's check first and then translates; the backend holds no `ROJORHI_VU`.
 
 ## Build options
 
@@ -41,8 +43,7 @@ translates; the backend holds no `ROJORHI_VU`.
   in Release; it defines `ROJORHI_D3D12_DEBUG_MODE`), `off`, `layer` (the debug layer and DRED) or
   `gbv` (the debug layer, GPU-based validation and DRED). The value is `mode` and not `auto`
   because xmake reads `auto` as unset.
-
-Both are build configuration, not environment variables: RojoRHI reads and sets none.
+- All three are build configuration, not environment variables: RojoRHI reads and sets none.
 
 ## Agility loading
 
@@ -89,23 +90,23 @@ Debug builds: a child object that outlives the device is a defect. The factory g
 ## Capabilities and formats
 
 `checkFloor` runs at creation and `reportCapabilities` fills the report from the device
-(`D3D12Capabilities.cpp`). The report is honest about what the backend does: `placementSparse` and
-`conservativeRaster` are false, `upscalers` is empty, `meshTasksIndirect` is true,
-`uploadInDeviceMemory` is `GPUUploadHeapSupported`, and `floorName` reads `FL 12_2, SM 6.<n>` with
-the highest shader model. `maxViews` is the view heap size less the
-reserved leading slots, `maxSamplers` is 2,048,
+(`D3D12Capabilities.cpp`). The report is honest about what the backend does: `placementSparse` is
+true at tiled-resources tier 2 or higher, `upscalers` lists FSR when the FidelityFX runtime loads,
+`conservativeRaster` is false, `meshTasksIndirect` is true, `uploadInDeviceMemory` is
+`GPUUploadHeapSupported`, and `floorName` reads `FL 12_2, SM 6.<n>` with the highest shader model.
+`maxViews` is the view heap size less the reserved leading slots, `maxSamplers` is 2,048,
 `maxAddrOffset` is 2^29 − 1, and `maxBufferSize` is the adapter's dedicated video memory (shared
 system memory when that is 0), capped by one resource's virtual address bits.
 
 The format table (`D3D12Formats.cpp`) starts from the core's ceiling and narrows it by what the
-device reports; no format reports a sparse capability, and a failed query is an error, never a
-narrower table. A texture's native format depends on its usage: a `Sampled` depth texture is
-created in the typeless family of its depth format so its depth and stencil planes both get views;
-a format with an sRGB counterpart is created in the typeless family of both unless the device
-reports relaxed format casting, in which case it is created as itself and `castableFormats` lists
-the formats its views may use. Any other texture is created as itself. A stencil view reads plane 1
-through a component mapping into the first component, and a `Storage` view of an sRGB format uses
-its linear counterpart because a typed UAV has no sRGB form.
+device reports; a format is sparse when the device reports it tiled and it has no stencil plane, and
+a failed query is an error, never a narrower table. A texture's native format depends on its usage:
+a `Sampled` depth texture is created in the typeless family of its depth format so its depth and
+stencil planes both get views; a format with an sRGB counterpart is created in the typeless family
+of both unless the device reports relaxed format casting, in which case it is created as itself and
+`castableFormats` lists the formats its views may use. Any other texture is created as itself. A
+stencil view reads plane 1 through a component mapping into the first component, and a `Storage`
+view of an sRGB format uses its linear counterpart because a typed UAV has no sRGB form.
 
 ## Memory
 
@@ -237,7 +238,8 @@ pool's mutex are leaves. The tracker lock in `submit` is held from the check to 
 call. Release recording reads the directory and each texture's target heap without a lock and
 claims transient slots with an atomic. The pipeline cache's mutex is a leaf: creation holds it
 only around `LoadPipeline` and `StorePipeline`, never while compiling, and `pipelineCacheData`
-around `Serialize`; no pool lock is held when it is taken, and recording never takes it.
+around `Serialize`; no pool lock is held when it is taken, and recording never takes it. The
+swapchain and FSR leaves are on [the edges page](d3d12-backend-edges.md#locks-and-counts).
 
 ## Shader libraries and pipelines
 
@@ -252,15 +254,14 @@ pipelines and the cache; [its file list](d3d12-drawing.md#files) adds the record
 
 ## Counting
 
-Counters follow the native call. `descriptorWrites` counts each `Create*View` and
-`CreateSampler` the backend issues (raw views, the two null views, RTVs and DSVs);
-`nativeCreateCalls` counts each staging buffer and each internal object made after creation;
-`cpuAllocations` counts each command list a pool grows by; `nativeSubmitCalls` counts each
-`ExecuteCommandLists`, `Wait` and `Signal`; and `nativeHostCalls` counts each `GetCompletedValue`,
-`SetEventOnCompletion` and `Map`. A wait for fence value 0 is not issued natively, since every
-fence has reached 0 and the debug layer warns about one, but the core still counts it in
-`nativeSubmitCalls`. `waitForFence` returns the number of host calls it made and its
-caller counts them.
+Counters follow the native call. `descriptorWrites` counts each `Create*View` and `CreateSampler`
+the backend issues (raw views, the two null views, RTVs and DSVs); `nativeCreateCalls` counts each
+staging buffer and each internal object made after creation; `cpuAllocations` counts each command
+list a pool grows by; `nativeSubmitCalls` counts each `ExecuteCommandLists`, `Wait` and `Signal`;
+and `nativeHostCalls` counts each `GetCompletedValue`, `SetEventOnCompletion` and `Map`. A wait for
+fence value 0 is not issued natively, since every fence has reached 0 and the debug layer warns
+about one, but the core still counts it in `nativeSubmitCalls`. `waitForFence` returns its host calls
+for its caller to count.
 
 ## The floor probe
 
@@ -268,8 +269,8 @@ Two probe executables under `Tools/D3D12Probe/` create a device on the app-local
 level 12_2 and record the floor, the loaded modules and the debug-layer messages. On the hosted
 runner both met the floor, loaded exactly the app-local `D3D12Core.dll` 1.619.6.0 and
 `d3d10warp.dll` 1.0.21.0, and showed the layer, GPU-based validation and DRED active. The `d3d12`
-job uploads their output as the artifact `d3d12-probe`. The full results are in
-[the build record](d3d12-build.md#the-floor-probe); they are WARP results, not hardware evidence.
+job uploads their output as the artifact `d3d12-probe`. The full results are in [the build
+record](d3d12-build.md#the-floor-probe); they are WARP results, not hardware evidence.
 
 ## Tests and CI
 
@@ -287,14 +288,13 @@ implement yet, and `d3d12_conformance_pending` lists the conformance files it le
 hold one file name per line, a name that matches no file fails the configure, and a file leaves
 the list when it passes whole on WARP under the debug layer and GPU-based validation.
 
-The `d3d12` job on `windows-latest` runs a Debug configure with
-`--rojorhi_d3d12_adapter=warp --rojorhi_d3d12_debug=gbv`, the probes and their gate, the
-`RojoRHITests` build, the DXIL and runtime-DLL checks, `abi`, `contract`, `death` and
-`conformance`, a case-count step with floors for `conformance`, `d3d12` and `contract`, the
-toolchain record and the layout check (`--only Backends/D3D12 --only Tests/D3D12 --only
-Tests/Support/D3D12 --only Tools/D3D12Probe`, with its own compilation database and `clangd`; the
-macOS format job excludes the same directories). A Release configure with
-`--rojorhi_d3d12_debug=mode` then builds warning-free under `/W4 /WX`, runs `contract` and
-`conformance`, and builds the link-time-optimization probe for `check_lto_inline.py`. The Release
-executables still turn off warnings C4702 and C4722 because entries not yet implemented abort
-(issue #83).
+The `d3d12` job on `windows-latest` runs a Debug configure with `--rojorhi_d3d12_adapter=warp
+--rojorhi_d3d12_debug=gbv`, the probes and their gate, the `RojoRHITests` build, the DXIL and
+runtime-DLL checks, `abi`, `contract`, `death` and `conformance`, a case-count step with floors for
+`conformance`, `d3d12` and `contract`, the toolchain record and the layout check (`--only
+Backends/D3D12 --only Tests/D3D12 --only Tests/Support/D3D12 --only Tools/D3D12Probe`, with its own
+compilation database and `clangd`; the macOS format job excludes the same directories). A Release
+configure with `--rojorhi_d3d12_debug=mode` then builds warning-free under `/W4 /WX`, runs
+`contract` and `conformance`, and builds the link-time-optimization probe for `check_lto_inline.py`.
+The Release executables still turn off warnings C4702 and C4722 because entries not yet implemented
+abort (issue #83).
