@@ -23,12 +23,16 @@ namespace rojoRHI::core {
     //==================================================================================================================
     void beginList(CommandListCore& list, DeviceCore& core, QueueType type, std::string_view label)
     {
-        // Every field starts afresh, but the containers are cleared and moved into the new state, so a list the pool hands
-        // out again keeps their capacity.
+        checkLabel(label);
         // A list that was never submitted still holds the counts it added; its slot is reused now, so they go before the log is cleared.
         releaseReferences(list);
+        // Every field starts afresh in place: one assignment resets the plain fields, and each container and string is cleared
+        // and keeps its capacity, so no state is built, moved and destroyed for a recycled list.
+        static_cast<ListFields&>(list) = ListFields{ .device = &core, .type = type, .frame = core.frameNumber() };
         list.pass.colors.clear();
+        list.pass = PassState{ .colors = std::move(list.pass.colors) };
         list.scopes.clear();
+        list.label.assign(label.empty() ? std::string_view{ "rojorhi.commandlist.unnamed" } : label);
         list.scopeLog.clear();
         list.pendingAccesses.clear();
         list.trackerLog.events.clear();
@@ -36,15 +40,6 @@ namespace rojoRHI::core {
         list.trackerLog.command = 0;
         list.trackerLog.passUses.clear();
         list.trackerLog.images.clear();
-        list = CommandListCore{ .pass = PassState{ .colors = std::move(list.pass.colors) },
-                                .scopes = std::move(list.scopes),
-                                .scopeLog = std::move(list.scopeLog),
-                                .pendingAccesses = std::move(list.pendingAccesses),
-                                .trackerLog = std::move(list.trackerLog) };
-        list.label = resolveLabel(label, "rojorhi.commandlist.unnamed");
-        list.device = &core;
-        list.type = type;
-        list.frame = core.frameNumber();
         core.noteListAcquired();
     }
 

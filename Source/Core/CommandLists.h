@@ -52,29 +52,37 @@ namespace rojoRHI::core {
         bool stencilWrite = false;                           ///< The pipeline has a stencil operation other than `Keep`.
     };
 
-    /// What the core keeps about one command list: the state machine the recording rules read. A backend's `CommandListImpl`
-    /// embeds one.
-    struct CommandListCore
+    /// The fields of a command list that hold no container and no string. `beginList` resets them all with one assignment of
+    /// `ListFields{}`, so a field added here starts afresh on every acquisition; a field that owns memory belongs in
+    /// `CommandListCore` instead, which clears each of its own by name.
+    struct ListFields
     {
-        DeviceCore* device = nullptr;         ///< The device that acquired the list.
-        QueueType type = QueueType::Graphics; ///< The queue type the list was acquired for.
-        uint64_t frame = 0;                   ///< The frame the list was acquired in.
-        Addr root = {};                       ///< The root `setRoot` bound; null until one is.
-        Buffer rootBuffer = {};               ///< The buffer `root` resolved to; written in Debug on a validating device only.
-        ListState state = ListState::Recording;
-        bool passOpen = false;                       ///< A render pass is open on the list.
+        DeviceCore* device = nullptr;           ///< The device that acquired the list.
+        QueueType type = QueueType::Graphics;   ///< The queue type the list was acquired for.
+        uint64_t frame = 0;                     ///< The frame the list was acquired in.
+        Addr root = {};                         ///< The root `setRoot` bound; null until one is.
+        Buffer rootBuffer = {};                 ///< The buffer `root` resolved to; written in Debug on a validating device only.
+        ListState state = ListState::Recording; ///< Where the list is in its life.
+        bool passOpen = false;                  ///< A render pass is open on the list.
+        BoundPipeline pipeline;                 ///< The bound pipeline; cleared by `beginRenderPass` and `endRenderPass`.
+        size_t passScopeBase = 0;               ///< The number of open scopes when the open pass began.
+        ArenaPage page;                         ///< The arena page the list uploads into; null until its first upload.
+        std::byte* cursor = nullptr;            ///< The next free byte of `page`: its bump cursor, which takes no lock.
+        std::byte* limit = nullptr;             ///< One past the last byte of `page`; null until the list has a page.
+        RecordCounts counts;                    ///< What the list recorded for `Device::counters`; folded into the device at submission.
+    };
+
+    /// What the core keeps about one command list: the state machine the recording rules read. A backend's `CommandListImpl`
+    /// embeds one. Its plain fields are those of `ListFields`; each field declared here owns memory that a recycled list
+    /// keeps, and `beginList` clears it by name, so a field added here is added there too.
+    struct CommandListCore : ListFields
+    {
         PassState pass;                              ///< The open pass; meaningful while `passOpen`.
-        BoundPipeline pipeline;                      ///< The bound pipeline; cleared by `beginRenderPass` and `endRenderPass`.
         std::vector<bool> scopes;                    ///< One entry per open scope, innermost last: true when it began inside a render pass.
-        size_t passScopeBase = 0;                    ///< The number of open scopes when the open pass began.
         std::string label;                           ///< The label the list was acquired with.
-        ArenaPage page;                              ///< The arena page the list uploads into; null until its first upload.
-        std::byte* cursor = nullptr;                 ///< The next free byte of `page`: its bump cursor, which takes no lock.
-        std::byte* limit = nullptr;                  ///< One past the last byte of `page`; null until the list has a page.
         std::vector<ScopeRecord> scopeLog;           ///< The scopes recorded on the list in the order they began, for `Device::scopeTimings`.
         std::vector<ResourceAccess> pendingAccesses; ///< Declared accesses no draw or dispatch has consumed; kept only on a validating device.
         TrackerLog trackerLog;                       ///< The uses and barriers the list recorded; kept only on a validating device, in Debug.
-        RecordCounts counts;                         ///< What the list recorded for `Device::counters`; folded into the device at submission.
     };
 
     /// Counts one recorded command for the validation tracker, which names each event's command by it. Every recording entry
