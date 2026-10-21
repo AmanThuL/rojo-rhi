@@ -297,9 +297,8 @@ target("RojoRHITests")
         }
         -- Pending under GPU-based validation only: WARP never completes a FidelityFX upscale dispatch with it on, while the
         -- debug layer alone runs it (the floor probe's fsr section, CI run 39463099719), so every other configuration, the
-        -- Release job's included, runs these.
+        -- Release job's included, runs it. The death cases submit nothing, so they run under it too.
         if is_config("rojorhi_d3d12_debug", "gbv") then
-            table.insert(d3d12_pending, "UpscaleDeathTests.cpp")
             table.insert(d3d12_pending, "UpscalerTests.cpp")
         end
         local pending = {}

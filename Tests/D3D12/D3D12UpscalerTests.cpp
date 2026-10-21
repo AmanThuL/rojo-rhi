@@ -229,6 +229,7 @@ namespace {
         Pipeline grid;    ///< The dispatch oracle's compute pipeline.
         Pipeline draw;    ///< The standard vertex and fragment pipeline over `kTargetFormat`.
         Buffer cells;     ///< `kGroupCells` cells the oracle writes, each `kUntouched` at creation.
+        Buffer pristine;  ///< `kGroupCells` cells of `kUntouched` that `cells` is reset from.
         Texture target;   ///< The `kTargetSize` square target the draw renders to.
         Fence done;       ///< Signalled when the list completes.
         CommandList list; ///< A Graphics list of the open frame.
@@ -263,6 +264,10 @@ namespace {
         );
         REQUIRE(cells.has_value());
         scene.cells = *cells;
+        const Result<Buffer> pristine =
+            device.createBuffer(BufferDesc{ .size = kGroupCells * sizeof(Cell), .label = "test.pristine" }, std::as_bytes(std::span(untouched)));
+        REQUIRE(pristine.has_value());
+        scene.pristine = *pristine;
         const Result<Texture> target = device.createTexture(
             TextureDesc{ .format = Format::RGBA16Float, .extent = { kTargetSize, kTargetSize, 1 }, .usage = TextureUsage::RenderTarget, .label = "test.target" }
         );
@@ -373,12 +378,23 @@ namespace {
 
     //==================================================================================================================
     /// Binds the oracle and its root, one group wide, on the scene's list and dispatches it once, so the compute side holds
-    /// the caller's pipeline, the global root signature and the root.
+    /// the caller's pipeline, the global root signature and the root. Then it copies `kUntouched` over the cells again, so only
+    /// a later dispatch can leave the grid in them.
     void bindCompute(Scene& scene)
     {
-        scene.list.setPipeline(scene.grid);
-        (void)scene.list.pushRoot(GridRoot{ scene.device.address(scene.cells), kGroupX, kGroupY });
-        scene.list.dispatch(1, 1, 1);
+        CommandList list = scene.list;
+        list.setPipeline(scene.grid);
+        (void)list.pushRoot(GridRoot{ scene.device.address(scene.cells), kGroupX, kGroupY });
+        list.dispatch(1, 1, 1);
+        list.barrier(
+            std::array{
+                GlobalBarrier{ .srcStage = Stage::ComputeShader, .srcAccess = Access::ShaderWrite, .dstStage = Stage::Copy, .dstAccess = Access::CopyWrite } }
+        );
+        list.copyBuffer(scene.pristine, 0, scene.cells, 0, kGroupCells * sizeof(Cell));
+        list.barrier(
+            std::array{
+                GlobalBarrier{ .srcStage = Stage::Copy, .srcAccess = Access::CopyWrite, .dstStage = Stage::ComputeShader, .dstAccess = Access::ShaderWrite } }
+        );
     }
 
     /// The native calls the commands after an upscale, or the restore that stands for one, recorded.
@@ -677,7 +693,7 @@ TEST_CASE("a dispatch and a draw after an upscale rebind their state and write t
         Upscaler upscaler;
         const UpscaleParams params = prepareUpscale(scene.device, scene.list, upscaler);
         // The compute side holds the oracle and the root block that names the cells before the upscale, and nothing binds
-        // them again after it.
+        // them again after it; the cells hold kUntouched again, so only the dispatch after the upscale can write the grid.
         bindCompute(scene);
         scene.list.upscale(upscaler, params);
         (void)recordAfter(scene);
