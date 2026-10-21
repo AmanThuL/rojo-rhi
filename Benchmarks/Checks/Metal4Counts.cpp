@@ -75,9 +75,9 @@ namespace {
     //==================================================================================================================
     // The first measured frame's native calls: for R the delta of nativeRecordCalls, nativeSubmitCalls and
     // nativeHostCalls from Device::counters, for N its hand counts.
-    uint64_t frameCalls(std::string_view workload, uint32_t k, Arm arm)
+    uint64_t frameCalls(std::string_view workload, uint32_t k, Arm arm, const RunOptions& options = countOptions())
     {
-        const ArmResult result = countRun(workload, k, arm);
+        const ArmResult result = countRun(workload, k, arm, options);
         REQUIRE(!result.nativeCalls.empty());
         return result.nativeCalls[0];
     }
@@ -144,6 +144,33 @@ TEST_CASE("C4 to C7 allocate no more a frame on Metal 4 than the native arm, whi
             const uint64_t native = frameAllocations(workload, 100, Arm::Native, steadyOptions());
             CAPTURE(rojo, native);
             CHECK(rojo <= native);
+        }
+    }
+}
+
+//======================================================================================================================
+TEST_CASE("C1 to C3 and C10 write and resolve no timestamp in R, as N writes none", "[metal4]")
+{
+    // R's device for these workloads is created without scope timings. Timing it, as C8 and the composed frame are, adds the
+    // pass's two encoder timestamps and, at the frame wait, one resolve and one invalidation of the slot's counter heap: four
+    // native calls a frame, and at least three allocations (the resolve's NSData and the resolve and invalidation inside
+    // Metal, measured 2026-10-21 at three without the validation layer). The first measured frame reuses a slot, as a timing run's do.
+    for (const std::string_view workload : { "C1", "C2", "C3", "C10" })
+    {
+        DYNAMIC_SECTION(workload)
+        {
+            RunOptions timed = countOptions();
+            timed.scopeTimings = true;
+            const uint64_t untimedCalls = frameCalls(workload, 100, Arm::Rojo);
+            const uint64_t timedCalls = frameCalls(workload, 100, Arm::Rojo, timed);
+            CAPTURE(untimedCalls, timedCalls);
+            CHECK(timedCalls == untimedCalls + 4);
+            RunOptions steadyTimed = steadyOptions();
+            steadyTimed.scopeTimings = true;
+            const uint64_t untimedAllocations = frameAllocations(workload, 100, Arm::Rojo, steadyOptions());
+            const uint64_t timedAllocations = frameAllocations(workload, 100, Arm::Rojo, steadyTimed);
+            CAPTURE(untimedAllocations, timedAllocations);
+            CHECK(untimedAllocations + 3 <= timedAllocations);
         }
     }
 }

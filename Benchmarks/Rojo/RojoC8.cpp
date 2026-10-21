@@ -121,6 +121,9 @@ namespace rojoRHI::bench {
     //==================================================================================================================
     ArmResult runRojoC8(const Config& config, const RunOptions& options)
     {
-        return runArm<RojoC8>(config, options);
+        // N writes the debug group and the two timestamps of every pass, so R times its passes too.
+        RunOptions timed = options;
+        timed.scopeTimings = true;
+        return runArm<RojoC8>(config, timed);
     }
 } // namespace rojoRHI::bench

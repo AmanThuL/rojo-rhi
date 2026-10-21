@@ -129,7 +129,7 @@ the call sequence and the counts are. `RojoRHIBench check` is a Catch2 session o
 | `[host]` | everywhere | the clock, the JSON writer, the allocation counter, the runner, the comparison of outputs |
 | `[null]` | Null builds | every R workload's `Counters` delta at the note's K pair, the per-operation delta, the traced call sequence at K 1 and 2; in Debug with validation on, so the tracker accepts every barrier |
 | `[native]` | local Apple Silicon | N's outputs against CPU oracles for C1 to C10, G1 and G2, its frame event's two calls a frame, and the composed frame's determinism across frames |
-| `[metal4]` | `metal4` builds | R's per-operation count is at most N's plus `c`, and N's equals the note's column, for C1 to C9 |
+| `[metal4]` | `metal4` builds | R's per-operation count is at most N's plus `c`, and N's equals the note's column, for C1 to C9; R's steady frame allocates no more than N's in C4 to C7, and less per C8 pass; R's C1 to C3 and C10 frames, untimed, make four native calls and at least three allocations fewer than timed |
 
 `xmake test RojoRHIBench/null` runs `[null],[host]`, `RojoRHIBench/native` runs `[native]` under
 `MTL_DEBUG_LAYER=1`, and `RojoRHIBench/metal4` exists only with that backend. The `[metal4]` case is
@@ -274,13 +274,13 @@ defect:
   Metal validation layer wraps the device, so a run without the layer pays none per command. A pool
   is not a message to a command buffer, encoder, argument table or scaler, so it is no native call
   and changes no count above; it shows only in CPU time.
-- Every render pass of R is a timed scope, so C1 to C3 and C10 pay a debug group and two
-  timestamps per frame that their N arms do not write; N mirrors them in C8 and the composed frame
-  only, as the note registers. R writes a pass's pair on its encoders, the begin timestamp first on
-  its first encoder (the kernels' encoder of C10's counted draws) and the end timestamp on its last
-  render encoder before `endEncoding`, while N writes it on the command buffer around the pass's
-  encoders. R's sequence for C8 and the composed frame therefore has the begin timestamp after the
-  encoder's open and the end timestamp before its `endEncoding`; its counts are unchanged.
+- R's device sets `DeviceDesc::scopeTimings` (`RunOptions::scopeTimings`) only for C8 and the
+  composed frame, whose N arms write a debug group and two timestamps per pass, as the note
+  registers; in every other workload R's passes keep their debug group, which N does not write,
+  write no timestamp and resolve none. R writes a timed pass's pair on its encoders, the begin first
+  on its first encoder and the end on its last render encoder before `endEncoding`, while N writes
+  it on the command buffer around the pass's encoders, so R's C8 and composed-frame sequences have
+  the begin after the encoder's open and the end before its `endEncoding`; their counts hold.
 - A pipeline that culls, tests stencil or has a fragment entry makes the backend set the winding
   once per encoder it opens, one native call more than N's sequence. An encoder carries a label only
   under the validation layer (or on a device created with `validation` or `enableCapture`), one call
