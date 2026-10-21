@@ -38,14 +38,23 @@ namespace rojoRHI::d3d12 {
             "an outcome the pipeline cache reads from the call's HRESULT: a name not stored yet, a name another creation stored "
             "first, or a refused blob, which the cache reports as its one warning";
 
-        /// The messages the router never forwards. A message is dropped only with a reason that holds for every use of the
-        /// library: the per-object notices the runtime raises at information severity, which a run creating thousands of
-        /// objects would otherwise bury every diagnosis under, and the outcomes of the pipeline library's calls, which only
-        /// the pipeline cache makes and which it handles. A look-up whose stored description differs from the one passed
-        /// (`LOADPIPELINE_INVALIDDESC`) is not dropped: the cache's key covers the whole description, so it shows a defect.
-        /// Every other error, warning and application message passes, and so does a live-object report, which diagnoses a
-        /// leak.
-        constexpr std::array<FilteredMessage, 74> kFiltered = { {
+        /// Why the clear-value mismatches of render-target and depth-stencil clears are dropped.
+        constexpr std::string_view kNoClearValue = "RojoRHI creates textures with no optimized clear value: `TextureDesc` carries none";
+
+        /// Why the hint on lists that record only barriers is dropped.
+        constexpr std::string_view kBarrierOnly =
+            "a list that records only barriers is valid usage: the caller states there the dependencies its later lists rely on";
+
+        /// The messages the router never forwards. A message is dropped only with a reason that holds for every use of
+        /// the library: the per-object notices the runtime raises at information severity, which a run creating
+        /// thousands of objects would otherwise bury every diagnosis under; the outcomes of the pipeline library's
+        /// calls, which only the pipeline cache makes and which it handles; the warning that a clear's value differs
+        /// from the optimized clear value, which no texture has; and the hint that a list recording only barriers should
+        /// name no sync or access, which a caller's barrier-only list need not follow. A look-up whose stored description
+        /// differs from the one passed (`LOADPIPELINE_INVALIDDESC`) is not dropped: the cache's key covers the whole
+        /// description, so it shows a defect. Every other error, warning and application message passes, and so does a
+        /// live-object report, which diagnoses a leak.
+        constexpr std::array<FilteredMessage, 77> kFiltered = { {
             { D3D12_MESSAGE_ID_CREATEPIPELINELIBRARY_INVALIDLIBRARYBLOB, kCacheOutcome },
             { D3D12_MESSAGE_ID_CREATEPIPELINELIBRARY_DRIVERVERSIONMISMATCH, kCacheOutcome },
             { D3D12_MESSAGE_ID_CREATEPIPELINELIBRARY_ADAPTERVERSIONMISMATCH, kCacheOutcome },
@@ -120,6 +129,9 @@ namespace rojoRHI::d3d12 {
             { D3D12_MESSAGE_ID_DESTROY_VIDEOENCODER, kObjectNotice },
             { D3D12_MESSAGE_ID_CREATE_VIDEOENCODERHEAP, kObjectNotice },
             { D3D12_MESSAGE_ID_DESTROY_VIDEOENCODERHEAP, kObjectNotice },
+            { D3D12_MESSAGE_ID_CLEARRENDERTARGETVIEW_MISMATCHINGCLEARVALUE, kNoClearValue },
+            { D3D12_MESSAGE_ID_CLEARDEPTHSTENCILVIEW_MISMATCHINGCLEARVALUE, kNoClearValue },
+            { D3D12_MESSAGE_ID_NON_OPTIMAL_BARRIER_ONLY_EXECUTE_COMMAND_LISTS, kBarrierOnly },
         } };
 
         /// The most nodes of one list that a removal report prints, so a long history cannot flood the log.

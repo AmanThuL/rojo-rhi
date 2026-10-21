@@ -380,7 +380,9 @@ namespace rojoRHI {
             requirements = allocationOf(impl, native, castable);
         }
         core::TextureRecord record = core::prepareTexture(impl.core, desc, initial, placement, requirements);
-        const D3D12_BARRIER_LAYOUT layout = initial.empty() ? D3D12_BARRIER_LAYOUT_UNDEFINED : D3D12_BARRIER_LAYOUT_COPY_DEST;
+        // A texture without data starts in COMMON, the one layout a copy queue accesses; its first barrier from Undefined
+        // still names LAYOUT_UNDEFINED and discards, which is legal whatever the layout.
+        const D3D12_BARRIER_LAYOUT layout = initial.empty() ? D3D12_BARRIER_LAYOUT_COMMON : D3D12_BARRIER_LAYOUT_COPY_DEST;
         const auto castableCount = static_cast<UINT32>(castable.size());
         const DXGI_FORMAT* castableList = castableCount == 0 ? nullptr : castable.data();
         d3d12::Com<ID3D12Resource> resource;

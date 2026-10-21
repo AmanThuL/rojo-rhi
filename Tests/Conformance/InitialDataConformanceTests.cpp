@@ -11,6 +11,7 @@
 #include <catch2/generators/catch_generators.hpp>
 
 #include <algorithm>
+#include <array>
 #include <cstddef>
 #include <cstdint>
 #include <utility>
@@ -75,6 +76,17 @@ namespace {
     /// Checks that every subresource of `texture`, created from `desc` with `subresources`, reads back its initial texels.
     void checkEverySubresource(test::GpuKit& kit, Texture texture, const TextureDesc& desc, const std::vector<Subresource>& subresources)
     {
+        // A texture created with initial data is in ShaderRead; the readback copies from CopySrc.
+        CommandList list = kit.list(QueueType::Graphics, "test.layout");
+        const std::array<TextureBarrier, 1> barriers{ TextureBarrier{ .texture = texture,
+                                                                      .srcStage = Stage::FragmentShader | Stage::ComputeShader,
+                                                                      .srcAccess = Access::ShaderRead,
+                                                                      .dstStage = Stage::Copy,
+                                                                      .dstAccess = Access::CopyRead,
+                                                                      .oldLayout = Layout::ShaderRead,
+                                                                      .newLayout = Layout::CopySrc } };
+        list.barrier({}, {}, barriers);
+        kit.run(std::array{ list });
         for (uint32_t layer = 0; layer < desc.layers; ++layer)
         {
             for (uint32_t mip = 0; mip < desc.mips; ++mip)

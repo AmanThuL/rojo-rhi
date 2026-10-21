@@ -245,6 +245,10 @@ target("RojoRHI")
         end
     elseif is_config("rojorhi_backend", "d3d12") then
         add_files(path.join(component, "Backends/D3D12/Source/*.cpp"))
+        -- The backend's kernels, compiled into DXIL its sources embed by the DXC `xmake setup` fetches.
+        add_rules("rojorhi.d3d12_kernels")
+        add_files(path.join(component, "Backends/D3D12/Kernels/*.hlsl"))
+        set_values("rojorhi.dxc", path.join(thirdparty_dir, "dxc/bin/x64/dxc.exe"))
         -- A system include, so the Agility headers shadow the Windows SDK's older d3d12.h and /external:W0 covers them.
         add_sysincludedirs(path.join(thirdparty, "agility/include"))
         add_defines("WIN32_LEAN_AND_MEAN", "NOMINMAX")
@@ -289,8 +293,6 @@ target("RojoRHITests")
             "DiagnosticsTests.cpp",
             "DrawDeathTests.cpp",
             "DrawTests.cpp",
-            "FrameJoinDeathTests.cpp",
-            "FrameJoinTests.cpp",
             "HandoffDeathTests.cpp",
             "HandoffTests.cpp",
             "HazardDeathTests.cpp",
@@ -299,8 +301,6 @@ target("RojoRHITests")
             "IndirectHazardTests.cpp",
             "LifetimeDeathTests.cpp",
             "LifetimeTests.cpp",
-            "QueueHazardDeathTests.cpp",
-            "QueueHazardTests.cpp",
             "RenderPassDeathTests.cpp",
             "RenderPassTests.cpp",
             "SparseDeathTests.cpp",
@@ -345,17 +345,11 @@ target("RojoRHITests")
         local d3d12_conformance_pending = {
             "AbiComputeConformanceTests.cpp",
             "AbiGraphicsConformanceTests.cpp",
-            "BarrierConformanceTests.cpp",
-            "ClearConformanceTests.cpp",
-            "CopyConformanceTests.cpp",
             "DispatchConformanceTests.cpp",
             "DrawConformanceTests.cpp",
-            "FillConformanceTests.cpp",
             "FormatConformanceTests.cpp",
             "GraphicsBarrierConformanceTests.cpp",
-            "HandoffConformanceTests.cpp",
             "IndirectConformanceTests.cpp",
-            "InitialDataConformanceTests.cpp",
             "MeshConformanceTests.cpp",
             "PresentationConformanceTests.cpp",
             "RenderPassConformanceTests.cpp",

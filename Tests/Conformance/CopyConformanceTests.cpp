@@ -16,11 +16,38 @@
 #include <cstdint>
 #include <cstring>
 #include <span>
+#include <utility>
 #include <vector>
 
 using namespace rojoRHI;
 
 namespace {
+    //==================================================================================================================
+    /// Records a barrier on `list` that moves every subresource of `texture` from `from` to `to`, each side holding the uses its
+    /// layout permits.
+    void move(CommandList list, Texture texture, Layout from, Layout to)
+    {
+        const auto use = [](Layout layout) -> std::pair<Stage, Access> {
+            switch (layout)
+            {
+            case Layout::ShaderRead: return { Stage::FragmentShader | Stage::ComputeShader, Access::ShaderRead };
+            case Layout::CopySrc: return { Stage::Copy, Access::CopyRead };
+            case Layout::CopyDst: return { Stage::Copy, Access::CopyWrite };
+            default: return { Stage::None, Access::None };
+            }
+        };
+        const auto [srcStage, srcAccess] = use(from);
+        const auto [dstStage, dstAccess] = use(to);
+        const std::array<TextureBarrier, 1> barriers{ TextureBarrier{ .texture = texture,
+                                                                      .srcStage = srcStage,
+                                                                      .srcAccess = srcAccess,
+                                                                      .dstStage = dstStage,
+                                                                      .dstAccess = dstAccess,
+                                                                      .oldLayout = from,
+                                                                      .newLayout = to } };
+        list.barrier({}, {}, barriers);
+    }
+
     //==================================================================================================================
     /// Copies `rows` rows of `rowBytes` bytes from `source`, rows `sourcePitch` apart from `sourceOffset`, into `target`, rows
     /// `targetPitch` apart from `targetOffset`.
@@ -140,7 +167,9 @@ TEST_CASE("copyBufferToTexture writes a region of one mip with rows rowPitch apa
     const Buffer upload = kit.buffer(source.size(), Memory::Upload, BufferUsage::None, source);
     CommandList list = kit.list(QueueType::Graphics, "test.copy");
     const TextureRegion region{ .mip = 1, .offset = { 2, 1, 0 }, .extent = { 4, 3, 1 } };
+    move(list, texture, Layout::ShaderRead, Layout::CopyDst);
     list.copyBufferToTexture(upload, BufferTextureLayout{ .offset = 512, .rowPitch = 256 }, texture, region);
+    move(list, texture, Layout::CopyDst, Layout::CopySrc);
     kit.run(std::array{ list });
     // Mip 1 is 8 texels wide: 32 bytes a row.
     std::vector<std::byte> expected = initial[1];
@@ -184,7 +213,9 @@ TEST_CASE("copyBufferToTexture writes array layers, cube faces and 3D slices wit
     const std::vector<std::byte> source = test::pattern(512 + 3 * imageBytes, 7);
     const Buffer upload = kit.buffer(source.size(), Memory::Upload, BufferUsage::None, source);
     CommandList list = kit.list(QueueType::Graphics, "test.copy");
+    move(list, texture, Layout::ShaderRead, Layout::CopyDst);
     list.copyBufferToTexture(upload, layout, texture, region);
+    move(list, texture, Layout::CopyDst, Layout::CopySrc);
     kit.run(std::array{ list });
     // Each image of the texture is 8 rows of 32 bytes; the region's images are consecutive layers or slices.
     std::vector<std::byte> expected = volume ? initial[0] : layersOf(initial, 0, 1, layers);
@@ -213,12 +244,14 @@ TEST_CASE("copyBufferToTexture writes BC1 blocks", "[conformance]")
     const Buffer upload = kit.buffer(source.size(), Memory::Upload, BufferUsage::None, source);
     CommandList list = kit.list(QueueType::Graphics, "test.copy");
     // Two by two blocks of mip 0 from block (1, 1), and the last block of mip 1, a region reaching the mip's 6-texel edge.
+    move(list, texture, Layout::ShaderRead, Layout::CopyDst);
     list.copyBufferToTexture(
         upload, BufferTextureLayout{ .offset = 0, .rowPitch = 256 }, texture, TextureRegion{ .offset = { 4, 4, 0 }, .extent = { 8, 8, 1 } }
     );
     list.copyBufferToTexture(
         upload, BufferTextureLayout{ .offset = 512, .rowPitch = 256 }, texture, TextureRegion{ .mip = 1, .offset = { 4, 4, 0 }, .extent = { 2, 2, 1 } }
     );
+    move(list, texture, Layout::CopyDst, Layout::CopySrc);
     kit.run(std::array{ list });
     std::vector<std::byte> mip0 = initial[0];
     blit(mip0, 1 * 24 + 1 * 8, 24, source, 0, 256, 2 * 8, 2);
@@ -246,6 +279,7 @@ TEST_CASE("copyTextureToBuffer leaves the padding between rows and images untouc
     const Buffer readback = kit.buffer(size, Memory::Readback);
     std::memset(kit.device.cpuPointer(readback), 0xCD, size);
     CommandList list = kit.list(QueueType::Graphics, "test.copy");
+    move(list, texture, Layout::ShaderRead, Layout::CopySrc);
     list.copyTextureToBuffer(
         texture, TextureRegion{ .layers = 2, .extent = { 4, 4, 1 } }, readback, BufferTextureLayout{ .offset = 512, .rowPitch = 256, .rowsPerImage = 6 }
     );
@@ -279,12 +313,15 @@ TEST_CASE("copyTexture copies regions between mips and layers of two textures", 
     const std::vector<std::vector<std::byte>> targetBytes = fillTexture(kit.device, targetDesc, 4, 60, target);
     CommandList list = kit.list(QueueType::Graphics, "test.copy");
     // Mip 1 of both source layers (8 texels wide) into mip 0 of target layers 1 and 2 (16 texels wide).
+    move(list, source, Layout::ShaderRead, Layout::CopySrc);
+    move(list, target, Layout::ShaderRead, Layout::CopyDst);
     list.copyTexture(
         source,
         TextureRegion{ .mip = 1, .layer = 0, .layers = 2, .offset = { 1, 1, 0 }, .extent = { 4, 3, 1 } },
         target,
         TextureRegion{ .mip = 0, .layer = 1, .layers = 2, .offset = { 5, 6, 0 }, .extent = { 4, 3, 1 } }
     );
+    move(list, target, Layout::CopyDst, Layout::CopySrc);
     kit.run(std::array{ list });
     std::vector<std::byte> mip0 = layersOf(targetBytes, 0, 2, 3);
     for (uint64_t layer = 0; layer < 2; ++layer)
@@ -314,8 +351,14 @@ TEST_CASE("copyTexture copies between an sRGB format and its linear partner bit 
     fillTexture(kit.device, desc(Format::RGBA8Unorm_sRGB), 4, 100, srgbTarget);
     CommandList list = kit.list(QueueType::Graphics, "test.copy");
     const TextureRegion whole{ .extent = { 8, 8, 1 } };
+    move(list, srgb, Layout::ShaderRead, Layout::CopySrc);
+    move(list, linear, Layout::ShaderRead, Layout::CopySrc);
+    move(list, linearTarget, Layout::ShaderRead, Layout::CopyDst);
+    move(list, srgbTarget, Layout::ShaderRead, Layout::CopyDst);
     list.copyTexture(srgb, whole, linearTarget, whole);
     list.copyTexture(linear, whole, srgbTarget, whole);
+    move(list, linearTarget, Layout::CopyDst, Layout::CopySrc);
+    move(list, srgbTarget, Layout::CopyDst, Layout::CopySrc);
     kit.run(std::array{ list });
     CHECK(kit.readTexture(linearTarget, whole, Format::RGBA8Unorm) == srgbBytes[0]);
     CHECK(kit.readTexture(srgbTarget, whole, Format::RGBA8Unorm_sRGB) == linearBytes[0]);
@@ -374,7 +417,10 @@ TEST_CASE("copyTexture copies BC1 blocks from an interior region to a region rea
     // Two by two blocks from block (1, 1) of the interior texture into the whole 6-texel mip 1: 8 by 8 texels against 6 by 6,
     // equal in blocks.
     CommandList list = kit.list(QueueType::Graphics, "test.copy");
+    move(list, interior, Layout::ShaderRead, Layout::CopySrc);
+    move(list, edged, Layout::ShaderRead, Layout::CopyDst);
     list.copyTexture(interior, TextureRegion{ .offset = { 4, 4, 0 }, .extent = { 8, 8, 1 } }, edged, TextureRegion{ .mip = 1, .extent = { 6, 6, 1 } });
+    move(list, edged, Layout::CopyDst, Layout::CopySrc);
     kit.run(std::array{ list });
     std::vector<std::byte> mip1(edgedBytes[1].size());
     blit(mip1, 0, 16, interiorBytes[0], 1 * 32 + 1 * 8, 32, 2 * 8, 2);
@@ -396,7 +442,10 @@ TEST_CASE("copyTexture copies BC1 blocks from a region reaching a mip's edge to 
         SKIP("the device does not sample BC1Unorm");
     }
     CommandList list = kit.list(QueueType::Graphics, "test.copy");
+    move(list, edged, Layout::ShaderRead, Layout::CopySrc);
+    move(list, interior, Layout::ShaderRead, Layout::CopyDst);
     list.copyTexture(edged, TextureRegion{ .mip = 1, .extent = { 6, 6, 1 } }, interior, TextureRegion{ .offset = { 4, 4, 0 }, .extent = { 8, 8, 1 } });
+    move(list, interior, Layout::CopyDst, Layout::CopySrc);
     kit.run(std::array{ list });
     std::vector<std::byte> mip0 = interiorBytes[0];
     blit(mip0, 1 * 32 + 1 * 8, 32, edgedBytes[1], 0, 16, 2 * 8, 2);

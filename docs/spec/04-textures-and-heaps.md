@@ -191,7 +191,7 @@ visible before any work submitted after the call returns, and the texture starts
 #### Mapping
 | | Metal 4 | D3D12 | Vulkan |
 |---|---|---|---|
-| Allocation | `MTL::Device::newTexture(descriptor)`; placed: `MTL::Heap::newTexture(descriptor, offset)` | `ID3D12Device10::CreateCommittedResource3` with `D3D12_BARRIER_LAYOUT_UNDEFINED`, or `D3D12_BARRIER_LAYOUT_COPY_DEST` when `initial` is not empty; placed: `CreatePlacedResource2`; sparse: `CreateReservedResource2` | `vkCreateImage` with `VK_IMAGE_LAYOUT_UNDEFINED`, `vkAllocateMemory`, `vkBindImageMemory` |
+| Allocation | `MTL::Device::newTexture(descriptor)`; placed: `MTL::Heap::newTexture(descriptor, offset)` | `ID3D12Device10::CreateCommittedResource3` with `D3D12_BARRIER_LAYOUT_COMMON`, the one layout a copy queue accesses, or `D3D12_BARRIER_LAYOUT_COPY_DEST` when `initial` is not empty; placed: `CreatePlacedResource2`; sparse: `CreateReservedResource2` | `vkCreateImage` with `VK_IMAGE_LAYOUT_UNDEFINED`, `vkAllocateMemory`, `vkBindImageMemory` |
 | Initial data | staged `MTL4::ComputeCommandEncoder::copyFromBuffer` into the texture; no layout | created in `D3D12_BARRIER_LAYOUT_COPY_DEST`; `GetCopyableFootprints`, staged `CopyTextureRegion`, then a texture barrier from `D3D12_BARRIER_LAYOUT_COPY_DEST` to the generic `D3D12_BARRIER_LAYOUT_SHADER_RESOURCE`, which direct and compute queues both accept | staged `vkCmdCopyBufferToImage2`, then `VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL` to `VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL` |
 | Cost | native | native | native |
 

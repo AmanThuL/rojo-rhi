@@ -23,6 +23,22 @@ using namespace rojoRHI;
 
 namespace {
     //==================================================================================================================
+    /// Records a barrier on `list` that moves every subresource of `texture` from `from` to `to`, after the copy or clear that
+    /// last used it in `from` and before the copies and clears that use it in `to`.
+    void move(CommandList list, Texture texture, Layout from, Layout to)
+    {
+        const bool used = from == Layout::CopyDst || from == Layout::CopySrc;
+        const std::array<TextureBarrier, 1> barriers{ TextureBarrier{ .texture = texture,
+                                                                      .srcStage = used ? Stage::Copy : Stage::None,
+                                                                      .srcAccess = from == Layout::CopyDst ? Access::CopyWrite : Access::None,
+                                                                      .dstStage = Stage::Copy,
+                                                                      .dstAccess = to == Layout::CopyDst ? Access::CopyWrite : Access::CopyRead,
+                                                                      .oldLayout = from,
+                                                                      .newLayout = to } };
+        list.barrier({}, {}, barriers);
+    }
+
+    //==================================================================================================================
     /// The width, height and depth of mip `mip` of a texture of `desc`.
     Extent3D mipExtent(const TextureDesc& desc, uint32_t mip)
     {
@@ -137,15 +153,18 @@ TEST_CASE("clearTexture clears the mips and layers of a render target's range an
     const std::vector<std::vector<std::byte>> initial = fillTexture(kit.device, desc, 4, 10, texture);
     const std::vector<std::byte> texel = bytesOf(kColorRGBA8);
     CommandList list = kit.list(QueueType::Graphics, "test.clear");
+    move(list, texture, Layout::ShaderRead, Layout::CopyDst);
     SECTION("an inner range")
     {
         list.clearTexture(texture, SubresourceRange{ .baseMip = 1, .mipCount = 1, .baseLayer = 1, .layerCount = 2 }, ClearValue{ .color = kColor });
+        move(list, texture, Layout::CopyDst, Layout::CopySrc);
         kit.run(std::array{ list });
         checkCleared(kit, texture, desc, initial, texel, 1, 2, 1, 3);
     }
     SECTION("kAllMips and kAllLayers reach the last mip and layer")
     {
         list.clearTexture(texture, SubresourceRange{ .baseMip = 1, .baseLayer = 2 }, ClearValue{ .color = kColor });
+        move(list, texture, Layout::CopyDst, Layout::CopySrc);
         kit.run(std::array{ list });
         checkCleared(kit, texture, desc, initial, texel, 1, 3, 2, 4);
     }
@@ -177,7 +196,9 @@ TEST_CASE("clearTexture writes RGBA8Unorm, RGBA16Float and R32Float render targe
         const uint32_t texelBytes = static_cast<uint32_t>(clear.texel.size());
         const std::vector<std::vector<std::byte>> initial = fillTexture(kit.device, desc, texelBytes, 20, texture);
         CommandList list = kit.list(QueueType::Graphics, "test.clear");
+        move(list, texture, Layout::ShaderRead, Layout::CopyDst);
         list.clearTexture(texture, {}, ClearValue{ .color = clear.color });
+        move(list, texture, Layout::CopyDst, Layout::CopySrc);
         kit.run(std::array{ list });
         CHECK(readSubresource(kit, texture, desc, 0, 0) == repeated(clear.texel, 8 * 4));
     }
@@ -203,7 +224,9 @@ TEST_CASE("clearTexture clears a cube render target's faces", "[conformance]")
     CommandList list = kit.list(QueueType::Graphics, "test.clear");
     // Faces 3 to 7 of a cube array cross from its first cube into its second.
     const uint32_t count = type == TextureType::Cube ? 3 : 5;
+    move(list, texture, Layout::ShaderRead, Layout::CopyDst);
     list.clearTexture(texture, SubresourceRange{ .baseLayer = 3, .layerCount = count }, ClearValue{ .color = kColor });
+    move(list, texture, Layout::CopyDst, Layout::CopySrc);
     kit.run(std::array{ list });
     checkCleared(kit, texture, desc, initial, bytesOf(kColorRGBA8), 0, 2, 3, 3 + count);
 }
@@ -220,7 +243,9 @@ TEST_CASE("clearTexture clears every depth plane of each mip of a 3D render targ
     Texture texture;
     const std::vector<std::vector<std::byte>> initial = fillTexture(kit.device, desc, 4, 70, texture);
     CommandList list = kit.list(QueueType::Graphics, "test.clear");
+    move(list, texture, Layout::ShaderRead, Layout::CopyDst);
     list.clearTexture(texture, SubresourceRange{ .baseMip = 1 }, ClearValue{ .color = kColor });
+    move(list, texture, Layout::CopyDst, Layout::CopySrc);
     kit.run(std::array{ list });
     // Each mip reads back whole, every plane of it, so a clear that missed a plane leaves that plane's initial bytes.
     checkCleared(kit, texture, desc, initial, bytesOf(kColorRGBA8), 1, 3, 0, 1);
@@ -255,7 +280,9 @@ TEST_CASE("clearTexture clears a D32Float texture to the clear depth", "[conform
     }
     const Texture texture = *kit.device.createTexture(desc, data);
     CommandList list = kit.list(QueueType::Graphics, "test.clear");
+    move(list, texture, Layout::ShaderRead, Layout::CopyDst);
     list.clearTexture(texture, SubresourceRange{ .baseMip = 1, .baseLayer = 1, .layerCount = 1 }, ClearValue{ .depth = 0.75f });
+    move(list, texture, Layout::CopyDst, Layout::CopySrc);
     kit.run(std::array{ list });
     checkCleared(kit, texture, desc, initial, bytesOf(std::array<float, 1>{ 0.75f }), 1, 2, 1, 2);
 }
@@ -296,9 +323,11 @@ TEST_CASE("clearTexture clears Storage-only textures of every type", "[conforman
     const uint32_t baseLayer = shape.layers > 1 ? 1 : 0;
     const uint32_t endLayer = shape.layers > 2 ? shape.layers - 1 : shape.layers;
     CommandList list = kit.list(QueueType::Graphics, "test.clear");
+    move(list, texture, Layout::ShaderRead, Layout::CopyDst);
     list.clearTexture(
         texture, SubresourceRange{ .baseMip = baseMip, .baseLayer = baseLayer, .layerCount = endLayer - baseLayer }, ClearValue{ .color = kColor }
     );
+    move(list, texture, Layout::CopyDst, Layout::CopySrc);
     kit.run(std::array{ list });
     checkCleared(kit, texture, desc, initial, bytesOf(kColorRGBA8), baseMip, shape.mips, baseLayer, endLayer);
 }
@@ -323,7 +352,9 @@ TEST_CASE("clearTexture clears placed textures as it clears dedicated ones", "[c
     Texture texture;
     const std::vector<std::vector<std::byte>> initial = fillTexture(kit.device, desc, 4, 60, texture, Placement{ heap, requirements.alignment });
     CommandList list = kit.list(QueueType::Graphics, "test.clear");
+    move(list, texture, Layout::ShaderRead, Layout::CopyDst);
     list.clearTexture(texture, SubresourceRange{ .baseMip = 1, .baseLayer = 1, .layerCount = 1 }, ClearValue{ .color = kColor });
+    move(list, texture, Layout::CopyDst, Layout::CopySrc);
     kit.run(std::array{ list });
     checkCleared(kit, texture, desc, initial, bytesOf(kColorRGBA8), 1, 2, 1, 2);
 }
@@ -343,7 +374,9 @@ TEST_CASE("clearTexture clears a Storage-only texture on a Compute list", "[conf
     Texture texture;
     const std::vector<std::vector<std::byte>> initial = fillTexture(kit.device, desc, 8, 50, texture);
     CommandList list = kit.list(QueueType::Compute, "test.clear");
+    move(list, texture, Layout::ShaderRead, Layout::CopyDst);
     list.clearTexture(texture, SubresourceRange{ .baseLayer = 1 }, ClearValue{ .color = { 0.25f, -2.0f, 1.5f, 1024.0f } });
+    move(list, texture, Layout::CopyDst, Layout::CopySrc);
     kit.run(std::array{ list });
     checkCleared(kit, texture, desc, initial, bytesOf(std::array<uint16_t, 4>{ 0x3400, 0xC000, 0x3E00, 0x6400 }), 0, 2, 1, 2);
 }
@@ -381,6 +414,7 @@ TEST_CASE("a barrier orders a load-action clear before a copy that reads it", "[
         {
             CAPTURE(round);
             CommandList list = kit.list(QueueType::Graphics, "test.list");
+            move(list, texture, round == 0 ? Layout::Undefined : Layout::CopySrc, Layout::CopyDst);
             list.clearTexture(texture, {}, ClearValue{ .color = color(round) });
             list.barrier({}, {}, std::array{ clearedToRead });
             list.copyTextureToBuffer(texture, corner, readback, layout);
@@ -394,6 +428,7 @@ TEST_CASE("a barrier orders a load-action clear before a copy that reads it", "[
         {
             CAPTURE(round);
             CommandList producer = kit.list(QueueType::Graphics, "test.producer");
+            move(producer, texture, round == 0 ? Layout::Undefined : Layout::CopySrc, Layout::CopyDst);
             producer.clearTexture(texture, {}, ClearValue{ .color = color(round) });
             producer.barrier({}, {}, std::array{ clearedToRead });
             CommandList consumer = kit.list(QueueType::Graphics, "test.consumer");
@@ -446,6 +481,7 @@ TEST_CASE("a barrier orders a copy into a texture before a load-action clear of 
         {
             CAPTURE(round);
             CommandList list = kit.list(QueueType::Graphics, "test.list");
+            move(list, texture, round == 0 ? Layout::Undefined : Layout::CopySrc, Layout::CopyDst);
             list.copyBufferToTexture(source, BufferTextureLayout{ .rowPitch = kRowBytes }, texture, whole);
             list.barrier({}, {}, std::array{ copiedToCleared });
             list.clearTexture(texture, {}, ClearValue{ .color = color(round) });
@@ -461,6 +497,7 @@ TEST_CASE("a barrier orders a copy into a texture before a load-action clear of 
         {
             CAPTURE(round);
             CommandList producer = kit.list(QueueType::Graphics, "test.producer");
+            move(producer, texture, round == 0 ? Layout::Undefined : Layout::CopySrc, Layout::CopyDst);
             producer.copyBufferToTexture(source, BufferTextureLayout{ .rowPitch = kRowBytes }, texture, whole);
             producer.barrier({}, {}, std::array{ copiedToCleared });
             CommandList consumer = kit.list(QueueType::Graphics, "test.consumer");
