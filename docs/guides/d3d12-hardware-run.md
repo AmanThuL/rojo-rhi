@@ -240,9 +240,28 @@ goes to the owner.
 
 ## 6. The D3D12 overhead round (issue #21)
 
-`Tools/bench.py` has no D3D12 arm yet. The T2 round on D3D12 needs the Windows GPU machine
-(issue #21) and follows ADR 0014; its commands are those of `python3 Tools/bench.py --help` and
-[the benchmark harness](../architecture/benchmarks.md) once the D3D12 arms exist.
+The T2 round on D3D12 needs the Windows GPU machine (issue #21) and follows ADR 0014. Its
+pre-registration is [the D3D12 overhead note](../research/2026-10-20-d3d12-overhead.md), Status
+Proposed. Before any timed run it must be accepted and frozen: merge the change that sets its
+Status to Accepted with the date, record any amendment in its Amendments section, and run from a
+clean checkout of the commit that merges it. Do not time against an unfrozen note.
+
+The harness is verified on WARP only; no hardware result exists yet. From a Developer PowerShell on
+AC power with the High-performance plan and nothing else running:
+
+```
+python3 Tools/bench.py --topic t2-d3d12 build --backend d3d12 --adapter hardware
+python3 Tools/bench.py --topic t2-d3d12 correctness
+python3 Tools/bench.py --topic t2-d3d12 timing
+python3 Tools/bench.py --topic t2-d3d12 analyze
+```
+
+`--root` and `--date` default to `rojo-rhi-evidence` beside the main checkout and today's date;
+`correctness` and `timing` take `--only C1,G2` to narrow the workloads, which a full round does not
+use. `timing` refuses a WARP build. Record `rojo-rhi-evidence/t2-d3d12/<date>/` with its
+`SHA256SUMS` and add the topic to [recording GPU evidence](gpu-evidence.md). The commit timing seam
+of the GPU span is not in the harness yet, so the round reports `gpuNs` as the benchmark
+architecture page says ([the benchmark harness](../architecture/benchmarks.md)).
 
 ## 7. After the run
 
@@ -256,7 +275,7 @@ goes to the owner.
   rule; the evidence note records the hardware run.
 - **The default backend.** The Windows default stays `null` (`xmake/targets.lua`, option
   `rojorhi_backend`); the owner decides whether `d3d12` becomes the default once section 3 passes.
-- **The issues.** #20 closes with section 5 and #21 with sections 3 and 6. #22 stays open until
+- **The issues.** #20 closes with section 5; #21 closes with section 3 and the judged round of section 6. #22 stays open until
   every D3D12 `unverified` marker is settled. #94 closes with its cross-adapter checks, and #90 gets
   its observation. Every open issue that waits for the machine, #20, #21, #22, #90 and #94, carries
   the comment "needs the Windows GPU PC; see docs/guides/d3d12-hardware-run.md".

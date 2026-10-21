@@ -516,6 +516,7 @@ if is_plat("macosx") or is_config("rojorhi_backend", "d3d12") then
             -- The D3D12 debug features are built in, as the build's rojorhi_d3d12_debug selects them; no variable enables them.
             add_tests("host", {runargs = {"check", "[host]"}, realtime_output = true})
             add_tests("native", {runargs = {"check", "[native]"}, realtime_output = true})
+            add_tests("d3d12", {runargs = {"check", "[d3d12]"}, realtime_output = true})
         else
             add_tests("null", {runargs = {"check", "[null],[host]"}, realtime_output = true})
             add_tests("native", {runargs = {"check", "[native]"}, runenvs = {MTL_DEBUG_LAYER = "1"}, realtime_output = true})

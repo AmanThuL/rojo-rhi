@@ -203,7 +203,10 @@ interface CI job, in Debug and Release; the `metal4` job does not build the harn
 cases check the native arm against CPU oracles under `MTL_DEBUG_LAYER=1` with
 `xmake test RojoRHIBench/native`, on local Apple Silicon only; CI requires their inventory to be
 non-zero. `[metal4]` holds the counter case of a `metal4` build, run by
-`xmake test RojoRHIBench/metal4`. Timed runs are not tests: they follow ADR 0014.
+`xmake test RojoRHIBench/metal4`; `[d3d12]` holds the counter case of a `d3d12` build, run by
+`xmake test RojoRHIBench/d3d12`. On a `d3d12` build `[host]` and `[native]` run on WARP in the
+`d3d12-bench` CI job, which also runs the correctness gate. Timed runs are not tests: they follow
+ADR 0014.
 
 Test support follows the same rule: the bootstrap that creates a device and a shader library for a
 GPU case is RojoRHI's, while a fixture that builds a consumer's scene is not.

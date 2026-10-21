@@ -2,10 +2,12 @@
 
 **Status**: Accepted
 
-`Benchmarks/` builds the executable `RojoRHIBench` on macOS. It measures the overhead of RojoRHI
-against native Metal 4 written in metal-cpp, as [the pre-registration](
-../research/2026-10-18-metal4-overhead.md) specifies: that note is the authority on the workloads,
-the metrics, the statistics and the decision rules, and this page does not restate its tables. It
+`Benchmarks/` builds the executable `RojoRHIBench` on macOS and, with the d3d12 backend, on Windows.
+It measures the overhead of RojoRHI against native Metal 4 written in metal-cpp, as [the
+pre-registration](../research/2026-10-18-metal4-overhead.md) specifies, and on D3D12 against native
+D3D12 as [its note](../research/2026-10-20-d3d12-overhead.md) specifies: that note is the
+authority on the workloads, the metrics, the statistics and the decision rules, and this page
+does not restate its tables. It
 describes what the harness is, how to run it and what it still lacks before a timed round
 ([ADR 0014](../decisions/0014-overhead-measurement.md)).
 
@@ -18,6 +20,10 @@ Benchmarks/Host/         clock, allocation counter, thermal state, environment, 
 Benchmarks/Native/       the native arm, Native* files; Kernels/*.metal is hand-written MSL
 Benchmarks/Rojo/         the RojoRHI arm, Rojo* files
 Benchmarks/Checks/       the Catch2 cases
+Benchmarks/HostWindows/  the Host/ interfaces on Windows (d3d12 builds only)
+Benchmarks/NativeD3D12/  the native arm on D3D12; Kernels/*.hlsl is hand-written HLSL (d3d12
+                         builds only)
+Benchmarks/ChecksD3D12/  the Catch2 cases of a d3d12 build: [host], [native] and [d3d12]
 Shaders/Bench/           the workloads' Slang sources, prefixed Bench
 Tools/bench.py           the driver; Tools/bench_analysis.py holds the statistics and the rules
 ```
@@ -44,7 +50,13 @@ virtual call sits in a timed span.
 Each workload family registers its configurations through one function: `registerCpuWorkloads`,
 `registerCountedWorkloads`, `registerKernelWorkloads` and `registerFrameWorkloads`.
 
-The native arm (N) is the registered minimum of Metal 4 calls for the workload. As a renderer with
+The native arm (N) is the registered minimum of Metal 4 calls for the workload. On a d3d12 build N
+is the registered minimum of D3D12 calls instead, in `Benchmarks/NativeD3D12/`: it creates its own
+device on the adapter R uses, loads the Agility runtime through its own device factory, keeps three
+frame slots and its own fence, and uses the same DXIL as R for the Slang workloads and hand-written
+HLSL for G1 and G2. The composed frame's N arm is not built on d3d12 yet: `runNativeFrame` returns
+a failed result that says so, `frame` stays registered with R and N, and the correctness gate of a
+d3d12 build selects every other workload. As a renderer with
 three frames in flight, `NativeContext::endFrame` signals a shared frame event on the graphics queue
 after the frame's commits, and `beginFrame` waits on the CPU for the value of the slot's last frame
 before it resets the slot: one queue call and one host call a frame, as R's `endFrame` and
@@ -89,8 +101,9 @@ and `outputs` with a SHA-256 for each.
 
 Each measurement has one definition for both arms.
 
-- **CPU span.** `mach_absolute_time`. R: `acquireCommandList` to `end`; N: `beginCommandBuffer` to
-  `endCommandBuffer`. C9 records its `K` lists before the span, which times the `K` submit calls
+- **CPU span.** `mach_absolute_time` (on d3d12, `QueryPerformanceCounter`). R: `acquireCommandList`
+  to `end`; N: `beginCommandBuffer` to `endCommandBuffer` (on d3d12, from the list's `Reset` to its
+  `Close`). C9 records its `K` lists before the span, which times the `K` submit calls
   alone. The composed frame has no CPU span, so its `cpuNs` is null.
 - **GPU span.** Every commit of both arms carries commit feedback, in every run. A frame's span is
   the earliest `GPUStartTime` to the latest `GPUEndTime` over its commits. A `FeedbackCollector`
@@ -102,6 +115,17 @@ Each measurement has one definition for both arms.
   R's measured overhead. Both arms attach the same handler, a block that opens an autorelease pool,
   so their feedback allocates alike. On Null a submission completes inside the call and no GPU time
   exists.
+- **Native calls on d3d12.** N counts a plain increment beside each call on an `ID3D12Device`,
+  `ID3D12CommandQueue`, `ID3D12GraphicsCommandList`, `ID3D12Fence`, `ID3D12Resource` (`Map` and
+  `Unmap`), query heap or descriptor heap; R's definition is unchanged. The GPU span is not measured
+  on d3d12 yet (below), so no timestamp query is counted. The registered column is in
+  [the D3D12 note](../research/2026-10-20-d3d12-overhead.md).
+- **GPU span on d3d12.** None yet: the GPU span of a submission needs the backend's submission
+  timing seam, which arrives with the composed frame's N arm, so a d3d12 run reports `gpuNs` as
+  null.
+- **Allocations on d3d12.** The harness replaces the global `operator new` and `operator delete`
+  in every form and counts the C++ allocations of both arms; allocations made inside the D3D12
+  runtime are not seen.
 - **Native calls.** R: the per-frame delta of `nativeRecordCalls + nativeSubmitCalls +
   nativeHostCalls`, with `nativeBarriers` reported beside it and not added. N: a plain increment
   beside each call on a Metal device, queue, command buffer, encoder, argument table, residency set,
@@ -160,9 +184,12 @@ pure functions. Its commands take `--root`, `--topic` (default `t2`) and `--date
 when the driver runs from a git worktree ([recording GPU evidence](../guides/gpu-evidence.md)).
 
 ```
-python3 Tools/bench.py build [--backend metal4|null]   builds Release and Debug, copies the binaries
-                                                        and Shaders/ into bin/, writes
-                                                        configurations.json and bench-environment.json,
+python3 Tools/bench.py build [--backend metal4|null|d3d12] [--adapter hardware|warp]
+                                                       builds Release and Debug, copies the binaries
+                                                        and Shaders/ into bin/ (on d3d12 the whole
+                                                        output directory, with the D3D12
+                                                        runtime), writes configurations.json
+                                                        and bench-environment.json,
                                                         returns xmake to Null Debug
 python3 Tools/bench.py correctness [--arms R,N] [--only C1,G2]
 python3 Tools/bench.py timing [--only C1,G2]
@@ -217,84 +244,17 @@ configurations (C1 to C3 at `K` 100, C2 and C3 above, C5-k10000, C6, and C1-k100
 allocations in 57 of 63, by 2 to 7 a frame. Both rounds stand as judged at 5%; later rounds use
 ADR 0025. The allocation misses remain defects for the next round.
 
+The d3d12 harness is implemented and verified on WARP only, not on hardware. The `d3d12-bench` CI
+job builds it in Debug (with the debug layer) and Release on WARP, runs `RojoRHIBench/host` in both
+modes, `native` and `d3d12` in Debug, and the correctness gate (`bench.py build --backend d3d12
+--adapter warp`, then `correctness`, which runs R and N in both modes) for every configuration but
+`frame`, whose N arm is not built on d3d12 yet. The gate fails unless each selected workload's
+`summary.json` entry has `passed` true and `gate` `compared`, and the job uploads
+`build/bench-evidence/`. `bench.py timing` refuses a WARP build; D3D12 allocation counts are
+recorded but no `[d3d12]` case judges them yet. Timing waits for the Windows GPU machine (issue
+#21).
+
 ## Backend obligations the N arm encodes
 
-N is the native minimum. Where R's lowering may legitimately do more, the difference is measured
-overhead and not a defect of the harness. In particular:
-
-- A barrier still pending at a list's end (the closing batches of the gbuffer and ao lists) lowers
-  to no native barrier in N.
-- N closes the compute encoder at a scope's end, while the design's M7 keeps it open until a render
-  pass, an upscale or `end`; R may therefore emit an encoder barrier at the ao closing batch that N
-  does not. What a list of R still owes at its end is R's own native calls: its last encoder carries
-  it (`updateFence` of the graphics queue's carry fence, `barrierAfterStages`, or both) when that
-  encoder waited for every source, as gbuffer's geometry encoder, C6's dispatch encoder and C10's
-  pass encoder do, and otherwise a trailing encoder emits it, as for the lighting and ao lists; each
-  compute encoder of a graphics list that dispatches waits on the fence once, as lighting's does.
-  A graphics list uses the fence only once a counted draw's kernels have run in an earlier frame:
-  the composed frame's lists do from its second frame on, while C4, C6, G1 and G2, which draw no
-  counted draw, never do, so C6's dispatch encoder carries its last barrier with
-  `barrierAfterStages` alone and no encoder of C4, C6, G1 or G2 waits on the fence.
-  Both are measured overhead; in the integrated gate R makes 1280 native calls per composed frame
-  with the validation layer on (Debug) and 1259 without it (Release) to N's 1256; the figure depends
-  on the layer because encoder labels are native calls. They are per frame, so they change no
-  per-operation count. A render pass's last encoder ends at the next encoder, a scope boundary or
-  `end` rather than at `endRenderPass`, after the pass's pop, and its end timestamp is written on
-  that encoder: C8's sequence keeps its count and changes its order.
-- `Copy` on a Graphics list lowers to `Blit | Dispatch | Fragment` on Metal 4, so that a copy waits
-  and signals for every stage that may touch its buffers; N's copy is a blit alone. The wider stage
-  set is measured overhead.
-- C6's barrier after its fill stays on the fill's compute encoder, which has run no dispatch: R
-  emits `barrierAfterQueueStages` there at once, for earlier lists' copies, and the encoder-level
-  barrier before the first dispatch, so its frame opens one compute encoder, as N's does. N's
-  barrier after its fill is encoder-level only; the queue-level one is measured overhead. The
-  per-repetition count is unchanged.
-- A list's indirect command buffers are resident through the device's residency set, which the
-  submission that follows their making updates, so a list with counted draws sends its command
-  buffer no `useResidencySet`: one native call and two Metal allocations fewer per such list, C10's
-  frame one and the composed frame two (`gbuffer`, `shadows`).
-- Allocator resets count in `nativeHostCalls`, outside every timed window and per-operation count,
-  though inside the composed frame's per-frame count; they are not native-call targets.
-- C9's count window spans the same `K` submit calls as its timed span, but in R it sums only the
-  deltas of `nativeSubmitCalls` and `nativeHostCalls`: the lists' record calls and barriers, which
-  fold into the counters at submission, are left out. Any submit-time encoding the backend does
-  must therefore count as submit calls.
-- `CommitTiming.h` promises exactly one commit per `Queue::submit` and no backend-internal commit on
-  a queue while timing is attached to it: `RojoGpuTiming` fails a frame on a stray or
-  non-contiguous serial. The seam's feedback must also coexist with a commit feedback handler the
-  backend sets for its own waits.
-
-Where the Metal 4 backend departs from N today, each difference is measured overhead and not a
-defect:
-
-- An encoder's open runs in an autorelease pool, as do the label a list sets when its text changes
-  and each pass's debug group. Without the validation layer, encoders carry no label: one native
-  call and one Metal allocation less per encoder. Every native draw, dispatch, copy and fill, the
-  end of a render encoder and each timestamp written on a command buffer run in a pool only when the
-  Metal validation layer wraps the device, so a run without the layer pays none per command. A pool
-  is not a message to a command buffer, encoder, argument table or scaler, so it is no native call
-  and changes no count above; it shows only in CPU time.
-- R's device sets `DeviceDesc::scopeTimings` (`RunOptions::scopeTimings`) only for C8 and the
-  composed frame, whose N arms write a debug group and two timestamps per pass, as the note
-  registers; in every other workload R's passes keep their debug group, which N does not write,
-  write no timestamp and resolve none. R writes a timed pass's pair on its encoders, the begin first
-  on its first encoder and the end on its last render encoder before `endEncoding`, while N writes
-  it on the command buffer around the pass's encoders, so R's C8 and composed-frame sequences have
-  the begin after the encoder's open and the end before its `endEncoding`; their counts hold.
-- A pipeline that culls, tests stencil or has a fragment entry makes the backend set the winding
-  once per encoder it opens, one native call more than N's sequence. An encoder carries a label only
-  under the validation layer (or on a device created with `validation` or `enableCapture`), one call
-  the registered 13 includes, so C8 makes 13 native calls per repetition in a timed run and 14 under
-  the layer, against N's 12 and the budget of 12 plus `c` of 7.
-- The correctness gate of 2026-10-19 (Release and Debug, validation on in Debug) measured, as
-  calls per repetition, R and N, and the budget N plus `c`: C1 2 and 2 (5), C2 2 and 2 (5), C3 4
-  and 4 (6), C4 2 and 2 (5), C5 0 and 0 (1), C6 2 and 2 (4), C7 1 and 1 (2), C8 14 and 12 (19),
-  C9 3 and 2 (3), C10 3 and 3 (4). C10 at `maxCount` 1 (R 3, N 1; R 1 since its writer kernels run
-  as one dispatch a pass) is outside the pre-registered budget table, and reported only.
-- C9 made three native calls per submit in that gate, the third the queue's own progress
-  `signalEvent`. A submission with lists and at most one signal no longer signals progress, since
-  the frame's retirement covers it, so R makes two per submit, the commit and the fence's
-  `signalEvent`, as N does, against a budget of 3. The composed frame loses the progress signals of
-  its `cull`, `gbuffer`, `ao` and `lighting` submissions, four native calls per frame. `endFrame`'s
-  frame-event signal remains, and N makes the same signal and wait. A change to `Queue::submit`
-  reruns C9 first.
+What N encodes of the backends' lowering, and the overhead that R may legitimately add, is on
+its own page: [backend obligations of the native arm](benchmarks-obligations.md).

@@ -151,31 +151,31 @@ The hosted `d3d12` CI job runs them on WARP in three configures: Debug with `gbv
 complete under `gbv`. The `tracker-stress` job builds the Null backend under MSVC AddressSanitizer
 and runs the two hidden `[stress][.]` cases of `Tests/Core/TrackerStressTests.cpp` with
 `RojoRHITests.exe "[stress]"` from the test build directory. D3D12 is implemented, verified on
-WARP only, not on hardware ([the run](docs/architecture/d3d12-backend-edges.md#the-t1-run-on-warp));
-it has no benchmark arm yet, and timing waits for the Windows GPU machine (#21).
+WARP only, not on hardware ([the run](docs/architecture/d3d12-backend-edges.md#the-t1-run-on-warp)),
+and so is its benchmark harness; timing waits for the Windows GPU machine (#21).
 
-The benchmark harness (macOS only, [architecture](docs/architecture/benchmarks.md)):
+The benchmark harness (macOS, or Windows on d3d12; [architecture](docs/architecture/benchmarks.md)):
 
 ```
 xmake build RojoRHIBench              # builds the harness for the configured backend
 xmake test RojoRHIBench/null          # runs the [null] and [host] cases, no GPU
 xmake test RojoRHIBench/metal4        # runs the [metal4] cases, Metal 4 only
-xmake test RojoRHIBench/native        # runs the [native] cases, local Metal 4 Apple Silicon only
+xmake test RojoRHIBench/native        # runs the [native] cases, Metal 4 Apple Silicon or d3d12
 python3 Tools/bench.py build          # builds Release and Debug, copies the binaries, lists configurations
 python3 Tools/bench.py correctness    # runs the correctness gate, R against N, in both builds
 python3 Tools/bench.py timing         # runs the timed processes, local hardware only (ADR 0014)
 python3 Tools/bench.py analyze        # writes summary.json and analysis.txt from the results
 ```
 
-`bench.py build` takes `--backend metal4` (the default) or `null`; on `metal4` the harness links,
-`xmake test RojoRHIBench/metal4` passes and `correctness` (R against N, both builds, untimed)
-passes; no CI job builds it there. `correctness --arms N` with the native arm alone smoke-runs it.
-Timing follows ADR 0014: Release, validation off, on AC power, never on hosted runners. The first
-timed round (2026-10-19) missed the CPU, GPU and allocation budgets and met the pipeline and
-native-call ones ([results](docs/research/2026-10-18-metal4-overhead-results.md)); round 2
-(2026-10-20), registered by an amendment to the note, measured the fixed backend, met the GPU,
-pipeline and native-call budgets and missed CPU in 15 of 34 judged configurations and allocations
-in 57 of 63 ([round 2 results](docs/research/2026-10-20-metal4-overhead-round2-results.md)).
+`bench.py build` takes `--backend metal4` (the default), `null` or `d3d12` (with `--adapter`). On
+`metal4` the harness links and `RojoRHIBench/metal4` and `correctness` (R against N, untimed) pass;
+on `d3d12` the `d3d12-bench` CI job runs `host`, `native`, `d3d12` and `correctness` on WARP.
+Timing follows ADR 0014: Release, validation off, on AC power, never on hosted runners. Round 1
+(2026-10-19) missed the CPU, GPU and allocation budgets and met the pipeline and native-call ones
+([results](docs/research/2026-10-18-metal4-overhead-results.md)); round 2 (2026-10-20) measured
+the fixed backend, met the GPU, pipeline and native-call budgets and missed CPU in 15 of 34 judged
+configurations and allocations in 57 of 63
+([round 2 results](docs/research/2026-10-20-metal4-overhead-round2-results.md)).
 
 `python3 Tools/check_lto_inline.py`, after `xmake build RojoRHILtoProbe` in a Release configure,
 fails unless link-time optimization inlined `Device::capabilities` into its caller in the probe
