@@ -237,6 +237,29 @@ namespace rojoRHI {
         }
 
         //==============================================================================================================
+        /// Returns the payload of `pipeline`: from the list's resolved pair when it holds the handle, else read with the pool's
+        /// acquire load, one entry replacing the older one.
+        const metal4::PipelineState* resolvePipeline(CommandListImpl& list, Pipeline pipeline)
+        {
+            metal4::ResolvedPipelines& resolved = list.draw.resolved;
+            if (pipeline.bits == resolved.handles[0])
+            {
+                return resolved.states[0];
+            }
+            if (pipeline.bits == resolved.handles[1])
+            {
+                return resolved.states[1];
+            }
+            // A record's payload is fixed from creation to retirement, so it is read with no lock (ADR 0020).
+            const auto* state = static_cast<const metal4::PipelineState*>(list.core.device->pool<Pipeline>().native(pipeline));
+            resolved.handles[1] = resolved.handles[0];
+            resolved.states[1] = resolved.states[0];
+            resolved.handles[0] = pipeline.bits;
+            resolved.states[0] = state;
+            return state;
+        }
+
+        //==============================================================================================================
         /// True when the render encoder of the open pass is open, so a state command applies now; otherwise it joins the
         /// prefix.
         bool appliesNow(const CommandListImpl& list)
@@ -351,8 +374,7 @@ namespace rojoRHI {
     {
         CommandListImpl& list = CommandListImpl::of(*this);
         core::bindPipeline(list.core, pipeline);
-        // A record's payload is fixed from creation to retirement, so it is read with one load and no lock (ADR 0020).
-        const auto* state = static_cast<const metal4::PipelineState*>(list.core.device->pool<Pipeline>().native(pipeline));
+        const metal4::PipelineState* state = resolvePipeline(list, pipeline);
         metal4::DrawState& draw = list.draw;
         if (state->kind == core::PipelineKind::Compute)
         {
