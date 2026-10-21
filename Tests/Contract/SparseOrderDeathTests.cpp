@@ -307,3 +307,18 @@ TEST_CASE("VU-rojo-sparse-0014 a shader read of a texture with a newly mapped ti
         submitTo(kit.device, graphics, QueueType::Graphics);
     });
 }
+
+//======================================================================================================================
+TEST_CASE("VU-rojo-sync-0006 a newly mapped Sparse texture is first used on a Copy list", "[contract][death]")
+{
+    // A Copy list finds only a texture that is neither placed nor Sparse in General, so the sparse texture is still in
+    // Undefined there; the rule reports before the tile's missing discard (VU-rojo-sparse-0014), which it also breaks.
+    ROJORHI_EXPECT_DEATH("VU-rojo-sync-0006", [] {
+        PassKit kit(QueueType::Copy, true);
+        const SparseSet set = sparse(kit);
+        const Buffer source = kit.buffer(BufferUsage::None, 65536);
+        kit.device.queue(QueueType::Copy).mapTiles(std::array{ textureTile(set) });
+        kit.list.copyBufferToTexture(source, { .rowPitch = set.shape.width * 4 }, set.texture, firstTile(set));
+        submitTo(kit.device, kit.list, QueueType::Copy);
+    });
+}

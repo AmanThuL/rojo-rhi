@@ -886,6 +886,14 @@ namespace rojoRHI::core {
     }
 
     //==================================================================================================================
+    bool Tracker::newOnCopy(const TextureState& texture, const LayoutEvent& event)
+    {
+        // An aliasing event has a queue and initial data leaves ShaderRead, so this is a creation nothing has reached since.
+        return event.layout == Layout::Undefined && !event.queue.has_value() && !event.lastUse.has_value() && texture.heap.bits == 0 &&
+               texture.tileUses.empty() && !texture.acquired;
+    }
+
+    //==================================================================================================================
     Clock Tracker::orderedBefore(QueueType queue) const
     {
         return join(m_waited[static_cast<size_t>(queue)], m_host);
@@ -1055,6 +1063,11 @@ namespace rojoRHI::core {
             for (uint32_t layer = use.range.baseLayer; layer < layerEnd; ++layer)
             {
                 LayoutEvent& event = texture->layouts[static_cast<size_t>(mip) * texture->layers + layer];
+                if (queue == QueueType::Copy && newOnCopy(*texture, event))
+                {
+                    // A Copy list finds a new texture in General, and its first use leaves it there.
+                    event.layout = Layout::General;
+                }
                 const std::optional<Layout> visible = layoutOn(event, queue, ordered);
                 if (!visible.has_value())
                 {
@@ -1613,6 +1626,13 @@ namespace rojoRHI::core {
             {
                 const size_t index = static_cast<size_t>(mip) * texture.layers + layer;
                 LayoutEvent& event = texture.layouts[index];
+                if (queue == QueueType::Copy && newOnCopy(texture, event))
+                {
+                    // A Copy list finds a new texture in General, and its first barrier, which keeps General
+                    // (VU-rojo-sync-0026), leaves it there. An acquired image no longer counts as acquired here, but on a Copy
+                    // list its first barrier starts from General and VU-rojo-present-0014 has reported it above.
+                    event.layout = Layout::General;
+                }
                 // With no fence ordering the latest layout event before the barrier, the race is reported below, not a layout.
                 const std::optional<Layout> visible = layoutOn(event, queue, ordered);
                 // A creation or an acquire is held by the queue of the latest use or barrier since, which hands it over.

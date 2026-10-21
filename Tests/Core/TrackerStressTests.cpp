@@ -235,14 +235,9 @@ TEST_CASE("every queue submits from its own thread while another thread reads th
         destinations[index] = *device.createBuffer(BufferDesc{ .size = kBytes, .label = "test.stress.destination" });
         fences[index] = *device.createFence(0, "test.stress.fence");
     }
-    // A Copy list takes no barrier out of Undefined, so the Copy queue's thread copies into a texture the Graphics queue
-    // moves to General before the first batch begins, and waits on that move in its first round.
-    const Texture general = *device.createTexture(smallTexture());
-    const Fence moved = *device.createFence(0, "test.stress.moved");
     const size_t texturesBefore = core::coreOf(device).pool<Texture>().liveCount();
-    // Each thread creates its own transient texture and copies into it, or into the General texture on the Copy queue, and
-    // into its own buffer, and signals its own fence; every kWaitEvery rounds it also waits on a value another queue's thread
-    // had already submitted for signal, so no wait precedes its signal.
+    // Each thread copies into its own transient texture and its own buffer and signals its own fence; every kWaitEvery rounds
+    // it also waits on a value another queue's thread had already submitted for signal, so no wait precedes its signal.
     const auto work = [&](size_t index, uint64_t batch, std::latch& start) {
         start.arrive_and_wait();
         for (uint64_t round = 1; round <= kRounds; ++round)
@@ -250,27 +245,24 @@ TEST_CASE("every queue submits from its own thread while another thread reads th
             const uint64_t value = batch * kRounds + round;
             const Texture texture = *device.createTexture(smallTexture());
             CommandList list = device.acquireCommandList(kQueues[index], "test.stress.list");
-            const bool copyQueue = kQueues[index] == QueueType::Copy;
-            if (!copyQueue)
+            // A Copy list finds the new texture in General and copies with no barrier.
+            if (kQueues[index] != QueueType::Copy)
             {
                 test::transition(list, texture, Layout::Undefined, Layout::CopyDst);
             }
-            copyInto(list, common, copyQueue ? general : texture);
+            copyInto(list, common, texture);
             copiesDone(list);
             list.copyBuffer(common, 0, destinations[index], 0, kBytes);
-            std::array<FenceValue, 2> wait{};
+            std::array<FenceValue, 1> wait{};
             size_t waits = 0;
-            if (copyQueue && batch == 0 && round == 1)
-            {
-                wait[waits++] = FenceValue{ moved, 1 };
-            }
             if (round % kWaitEvery == 0)
             {
                 const size_t other = (index + 1) % kQueues.size();
                 const uint64_t reached = published[other].load();
                 if (reached > 0)
                 {
-                    wait[waits++] = FenceValue{ fences[other], reached };
+                    wait[0] = FenceValue{ fences[other], reached };
+                    waits = 1;
                 }
             }
             const std::array<FenceValue, 1> signal{ FenceValue{ fences[index], value } };
@@ -283,13 +275,6 @@ TEST_CASE("every queue submits from its own thread while another thread reads th
     for (uint64_t batch = 0; batch < kBatches; ++batch)
     {
         device.beginFrame();
-        if (batch == 0)
-        {
-            CommandList move = device.acquireCommandList(QueueType::Graphics, "test.stress.move");
-            test::transition(move, general, Layout::Undefined, Layout::General);
-            const std::array<FenceValue, 1> signal{ FenceValue{ moved, 1 } };
-            submitTo(device, move, QueueType::Graphics, {}, signal);
-        }
         std::atomic<bool> submitting{ true };
         const auto observe = [&] {
             while (submitting.load())
@@ -328,8 +313,6 @@ TEST_CASE("every queue submits from its own thread while another thread reads th
     }
     CHECK(submitted[0] + submitted[1] + submitted[2] == 3 * kBatches * kRounds);
     CHECK(core::coreOf(device).pool<Texture>().liveCount() == texturesBefore);
-    device.destroy(general);
-    device.destroy(moved);
     device.destroy(common);
     for (size_t index = 0; index < kQueues.size(); ++index)
     {

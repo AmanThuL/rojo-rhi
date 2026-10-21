@@ -94,6 +94,9 @@ or lies below a later one.
   event. The identifier was retired, not edited, because the discard exemption changed its meaning.
   An event with no queue is held by the queue of the latest use or barrier since, so a texture
   created with data in `ShaderRead` and sampled on Graphics is handed over to Copy in that layout.
+  A creation event a Copy list found in `General` (`newOnCopy`) is held by the Copy queue and
+  handed over in `General`, which every queue shares, so a fenced use on Graphics or Compute takes
+  it over and an unfenced one reports `queue-0005` through the hazard rules.
 - **Present.** `VU-rojo-present-0018` is judged at `presentImage` from the graphics queue's view:
   the latest event must set `Present` and be on Graphics, covered by its clock, or have no queue.
   An image presented without a barrier to `Present` reports. Only a Graphics list can move an image

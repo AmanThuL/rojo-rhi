@@ -186,7 +186,10 @@ namespace rojoRHI::core {
         /// layout it set when the event is on that queue, precedes every submission, or is covered by the clock of the queue's
         /// submission; otherwise the two queues race (VU-rojo-queue-0005). An event on another queue that the clock covers
         /// hands the subresource over (VU-rojo-sync-0025), unless it left the subresource `Undefined`. An event with no queue
-        /// is held by the queue of the latest use since, and a use on another queue takes it over in the event's layout.
+        /// is held by the queue of the latest use since, and a use on another queue takes it over in the event's layout. A
+        /// creation that left the subresource `Undefined` is set to `General` by the first use or barrier a Copy list makes
+        /// of it, unless the texture is placed, sparse or an acquired swapchain image (`newOnCopy`), and the Copy queue then
+        /// holds it in `General`.
         struct LayoutEvent
         {
             Layout layout = Layout::Undefined; ///< The layout the event set.
@@ -314,6 +317,11 @@ namespace rojoRHI::core {
         /// since; none before the first.
         static std::optional<QueueType> holderOf(const LayoutEvent& event);
 
+        /// Returns whether a Copy list finds in `General` the subresource of `texture` whose latest layout event is `event`
+        /// (09 `Layout`): its creation left it `Undefined`, no use or barrier has reached it since, and the texture is neither
+        /// placed, sparse nor an acquired swapchain image.
+        static bool newOnCopy(const TextureState& texture, const LayoutEvent& event);
+
         /// Returns the clock that orders earlier work before the work replayed now on `queue`: the join of the clocks of the
         /// values its submissions waited on, so its own component is reached only through fences, and the host clock.
         Clock orderedBefore(QueueType queue) const;
@@ -340,10 +348,11 @@ namespace rojoRHI::core {
         /// `queue` or later: the current position on `queue`, one past the last elsewhere. Segments merge only below it.
         std::array<uint64_t, 3> mergeFloor(QueueType queue) const;
 
-        /// Replays one use at `position` on its queue: for a texture, the layout every subresource of its range has on the queue
-        /// against the layouts that permit it, reporting VU-rojo-sync-0025 for a subresource handed over from another queue in
-        /// a layout the two queues do not share, then VU-rojo-sync-0006, then the entry's own rule, then VU-rojo-sync-0004; a
-        /// subresource whose latest layout event is on another queue that no fence orders before is left to VU-rojo-queue-0005.
+        /// Replays one use at `position` on its queue: for a texture, the layout every subresource of its range has on the queue,
+        /// `General` on a Copy list for a subresource `newOnCopy` accepts, against the layouts that permit it, reporting
+        /// VU-rojo-sync-0025 for a subresource handed over from another queue in a layout the two queues do not share, then
+        /// VU-rojo-sync-0006, then the entry's own rule, then VU-rojo-sync-0004; a subresource whose latest layout event is on
+        /// another queue that no fence orders before is left to VU-rojo-queue-0005.
         /// Then, for a sparse texture or buffer, the mapping changes of its tiles on other queues (VU-rojo-sparse-0013); then,
         /// for a texture or a buffer, its hazards on the queue (VU-rojo-sync-0021, then VU-rojo-sync-0024) and against every
         /// other queue (VU-rojo-queue-0005); then, for a sparse texture or buffer, the newly mapped tiles it reaches, which a
@@ -365,9 +374,10 @@ namespace rojoRHI::core {
         /// Replays one buffer barrier recorded at `position`: exactly the segments of its range gain its reach.
         void replayBuffer(const TrackerLock& held, const BufferBarrier& barrier, QueueType queue, uint64_t position);
 
-        /// Replays one texture barrier recorded at `position`: its old layout (VU-rojo-present-0014; for a subresource handed over
-        /// from another queue, VU-rojo-sync-0025 for a barrier that does not discard and either starts elsewhere or takes over a
-        /// layout the two queues do not share; then VU-rojo-sync-0013), then, for a transition, its source against the uses before it
+        /// Replays one texture barrier recorded at `position`: its old layout, against `General` on a Copy list for a subresource
+        /// `newOnCopy` accepts (VU-rojo-present-0014; for a subresource handed over from another queue, VU-rojo-sync-0025 for a
+        /// barrier that does not discard and either starts elsewhere or takes over a layout the two queues do not share; then
+        /// VU-rojo-sync-0013), then, for a transition, its source against the uses before it
         /// (VU-rojo-sync-0024) and, as a write of every tile, against the mapping changes of a sparse texture on other queues
         /// (VU-rojo-sparse-0013), the uses of every other queue and, for a placed texture, other resources' uses of its heap
         /// bytes there (VU-rojo-queue-0005), then, for a sparse texture, the newly mapped tiles of the subresource, which only a

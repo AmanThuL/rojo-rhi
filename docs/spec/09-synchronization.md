@@ -194,8 +194,15 @@ Vulkan image layouts, where `General` and `ShaderWrite` both become `GENERAL`; M
 layouts and ignores them. Buffers have no layout. The caller states both the layout a subresource
 is in and the one it moves to; RojoRHI never infers either. A new texture starts `Undefined`, or
 `ShaderRead` when it is created with initial data
-([`Device::createTexture`](04-textures-and-heaps.md#devicecreatetexture)). Depth and stencil share
-one layout.
+([`Device::createTexture`](04-textures-and-heaps.md#devicecreatetexture)). Depth and stencil
+share one layout. A `QueueType::Copy` list, which takes no layout barrier (`VU-rojo-sync-0026`),
+finds a new texture in `General` instead: a subresource of a texture created without initial data,
+neither placed nor `Sparse`, that no use or barrier submitted before has reached since its creation
+is in `General` for the first use or barrier a Copy list records on it, in queue submission order,
+and stays in `General` after it, so the copy queue fills a new texture with no barrier on another
+queue first. A placed or `Sparse` texture is not: a `Graphics` or `Compute` list discards it from
+`Undefined` before a Copy list uses it
+([first use of aliased memory](09-synchronization-part2.md#first-use-of-aliased-memory)).
 
 - `Undefined`: contents are undefined. Valid only as the layout before a barrier, which discards
   the contents.
