@@ -299,3 +299,15 @@
   resources on any queue, captures through the PIX GPU capturer and creates FSR upscalers through
   the FidelityFX runtime that sits beside the executable. Implemented, verified on WARP only, not
   on hardware ([architecture](docs/architecture/d3d12-backend-edges.md)).
+- The D3D12 backend records FSR upscales on graphics lists, and its test run on WARP covers every
+  contract, death and `abi` entry and every conformance file except three that wait for #100,
+  in Debug under the debug layer and GPU-based validation, and the contract and conformance
+  entries in Release, with a third Debug configure for the upscale cases WARP cannot complete under
+  validation. Implemented, verified on WARP only, not on hardware
+  ([the run](docs/architecture/d3d12-backend-edges.md#the-t1-run-on-warp)).
+  `createUpscaler` refuses an FSR input under 2 texels in an axis with `Unsupported`.
+- API reference changes: `VU-rojo-sparse-0014` is added (chapter 13), so the first use of a tile
+  that `Queue::mapTiles` newly mapped is, for a texture, a barrier from `Undefined` that discards
+  it, and, for a buffer, ordered after the mapping by a global barrier; the tracker now checks the
+  rule (#68). On Metal 4 a discard of a `Sparse` texture is lowered with alias visibility, which
+  chapter 09's Visibility row states.

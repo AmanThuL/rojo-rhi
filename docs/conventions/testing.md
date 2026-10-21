@@ -156,6 +156,19 @@ shader library paths relative to the current directory.
 [Recording GPU evidence](../guides/gpu-evidence.md) says where a run's raw output is kept and how
 it is checksummed.
 
+**D3D12 cases** are tagged `[d3d12]` and live in `Tests/D3D12/`; they may include the backend's
+headers and the Agility headers, and `contract` runs them besides the `[contract]` cases. A d3d12
+build is configured with `--rojorhi_backend=d3d12`, `--rojorhi_d3d12_adapter=hardware` or `warp` and
+`--rojorhi_d3d12_debug=mode`, `off`, `layer` or `gbv`. The `d3d12` CI job runs the `abi`,
+`contract`, `death` and `conformance` entries on WARP in Debug under the debug layer and GPU-based
+validation, whose error messages abort the run, and `contract` and `conformance` in Release, and a
+third Debug configure with `layer` alone runs the upscale cases WARP cannot complete under `gbv`. A
+run on WARP shows the lowering functionally right on the D3D reference implementation; D3D12 stays
+"implemented, verified on WARP only, not on hardware" until a hardware run, and no WARP run counts
+as T1 acceptance ([the run](../architecture/d3d12-backend-edges.md#the-t1-run-on-warp)). An abort
+ends the whole Catch2 process, and every case after it goes unrun, so a case that may abort is a
+death test; the per-case failure step then names the case.
+
 ## The conformance filter
 
 [ADR 0005](../decisions/0005-conformance-checkpoint.md) freezes eight semantic areas behind the

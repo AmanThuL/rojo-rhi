@@ -126,6 +126,17 @@ On a Metal 4 configure the same `-P .` applies to its entries, `conformance` inc
 backend is `metal4` on macOS, so a consumer's hosted macOS CI, which has no GPU, passes
 `--rojorhi_backend=null` to `xmake f`.
 
+The D3D12 backend builds on Windows only: `xmake f -m debug -y --rojorhi_backend=d3d12` selects it,
+with `--rojorhi_d3d12_adapter=hardware` (the default) or `warp` (the software rasterizer) and
+`--rojorhi_d3d12_debug=mode` (the default: the debug layer in Debug, nothing in Release), `off`,
+`layer` or `gbv` (the layer with GPU-based validation). Its own cases are tagged `[d3d12]`; the
+`contract`, `death`, `abi` and `conformance` entries above run on it, on WARP in the hosted `d3d12`
+CI job: a Debug configure with `warp` and `gbv`, a Release one with `mode` that runs `contract` and
+`conformance` only, and a Debug one with `layer` for the upscale cases WARP cannot complete under
+`gbv`; a per-case step re-runs a failed
+entry one case per process. D3D12 is implemented, verified on WARP only, not on hardware
+([the edges page](docs/architecture/d3d12-backend-edges.md#the-t1-run-on-warp)).
+
 The benchmark harness (macOS only, [architecture](docs/architecture/benchmarks.md)):
 
 ```

@@ -2,19 +2,20 @@
 
 **Status**: Accepted
 
-This page describes the D3D12 backend as it stands. `createDevice` opens a device on the Agility
-runtime and the backend owns the device-wide native state: queues, fences and frames, shader-visible
-descriptor heaps, root and command signatures, memory, buffers, heaps, textures, views, samplers,
-swapchains, reserved resources, capture, FSR upscaler contexts and the debug layer. Command lists
-record copies, fills, clears, barriers and scopes, timed on a device created with
-`DeviceDesc::scopeTimings` ([recording](d3d12-recording.md)), passes, dispatches and draws
-([drawing](d3d12-drawing.md)); [the edges page](d3d12-backend-edges.md) describes presentation,
-sparse resources, capture and FSR. Everything below is "implemented, verified on WARP only, not on
-hardware": the backend is not a capability until a hardware run says so ([ADR
-0009](../decisions/0009-conformance-and-valid-usage.md),
-[documentation](../conventions/documentation.md)). `docs/spec/` stays the authority on every entry's
-semantics; [the Null backend](null-backend.md) describes the shared core it translates to. [The
-build record](d3d12-build.md) holds the pins, runtime layout, floor probe and toolchain record.
+This page describes the D3D12 backend. `createDevice` opens a device on the Agility runtime and the
+backend owns the device-wide native state: queues, fences and frames, shader-visible descriptor
+heaps, root and command signatures, memory, buffers, heaps, textures, views, samplers, swapchains,
+reserved resources, capture, FSR contexts and the debug layer. Command lists record copies, fills,
+clears, barriers and scopes, timed on a device created with `DeviceDesc::scopeTimings`
+([recording](d3d12-recording.md)), passes, dispatches and draws ([drawing](d3d12-drawing.md)); [the
+edges page](d3d12-backend-edges.md) describes presentation, sparse resources, capture and FSR.
+Everything below is "implemented, verified on WARP only, not on hardware": the T1 cases ran on WARP
+in [CI run 39641225757](https://github.com/AmanThuL/rojo-rhi/actions/runs/39641225757)
+([edges](d3d12-backend-edges.md#the-t1-run-on-warp)), and no run used hardware, so it is no
+capability until one says so ([ADR 0009](../decisions/0009-conformance-and-valid-usage.md),
+[documentation](../conventions/documentation.md)). `docs/spec/` owns every entry's semantics; [the
+Null backend](null-backend.md) describes the shared core, [the build record](d3d12-build.md) the
+pins, runtime layout, floor probe and toolchain record.
 
 | Chapter | State |
 |---|---|
@@ -22,13 +23,12 @@ build record](d3d12-build.md) holds the pins, runtime layout, floor probe and to
 | 03 memory and buffers, 04 textures and heaps | implemented, with views and samplers |
 | 15 formats and limits | implemented: the format table and the limits |
 | 10 queues and frames (with the fences of 09) | implemented: fences, `submit`, frames, `Queue::present` and `Queue::mapTiles` ([edges](d3d12-backend-edges.md)) |
-| 07 command recording, 08 GPU-driven work | lists, `setRoot`, copies, fills, clears, scopes, barriers (09), passes, dispatches, direct and indirect draws record ([recording](d3d12-recording.md), [drawing](d3d12-drawing.md)); `declareAccess` records for the tracker alone; `upscale` aborts |
+| 07 command recording, 08 GPU-driven work | lists, `setRoot`, copies, fills, clears, scopes, barriers (09), passes, dispatches, direct and indirect draws record ([recording](d3d12-recording.md), [drawing](d3d12-drawing.md)); `declareAccess` records for the tracker alone; `upscale` records an FSR dispatch ([edges](d3d12-backend-edges.md#fsr)) |
 | 06 pipelines | implemented: shader libraries, graphics, mesh and compute pipelines and the pipeline cache ([drawing](d3d12-drawing.md)) |
 | 11 presentation, 13 sparse | implemented: swapchains, `acquire`, `present`, `resize`; reserved resources, tile shapes and `mapTiles` ([edges](d3d12-backend-edges.md)) |
-| 12 upscaling | `createUpscaler` and `upscalers` ([edges](d3d12-backend-edges.md#fsr)); `CommandList::upscale` aborts |
+| 12 upscaling | `createUpscaler`, `upscalers` and `CommandList::upscale` ([edges](d3d12-backend-edges.md#fsr)) |
 | 14 diagnostics | the core's counters and checks, and `beginCapture` and `endCapture` through the PIX GPU capturer ([edges](d3d12-backend-edges.md#capture)) |
 
-`CommandList::upscale`, the one entry not implemented, logs its name and aborts in every build.
 Each entry calls the core's check first and then translates; the backend holds no `ROJORHI_VU`.
 
 ## Build options
@@ -260,8 +260,8 @@ staging buffer and each internal object made after creation; `cpuAllocations` co
 list a pool grows by; `nativeSubmitCalls` counts each `ExecuteCommandLists`, `Wait` and `Signal`;
 and `nativeHostCalls` counts each `GetCompletedValue`, `SetEventOnCompletion` and `Map`. A wait for
 fence value 0 is not issued natively, since every fence has reached 0 and the debug layer warns
-about one, but the core still counts it in `nativeSubmitCalls`. `waitForFence` returns its host calls
-for its caller to count.
+about one, but the core still counts it in `nativeSubmitCalls`. `waitForFence` returns its host
+calls for its caller to count.
 
 ## The floor probe
 
@@ -283,18 +283,17 @@ globs the directory, so no build file lists them. The entries on a d3d12 build:
 - `death` runs `[death]`.
 - `conformance` runs `[conformance]` over the files the build does not hold back.
 
-`d3d12_pending` in `xmake/targets.lua` lists the contract files of chapters the backend does not
-implement yet, and `d3d12_conformance_pending` lists the conformance files it leaves out; both
-hold one file name per line, a name that matches no file fails the configure, and a file leaves
-the list when it passes whole on WARP under the debug layer and GPU-based validation.
-
+`xmake/targets.lua` holds back only what [the edges page](d3d12-backend-edges.md#the-t1-run-on-warp)
+lists; a name that matches no file fails the configure.
 The `d3d12` job on `windows-latest` runs a Debug configure with `--rojorhi_d3d12_adapter=warp
 --rojorhi_d3d12_debug=gbv`, the probes and their gate, the `RojoRHITests` build, the DXIL and
 runtime-DLL checks, `abi`, `contract`, `death` and `conformance`, a case-count step with floors for
 `conformance`, `d3d12` and `contract`, the toolchain record and the layout check (`--only
 Backends/D3D12 --only Tests/D3D12 --only Tests/Support/D3D12 --only Tools/D3D12Probe`, with its own
-compilation database and `clangd`; the macOS format job excludes the same directories). A Release
+compilation database and `clangd`; the format job excludes the same directories). A Release
 configure with `--rojorhi_d3d12_debug=mode` then builds warning-free under `/W4 /WX`, runs
 `contract` and `conformance`, and builds the link-time-optimization probe for `check_lto_inline.py`.
-The Release executables still turn off warnings C4702 and C4722 because entries not yet implemented
-abort (issue #83).
+A third Debug configure with `--rojorhi_d3d12_debug=layer` runs the upscale cases WARP cannot
+complete under GPU-based validation. After a failed test step, a Windows-only step runs that entry
+again one case per process. The Release executables still turn off warnings C4702 and C4722
+(issue #83).

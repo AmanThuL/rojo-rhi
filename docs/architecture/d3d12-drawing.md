@@ -288,13 +288,9 @@ starting values, pipeline and topology binds, depth bias at every `setPipeline`,
 filter, zero-count draws, `b1` after an indirect draw for vertex and mesh pipelines, `maxCount` 0,
 and counts of 0 or above `maxCount` read back from the target.
 
-A conformance file runs on WARP unless `d3d12_conformance_pending` in `xmake/targets.lua` lists it,
-and it leaves the list whole. Still listed: the draw, indirect and graphics ABI files, whose cases
-expect the base vertex in `vertexIndex`; the scope file, for its upscale case; and the presentation,
-sparse and upscaling files, which wait for their entries. The contract list `d3d12_pending` holds
-the diagnostics files (capture, upscalers), the handoff, lifetime and tracker files (swapchains),
-the sparse, swapchain and upscale files, `CopyTests` (two clears of textures never moved out of
-`Undefined`), and `AliasingTests` and `AliasingDeathTests` (placements below the 64 KiB a D3D12
-placement needs). Two multisample cases of the ABI compute file expect the value
+Every contract and conformance file runs on WARP, except the draw, indirect and graphics ABI
+conformance files, whose cases expect the base vertex in `vertexIndex` (#100), and the two upscale
+files under GPU-based validation ([edges](d3d12-backend-edges.md#the-t1-run-on-warp)). Two
+multisample cases of the ABI compute file expect the value
 `multisampleReadsSize()` of `Tests/Support/Backend.h` names: Metal 4's exact value, the cleared
 colour on Null and D3D12.

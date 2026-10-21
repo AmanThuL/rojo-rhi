@@ -2,17 +2,15 @@
 
 **Status**: Accepted
 
-Implemented, verified on WARP only, not on hardware: CI run
-[39550630614](https://github.com/AmanThuL/rojo-rhi/actions/runs/39550630614) built and ran these entries
-on the hosted Windows runner's WARP adapter under the debug layer and GPU-based validation, and no
-run has used a hardware adapter. The backend is not a capability until a hardware run says so
+Implemented, verified on WARP only, not on hardware: [CI run 39641225757](https://github.com/AmanThuL/rojo-rhi/actions/runs/39641225757) ran these entries on the hosted
+Windows runner's WARP adapter under the debug layer and GPU-based validation, and no run has used a
+hardware adapter. The backend is not a capability until a hardware run says so
 ([ADR 0009](../decisions/0009-conformance-and-valid-usage.md),
-[documentation](../conventions/documentation.md)). One result of the FSR probe shapes the text
-below: FSR loads, creates and dispatches on WARP with the debug layer alone, and under
-GPU-based validation the dispatch submission does not complete.
+[documentation](../conventions/documentation.md)). Under GPU-based validation WARP never completes
+an FSR dispatch; with the debug layer alone it does.
 
-This page describes the parts of the D3D12 backend that record no commands: swapchains and
-presentation, reserved (sparse) resources, programmatic capture and FSR upscaler creation.
+This page describes swapchains and presentation, reserved (sparse) resources, programmatic capture
+and FSR: upscaler creation and the recording of an upscale.
 [The D3D12 backend](d3d12-backend.md) describes the rest of the backend, and chapters 11 to 14 of
 the API reference stay the authority on semantics and mapping. Each entry calls the core's check
 first and then translates; the backend holds no `ROJORHI_VU`. [The Null backend's
@@ -46,7 +44,7 @@ core (`VU-rojo-present-0006`) before any native call. `createNative` then:
    write counts one `descriptorWrites`.
 
 A failure at any step removes the core's claim, frees what was made and returns the error:
-`Unsupported` for a mode or color space, otherwise the native call's error.
+`Unsupported` for a mode or color space, else the native call's error.
 
 **Acquire.** `Swapchain::acquire` runs `core::checkAcquireImage`, then waits on the waitable
 object for at most one second, `kAcquireDeadlineMs`, counted as one `nativeHostCalls`. The object
@@ -217,22 +215,36 @@ also checks that the version query and the contexts leave none behind.
 function-local mutex covers every `ffxQuery`, `ffxCreateContext` and `ffxDestroyContext` of every
 device. It is a leaf.
 
-**Recording.** `CommandList::upscale` is not yet recorded: it aborts as an unimplemented entry,
-and no case dispatches FSR.
+**Recording.** `CommandList::upscale` (`D3D12Upscaler.cpp`) runs `core::upscale`, then fills one
+`ffxDispatchDescUpscale` from the texture payloads without a lock. Colour, depth, motion vectors and
+the optional exposure and reactive masks are inputs in `FFX_API_RESOURCE_STATE_PIXEL_COMPUTE_READ`,
+the state `Layout::ShaderRead` maps to; the output is a UAV in `..._UNORDERED_ACCESS`, the state of
+`Layout::ShaderWrite`; a depth plane is `R32_FLOAT` and an sRGB output its linear format. The render
+size is the content extent, or the input's when that is zero. The reference carries no frame time
+or camera, so the dispatch passes 1000/60 ms, near 0.1, far 100, a vertical field of view of 1
+radian and a metre factor of 1, the floor probe's values. `ffxDispatch` runs between the scope's
+event and its timestamp pair; a result other than OK logs and aborts in every build. FidelityFX
+issues its own barriers between the states above, so the backend adds none.
+
+FidelityFX leaves the list with its own heaps, root signatures and pipeline, so
+`resumeAfterVendorWork` sets the shader-visible heaps again at once and marks both root signatures
+and roots, `b1`, the pipelines and the topology for the next use: the next dispatch costs four
+native calls, the next `setPipeline` two and the next draw four. FidelityFX makes internal surfaces
+at half the input extent: `createUpscaler` refuses an input under 2 texels per axis (`Unsupported`).
 
 ## Locks and counts
 
 Locks the edges add, all leaves: `Presentation::mutex` guards the live and retired swapchain lists
 and the presentation fence; it is held across the lazy `CreateFence` and the one `Signal` of a
-window reuse, and never across a `Present` or a wait. `SwapchainNative::mutex` guards one
-swapchain's back-buffer payloads, held only around reads and writes (and the `GetBuffer` and view
-writes of a fetch), never across a wait or `Present`. The FidelityFX mutex above is process-wide;
-the retire hook takes it under the upscaler pool's lock, so the order is pool, then FidelityFX, and
-`createUpscaler` releases it before it allocates. The two swapchain locks are never held together
-or while the FidelityFX mutex is taken. Recording takes no lock
-([threading](d3d12-backend.md#threading-and-lock-order)).
+window reuse, never across a `Present` or a wait. `SwapchainNative::mutex` guards one swapchain's
+back-buffer payloads, held only around reads and writes, never across a wait or `Present`. The
+FidelityFX mutex above is process-wide; the retire hook takes it under the upscaler pool's lock, so
+the order is pool, then FidelityFX, and `createUpscaler` releases it before it allocates. The two
+swapchain locks are never held together or while the FidelityFX mutex is taken. Recording takes no
+lock ([threading](d3d12-backend.md#threading-and-lock-order)).
 
-Counters follow the native call, as the rest of the backend does:
+Counters follow the native call, as the rest of the backend does; reading a tile shape, querying
+FSR and freeing swapchains at `destroyDevice` count nothing:
 
 | Counter | Edge sites |
 |---|---|
@@ -243,36 +255,46 @@ Counters follow the native call, as the rest of the backend does:
 | `cpuAllocations` | each swapchain and each image payload |
 | `deferredRetired` | each swapchain freed at slot reuse or window reuse; each upscaler the core retires |
 
-Reading a tile shape, querying FSR and freeing swapchains at `destroyDevice` count nothing.
-
 ## Redistribution
 
-A consumer that ships `amd_fidelityfx_loader_dx12.dll` and `amd_fidelityfx_upscaler_dx12.dll`
-with its executable reproduces AMD's notice from the licence file `xmake setup` keeps in
-`ThirdParty/fidelityfx/` (`license.md`, the FidelityFX SDK's licence of the pinned release). The
-DLLs are AMD's signed binaries and are covered by that licence, not by RojoRHI's. RojoRHI commits
-no FidelityFX file: the headers, the DLLs and the licence file are fetched by `xmake setup` and
-each is checked against a pinned SHA-256 before it is kept.
+A consumer that ships `amd_fidelityfx_loader_dx12.dll` and `amd_fidelityfx_upscaler_dx12.dll` with
+its executable reproduces AMD's notice from `ThirdParty/fidelityfx/license.md`, the licence of the
+pinned FidelityFX SDK release that `xmake setup` keeps there. The DLLs are AMD's signed binaries,
+covered by that licence, not by RojoRHI's. RojoRHI commits no FidelityFX file: `xmake setup` fetches
+the headers, the DLLs and the licence file and checks each against a pinned SHA-256.
 
-## Tests
+## The T1 run on WARP
 
-The edge cases that run on WARP are the `[d3d12]` files under `Tests/D3D12/`
-(`D3D12SwapchainTests.cpp`, `D3D12SparseTests.cpp`, `D3D12CaptureTests.cpp` and
-`D3D12UpscalerTests.cpp`) and the edges' contract and conformance files that pass whole there:
-`SwapchainTests.cpp`, `SwapchainDeathTests.cpp`, `SparseDeathTests.cpp`, `HandoffTests.cpp`,
-`HandoffDeathTests.cpp`, `LifetimeTests.cpp` and `DiagnosticsDeathTests.cpp`, and the conformance
-files `PresentationConformanceTests.cpp` and `SparseConformanceTests.cpp`. The `d3d12` CI job runs
-them in Debug, under the debug layer and GPU-based validation, whose messages abort the run, and
-in Release; a green job means none was raised on the paths they take.
+The edge cases are the `[d3d12]` files under `Tests/D3D12/` and the contract and conformance
+files that cover the edges. [CI run 39641225757](https://github.com/AmanThuL/rojo-rhi/actions/runs/39641225757) built Debug (debug layer and GPU-based
+validation, whose messages abort the run) and Release on WARP and ran every contract file, every
+death file in Debug and every T1 conformance file the build does not leave out. It is no T1
+acceptance, which waits for a hardware adapter ([ADR 0009](
+../decisions/0009-conformance-and-valid-usage.md)).
 
-These stay on the pending lists of `xmake/targets.lua`, each with its reason:
-`SparseTests.cpp`, `SparseOrderTests.cpp` and `SparseOrderDeathTests.cpp` (one case of each maps
-or uses a mip tail, which the WARP texture lacks, #102); `DiagnosticsTests.cpp`,
-`TrackerTests.cpp`, `TrackerDeathTests.cpp` and `LifetimeDeathTests.cpp` (one case of each
-upscales, which the backend does not record, #111; two cases also break a D3D12 layout rule,
-#109); `UpscalerTests.cpp`, `UpscaleDeathTests.cpp` and the conformance files
-`UpscaleConformanceTests.cpp` and `ScopeConformanceTests.cpp` (they upscale).
+Debug: `abi` 10 cases (8 passed, 2 skipped), `contract` 578 (567, 11), `death` 555 (550, 3, and 2
+that fail as expected), `conformance` 147 (136, 11). Release (no validation, no layer): `contract`
+588 (485, 103) and `conformance` 152 (142, 10).
 
-**Not verified.** A real PIX capture; an FSR dispatch (the backend records none, and under
-GPU-based validation the probe's dispatch does not complete); the mip-tail paths on a GPU;
-`DXGI_STATUS_OCCLUDED` on a window the display hides; and tearing on a display that allows it.
+A third Debug configure, with the debug layer alone, runs the six files holding 64 upscale cases
+WARP does not complete under GPU-based validation; all pass. No case is PC-only.
+
+`xmake/targets.lua` leaves out `UpscalerTests.cpp` and `UpscaleConformanceTests.cpp` under GPU-based
+validation, where the shared cases that wait for an upscale skip through
+`test::requireUpscaleCompletion`, and, until #100 merges, the `AbiGraphics`, `Draw` and `Indirect`
+conformance files, whose cases expect a base-including `vertexIndex`. Cases that skip print their
+reasons: `maxDrawIndirectCount` is `UINT32_MAX`, so no `maxCount` lies above it
+(`DrawDeathTests`, #109), and its records exceed `maxBufferSize` (`DrawTests`); the device packs no
+mip tail for the sparse test texture (`SparseTests`, `SparseOrderTests`, `SparseOrderDeathTests`,
+`SparseConformanceTests`, #102); the `TrackerDeathTests` case "a cleared range is in General" ends
+the process in the layer on the clear's own barrier before the tracker judges the list;
+`D3D12PipelineTests` skips a refusal the debug layer reports as an error message, and
+`D3D12IndirectTests` a `maxCount` of 0, which a Debug build checks (`VU-rojo-indirect-0003`).
+
+**Newly mapped tiles (#68).** Two `SparseConformanceTests.cpp` cases render into a newly mapped
+tile of a render target and of a depth texture after the discard `VU-rojo-sparse-0014` requires.
+A barrier from `General` in its place draws STATE_SETTING 1334 from the layer (layout `COMMON`,
+expected `UNDEFINED`; run 39616320545, scratch branch), so the discard is what it needs.
+
+**Not verified.** A real PIX capture; mip-tail paths; a `D32FloatS8` input or nonzero FSR jitter;
+`DXGI_STATUS_OCCLUDED`; tearing; and anything that needs hardware.
