@@ -579,10 +579,38 @@ jobs:
       - run: xmake f -m debug -y --rojorhi_backend=d3d12 --rojorhi_d3d12_adapter=warp --rojorhi_d3d12_debug=layer
       - run: xmake build RojoRHIBench
       - run: xmake test RojoRHIBench/host
-        timeout-minutes: 15
+        timeout-minutes: 5
       - run: xmake test RojoRHIBench/native
-        timeout-minutes: 15
+        timeout-minutes: 10
+      - run: xmake test RojoRHIBench/d3d12
+        timeout-minutes: 5
       - run: xmake f -m release -y --rojorhi_backend=d3d12 --rojorhi_d3d12_adapter=warp --rojorhi_d3d12_debug=mode
       - run: xmake build RojoRHIBench
       - run: xmake test RojoRHIBench/host
+        timeout-minutes: 5
+      # The driver builds both modes itself and copies each with its runtime; the date is fixed once so the summary's path is known.
+      - shell: pwsh
+        run: '"BENCH_DATE=$(Get-Date -Format yyyy-MM-dd)" | Out-File -Append -Encoding utf8 $env:GITHUB_ENV'
+      - run: python3 Tools/bench.py --root build/bench-evidence --topic t2-gate-d3d12 --date ${{ env.BENCH_DATE }} build --backend d3d12 --adapter warp
         timeout-minutes: 15
+      # The workload list is joined to its flag with an equals sign: the layout test reads every flag followed by a space as a directory.
+      - run: python3 Tools/bench.py --root build/bench-evidence --topic t2-gate-d3d12 --date ${{ env.BENCH_DATE }} correctness --only=C1,C2,C3,C4,C5,C6,C7,C8,C9,C10,G1,G2
+        timeout-minutes: 30
+      # The gate passes only when every selected workload was compared and passed.
+      - shell: pwsh
+        run: |
+          $summary = Get-Content "build/bench-evidence/t2-gate-d3d12/$env:BENCH_DATE/correctness/summary.json" -Raw | ConvertFrom-Json
+          $failed = 0
+          foreach ($workload in 'C1','C2','C3','C4','C5','C6','C7','C8','C9','C10','G1','G2') {
+            $entry = $summary.$workload
+            if ($null -eq $entry -or $entry.passed -ne $true -or $entry.gate -ne 'compared') {
+              Write-Host "::error::$workload did not pass the gate: $($entry | ConvertTo-Json -Compress)"
+              $failed++
+            }
+          }
+          if ($failed -gt 0) { exit 1 }
+      - if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: d3d12-bench-gate
+          path: build/bench-evidence/

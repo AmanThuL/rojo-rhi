@@ -34,6 +34,8 @@ rojo-rhi/
   Shaders/RojoRHI/  Shaders/Tests/            the shader ABI module; its conformance shaders
   Shaders/Bench/                              the Slang sources of the benchmark workloads
   Benchmarks/                                 the RojoRHIBench harness: both arms, host code, checks
+  Benchmarks/HostWindows/  Benchmarks/NativeD3D12/  Benchmarks/ChecksD3D12/
+                                              the Windows host; the D3D12 arm and checks
   Legacy/Include/rojoRHI/                     v1 public headers, dependency-free
   Legacy/Source/  Legacy/Source/Base/         v1 shared implementation; private base
   Legacy/Backends/Metal4/Source/  Legacy/Backends/Metal4/ImGui/
@@ -51,9 +53,9 @@ rojo-rhi/
 
 `xmake.lua` at the root declares project settings, requires and the language level once; it is never
 included directly by a host project. `xmake/` holds `targets.lua` (the includable target
-declarations; the v1 targets and `RojoRHIBench` are macOS only), a minimal `setup.lua` (metal-cpp
-and Slang pins, fetched on macOS; Windows fetches Slang, the Agility SDK, WARP and DXC, as
-hash-checked archives), and a test-only copy of the
+declarations; the v1 targets are macOS only and `RojoRHIBench` builds on macOS and, with
+`d3d12`, on Windows), a minimal `setup.lua` (metal-cpp and Slang pins, fetched on macOS; Windows
+fetches Slang, the Agility SDK, WARP and DXC, as hash-checked archives), and a test-only copy of the
 shader-to-metallib rule, so RojoRHI configures, builds and tests standalone.
 
 `Include/`, `Source/`, `Backends/`, `Tests/` and `Shaders/` are the permanent tree of the v2
@@ -101,9 +103,10 @@ shader to MSL, SPIR-V and HLSL on every host, to a metallib when the Metal toolc
 `Tools/shader_layout.py`, which reads the probe's reflection on each target and generates
 `static_assert`s compiled into `RojoRHITests`. The tests tagged `[abi]` run both.
 
-`Benchmarks/` builds as the macOS executable `RojoRHIBench`, which runs a native Metal 4 arm and a
-RojoRHI arm of the same workloads in one process and takes the measurements of the overhead
-round. `Shaders/Bench/` holds the workloads' Slang sources beside `Shaders/Tests/`, and the
+`Benchmarks/` builds the executable `RojoRHIBench` on macOS and, on a `d3d12` build, on Windows.
+It runs a native arm (Metal 4 or D3D12) and a RojoRHI arm of the same workloads in one process and
+takes the measurements of the overhead round. The D3D12 build is verified on WARP only, not on
+hardware. `Shaders/Bench/` holds the workloads' Slang sources beside `Shaders/Tests/`, and the
 hand-written MSL lives with the native arm. Its RojoRHI arm runs on the Null backend until the
 Metal 4 backend implements the entries it calls. [The benchmark harness](benchmarks.md) describes
 the arms, the command line, the Null mode and the driver `Tools/bench.py`.
