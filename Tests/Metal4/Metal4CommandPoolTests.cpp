@@ -215,6 +215,29 @@ TEST_CASE("a scope between encoders and a render pass open their command pools o
 }
 
 //======================================================================================================================
+TEST_CASE("a render pass opens one pool for its debug group and one around its descriptor and encoder factory", "[metal4]")
+{
+    Device device = *createDevice();
+    const Texture target = *device.createTexture(
+        TextureDesc{ .format = Format::RGBA8Unorm, .extent = { kEdge, kEdge, 1 }, .usage = TextureUsage::RenderTarget, .label = "test.target" }
+    );
+    const auto passes = [&](CommandList list, uint32_t count) {
+        for (uint32_t i = 0; i < count; ++i)
+        {
+            const std::array attachments{ ColorAttachment{ .texture = target, .load = LoadOp::Clear } };
+            list.beginRenderPass(RenderPassDesc{ .colors = attachments, .area = { 0, 0, kEdge, kEdge }, .label = "test.pass" });
+            list.endRenderPass();
+        }
+    };
+    const uint64_t small = poolsOpenedBy(device, passes, kCommands, Counting::AllPools);
+    const uint64_t large = poolsOpenedBy(device, passes, 2 * kCommands, Counting::AllPools);
+    // Under the validation layer the end of each pass's encoder opens a command pool too.
+    const uint64_t perPass = 2 + (DeviceImpl::of(device).commandPools ? 1 : 0);
+    CHECK(large - small == perPass * kCommands);
+    destroyDevice(device);
+}
+
+//======================================================================================================================
 TEST_CASE("counted draws open their kernel and replay command pools only under the validation layer", "[metal4]")
 {
     constexpr uint32_t kRecords = 8;

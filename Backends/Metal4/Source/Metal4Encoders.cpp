@@ -160,16 +160,14 @@ namespace rojoRHI::metal4 {
             close(list);
         }
         ROJORHI_INTERNAL_ASSERT(m_kind == EncoderKind::None, "a render pass's encoder opens while another encoder is open");
+        // The factory autoreleases its encoder and the driver the label's text, into the caller's pool; the list keeps the
+        // encoder, so it retains it.
+        m_render = state.commandBuffer->renderCommandEncoder(descriptor);
+        m_render->retain();
+        if (state.encoderLabels)
         {
-            // The factory autoreleases its encoder and the driver the label's text; the list keeps the encoder, so it retains it.
-            const AutoreleasePool pool;
-            m_render = state.commandBuffer->renderCommandEncoder(descriptor);
-            m_render->retain();
-            if (state.encoderLabels)
-            {
-                m_render->setLabel(state.scopeLabels.empty() ? state.label : state.scopeLabels.back());
-                core::noteNativeCall(list);
-            }
+            m_render->setLabel(state.scopeLabels.empty() ? state.label : state.scopeLabels.back());
+            core::noteNativeCall(list);
         }
         m_commandPools = state.commandPools;
         core::noteNativeCall(list);
