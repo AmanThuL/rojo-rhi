@@ -295,3 +295,7 @@
   resolves nothing at the frame wait, and returns an empty `Device::scopeTimings`; with it, scopes
   are timed as before. No valid-usage rule is added. The version stays 0.1.0, unreleased
   ([ADR 0022](docs/decisions/0022-versioning-in-the-single-header.md)).
+- The D3D12 backend presents through DXGI flip-model swapchains, maps tiles of reserved
+  resources on any queue, captures through the PIX GPU capturer and creates FSR upscalers through
+  the FidelityFX runtime that sits beside the executable. Implemented, verified on WARP only, not
+  on hardware ([architecture](docs/architecture/d3d12-backend-edges.md)).
