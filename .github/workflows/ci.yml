@@ -404,7 +404,7 @@ jobs:
         shell: pwsh
         run: |
           $exe = 'build/windows/x64/debug/rojorhi-test/RojoRHITests.exe'
-          $floors = [ordered]@{ conformance = 53; d3d12 = 194; contract = 306 }
+          $floors = [ordered]@{ conformance = 122; d3d12 = 221; contract = 559 }
           foreach ($tag in $floors.Keys) {
             $out = & $exe --list-tests "[$tag]" | Out-String
             if ($out -notmatch '(\d+) matching test cases') { throw "no case count for [$tag]" }

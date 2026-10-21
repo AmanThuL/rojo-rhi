@@ -201,6 +201,17 @@ TEST_CASE("a pass clears only the mip and layer it names, and a cube face as a l
         list.beginRenderPass(passOf(colors, mipExtent(desc, 1)));
         list.endRenderPass();
         test::transition(list, texture, Layout::ColorAttachment, Layout::CopySrc, only(1, 2));
+        // Every other subresource stays in ShaderRead from its initial data, and the copies that read it back need CopySrc.
+        for (uint32_t layer = 0; layer < desc.layers; ++layer)
+        {
+            for (uint32_t mip = 0; mip < desc.mips; ++mip)
+            {
+                if (mip != 1 || layer != 2)
+                {
+                    test::transition(list, texture, Layout::ShaderRead, Layout::CopySrc, only(mip, layer));
+                }
+            }
+        }
         kit.run(std::array{ list });
         for (uint32_t layer = 0; layer < desc.layers; ++layer)
         {
@@ -230,6 +241,14 @@ TEST_CASE("a pass clears only the mip and layer it names, and a cube face as a l
         list.beginRenderPass(passOf(colors, desc.extent));
         list.endRenderPass();
         test::transition(list, texture, Layout::ColorAttachment, Layout::CopySrc, only(0, 4));
+        // Every other face stays in ShaderRead from its initial data, and the copies that read it back need CopySrc.
+        for (uint32_t face = 0; face < desc.layers; ++face)
+        {
+            if (face != 4)
+            {
+                test::transition(list, texture, Layout::ShaderRead, Layout::CopySrc, only(0, face));
+            }
+        }
         kit.run(std::array{ list });
         for (uint32_t face = 0; face < 6; ++face)
         {

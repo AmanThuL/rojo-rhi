@@ -30,4 +30,11 @@ namespace rojoRHI::test {
 
     /// True when the compiled backend executes work on a GPU, so a conformance case can observe results.
     bool runsOnGpu();
+
+    /// True when the compiled backend's conformance shaders read a multisample view's size, not a sample: the pinned Slang's Metal lowering.
+    bool multisampleReadsSize();
+
+    /// True when the compiled backend lowers layouts to native ones its runtime checks, so a texture must leave `Undefined`
+    /// through a barrier before a pass or a clear uses it even on a device that does not validate.
+    bool layoutsAreNative();
 } // namespace rojoRHI::test

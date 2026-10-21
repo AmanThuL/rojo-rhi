@@ -145,7 +145,14 @@ TEST_CASE("an indirect draw of the largest allowed maxCount names a sufficiently
 {
     PassKit kit;
     const Limits limits = kit.device.capabilities().limits;
-    const Buffer args = kit.buffer(BufferUsage::IndirectArgs, uint64_t{ limits.maxDrawIndirectCount } * sizeof(DrawIndexedIndirectArgs));
+    const uint64_t size = uint64_t{ limits.maxDrawIndirectCount } * sizeof(DrawIndexedIndirectArgs);
+    if (size > limits.maxBufferSize)
+    {
+        // Chapter 15 bounds the count and the buffer size separately, so a device may allow more records than one buffer holds.
+        kit.finish();
+        SKIP("maxDrawIndirectCount records exceed maxBufferSize, so no buffer holds the largest maxCount");
+    }
+    const Buffer args = kit.buffer(BufferUsage::IndirectArgs, size);
     kit.readyToDraw();
     kit.list.drawIndirect(kit.device.address(args), limits.maxDrawIndirectCount);
     kit.list.endRenderPass();

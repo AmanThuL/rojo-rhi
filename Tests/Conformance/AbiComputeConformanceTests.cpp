@@ -5,8 +5,10 @@
 #include <rojoRHI/RHI.h>
 
 #include "AbiExamples.h"
+#include "Support/Backend.h"
 #include "Support/Conformance.h"
 #include "Support/GpuKit.h"
+#include "Support/PassKit.h"
 
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/generators/catch_generators.hpp>
@@ -180,6 +182,21 @@ namespace {
     }
 
     //==================================================================================================================
+    /// Clears layer `layer` of the multisample `texture` to (1, 0, 1, 1) through a render pass and leaves it readable by a
+    /// shader, as the fetch kernels need. Every layer changes layout together, so no view spans mixed layouts.
+    void clearMultisample(test::GpuKit& kit, Texture texture, uint32_t layer)
+    {
+        CommandList list = kit.list(QueueType::Graphics, "test.clearMultisample");
+        test::transition(list, texture, Layout::Undefined, Layout::ColorAttachment);
+        const std::array colors{ ColorAttachment{
+            .texture = texture, .layer = layer, .load = LoadOp::Clear, .store = StoreOp::Store, .clear = ClearColor{ 1.0f, 0.0f, 1.0f, 1.0f } } };
+        list.beginRenderPass(RenderPassDesc{ .colors = colors, .area = { 0, 0, kEdge, kEdge }, .label = "test.clearMultisample.pass" });
+        list.endRenderPass();
+        test::transition(list, texture, Layout::ColorAttachment, Layout::ShaderRead);
+        kit.run(std::array{ list });
+    }
+
+    //==================================================================================================================
     /// Creates a linear-clamp sampler on `device` and returns its index.
     uint32_t linearClamp(Device device)
     {
@@ -215,6 +232,10 @@ namespace {
         {
             *created = texture;
         }
+        // Initial data leaves the texture in ShaderRead, which permits no Storage view access (chapter 09).
+        CommandList move = kit.list(QueueType::Graphics, "test.storage");
+        test::transition(move, texture, Layout::ShaderRead, Layout::ShaderWrite);
+        kit.run(std::array{ move });
         const ViewIndex view = *kit.device.createView(
             texture,
             TextureViewDesc{
@@ -396,7 +417,9 @@ TEST_CASE("AbiTextures compareMain returns the comparison of a depth texture aga
                      .label = "test.depth" }
     );
     CommandList clear = kit.list(QueueType::Graphics, "test.clearDepth");
+    test::transition(clear, texture, Layout::Undefined, Layout::CopyDst);
     clear.clearTexture(texture, {}, ClearValue{ .depth = depth });
+    test::transition(clear, texture, Layout::CopyDst, Layout::DepthStencilRead);
     kit.run(std::array{ clear });
     const ViewIndex view = *kit.device.createView(texture, TextureViewDesc{ .aspect = TextureAspect::Depth });
     const SamplerIndex comparison = *kit.device.createSampler(
@@ -412,7 +435,7 @@ TEST_CASE("AbiTextures compareMain returns the comparison of a depth texture aga
 }
 
 //======================================================================================================================
-TEST_CASE("AbiTextures texture2DMSMain stores the size and sample count Metal reports for a multisample texture", "[conformance]")
+TEST_CASE("AbiTextures texture2DMSMain reads a cleared multisample texture", "[conformance]")
 {
     test::requireGpu();
     test::GpuKit kit;
@@ -424,13 +447,16 @@ TEST_CASE("AbiTextures texture2DMSMain stores the size and sample count Metal re
                      .usage = TextureUsage::Sampled | TextureUsage::RenderTarget,
                      .label = "test.ms" }
     );
+    clearMultisample(kit, texture, 0);
     const ViewIndex view = *kit.device.createView(texture, TextureViewDesc{});
-    // On Metal the kernel stores (width, height, samples, 0): the pinned Slang miscompiles the multisample `Load`.
-    CHECK(fetch(kit, "texture2DMSMain", FetchRoot{ .view = static_cast<uint32_t>(view) }) == Float4{ 4, 4, 4, 0 });
+    // Other targets load sample 0 of texel (1, 1), the cleared color. On Metal the kernel stores (width, height, samples, 0)
+    // instead: the pinned Slang miscompiles the multisample `Load`.
+    const Float4 expected = test::multisampleReadsSize() ? Float4{ 4, 4, 4, 0 } : Float4{ 1, 0, 1, 1 };
+    CHECK(fetch(kit, "texture2DMSMain", FetchRoot{ .view = static_cast<uint32_t>(view) }) == expected);
 }
 
 //======================================================================================================================
-TEST_CASE("AbiTextures texture2DMSArrayMain stores the size, array size and sample count Metal reports for a multisample array", "[conformance]")
+TEST_CASE("AbiTextures texture2DMSArrayMain reads a cleared multisample array", "[conformance]")
 {
     test::requireGpu();
     test::GpuKit kit;
@@ -443,9 +469,12 @@ TEST_CASE("AbiTextures texture2DMSArrayMain stores the size, array size and samp
                      .usage = TextureUsage::Sampled | TextureUsage::RenderTarget,
                      .label = "test.msArray" }
     );
+    clearMultisample(kit, texture, 1);
     const ViewIndex view = *kit.device.createView(texture, TextureViewDesc{ .type = TextureType::Tex2DArray });
-    // On Metal the kernel stores (width, height, array size, samples).
-    CHECK(fetch(kit, "texture2DMSArrayMain", FetchRoot{ .view = static_cast<uint32_t>(view) }) == Float4{ 4, 4, 3, 4 });
+    // Other targets load sample 0 of texel (1, 1) of layer 1, the cleared color. On Metal the kernel stores (width, height,
+    // array size, samples) instead, for the same reason.
+    const Float4 expected = test::multisampleReadsSize() ? Float4{ 4, 4, 3, 4 } : Float4{ 1, 0, 1, 1 };
+    CHECK(fetch(kit, "texture2DMSArrayMain", FetchRoot{ .view = static_cast<uint32_t>(view) }) == expected);
 }
 
 //======================================================================================================================
@@ -472,6 +501,9 @@ TEST_CASE("AbiTextures rwTexture2DMain reads texel (1, 1) of a 2D storage textur
     Texture texture;
     const Float4 value = storageFetch(kit, "rwTexture2DMain", TextureType::Tex2D, 1, TextureType::Tex2D, 1, &texture);
     CHECK(value == texelValue(0, 1, 1, 0));
+    CommandList move = kit.list(QueueType::Graphics, "test.toCopy");
+    test::transition(move, texture, Layout::ShaderWrite, Layout::CopySrc);
+    kit.run(std::array{ move });
     // The kernel also wrote that value to texel (0, 0).
     const std::vector<std::byte> texels = kit.readTexture(texture, TextureRegion{ .extent = { kEdge, kEdge, 1 } }, Format::RGBA16Float);
     std::array<uint16_t, 4> first{};

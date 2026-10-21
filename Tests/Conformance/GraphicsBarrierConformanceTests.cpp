@@ -415,9 +415,13 @@ namespace {
         }
 
         //==============================================================================================================
-        /// Reads `texture`, an `RGBA16Float` oracle target, back.
+        /// Moves `texture`, an `RGBA16Float` oracle target in `ColorAttachment`, to `CopySrc`, where a copy reads it, and reads
+        /// it back.
         std::vector<std::byte> read(Texture texture) const
         {
+            CommandList list = kit.list(QueueType::Graphics, "test.toCopy");
+            test::transition(list, texture, Layout::ColorAttachment, Layout::CopySrc);
+            kit.run(std::array{ list });
             return kit.readTexture(texture, TextureRegion{ .extent = { kEdge, kEdge, 1 } }, Format::RGBA16Float);
         }
 
@@ -749,6 +753,7 @@ TEST_CASE("a copy into a texture is loaded by the next pass's attachment", "[con
     list.setScissor(kBigRect);
     list.draw(3);
     list.endRenderPass();
+    test::transition(list, texture, Layout::ColorAttachment, Layout::CopySrc);
     kit.run(std::array{ list });
     std::fill(texels.begin(), texels.begin() + 4, std::byte{ 0xFF });
     const std::vector<std::byte> actual = kit.readTexture(texture, TextureRegion{ .extent = { kBigEdge, kBigEdge, 1 } }, Format::RGBA8Unorm);

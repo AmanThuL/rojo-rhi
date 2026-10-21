@@ -6,6 +6,7 @@
 
 #include "Support/Conformance.h"
 #include "Support/GpuKit.h"
+#include "Support/PassKit.h"
 
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/generators/catch_generators.hpp>
@@ -230,12 +231,14 @@ TEST_CASE("draw writes each instance of each vertex range with drawId 0, firstIn
     const Texture target = targetOf(kit.device);
     CommandList list = kit.list(QueueType::Graphics, "test.draw");
     const std::array colors{ ColorAttachment{ .texture = target, .load = LoadOp::Clear } };
+    test::transition(list, target, Layout::Undefined, Layout::ColorAttachment);
     list.beginRenderPass(passOf(colors));
     list.setPipeline(pipeline);
     list.setViewport(kFull);
     list.setScissor(kFullRect);
     list.draw(3, instances, firstVertex, firstInstance);
     list.endRenderPass();
+    test::transition(list, target, Layout::ColorAttachment, Layout::CopySrc);
     kit.run(std::array{ list });
     Image expected;
     for (uint32_t instance = 0; instance < instances; ++instance)
@@ -264,12 +267,14 @@ TEST_CASE("drawIndexed applies firstIndex and baseVertex with UInt16 and UInt32 
     const Buffer buffer = indexBuffer(kit, type, indices);
     CommandList list = kit.list(QueueType::Graphics, "test.draw");
     const std::array colors{ ColorAttachment{ .texture = target, .load = LoadOp::Clear } };
+    test::transition(list, target, Layout::Undefined, Layout::ColorAttachment);
     list.beginRenderPass(passOf(colors));
     list.setPipeline(pipeline);
     list.setViewport(kFull);
     list.setScissor(kFullRect);
     list.drawIndexed(buffer, type, 3, 2, 3, baseVertex, 5);
     list.endRenderPass();
+    test::transition(list, target, Layout::ColorAttachment, Layout::CopySrc);
     kit.run(std::array{ list });
     const auto base = static_cast<uint32_t>(3 + baseVertex);
     Image expected;
@@ -295,6 +300,7 @@ TEST_CASE("triangle strips and line lists draw with the topology set after setPi
     const Buffer buffer = indexBuffer(kit, IndexType::UInt16, indices);
     CommandList list = kit.list(QueueType::Graphics, "test.draw");
     const std::array colors{ ColorAttachment{ .texture = target, .load = LoadOp::Clear } };
+    test::transition(list, target, Layout::Undefined, Layout::ColorAttachment);
     list.beginRenderPass(passOf(colors));
     list.setScissor(kFullRect);
     list.setPipeline(triangles);
@@ -309,6 +315,7 @@ TEST_CASE("triangle strips and line lists draw with the topology set after setPi
     list.setViewport(shifted(32, 0));
     list.drawIndexed(buffer, IndexType::UInt16, 4, 1, 6);
     list.endRenderPass();
+    test::transition(list, target, Layout::ColorAttachment, Layout::CopySrc);
     kit.run(std::array{ list });
     Image expected;
     expected.set(0, 0, oracleValue(0, 0));
@@ -332,6 +339,7 @@ TEST_CASE("setPipeline resets the topology to its class's list form", "[conforma
     const Buffer buffer = indexBuffer(kit, IndexType::UInt16, indices);
     CommandList list = kit.list(QueueType::Graphics, "test.draw");
     const std::array colors{ ColorAttachment{ .texture = target, .load = LoadOp::Clear } };
+    test::transition(list, target, Layout::Undefined, Layout::ColorAttachment);
     list.beginRenderPass(passOf(colors));
     list.setScissor(kFullRect);
     list.setPipeline(triangles);
@@ -343,6 +351,7 @@ TEST_CASE("setPipeline resets the topology to its class's list form", "[conforma
     list.setViewport(shifted(16, 0));
     list.drawIndexed(buffer, IndexType::UInt16, 4);
     list.endRenderPass();
+    test::transition(list, target, Layout::ColorAttachment, Layout::CopySrc);
     kit.run(std::array{ list });
     Image expected;
     expected.set(16, 0, oracleValue(0, 0));
@@ -363,12 +372,14 @@ TEST_CASE("a viewport and a scissor limit what a full-target draw writes", "[con
     const Texture target = targetOf(kit.device);
     CommandList list = kit.list(QueueType::Graphics, "test.draw");
     const std::array colors{ ColorAttachment{ .texture = target, .load = LoadOp::Clear } };
+    test::transition(list, target, Layout::Undefined, Layout::ColorAttachment);
     list.beginRenderPass(passOf(colors));
     list.setPipeline(solid);
     list.setViewport(Viewport{ .x = 32.0f, .y = 16.0f, .width = 128.0f, .height = 64.0f });
     list.setScissor(Rect2D{ 48, 24, 200, 200 });
     list.draw(3);
     list.endRenderPass();
+    test::transition(list, target, Layout::ColorAttachment, Layout::CopySrc);
     kit.run(std::array{ list });
     // The viewport covers [32, 160) by [16, 80) and the scissor [48, 248) by [24, 224).
     Image expected;
@@ -397,12 +408,14 @@ TEST_CASE("a pass with a DontCare load stores what a draw over every pixel write
     CommandList list = kit.list(QueueType::Graphics, "test.draw");
     // Chapter 07: DontCare leaves the attachment undefined at the start of the pass, which the draw then overwrites.
     const std::array colors{ ColorAttachment{ .texture = target, .load = LoadOp::DontCare, .store = StoreOp::Store } };
+    test::transition(list, target, Layout::Undefined, Layout::ColorAttachment);
     list.beginRenderPass(passOf(colors));
     list.setPipeline(solid);
     list.setViewport(kFull);
     list.setScissor(kFullRect);
     list.draw(3);
     list.endRenderPass();
+    test::transition(list, target, Layout::ColorAttachment, Layout::CopySrc);
     kit.run(std::array{ list });
     Image expected;
     for (uint32_t y = 0; y < kEdge; ++y)
@@ -445,6 +458,8 @@ TEST_CASE("the stencil reference and a Replace operation mark exactly the drawn 
     const Texture depth = targetOf(kit.device, Format::D32FloatS8, TextureUsage::DepthStencil);
     CommandList list = kit.list(QueueType::Graphics, "test.draw");
     const std::array colors{ ColorAttachment{ .texture = target, .load = LoadOp::Clear } };
+    test::transition(list, target, Layout::Undefined, Layout::ColorAttachment);
+    test::transition(list, depth, Layout::Undefined, Layout::DepthStencilWrite);
     list.beginRenderPass(passOf(
         colors,
         DepthAttachment{ .texture = depth, .load = LoadOp::Clear, .store = StoreOp::DontCare, .stencilLoad = LoadOp::Clear, .stencilStore = StoreOp::DontCare }
@@ -460,6 +475,7 @@ TEST_CASE("the stencil reference and a Replace operation mark exactly the drawn 
     list.setPipeline(test);
     list.draw(3);
     list.endRenderPass();
+    test::transition(list, target, Layout::ColorAttachment, Layout::CopySrc);
     kit.run(std::array{ list });
     Image expected;
     expected.set(0, 0, kSolid);
@@ -486,6 +502,7 @@ TEST_CASE("blend constants scale the solid color exactly", "[conformance]")
     const Texture target = targetOf(kit.device);
     CommandList list = kit.list(QueueType::Graphics, "test.draw");
     const std::array colors{ ColorAttachment{ .texture = target, .load = LoadOp::Clear } };
+    test::transition(list, target, Layout::Undefined, Layout::ColorAttachment);
     list.beginRenderPass(passOf(colors));
     list.setPipeline(blended);
     list.setViewport(kFull);
@@ -493,6 +510,7 @@ TEST_CASE("blend constants scale the solid color exactly", "[conformance]")
     list.setBlendConstants(0.5f, 0.25f, 2.0f, 0.5f);
     list.draw(3);
     list.endRenderPass();
+    test::transition(list, target, Layout::ColorAttachment, Layout::CopySrc);
     kit.run(std::array{ list });
     Image expected;
     for (uint32_t y = 0; y < kEdge; ++y)
@@ -523,6 +541,7 @@ TEST_CASE("depth bias moves a D32Float depth by the constant term", "[conformanc
     const Pipeline plain = *kit.device.createPipeline(desc);
     const Texture depth = targetOf(kit.device, Format::D32Float, TextureUsage::DepthStencil);
     CommandList list = kit.list(QueueType::Graphics, "test.draw");
+    test::transition(list, depth, Layout::Undefined, Layout::DepthStencilWrite);
     list.beginRenderPass(passOf({}, DepthAttachment{ .texture = depth, .load = LoadOp::Clear }));
     list.setViewport(kFull);
     // The left half with the bias, the right half without: a pipeline without depthBias ignores the values.
@@ -534,6 +553,7 @@ TEST_CASE("depth bias moves a D32Float depth by the constant term", "[conformanc
     list.setScissor(Rect2D{ kEdge / 2, 0, kEdge / 2, kEdge });
     list.draw(3);
     list.endRenderPass();
+    test::transition(list, depth, Layout::DepthStencilWrite, Layout::CopySrc);
     kit.run(std::array{ list });
     const std::vector<std::byte> bytes = kit.readTexture(depth, TextureRegion{ .extent = { kEdge, kEdge, 1 } }, Format::D32Float);
     REQUIRE(bytes.size() == size_t{ kEdge } * kEdge * sizeof(float));
@@ -590,6 +610,7 @@ TEST_CASE("back-face culling drops the triangles of one winding", "[conformance]
     const Texture target = targetOf(kit.device);
     CommandList list = kit.list(QueueType::Graphics, "test.draw");
     const std::array colors{ ColorAttachment{ .texture = target, .load = LoadOp::Clear } };
+    test::transition(list, target, Layout::Undefined, Layout::ColorAttachment);
     list.beginRenderPass(passOf(colors));
     list.setScissor(kFullRect);
     Image expected;
@@ -611,6 +632,7 @@ TEST_CASE("back-face culling drops the triangles of one winding", "[conformance]
         }
     }
     list.endRenderPass();
+    test::transition(list, target, Layout::ColorAttachment, Layout::CopySrc);
     kit.run(std::array{ list });
     const std::string difference = differences(readImage(kit, target), expected);
     INFO(difference);
@@ -661,6 +683,8 @@ TEST_CASE("a pipeline that culls nothing applies its own winding to two-sided st
     const Texture depth = targetOf(kit.device, Format::D32FloatS8, TextureUsage::DepthStencil);
     CommandList list = kit.list(QueueType::Graphics, "test.draw");
     const std::array colors{ ColorAttachment{ .texture = target, .load = LoadOp::Clear } };
+    test::transition(list, target, Layout::Undefined, Layout::ColorAttachment);
+    test::transition(list, depth, Layout::Undefined, Layout::DepthStencilWrite);
     list.beginRenderPass(passOf(
         colors,
         DepthAttachment{ .texture = depth, .load = LoadOp::Clear, .store = StoreOp::DontCare, .stencilLoad = LoadOp::Clear, .stencilStore = StoreOp::DontCare }
@@ -682,6 +706,7 @@ TEST_CASE("a pipeline that culls nothing applies its own winding to two-sided st
     list.setViewport(kFull);
     list.draw(3);
     list.endRenderPass();
+    test::transition(list, target, Layout::ColorAttachment, Layout::CopySrc);
     kit.run(std::array{ list });
     Image expected;
     expected.set(48, 0, oracleValue(0, 0));
@@ -736,6 +761,8 @@ TEST_CASE("state set before the pass's first draw applies to that draw", "[confo
     }
     // The root bound before the pass, then the pipeline, viewport and scissor recorded before its first draw.
     list.setRoot(addresses[0]);
+    test::transition(list, targets[0], Layout::Undefined, Layout::ColorAttachment);
+    test::transition(list, targets[1], Layout::Undefined, Layout::ColorAttachment);
     const std::array first{ ColorAttachment{ .texture = targets[0], .load = LoadOp::Clear } };
     list.beginRenderPass(passOf(first));
     list.setPipeline(sampled);
@@ -755,6 +782,8 @@ TEST_CASE("state set before the pass's first draw applies to that draw", "[confo
     list.setViewport(shifted(16, 0));
     list.draw(3);
     list.endRenderPass();
+    test::transition(list, targets[0], Layout::ColorAttachment, Layout::CopySrc);
+    test::transition(list, targets[1], Layout::ColorAttachment, Layout::CopySrc);
     kit.run(std::array{ list });
     Image expectedFirst;
     expectedFirst.set(0, 0, texels[0]);
@@ -782,12 +811,14 @@ TEST_CASE("drawMeshTasks draws each task group with drawId 0", "[conformance]")
     const Texture target = targetOf(kit.device);
     CommandList list = kit.list(QueueType::Graphics, "test.draw");
     const std::array colors{ ColorAttachment{ .texture = target, .load = LoadOp::Clear } };
+    test::transition(list, target, Layout::Undefined, Layout::ColorAttachment);
     list.beginRenderPass(passOf(colors));
     list.setPipeline(mesh);
     list.setViewport(kFull);
     list.setScissor(kFullRect);
     list.drawMeshTasks(4, 1, 1);
     list.endRenderPass();
+    test::transition(list, target, Layout::ColorAttachment, Layout::CopySrc);
     kit.run(std::array{ list });
     Image expected;
     for (uint32_t group = 0; group < 4; ++group)
