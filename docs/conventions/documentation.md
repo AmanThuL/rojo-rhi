@@ -41,8 +41,9 @@ number and title, in a `**Restates**:` line, and never by a link into another re
   it, never in the present tense.
 - The repository is public and licensed under the Apache License, Version 2.0; see `LICENSE`.
   Nothing here describes a package registry entry or a published release, since neither exists.
-- `README.md` is the public-facing surface: it names no unimplemented backend as a current
-  capability and no internal milestone or `M<number>` language, a rule
+- `README.md` is the public-facing surface: it never names Vulkan, names D3D12 only in a sentence
+  that says "verified on WARP only, not on hardware" and never calls D3D12 supported or accepted,
+  and uses no internal milestone or `M<number>` language, a rule
   `Tools/check_project_policy.py` enforces mechanically.
 
 ## Status lifecycle
