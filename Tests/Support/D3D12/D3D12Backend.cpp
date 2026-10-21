@@ -182,4 +182,15 @@ namespace rojoRHI::test {
     {
         return true;
     }
+
+    //==================================================================================================================
+    std::string_view upscalesNeverComplete()
+    {
+#if defined(ROJORHI_D3D12_ADAPTER_WARP) && defined(ROJORHI_D3D12_DEBUG_GBV)
+        return "WARP never completes a FidelityFX upscale dispatch under GPU-based validation (the floor probe's fsr section, CI run "
+               "39463099719)";
+#else
+        return {};
+#endif
+    }
 } // namespace rojoRHI::test

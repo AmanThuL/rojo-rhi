@@ -80,4 +80,10 @@ namespace rojoRHI::test {
     {
         return false;
     }
+
+    //==================================================================================================================
+    std::string_view upscalesNeverComplete()
+    {
+        return {};
+    }
 } // namespace rojoRHI::test

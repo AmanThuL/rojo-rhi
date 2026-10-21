@@ -95,13 +95,6 @@ namespace rojoRHI::d3d12 {
     }
 
     //==================================================================================================================
-    void notImplemented(std::string_view entry)
-    {
-        ROJORHI_LOG_FATAL("{} is not implemented by the D3D12 backend", entry);
-        std::abort();
-    }
-
-    //==================================================================================================================
     Error hresultError(HRESULT result, std::string_view what)
     {
         const ErrorCategory category = result == E_OUTOFMEMORY ? ErrorCategory::OutOfMemory : ErrorCategory::DriverFailure;

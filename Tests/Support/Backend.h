@@ -42,4 +42,8 @@ namespace rojoRHI::test {
     /// True when the compiled backend lowers layouts to native ones its runtime checks, so a texture must leave `Undefined`
     /// through a barrier before a pass or a clear uses it even on a device that does not validate.
     bool layoutsAreNative();
+
+    /// Why the compiled backend's device never completes a submitted upscale, or empty when it completes one: a case that
+    /// submits an upscale skips with the reason.
+    std::string_view upscalesNeverComplete();
 } // namespace rojoRHI::test
