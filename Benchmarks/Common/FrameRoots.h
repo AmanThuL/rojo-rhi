@@ -110,8 +110,9 @@ namespace rojoRHI::bench {
         Float4 cascade2Row3;
     };
 
-    // One forward box: its transform rows and color, the mesh vertices it reads and `camera`, the address of the camera's
-    // view-projection (64 bytes, one Transform) that the lighting list uploads once before the forward pass.
+    // One forward box: its transform rows and color, `vertices`, the first vertex of its mesh, and `camera`, the
+    // address of the camera's view-projection (64 bytes, one Transform) that the lighting list uploads once before
+    // the forward pass.
     struct alignas(16) ForwardRoot
     {
         Float4 transform0;

@@ -5,6 +5,7 @@
 #include <rojoRHI/RHI.h>
 
 #include "Core/DeviceCore.h"
+#include "Core/Pipelines.h"
 #include "Support/Backend.h"
 
 #include <catch2/catch_test_macros.hpp>
@@ -63,7 +64,7 @@ TEST_CASE("loadShaderLibrary returns an error for a blob not built for the backe
 TEST_CASE("loadShaderLibrary returns ShaderAbiMismatch for a library stamped with another ABI version", "[contract]")
 {
     Device device = *createDevice();
-    const std::vector<std::byte> blob = test::libraryStampedWith(2);
+    const std::vector<std::byte> blob = test::libraryStampedWith(core::kShaderAbiVersion + 1);
     const Result<ShaderLibrary> library = device.loadShaderLibrary(blob, "test.library");
     REQUIRE_FALSE(library.has_value());
     CHECK(library.error().category == ErrorCategory::ShaderAbiMismatch);
@@ -74,7 +75,7 @@ TEST_CASE("loadShaderLibrary returns ShaderAbiMismatch for a library stamped wit
 TEST_CASE("a failed loadShaderLibrary creates nothing to destroy", "[contract]")
 {
     Device device = *createDevice();
-    const std::vector<std::byte> blob = test::libraryStampedWith(2);
+    const std::vector<std::byte> blob = test::libraryStampedWith(core::kShaderAbiVersion + 1);
     const size_t before = core::coreOf(device).pool<ShaderLibrary>().liveCount();
     CHECK_FALSE(device.loadShaderLibrary(blob, "test.library").has_value());
     CHECK(core::coreOf(device).pool<ShaderLibrary>().liveCount() == before);

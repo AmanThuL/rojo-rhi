@@ -174,10 +174,11 @@ namespace rojoRHI::bench {
         for (uint32_t index = 0; index < kForwardDraws; ++index)
         {
             const ForwardBox box = forwardBox(index);
-            ForwardRoot root{ .color = box.color, .vertices = vertices };
+            const uint32_t mesh = box.box % kMeshCount;
+            ForwardRoot root{ .color = box.color, .vertices = vertices + uint64_t{ kMeshVertexCount } * mesh * sizeof(MeshVertex) };
             setRows(box.transform, root.transform0, root.transform1, root.transform2, root.transform3);
             m_forwardRoots.push_back(root);
-            m_forwardMeshes.push_back(box.box % kMeshCount);
+            m_forwardMeshes.push_back(mesh);
         }
 
         const uint32_t sampler = static_cast<uint32_t>(m_resources.sampler);

@@ -4,6 +4,8 @@
 //----------------------------------------------------------------------------------------------------------------------
 #pragma once
 
+#include "Core/Pipelines.h"
+
 #include <cstddef>
 #include <cstdint>
 #include <string>
@@ -20,5 +22,7 @@ namespace rojoRHI::test {
 
     /// Builds the text blob of a Null shader library: the magic line, `abi <abi>` and one `entry` line per entry. A test passes
     /// another `magic` or `abi` to build a library the Null backend refuses.
-    std::vector<std::byte> nullLibrary(const std::vector<LibraryEntry>& entries, uint32_t abi = 1, std::string_view magic = "rojorhi.null.shaderlibrary");
+    std::vector<std::byte> nullLibrary(
+        const std::vector<LibraryEntry>& entries, uint32_t abi = core::kShaderAbiVersion, std::string_view magic = "rojorhi.null.shaderlibrary"
+    );
 } // namespace rojoRHI::test

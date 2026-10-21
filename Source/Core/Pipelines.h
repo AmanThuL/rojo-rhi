@@ -18,7 +18,7 @@ namespace rojoRHI::core {
     /// The shader ABI version a library must be stamped with: the value of `ROJORHI_SHADER_ABI_VERSION` in `RojoRHI.slang`
     /// (chapter 05), which the shader build stamps into every library it builds.
     /// A change to either constant must change the other: `Shaders/RojoRHI/RojoRHI.slang` declares the same number.
-    inline constexpr uint32_t kShaderAbiVersion = 1;
+    inline constexpr uint32_t kShaderAbiVersion = 2;
 
     /// Returns the bit `PipelineRecord::stages` holds for `stage`.
     constexpr uint32_t stageBit(ShaderStage stage)

@@ -48,7 +48,7 @@ namespace {
     struct VertexRoot
     {
         Addr output;                  ///< Where the entry stores what it observed, one `uint4` per vertex.
-        uint32_t firstVertex;         ///< The first vertex index the draw passes.
+        uint32_t lowestVertex;        ///< The smallest vertexIndex the draw yields; vertex v lands at instance * verticesPerInstance + v - lowestVertex.
         uint32_t verticesPerInstance; ///< The vertices of each instance.
     };
 
@@ -82,7 +82,8 @@ TEST_CASE("AbiVertex stores vertexIndex, a zero-based instanceIndex and drawId 0
     );
     constexpr uint64_t kOutputBytes = uint64_t{ kVertices } * kInstances * 4 * sizeof(uint32_t);
     const Buffer output = kit.buffer(kOutputBytes, Memory::Gpu, BufferUsage::ShaderWrite);
-    // Read from index 1, the indices name the vertices 7, 5 and 6 once baseVertex is added.
+    // Read from index 1, the indices name the vertices 2, 0 and 1: vertexIndex excludes baseVertex, as it excludes
+    // firstVertex from the vertices 0 to 2 of the non-indexed draw.
     const std::array<uint16_t, 4> indices{ 9, 2, 0, 1 };
     const Buffer indexBuffer = kit.buffer(sizeof(indices), Memory::Gpu, BufferUsage::Index, std::as_bytes(std::span(indices)));
     CommandList list = kit.list(QueueType::Graphics, "test.abiVertex");
@@ -91,7 +92,7 @@ TEST_CASE("AbiVertex stores vertexIndex, a zero-based instanceIndex and drawId 0
     list.setPipeline(pipeline);
     list.setViewport(Viewport{ .width = 4.0f, .height = 4.0f });
     list.setScissor(Rect2D{ 0, 0, 4, 4 });
-    list.pushRoot(VertexRoot{ kit.device.address(output), kFirstVertex, kVertices });
+    list.pushRoot(VertexRoot{ kit.device.address(output), 0, kVertices });
     if (indexed)
     {
         list.drawIndexed(indexBuffer, IndexType::UInt16, kVertices, kInstances, 1, static_cast<int32_t>(kFirstVertex), 7);
@@ -109,7 +110,7 @@ TEST_CASE("AbiVertex stores vertexIndex, a zero-based instanceIndex and drawId 0
     std::vector<uint32_t> expected;
     for (uint32_t instance = 0; instance < kInstances; ++instance)
     {
-        for (uint32_t vertex = kFirstVertex; vertex < kFirstVertex + kVertices; ++vertex)
+        for (uint32_t vertex = 0; vertex < kVertices; ++vertex)
         {
             expected.insert(expected.end(), { vertex, instance, 0u, 0u });
         }
@@ -193,7 +194,8 @@ TEST_CASE("AbiVertex reads the record's drawId through drawIndirect, firstInstan
     );
     constexpr uint64_t kOutputBytes = uint64_t{ kVertices } * kInstances * 4 * sizeof(uint32_t);
     const Buffer output = kit.buffer(kOutputBytes, Memory::Gpu, BufferUsage::ShaderWrite);
-    // Read from index 1 with baseVertex -5, the indices name the vertices 7, 5 and 6.
+    // Read from index 1 with baseVertex -5, which vertexIndex excludes, the indices name the vertices 12, 10 and 11; the
+    // non-indexed draw names 0 to 2 whatever its firstVertex.
     const std::array<uint16_t, 4> indices{ 0, 12, 10, 11 };
     const Buffer indexBuffer = kit.buffer(sizeof(indices), Memory::Gpu, BufferUsage::Index, std::as_bytes(std::span(indices)));
     // Every record is the same draw; the count stops after the first.
@@ -227,7 +229,8 @@ TEST_CASE("AbiVertex reads the record's drawId through drawIndirect, firstInstan
     list.setPipeline(pipeline);
     list.setViewport(Viewport{ .width = 4.0f, .height = 4.0f });
     list.setScissor(Rect2D{ 0, 0, 4, 4 });
-    list.pushRoot(VertexRoot{ kit.device.address(output), kFirstVertex, kVertices });
+    const uint32_t lowestVertex = indexed ? 10u : 0u;
+    list.pushRoot(VertexRoot{ kit.device.address(output), lowestVertex, kVertices });
     if (indexed)
     {
         list.drawIndexedIndirect(indexBuffer, IndexType::UInt16, kit.device.address(args), maxCount, countAddress);
@@ -245,7 +248,7 @@ TEST_CASE("AbiVertex reads the record's drawId through drawIndirect, firstInstan
     std::vector<uint32_t> expected;
     for (uint32_t instance = 0; instance < kInstances; ++instance)
     {
-        for (uint32_t vertex = kFirstVertex; vertex < kFirstVertex + kVertices; ++vertex)
+        for (uint32_t vertex = lowestVertex; vertex < lowestVertex + kVertices; ++vertex)
         {
             expected.insert(expected.end(), { vertex, instance, kDrawId, 0u });
         }

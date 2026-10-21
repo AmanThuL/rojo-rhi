@@ -3,6 +3,7 @@
 /// @brief Implements the backend-dependent test support for the Null backend.
 //----------------------------------------------------------------------------------------------------------------------
 
+#include "Core/Pipelines.h"
 #include "Support/Backend.h"
 #include "Support/Null/NullLibrary.h"
 
@@ -20,7 +21,7 @@ namespace rojoRHI::test {
     //==================================================================================================================
     std::vector<std::byte> standardLibrary()
     {
-        return libraryStampedWith(1);
+        return libraryStampedWith(core::kShaderAbiVersion);
     }
 
     //==================================================================================================================

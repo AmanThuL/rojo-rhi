@@ -216,7 +216,7 @@ recording](docs/architecture/null-backend-recording.md)).
   `Legacy/` is exempt. The project policy check enforces it.
 - The module owns every shader binding and each shader compile defines exactly one
   `ROJORHI_TARGET_*` macro; a consumer shader declares no binding (ADR 0018). Changing a reserved
-  binding bumps `ROJORHI_SHADER_ABI_VERSION`.
+  binding or the value a built-in returns bumps `ROJORHI_SHADER_ABI_VERSION` (ADR 0024).
 - Release recording takes no locks except when a list claims a new frame-arena page, for
   `uploadFrameData` or for a debug scope's label; a lookup that only feeds a Debug-tier check is
   compiled out of Release builds (ADR 0020).

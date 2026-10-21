@@ -325,7 +325,7 @@ TEST_CASE("drawIndirect draws min(count, maxCount) records", "[conformance]")
 }
 
 //======================================================================================================================
-TEST_CASE("drawIndexedIndirect draws min(count, maxCount) records with firstIndex and baseVertex", "[conformance]")
+TEST_CASE("drawIndexedIndirect draws min(count, maxCount) records with firstIndex, baseVertex invisible", "[conformance]")
 {
     test::requireGpu();
     const uint32_t maxCount = GENERATE(1u, 256u, 65536u);
@@ -337,8 +337,9 @@ TEST_CASE("drawIndexedIndirect draws min(count, maxCount) records with firstInde
     const Format format = formatFor(maxCount);
     const Pipeline pipeline = oracle.pipeline(format);
     const Texture target = oracle.target(format);
-    // Index k holds k + 6. Record i reads three of them from 3 (i mod 4) and adds -6, 0 or 21: each triangle's vertices
-    // are consecutive from a multiple of 3, the oracle's flat first vertex, which a lost firstIndex or baseVertex changes.
+    // Index k holds k + 6. Record i reads three of them from 3 (i mod 4) with baseVertex -6, 0 or 21, which vertexIndex
+    // excludes: each triangle's vertices are the index values, consecutive from firstIndex + 6, a multiple of 3 and the
+    // oracle's flat first vertex, which a lost firstIndex or an added baseVertex changes.
     constexpr std::array<int32_t, 3> kBaseVertices{ -6, 0, 21 };
     std::vector<std::byte> indexBytes;
     for (uint32_t k = 0; k < 12; ++k)
@@ -369,7 +370,7 @@ TEST_CASE("drawIndexedIndirect draws min(count, maxCount) records with firstInde
         );
         if (i < count)
         {
-            expected.set(drawId, oracleValue(drawId, static_cast<uint32_t>(static_cast<int32_t>(firstIndex + 6) + baseVertex)));
+            expected.set(drawId, oracleValue(drawId, firstIndex + 6));
         }
     }
     const Buffer args = kit.buffer(records.size() * sizeof(DrawIndexedIndirectArgs), Memory::Gpu, BufferUsage::IndirectArgs, bytesOf(std::span(records)));
@@ -484,7 +485,7 @@ TEST_CASE("a pass draws counted draws recorded before and after a direct draw an
             expected.set(kShiftY * kEdge + kShiftX + record.drawId, blended(oracleValue(record.drawId)));
         }
     }
-    expected.set(kShiftY * kEdge + kShiftX, blended(oracleValue(0, 3)));
+    expected.set(kShiftY * kEdge + kShiftX, blended(oracleValue(0)));
     expected.set(kShiftY * kEdge + kShiftX + lone[0].drawId, blended(oracleValue(lone[0].drawId)));
     const std::string difference = differences(oracle.read(target, format), expected);
     INFO(difference);

@@ -100,7 +100,8 @@ TEST_CASE("parseShaderLibrary reads entries, stages, sizes and each entry's DXIL
 //======================================================================================================================
 TEST_CASE("a library stamped with another ABI is ShaderAbiMismatch before a malformed entry line", "[d3d12]")
 {
-    checkRefused(blobOf("2", "entry a vertex 0 0 0 8 extra\n", "8", kDxil), ErrorCategory::ShaderAbiMismatch, "ABI version 2");
+    const std::string wrongAbi = std::to_string(core::kShaderAbiVersion + 1);
+    checkRefused(blobOf(wrongAbi, "entry a vertex 0 0 0 8 extra\n", "8", kDxil), ErrorCategory::ShaderAbiMismatch, "ABI version " + wrongAbi);
 }
 
 //======================================================================================================================

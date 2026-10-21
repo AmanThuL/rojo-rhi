@@ -29,12 +29,18 @@ struct ShadowRoot
     float4 viewProj3;
 };
 
+// Box b draws mesh b mod kMeshCount, whose vertices start at kMeshVertexCount * mesh in the combined vertex buffer: the base
+// vertex BenchCull.slang writes into the box's record, as Benchmarks/Common/Scene.h defines.
+static const uint kMeshCount = 64;
+static const uint kMeshVertexCount = 24;
+
 [shader("vertex")]
 float4 shadowVertex(rojoRHI::VertexIds ids) : SV_Position
 {
     ShadowRoot root = rojoRHI::root<ShadowRoot>();
-    Transform instance = rojoRHI::load<Transform>(root.instances, rojoRHI::drawId(ids));
-    MeshVertex vertex = rojoRHI::load<MeshVertex>(root.vertices, rojoRHI::vertexIndex(ids));
+    uint box = rojoRHI::drawId(ids);
+    Transform instance = rojoRHI::load<Transform>(root.instances, box);
+    MeshVertex vertex = rojoRHI::load<MeshVertex>(root.vertices, kMeshVertexCount * (box % kMeshCount) + rojoRHI::vertexIndex(ids));
 
     float4 local = float4(vertex.position.xyz, 1.0);
     float4 world = float4(dot(instance.row0, local), dot(instance.row1, local), dot(instance.row2, local), 1.0);
