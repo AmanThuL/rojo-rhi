@@ -59,7 +59,9 @@ shader-to-metallib rule, so RojoRHI configures, builds and tests standalone.
 `Include/`, `Source/`, `Backends/`, `Tests/` and `Shaders/` are the permanent tree of the v2
 interface. `RojoRHI` is a static library of `Source/**/*.cpp` and the selected backend's sources;
 the `rojorhi_backend` configure option accepts `metal4`, which builds on macOS only and is the
-default there, and `null`, the GPU-free Null backend and the default elsewhere. `Source/Base/` is
+default there, `d3d12`, which builds on Windows only and takes the options `rojorhi_d3d12_adapter`
+(`hardware` or `warp`) and `rojorhi_d3d12_debug` (`mode`, `off`, `layer` or `gbv`), and `null`, the
+GPU-free Null backend and the default elsewhere. `Source/Base/` is
 the private base (the Debug-tier `ROJORHI_VU` check and the message sink) and `Source/Core/` the
 backend-neutral core every backend embeds; `Backends/Null/Source/` and `Backends/Metal4/Source/`
 implement the public entries over it, each one backend per build. `Backends/Metal4/MetalCpp/` holds
@@ -129,7 +131,9 @@ ran the extraction itself and the verifier that checked its result, both kept fo
 
 `.github/workflows/` runs the project policy check on Linux; the legacy, metal4, format and
 interface jobs on hosted macOS; and the interface job also on Windows. The metal4 job builds the
-Metal 4 backend in Debug and Release and counts its cases per tag. Hosted macOS has no Metal 4
+Metal 4 backend in Debug and Release and counts its cases per tag. The `d3d12` job, on hosted
+Windows, builds the D3D12 backend and runs its entries on WARP: implemented, verified on WARP only,
+not on hardware ([the run](d3d12-backend-edges.md#the-t1-run-on-warp)). Hosted macOS has no Metal 4
 device, so the GPU cases run on Apple Silicon before merge ([testing](../conventions/testing.md)).
 
 `docs/conventions/`, `docs/decisions/`, `docs/architecture/` and `docs/guides/` hold this

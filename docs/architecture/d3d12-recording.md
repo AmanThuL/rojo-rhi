@@ -285,12 +285,10 @@ counters and `DeviceImpl`, read bytes back through native copies on a queue of t
 - `D3D12ScopeDurationTests.cpp`: four scope-duration cases, which cover what
   `ScopeConformanceTests.cpp` would for scopes that need no render pass, draw or upscaler.
 
-`Tests/Conformance` files run on this backend unless `d3d12_conformance_pending` in
-`xmake/targets.lua` lists them; a file leaves the list only when every case in it passes on WARP
-under GPU-based validation. The copy, initial-data, barrier, fill, clear and handoff files run, and
-so do the contract files for frame joins and queue hazards (`FrameJoinTests`, `FrameJoinDeathTests`,
-`QueueHazardTests`, `QueueHazardDeathTests`). Still listed: `ScopeConformanceTests.cpp` (one case
-upscales) and the contract file `CopyTests` (two clears of textures never moved out of `Undefined`);
+Every `Tests/Conformance` and `Tests/Contract` file runs on this backend, except the few that
+`xmake/targets.lua` leaves out; [the edges page](d3d12-backend-edges.md#the-t1-run-on-warp) names
+them and the skips. That includes the copy, initial-data, barrier, fill, clear and handoff files,
+the contract files for frame joins and queue hazards, `CopyTests` and `ScopeConformanceTests.cpp`;
 [drawing](d3d12-drawing.md#tests) lists the rest.
 
 All of this is WARP evidence under the debug layer and GPU-based validation. It is not hardware
