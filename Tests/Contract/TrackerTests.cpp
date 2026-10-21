@@ -5,6 +5,7 @@
 #include <rojoRHI/RHI.h>
 
 #include "Support/Backend.h"
+#include "Support/Conformance.h"
 #include "Support/PassKit.h"
 #include "Support/UpscaleKit.h"
 
@@ -330,6 +331,7 @@ TEST_CASE("a placed texture is discarded on Graphics before its first use on a C
 TEST_CASE("an upscale of inputs in ShaderRead and an output in ShaderWrite passes", "[contract]")
 {
 #ifndef NDEBUG
+    test::requireUpscaleCompletion();
     UpscaleKit kit(QueueType::Graphics, UpscaleKit::defaultDesc(), true);
     test::transition(kit.kit.list, kit.params.color, Layout::Undefined, Layout::ShaderRead);
     test::transition(kit.kit.list, kit.params.depth, Layout::Undefined, Layout::ShaderRead);

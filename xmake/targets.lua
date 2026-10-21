@@ -151,10 +151,9 @@ local function warn_unreachable()
     add_cxxflags("-Wunreachable-code", "-Wunreachable-code-return", {tools = "clang"})
 end
 
--- Entries of the D3D12 backend that recording, pipelines, presentation, sparse and upscaling will implement still abort.
--- Release link-time code generation sees through them, so in an executable that calls the library it finds the code after
--- each such call unreachable (C4702) and a destructor that calls one never returning (C4722), which /WX makes errors. An
--- executable target calls this to turn those two warnings off on a d3d12 Release build; every other warning still fails it.
+-- An executable target calls this to turn off warnings C4702 (unreachable code) and C4722 (a destructor that never returns)
+-- on a d3d12 Release build, where link-time code generation raised them across the library's aborting entries and /WX made
+-- them errors; every other warning still fails it.
 local function unreachable_after_stubs()
     if is_config("rojorhi_backend", "d3d12") and is_mode("release") then
         add_cxflags("/wd4702", "/wd4722")
@@ -279,87 +278,49 @@ target("RojoRHITests")
     set_default(false)
     set_targetdir("$(builddir)/$(plat)/$(arch)/$(mode)/rojorhi-test")
     add_files(path.join(component, "Tests/*.cpp"))
+    local contract_left_out = {}
+    local conformance_left_out = {}
     if is_config("rojorhi_backend", "d3d12") then
-        -- The contract files whose chapters the D3D12 backend does not implement yet. A file leaves the list when it
-        -- passes whole on WARP under the debug layer and GPU-based validation, and the list ends empty.
-        local d3d12_pending = {
-            "AliasingDeathTests.cpp", -- two VU-rojo-sync-0017 cases place resources at offset 16384, below the 64 KiB a D3D12 placement needs, so VU-rojo-heap-0004 fires first
-            "AliasingTests.cpp", -- one case places a buffer at offset 256, below the 64 KiB a D3D12 buffer placement needs
-            "CopyTests.cpp", -- two cases clear textures they never moved out of Undefined, which a D3D12 clear needs in CopyDst
-            "DiagnosticsTests.cpp", -- one case upscales, which D3D12 does not record (#111); one renders into Undefined (#109)
-            "LifetimeDeathTests.cpp", -- one case upscales, which D3D12 does not record (#111)
-            -- WARP packs no mip tail for the sparse kit texture, and one case of each maps or uses a tail (#102).
-            "SparseOrderDeathTests.cpp",
-            "SparseOrderTests.cpp",
-            "SparseTests.cpp",
-            "TrackerDeathTests.cpp", -- one case upscales (#111); the layer stops one clear in General before the tracker (#109)
-            "TrackerTests.cpp", -- one case upscales, which D3D12 does not record (#111)
-        }
-        -- Pending under GPU-based validation only: WARP never completes a FidelityFX upscale dispatch with it on, while the
-        -- debug layer alone runs it (the floor probe's fsr section, CI run 39463099719), so every other configuration, the
-        -- Release job's included, runs it. The death cases submit nothing, so they run under it too.
-        if is_config("rojorhi_d3d12_debug", "gbv") then
-            table.insert(d3d12_pending, "UpscalerTests.cpp")
-        end
-        local pending = {}
-        for _, name in ipairs(d3d12_pending) do
-            pending[name] = true
-        end
-        -- A renamed or deleted contract file must leave the list too, so on_config fails on a name that matches no file.
-        -- The check runs in script scope, the only scope that can fail a configuration, so the values travel absolute.
-        set_values("rojorhi.d3d12_pending", d3d12_pending)
-        set_values("rojorhi.contract_dir", path.join(component_dir, "Tests/Contract"))
-        on_config(function (target)
-            local contract_dir = target:values("rojorhi.contract_dir")
-            for _, name in ipairs(table.wrap(target:values("rojorhi.d3d12_pending"))) do
-                assert(os.isfile(path.join(contract_dir, name)),
-                       format("d3d12_pending names Tests/Contract/%s, which does not exist; remove or rename the entry", name))
-            end
-        end)
-        for _, file in ipairs(os.files(path.join(component_dir, "Tests/Contract/*.cpp"))) do
-            if not pending[path.filename(file)] then
-                add_files(path.join(component, "Tests/Contract", path.filename(file)))
-            end
-        end
-    else
-        add_files(path.join(component, "Tests/Contract/*.cpp"))
-    end
-    add_files(path.join(component, "Tests/Support/*.cpp"))
-    -- The conformance directory holds no source until a part adds one, and xmake warns on an empty glob.
-    if is_config("rojorhi_backend", "d3d12") then
-        -- The conformance files whose chapters the D3D12 backend does not implement yet. A file leaves the list when its
-        -- cases pass whole on WARP under the debug layer and GPU-based validation, and the list ends empty.
-        local d3d12_conformance_pending = {
+        -- The conformance files that assert the base-including vertexIndex, which D3D12 does not produce (#100).
+        conformance_left_out = {
             "AbiGraphicsConformanceTests.cpp", -- draws with firstVertex and baseVertex assert the base-including vertexIndex, which D3D12 does not produce
             "DrawConformanceTests.cpp", -- draws with firstVertex and baseVertex assert the base-including vertexIndex, which D3D12 does not produce
             "IndirectConformanceTests.cpp", -- baseVertex records assert the base-including vertexIndex, which D3D12 does not produce
-            "ScopeConformanceTests.cpp", -- one case upscales
         }
-        -- Pending under GPU-based validation only, for the reason the contract list gives.
-        if is_config("rojorhi_d3d12_debug", "gbv") then
-            table.insert(d3d12_conformance_pending, "UpscaleConformanceTests.cpp")
+        -- WARP+GBV: WARP never completes a FidelityFX upscale dispatch under GPU-based validation, while the debug layer alone
+        -- runs it, so the two files whose cases submit upscales are left out of that configuration and every other one runs
+        -- them; evidence: the floor probe's fsr section, CI run 39463099719.
+        if is_config("rojorhi_d3d12_adapter", "warp") and is_config("rojorhi_d3d12_debug", "gbv") then
+            table.insert(contract_left_out, "UpscalerTests.cpp")
+            table.insert(conformance_left_out, "UpscaleConformanceTests.cpp")
         end
-        local conformance_pending = {}
-        for _, name in ipairs(d3d12_conformance_pending) do
-            conformance_pending[name] = true
+        -- A renamed or deleted file must leave the lists too, so on_config fails on a name that matches no file. The check
+        -- runs in script scope, the only scope that can fail a configuration, so the values travel absolute.
+        local left_out = {}
+        for _, name in ipairs(contract_left_out) do
+            table.insert(left_out, path.join(component_dir, "Tests/Contract", name))
         end
-        -- A renamed or deleted conformance file must leave the list too; on_config fails on a name that matches no file.
-        set_values("rojorhi.d3d12_conformance_pending", d3d12_conformance_pending)
-        set_values("rojorhi.conformance_dir", path.join(component_dir, "Tests/Conformance"))
+        for _, name in ipairs(conformance_left_out) do
+            table.insert(left_out, path.join(component_dir, "Tests/Conformance", name))
+        end
+        set_values("rojorhi.d3d12_left_out", left_out)
         on_config(function (target)
-            local conformance_dir = target:values("rojorhi.conformance_dir")
-            for _, name in ipairs(table.wrap(target:values("rojorhi.d3d12_conformance_pending"))) do
-                assert(os.isfile(path.join(conformance_dir, name)),
-                       format("d3d12_conformance_pending names Tests/Conformance/%s, which does not exist; remove or rename the entry", name))
+            for _, file in ipairs(table.wrap(target:values("rojorhi.d3d12_left_out"))) do
+                assert(os.isfile(file), format("the d3d12 build leaves out %s, which does not exist; remove or rename the entry", file))
             end
         end)
-        for _, file in ipairs(os.files(path.join(component_dir, "Tests/Conformance/*.cpp"))) do
-            if not conformance_pending[path.filename(file)] then
-                add_files(path.join(component, "Tests/Conformance", path.filename(file)))
-            end
+    end
+    for _, file in ipairs(os.files(path.join(component_dir, "Tests/Contract/*.cpp"))) do
+        if not table.contains(contract_left_out, path.filename(file)) then
+            add_files(path.join(component, "Tests/Contract", path.filename(file)))
         end
-    elseif #os.files(path.join(component_dir, "Tests/Conformance/*.cpp")) > 0 then
-        add_files(path.join(component, "Tests/Conformance/*.cpp"))
+    end
+    add_files(path.join(component, "Tests/Support/*.cpp"))
+    -- The conformance directory may hold no source, and a glob that matches nothing makes xmake warn, so each file is added.
+    for _, file in ipairs(os.files(path.join(component_dir, "Tests/Conformance/*.cpp"))) do
+        if not table.contains(conformance_left_out, path.filename(file)) then
+            add_files(path.join(component, "Tests/Conformance", path.filename(file)))
+        end
     end
     -- Core and Null cases test the core through the Null backend, which never ships, so they build only with it.
     if is_config("rojorhi_backend", "null") then
@@ -409,7 +370,7 @@ target("RojoRHITests")
         add_tests("conformance", {runargs = {"[conformance]"}, runenvs = layer, realtime_output = true})
     elseif is_config("rojorhi_backend", "d3d12") then
         -- contract runs the shared and [d3d12] cases without the death ones, death runs every death case, and
-        -- conformance runs the [conformance] cases of the files the backend has taken off its pending list.
+        -- conformance runs the [conformance] cases.
         add_tests("contract", {runargs = {"[contract]~[death],[d3d12]~[death]"}, realtime_output = true})
         -- Each case spawns this executable again, so keep Catch2's summary in the log and bound a hang.
         add_tests("death", {runargs = {"[death]"}, realtime_output = true, run_timeout = 300000})

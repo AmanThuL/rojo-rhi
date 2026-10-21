@@ -108,9 +108,6 @@ namespace rojoRHI::d3d12 {
         T* m_pointer = nullptr;
     };
 
-    /// Logs that the D3D12 backend does not implement `entry`, named `Class::member`, then aborts, in every build.
-    [[noreturn]] void notImplemented(std::string_view entry);
-
     /// Returns the 32 bits of `result`, which a message prints as eight hexadecimal digits.
     uint32_t hresultBits(HRESULT result);
 
