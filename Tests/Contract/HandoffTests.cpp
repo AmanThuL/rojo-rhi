@@ -128,11 +128,15 @@ TEST_CASE("a texture uploaded on Copy in General is read on Graphics in General 
     const Buffer staging = kit.buffer(BufferUsage::None, 64 * 1024);
     const Buffer readback = kit.buffer(BufferUsage::ShaderWrite, 64 * 1024);
     const Fence fence = *kit.device.createFence(0, "test.fence");
-    const std::array<FenceValue, 1> uploaded{ FenceValue{ fence, 1 } };
+    const std::array<FenceValue, 1> prepared{ FenceValue{ fence, 1 } };
+    const std::array<FenceValue, 1> uploaded{ FenceValue{ fence, 2 } };
+    // A Copy list keeps its textures in General and takes no barrier out of Undefined, so Graphics moves the texture first.
+    CommandList prepare = kit.device.acquireCommandList(QueueType::Graphics, "test.prepare");
+    test::transition(prepare, texture, Layout::Undefined, Layout::General);
+    submitTo(kit.device, prepare, QueueType::Graphics, {}, prepared);
     CommandList copy = kit.device.acquireCommandList(QueueType::Copy, "test.copy");
-    test::transition(copy, texture, Layout::Undefined, Layout::General);
     copy.copyBufferToTexture(staging, BufferTextureLayout{ .rowPitch = 256 }, texture, kRow);
-    submitTo(kit.device, copy, QueueType::Copy, {}, uploaded);
+    submitTo(kit.device, copy, QueueType::Copy, prepared, uploaded);
     kit.list.copyTextureToBuffer(texture, kRow, readback, BufferTextureLayout{ .rowPitch = 256 });
     test::transition(kit.list, texture, Layout::General, Layout::ShaderRead);
     dispatchWith(kit, kit.list, texture, Access::ShaderRead);

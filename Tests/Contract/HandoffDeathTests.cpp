@@ -78,19 +78,21 @@ TEST_CASE("VU-rojo-sync-0025 a texture handed from Graphics to Copy in ShaderRea
 }
 
 //======================================================================================================================
-TEST_CASE("VU-rojo-sync-0025 a texture handed from Copy to Graphics in CopyDst is moved there from CopyDst", "[contract][death]")
+TEST_CASE("VU-rojo-sync-0025 Copy's first barrier on a texture handed from Graphics in CopyDst takes it over in General", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-sync-0025", [] {
         PassKit kit(QueueType::Graphics, true);
         const Texture texture = kit.texture();
         const Fence fence = *kit.device.createFence(0, "test.fence");
-        const std::array<FenceValue, 1> uploaded{ FenceValue{ fence, 1 } };
+        const std::array<FenceValue, 1> moved{ FenceValue{ fence, 1 } };
+        test::transition(kit.list, texture, Layout::Undefined, Layout::CopyDst);
+        submitTo(kit.device, kit.list, QueueType::Graphics, {}, moved);
+        // A Copy list's barrier keeps General on both sides (VU-rojo-sync-0026), but the texture reaches the Copy queue in
+        // CopyDst, which the two queues do not share. The barrier breaks VU-rojo-sync-0013 too; the tracker checks the
+        // handoff rule first.
         CommandList copy = kit.device.acquireCommandList(QueueType::Copy, "test.copy");
-        test::transition(copy, texture, Layout::Undefined, Layout::CopyDst);
-        submitTo(kit.device, copy, QueueType::Copy, {}, uploaded);
-        // Graphics starts from the layout the Copy queue left, which only the Copy queue's own rule would have refused.
-        test::transition(kit.list, texture, Layout::CopyDst, Layout::ShaderRead);
-        submitTo(kit.device, kit.list, QueueType::Graphics, uploaded);
+        test::transition(copy, texture, Layout::General, Layout::General);
+        submitTo(kit.device, copy, QueueType::Copy, moved);
     });
 }
 
@@ -131,7 +133,7 @@ TEST_CASE("VU-rojo-sync-0025 Compute's first barrier on a swapchain image handed
 }
 
 //======================================================================================================================
-TEST_CASE("VU-rojo-sync-0025 Copy's first barrier on a texture created with data and sampled on Graphics starts from ShaderRead", "[contract][death]")
+TEST_CASE("VU-rojo-sync-0025 Copy's first barrier on a texture created with data and sampled on Graphics takes it over in ShaderRead", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-sync-0025", [] {
         PassKit kit(QueueType::Graphics, true);
@@ -148,9 +150,11 @@ TEST_CASE("VU-rojo-sync-0025 Copy's first barrier on a texture created with data
         // Initial data leaves the texture in ShaderRead, and the Graphics queue samples it there with no barrier.
         dispatchWith(kit, kit.list, texture, Access::ShaderRead);
         submitTo(kit.device, kit.list, QueueType::Graphics, {}, sampled);
-        // The Copy queue takes it over from Graphics in ShaderRead, which the two queues do not share.
+        // The Copy queue takes it over from Graphics in ShaderRead, which the two queues do not share. Its first barrier
+        // keeps General on both sides (VU-rojo-sync-0026) and so breaks VU-rojo-sync-0013 too; the tracker checks the
+        // handoff rule first.
         CommandList copy = kit.device.acquireCommandList(QueueType::Copy, "test.copy");
-        test::transition(copy, texture, Layout::ShaderRead, Layout::General);
+        test::transition(copy, texture, Layout::General, Layout::General);
         copy.copyBufferToTexture(staging, BufferTextureLayout{ .rowPitch = 256 }, texture, kRow);
         submitTo(kit.device, copy, QueueType::Copy, sampled);
     });
@@ -173,27 +177,5 @@ TEST_CASE("VU-rojo-queue-0005 a texture moved on Graphics after the value Comput
         CommandList compute = kit.device.acquireCommandList(QueueType::Compute, "test.compute");
         dispatchWith(kit, compute, texture, Access::ShaderRead);
         submitTo(kit.device, compute, QueueType::Compute, moved);
-    });
-}
-
-//======================================================================================================================
-TEST_CASE("VU-rojo-present-0018 an image moved to Present on Copy is presented on Graphics with no fence after the move", "[contract][death]")
-{
-    ROJORHI_EXPECT_DEATH("VU-rojo-present-0018", [] {
-        Device device = *createDevice(DeviceDesc{ .validation = true });
-        Swapchain swapchain = *device.createSwapchain(SwapchainDesc{ .nativeSurface = test::surface(), .label = "test.swapchain" });
-        const Fence fence = *device.createFence(0, "test.fence");
-        const std::array<FenceValue, 1> drawn{ FenceValue{ fence, 1 } };
-        device.beginFrame();
-        const Texture image = swapchain.acquire();
-        CommandList graphics = device.acquireCommandList(QueueType::Graphics, "test.graphics");
-        test::transition(graphics, image, Layout::Undefined, Layout::ColorAttachment);
-        test::transition(graphics, image, Layout::ColorAttachment, Layout::General);
-        submitTo(device, graphics, QueueType::Graphics, {}, drawn);
-        CommandList copy = device.acquireCommandList(QueueType::Copy, "test.copy");
-        test::transition(copy, image, Layout::General, Layout::Present);
-        submitTo(device, copy, QueueType::Copy, drawn);
-        // The graphics queue never waits on the Copy move, so the image is not in Present there.
-        device.queue(QueueType::Graphics).present(swapchain);
     });
 }

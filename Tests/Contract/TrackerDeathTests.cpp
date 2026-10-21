@@ -12,6 +12,8 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include <array>
+#include <cstddef>
+#include <vector>
 
 using namespace rojoRHI;
 using test::PassKit;
@@ -157,11 +159,16 @@ TEST_CASE("VU-rojo-sync-0006 a texture used by a Copy list is not in General", "
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-sync-0006", [] {
         PassKit kit(QueueType::Copy, true);
-        const Texture texture = kit.texture();
+        const std::vector<std::byte> texels(static_cast<size_t>(PassKit::kSize) * PassKit::kSize * 4);
+        const std::array<TextureData, 1> initial{ TextureData{ .bytes = texels, .bytesPerRow = PassKit::kSize * 4 } };
+        const Texture texture = *kit.device.createTexture(
+            TextureDesc{
+                .format = Format::RGBA8Unorm, .extent = { PassKit::kSize, PassKit::kSize, 1 }, .usage = TextureUsage::Sampled, .label = "test.texture" },
+            initial
+        );
         const Buffer buffer = kit.buffer(BufferUsage::None, 4096);
-        // CopyDst permits the copy, so only the Copy list's rule fails.
-        move(kit.list, texture, Layout::Undefined, Layout::CopyDst);
-        kit.list.copyBufferToTexture(buffer, kLayout, texture, kRegion);
+        // Initial data leaves the texture in ShaderRead, which permits no copy, and a Copy list takes no barrier out of it.
+        kit.list.copyTextureToBuffer(texture, kRegion, buffer, kLayout);
         kit.finish();
     });
 }

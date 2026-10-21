@@ -193,10 +193,8 @@ A `SYNC_ALL` sync is kept, a side with `NO_ACCESS` drops only `CLEAR_UNORDERED_A
 - **Ranges.** The mip and layer ranges resolve against the texture's description; a 3D texture is
   one array slice; a format with a stencil plane names planes 0 and 1.
 - **Copy lists.** A copy queue takes no layout barrier and its textures stay in `General`, so a
-  texture barrier on a Copy list becomes a global barrier of the same stages and accesses.
-  A fresh texture's `Undefined` to `General` barrier is valid on a Copy list because of the
-  `COMMON` creation. A layout change of a texture another queue left in a non-`COMMON` layout is
-  legal in the API but not expressible on a Copy list.
+  texture barrier on a Copy list, which keeps `General` on both sides (`VU-rojo-sync-0026`),
+  becomes a global barrier of the same stages and accesses.
 
 The backend tracks no layouts; the caller's `oldLayout` is the native `LayoutBefore`, as the
 reference makes the caller state it. Three transitions are hidden from the caller: the clear

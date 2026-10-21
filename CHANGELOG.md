@@ -273,3 +273,8 @@
   heap handle fed by `rojoRHI::nonUniform` carries the non-uniform flag, for each fetch kind, and
   the module's root loads and 16-byte raw accesses are as wide as the kernel needs; hosted Windows
   CI runs it.
+- API reference change for the planned D3D12 backend: `VU-rojo-sync-0026` is added, so a texture
+  barrier recorded on a `Copy` list has `General` as both its old and new layout and discards
+  nothing from `Undefined`. A D3D12 copy queue takes no layout barrier, and such a barrier lowers to
+  a global one. A caller moves a texture to `General` on the graphics or compute queue before the
+  copy queue uses it; `VU-rojo-sync-0006` still reports a use on a Copy list in another layout.
