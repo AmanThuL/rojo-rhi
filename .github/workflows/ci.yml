@@ -242,7 +242,8 @@ jobs:
       - run: |
           python3 Tools/check_cpp_layout.py --compile-commands build/compile-commands/null/compile_commands.json \
               --compile-commands build/compile-commands/metal4/compile_commands.json \
-              --exclude Backends/D3D12 --exclude Tests/D3D12 --exclude Tests/Support/D3D12 --exclude Tools/D3D12Probe
+              --exclude Backends/D3D12 --exclude Tests/D3D12 --exclude Tests/Support/D3D12 --exclude Tools/D3D12Probe \
+              --exclude Benchmarks/HostWindows --exclude Benchmarks/NativeD3D12 --exclude Benchmarks/ChecksD3D12
       - run: python3 Tools/check_cpp_comments.py --public-api-docs error --compile-commands build/compile-commands/null/compile_commands.json
       - run: python3 Tools/check_cpp_comments.py --public-api-docs error --compile-commands build/compile-commands/metal4/compile_commands.json
   # The floor probe gates the D3D12 backend (ADR 0010): WARP on the hosted image must meet the hardware floor
@@ -452,6 +453,7 @@ jobs:
       # Keep these directories equal to the ones the format job excludes.
       - run: >-
           python3 Tools/check_cpp_layout.py --only Backends/D3D12 --only Tests/D3D12 --only Tests/Support/D3D12 --only Tools/D3D12Probe
+          --only Benchmarks/HostWindows --only Benchmarks/NativeD3D12 --only Benchmarks/ChecksD3D12
           --compile-commands build/compile-commands/d3d12/compile_commands.json --clangd "$env:CLANGD_PATH"
       # Release with debug features mode, which enables none in Release; /WX makes the build warning-free. The LTO
       # probe only builds and is not run, and check_lto_inline.py disassembles it to require that link-time
@@ -550,3 +552,37 @@ jobs:
           }
           $summary -join "`n" | Out-File -Append -Encoding utf8 $env:GITHUB_STEP_SUMMARY
           exit 1
+  # The benchmark harness on D3D12 (WARP): the Windows host layer, the native arm's context and the checks of both, built
+  # warning-free in Debug with the debug layer and in Release with no debug feature. It never times anything (ADR 0014).
+  d3d12-bench:
+    runs-on: windows-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v5
+      - uses: xmake-io/github-action-setup-xmake@v1
+        with: {xmake-version: latest}
+      - uses: actions/cache@v5
+        with:
+          path: ThirdParty
+          key: ${{ runner.os }}-thirdparty-${{ hashFiles('xmake/setup.lua') }}
+      # The shader rules run `python3`; setup-python on Windows installs only `python.exe`.
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.x'}
+      - shell: pwsh
+        run: |
+          if (-not (Get-Command python3 -ErrorAction SilentlyContinue)) {
+            $python = (Get-Command python).Source
+            Copy-Item $python (Join-Path (Split-Path $python) 'python3.exe')
+          }
+          python3 --version
+      - run: xmake setup
+      - run: xmake f -m debug -y --rojorhi_backend=d3d12 --rojorhi_d3d12_adapter=warp --rojorhi_d3d12_debug=layer
+      - run: xmake build RojoRHIBench
+      - run: xmake test RojoRHIBench/host
+        timeout-minutes: 15
+      - run: xmake test RojoRHIBench/native
+        timeout-minutes: 15
+      - run: xmake f -m release -y --rojorhi_backend=d3d12 --rojorhi_d3d12_adapter=warp --rojorhi_d3d12_debug=mode
+      - run: xmake build RojoRHIBench
+      - run: xmake test RojoRHIBench/host
+        timeout-minutes: 15

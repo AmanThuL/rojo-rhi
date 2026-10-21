@@ -21,6 +21,7 @@
 using namespace rojoRHI::bench;
 using rojoRHI::Counters;
 
+#if defined(ROJORHI_BENCH_NATIVE_METAL)
 namespace {
     //==================================================================================================================
     ArmResult runConfig(const WorkloadEntry& entry, const Config& config, Arm arm, const RunOptions& options)
@@ -48,6 +49,7 @@ namespace {
         return static_cast<double>(atThousand.nativeCalls[0] - atHundred.nativeCalls[0]) / 900.0;
     }
 } // namespace
+#endif
 
 #if defined(ROJORHI_BENCH_BACKEND_NULL)
 namespace {
@@ -187,6 +189,7 @@ TEST_CASE("C10 and C10m1 through RojoRHI run on a validating Null device without
 }
 #endif
 
+#if defined(ROJORHI_BENCH_NATIVE_METAL)
 //======================================================================================================================
 TEST_CASE("C10's native arm draws drawId + 1 at each drawId pixel from kernel-encoded commands", "[native]")
 {
@@ -248,3 +251,4 @@ TEST_CASE("the native counted-draw helper encodes UInt16 indexed draws at maxCou
         CHECK(result.outputs[0].bytes == expectedTarget(maxCount, maxCount));
     }
 }
+#endif

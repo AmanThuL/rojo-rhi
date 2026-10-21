@@ -16,6 +16,8 @@
 
 #include <algorithm>
 #include <cstdio>
+#include <filesystem>
+#include <fstream>
 #include <optional>
 #include <span>
 #include <string>
@@ -226,9 +228,10 @@ namespace {
             .arms = results,
         };
         const std::string text = runJson(record);
-        std::FILE* file = std::fopen(parsed.out.c_str(), "wb");
-        const bool written = file != nullptr && std::fputs((text + "\n").c_str(), file) >= 0;
-        if (file == nullptr || std::fclose(file) != 0 || !written)
+        std::ofstream file(std::filesystem::path(parsed.out), std::ios::binary);
+        file << text << '\n';
+        file.close();
+        if (!file)
         {
             std::fprintf(stderr, "run: cannot write %s\n", parsed.out.c_str());
             return 1;

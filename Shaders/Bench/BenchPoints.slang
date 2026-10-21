@@ -10,7 +10,10 @@ static const uint kTargetSize = 256;
 struct PointOutput
 {
     float4 position : SV_Position;
+    // D3D12 rasterizes every point as one pixel and has no point size; DXIL refuses SV_PointSize in a vertex shader.
+#if !defined(ROJORHI_TARGET_HLSL)
     float pointSize : SV_PointSize;
+#endif
     nointerpolation uint drawId : DRAWID;
 };
 
@@ -28,7 +31,9 @@ PointOutput pointVertex(rojoRHI::VertexIds ids)
     const float2 ndc = pixel / float(kTargetSize) * 2.0 - 1.0;
     PointOutput output;
     output.position = float4(ndc.x, -ndc.y, 0.0, 1.0);
+#if !defined(ROJORHI_TARGET_HLSL)
     output.pointSize = 1.0;
+#endif
     output.drawId = drawId;
     return output;
 }
