@@ -289,6 +289,7 @@ TEST_CASE("a render pass that draws reports a positive duration", "[conformance]
     const Texture target = square(device, Format::RGBA16Float, kDrawnEdge, TextureUsage::RenderTarget, "test.target");
     device.beginFrame();
     CommandList list = device.acquireCommandList(QueueType::Graphics, "test.list");
+    transition(list, target, Layout::Undefined, Layout::ColorAttachment, Stage::None, Access::None, Stage::ColorAttachment, Access::ColorAttachmentWrite);
     beginDrawing(list, target, kDrawnEdge, solid, "test.pass");
     list.draw(3, kInstances);
     list.endRenderPass();
@@ -380,6 +381,7 @@ TEST_CASE("a render pass that draws reports more than an empty pass", "[conforma
     const Texture target = square(device, Format::RGBA16Float, kDrawnEdge, TextureUsage::RenderTarget, "test.target");
     device.beginFrame();
     CommandList list = device.acquireCommandList(QueueType::Graphics, "test.list");
+    transition(list, target, Layout::Undefined, Layout::ColorAttachment, Stage::None, Access::None, Stage::ColorAttachment, Access::ColorAttachmentWrite);
     beginDrawing(list, target, kDrawnEdge, solid, "test.empty");
     list.endRenderPass();
     betweenPasses(list, target);
@@ -413,6 +415,7 @@ TEST_CASE("a render pass of counted draws only reports a positive duration, more
     const Buffer records = drawRecords(device, kRecords, kInstances / kRecords);
     device.beginFrame();
     CommandList list = device.acquireCommandList(QueueType::Graphics, "test.list");
+    transition(list, target, Layout::Undefined, Layout::ColorAttachment, Stage::None, Access::None, Stage::ColorAttachment, Access::ColorAttachmentWrite);
     beginDrawing(list, target, kDrawnEdge, solid, "test.empty");
     list.endRenderPass();
     betweenPasses(list, target);
@@ -445,6 +448,7 @@ TEST_CASE("a scope inside a render pass reports no more than its pass", "[confor
     const Texture target = square(device, Format::RGBA16Float, kDrawnEdge, TextureUsage::RenderTarget, "test.target");
     device.beginFrame();
     CommandList list = device.acquireCommandList(QueueType::Graphics, "test.list");
+    transition(list, target, Layout::Undefined, Layout::ColorAttachment, Stage::None, Access::None, Stage::ColorAttachment, Access::ColorAttachmentWrite);
     beginDrawing(list, target, kDrawnEdge, solid, "test.pass");
     list.draw(3, kInstances);
     list.beginScope("test.inner");
@@ -480,6 +484,7 @@ TEST_CASE("a render pass a counted draw splits reports one duration, more than t
     const Buffer records = drawRecords(device, 1, 1);
     device.beginFrame();
     CommandList list = device.acquireCommandList(QueueType::Graphics, "test.list");
+    transition(list, target, Layout::Undefined, Layout::ColorAttachment, Stage::None, Access::None, Stage::ColorAttachment, Access::ColorAttachmentWrite);
     beginDrawing(list, target, kDrawnEdge, solid, "test.single");
     list.draw(3, kInstances);
     list.endRenderPass();

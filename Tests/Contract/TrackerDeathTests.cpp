@@ -13,6 +13,7 @@
 
 #include <array>
 #include <cstddef>
+#include <string_view>
 #include <vector>
 
 using namespace rojoRHI;
@@ -131,6 +132,11 @@ TEST_CASE("VU-rojo-cmd-0072 a cleared range is not in CopyDst", "[contract][deat
 //======================================================================================================================
 TEST_CASE("VU-rojo-cmd-0072 a cleared range is in General", "[contract][death]")
 {
+    const std::string_view ends = test::misplacedClearEndsRecording();
+    if (!ends.empty())
+    {
+        SKIP("the clear never reaches the tracker: " << ends);
+    }
     ROJORHI_EXPECT_DEATH("VU-rojo-cmd-0072", [] {
         PassKit kit(QueueType::Graphics, true);
         // A Storage usage makes the move to General legal natively, so only the tracker judges the clear.

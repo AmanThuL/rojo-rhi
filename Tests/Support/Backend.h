@@ -34,6 +34,11 @@ namespace rojoRHI::test {
     /// True when the compiled backend's conformance shaders read a multisample view's size, not a sample: the pinned Slang's Metal lowering.
     bool multisampleReadsSize();
 
+    /// Why the compiled backend's runtime ends the process at the clear of a texture that a barrier earlier in the same list
+    /// moved to a layout other than `CopyDst`, before the tracker judges the list at submission, or empty when it lets the
+    /// tracker judge it: a death case that records such a clear skips with the reason.
+    std::string_view misplacedClearEndsRecording();
+
     /// True when the compiled backend lowers layouts to native ones its runtime checks, so a texture must leave `Undefined`
     /// through a barrier before a pass or a clear uses it even on a device that does not validate.
     bool layoutsAreNative();
