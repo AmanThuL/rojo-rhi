@@ -6,6 +6,7 @@
 
 #include "Support/Conformance.h"
 #include "Support/GpuKit.h"
+#include "Support/PassKit.h"
 
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/generators/catch_generators.hpp>
@@ -88,6 +89,7 @@ TEST_CASE("AbiVertex stores vertexIndex, a zero-based instanceIndex and drawId 0
     const Buffer indexBuffer = kit.buffer(sizeof(indices), Memory::Gpu, BufferUsage::Index, std::as_bytes(std::span(indices)));
     CommandList list = kit.list(QueueType::Graphics, "test.abiVertex");
     const std::array colors{ ColorAttachment{ .texture = target, .load = LoadOp::Clear } };
+    test::transition(list, target, Layout::Undefined, Layout::ColorAttachment);
     list.beginRenderPass(RenderPassDesc{ .colors = colors, .area = { 0, 0, 4, 4 }, .label = "test.pass" });
     list.setPipeline(pipeline);
     list.setViewport(Viewport{ .width = 4.0f, .height = 4.0f });
@@ -144,6 +146,7 @@ TEST_CASE("AbiFragment samples a view and adds drawId 0 through the oracle verte
     );
     CommandList list = kit.list(QueueType::Graphics, "test.abiFragment");
     const std::array colors{ ColorAttachment{ .texture = target, .load = LoadOp::Clear } };
+    test::transition(list, target, Layout::Undefined, Layout::ColorAttachment);
     list.beginRenderPass(RenderPassDesc{ .colors = colors, .area = { 0, 0, kEdge, kEdge }, .label = "test.pass" });
     list.setPipeline(pipeline);
     list.setViewport(Viewport{ .width = static_cast<float>(kEdge), .height = static_cast<float>(kEdge) });
@@ -152,6 +155,7 @@ TEST_CASE("AbiFragment samples a view and adds drawId 0 through the oracle verte
     // Two instances: the oracle places them 64 rows apart, both with drawId 0.
     list.draw(3, 2);
     list.endRenderPass();
+    test::transition(list, target, Layout::ColorAttachment, Layout::CopySrc);
     kit.run(std::array{ list });
     const std::vector<std::byte> bytes = kit.readTexture(target, TextureRegion{ .extent = { kEdge, kEdge, 1 } }, Format::RGBA16Float);
     std::vector<uint16_t> observed(bytes.size() / sizeof(uint16_t));
@@ -225,6 +229,7 @@ TEST_CASE("AbiVertex reads the record's drawId through drawIndirect, firstInstan
     const Addr countAddress = maxCount == 1 ? Addr{} : kit.device.address(count);
     CommandList list = kit.list(QueueType::Graphics, "test.abiVertex");
     const std::array colors{ ColorAttachment{ .texture = target, .load = LoadOp::Clear } };
+    test::transition(list, target, Layout::Undefined, Layout::ColorAttachment);
     list.beginRenderPass(RenderPassDesc{ .colors = colors, .area = { 0, 0, 4, 4 }, .label = "test.pass" });
     list.setPipeline(pipeline);
     list.setViewport(Viewport{ .width = 4.0f, .height = 4.0f });
@@ -290,6 +295,7 @@ TEST_CASE("AbiFragment adds the record's drawId", "[conformance]")
     const Buffer count = kit.buffer(sizeof(one), Memory::Gpu, BufferUsage::IndirectArgs, std::as_bytes(std::span(&one, 1)));
     CommandList list = kit.list(QueueType::Graphics, "test.abiFragment");
     const std::array colors{ ColorAttachment{ .texture = target, .load = LoadOp::Clear } };
+    test::transition(list, target, Layout::Undefined, Layout::ColorAttachment);
     list.beginRenderPass(RenderPassDesc{ .colors = colors, .area = { 0, 0, kEdge, kEdge }, .label = "test.pass" });
     list.setPipeline(pipeline);
     list.setViewport(Viewport{ .width = static_cast<float>(kEdge), .height = static_cast<float>(kEdge) });
@@ -297,6 +303,7 @@ TEST_CASE("AbiFragment adds the record's drawId", "[conformance]")
     list.pushRoot(FragmentRoot{ static_cast<uint32_t>(view), static_cast<uint32_t>(sampler), 0, 0 });
     list.drawIndirect(kit.device.address(args), maxCount, maxCount == 1 ? Addr{} : kit.device.address(count));
     list.endRenderPass();
+    test::transition(list, target, Layout::ColorAttachment, Layout::CopySrc);
     kit.run(std::array{ list });
     const std::vector<std::byte> bytes = kit.readTexture(target, TextureRegion{ .extent = { kEdge, kEdge, 1 } }, Format::RGBA16Float);
     std::vector<uint16_t> observed(bytes.size() / sizeof(uint16_t));
@@ -347,6 +354,7 @@ TEST_CASE("AbiMesh runs its task and mesh entries directly and indirectly under 
     const Buffer count = kit.buffer(sizeof(three), Memory::Gpu, BufferUsage::IndirectArgs, std::as_bytes(std::span(&three, 1)));
     CommandList list = kit.list(QueueType::Graphics, "test.abiMesh");
     const std::array colors{ ColorAttachment{ .texture = target, .load = LoadOp::Clear } };
+    test::transition(list, target, Layout::Undefined, Layout::ColorAttachment);
     list.beginRenderPass(RenderPassDesc{ .colors = colors, .area = { 0, 0, 4, 4 }, .label = "test.pass" });
     list.setPipeline(pipeline);
     list.setViewport(Viewport{ .width = 4.0f, .height = 4.0f });

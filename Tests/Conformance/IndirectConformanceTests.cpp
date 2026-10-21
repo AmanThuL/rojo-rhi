@@ -6,6 +6,7 @@
 
 #include "Support/Conformance.h"
 #include "Support/GpuKit.h"
+#include "Support/PassKit.h"
 
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/generators/catch_generators.hpp>
@@ -237,6 +238,7 @@ namespace {
         /// Begins a pass on `list` that clears `texture` to zero, then binds `bound`, the full viewport and the full scissor.
         static void begin(CommandList list, Texture texture, Pipeline bound)
         {
+            test::transition(list, texture, Layout::Undefined, Layout::ColorAttachment);
             const std::array colors{ ColorAttachment{ .texture = texture, .load = LoadOp::Clear } };
             list.beginRenderPass(RenderPassDesc{ .colors = colors, .area = kFullRect, .label = "test.pass" });
             list.setPipeline(bound);
@@ -318,6 +320,7 @@ TEST_CASE("drawIndirect draws min(count, maxCount) records", "[conformance]")
     Oracle::begin(list, target, pipeline);
     list.drawIndirect(kit.device.address(args), maxCount, kind == CountKind::Null ? Addr{} : kit.device.address(counted));
     list.endRenderPass();
+    test::transition(list, target, Layout::ColorAttachment, Layout::CopySrc);
     kit.run(std::array{ list });
     const std::string difference = differences(oracle.read(target, format), drawnImage(records, std::min(count, maxCount), Image(format)));
     INFO(difference);
@@ -379,6 +382,7 @@ TEST_CASE("drawIndexedIndirect draws min(count, maxCount) records with firstInde
     Oracle::begin(list, target, pipeline);
     list.drawIndexedIndirect(indices, type, kit.device.address(args), maxCount, kind == CountKind::Null ? Addr{} : kit.device.address(counted));
     list.endRenderPass();
+    test::transition(list, target, Layout::ColorAttachment, Layout::CopySrc);
     kit.run(std::array{ list });
     const std::string difference = differences(oracle.read(target, format), expected);
     INFO(difference);
@@ -420,6 +424,7 @@ TEST_CASE("records and a count written by the GPU earlier in the list are read a
     Oracle::begin(list, target, pipeline);
     list.drawIndirect(kit.device.address(args), maxCount, kit.device.address(counted));
     list.endRenderPass();
+    test::transition(list, target, Layout::ColorAttachment, Layout::CopySrc);
     kit.run(std::array{ list });
     const std::string difference = differences(oracle.read(target, format), drawnImage(records, std::min(count, maxCount), Image(format)));
     INFO(difference);
@@ -470,6 +475,7 @@ TEST_CASE("a pass draws counted draws recorded before and after a direct draw an
     list.draw(3, 1, 3);
     list.drawIndirect(kit.device.address(loneArgs), 1);
     list.endRenderPass();
+    test::transition(list, target, Layout::ColorAttachment, Layout::CopySrc);
     kit.run(std::array{ list });
     const auto blended = [](const std::array<float, 4>& value) { return std::array{ value[0] * 0.5f, value[1] * 2.0f, value[2] * 0.25f, value[3] }; };
     Image expected(format);
@@ -520,6 +526,7 @@ TEST_CASE("counted draws recorded before the render encoder opens use the pipeli
         list.drawIndirect(kit.device.address(args[i]), static_cast<uint32_t>(records[i].size()));
     }
     list.endRenderPass();
+    test::transition(list, target, Layout::ColorAttachment, Layout::CopySrc);
     kit.run(std::array{ list });
     Image expected(format);
     for (size_t i = 0; i < records.size(); ++i)
@@ -589,6 +596,7 @@ TEST_CASE("a record with no vertices, indices or instances draws nothing where t
             list.drawIndirect(kit.device.address(args), kRecords);
         }
         list.endRenderPass();
+        test::transition(list, target, Layout::ColorAttachment, Layout::CopySrc);
         kit.run(std::array{ list });
     };
     const Buffer drawnArgs = argsOf(drawn);
@@ -659,6 +667,7 @@ TEST_CASE("each counted draw sees the root recorded before it", "[conformance]")
     };
     CommandList list = kit.list(QueueType::Graphics, "test.indirect");
     const std::array colors{ ColorAttachment{ .texture = target, .load = LoadOp::Clear } };
+    test::transition(list, target, Layout::Undefined, Layout::ColorAttachment);
     list.beginRenderPass(RenderPassDesc{ .colors = colors, .area = kFullRect, .label = "test.pass" });
     list.setPipeline(pipeline);
     list.setViewport(kFull);
@@ -670,6 +679,7 @@ TEST_CASE("each counted draw sees the root recorded before it", "[conformance]")
     list.setRoot(firstRoot);
     list.drawIndirect(kit.device.address(thirdArgs), 1);
     list.endRenderPass();
+    test::transition(list, target, Layout::ColorAttachment, Layout::CopySrc);
     kit.run(std::array{ list });
     Image expected(format);
     const auto add = [&expected](std::span<const DrawIndirectArgs> records, const std::array<float, 4>& value) {
@@ -714,6 +724,7 @@ TEST_CASE("counted draws in two passes of one list and in lists recorded on two 
         list.drawIndirect(kit.device.address(args[pass]), 32);
         list.drawIndirect(kit.device.address(lone[pass]), 1);
         list.endRenderPass();
+        test::transition(list, targets[pass], Layout::ColorAttachment, Layout::CopySrc);
     };
     CommandList twoPasses = kit.list(QueueType::Graphics, "test.twoPasses");
     CommandList threaded = kit.list(QueueType::Graphics, "test.threaded");
