@@ -157,28 +157,31 @@ the object and mesh stages too: each bound stage costs every draw that follows a
 ## State and the prefix
 
 The list keeps the graphics state it recorded and what the open render encoder holds. Until that
-encoder opens, `setPipeline` with a graphics pipeline, the five dynamic-state setters, `setRoot`
-and a counted draw's execute append to a list-owned prefix, a vector that keeps its capacity. A
-later entry of a kind replaces an earlier one that no execute separates from it, so a pass that
-binds two pipelines and draws with neither sends only the last. The open replays the prefix in
-order through the filtered setters, so each execute sees the root, pipeline and state recorded
-before it.
+encoder opens, `setPipeline` with a graphics pipeline, the five dynamic-state setters, `setRoot` and
+a counted draw's execute append to a list-owned prefix, a vector that keeps its capacity. A later
+entry of a kind replaces an earlier one that no execute separates from it, so a pass that binds two
+pipelines and draws with neither sends only the last. The open replays the prefix in order through
+the filtered setters, so each execute sees the state recorded before it.
 
 - The held state starts at Metal's encoder defaults: no pipeline, no depth-stencil state,
   `CullModeNone`, `WindingClockwise`, `TriangleFillModeFill`, `DepthClipModeClip`, bias 0, stencil
   reference 0, blend color 0, viewport and scissor unknown. A setter calls Metal only for a value
   that differs, so a depth-stencil state is compared by pointer; null is sent as the untested
   state, which Metal binds about 1 ns faster (C3, Apple M3 Max).
+- `setPipeline` keeps the last two payloads it resolved in the recording, by handle, and reads a
+  handle bound again from them; another is read through the native table and replaces the older. A
+  handle's bits name one allocation (a release advances the generation) and a payload retires after
+  the list's frame, so a live handle's entry is its payload. A hit reads no table: a list still
+  recording after its frame retired (`VU-rojo-device-0005`, checked at `endFrame` in Debug) can read
+  a retired one. Acquisition empties them.
 - The winding decides front and back faces even with culling off, since two-sided stencil and
-  `SV_IsFrontFace` read it. A pipeline's winding is applied, filtered, when the pipeline culls,
-  tests stencil or has a fragment entry (`PipelineState::setsWinding`); only a depth-only or
-  rasterization-off pipeline skips it.
+  `SV_IsFrontFace` read it. A pipeline's winding is applied, filtered, when it culls, tests stencil
+  or has a fragment entry (`setsWinding`); a depth-only or rasterization-off pipeline skips it.
 - The applied depth bias is the recorded values when the bound pipeline has `depthBias`, else
   zero. Topology is list state only: `setPrimitiveTopology` sets no native state, `setPipeline`
   resets it to the list form of the pipeline's class, and each draw passes it.
-- `setRoot` writes the list table's `buffer(0)` at once outside a pass or while the render encoder
-  is open, filtered against the address it holds, and joins the prefix otherwise. Slots 1 and 2
-  hold the view and sampler tables from the start.
+- `setRoot` writes the table's `buffer(0)` at once outside a pass or with the render encoder open,
+  filtered, and joins the prefix otherwise. Slots 1 and 2 hold the view and sampler tables.
 - A direct draw passes base instance 0. An indexed draw passes the index address plus `firstIndex`
   times the index size and the bytes that remain. A direct mesh draw binds four zero bytes at
   `buffer(3)`, the `drawId` the shader reads, filtered; the list writes them into its frame-arena
@@ -262,8 +265,7 @@ kernel reads the count and either encodes the draws into an indirect command buf
   pipeline (the parameters' address and the dispatch), three when the kind changes, four on a new
   encoder (pipeline, kernel table, address, dispatch), and its execute one more at replay. The batch
   adds the compute encoder's open, `endEncoding` and one barrier at the render encoder's open, and
-  the pass's begin timestamp when it opens the pass. Dispatches and executes each run in their own
-  pool.
+  the pass's begin timestamp when it opens the pass. Dispatches and executes each run in a pool.
 
 ## Mesh paths
 
@@ -276,8 +278,7 @@ indirect draw is counted: its kernels are the batch form of the previous section
 the mesh one, and the barrier adds the object and mesh stages. A mesh ICB command binds buffers 0
 to 3 on the object, mesh and fragment stages, with four bind counts and `inheritBuffers` false:
 nothing reaches an ICB command from the table, and Slang gives every entry of a file each reserved
-binding any entry of the file touches. The writer path binds the record at `buffer(3)` for its
-draw.
+binding any entry of the file touches. The writer path binds the record at `buffer(3)` to draw.
 
 Slang drops the user semantic of mesh vertex outputs when it compiles to MSL, so Metal refuses a
 mesh pipeline whose fragment entry reads a vertex varying; a mesh shader passes its values per

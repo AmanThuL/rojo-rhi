@@ -22,6 +22,7 @@ namespace rojoRHI::metal4 {
         tableRoot = 0;
         tableDrawRecord = 0;
         zeroRecord = 0;
+        resolved = {};
         icbs.reset();
     }
 

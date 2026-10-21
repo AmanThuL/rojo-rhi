@@ -55,6 +55,19 @@ namespace rojoRHI::metal4 {
         bool meshStages = false;
     };
 
+    /// The payloads of the last two pipeline handles `setPipeline` resolved in a recording, newest first, so binding either
+    /// again reads no handle table. A handle's bits name one allocation for the pool's whole life: a release advances the
+    /// slot's generation, a slot at the last generation is never reused, and a payload is fixed from creation to retirement.
+    /// A handle that is live when it is bound therefore names the payload cached for its bits, which retires only after the
+    /// list's frame does, since a destroyed pipeline retires only when the frame it was destroyed in retires and the list
+    /// belongs to its own. A hit reads no table, so a list still recording after its frame retired, which breaks
+    /// VU-rojo-device-0005 and goes unchecked in Release, can read a retired payload. Emptied at each acquisition.
+    struct ResolvedPipelines
+    {
+        std::array<uint64_t, 2> handles = {};            ///< The handles' bits, newest first; 0 for an empty entry.
+        std::array<const PipelineState*, 2> states = {}; ///< The payload of each handle.
+    };
+
     /// The kinds of command a list records into its prefix while its pass's render encoder is closed.
     enum class PrefixKind : uint8_t
     {
@@ -178,6 +191,8 @@ namespace rojoRHI::metal4 {
 
         /// The graphics pipeline bound last, as recorded; null when none is bound.
         const PipelineState* pipeline = nullptr;
+        /// The payloads `setPipeline` resolved last in this recording; kept across passes.
+        ResolvedPipelines resolved;
         /// The primitive type of the next draw: the bound pipeline's list form, or what `setPrimitiveTopology` set since.
         MTL::PrimitiveType topology = MTL::PrimitiveTypeTriangle;
         /// The values of the last `setDepthBias` the render encoder has seen: set at once while it is open, and by the replay
@@ -207,10 +222,10 @@ namespace rojoRHI::metal4 {
         uint64_t viewTableAddress = 0;
         uint64_t samplerTableAddress = 0; ///< See `viewTableAddress`.
 
-        /// Forgets everything the list recorded, as when the list is acquired again: the pass, the graphics state, the root and
-        /// the addresses the list's table holds, the zero record and the compute pipeline, and frees every indirect command
-        /// buffer slot for the new recording. Keeps the containers' capacity, the descriptor, the indirect command buffers and
-        /// the view and sampler table addresses.
+        /// Forgets everything the list recorded, as when the list is acquired again: the pass, the graphics state, the resolved
+        /// pipelines, the root and the addresses the list's table holds, the zero record and the compute pipeline, and frees
+        /// every indirect command buffer slot for the new recording. Keeps the containers' capacity, the descriptor, the indirect
+        /// command buffers and the view and sampler table addresses.
         void reset();
 
         /// Forgets the pass and the graphics state recorded in it, as `endRenderPass` does, which also unbinds the pipeline.

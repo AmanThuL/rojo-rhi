@@ -103,8 +103,10 @@ without touching a pool. The table holds 2^22 slots; a creation that finds it fu
 `OutOfMemory` through `core::tableFull`, and the backend releases the object it made. A buffer's
 payload, a `metal4::BufferPayload` (one `cpuAllocations`), caches its GPU address and length.
 
-A pool clears a slot's table entry before the retire hook runs, so a racing misuse reads null and
-never a dangling pointer, and the hook then releases the object and sets the record's field to null.
+A pool clears a slot's table entry before the retire hook runs, so a racing misuse that reads the
+table gets null and never a dangling pointer, and the hook then releases the object and sets the
+record's field to null. A list's cached pipelines do not read the table
+([drawing](metal4-drawing.md#state-and-the-prefix)).
 A hook opens an autorelease pool, tolerates a null payload and releases in reverse order of
 creation. The backend registers hooks for buffers, heaps, textures, fences, views, samplers,
 shader libraries, pipelines and upscalers ([command recording](metal4-recording.md#upscalers)), a

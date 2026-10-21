@@ -7,6 +7,7 @@
 #include "Core/CommandLists.h"
 #include "Core/Counters.h"
 #include "Core/HandlePool.h"
+#include "Core/Records.h"
 #include "Metal4Barriers.h"
 #include "Metal4Device.h"
 #include "Metal4DrawState.h"
@@ -266,6 +267,88 @@ TEST_CASE("setPipeline sets only the state that differs from the encoder's", "[m
     before = callsOf(list);
     list.setPipeline(b);
     CHECK(callsOf(list) == before);
+    list.endRenderPass();
+    finish(device, list);
+    destroyDevice(device);
+}
+
+//======================================================================================================================
+TEST_CASE("setPipeline reads a pipeline bound again in the recording from the list, and a reused slot's new pipeline from the pool", "[metal4]")
+{
+    Device device = *createDevice({ .framesInFlight = 2 });
+    const ShaderLibrary library = standard(device);
+    const Pipeline a = vertexPipeline(device, library);
+    const Pipeline b = vertexPipeline(device, library, RasterState{ .cull = CullMode::Back });
+    const Pipeline c = vertexPipeline(device, library, RasterState{ .cull = CullMode::Front });
+    const Texture target = makeTexture(device, Format::RGBA8Unorm);
+    const std::array colors{ ColorAttachment{ .texture = target, .load = LoadOp::Clear } };
+    using Pair = std::array<uint64_t, 2>;
+    device.beginFrame();
+    CommandList list = device.acquireCommandList(QueueType::Graphics, "test.list");
+    CHECK(drawOf(list).resolved.handles == Pair{});
+    list.beginRenderPass(passOf(colors));
+    list.setViewport(kViewport);
+    list.setScissor(kScissor);
+    list.setPipeline(a);
+    list.draw(3);
+    list.setPipeline(b);
+    list.draw(3);
+    // The two handles bound last, newest first, with their payloads.
+    const metal4::ResolvedPipelines& resolved = drawOf(list).resolved;
+    CHECK(resolved.handles == Pair{ b.bits, a.bits });
+    CHECK(resolved.states == std::array{ stateOf(list, b), stateOf(list, a) });
+    // Binding either again reads the pair and leaves it as it is.
+    list.setPipeline(a);
+    list.draw(3);
+    CHECK(drawOf(list).held.pipeline == stateOf(list, a));
+    CHECK(resolved.handles == Pair{ b.bits, a.bits });
+    // A third pipeline replaces the older entry.
+    list.setPipeline(c);
+    list.draw(3);
+    CHECK(drawOf(list).held.pipeline == stateOf(list, c));
+    CHECK(resolved.handles == Pair{ c.bits, b.bits });
+    list.endRenderPass();
+    // The pair outlives the pass: the next pass binds b from it.
+    list.beginRenderPass(passOf(colors));
+    list.setViewport(kViewport);
+    list.setScissor(kScissor);
+    list.setPipeline(b);
+    list.draw(3);
+    CHECK(drawOf(list).held.pipeline == stateOf(list, b));
+    CHECK(resolved.handles == Pair{ c.bits, b.bits });
+    list.endRenderPass();
+    // The list ends its frame holding a full pair; its frame slot hands the same list out again below.
+    const CommandListImpl* recycled = &CommandListImpl::of(list);
+    finish(device, list);
+
+    // Once a retires, a new pipeline takes its slot at the next generation.
+    device.destroy(a);
+    for (int frame = 0; frame < 3; ++frame)
+    {
+        device.beginFrame();
+        device.endFrame();
+    }
+    const Pipeline d = vertexPipeline(device, library, RasterState{ .cull = CullMode::Back });
+    using Pool = core::HandlePool<Pipeline, core::PipelineRecord>;
+    REQUIRE(Pool::slotIndex(d) == Pool::slotIndex(a));
+    REQUIRE(d.bits != a.bits);
+    device.beginFrame();
+    list = device.acquireCommandList(QueueType::Graphics, "test.list");
+    // Acquisition empties the pair the recycled list held. Even an entry left for a's handle names another generation of the
+    // slot, so d misses it and is read from the pool.
+    REQUIRE(&CommandListImpl::of(list) == recycled);
+    CHECK(drawOf(list).resolved.handles == Pair{});
+    CHECK(drawOf(list).resolved.states == std::array<const metal4::PipelineState*, 2>{});
+    metal4::ResolvedPipelines& planted = CommandListImpl::of(list).draw.resolved;
+    planted.handles = { a.bits, 0 };
+    planted.states = { stateOf(list, b), nullptr };
+    list.beginRenderPass(passOf(colors));
+    list.setViewport(kViewport);
+    list.setScissor(kScissor);
+    list.setPipeline(d);
+    list.draw(3);
+    CHECK(drawOf(list).held.pipeline == stateOf(list, d));
+    CHECK(drawOf(list).resolved.handles == Pair{ d.bits, a.bits });
     list.endRenderPass();
     finish(device, list);
     destroyDevice(device);
