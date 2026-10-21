@@ -1,6 +1,6 @@
 //----------------------------------------------------------------------------------------------------------------------
 /// @file RojoShaders.h
-/// @brief Declares how the RojoRHI arm loads a shader library: a text blob on Null, the built .metal4lib on Metal 4.
+/// @brief Declares how the RojoRHI arm loads a shader library: a text blob on Null, the built library elsewhere.
 //----------------------------------------------------------------------------------------------------------------------
 #pragma once
 
@@ -20,6 +20,7 @@ namespace rojoRHI::bench {
     };
 
     // Loads library `name` with the label "bench.<name>". On Null the blob lists exactly `entries`; on Metal 4 it is
-    // Shaders/<name>.metal4lib beside the executable, which holds them. Destroying the library is the caller's.
+    // Shaders/<name>.metal4lib beside the executable, which holds them, and on D3D12 Shaders/<name>.d3d12lib. Destroying
+    // the library is the caller's.
     std::expected<ShaderLibrary, std::string> loadLibrary(Device device, std::string_view name, std::span<const ShaderEntryName> entries);
 } // namespace rojoRHI::bench

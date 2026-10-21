@@ -9,6 +9,7 @@
 #include <cmath>
 #include <cstdio>
 #include <format>
+#include <fstream>
 
 namespace rojoRHI::bench {
     //==================================================================================================================
@@ -122,14 +123,14 @@ namespace rojoRHI::bench {
     //==================================================================================================================
     std::expected<void, std::string> JsonWriter::save(const std::filesystem::path& path) const
     {
-        std::FILE* file = std::fopen(path.c_str(), "wb");
-        if (file == nullptr)
+        std::ofstream file(path, std::ios::binary);
+        if (!file)
         {
             return std::unexpected(std::format("json: cannot open {} for writing", path.string()));
         }
-        const bool written = std::fwrite(m_text.data(), 1, m_text.size(), file) == m_text.size() && std::fputc('\n', file) != EOF;
-        const bool closed = std::fclose(file) == 0;
-        if (!written || !closed)
+        file << m_text << '\n';
+        file.close();
+        if (!file)
         {
             return std::unexpected(std::format("json: cannot write {}", path.string()));
         }

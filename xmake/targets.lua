@@ -439,34 +439,58 @@ if is_plat("windows") then
     end
 end
 
--- The benchmark harness under Benchmarks/, one executable so that a process measures RojoRHI and hand-written
--- metal-cpp code on the same device. It links RojoRHI of the configured backend and runs its own Catch2 session, so
--- it links Catch2 without Catch2Main. Its native code needs Metal, so it builds on macOS only.
-if is_plat("macosx") then
+-- The benchmark harness under Benchmarks/, one executable so that a process measures RojoRHI and hand-written native
+-- code on the same device. It links RojoRHI of the configured backend and runs its own Catch2 session, so it links
+-- Catch2 without Catch2Main. Its native arm needs a native API: Metal through metal-cpp on macOS, on every backend
+-- there, and D3D12 on a d3d12 build, so it builds on those two only.
+if is_plat("macosx") or is_config("rojorhi_backend", "d3d12") then
     target("RojoRHIBench")
         set_kind("binary")
         warn_unreachable()
         set_default(false)
         set_targetdir("$(builddir)/$(plat)/$(arch)/$(mode)/rojorhi-bench")
         release_lto()
-        -- The native arm's metal-cpp calls link the one shared metal-cpp unit, the same one a metal4 RojoRHI links.
-        add_deps("RojoRHI", "RojoRHIMetalCpp")
         add_packages("catch2", {components = "lib"})
         add_includedirs(path.join(component, "Benchmarks"))
-        add_sysincludedirs(path.join(thirdparty, "metal-cpp"))
-        add_frameworks("Metal", "QuartzCore", "Foundation")
-        add_files(path.join(component, "Benchmarks/**.cpp"))
-        if is_config("rojorhi_backend", "metal4") then
-            add_includedirs(path.join(component, "Backends/Metal4/Source"))
-            add_defines("ROJORHI_BENCH_BACKEND_METAL4")
+        if is_config("rojorhi_backend", "d3d12") then
+            -- The Windows host layer and the D3D12 native arm and checks replace Host/*.cpp, Native/ and the two
+            -- Metal-only check files; every other source is shared.
+            add_deps("RojoRHI")
+            add_files(path.join(component, "Benchmarks/Main.cpp"), path.join(component, "Benchmarks/Common/**.cpp"),
+                      path.join(component, "Benchmarks/Rojo/**.cpp"),
+                      path.join(component, "Benchmarks/Checks/*.cpp|HostChecks.cpp|Metal4Counts.cpp"),
+                      path.join(component, "Benchmarks/HostWindows/*.cpp"), path.join(component, "Benchmarks/NativeD3D12/*.cpp"),
+                      path.join(component, "Benchmarks/ChecksD3D12/*.cpp"))
+            -- An abort or a CRT report ends the process with a message on stderr, never a modal dialog that holds a CI step.
+            add_files(path.join(component, "Tests/Support/D3D12/D3D12NoDialog.cpp"))
+            add_defines("ROJORHI_BENCH_BACKEND_D3D12", "ROJORHI_BENCH_NATIVE_D3D12", "WIN32_LEAN_AND_MEAN", "NOMINMAX", "UNICODE", "_UNICODE")
+            d3d12_selection()
+            -- System includes, so the Agility headers shadow the Windows SDK's older d3d12.h and /external:W0 covers them.
+            add_sysincludedirs(path.join(thirdparty, "agility/include"))
+            -- bcrypt for the outputs' SHA-256, version for the runtime DLLs' file versions the environment records.
+            add_syslinks("d3d12", "dxgi", "dxguid", "bcrypt", "version")
+            add_rules("rojorhi.d3d12_runtime")
+            set_values("rojorhi.thirdparty", thirdparty_dir)
         else
-            add_defines("ROJORHI_BENCH_BACKEND_NULL")
+            -- The native arm's metal-cpp calls link the one shared metal-cpp unit, the same one a metal4 RojoRHI links.
+            add_deps("RojoRHI", "RojoRHIMetalCpp")
+            add_sysincludedirs(path.join(thirdparty, "metal-cpp"))
+            add_frameworks("Metal", "QuartzCore", "Foundation")
+            add_files(path.join(component, "Benchmarks/**.cpp|HostWindows/*.cpp|NativeD3D12/*.cpp|ChecksD3D12/*.cpp"))
+            add_defines("ROJORHI_BENCH_NATIVE_METAL")
+            if is_config("rojorhi_backend", "metal4") then
+                add_includedirs(path.join(component, "Backends/Metal4/Source"))
+                add_defines("ROJORHI_BENCH_BACKEND_METAL4")
+            else
+                add_defines("ROJORHI_BENCH_BACKEND_NULL")
+            end
         end
         -- Both shader rules raise on an empty file list, so each is added only when its directory holds a source.
         if #os.files(path.join(component_dir, "Shaders/Bench/*.slang")) > 0 then
             add_rules("rojorhi.slang")
             set_values("slang.moduledir", path.join(component_dir, "Shaders/RojoRHI"))
-            set_values("slang.slangc", path.join(thirdparty_dir, "slang/bin/slangc"))
+            set_values("slang.slangc", path.join(thirdparty_dir, is_host("windows") and "slang/bin/slangc.exe"
+                                                                 or "slang/bin/slangc"))
             add_files(path.join(component, "Shaders/Bench/*.slang"))
             -- The composed frame's roots and records, checked against Benchmarks/Common/FrameRoots.h and Scene.h.
             add_rules("rojorhi.shader_layout")
@@ -479,13 +503,20 @@ if is_plat("macosx") then
                        "BloomUpRoot=rojoRHI::bench::BloomUpRoot", "ToneMapRoot=rojoRHI::bench::ToneMapRoot")
             set_values("slang.layout_include", "rojoRHI/RHI.h", "Common/Scene.h", "Common/FrameRoots.h")
         end
-        if #os.files(path.join(component_dir, "Benchmarks/Native/Kernels/*.metal")) > 0 then
+        if is_plat("macosx") and #os.files(path.join(component_dir, "Benchmarks/Native/Kernels/*.metal")) > 0 then
             add_rules("rojorhi.metal")
             add_files(path.join(component, "Benchmarks/Native/Kernels/*.metal"))
         end
-        add_tests("null", {runargs = {"check", "[null],[host]"}, realtime_output = true})
-        add_tests("native", {runargs = {"check", "[native]"}, runenvs = {MTL_DEBUG_LAYER = "1"}, realtime_output = true})
-        if is_config("rojorhi_backend", "metal4") then
-            add_tests("metal4", {runargs = {"check", "[metal4]"}, runenvs = {MTL_DEBUG_LAYER = "1"}, realtime_output = true})
+        unreachable_after_stubs()
+        if is_config("rojorhi_backend", "d3d12") then
+            -- The D3D12 debug features are built in, as the build's rojorhi_d3d12_debug selects them; no variable enables them.
+            add_tests("host", {runargs = {"check", "[host]"}, realtime_output = true})
+            add_tests("native", {runargs = {"check", "[native]"}, realtime_output = true})
+        else
+            add_tests("null", {runargs = {"check", "[null],[host]"}, realtime_output = true})
+            add_tests("native", {runargs = {"check", "[native]"}, runenvs = {MTL_DEBUG_LAYER = "1"}, realtime_output = true})
+            if is_config("rojorhi_backend", "metal4") then
+                add_tests("metal4", {runargs = {"check", "[metal4]"}, runenvs = {MTL_DEBUG_LAYER = "1"}, realtime_output = true})
+            end
         end
 end

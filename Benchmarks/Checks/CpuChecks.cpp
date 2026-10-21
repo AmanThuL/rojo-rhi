@@ -8,7 +8,9 @@
 #include "Common/CpuRoots.h"
 #include "Common/Registry.h"
 #include "Common/RunOptions.h"
+#if defined(ROJORHI_BENCH_NATIVE_METAL)
 #include "Native/NativeContext.h"
+#endif
 
 #include <rojoRHI/RHI.h>
 
@@ -27,6 +29,7 @@
 using namespace rojoRHI::bench;
 using rojoRHI::Counters;
 
+#if defined(ROJORHI_BENCH_NATIVE_METAL)
 namespace {
     //==================================================================================================================
     ArmResult runConfig(const WorkloadEntry& entry, const Config& config, Arm arm, const RunOptions& options)
@@ -165,6 +168,7 @@ namespace {
         return expected;
     }
 } // namespace
+#endif
 
 #if defined(ROJORHI_BENCH_BACKEND_NULL)
 namespace {
@@ -590,6 +594,7 @@ TEST_CASE("C1 to C4, C6, C8 and C9 through RojoRHI run on a validating Null devi
 }
 #endif
 
+#if defined(ROJORHI_BENCH_NATIVE_METAL)
 //======================================================================================================================
 TEST_CASE("C5's native arm copies frame data with no native call per repetition under the validation layer", "[native]")
 {
@@ -746,3 +751,4 @@ TEST_CASE("the native arm signals its frame event at each frame's end and waits 
         CHECK(context.frameEvent()->signaledValue() == value);
     }
 }
+#endif

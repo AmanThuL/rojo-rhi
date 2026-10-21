@@ -9,6 +9,7 @@
 #include <string>
 
 namespace rojoRHI::bench {
-    // The canonical directory of the running executable, from _NSGetExecutablePath.
+    // The canonical directory of the running executable, from _NSGetExecutablePath on macOS and GetModuleFileNameW on
+    // Windows.
     std::expected<std::filesystem::path, std::string> executableDirectory();
 } // namespace rojoRHI::bench

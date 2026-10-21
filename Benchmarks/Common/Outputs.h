@@ -15,8 +15,8 @@
 #include <string_view>
 
 namespace rojoRHI::bench {
-    // Lowercase hexadecimal SHA-256 of the bytes.
-    std::string sha256Hex(std::span<const std::byte> bytes);
+    // Lowercase hexadecimal SHA-256 of the bytes, or the reason the hash could not be computed (Windows only).
+    std::expected<std::string, std::string> sha256Hex(std::span<const std::byte> bytes);
     // Writes each output to `directory/<id>.<arm>.<output name>.bin`, creating the directory.
     std::expected<void, std::string> dumpOutputs(const std::filesystem::path& directory, std::string_view id, Arm arm, std::span<const Output> outputs);
     // True when both sets hold the same names in the same order with identical bytes.

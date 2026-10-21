@@ -6,18 +6,18 @@
 
 #include "Host/ExecutableDirectory.h"
 
-#include <array>
 #include <cstddef>
-#include <cstdio>
 #include <filesystem>
 #include <format>
+#include <fstream>
+#include <iterator>
 #include <vector>
 
 namespace rojoRHI::bench {
     namespace {
         //==============================================================================================================
-        // Null: the backend's text format, a magic line, the shader ABI version, then one line per entry point. Metal 4:
-        // the .metal4lib the Slang rule built beside the executable.
+        // Null: the backend's text format, a magic line, the shader ABI version, then one line per entry point. Metal 4 and
+        // D3D12: the .metal4lib or .d3d12lib the Slang rule built beside the executable.
         std::expected<std::vector<std::byte>, std::string> libraryBytes(std::string_view name, std::span<const ShaderEntryName> entries)
         {
 #if defined(ROJORHI_BENCH_BACKEND_NULL)
@@ -36,21 +36,24 @@ namespace rojoRHI::bench {
             {
                 return std::unexpected(directory.error());
             }
-            const std::filesystem::path path = *directory / "Shaders" / (std::string(name) + ".metal4lib");
-            std::FILE* file = std::fopen(path.c_str(), "rb");
-            if (file == nullptr)
+#if defined(ROJORHI_BENCH_BACKEND_D3D12)
+            constexpr std::string_view kExtension = ".d3d12lib";
+#else
+            constexpr std::string_view kExtension = ".metal4lib";
+#endif
+            const std::filesystem::path path = *directory / "Shaders" / (std::string(name) + std::string(kExtension));
+            std::ifstream file(path, std::ios::binary);
+            if (!file)
             {
                 return std::unexpected(std::format("{} cannot be opened; the rojorhi.slang rule builds it", path.string()));
             }
-            std::vector<std::byte> bytes;
-            std::array<std::byte, 65536> block;
-            size_t read = 0;
-            while ((read = std::fread(block.data(), 1, block.size(), file)) > 0)
+            std::vector<char> text{ std::istreambuf_iterator<char>(file), std::istreambuf_iterator<char>() };
+            if (file.bad())
             {
-                bytes.insert(bytes.end(), block.begin(), block.begin() + static_cast<std::ptrdiff_t>(read));
+                return std::unexpected(std::format("{} cannot be read", path.string()));
             }
-            std::fclose(file);
-            return bytes;
+            const auto* bytes = reinterpret_cast<const std::byte*>(text.data());
+            return std::vector<std::byte>(bytes, bytes + text.size());
 #endif
         }
     } // namespace

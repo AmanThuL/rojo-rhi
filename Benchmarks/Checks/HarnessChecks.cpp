@@ -27,8 +27,13 @@
 #include <string>
 #include <string_view>
 #include <thread>
-#include <unistd.h>
 #include <vector>
+
+#if defined(_WIN32)
+#include <process.h>
+#else
+#include <unistd.h>
+#endif
 
 using namespace rojoRHI::bench;
 
@@ -40,9 +45,22 @@ namespace {
 #endif
 #if defined(ROJORHI_BENCH_BACKEND_METAL4)
     constexpr std::string_view kBackend = "metal4";
+#elif defined(ROJORHI_BENCH_BACKEND_D3D12)
+    constexpr std::string_view kBackend = "d3d12";
 #else
     constexpr std::string_view kBackend = "null";
 #endif
+
+    //==================================================================================================================
+    // The process id, which names a scratch directory no concurrent run shares.
+    int processId()
+    {
+#if defined(_WIN32)
+        return _getpid();
+#else
+        return getpid();
+#endif
+    }
 
     // SHA-256 of the three bytes "abc", from FIPS 180-2 appendix B.1.
     constexpr std::string_view kAbcSha256 = "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad";
@@ -348,14 +366,14 @@ TEST_CASE("a frame whose RojoRHI commit serials skip one fails when it closes", 
 //======================================================================================================================
 TEST_CASE("an output's SHA-256 matches the standard's test vectors", "[host]")
 {
-    CHECK(sha256Hex(bytesOf("abc")) == kAbcSha256);
-    CHECK(sha256Hex({}) == "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855");
+    CHECK(sha256Hex(bytesOf("abc")).value_or("") == kAbcSha256);
+    CHECK(sha256Hex({}).value_or("") == "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855");
 }
 
 //======================================================================================================================
 TEST_CASE("dumped outputs land in one file per arm and output, holding the output's bytes", "[host]")
 {
-    const std::filesystem::path directory = std::filesystem::temp_directory_path() / ("rojorhi-bench-dumps-" + std::to_string(getpid())) / "nested";
+    const std::filesystem::path directory = std::filesystem::temp_directory_path() / ("rojorhi-bench-dumps-" + std::to_string(processId())) / "nested";
     const std::array<Output, 2> outputs{ Output{ "dst", bytesOf("abc") }, Output{ "count", bytesOf("") } };
     REQUIRE(dumpOutputs(directory, "C7-k100", Arm::Native, outputs).has_value());
     std::ifstream file(directory / "C7-k100.N.dst.bin", std::ios::binary);

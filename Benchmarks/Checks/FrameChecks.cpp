@@ -9,9 +9,11 @@
 #include "Common/Registry.h"
 #include "Common/RunOptions.h"
 #include "Common/Scene.h"
+#if defined(ROJORHI_BENCH_NATIVE_METAL)
 #include "Native/NativeContext.h"
 #include "Native/NativeFrame.h"
 #include "Native/NativeFrameBarriers.h"
+#endif
 #include "Rojo/RojoTrace.h"
 #include "ShaderLayout.h"
 
@@ -367,8 +369,8 @@ TEST_CASE("the render pass table fixes targets, depth state, blending and rectan
     {
         CAPTURE(kPasses[pass.pass].label);
         REQUIRE(pass.pass < kPassCount);
-        CHECK(pass.scissor.width == pass.viewport.width);
-        CHECK(pass.scissor.height == pass.viewport.height);
+        CHECK(static_cast<float>(pass.scissor.width) == pass.viewport.width);
+        CHECK(static_cast<float>(pass.scissor.height) == pass.viewport.height);
         CHECK(pass.hasDepth == pass.depthStencil.depthTest);
         if (pass.hasDepth)
         {
@@ -377,13 +379,13 @@ TEST_CASE("the render pass table fixes targets, depth state, blending and rectan
         for (uint32_t color = 0; color < pass.colorCount; ++color)
         {
             const TextureSpec& target = textureSpec(pass.colors[color].texture);
-            CHECK(target.extent.width == pass.viewport.width);
-            CHECK(target.extent.height == pass.viewport.height);
+            CHECK(static_cast<float>(target.extent.width) == pass.viewport.width);
+            CHECK(static_cast<float>(target.extent.height) == pass.viewport.height);
         }
         if (pass.hasDepth)
         {
             const TextureSpec& target = textureSpec(pass.depth.texture);
-            CHECK(target.extent.width == pass.viewport.width);
+            CHECK(static_cast<float>(target.extent.width) == pass.viewport.width);
         }
     }
     const auto byLabel = [](std::string_view label) -> const RenderPassSpec& {
@@ -902,6 +904,7 @@ TEST_CASE("the composed frame through RojoRHI runs on a validating Null device w
 }
 #endif
 
+#if defined(ROJORHI_BENCH_NATIVE_METAL)
 namespace {
     //==================================================================================================================
     // A pipeline over one vertex entry and an optional fragment entry of a library, with the given color formats.
@@ -1142,3 +1145,4 @@ TEST_CASE("two consecutive native composed frames write identical bytes to every
         CHECK((*first)[index].bytes == (*second)[index].bytes);
     }
 }
+#endif

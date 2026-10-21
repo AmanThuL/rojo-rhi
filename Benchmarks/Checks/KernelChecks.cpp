@@ -23,6 +23,7 @@
 using namespace rojoRHI::bench;
 using rojoRHI::Counters;
 
+#if defined(ROJORHI_BENCH_NATIVE_METAL)
 namespace {
     //==================================================================================================================
     ArmResult runConfiguration(std::string_view id, Arm arm, const RunOptions& options)
@@ -64,6 +65,7 @@ namespace {
         return bytes;
     }
 } // namespace
+#endif
 
 #if defined(ROJORHI_BENCH_BACKEND_NULL)
 namespace {
@@ -164,6 +166,7 @@ TEST_CASE("G1 and G2 through RojoRHI run on a validating Null device without a m
 }
 #endif
 
+#if defined(ROJORHI_BENCH_NATIVE_METAL)
 //======================================================================================================================
 TEST_CASE("G1's native arm sums the 16 loads of every thread exactly under the validation layer", "[native]")
 {
@@ -199,3 +202,4 @@ TEST_CASE("G2's native arms sum the 16 point samples of every thread exactly und
         CHECK(fixed.gpuNs[0].has_value());
     }
 }
+#endif

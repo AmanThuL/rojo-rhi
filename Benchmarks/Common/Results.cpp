@@ -8,7 +8,11 @@
 #include "Common/JsonWriter.h"
 #include "Common/Outputs.h"
 
+#include <cstddef>
 #include <cstdint>
+#include <expected>
+#include <format>
+#include <string>
 #include <vector>
 
 namespace rojoRHI::bench {
@@ -20,6 +24,8 @@ namespace rojoRHI::bench {
 #endif
 #if defined(ROJORHI_BENCH_BACKEND_METAL4)
         constexpr std::string_view kBackend = "metal4";
+#elif defined(ROJORHI_BENCH_BACKEND_D3D12)
+        constexpr std::string_view kBackend = "d3d12";
 #else
         constexpr std::string_view kBackend = "null";
 #endif
@@ -80,9 +86,21 @@ namespace rojoRHI::bench {
         //==============================================================================================================
         void writeArm(JsonWriter& json, const ArmResult& arm)
         {
+            // A hash that cannot be computed fails the arm, so two failing arms never agree on a hash.
+            std::vector<std::string> hashes;
+            std::string hashError;
+            for (const Output& output : arm.outputs)
+            {
+                std::expected<std::string, std::string> hash = sha256Hex(output.bytes);
+                if (!hash && hashError.empty())
+                {
+                    hashError = std::format("output {}: {}", output.name, hash.error());
+                }
+                hashes.push_back(hash.value_or(std::string()));
+            }
             json.beginObject();
-            json.key("status").string(arm.ok ? "ok" : "failed");
-            json.key("error").string(arm.error);
+            json.key("status").string(arm.ok && hashError.empty() ? "ok" : "failed");
+            json.key("error").string(arm.ok ? hashError : arm.error);
             writeOptionalNumbers(json, "cpuNs", arm.cpuNs);
             writeOptionalNumbers(json, "gpuNs", arm.gpuNs);
             writeCounts(json, "allocations", arm.allocations);
@@ -120,12 +138,13 @@ namespace rojoRHI::bench {
                 json.null();
             }
             json.key("outputs").beginArray();
-            for (const Output& output : arm.outputs)
+            for (size_t index = 0; index < arm.outputs.size(); ++index)
             {
+                const Output& output = arm.outputs[index];
                 json.beginObject();
                 json.key("name").string(output.name);
                 json.key("bytes").unsignedInteger(output.bytes.size());
-                json.key("sha256").string(sha256Hex(output.bytes));
+                json.key("sha256").string(hashes[index]);
                 json.endObject();
             }
             json.endArray();

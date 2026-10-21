@@ -213,7 +213,7 @@ namespace rojoRHI::bench {
         const Vector3 half{ 0.5f + 0.02f * static_cast<float>(mesh % 8),
                             0.5f + 0.02f * static_cast<float>(mesh / 8),
                             0.5f + 0.01f * static_cast<float>(mesh % 5) };
-        constexpr std::array<std::pair<float, float>, 4> kCorners{ { { -1, -1 }, { 1, -1 }, { 1, 1 }, { -1, 1 } } };
+        constexpr std::array<std::pair<float, float>, 4> kCorners{ { { -1.0f, -1.0f }, { 1.0f, -1.0f }, { 1.0f, 1.0f }, { -1.0f, 1.0f } } };
         std::array<MeshVertex, kMeshVertexCount> vertices{};
         for (uint32_t face = 0; face < 6; ++face)
         {
