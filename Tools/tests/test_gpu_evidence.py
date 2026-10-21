@@ -6,6 +6,7 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 from Tools import gpu_evidence
 
@@ -85,6 +86,35 @@ class GpuEvidenceTests(unittest.TestCase):
     def test_main_checkout_falls_back_outside_a_repository(self) -> None:
         with tempfile.TemporaryDirectory() as name:
             self.assertEqual(gpu_evidence.main_checkout(Path(name)), Path(name))
+
+
+class WindowsEnvironmentTests(unittest.TestCase):
+    def test_environment_on_windows_names_msvc_dxc_and_slang(self) -> None:
+        answers = {"powershell": "Test CPU", "cl": "Microsoft (R) C/C++ 19.44",
+                   "dxc.exe": "dxcompiler.dll: 1.8", "slangc.exe": "2026.14.1", "git": "abc123"}
+
+        def probe(*command: str, any_status: bool = False) -> str:
+            if command[0] == "powershell" and "VersionInfo" in command[-1]:
+                return "1.619.6" if "D3D12Core" in command[-1] else "10.0.26100.1"
+            return answers[Path(command[0]).name]
+
+        with mock.patch.object(gpu_evidence.sys, "platform", "win32"), \
+                mock.patch.object(gpu_evidence, "probe", probe), \
+                mock.patch.object(gpu_evidence, "dirty", lambda: "no"), \
+                mock.patch.object(gpu_evidence.platform, "version", lambda: "10.0.26100"), \
+                mock.patch.object(gpu_evidence.platform, "machine", lambda: "AMD64"):
+            found = gpu_evidence.environment()
+        self.assertEqual(found, {
+            "machine": "AMD64", "device": "Test CPU", "osVersion": "10.0.26100", "osBuild": "26100",
+            "msvc": "Microsoft (R) C/C++ 19.44", "dxc": "dxcompiler.dll: 1.8",
+            "slang": "2026.14.1", "agility": "1.619.6", "warp": "10.0.26100.1", "commit": "abc123", "dirty": "no"})
+
+    def test_windows_cpu_falls_back_to_the_platform_processor(self) -> None:
+        with mock.patch.object(gpu_evidence.sys, "platform", "win32"), \
+                mock.patch.object(gpu_evidence, "probe", lambda *command, any_status=False: "unknown"), \
+                mock.patch.object(gpu_evidence, "dirty", lambda: "no"), \
+                mock.patch.object(gpu_evidence.platform, "processor", lambda: "Family 6"):
+            self.assertEqual(gpu_evidence.environment()["device"], "Family 6")
 
 
 if __name__ == "__main__":

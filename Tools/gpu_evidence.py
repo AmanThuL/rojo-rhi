@@ -44,8 +44,12 @@ ENVIRONMENT_FILE = "environment.json"
 CHECKSUM_FILE = "SHA256SUMS"
 
 
-def probe(*command: str) -> str:
-    """Return the first line a tool prints, or "unknown" when the tool is missing or fails."""
+def probe(*command: str, any_status: bool = False) -> str:
+    """Return the first line a tool prints, or "unknown" when the tool is missing or fails.
+
+    With `any_status`, a non-zero exit still counts, for tools such as MSVC's `cl`, which prints a
+    banner and exits non-zero when given no input.
+    """
     try:
         result = subprocess.run(
             command, cwd=ROOT, text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT
@@ -53,7 +57,7 @@ def probe(*command: str) -> str:
     except OSError:
         return "unknown"
     lines = result.stdout.strip().splitlines()
-    return lines[0].strip() if result.returncode == 0 and lines else "unknown"
+    return lines[0].strip() if (any_status or result.returncode == 0) and lines else "unknown"
 
 
 def dirty() -> str:
@@ -68,8 +72,38 @@ def dirty() -> str:
     return "yes" if result.stdout.strip() else "no"
 
 
+BENCH_RELEASE = ROOT / "build" / "windows" / "x64" / "release" / "rojorhi-bench"
+
+
+def file_version(path: Path) -> str:
+    """Return the FileVersion of a Windows binary, or "unknown" when it cannot be read."""
+    return probe("powershell", "-NoProfile", "-Command",
+                 f"(Get-Item -LiteralPath '{path}').VersionInfo.FileVersion")
+
+
+def windows_environment() -> dict[str, str]:
+    """Describe a Windows machine, its toolchain and the checkout the evidence was produced with."""
+    processor = probe("powershell", "-NoProfile", "-Command",
+                      "(Get-CimInstance Win32_Processor | Select-Object -First 1).Name")
+    return {
+        "machine": platform.machine(),
+        "device": processor if processor != "unknown" else (platform.processor() or "unknown"),
+        "osVersion": platform.version(),
+        "osBuild": platform.version().rsplit(".", 1)[-1],
+        "msvc": probe("cl", any_status=True),
+        "dxc": probe(str(ROOT / "ThirdParty" / "dxc" / "bin" / "x64" / "dxc.exe"), "--version"),
+        "slang": probe(str(ROOT / "ThirdParty" / "slang" / "bin" / "slangc.exe"), "-v"),
+        "agility": file_version(BENCH_RELEASE / "D3D12" / "D3D12Core.dll"),
+        "warp": file_version(BENCH_RELEASE / "d3d10warp.dll"),
+        "commit": probe("git", "rev-parse", "HEAD"),
+        "dirty": dirty(),
+    }
+
+
 def environment() -> dict[str, str]:
     """Describe the machine, toolchain and checkout the evidence was produced with."""
+    if sys.platform == "win32":
+        return windows_environment()
     return {
         "machine": platform.machine(),
         "device": probe("sysctl", "-n", "machdep.cpu.brand_string"),
