@@ -255,6 +255,8 @@ namespace rojoRHI {
             impl.lists.reset(impl, slot);
             impl.descriptors.resetTransient(slot);
             impl.frames.releasePassed(impl);
+            // The frame that opened is past framesInFlight, and the core has waited for the one framesInFlight before it.
+            freePassedSwapchains(impl, impl.core.frameNumber() - impl.core.framesInFlight());
         }
     } // namespace d3d12
 

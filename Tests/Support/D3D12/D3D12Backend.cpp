@@ -26,7 +26,7 @@ namespace rojoRHI::test {
         /// The surfaces a test may ask for, each a distinct window.
         constexpr uint32_t kSurfaceCount = 8;
 
-        /// The width and height of every surface window, in pixels.
+        /// The width and height of the client area of every surface window, in pixels.
         constexpr int kSurfaceSize = 256;
 
         /// The window class every surface window belongs to, registered once for the process.
@@ -98,7 +98,8 @@ namespace rojoRHI::test {
     }
 
     //==================================================================================================================
-    // Each surface is a hidden 256 x 256 window, never shown, created on first use and alive for the process.
+    // Each surface is a hidden window whose client area is 256 x 256, the extent a new swapchain takes, never shown, created
+    // on first use and alive for the process.
     void* surface(uint32_t index)
     {
         if (index >= kSurfaceCount)
@@ -125,6 +126,12 @@ namespace rojoRHI::test {
         }
         if (windows[index] == nullptr)
         {
+            // The window's size includes its frame, so it is grown by the frame the style adds around the client area.
+            RECT frame{ 0, 0, kSurfaceSize, kSurfaceSize };
+            if (AdjustWindowRectEx(&frame, WS_OVERLAPPEDWINDOW, FALSE, 0) == 0)
+            {
+                FAIL("AdjustWindowRectEx for the test surfaces failed with error " << GetLastError());
+            }
             windows[index] = CreateWindowExW(
                 0,
                 kSurfaceClass,
@@ -132,8 +139,8 @@ namespace rojoRHI::test {
                 WS_OVERLAPPEDWINDOW,
                 CW_USEDEFAULT,
                 CW_USEDEFAULT,
-                kSurfaceSize,
-                kSurfaceSize,
+                frame.right - frame.left,
+                frame.bottom - frame.top,
                 nullptr,
                 nullptr,
                 instance,

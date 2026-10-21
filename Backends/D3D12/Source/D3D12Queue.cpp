@@ -1,6 +1,6 @@
 //----------------------------------------------------------------------------------------------------------------------
 /// @file D3D12Queue.cpp
-/// @brief Implements submission on the D3D12 queues, which executes lists between fence waits and signals; presentation and tile mapping abort.
+/// @brief Implements D3D12 queue submission, which executes lists between fence waits and signals; mapTiles aborts.
 //----------------------------------------------------------------------------------------------------------------------
 
 #include "D3D12Device.h"
@@ -85,12 +85,6 @@ namespace rojoRHI {
         }
         // The objects the lists name stay counted until replay has read them; the counts go outside the tracker's lock.
         core::releaseSubmitted(lists);
-    }
-
-    //==================================================================================================================
-    void Queue::present(Swapchain)
-    {
-        d3d12::notImplemented("Queue::present");
     }
 
     //==================================================================================================================
