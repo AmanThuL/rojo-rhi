@@ -416,6 +416,8 @@ namespace rojoRHI {
         payload->format = record.format;
         payload->type = record.type;
         payload->usage = record.usage;
+        payload->width = record.extent.width;
+        payload->height = record.extent.height;
         payload->mips = record.mips;
         const bool volume = record.type == TextureType::Tex3D;
         payload->layers = volume ? 1 : record.layers;

@@ -120,9 +120,10 @@ Dynamic state lives for one render pass ([command recording](07-command-recordin
 | Topology | the list form of the pipeline's class, reset by every `setPipeline` | `setPrimitiveTopology` |
 | Depth bias | 0, 0, 0 | `setDepthBias` |
 
-D3D12 command-list state persists across render passes, so the planned backend writes the starting
-values at `beginRenderPass`; Metal 4 starts each render encoder fresh and Vulkan 1.4 sets them as
-dynamic state.
+D3D12 command-list state persists across render passes, so its backend writes the starting stencil
+reference and blend constants at `beginRenderPass` where the list holds other values, and records
+the zero depth bias; Metal 4 starts each render encoder fresh and Vulkan 1.4 sets them as dynamic
+state.
 
 ### `CommandList::setViewport`
 
@@ -248,8 +249,8 @@ magnitude by `clamp` when `clamp` is not zero. The values apply only while the b
 `RasterState::depthBias` set, and they persist across `setPipeline` until the render pass ends.
 The backend re-issues them after a pipeline change where native state does not carry them: Metal 4
 has no enable bit, so its backend sets a zero bias for pipelines without `depthBias` and restores
-the values afterwards; whether D3D12 keeps them across `SetPipelineState` is unverified, so the
-planned backend re-issues them too.
+the values afterwards; whether D3D12 keeps them across `SetPipelineState` is unverified, so its
+backend re-issues them at each `setPipeline` of a `depthBias` pipeline.
 
 On D3D12, dynamic depth-bias values need the pipeline flag
 `D3D12_PIPELINE_STATE_FLAG_DYNAMIC_DEPTH_BIAS` and the `DynamicDepthBiasSupported` cap, which
@@ -268,4 +269,4 @@ hidden pipeline variants, which the zero-variant budget forbids.
 | | Metal 4 | D3D12 | Vulkan |
 |---|---|---|---|
 | Call | `MTL4::RenderCommandEncoder::setDepthBias` | `RSSetDepthBias` (`ID3D12GraphicsCommandList9`) | `vkCmdSetDepthBias` |
-| Cost | cheap: values re-issued at a pipeline change | native: needs `DynamicDepthBiasSupported`; per-vendor support unverified | native |
+| Cost | cheap: values re-issued at a pipeline change | cheap: values re-issued at each `setPipeline` of a `depthBias` pipeline; needs `DynamicDepthBiasSupported`; per-vendor support unverified | native |

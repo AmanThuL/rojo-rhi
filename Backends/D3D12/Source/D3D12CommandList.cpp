@@ -1,12 +1,13 @@
 //----------------------------------------------------------------------------------------------------------------------
 /// @file D3D12CommandList.cpp
-/// @brief Implements D3D12 command list acquisition into native lists, `end`, frame data and the lazy root; other entries abort.
+/// @brief Implements D3D12 command list acquisition into native lists, `end`, frame data, the lazy root and declared accesses; `upscale` aborts.
 //----------------------------------------------------------------------------------------------------------------------
 
 #include "D3D12Device.h"
 
 #include <rojoRHI/RHI.h>
 
+#include "Core/Accesses.h"
 #include "Core/CommandLists.h"
 #include "Core/Counters.h"
 #include "Core/DeviceCore.h"
@@ -49,6 +50,8 @@ namespace rojoRHI {
         core::noteNativeCall(list.core);
         state.timestamps.reset();
         state.binding = {};
+        // Reset leaves the native list's dynamic state unknown, so the list's first pass writes every starting value.
+        state.dynamic = {};
         if (type != QueueType::Copy)
         {
             // Shaders index both heaps directly, so they are set once per recording, before any root signature.
@@ -98,54 +101,6 @@ namespace rojoRHI {
     }
 
     //==================================================================================================================
-    void CommandList::beginRenderPass(const RenderPassDesc&)
-    {
-        d3d12::notImplemented("CommandList::beginRenderPass");
-    }
-
-    //==================================================================================================================
-    void CommandList::endRenderPass()
-    {
-        d3d12::notImplemented("CommandList::endRenderPass");
-    }
-
-    //==================================================================================================================
-    void CommandList::setViewport(const Viewport&)
-    {
-        d3d12::notImplemented("CommandList::setViewport");
-    }
-
-    //==================================================================================================================
-    void CommandList::setScissor(const Rect2D&)
-    {
-        d3d12::notImplemented("CommandList::setScissor");
-    }
-
-    //==================================================================================================================
-    void CommandList::setStencilReference(uint8_t)
-    {
-        d3d12::notImplemented("CommandList::setStencilReference");
-    }
-
-    //==================================================================================================================
-    void CommandList::setBlendConstants(float, float, float, float)
-    {
-        d3d12::notImplemented("CommandList::setBlendConstants");
-    }
-
-    //==================================================================================================================
-    void CommandList::setPrimitiveTopology(PrimitiveTopology)
-    {
-        d3d12::notImplemented("CommandList::setPrimitiveTopology");
-    }
-
-    //==================================================================================================================
-    void CommandList::setDepthBias(float, float, float)
-    {
-        d3d12::notImplemented("CommandList::setDepthBias");
-    }
-
-    //==================================================================================================================
     void CommandList::setRoot(Addr root)
     {
         CommandListImpl& list = CommandListImpl::of(*this);
@@ -158,50 +113,15 @@ namespace rojoRHI {
     }
 
     //==================================================================================================================
-    void CommandList::draw(uint32_t, uint32_t, uint32_t, uint32_t)
-    {
-        d3d12::notImplemented("CommandList::draw");
-    }
-
-    //==================================================================================================================
-    void CommandList::drawIndexed(Buffer, IndexType, uint32_t, uint32_t, uint32_t, int32_t, uint32_t)
-    {
-        d3d12::notImplemented("CommandList::drawIndexed");
-    }
-
-    //==================================================================================================================
-    void CommandList::drawMeshTasks(uint32_t, uint32_t, uint32_t)
-    {
-        d3d12::notImplemented("CommandList::drawMeshTasks");
-    }
-
-    //==================================================================================================================
-    void CommandList::drawIndirect(Addr, uint32_t, Addr)
-    {
-        d3d12::notImplemented("CommandList::drawIndirect");
-    }
-
-    //==================================================================================================================
-    void CommandList::drawIndexedIndirect(Buffer, IndexType, Addr, uint32_t, Addr)
-    {
-        d3d12::notImplemented("CommandList::drawIndexedIndirect");
-    }
-
-    //==================================================================================================================
-    void CommandList::drawMeshTasksIndirect(Addr, uint32_t, Addr)
-    {
-        d3d12::notImplemented("CommandList::drawMeshTasksIndirect");
-    }
-
-    //==================================================================================================================
     void CommandList::upscale(Upscaler, const UpscaleParams&)
     {
         d3d12::notImplemented("CommandList::upscale");
     }
 
     //==================================================================================================================
-    void CommandList::declareAccessChecked(std::span<const ResourceAccess>)
+    void CommandList::declareAccessChecked(std::span<const ResourceAccess> accesses)
     {
-        d3d12::notImplemented("CommandList::declareAccess");
+        // A record for the validation tracker only: no native call.
+        core::declareAccess(CommandListImpl::of(*this).core, accesses);
     }
 } // namespace rojoRHI
