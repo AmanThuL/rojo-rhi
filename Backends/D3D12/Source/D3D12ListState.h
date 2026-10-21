@@ -15,6 +15,7 @@
 #include <cstdint>
 #include <memory>
 #include <mutex>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -24,6 +25,7 @@ namespace rojoRHI {
 } // namespace rojoRHI
 
 namespace rojoRHI::d3d12 {
+    struct BufferPayload;
     struct PipelineState;
 
     /// The root signature the compute side of a list holds: the global one of caller pipelines, or the backend kernels' one.
@@ -47,6 +49,41 @@ namespace rojoRHI::d3d12 {
         const PipelineState* pipeline = nullptr;         ///< The payload of the caller's bound pipeline; null for none.
     };
 
+    /// The dynamic and input-assembler state the native list of a Graphics list holds, so a pass's starting values, the setters,
+    /// `setPipeline` and the indexed draws send a native call only for a change. Reset at each acquisition: the state a native
+    /// list keeps across its `Reset` is unknown. Render passes leave it as it is, so it carries from one pass to the next.
+    struct DynamicState
+    {
+        std::optional<uint8_t> stencilReference;         ///< The stencil reference `OMSetStencilRef` last set; empty while unknown.
+        std::optional<std::array<float, 4>> blendFactor; ///< The factors `OMSetBlendFactor` last set; empty while unknown.
+        /// The recorded constant, slope-scaled and clamp bias; zero at each pass. While the caller's bound pipeline has
+        /// `depthBias`, the native list holds these values.
+        std::array<float, 3> depthBias = {};
+        std::optional<D3D12_VIEWPORT> viewport; ///< The viewport `RSSetViewports` last set; empty while unknown.
+        std::optional<D3D12_RECT> scissor;      ///< The scissor rectangle `RSSetScissorRects` last set; empty while unknown.
+        /// The topology `IASetPrimitiveTopology` last set; undefined while unknown.
+        D3D_PRIMITIVE_TOPOLOGY topology = D3D_PRIMITIVE_TOPOLOGY_UNDEFINED;
+        /// The index buffer `IASetIndexBuffer` last set; a zero location while unknown, which no buffer has.
+        D3D12_INDEX_BUFFER_VIEW indexBuffer = {};
+    };
+
+    /// The native description of the render pass a list began last, the list's own, so recording allocates nothing and the
+    /// resolve parameters `BeginRenderPass` points at stay where they are until `EndRenderPass`. Rewritten at each pass.
+    struct PassStorage
+    {
+        /// The pass's render targets, the first `targetCount` used.
+        std::array<D3D12_RENDER_PASS_RENDER_TARGET_DESC, D3D12_SIMULTANEOUS_RENDER_TARGET_COUNT> targets = {};
+        /// The resolve of each target that names a resolve target, the first `resolveCount` used, in target order.
+        std::array<D3D12_RENDER_PASS_ENDING_ACCESS_RESOLVE_SUBRESOURCE_PARAMETERS, D3D12_SIMULTANEOUS_RENDER_TARGET_COUNT> resolves = {};
+        /// The barrier of each resolve target, moving it to `LAYOUT_RESOLVE_DEST` before the pass; `EndRenderPass` reverses it
+        /// in place, so after the pass it holds the barrier back to `LAYOUT_RENDER_TARGET`.
+        std::array<D3D12_TEXTURE_BARRIER, D3D12_SIMULTANEOUS_RENDER_TARGET_COUNT> resolveBarriers = {};
+        D3D12_RENDER_PASS_DEPTH_STENCIL_DESC depth = {}; ///< The depth-stencil attachment, when `hasDepth`.
+        uint32_t targetCount = 0;                        ///< The render targets of the pass.
+        uint32_t resolveCount = 0;                       ///< The resolve targets of the pass.
+        bool hasDepth = false;                           ///< The pass has a depth-stencil attachment.
+    };
+
     /// The native objects and recording state of one command list, created when its frame slot's pool grows and kept while
     /// the pool hands the list out again. Everything recording touches is the list's own, so recording takes no lock.
     struct ListState
@@ -61,6 +98,8 @@ namespace rojoRHI::d3d12 {
         Binding binding;                       ///< The lazy root binding.
         BarrierScratch barriers;               ///< The scratch barrier batches are lowered into.
         ListTimestamps timestamps;             ///< The timestamps the list records.
+        DynamicState dynamic;                  ///< The dynamic state the native list holds.
+        PassStorage pass;                      ///< The native description of the list's last render pass.
     };
 
     /// The command lists of one frame slot: those taken since the slot was reused come first and the rest wait to be reused.
@@ -101,4 +140,15 @@ namespace rojoRHI::d3d12 {
     /// holds something else: the global root signature after a backend kernel switched it, the bound pipeline after another
     /// displaced it, and the root block after `setRoot` or a root signature switch. A compute pipeline must be bound.
     void flushCompute(CommandListImpl& list);
+
+    /// Brings the graphics side of `list` to what the caller bound before a draw, each call only where the native list holds
+    /// something else: the bound pipeline, with its recorded depth bias when it has `depthBias`, after another displaced it,
+    /// and the root block after `setRoot`. A list with no root binds none. It writes no draw-record constant: a direct draw
+    /// writes it, and an indirect draw's command signature does. A graphics or mesh pipeline must be bound.
+    void flushGraphics(CommandListImpl& list);
+
+    /// Sets the view of the whole of `buffer`, from offset 0, as indices of `type` on `list`, unless the native list holds
+    /// that view: the indices of `type` that fit in the buffer and in the view's 32-bit size. Every indexed draw, direct or
+    /// indirect, binds its buffer here, so draws of one buffer share the view.
+    void applyIndexBuffer(CommandListImpl& list, const BufferPayload& buffer, IndexType type);
 } // namespace rojoRHI::d3d12

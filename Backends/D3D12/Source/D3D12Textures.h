@@ -28,6 +28,8 @@ namespace rojoRHI::d3d12 {
         Format format = Format::Undefined;                ///< The texture's format.
         TextureType type = TextureType::Tex2D;            ///< The texture's type.
         TextureUsage usage = TextureUsage::None;          ///< The texture's usage.
+        uint32_t width = 1;                               ///< Width of mip 0 in texels.
+        uint32_t height = 1;                              ///< Height of mip 0 in texels.
         uint32_t mips = 1;                                ///< Mip levels.
         uint32_t layers = 1;                              ///< Array layers, faces for cube types; 1 for a 3D texture.
         uint32_t depth = 1;                               ///< Depth slices of mip 0 for a 3D texture; 1 otherwise.
