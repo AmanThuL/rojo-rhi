@@ -83,23 +83,57 @@ class CountTests(unittest.TestCase):
 
 
 class RuleTests(unittest.TestCase):
+    # N of 1,000 ns puts 5% (50 ns) above C1's floor of 3 calls times 5 ns, so these cases judge
+    # the relative part of the budget.
     def test_cpu_miss_needs_an_interval_off_zero_and_over_five_percent(self) -> None:
-        result = analysis.cpu_rule("C1", 100, cmp(106, 100, 6, 4, 8))
+        result = analysis.cpu_rule("C1", 100, cmp(1060, 1000, 60, 40, 80))
         self.assertEqual((result["judged"], result["miss"]), (True, True))
 
     def test_cpu_interval_crossing_zero_is_not_a_miss(self) -> None:
-        self.assertFalse(analysis.cpu_rule("C1", 100, cmp(110, 100, 10, -1, 20))["miss"])
+        self.assertFalse(analysis.cpu_rule("C1", 100, cmp(1100, 1000, 100, -10, 200))["miss"])
 
     def test_cpu_interval_bound_exactly_at_zero_does_not_exclude_zero(self) -> None:
-        self.assertFalse(analysis.cpu_rule("C1", 100, cmp(110, 100, 10, 0, 20))["miss"])
-        self.assertFalse(analysis.cpu_rule("C1", 100, cmp(80, 100, -20, -30, 0))["miss"])
-        self.assertTrue(analysis.cpu_rule("C1", 100, cmp(110, 100, 10, 0.001, 20))["miss"])
+        self.assertFalse(analysis.cpu_rule("C1", 100, cmp(1100, 1000, 100, 0, 200))["miss"])
+        self.assertFalse(analysis.cpu_rule("C1", 100, cmp(800, 1000, -200, -300, 0))["miss"])
+        self.assertTrue(analysis.cpu_rule("C1", 100, cmp(1100, 1000, 100, 0.001, 200))["miss"])
 
     def test_cpu_under_five_percent_is_not_a_miss(self) -> None:
-        self.assertFalse(analysis.cpu_rule("C1", 1000, cmp(104, 100, 4, 3, 5))["miss"])
+        self.assertFalse(analysis.cpu_rule("C1", 1000, cmp(1040, 1000, 40, 30, 50))["miss"])
 
     def test_cpu_exactly_five_percent_is_not_a_miss(self) -> None:
-        self.assertFalse(analysis.cpu_rule("C1", 100, cmp(105, 100, 5, 3, 7))["miss"])
+        self.assertFalse(analysis.cpu_rule("C1", 100, cmp(1050, 1000, 50, 30, 70))["miss"])
+
+    def test_cpu_budget_is_the_larger_of_five_percent_and_the_floor(self) -> None:
+        # C3 makes 2 calls: 10 ns against 5% of 58.4 ns; C1 makes 3: 5% of 1,000 ns against 15 ns
+        short = analysis.cpu_rule("C3", 1000, cmp(61.6, 58.4, 3.2, 2.7, 3.6))
+        long = analysis.cpu_rule("C1", 1000, cmp(1040, 1000, 40, 30, 50))
+        self.assertEqual((short["budget"], long["budget"]), (10.0, 50.0))
+
+    def test_cpu_within_the_floor_and_over_five_percent_passes(self) -> None:
+        # C3 at K 1,000 in the 2026-10-21 profile: +3.2 ns [2.7, 3.6], +5.5% of 58.4 ns
+        result = analysis.cpu_rule("C3", 1000, cmp(61.6, 58.4, 3.2, 2.7, 3.6))
+        self.assertEqual((result["miss"], result["fivePercentMiss"]), (False, True))
+
+    def test_cpu_exactly_at_the_floor_is_not_a_miss(self) -> None:
+        result = analysis.cpu_rule("C3", 1000, cmp(68.4, 58.4, 10.0, 9.0, 11.0))
+        self.assertEqual((result["miss"], result["fivePercentMiss"]), (False, True))
+
+    def test_cpu_over_the_floor_on_a_short_operation_misses(self) -> None:
+        result = analysis.cpu_rule("C3", 100, cmp(65, 50, 15, 14, 16))
+        self.assertEqual((result["miss"], result["fivePercentMiss"]), (True, True))
+
+    def test_cpu_long_operation_over_five_percent_and_the_floor_misses(self) -> None:
+        result = analysis.cpu_rule("C1", 1000, cmp(1100, 1000, 100, 80, 120))
+        self.assertEqual((result["miss"], result["fivePercentMiss"]), (True, True))
+
+    def test_cpu_both_rules_pass_under_five_percent_and_the_floor(self) -> None:
+        result = analysis.cpu_rule("C7", 1000, cmp(101.5, 101.4, 0.1, -0.8, 1.2))
+        self.assertEqual((result["miss"], result["fivePercentMiss"]), (False, False))
+
+    def test_cpu_five_percent_verdict_is_absent_when_not_judged(self) -> None:
+        for result in (analysis.cpu_rule("C1", 10, cmp(200, 100, 100, 90, 110)),
+                       analysis.cpu_rule("C1", 100, None)):
+            self.assertIsNone(result.get("fivePercentMiss"))
 
     def test_cpu_k_below_100_is_reported_only(self) -> None:
         result = analysis.cpu_rule("C1", 10, cmp(200, 100, 100, 90, 110))
@@ -271,6 +305,20 @@ class SummaryTests(unittest.TestCase):
         result = analysis.summary(frame, processes, {}, {"frame": {"passed": True}})
         self.assertIn("textureIndexing", result)
         self.assertIn("#30", result["textureIndexing"])
+
+    def test_within_the_floor_is_not_a_miss_and_keeps_the_five_percent_verdict(self) -> None:
+        # R 112 against N 100 ns a repetition of C1: 12 ns is under 15 ns, over 5 ns
+        result = self.run_summary(self.good_processes(112.0))
+        self.assertEqual(result["verdict"], "within budget")
+        entry = {e["id"]: e for e in result["configurations"]}["C1-k1000"]
+        self.assertEqual((entry["rules"]["cpu"]["miss"], entry["rules"]["cpu"]["fivePercentMiss"]),
+                         (False, True))
+
+    def test_report_shows_the_five_percent_verdict_beside_the_rule(self) -> None:
+        text = analysis.format_report(self.run_summary(self.good_processes(112.0)))
+        self.assertIn("5% rule", text)
+        row = next(line for line in text.splitlines() if line.startswith("C1-k1000"))
+        self.assertEqual(row.split()[1:3], ["pass", "MISS"])
 
     def test_report_names_every_rule(self) -> None:
         text = analysis.format_report(self.run_summary(self.good_processes(120.0)))
