@@ -10,7 +10,8 @@ defines the built-ins. Notation, cost classes and valid-usage identifiers follow
 [conventions](00-conventions.md). The decisions behind this chapter are
 [ADR 0011](../decisions/0011-shader-abi.md), and
 [ADR 0018](../decisions/0018-root-srv-and-reserved-bindings.md) for the root's D3D12 form and the
-reserved bindings.
+reserved bindings. The D3D12 lowerings are implemented, verified on WARP only, not on hardware
+([evidence](../research/2026-10-21-d3d12-warp-evidence.md)).
 
 ## Model
 
@@ -118,16 +119,15 @@ root type is therefore flat, which makes natural layout equal to constant-buffer
 - The block is placed at 256-byte alignment, which D3D12 requires of a root address, and is at most
   65536 bytes, the D3D12 constant-buffer limit, kept as the portable cap.
 
-Data behind an `Addr` uses natural layout on every target: C++ `offsetof` and `sizeof`, with
-nested structs allowed and three-component vectors packed to 12 bytes (`packed_float3` on Metal).
-Slang's natural layout aligns a `uint2` to 4 bytes while the C++ `alignas(8)` `Addr` aligns to 8, so
-an `Addr` in a record also sits at an 8-byte offset, with explicit padding, as in a root. On Vulkan
-the shader rule compiles with `-fvk-use-scalar-layout`, and natural layout behind an `Addr`, such as
-a `float3` followed by a `float2`, passes `spirv-val` only with `--scalar-block-layout`: the Vulkan
+Data behind an `Addr` uses natural layout on every target: C++ `offsetof` and `sizeof`, with nested
+structs allowed and three-component vectors packed to 12 bytes (`packed_float3` on Metal). Slang's
+natural layout aligns a `uint2` to 4 bytes while the C++ `alignas(8)` `Addr` aligns to 8, so an
+`Addr` in a record also sits at an 8-byte offset, with explicit padding, as in a root. On Vulkan the
+shader rule compiles with `-fvk-use-scalar-layout`, and natural layout behind an `Addr`, such as a
+`float3` followed by a `float2`, passes `spirv-val` only with `--scalar-block-layout`: the Vulkan
 mapping presumes the `scalarBlockLayout` feature. A shared struct names buffer memory with `Addr`,
-never with a raw 64-bit pointer, because the D3D12
-form of an address is not a virtual address. No shared struct contains a texture, sampler or handle
-type, a pointer to one, or an unsized array.
+never with a raw 64-bit pointer, because the D3D12 form of an address is not a virtual address. No
+shared struct contains a texture, sampler or handle type, a pointer to one, or an unsized array.
 
 ## Layout checking
 
@@ -265,7 +265,7 @@ executes.
 
 | | Metal 4 | D3D12 | Vulkan |
 |---|---|---|---|
-| Lowering | a raw buffer at argument-table `buffer(0)`, read as `T` at offset 0 | a raw `ByteAddressBuffer` at `t0`, a root SRV, read as `T` at offset 0; unverified | `T` loaded through the root `Addr` in the push block, as a physical storage buffer pointer |
+| Lowering | a raw buffer at argument-table `buffer(0)`, read as `T` at offset 0 | a raw `ByteAddressBuffer` at `t0`, a root SRV, read as `T` at offset 0 | `T` loaded through the root `Addr` in the push block, as a physical storage buffer pointer |
 | Cost | native | native | native |
 | Constraint | none | 256-byte alignment of the root address; 65536-byte cap | none: a pointer has no uniform-range limit |
 

@@ -58,9 +58,11 @@ upscaler states its own uses in [upscaling](12-upscaling.md).
 A combined bit, such as `Stage::AllGraphics`, lowers on every backend to the union of the mappings
 of its member bits.
 
-Rules marked *unverified* rest on D3D12 queue-type restrictions of enhanced barriers as recalled,
-not as recorded in the research notes. They are kept as conservative rules until conformance
-checks them on D3D12.
+The queue-type rules below (`VU-rojo-sync-0001`, `VU-rojo-sync-0006` and `VU-rojo-sync-0007`) rest
+on the restrictions D3D12's enhanced barriers place on each queue type, and they stay conservative.
+Every stage and layout they allow records on its queue type without a debug-layer or GPU-based
+validation message, verified on WARP only, not on hardware
+([evidence](../research/2026-10-21-d3d12-warp-evidence.md)).
 
 ### `Stage`
 
@@ -103,7 +105,7 @@ A bit set of pipeline stages, modelled on D3D12 enhanced barriers and Vulkan syn
 #### Valid usage
 - `VU-rojo-sync-0001` A barrier recorded on a `QueueType::Compute` list names no stage bits other
   than `IndirectArgs`, `ComputeShader`, `Copy` and `All`, and one recorded on a `QueueType::Copy`
-  list none other than `Copy` and `All` (*unverified*).
+  list none other than `Copy` and `All`.
 
 #### Mapping
 | | Metal 4 | D3D12 | Vulkan |
@@ -225,10 +227,10 @@ queue first. A placed or `Sparse` texture is not: a `Graphics` or `Compute` list
   tracker.
 - `VU-rojo-sync-0005` `Present` is used only for textures acquired from a
   [swapchain](11-presentation.md).
-- `VU-rojo-sync-0006` A texture used by a `QueueType::Copy` list is in `General` (*unverified*).
+- `VU-rojo-sync-0006` A texture used by a `QueueType::Copy` list is in `General`.
   Checked by the validation tracker.
 - `VU-rojo-sync-0007` A barrier recorded on a `QueueType::Compute` list uses no layouts other than
-  `Undefined`, `General`, `ShaderRead`, `ShaderWrite`, `CopySrc` and `CopyDst` (*unverified*).
+  `Undefined`, `General`, `ShaderRead`, `ShaderWrite`, `CopySrc` and `CopyDst`.
 - `VU-rojo-sync-0026` A texture barrier recorded on a `QueueType::Copy` list has `General` as both
   `oldLayout` and `newLayout`: a copy queue takes no layout barrier, so a Copy list neither moves a
   texture to another layout nor discards one from `Undefined`.

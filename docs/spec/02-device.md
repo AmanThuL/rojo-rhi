@@ -84,7 +84,7 @@ in the message:
 - Metal 4: macOS 26 or later and a GPU of the Apple7 family (M1) or newer, with read-write texture
   tier 2, BC texture compression, and at least the floor of each limit the device reports
   ([formats and limits, part 2](15-formats-and-limits-part2.md#limits)).
-- D3D12, as designed: Windows 11, Agility SDK 1.619 or later, feature level 12_2, Shader Model 6.6
+- D3D12: Windows 11, Agility SDK 1.619 or later, feature level 12_2, Shader Model 6.6
   with resource binding tier 3, `TypedUAVLoadAdditionalFormats`, enhanced barriers, and
   `DynamicDepthBiasSupported` for dynamic depth bias ([pipelines](06-pipelines-part2.md)).
   Per-vendor driver support for the last is unverified.

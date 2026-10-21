@@ -68,8 +68,8 @@ rule and its identifier belong to `TextureViewDesc` in
 and the reverse without a creation flag, which saved 36 microseconds of one composed frame (median
 of eight paired processes, M3 Max); the backend sets `MTL::TextureUsagePixelFormatView` only for the
 stencil plane view of a `Sampled` `D32FloatS8` texture, the one reinterpretation Metal's validation
-layer rejects without it. Vulkan needs `VK_IMAGE_CREATE_MUTABLE_FORMAT_BIT`, and the planned D3D12
-backend creates the resource with a castable-format list or the family's typeless format
+layer rejects without it. Vulkan needs `VK_IMAGE_CREATE_MUTABLE_FORMAT_BIT`, and the D3D12 backend
+creates the resource with a castable-format list or the family's typeless format
 (`R8G8B8A8_TYPELESS`, `BC1_TYPELESS`). The backend chooses this at creation; the caller states
 nothing extra.
 
@@ -79,7 +79,7 @@ of the floor below. Two formats that differ only in sRGB transfer are copy-compa
 between them ([command recording](07-command-recording-part3.md#commandlistcopytexture)) moves the
 stored bits unchanged and neither encodes nor decodes. `BGRA8Unorm` has no sRGB partner in this
 version; presentation formats and their color spaces belong to [presentation](11-presentation.md). A
-D3D12 flip-model swap chain cannot hold an `_SRGB` format, so sRGB presentation on the planned D3D12
+D3D12 flip-model swap chain cannot hold an `_SRGB` format, so sRGB presentation on the D3D12
 backend would render through an sRGB view of a linear buffer.
 
 **Depth formats.** `D32Float` holds depth only; `D32FloatS8` adds an 8-bit stencil, which the
@@ -87,8 +87,8 @@ stencil state in [pipelines](06-pipelines.md) and the stencil load and store ope
 [command recording](07-command-recording.md) act on. Both are depth attachments and, sampled, a
 single-channel float depth read through `rojoRHI::texture`. The memory size of `D32FloatS8` is 8
 bytes per texel on D3D12 and implementation-defined on Metal 4 and Vulkan, which may store the
-two aspects separately; no copy layout may assume a packed size for it. The planned D3D12 backend
-would create a sampled depth texture typeless and view it per aspect:
+two aspects separately; no copy layout may assume a packed size for it. The D3D12 backend creates
+a sampled depth texture typeless and views it per aspect:
 
 | `Format` | D3D12 resource | Depth-stencil view | Depth shader view | Stencil shader view |
 |---|---|---|---|---|
@@ -111,12 +111,13 @@ a 4-texel boundary and spans whole blocks unless it reaches the edge of its mip 
 `VU-rojo-cmd-0040` of [`TextureRegion`](07-command-recording-part3.md#textureregion) requires.
 
 **Guaranteed capabilities.** Every device that meets the hardware floor supports at least the
-following; anything outside it is reported by `Device::formatCapabilities`. The table is read
-from the Apple7 pixel-format capability tables and the D3D12 required format support at feature
-level 12_2 (the floor of [ADR 0010](../decisions/0010-hardware-floor.md)). Every row is checked
-on Metal 4 hardware by `Tests/Conformance/FormatConformanceTests.cpp`, which exercises each
-capability a device reports for each format; no D3D12 backend exists yet to check it there. A "no"
-is unsupported on every backend in this version; "reported" varies by device.
+following; anything outside it is reported by `Device::formatCapabilities`. The table is read from
+the Apple7 pixel-format capability tables and the D3D12 required format support at feature level
+12_2 (the floor of [ADR 0010](../decisions/0010-hardware-floor.md)). Every row is checked on Metal 4
+hardware by `Tests/Conformance/FormatConformanceTests.cpp`, which exercises each capability a device
+reports for each format; on D3D12 it runs on WARP only, not on hardware
+([evidence](../research/2026-10-21-d3d12-warp-evidence.md)). A "no" is unsupported on every backend
+in this version; "reported" varies by device.
 
 | `Format` | Sampled | Linear filter | Storage read | Storage write | Color attachment and blend | Depth attachment |
 |---|---|---|---|---|---|---|

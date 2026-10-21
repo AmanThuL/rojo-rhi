@@ -4,8 +4,10 @@
 **API version**: 0.1.0
 
 This part defines the three barrier kinds, the one batched call that records them, the cross-queue
-handoff of textures and the first use of aliased memory. The stage, access and layout vocabulary
-is in [part 1](09-synchronization.md).
+handoff of textures and the first use of aliased memory. The stage, access and layout vocabulary is
+in [part 1](09-synchronization.md). Where no sentence says *unverified*, its D3D12 lowerings are
+implemented, verified on WARP only, not on hardware
+([evidence](../research/2026-10-21-d3d12-warp-evidence.md)).
 
 Each barrier kind exists for a reason. A global barrier orders memory by stage and access with no
 resource, and any buffer hazard can be expressed with one. A buffer barrier names a buffer and a
@@ -213,8 +215,7 @@ they lower to `LAYOUT_COMMON` and the generic `LAYOUT_SHADER_RESOURCE`, `LAYOUT_
 `LAYOUT_COPY_SOURCE` and `LAYOUT_COPY_DEST`, which direct and compute queues both accept, so a
 texture created with initial data in `ShaderRead` is read on either queue without a transition. A
 handoff to or from the copy queue is in `General`, which maps to `D3D12_BARRIER_LAYOUT_COMMON`,
-taken to be the one layout every D3D12 queue type accepts (*unverified*; see
-[part 1](09-synchronization.md)). On Vulkan, resources are shared concurrently between queue
+which every D3D12 queue type accepts. On Vulkan, resources are shared concurrently between queue
 families, so no ownership transfer is needed and every layout is valid on every queue that supports
 its use. Buffers need no transition. In every case the acquiring queue waits on a fence the
 releasing queue signals after its last use ([queues and frames](10-queues-and-frames.md)). The

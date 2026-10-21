@@ -83,7 +83,7 @@ Notes on the floor:
   buffer view requires it; Metal 4 needs only 4 bytes and Vulkan at most 256. See
   [shader ABI](05-shader-abi.md) and `CommandList::uploadFrameData`.
 - `maxAddrOffset` bounds `Addr` arithmetic and dereference (`VU-rojo-buffer-0011` in
-  [memory and buffers](03-memory-and-buffers.md#addr)). On the planned D3D12 backend an `Addr` is a
+  [memory and buffers](03-memory-and-buffers.md#addr)). On the D3D12 backend an `Addr` is a
   raw-buffer heap index and a byte offset into that buffer's raw view, and a raw view holds at most
   2^27 four-byte elements, so one `Addr` base reaches 512 MiB and the portable value is 2^29 − 1
   even where `maxBufferSize` is larger. Shader arithmetic stays inside one view, so no encoding of a
