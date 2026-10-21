@@ -9,9 +9,10 @@ by heap index and mark divergent indices. The model, the layout rules and the ro
 lives in namespace `rojoRHI`. As [part 1](05-shader-abi.md#model) explains, each entry states its
 requirements as normative prose, because no tier can diagnose a shader's use of them.
 
-The D3D12 lowerings below are designed mappings; DXIL compiled from this ABI has not yet been
-validated with DXC, so each D3D12 lowering says `unverified` until the planned backend's
-compile-and-run test passes.
+Where a cell does not say `unverified`, the D3D12 lowerings below are implemented, verified on WARP
+only, not on hardware: the ABI conformance cases ran them on WARP, and `Tools/check_dxil.py` checks
+the DXIL of each heap fetch and of the raw accesses
+([evidence](../research/2026-10-21-d3d12-warp-evidence.md)).
 
 ## Divergence
 
@@ -90,7 +91,7 @@ members; and `base` is dynamically uniform across the wave or marked with `rojoR
 
 | | Metal 4 | D3D12 | Vulkan |
 |---|---|---|---|
-| Lowering | `device T*` load | `ByteAddressBuffer` from `ResourceDescriptorHeap[index]`, then `LoadAligned<T>` at offset: one raw access for a 2- or 4-component vector `T`, or a struct member at a multiple of its size, 4-byte accesses otherwise; unverified | `PhysicalStorageBuffer` load |
+| Lowering | `device T*` load | `ByteAddressBuffer` from `ResourceDescriptorHeap[index]`, then `LoadAligned<T>` at offset: one raw access for a 2- or 4-component vector `T`, or a struct member at a multiple of its size, 4-byte accesses otherwise | `PhysicalStorageBuffer` load |
 | Cost | native | costly: one descriptor fetch per base; spike 1 pending | native |
 
 ### `rojoRHI::store`
@@ -117,7 +118,7 @@ uniform across the wave or marked with `rojoRHI::nonUniform`.
 
 | | Metal 4 | D3D12 | Vulkan |
 |---|---|---|---|
-| Lowering | `device T*` store | `RWByteAddressBuffer` from `ResourceDescriptorHeap[NonUniformResourceIndex(index + 1)]`, then `StoreAligned<T>` at offset: one raw access for a 2- or 4-component vector `T`, or a struct member at a multiple of its size, 4-byte accesses otherwise; unverified | `PhysicalStorageBuffer` store |
+| Lowering | `device T*` store | `RWByteAddressBuffer` from `ResourceDescriptorHeap[NonUniformResourceIndex(index + 1)]`, then `StoreAligned<T>` at offset: one raw access for a 2- or 4-component vector `T`, or a struct member at a multiple of its size, 4-byte accesses otherwise | `PhysicalStorageBuffer` store |
 | Cost | native | costly: one descriptor fetch per base; spike 1 pending | native |
 
 ## Heap indices
@@ -170,7 +171,7 @@ or marked with `rojoRHI::nonUniform`.
 
 | | Metal 4 | D3D12 | Vulkan |
 |---|---|---|---|
-| Lowering | 8-byte resource ID read from the ID table at `buffer(1)`, through a Slang `__intrinsic_asm` over an argument-buffer table; `texture2DMS` and `texture2DMSArray` compile, but reading them miscompiles under the pinned Slang, which emits invalid MSL for `Load` and `GetDimensions`, and stays unverified until compile-and-run; the conformance multisample kernels read only the dimensions on Metal, through an `__intrinsic_asm` helper, so `Load` on a multisample texture is not exercised there | `ResourceDescriptorHeap[view]`; unverified | resource descriptor heap, Slang's `__slang_resource_heap` runtime arrays, each fetch marked `NonUniform` |
+| Lowering | 8-byte resource ID read from the ID table at `buffer(1)`, through a Slang `__intrinsic_asm` over an argument-buffer table; `texture2DMS` and `texture2DMSArray` compile, but reading them miscompiles under the pinned Slang, which emits invalid MSL for `Load` and `GetDimensions`, and stays unverified until compile-and-run; the conformance multisample kernels read only the dimensions on Metal, through an `__intrinsic_asm` helper, so `Load` on a multisample texture is not exercised there | `ResourceDescriptorHeap[view]` | resource descriptor heap, Slang's `__slang_resource_heap` runtime arrays, each fetch marked `NonUniform` |
 | Cost | cheap: one extra 8-byte load, measured at about 3% for `read` and 7.5% for `sample` in a fetch-only kernel | native | cheap: every fetch is marked `NonUniform`, since the `uint` marker cannot reach the handle; correct for a uniform index too |
 
 ### `rojoRHI::wTexture`
@@ -202,7 +203,7 @@ type and array form match the function, and whose format reports `storageWrite`.
 
 | | Metal 4 | D3D12 | Vulkan |
 |---|---|---|---|
-| Lowering | an `access::write` texture of the matching shape, read from the ID table at `buffer(1)` as for `rojoRHI::texture`; `Store` is `write` | `RWTexture*` of the matching shape from `ResourceDescriptorHeap[view]`, written by subscript and never read; unverified | storage image of `Unknown` format from `__slang_resource_heap`, `NonUniform` on every fetch, written with `OpImageWrite`; it needs `StorageImageWriteWithoutFormat` alone, and Slang emits no `NonReadable` decoration |
+| Lowering | an `access::write` texture of the matching shape, read from the ID table at `buffer(1)` as for `rojoRHI::texture`; `Store` is `write` | `RWTexture*` of the matching shape from `ResourceDescriptorHeap[view]`, written by subscript and never read | storage image of `Unknown` format from `__slang_resource_heap`, `NonUniform` on every fetch, written with `OpImageWrite`; it needs `StorageImageWriteWithoutFormat` alone, and Slang emits no `NonReadable` decoration |
 | Cost | cheap: one extra 8-byte load, as for `rojoRHI::texture` | native | cheap: `NonUniform` on every fetch, as for `rojoRHI::texture` |
 
 ### `rojoRHI::sampler`
@@ -230,5 +231,5 @@ comparisons; and `index` is dynamically uniform across the wave or marked with
 
 | | Metal 4 | D3D12 | Vulkan |
 |---|---|---|---|
-| Lowering | sampler ID read from the ID table at `buffer(2)`, as for textures | `SamplerDescriptorHeap[index]`; unverified | sampler descriptor heap, `NonUniform` on every fetch as for textures |
+| Lowering | sampler ID read from the ID table at `buffer(2)`, as for textures | `SamplerDescriptorHeap[index]` | sampler descriptor heap, `NonUniform` on every fetch as for textures |
 | Cost | cheap: one extra 8-byte load, measured under 0.4% against a `constexpr` sampler in a fetch-only kernel | native | cheap: `NonUniform` on every fetch |

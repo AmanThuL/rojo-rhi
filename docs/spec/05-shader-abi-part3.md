@@ -10,8 +10,9 @@ divergence markers are in [part 2](05-shader-abi-part2.md). Every function lives
 `rojoRHI`. Each entry states its requirements as normative prose, because no tier can diagnose a
 shader's use of them (see [part 1](05-shader-abi.md#model)).
 
-The D3D12 lowerings below are designed mappings, `unverified` until the planned backend's
-compile-and-run test passes, except where a cell says "verified on WARP only".
+The D3D12 lowerings below are implemented, verified on WARP only, not on hardware: the draw,
+indirect, mesh and graphics ABI conformance cases ran them on WARP
+([evidence](../research/2026-10-21-d3d12-warp-evidence.md)).
 
 ## Built-ins
 
@@ -49,7 +50,7 @@ Requirements: the vertex entry point takes exactly one `VertexIds` parameter, un
 
 | | Metal 4 | D3D12 | Vulkan |
 |---|---|---|---|
-| Lowering | `[[vertex_id]]`, `[[base_vertex]]`, `[[instance_id]]` and `[[base_instance]]` entry parameters | `SV_VertexID` and `SV_InstanceID`; no base instance or base vertex; unverified | `SV_VulkanVertexID`, `SV_VulkanInstanceID`, `SV_StartVertexLocation` and `SV_StartInstanceLocation`, the raw `VertexIndex`, `InstanceIndex`, `BaseVertex` and `BaseInstance`, because Slang's plain `SV_VertexID` and `SV_InstanceID` already subtract the bases there |
+| Lowering | `[[vertex_id]]`, `[[base_vertex]]`, `[[instance_id]]` and `[[base_instance]]` entry parameters | `SV_VertexID` and `SV_InstanceID`; no base instance or base vertex | `SV_VulkanVertexID`, `SV_VulkanInstanceID`, `SV_StartVertexLocation` and `SV_StartInstanceLocation`, the raw `VertexIndex`, `InstanceIndex`, `BaseVertex` and `BaseInstance`, because Slang's plain `SV_VertexID` and `SV_InstanceID` already subtract the bases there |
 | Cost | native | native: unverified | native |
 
 ### `rojoRHI::vertexIndex`
@@ -98,7 +99,7 @@ Requirements: `ids` is the unmodified `VertexIds` parameter of a vertex entry po
 
 | | Metal 4 | D3D12 | Vulkan |
 |---|---|---|---|
-| Lowering | `[[instance_id]]` minus `[[base_instance]]` | `SV_InstanceID`, taken to exclude the base instance; unverified | the raw `InstanceIndex` minus `BaseInstance`, subtracted once |
+| Lowering | `[[instance_id]]` minus `[[base_instance]]` | `SV_InstanceID`, which excludes the base instance | the raw `InstanceIndex` minus `BaseInstance`, subtracted once |
 | Cost | cheap: one subtract | native | cheap: one subtract |
 
 ### `rojoRHI::drawId`
@@ -124,5 +125,5 @@ passes its unmodified `VertexIds` parameter.
 
 | | Metal 4 | D3D12 | Vulkan |
 |---|---|---|---|
-| Lowering | vertex stage: `[[base_instance]]`, which the backend sets to the record's `drawId` for an indirect draw and to 0 for a direct draw; task and mesh stages: the backend binds the record's address for the draw and the shader loads offset 0, or for a direct draw binds a zero record, four bytes the list writes into its frame arena once per recording | root constant read from record offset 0 by the `ExecuteIndirect` command signature, or written as 0 by a direct draw when the list does not hold 0 there, which it does not after acquisition or an indirect draw; unverified | the backend binds the records' base address and stride, and the shader loads offset 0 of record `DrawIndex`; a direct draw binds a zero record, and `DrawIndex` is 0 |
+| Lowering | vertex stage: `[[base_instance]]`, which the backend sets to the record's `drawId` for an indirect draw and to 0 for a direct draw; task and mesh stages: the backend binds the record's address for the draw and the shader loads offset 0, or for a direct draw binds a zero record, four bytes the list writes into its frame arena once per recording | root constant read from record offset 0 by the `ExecuteIndirect` command signature, or written as 0 by a direct draw when the list does not hold 0 there, which it does not after acquisition or an indirect draw | the backend binds the records' base address and stride, and the shader loads offset 0 of record `DrawIndex`; a direct draw binds a zero record, and `DrawIndex` is 0 |
 | Cost | native in the vertex stage; cheap in task and mesh stages: one load | native: unverified | cheap: one load |
