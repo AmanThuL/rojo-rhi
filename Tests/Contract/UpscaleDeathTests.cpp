@@ -525,18 +525,17 @@ TEST_CASE("VU-rojo-upscale-0008 two lists of one frame each upscale the same ups
 TEST_CASE("VU-rojo-upscale-0011 the output is also the exposure input", "[contract][death]")
 {
     UpscalerDesc desc = UpscaleKit::defaultDesc();
-    desc.input = { 1, 1 };
-    desc.output = { 1, 1 };
+    desc.output = desc.input;
     desc.outputFormat = Format::R16Float;
-    // The 1x1 extent lets the output stand in as the 1x1 exposure; creation may refuse it ("when the implementation rejects the extent
-    // ratio").
+    // The output, in the exposure's format, stands in as the exposure. It is not 1x1, but VU-rojo-upscale-0011 is checked before
+    // the exposure's own rule. Creation may refuse the output format, and the case then skips.
     Device device = *createDevice();
     const Result<Upscaler> created = device.createUpscaler(desc);
     if (!created)
     {
         const std::string message = created.error().message;
         destroyDevice(device);
-        SKIP("the device refuses a 1x1 upscaler: " << message);
+        SKIP("the device refuses an R16Float upscaler output: " << message);
     }
     device.destroy(*created);
     destroyDevice(device);

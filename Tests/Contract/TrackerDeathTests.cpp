@@ -13,6 +13,7 @@
 
 #include <array>
 #include <cstddef>
+#include <string_view>
 #include <vector>
 
 using namespace rojoRHI;
@@ -131,9 +132,15 @@ TEST_CASE("VU-rojo-cmd-0072 a cleared range is not in CopyDst", "[contract][deat
 //======================================================================================================================
 TEST_CASE("VU-rojo-cmd-0072 a cleared range is in General", "[contract][death]")
 {
+    const std::string_view ends = test::misplacedClearEndsRecording();
+    if (!ends.empty())
+    {
+        SKIP("the clear never reaches the tracker: " << ends);
+    }
     ROJORHI_EXPECT_DEATH("VU-rojo-cmd-0072", [] {
         PassKit kit(QueueType::Graphics, true);
-        const Texture target = kit.target();
+        // The tracker judges the clear; where the layer would end the process first, the case skips above.
+        const Texture target = kit.texture(Format::RGBA8Unorm, TextureUsage::RenderTarget | TextureUsage::Storage);
         move(kit.list, target, Layout::Undefined, Layout::General);
         kit.list.clearTexture(target, {}, {});
         kit.finish();

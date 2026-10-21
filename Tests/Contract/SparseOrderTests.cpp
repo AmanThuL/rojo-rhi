@@ -211,7 +211,10 @@ TEST_CASE("a copy on Compute to the mip tail of one layer needs no fence against
 #else
     PassKit kit(QueueType::Graphics, true);
     const SparseSet set = sparse(kit);
-    REQUIRE(set.shape.mipTailFirst < 10);
+    if (set.shape.mipTailFirst >= 10)
+    {
+        SKIP("the device packs no mip tail for the sparse texture, so there is no tail to map");
+    }
     const Buffer source = kit.buffer(BufferUsage::None, kBytes);
     const Fence fence = *kit.device.createFence(0, "test.fence");
     const std::array<FenceValue, 1> moved{ FenceValue{ fence, 1 } };
