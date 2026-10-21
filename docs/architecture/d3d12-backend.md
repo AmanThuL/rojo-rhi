@@ -5,8 +5,8 @@
 This page describes the D3D12 backend as it stands. `createDevice` opens a device on the Agility
 runtime and the backend owns the device-wide native state: queues, fences and frames, shader-visible
 descriptor heaps, root and command signatures, memory, buffers, heaps, textures, views and
-samplers, and the debug layer. Command lists are acquired, ended and given frame data, and
-submission waits and signals fences; no list encodes a native command yet. Everything below is
+samplers, and the debug layer. Command lists record copies, fills, clears, barriers and timed
+scopes ([recording](d3d12-recording.md)); draws and passes do not yet. Everything below is
 "implemented, verified on WARP only, not on hardware": the backend is not a capability until a
 hardware run says so ([ADR 0009](../decisions/0009-conformance-and-valid-usage.md),
 [documentation](../conventions/documentation.md)). The API reference under `docs/spec/` stays the
@@ -20,7 +20,7 @@ are in [the build record](d3d12-build.md).
 | 03 memory and buffers, 04 textures and heaps | implemented, with views and samplers |
 | 15 formats and limits | implemented: the format table and the limits |
 | 10 queues and frames (with the fences of 09) | implemented: fences, `submit`, frames; `Queue::present` and `Queue::mapTiles` abort |
-| 07 command recording | `acquireCommandList`, `end` and `uploadFrameData` only; every other recording entry aborts |
+| 07 command recording | lists, `setRoot`, copies, fills, clears, scopes and barriers (09) record ([recording](d3d12-recording.md)); render passes, draws and dispatches abort |
 | 06 pipelines | implemented: shader libraries, graphics, mesh and compute pipelines and the pipeline cache ([drawing](d3d12-drawing.md)) |
 | 08 GPU-driven work, 11 presentation, 12 upscaling, 13 sparse | not implemented: entries return `Unsupported` or abort, and `createSwapchain` is `Unsupported` |
 | 14 diagnostics | the core's counters and checks; no capture hook, so `beginCapture` is `Unsupported` |
@@ -111,11 +111,11 @@ its linear counterpart because a typed UAV has no sRGB form.
 
 `Memory::Gpu` is a `DEFAULT` heap, `Readback` is `READBACK`, and `Upload` is `GPU_UPLOAD` when the
 device reports it and `UPLOAD` otherwise (`D3D12Memory.cpp`). Buffers and textures are created
-committed with `CreateCommittedResource3` (buffers in `D3D12_BARRIER_LAYOUT_UNDEFINED`), or placed
-in a heap with `CreatePlacedResource2`. A `Heap` is one `ID3D12Heap` with
-`ALLOW_ALL_BUFFERS_AND_TEXTURES`, aligned to 4 MiB for `Gpu` so multisample textures can be placed
-and to 64 KiB otherwise, its size rounded up to that alignment. An `Upload` or `Readback` buffer
-is mapped once at creation and stays mapped until it retires. The backend makes no residency
+committed with `CreateCommittedResource3` (buffers in `LAYOUT_UNDEFINED`, textures in
+`LAYOUT_COMMON`), or placed in a heap with `CreatePlacedResource2`. A `Heap` is one `ID3D12Heap`
+with `ALLOW_ALL_BUFFERS_AND_TEXTURES`, aligned to 4 MiB for `Gpu` so multisample textures can be
+placed and to 64 KiB otherwise, its size rounded up to that alignment. An `Upload` or `Readback`
+buffer is mapped once at creation and stays mapped until it retires. The backend makes no residency
 calls: the interface exposes no residency control ([memory and buffers](
 ../spec/03-memory-and-buffers.md#residency)), and every allocation stays resident for its life.
 
@@ -140,10 +140,10 @@ always holds 2,048. The core's view and sampler allocators hand out the slots, s
 Slot 0 holds a null raw SRV and slot 1 a null raw UAV for the device's life, so a load through the
 zero `Addr` reads zeros and a store through it is discarded. The transient ring follows them: one
 range of `framesInFlight` blocks of 1,024 slots, each with a twin in the CPU-only heap. A frame
-slot claims its next transient with one atomic increment and no lock; claiming more than 1,024 in
-one frame slot logs "at most 1,024 storage-texture clears per frame slot" and aborts in every
-build, and the block is claimable again once the slot's frame has retired. The ring and the two
-held slots are the reserved leading slots, so they do not count in `maxViews`.
+slot claims its next transient with one atomic increment and no lock; claiming more than 1,024
+in one frame slot logs "at most 1,024 storage clears and fill windows per frame slot" and aborts
+in every build, and the block is claimable again once the slot's frame has retired. The ring and
+the two held slots are the reserved leading slots, so they do not count in `maxViews`.
 
 A texture with `RenderTarget` or `DepthStencil` usage gets, at creation, a CPU-only heap with one
 RTV or DSV per mip and layer (per mip and depth slice for a 3D texture), immutable for its life
@@ -217,16 +217,16 @@ ring and releases the kept fences every queue has passed.
 
 When the build enables the layer, `MessageRouter` registers an `ID3D12InfoQueue1` callback that
 forwards each message with its severity (info and message as `Info`, warning as `Warning`, error
-and corruption as `Error`), on whatever thread the runtime raises it, and aborts after an error
-or corruption message. Messages are dropped only by the deny list `kFiltered` in `D3D12Debug.cpp`,
-which holds the runtime's per-object create and destroy notices at information severity and six
-pipeline-library outcomes the cache reads from the HRESULT (not found, duplicate name, invalid
-blob, driver or adapter mismatch, unsupported; see [drawing](d3d12-drawing.md)); message 972 passes.
-Every other error, warning and application message passes, and so does a live-object report. On
-`DXGI_ERROR_DEVICE_REMOVED`, `_RESET` or `_HUNG`, `d3d12::failure` reports the removal reason, the
-auto-breadcrumb nodes and the page-fault data as `Error` messages, then the entry fails as its
-contract says: a `Result` error, or a logged abort in an entry with no `Result`. Every native
-object is named from its label.
+and corruption as `Error`), on whatever thread the runtime raises it, and aborts after an error or
+corruption message. Messages are dropped only by the deny list `kFiltered` in `D3D12Debug.cpp`,
+which holds the runtime's per-object create and destroy notices at information severity, six
+pipeline-library outcomes the cache reads from the HRESULT (see [drawing](d3d12-drawing.md)), the
+two clear-value mismatch warnings ([recording](d3d12-recording.md#clears)) and the hint on a list
+of barriers alone (1356), which is valid usage; message 972 passes. Every other error, warning and
+application message passes, and so does a live-object report. On `DXGI_ERROR_DEVICE_REMOVED`,
+`_RESET` or `_HUNG`, `d3d12::failure` reports the removal reason, the auto-breadcrumb nodes and the
+page-fault data as `Error` messages, then the entry fails as its contract says: a `Result` error,
+or a logged abort in an entry with no `Result`. Every native object is named from its label.
 
 ## Threading and lock order
 
