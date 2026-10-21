@@ -154,18 +154,20 @@ namespace rojoRHI::d3d12 {
         impl.adapterName = utf8(adapter.Description);
         impl.floorName = std::format("FL 12_2, SM {}", shaderModelName(model.HighestShaderModel));
 
-        // Nothing past the floor is reported until the backend implements it: no placement sparse, no conservative raster, no
-        // upscaler.
+        // Nothing past the floor is reported until the backend implements it: no conservative raster. Placement sparse
+        // needs tiled-resources tier 2: an unmapped tile then reads as zero and discards writes, which tier 1 leaves
+        // undefined, and no mip of at least one tile is packed into the tail. FSR is listed when the FidelityFX runtime
+        // loaded beside the executable and offers a provider for the device.
         Capabilities& capabilities = impl.core.capabilities();
         capabilities.adapterName = impl.adapterName;
         capabilities.floorName = impl.floorName;
         capabilities.maxViews = impl.descriptors.viewSlots();
         capabilities.maxSamplers = impl.descriptors.samplerCapacity();
         capabilities.uploadInDeviceMemory = impl.features.gpuUploadHeap;
-        capabilities.placementSparse = false;
+        capabilities.placementSparse = impl.features.tiledResourcesTier >= static_cast<uint32_t>(D3D12_TILED_RESOURCES_TIER_2);
         capabilities.meshTasksIndirect = true;
         capabilities.conservativeRaster = false;
-        capabilities.upscalers = {};
+        capabilities.upscalers = listedUpscalers(impl.fsr.fidelityFx, *device);
 
         // A buffer is as large as the adapter's memory, which is shared memory on an adapter with no dedicated memory, and no
         // larger than one resource's virtual address space.

@@ -23,6 +23,7 @@
 #include "D3D12Stager.h"
 #include "D3D12Swapchain.h"
 #include "D3D12Timestamps.h"
+#include "D3D12Upscaler.h"
 
 #include <array>
 #include <cstddef>
@@ -94,6 +95,7 @@ namespace rojoRHI {
 
         core::DeviceCore core;                ///< Frame bookkeeping, pools, labels, capabilities and the format table.
         d3d12::Loaded loaded;                 ///< The device factory, DXGI factory, adapter and device.
+        d3d12::FsrRuntime fsr;                ///< The FidelityFX runtime beside the executable, if it loaded.
         d3d12::MessageRouter messages;        ///< Routes the debug layer's messages while the device lives.
         d3d12::DeviceFeatures features;       ///< The optional features the device reports.
         std::array<QueueImpl, 3> queues = {}; ///< One queue per `QueueType`, indexed by its value.

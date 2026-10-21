@@ -119,9 +119,7 @@ TEST_CASE("capabilities stay honest until the features exist", "[d3d12]")
     Result<Device> created = createDevice();
     REQUIRE(created.has_value());
     const Capabilities& capabilities = created->capabilities();
-    CHECK_FALSE(capabilities.placementSparse);
     CHECK_FALSE(capabilities.conservativeRaster);
-    CHECK(capabilities.upscalers.empty());
     CHECK(capabilities.meshTasksIndirect);
     destroyDevice(*created);
 }
@@ -148,7 +146,6 @@ TEST_CASE("every format the table reports as sampled is sampleable by D3D12", "[
         const Format format = static_cast<Format>(value);
         CAPTURE(value);
         const FormatCapabilities caps = created->formatCapabilities(format);
-        CHECK_FALSE(caps.sparse);
         if (caps.sampled)
         {
             // A depth format is sampled through its float view.

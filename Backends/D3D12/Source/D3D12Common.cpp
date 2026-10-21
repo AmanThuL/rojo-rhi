@@ -102,12 +102,6 @@ namespace rojoRHI::d3d12 {
     }
 
     //==================================================================================================================
-    std::unexpected<Error> unsupported(std::string_view entry)
-    {
-        return std::unexpected(Error{ ErrorCategory::Unsupported, std::format("{} is not supported by the D3D12 backend", entry) });
-    }
-
-    //==================================================================================================================
     Error hresultError(HRESULT result, std::string_view what)
     {
         const ErrorCategory category = result == E_OUTOFMEMORY ? ErrorCategory::OutOfMemory : ErrorCategory::DriverFailure;
