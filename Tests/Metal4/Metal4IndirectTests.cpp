@@ -308,7 +308,7 @@ namespace {
 //======================================================================================================================
 TEST_CASE("a counted draw before the pass's first direct draw runs its kernel ahead of the render encoder", "[metal4]")
 {
-    test::GpuKit kit;
+    test::GpuKit kit(2, true);
     const Fixture fixture(kit.device);
     CommandList list = kit.list(QueueType::Graphics, "test.indirect");
     fixture.begin(list);
@@ -341,7 +341,7 @@ TEST_CASE("a counted draw before the pass's first direct draw runs its kernel ah
 //======================================================================================================================
 TEST_CASE("the kernels of a pass's leading counted draws share one compute encoder", "[metal4]")
 {
-    test::GpuKit kit;
+    test::GpuKit kit(2, true);
     const Fixture fixture(kit.device);
     CommandList list = kit.list(QueueType::Graphics, "test.indirect");
     fixture.begin(list);
@@ -364,7 +364,7 @@ TEST_CASE("the kernels of a pass's leading counted draws share one compute encod
 //======================================================================================================================
 TEST_CASE("a counted draw after a direct draw splits the pass", "[metal4]")
 {
-    test::GpuKit kit;
+    test::GpuKit kit(2, true);
     const Fixture fixture(kit.device);
     CommandList list = kit.list(QueueType::Graphics, "test.indirect");
     // Not stored at the pass's end, so the split's Store is a call.
@@ -386,7 +386,7 @@ TEST_CASE("a counted draw after a direct draw splits the pass", "[metal4]")
 //======================================================================================================================
 TEST_CASE("a split orders the ended encoder's stores before the resumed encoder's loads", "[metal4]")
 {
-    test::GpuKit kit;
+    test::GpuKit kit(2, true);
     const Fixture fixture(kit.device);
     CommandList list = kit.list(QueueType::Graphics, "test.indirect");
     fixture.begin(list);
@@ -411,7 +411,7 @@ TEST_CASE("a split orders the ended encoder's stores before the resumed encoder'
 //======================================================================================================================
 TEST_CASE("a kernel makes four calls on a new encoder, two once the encoder holds its pipeline, and its execute one", "[metal4]")
 {
-    test::GpuKit kit;
+    test::GpuKit kit(2, true);
     const Fixture fixture(kit.device);
     CommandList list = kit.list(QueueType::Graphics, "test.indirect");
     fixture.begin(list);
@@ -441,7 +441,7 @@ TEST_CASE("a kernel makes four calls on a new encoder, two once the encoder hold
 //======================================================================================================================
 TEST_CASE("maxCount 1 runs the writer kernel and one native indirect draw", "[metal4]")
 {
-    test::GpuKit kit;
+    test::GpuKit kit(2, true);
     const Fixture fixture(kit.device);
     CommandList list = kit.list(QueueType::Graphics, "test.indirect");
     fixture.begin(list);
@@ -471,7 +471,7 @@ TEST_CASE("maxCount 1 runs the writer kernel and one native indirect draw", "[me
 //======================================================================================================================
 TEST_CASE("an execute replays after the root, pipeline and state recorded before it", "[metal4]")
 {
-    test::GpuKit kit;
+    test::GpuKit kit(2, true);
     const Fixture fixture(kit.device);
     CommandList list = kit.list(QueueType::Graphics, "test.indirect");
     const std::array<std::byte, 256> zeroes{};
@@ -503,7 +503,7 @@ TEST_CASE("an execute replays after the root, pipeline and state recorded before
 //======================================================================================================================
 TEST_CASE("a counted draw after a scope opened in the pass splits it and the resumed encoder pushes the group again", "[metal4]")
 {
-    test::GpuKit kit;
+    test::GpuKit kit(2, true);
     const Fixture fixture(kit.device);
     CommandList list = kit.list(QueueType::Graphics, "test.indirect");
     fixture.begin(list);
@@ -531,7 +531,7 @@ TEST_CASE("a counted draw after a scope opened in the pass splits it and the res
 //======================================================================================================================
 TEST_CASE("ICBs are made once per list and reused when its slot comes round; a larger maxCount replaces one", "[metal4]")
 {
-    Device device = *createDevice();
+    Device device = *createDevice({ .scopeTimings = true });
     const uint32_t slots = core::coreOf(device).framesInFlight();
     const Fixture fixture(device);
     std::vector<const MTL::IndirectCommandBuffer*> first;
@@ -588,7 +588,7 @@ TEST_CASE("ICBs are made once per list and reused when its slot comes round; a l
 //======================================================================================================================
 TEST_CASE("a list's indirect command buffers join the device's residency set at submission, and a replaced one leaves it", "[metal4]")
 {
-    Device device = *createDevice();
+    Device device = *createDevice({ .scopeTimings = true });
     const uint32_t slots = core::coreOf(device).framesInFlight();
     const Fixture fixture(device);
     metal4::Residency& residency = DeviceImpl::of(device).residency;
@@ -654,7 +654,7 @@ TEST_CASE("a list's indirect command buffers join the device's residency set at 
 //======================================================================================================================
 TEST_CASE("a counted draw that claims a new frame-arena page reads its kernel's parameters from that page", "[metal4]")
 {
-    test::GpuKit kit;
+    test::GpuKit kit(2, true);
     const OracleTarget oracle(kit, Format::R32Float);
     // Each counted draw reserves 96 bytes of the list's 1 MiB page, so these claim a second page part way through. Each draws
     // its own drawId into its own pixel; one that read its parameters at the old page's address would draw another's.
@@ -688,7 +688,7 @@ TEST_CASE("a counted draw that claims a new frame-arena page reads its kernel's 
 //======================================================================================================================
 TEST_CASE("counted indexed draws read the index buffer each names", "[metal4]")
 {
-    test::GpuKit kit;
+    test::GpuKit kit(2, true);
     const OracleTarget oracle(kit, Format::RGBA16Float);
     // From index 0, the first buffer draws vertices 0 to 2; from index 3, the second draws vertices 3 to 5. Either read at the
     // other's address draws a degenerate triangle, or nothing, so a stale address loses its pixels.

@@ -7,7 +7,7 @@ objects a list owns, the one open encoder, copies, fills, clears, barriers, scop
 their upscales, the counts and the commit-timing seam
 ([benchmarks](benchmarks.md#the-commit-timing-seam)). [The Metal 4 backend](metal4-backend.md)
 describes the device around it, and [drawing](metal4-drawing.md) the render passes, pipelines,
-dispatches and draws a list also records. Every scope, render pass and upscale is timed. Chapters
+dispatches and draws a list also records. Scopes are timed on a device that asks for it. Chapters
 07, 09 and 10 of the API reference stay the authority on semantics and on each entry's Metal 4
 mapping; every check lives in `Source/Core`, so no `ROJORHI_VU` appears under `Backends/Metal4/`.
 
@@ -104,10 +104,8 @@ list's table back ([counted draws](metal4-drawing.md#counted-draws)). Parameters
 arena through `core::bumpArenaPage`, which locks only to claim a page, and count as no frame data
 upload. Its bump into a page with room is inline, and the list's page keeps the GPU address read
 when the page was created, so a reservation or `uploadFrameData` makes no call and sends the page no
-message.
-
-The fill kernel writes one 32-bit word per thread, 64 threads per group, at most 2^31 words per
-dispatch. The pattern's bytes land in little-endian order.
+message. The fill kernel writes one 32-bit word per thread, 64 threads per group, at most 2^31 words
+per dispatch. The pattern's bytes land in little-endian order.
 
 ## Clears
 
@@ -204,15 +202,17 @@ draws, else its render encoder), the end timestamp on its last render encoder ju
 lingers, so its counted draws' kernels and its splits fall inside it ([drawing](metal4-drawing.md)).
 An upscale writes its pair around its carrier and MetalFX's encoders (below).
 
-A claim is one relaxed `fetch_add(2)` on the slot's cursor. A slot has up to eight
+A claim is one relaxed `fetch_add(2)` on the slot's cursor. A device created without
+`DeviceDesc::scopeTimings` makes none and gets `core::kNoTimestamp`, so it writes, creates and
+resolves nothing while its groups, labels and encoders stay. A slot has up to eight
 `MTL4::CounterHeap`s of 4,096 timestamps, each created on the first claim that needs it and
-published with a compare-exchange (a thread that loses releases its own heap), so recording takes
-no lock and a device that records no scope holds no heap. A scope past the slot's 16,384 pairs, or
-whose heap Metal refuses (Metal allows 32 counter heaps per process or on the system), writes no
-timestamp. A refusal holds until the slot's reuse, so while Metal keeps refusing, a frame makes one
-failed `newCounterHeap` per refused heap it needs (more only when threads race to create it). Metal
-autoreleases objects inside `writeTimestampIntoHeap` under the validation layer, so each write runs
-inside a command pool; an encoder's `writeTimestamp` autoreleases nothing and opens none.
+published with a compare-exchange (a thread that loses releases its own heap), so recording takes no
+lock. A scope past the slot's 16,384 pairs, or whose heap Metal refuses (Metal allows 32 counter
+heaps per process or on the system), writes no timestamp. A refusal holds until the slot's reuse, so
+while Metal keeps refusing, a frame makes one failed `newCounterHeap` per refused heap it needs
+(more only when threads race to create it). Metal autoreleases objects inside
+`writeTimestampIntoHeap` under the validation layer, so each write runs inside a command pool; an
+encoder's `writeTimestamp` autoreleases nothing and opens none.
 
 At the frame wait the core calls the scope-time hook once per queue with records. The first call of
 the frame resolves each heap the slot used, once, with `resolveCounterRange` inside a pool, and
@@ -257,8 +257,8 @@ StageBlit, StageAll)` holds back every stage of every later encoder on the queue
 reads of the output follow MetalFX's writes whatever stages MetalFX runs. A later upscale's carrier
 takes a wait still owed, so its fence, which replaces the earlier one, follows the earlier upscale's
 work. `sharpness` has no effect. An upscale with no encoder open and nothing pending sends 24 native
-calls and one native barrier: the push and a timestamp, five on the carrier, fourteen setters, the
-encode, a timestamp and the pop.
+calls and one native barrier on a device with scope timings (22 without): the push and a timestamp,
+five on the carrier, fourteen setters, the encode, a timestamp and the pop.
 
 ## Counts
 
@@ -281,10 +281,10 @@ Operation counts, inside one open encoder: `uploadFrameData` makes no native cal
 one; an equal-byte fill is one and an unequal one five (kernel table, two addresses, dispatch, list
 table; six for the first kernel an encoder runs, which also sets the pipeline); a barrier between
 copies is one native call and one native barrier at its emission; a scope outside a pass is four
-(the push, two timestamps and the pop) beyond the `endEncoding` of each boundary that closes an
-encoder. A counter heap counts one `nativeCreateCalls`, and each resolve and each invalidation of a
-used heap one `nativeHostCalls`. Messages to an upscaler's scaler count as record calls, and the
-carrier counts as an encoder; MetalFX's own encoders are not counted.
+(the push, two timestamps and the pop; two untimed) beyond the `endEncoding` of each boundary that
+closes an encoder. A counter heap counts one `nativeCreateCalls`, and each resolve and each
+invalidation of a used heap one `nativeHostCalls`. Messages to an upscaler's scaler count as record
+calls, and the carrier counts as an encoder; MetalFX's own encoders are not counted.
 
 ## Tests
 

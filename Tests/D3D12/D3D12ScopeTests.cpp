@@ -99,10 +99,11 @@ namespace {
     }
 
     //==================================================================================================================
-    /// Returns a new device that keeps `framesInFlight` frames in flight.
+    /// Returns a new device that keeps `framesInFlight` frames in flight and times scopes.
     Device makeDevice(uint32_t framesInFlight = 3)
     {
         DeviceDesc desc;
+        desc.scopeTimings = true;
         desc.framesInFlight = framesInFlight;
         Result<Device> created = createDevice(desc);
         REQUIRE(created.has_value());
@@ -349,6 +350,42 @@ TEST_CASE("a list that records no scope resolves nothing", "[d3d12]")
     CHECK(recordCalls(list) - before == 1u);
     CHECK(stateOf(list).timestamps.heaps.empty());
     device.queue(QueueType::Graphics).submit(std::span(&list, 1), {}, {});
+    device.endFrame();
+    CHECK(messages.all().empty());
+    destroyDevice(device);
+}
+
+//======================================================================================================================
+TEST_CASE("a device without scopeTimings records each scope's event alone, makes no query heap and resolves nothing", "[d3d12]")
+{
+    Result<Device> created = createDevice({ .framesInFlight = 2 });
+    REQUIRE(created.has_value());
+    Device device = *created;
+    const MessageCollection messages;
+    device.beginFrame();
+    CommandList list = device.acquireCommandList(QueueType::Graphics, "test.list");
+    const d3d12::ListState& state = stateOf(list);
+    const Counters before = device.counters();
+    const uint64_t calls = recordCalls(list);
+    // BeginEvent alone, then EndEvent alone: no query is claimed, so no heap or readback buffer is made. The core's default
+    // label takes no frame-arena page, so nothing else is created either.
+    list.beginScope("");
+    CHECK(recordCalls(list) - calls == 1u);
+    CHECK(lastScope(list).timestamp == core::kNoTimestamp);
+    CHECK(state.timestamps.open == std::vector<uint32_t>{ core::kNoTimestamp });
+    list.endScope();
+    CHECK(recordCalls(list) - calls == 2u);
+    CHECK(state.timestamps.next == 0u);
+    CHECK(state.timestamps.heaps.empty());
+    CHECK(device.counters().nativeCreateCalls == before.nativeCreateCalls);
+    CHECK(device.counters().gpuAllocations == before.gpuAllocations);
+    // Close alone: nothing to resolve.
+    const uint64_t closing = recordCalls(list);
+    list.end();
+    CHECK(recordCalls(list) - closing == 1u);
+    device.queue(QueueType::Graphics).submit(std::span(&list, 1), {}, {});
+    retireOpenFrame(device);
+    CHECK(device.scopeTimings().empty());
     device.endFrame();
     CHECK(messages.all().empty());
     destroyDevice(device);

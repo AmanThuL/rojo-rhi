@@ -121,10 +121,11 @@ namespace {
     }
 
     //==================================================================================================================
-    /// Returns a new device that keeps two frames in flight.
+    /// Returns a new device that keeps two frames in flight and times scopes, so a pass's counts include its two queries.
     Device makeDevice()
     {
         DeviceDesc desc;
+        desc.scopeTimings = true;
         desc.framesInFlight = 2;
         Result<Device> created = createDevice(desc);
         INFO((created ? std::string() : created.error().message));

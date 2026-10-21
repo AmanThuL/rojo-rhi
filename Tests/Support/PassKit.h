@@ -20,8 +20,8 @@ namespace rojoRHI::test {
         static constexpr uint32_t kSize = 64;
 
         /// Creates the device, opens a frame and acquires a list of `type`. `validation` selects `DeviceDesc::validation`, which a
-        /// Release build refuses, so only Debug-only tests pass true.
-        explicit PassKit(QueueType type = QueueType::Graphics, bool validation = false);
+        /// Release build refuses, so only Debug-only tests pass true; `scopeTimings` selects `DeviceDesc::scopeTimings`.
+        explicit PassKit(QueueType type = QueueType::Graphics, bool validation = false, bool scopeTimings = false);
 
         /// Creates a `kSize` square `RenderTarget` texture. Where layouts are native and the kit does not validate, a Graphics
         /// kit first records the barrier that moves it to `ColorAttachment`, which a pass needs and the case does not record.

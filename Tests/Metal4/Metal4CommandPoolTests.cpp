@@ -71,7 +71,7 @@ namespace {
 //======================================================================================================================
 TEST_CASE("a dispatch opens a command pool only under the validation layer", "[metal4]")
 {
-    Device device = *createDevice();
+    Device device = *createDevice({ .scopeTimings = true });
     const std::vector<std::byte> blob = test::standardLibrary();
     const ShaderLibrary library = *device.loadShaderLibrary(blob, "test.library");
     const Pipeline pipeline = *device.createPipeline(ComputePipelineDesc{ .compute = { library, "csMain" }, .label = "test.compute" });
@@ -92,7 +92,7 @@ TEST_CASE("a dispatch opens a command pool only under the validation layer", "[m
 //======================================================================================================================
 TEST_CASE("a buffer copy and a fill open a command pool only under the validation layer", "[metal4]")
 {
-    Device device = *createDevice();
+    Device device = *createDevice({ .scopeTimings = true });
     const Buffer source = *device.createBuffer({ .size = 256, .label = "test.source" });
     const Buffer target = *device.createBuffer({ .size = 256, .usage = BufferUsage::ShaderWrite, .label = "test.target" });
     checkPoolsPerCommand(
@@ -132,7 +132,7 @@ TEST_CASE("a buffer copy and a fill open a command pool only under the validatio
 //======================================================================================================================
 TEST_CASE("a draw opens a command pool only under the validation layer", "[metal4]")
 {
-    Device device = *createDevice();
+    Device device = *createDevice({ .scopeTimings = true });
     const std::vector<std::byte> blob = test::standardLibrary();
     const ShaderLibrary library = *device.loadShaderLibrary(blob, "test.library");
     const std::array colors{ ColorTarget{ .format = Format::RGBA8Unorm } };
@@ -168,7 +168,7 @@ TEST_CASE("a draw opens a command pool only under the validation layer", "[metal
 //======================================================================================================================
 TEST_CASE("the detected flag matches the layer the process runs under", "[metal4]")
 {
-    Device device = *createDevice();
+    Device device = *createDevice({ .scopeTimings = true });
     // The test, not the library, reads the environment: the layer is on exactly when MTL_DEBUG_LAYER is set to 1. A bare
     // driver device is the only one whose commands open no pool.
     const char* layer = std::getenv("MTL_DEBUG_LAYER");
@@ -180,7 +180,7 @@ TEST_CASE("the detected flag matches the layer the process runs under", "[metal4
 //======================================================================================================================
 TEST_CASE("a scope between encoders and a render pass open their command pools only under the validation layer", "[metal4]")
 {
-    Device device = *createDevice();
+    Device device = *createDevice({ .scopeTimings = true });
     // A scope writes a timestamp on the command buffer at its begin and at its end, between encoders.
     checkPoolsPerCommand(
         device,
@@ -217,7 +217,7 @@ TEST_CASE("a scope between encoders and a render pass open their command pools o
 //======================================================================================================================
 TEST_CASE("a render pass opens one pool for its debug group and one around its descriptor and encoder factory", "[metal4]")
 {
-    Device device = *createDevice();
+    Device device = *createDevice({ .scopeTimings = true });
     const Texture target = *device.createTexture(
         TextureDesc{ .format = Format::RGBA8Unorm, .extent = { kEdge, kEdge, 1 }, .usage = TextureUsage::RenderTarget, .label = "test.target" }
     );
@@ -241,7 +241,7 @@ TEST_CASE("a render pass opens one pool for its debug group and one around its d
 TEST_CASE("counted draws open their kernel and replay command pools only under the validation layer", "[metal4]")
 {
     constexpr uint32_t kRecords = 8;
-    Device device = *createDevice();
+    Device device = *createDevice({ .scopeTimings = true });
     const std::vector<std::byte> blob = test::standardLibrary();
     const ShaderLibrary library = *device.loadShaderLibrary(blob, "test.library");
     const std::array colors{ ColorTarget{ .format = Format::RGBA8Unorm } };
@@ -287,7 +287,7 @@ TEST_CASE("counted draws open their kernel and replay command pools only under t
 //======================================================================================================================
 TEST_CASE("mesh draws open a command pool only under the validation layer", "[metal4]")
 {
-    Device device = *createDevice();
+    Device device = *createDevice({ .scopeTimings = true });
     if (!device.capabilities().meshTasksIndirect)
     {
         destroyDevice(device);
@@ -328,7 +328,7 @@ TEST_CASE("mesh draws open a command pool only under the validation layer", "[me
 //======================================================================================================================
 TEST_CASE("a list empties its pass descriptor's attachments without an autorelease pool", "[metal4]")
 {
-    Device device = *createDevice();
+    Device device = *createDevice({ .scopeTimings = true });
     const Texture target = *device.createTexture(
         TextureDesc{ .format = Format::RGBA8Unorm, .extent = { kEdge, kEdge, 1 }, .usage = TextureUsage::RenderTarget, .label = "test.target" }
     );

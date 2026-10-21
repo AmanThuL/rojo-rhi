@@ -25,8 +25,9 @@ namespace rojoRHI::metal4 {
     /// The timestamp storage of a device: per frame slot, up to `kSlotHeaps` counter heaps of `kHeapEntries` timestamps and a
     /// cursor. A scope claims a pair of entries with one atomic add on its slot's cursor; a pair never straddles two heaps. A
     /// heap is created on the first claim that needs it and published with a compare-exchange, so recording takes no lock and
-    /// a device that records no scope holds no heap. Heaps live until `release`. At the frame wait the scope-time hook
-    /// resolves each used heap of the reused slot once, and the slot's reuse invalidates the used ranges and resets the cursor.
+    /// a device that records no scope, or was created without `DeviceDesc::scopeTimings` and so claims none, holds no heap.
+    /// Heaps live until `release`. At the frame wait the scope-time hook resolves each used heap of the reused slot once, and
+    /// the slot's reuse invalidates the used ranges and resets the cursor.
     class Timestamps
     {
       public:
@@ -110,7 +111,8 @@ namespace rojoRHI::metal4 {
 
     /// Claims a pair of entries of `list`'s frame slot for the scope the core recorded last on `list`, stores it on that
     /// record for the resolve, pushes it on the list's pair stack and returns its first index, or `core::kNoTimestamp` when
-    /// the slot gives none. One atomic add; the heap is created on its first claim. Free-threaded across lists, lock-free.
+    /// the slot gives none or the device was created without `DeviceDesc::scopeTimings`, which claims nothing. One atomic
+    /// add; the heap is created on its first claim. Free-threaded across lists, lock-free.
     uint32_t claimPair(CommandListImpl& list);
 
     /// Pops the innermost pair of `list`'s pair stack and returns the index of its end entry, or `core::kNoTimestamp` when the

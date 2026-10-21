@@ -25,8 +25,9 @@ namespace rojoRHI::test {
         static UpscalerDesc defaultDesc();
 
         /// Creates the device and list of `type`, an upscaler of `desc`, and textures that make `params` a valid upscale of it.
-        /// `validation` selects `DeviceDesc::validation`, which a Release build refuses.
-        explicit UpscaleKit(QueueType type = QueueType::Graphics, const UpscalerDesc& desc = defaultDesc(), bool validation = false);
+        /// `validation` selects `DeviceDesc::validation`, which a Release build refuses, and `scopeTimings`
+        /// `DeviceDesc::scopeTimings`.
+        explicit UpscaleKit(QueueType type = QueueType::Graphics, const UpscalerDesc& desc = defaultDesc(), bool validation = false, bool scopeTimings = false);
 
         /// Creates a 2D texture of `format`, `extent` and `usage` on the kit's device.
         Texture make(Format format, Extent2D extent, TextureUsage usage);

@@ -274,7 +274,9 @@ namespace rojoRHI::metal4 {
     uint32_t claimPair(CommandListImpl& list)
     {
         DeviceImpl& device = deviceOf(list.core);
-        const uint32_t pair = device.timestamps.claim(slotOf(list.core), device.core.counts());
+        // A device created without scope timings claims nothing, so it creates no heap, writes no timestamp and resolves
+        // nothing; the record keeps `core::kNoTimestamp`.
+        const uint32_t pair = device.core.timesScopes() ? device.timestamps.claim(slotOf(list.core), device.core.counts()) : core::kNoTimestamp;
         list.core.scopeLog.back().timestamp = pair;
         list.state.scopeTimestamps.push_back(pair);
         return pair;

@@ -83,7 +83,7 @@ TEST_CASE("the render encoder has every stage the lowering assumes", "[metal4]")
     CHECK((metal4::kRenderStages & metal4::kComputeStages) == 0);
     // A clear by load action is copy work in the fragment stage.
     CHECK((metal4::metalStages(Stage::Copy) & metal4::kRenderStages) == MTL::StageFragment);
-    Device device = *createDevice();
+    Device device = *createDevice({ .scopeTimings = true });
     const Texture target = makeTexture(device, TextureType::Tex2D, Format::RGBA8Unorm, TextureUsage::RenderTarget, { 8, 8, 1 });
     device.beginFrame();
     CommandList list = device.acquireCommandList(QueueType::Graphics, "test.list");
@@ -108,7 +108,7 @@ TEST_CASE("the render encoder has every stage the lowering assumes", "[metal4]")
 //======================================================================================================================
 TEST_CASE("a clear of many subresources emits a pending barrier's render part once", "[metal4]")
 {
-    Device device = *createDevice();
+    Device device = *createDevice({ .scopeTimings = true });
     const Texture target = makeTexture(device, TextureType::Tex2DArray, Format::RGBA8Unorm, TextureUsage::RenderTarget, { 8, 8, 1 }, 2, 2);
     device.beginFrame();
     CommandList list = device.acquireCommandList(QueueType::Graphics, "test.list");
@@ -129,7 +129,7 @@ TEST_CASE("a clear of many subresources emits a pending barrier's render part on
 //======================================================================================================================
 TEST_CASE("a render-target clear opens one render encoder per subresource and closes the compute encoder", "[metal4]")
 {
-    Device device = *createDevice();
+    Device device = *createDevice({ .scopeTimings = true });
     const Buffer a = *device.createBuffer({ .size = 256, .label = "test.a" });
     const Buffer b = *device.createBuffer({ .size = 256, .label = "test.b" });
     const Texture array = makeTexture(device, TextureType::Tex2DArray, Format::RGBA8Unorm, TextureUsage::RenderTarget, { 16, 16, 1 }, 3, 4);
@@ -164,7 +164,7 @@ TEST_CASE("a render-target clear opens one render encoder per subresource and cl
 //======================================================================================================================
 TEST_CASE("a Storage-only clear dispatches one kernel per mip on the compute encoder", "[metal4]")
 {
-    Device device = *createDevice();
+    Device device = *createDevice({ .scopeTimings = true });
     const metal4::Kernels& kernels = DeviceImpl::of(device).kernels;
     const Texture array = makeTexture(device, TextureType::Tex2DArray, Format::RGBA8Unorm, TextureUsage::Storage, { 16, 16, 1 }, 3, 2);
     const Texture volume = makeTexture(device, TextureType::Tex3D, Format::R32Float, TextureUsage::Storage, { 8, 8, 4 }, 2);
@@ -195,7 +195,7 @@ TEST_CASE("a Storage-only clear dispatches one kernel per mip on the compute enc
 //======================================================================================================================
 TEST_CASE("a clear's render encoder emits the render part of a pending barrier and leaves none at end", "[metal4]")
 {
-    Device device = *createDevice();
+    Device device = *createDevice({ .scopeTimings = true });
     const Buffer a = *device.createBuffer({ .size = 256, .label = "test.a" });
     const Buffer b = *device.createBuffer({ .size = 256, .usage = BufferUsage::ShaderWrite, .label = "test.b" });
     const Texture target = makeTexture(device, TextureType::Tex2D, Format::RGBA8Unorm, TextureUsage::RenderTarget, { 8, 8, 1 });
@@ -227,7 +227,7 @@ TEST_CASE("a clear's render encoder emits the render part of a pending barrier a
 //======================================================================================================================
 TEST_CASE("a D32FloatS8 clear runs under the validation layer with depth and stencil attachments", "[metal4]")
 {
-    Device device = *createDevice();
+    Device device = *createDevice({ .scopeTimings = true });
     const Texture depthStencil = makeTexture(device, TextureType::Tex2DArray, Format::D32FloatS8, TextureUsage::DepthStencil, { 16, 16, 1 }, 2, 2);
     const Texture depth = makeTexture(device, TextureType::Cube, Format::D32Float, TextureUsage::DepthStencil, { 8, 8, 1 }, 1, 6);
     const Texture multisample = makeTexture(device, TextureType::Tex2DArray, Format::RGBA8Unorm, TextureUsage::RenderTarget, { 8, 8, 1 }, 1, 2, 4);
@@ -248,7 +248,7 @@ TEST_CASE("a D32FloatS8 clear runs under the validation layer with depth and ste
 //======================================================================================================================
 TEST_CASE("the kernel set holds one clear pipeline per Storage texture type, from at most three functions", "[metal4]")
 {
-    Device device = *createDevice();
+    Device device = *createDevice({ .scopeTimings = true });
     const metal4::Kernels& kernels = DeviceImpl::of(device).kernels;
     constexpr std::array<const char*, metal4::kClearKernelCount> kLabels{
         "rojorhi.kernel.clear.1D", "rojorhi.kernel.clear.1DArray", "rojorhi.kernel.clear.2D",        "rojorhi.kernel.clear.2DArray",

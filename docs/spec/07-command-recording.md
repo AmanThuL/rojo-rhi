@@ -258,7 +258,7 @@ void CommandList::beginRenderPass(const RenderPassDesc& desc);
 ```
 
 Begins a render pass. It performs the load operations and no layout transition. The pass forms its
-own scope, a debug group and a timestamp pair labeled `desc.label` (see `CommandList::beginScope`).
+own scope labeled `desc.label`, a debug group timed as `CommandList::beginScope` states.
 Dynamic state starts as listed in [dynamic state](06-pipelines-part2.md), and no pipeline is bound.
 On Metal 4 it closes the lazily opened compute encoder and opens no encoder: the render encoder
 opens at the pass's first draw that needs no kernel, at a scope boundary inside the pass, or at
@@ -275,7 +275,7 @@ opens at the pass's first draw that needs no kernel, at a scope boundary inside 
 
 | | Metal 4 | D3D12 | Vulkan |
 |---|---|---|---|
-| Call | `MTL4::CommandBuffer::pushDebugGroup` for the pass's scope, whose timestamp pair its encoders write ([diagnostics](14-diagnostics.md)): the begin timestamp first on the pass's first encoder, the compute encoder of its leading counted draws' kernels or else its render encoder; `MTL4::CommandBuffer::renderCommandEncoder` deferred to the pass's first draw that needs no kernel, scope boundary inside it, or `endRenderPass`, with the caller's load actions, and `Load` when a split resumes the pass | `BeginEvent` and `EndQuery` for the pass's scope; one `Barrier` moving each resolve target to `LAYOUT_RESOLVE_DEST`; `BeginRenderPass` (`ID3D12GraphicsCommandList4`) with `ALLOW_UAV_WRITES`, since any stage may store through an address; `OMSetStencilRef(0)` and `OMSetBlendFactor` of zeros where the list holds another or an unknown value | `vkCmdBeginRendering` |
+| Call | `MTL4::CommandBuffer::pushDebugGroup` for the pass's scope, whose timestamp pair its encoders write with `scopeTimings` ([diagnostics](14-diagnostics.md)): the begin timestamp first on the pass's first encoder, the compute encoder of its leading counted draws' kernels or else its render encoder; `MTL4::CommandBuffer::renderCommandEncoder` deferred to the pass's first draw that needs no kernel, scope boundary inside it, or `endRenderPass`, with the caller's load actions, and `Load` when a split resumes the pass | `BeginEvent`, and `EndQuery` with `scopeTimings`, for the pass's scope; one `Barrier` moving each resolve target to `LAYOUT_RESOLVE_DEST`; `BeginRenderPass` (`ID3D12GraphicsCommandList4`) with `ALLOW_UAV_WRITES`, since any stage may store through an address; `OMSetStencilRef(0)` and `OMSetBlendFactor` of zeros where the list holds another or an unknown value | `vkCmdBeginRendering` |
 | Cost | native | cheap: the scope, the resolve barrier and the starting values the list does not hold | native |
 
 ### `CommandList::endRenderPass`
@@ -296,5 +296,5 @@ unbinds the pipeline. The next compute or copy command opens a new Metal 4 compu
 
 | | Metal 4 | D3D12 | Vulkan |
 |---|---|---|---|
-| Call | `MTL4::CommandBuffer::renderCommandEncoder` first when nothing opened it, which then writes both timestamps; `MTL4::RenderCommandEncoder::setColorStoreAction`, `setDepthStoreAction` or `setStencilStoreAction` for an attachment that is not `Store` without a resolve; `MTL4::RenderCommandEncoder::writeTimestamp` for the pass's end timestamp; `MTL4::CommandBuffer::popDebugGroup`; the encoder stays open, running no further command, and `endEncoding` follows at the next encoder, scope boundary or `end`, which may carry a barrier the list still owes on it ([synchronization](09-synchronization-part2.md#commandlistbarrier)) | `EndRenderPass`; one `Barrier` moving each resolve target back to `LAYOUT_RENDER_TARGET`; `EndQuery` and `EndEvent` for the pass's scope | `vkCmdEndRendering` |
+| Call | `MTL4::CommandBuffer::renderCommandEncoder` first when nothing opened it, which then writes both timestamps with `scopeTimings`; `MTL4::RenderCommandEncoder::setColorStoreAction`, `setDepthStoreAction` or `setStencilStoreAction` for an attachment that is not `Store` without a resolve; `MTL4::RenderCommandEncoder::writeTimestamp` for the pass's end timestamp with `scopeTimings`; `MTL4::CommandBuffer::popDebugGroup`; the encoder stays open, running no further command, and `endEncoding` follows at the next encoder, scope boundary or `end`, which may carry a barrier the list still owes on it ([synchronization](09-synchronization-part2.md#commandlistbarrier)) | `EndRenderPass`; one `Barrier` moving each resolve target back to `LAYOUT_RENDER_TARGET`; `EndQuery` with `scopeTimings`, and `EndEvent`, for the pass's scope | `vkCmdEndRendering` |
 | Cost | native | cheap: the scope's end and the resolve barrier | native |

@@ -163,7 +163,7 @@ namespace {
 TEST_CASE("a scope around GPU work reports a positive duration", "[conformance]")
 {
     test::requireGpu();
-    Device device = *createDevice({ .framesInFlight = kFramesInFlight });
+    Device device = *createDevice({ .scopeTimings = true, .framesInFlight = kFramesInFlight });
     const Buffer target = *device.createBuffer({ .size = kBig, .usage = BufferUsage::ShaderWrite, .label = "test.target" });
     device.beginFrame();
     CommandList list = device.acquireCommandList(QueueType::Graphics, "test.list");
@@ -187,7 +187,7 @@ TEST_CASE("a scope around GPU work reports a positive duration", "[conformance]"
 TEST_CASE("nested scopes report parents before children with finite non-negative durations", "[conformance]")
 {
     test::requireGpu();
-    Device device = *createDevice({ .framesInFlight = kFramesInFlight });
+    Device device = *createDevice({ .scopeTimings = true, .framesInFlight = kFramesInFlight });
     const Buffer target = *device.createBuffer({ .size = kBig, .usage = BufferUsage::ShaderWrite, .label = "test.target" });
     device.beginFrame();
     CommandList list = device.acquireCommandList(QueueType::Graphics, "test.list");
@@ -229,7 +229,7 @@ TEST_CASE("nested scopes report parents before children with finite non-negative
 TEST_CASE("scopes on the compute queue are timed and reported with their queue", "[conformance]")
 {
     test::requireGpu();
-    Device device = *createDevice({ .framesInFlight = kFramesInFlight });
+    Device device = *createDevice({ .scopeTimings = true, .framesInFlight = kFramesInFlight });
     const Buffer target = *device.createBuffer({ .size = kBig, .usage = BufferUsage::ShaderWrite, .label = "test.target" });
     device.beginFrame();
     std::array<CommandList, 2> lists{ device.acquireCommandList(QueueType::Graphics, "test.graphics"),
@@ -264,7 +264,7 @@ TEST_CASE("scopes on the compute queue are timed and reported with their queue",
 TEST_CASE("an empty scope reports a finite duration of at least zero", "[conformance]")
 {
     test::requireGpu();
-    Device device = *createDevice({ .framesInFlight = kFramesInFlight });
+    Device device = *createDevice({ .scopeTimings = true, .framesInFlight = kFramesInFlight });
     device.beginFrame();
     CommandList list = device.acquireCommandList(QueueType::Graphics, "test.list");
     list.beginScope("test.empty");
@@ -283,7 +283,7 @@ TEST_CASE("an empty scope reports a finite duration of at least zero", "[conform
 TEST_CASE("a render pass that draws reports a positive duration", "[conformance]")
 {
     test::requireGpu();
-    Device device = *createDevice({ .framesInFlight = kFramesInFlight });
+    Device device = *createDevice({ .scopeTimings = true, .framesInFlight = kFramesInFlight });
     const ShaderLibrary library = *device.loadShaderLibrary(test::shaderLibraryFile("DrawOracle"), "DrawOracle");
     const Pipeline solid = solidPipeline(device, library);
     const Texture target = square(device, Format::RGBA16Float, kDrawnEdge, TextureUsage::RenderTarget, "test.target");
@@ -311,7 +311,7 @@ TEST_CASE("a render pass that draws reports a positive duration", "[conformance]
 TEST_CASE("a pass, a scope inside it and an upscale are each reported with their label, depth and a finite duration", "[conformance]")
 {
     test::requireGpu();
-    Device device = *createDevice({ .framesInFlight = kFramesInFlight });
+    Device device = *createDevice({ .scopeTimings = true, .framesInFlight = kFramesInFlight });
     if (device.capabilities().upscalers.empty())
     {
         destroyDevice(device);
@@ -373,7 +373,7 @@ TEST_CASE("a pass, a scope inside it and an upscale are each reported with their
 TEST_CASE("a render pass that draws reports more than an empty pass", "[conformance]")
 {
     test::requireGpu();
-    Device device = *createDevice({ .framesInFlight = kFramesInFlight });
+    Device device = *createDevice({ .scopeTimings = true, .framesInFlight = kFramesInFlight });
     const ShaderLibrary library = *device.loadShaderLibrary(test::shaderLibraryFile("DrawOracle"), "DrawOracle");
     const Pipeline solid = solidPipeline(device, library);
     const Texture target = square(device, Format::RGBA16Float, kDrawnEdge, TextureUsage::RenderTarget, "test.target");
@@ -404,7 +404,7 @@ TEST_CASE("a render pass that draws reports more than an empty pass", "[conforma
 TEST_CASE("a render pass of counted draws only reports a positive duration, more than an empty pass", "[conformance]")
 {
     test::requireGpu();
-    Device device = *createDevice({ .framesInFlight = kFramesInFlight });
+    Device device = *createDevice({ .scopeTimings = true, .framesInFlight = kFramesInFlight });
     const ShaderLibrary library = *device.loadShaderLibrary(test::shaderLibraryFile("DrawOracle"), "DrawOracle");
     const Pipeline solid = solidPipeline(device, library);
     const Texture target = square(device, Format::RGBA16Float, kDrawnEdge, TextureUsage::RenderTarget, "test.target");
@@ -438,7 +438,7 @@ TEST_CASE("a render pass of counted draws only reports a positive duration, more
 TEST_CASE("a scope inside a render pass reports no more than its pass", "[conformance]")
 {
     test::requireGpu();
-    Device device = *createDevice({ .framesInFlight = kFramesInFlight });
+    Device device = *createDevice({ .scopeTimings = true, .framesInFlight = kFramesInFlight });
     const ShaderLibrary library = *device.loadShaderLibrary(test::shaderLibraryFile("DrawOracle"), "DrawOracle");
     const Pipeline solid = solidPipeline(device, library);
     const Texture target = square(device, Format::RGBA16Float, kDrawnEdge, TextureUsage::RenderTarget, "test.target");
@@ -472,7 +472,7 @@ TEST_CASE("a scope inside a render pass reports no more than its pass", "[confor
 TEST_CASE("a render pass a counted draw splits reports one duration, more than the pass without the split", "[conformance]")
 {
     test::requireGpu();
-    Device device = *createDevice({ .framesInFlight = kFramesInFlight });
+    Device device = *createDevice({ .scopeTimings = true, .framesInFlight = kFramesInFlight });
     const ShaderLibrary library = *device.loadShaderLibrary(test::shaderLibraryFile("DrawOracle"), "DrawOracle");
     const Pipeline solid = solidPipeline(device, library);
     const Texture target = square(device, Format::RGBA16Float, kDrawnEdge, TextureUsage::RenderTarget, "test.target");
@@ -501,6 +501,34 @@ TEST_CASE("a render pass a counted draw splits reports one duration, more than t
     CHECK(report[0].gpuMilliseconds > 0.0);
     CHECK(std::isfinite(report[1].gpuMilliseconds));
     CHECK(report[1].gpuMilliseconds > report[0].gpuMilliseconds);
+    device.endFrame();
+    destroyDevice(device);
+}
+
+//======================================================================================================================
+TEST_CASE("a device created without scopeTimings reports no scope of a frame that ran scopes and passes", "[conformance]")
+{
+    test::requireGpu();
+    Device device = *createDevice({ .framesInFlight = kFramesInFlight });
+    const ShaderLibrary library = *device.loadShaderLibrary(test::shaderLibraryFile("DrawOracle"), "DrawOracle");
+    const Pipeline solid = solidPipeline(device, library);
+    const Texture target = square(device, Format::RGBA16Float, kDrawnEdge, TextureUsage::RenderTarget, "test.target");
+    const Buffer filled = *device.createBuffer({ .size = kBig, .usage = BufferUsage::ShaderWrite, .label = "test.filled" });
+    device.beginFrame();
+    CommandList list = device.acquireCommandList(QueueType::Graphics, "test.list");
+    list.beginScope("test.fill");
+    list.fillBuffer(filled, 0, kBig, kUnequal);
+    list.endScope();
+    beginDrawing(list, target, kDrawnEdge, solid, "test.pass");
+    list.beginScope("test.inner");
+    list.draw(3, kInstances);
+    list.endScope();
+    list.endRenderPass();
+    submit(device, std::array{ list }, std::array{ QueueType::Graphics });
+    retireOpenFrame(device);
+    // Chapter 14, `Device::scopeTimings`: a device created without `DeviceDesc::scopeTimings` writes no timestamp, so the
+    // frame its beginFrame waited for reports no scope although it ran GPU work in scopes and a pass.
+    CHECK(device.scopeTimings().empty());
     device.endFrame();
     destroyDevice(device);
 }

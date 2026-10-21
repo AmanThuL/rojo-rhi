@@ -86,7 +86,7 @@ namespace {
 //======================================================================================================================
 TEST_CASE("a dispatch after setPipeline sends one call, and a second one more", "[metal4]")
 {
-    Device device = *createDevice();
+    Device device = *createDevice({ .scopeTimings = true });
     const Pipeline pipeline = standardCompute(device);
     device.beginFrame();
     CommandList list = device.acquireCommandList(QueueType::Graphics, "test.list");
@@ -111,7 +111,7 @@ TEST_CASE("a dispatch after setPipeline sends one call, and a second one more", 
 //======================================================================================================================
 TEST_CASE("a dispatch after an unequal-pattern fill sets the caller's pipeline again, once", "[metal4]")
 {
-    Device device = *createDevice();
+    Device device = *createDevice({ .scopeTimings = true });
     const Pipeline pipeline = standardCompute(device);
     const Buffer buffer = *device.createBuffer({ .size = 256, .usage = BufferUsage::ShaderWrite, .label = "test.buffer" });
     device.beginFrame();
@@ -134,7 +134,7 @@ TEST_CASE("a dispatch after an unequal-pattern fill sets the caller's pipeline a
 //======================================================================================================================
 TEST_CASE("a dispatch on an encoder opened after a scope boundary sets the caller's pipeline again", "[metal4]")
 {
-    Device device = *createDevice();
+    Device device = *createDevice({ .scopeTimings = true });
     const Pipeline pipeline = standardCompute(device);
     device.beginFrame();
     CommandList list = device.acquireCommandList(QueueType::Graphics, "test.list");
@@ -154,7 +154,7 @@ TEST_CASE("a dispatch on an encoder opened after a scope boundary sets the calle
 //======================================================================================================================
 TEST_CASE("a zero-group dispatch opens no encoder", "[metal4]")
 {
-    Device device = *createDevice();
+    Device device = *createDevice({ .scopeTimings = true });
     const Pipeline pipeline = standardCompute(device);
     device.beginFrame();
     CommandList list = device.acquireCommandList(QueueType::Graphics, "test.list");
@@ -178,7 +178,7 @@ TEST_CASE("a zero-group dispatch opens no encoder", "[metal4]")
 //======================================================================================================================
 TEST_CASE("a compute pipeline carries the threadgroup size its library declares", "[metal4]")
 {
-    Device device = *createDevice();
+    Device device = *createDevice({ .scopeTimings = true });
     const std::vector<std::byte> blob = test::shaderLibraryFile("DispatchOracle");
     const ShaderLibrary library = *device.loadShaderLibrary(blob, "test.oracle");
     const Pipeline pipeline = *device.createPipeline(ComputePipelineDesc{ .compute = { library, "gridMain" }, .label = "test.grid" });
@@ -195,7 +195,7 @@ TEST_CASE("a compute pipeline carries the threadgroup size its library declares"
 //======================================================================================================================
 TEST_CASE("a pending barrier waits through a zero-group dispatch and is emitted once, before the next real one", "[metal4]")
 {
-    Device device = *createDevice();
+    Device device = *createDevice({ .scopeTimings = true });
     const Pipeline pipeline = standardCompute(device);
     device.beginFrame();
     CommandList list = device.acquireCommandList(QueueType::Graphics, "test.list");

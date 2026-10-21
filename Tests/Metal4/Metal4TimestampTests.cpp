@@ -213,7 +213,7 @@ namespace {
 //======================================================================================================================
 TEST_CASE("a scope outside a pass writes two timestamps on the command buffer", "[metal4]")
 {
-    Device device = *createDevice();
+    Device device = *createDevice({ .scopeTimings = true });
     device.beginFrame();
     CommandList list = device.acquireCommandList(QueueType::Graphics, "test.list");
     const core::CommandListCore& state = core::coreOf(list);
@@ -243,7 +243,7 @@ TEST_CASE("a scope outside a pass writes two timestamps on the command buffer", 
 //======================================================================================================================
 TEST_CASE("a device that records no scope creates no counter heap", "[metal4]")
 {
-    Device device = *createDevice({ .framesInFlight = 2 });
+    Device device = *createDevice({ .scopeTimings = true, .framesInFlight = 2 });
     const Buffer a = *device.createBuffer({ .size = 256, .label = "test.a" });
     const Buffer b = *device.createBuffer({ .size = 256, .label = "test.b" });
     for (int frame = 0; frame < 4; ++frame)
@@ -261,7 +261,7 @@ TEST_CASE("a device that records no scope creates no counter heap", "[metal4]")
 //======================================================================================================================
 TEST_CASE("the first scope of a frame slot creates its heap once, a second does not", "[metal4]")
 {
-    Device device = *createDevice({ .framesInFlight = 2 });
+    Device device = *createDevice({ .scopeTimings = true, .framesInFlight = 2 });
     device.beginFrame();
     CommandList list = device.acquireCommandList(QueueType::Graphics, "test.list");
     const uint32_t slot = slotOf(device, list);
@@ -309,7 +309,7 @@ TEST_CASE("pairs are claimed without overlap by lists recording on several threa
 {
     constexpr uint32_t kThreads = 8;
     constexpr uint32_t kScopes = 256;
-    Device device = *createDevice({ .framesInFlight = 2 });
+    Device device = *createDevice({ .scopeTimings = true, .framesInFlight = 2 });
     device.beginFrame();
     std::array<CommandList, kThreads> lists{};
     for (CommandList& list : lists)
@@ -363,7 +363,7 @@ TEST_CASE("a frame with more scopes than the heaps hold reports zero for the res
     constexpr uint32_t kCapacity = metal4::Timestamps::kSlotHeaps * metal4::Timestamps::kHeapEntries / 2;
     g_warnings.clear();
     setMessageCallback(collectWarning, nullptr);
-    Device device = *createDevice({ .framesInFlight = 2 });
+    Device device = *createDevice({ .scopeTimings = true, .framesInFlight = 2 });
     device.beginFrame();
     CommandList list = device.acquireCommandList(QueueType::Graphics, "test.list");
     const uint32_t slot = slotOf(device, list);
@@ -405,7 +405,7 @@ TEST_CASE("scopeTimings counts one host call per used heap resolve", "[metal4]")
     // A heap holds 2,048 pairs, so 2,049 scopes use two heaps. Each used heap is resolved once at the frame wait and its used
     // range invalidated once when the slot is reused: two host calls per heap beyond a frame without scopes.
     constexpr uint32_t kScopes = metal4::Timestamps::kHeapEntries / 2 + 1;
-    Device device = *createDevice({ .framesInFlight = 2 });
+    Device device = *createDevice({ .scopeTimings = true, .framesInFlight = 2 });
     for (const uint32_t scopes : { 0u, kScopes })
     {
         device.beginFrame();
@@ -431,7 +431,7 @@ TEST_CASE("scopeTimings counts one host call per used heap resolve", "[metal4]")
 //======================================================================================================================
 TEST_CASE("scopes on two queue types in one frame resolve their slot's heap once", "[metal4]")
 {
-    Device device = *createDevice({ .framesInFlight = 2 });
+    Device device = *createDevice({ .scopeTimings = true, .framesInFlight = 2 });
     for (const bool scoped : { false, true })
     {
         device.beginFrame();
@@ -468,7 +468,7 @@ TEST_CASE("scopes on two queue types in one frame resolve their slot's heap once
 //======================================================================================================================
 TEST_CASE("a scope on a Copy list claims a pair and reports a duration of at least zero", "[metal4]")
 {
-    Device device = *createDevice({ .framesInFlight = 2 });
+    Device device = *createDevice({ .scopeTimings = true, .framesInFlight = 2 });
     device.beginFrame();
     CommandList list = device.acquireCommandList(QueueType::Copy, "test.copy");
     list.beginScope("test.scope");
@@ -493,7 +493,7 @@ TEST_CASE("a scope on a Copy list claims a pair and reports a duration of at lea
 //======================================================================================================================
 TEST_CASE("two live devices each time a scope in heaps of their own", "[metal4]")
 {
-    std::array<Device, 2> devices{ *createDevice({ .framesInFlight = 2 }), *createDevice({ .framesInFlight = 2 }) };
+    std::array<Device, 2> devices{ *createDevice({ .scopeTimings = true, .framesInFlight = 2 }), *createDevice({ .scopeTimings = true, .framesInFlight = 2 }) };
     std::array<CommandList, 2> lists{};
     for (size_t i = 0; i < devices.size(); ++i)
     {
@@ -623,7 +623,7 @@ TEST_CASE("a heap Metal refuses is asked for again after its slot's reuse, and c
 //======================================================================================================================
 TEST_CASE("a render pass with a counted draw writes its begin timestamp on the kernels' encoder and its end on its render encoder", "[metal4]")
 {
-    Device device = *createDevice({ .framesInFlight = 2 });
+    Device device = *createDevice({ .scopeTimings = true, .framesInFlight = 2 });
     const Drawing drawing(device);
     device.beginFrame();
     CommandList list = device.acquireCommandList(QueueType::Graphics, "test.list");
@@ -690,7 +690,7 @@ TEST_CASE("a render pass with a counted draw writes its begin timestamp on the k
 //======================================================================================================================
 TEST_CASE("a pass whose encoder opens at endRenderPass writes both its timestamps on that encoder", "[metal4]")
 {
-    Device device = *createDevice({ .framesInFlight = 2 });
+    Device device = *createDevice({ .scopeTimings = true, .framesInFlight = 2 });
     const Drawing drawing(device);
     device.beginFrame();
     CommandList list = device.acquireCommandList(QueueType::Graphics, "test.list");
@@ -726,7 +726,7 @@ TEST_CASE("a pass whose encoder opens at endRenderPass writes both its timestamp
 //======================================================================================================================
 TEST_CASE("a pass that splits writes two timestamps, the begin on its first render encoder and the end on its last", "[metal4]")
 {
-    Device device = *createDevice({ .framesInFlight = 2 });
+    Device device = *createDevice({ .scopeTimings = true, .framesInFlight = 2 });
     const Drawing drawing(device);
     device.beginFrame();
     CommandList list = device.acquireCommandList(QueueType::Graphics, "test.list");
@@ -774,7 +774,7 @@ TEST_CASE("a pass that splits writes two timestamps, the begin on its first rend
 //======================================================================================================================
 TEST_CASE("a scope that opens a pass's render encoder writes after the pass's begin timestamp, on the same encoder", "[metal4]")
 {
-    Device device = *createDevice({ .framesInFlight = 2 });
+    Device device = *createDevice({ .scopeTimings = true, .framesInFlight = 2 });
     const Drawing drawing(device);
     device.beginFrame();
     CommandList list = device.acquireCommandList(QueueType::Graphics, "test.list");
@@ -819,7 +819,7 @@ TEST_CASE("a scope that opens a pass's render encoder writes after the pass's be
 //======================================================================================================================
 TEST_CASE("a scope inside a pass writes its timestamps on the render encoder; a split writes none", "[metal4]")
 {
-    Device device = *createDevice({ .framesInFlight = 2 });
+    Device device = *createDevice({ .scopeTimings = true, .framesInFlight = 2 });
     const Drawing drawing(device);
     device.beginFrame();
     CommandList list = device.acquireCommandList(QueueType::Graphics, "test.list");
@@ -887,7 +887,7 @@ TEST_CASE("a scope inside a pass writes its timestamps on the render encoder; a 
 //======================================================================================================================
 TEST_CASE("an upscale writes its two timestamps around the carrier and the MetalFX encode", "[metal4]")
 {
-    test::UpscaleKit kit;
+    test::UpscaleKit kit(QueueType::Graphics, test::UpscaleKit::defaultDesc(), false, true);
     Device device = kit.kit.device;
     CommandList list = kit.kit.list;
     const uint64_t label = test::encoderLabel(list);
@@ -922,7 +922,7 @@ TEST_CASE("a frame of passes, scopes inside them and upscales leaves no scope un
     g_warnings.clear();
     setMessageCallback(collectWarning, nullptr);
     {
-        test::UpscaleKit kit;
+        test::UpscaleKit kit(QueueType::Graphics, test::UpscaleKit::defaultDesc(), false, true);
         Device device = kit.kit.device;
         CommandList list = kit.kit.list;
         const Drawing drawing(device);
@@ -945,7 +945,7 @@ TEST_CASE("a frame of passes, scopes inside them and upscales leaves no scope un
 //======================================================================================================================
 TEST_CASE("nested scopes inside a pass end on the encoder a split resumed, inner then outer", "[metal4]")
 {
-    Device device = *createDevice({ .framesInFlight = 2 });
+    Device device = *createDevice({ .scopeTimings = true, .framesInFlight = 2 });
     const Drawing drawing(device);
     device.beginFrame();
     CommandList list = device.acquireCommandList(QueueType::Graphics, "test.list");
@@ -1005,7 +1005,7 @@ TEST_CASE("a pass, a scope inside it and an upscale past the slot's capacity wri
     g_warnings.clear();
     setMessageCallback(collectWarning, nullptr);
     {
-        test::UpscaleKit kit;
+        test::UpscaleKit kit(QueueType::Graphics, test::UpscaleKit::defaultDesc(), false, true);
         Device device = kit.kit.device;
         CommandList list = kit.kit.list;
         claimArenaPage(list);
@@ -1093,11 +1093,102 @@ TEST_CASE("a pass, a scope inside it and an upscale past the slot's capacity wri
 }
 
 //======================================================================================================================
+TEST_CASE("a device without scopeTimings sends the same debug groups and encoders with no timestamp and no counter heap", "[metal4]")
+{
+    // One list records a scope, a pass with a scope inside it, a pass whose counted draw opens a kernels' encoder first, and
+    // an upscale: five scopes, each of which writes a pair on a timed device.
+    constexpr uint64_t kScopes = 5;
+    struct Recorded
+    {
+        uint64_t calls = 0;
+        uint64_t encoders = 0;
+        std::vector<uint32_t> timestamps;
+    };
+    const auto record = [](bool timed) {
+        test::UpscaleKit kit(QueueType::Graphics, test::UpscaleKit::defaultDesc(), false, timed);
+        Device device = kit.kit.device;
+        CommandList list = kit.kit.list;
+        const Drawing drawing(device);
+        claimArenaPage(list);
+        const core::CommandListCore& state = core::coreOf(list);
+        const uint64_t calls = state.counts.nativeRecordCalls;
+        const uint64_t encoders = state.counts.encodersOpened;
+        list.beginScope("test.outer");
+        list.endScope();
+        drawing.begin(list, "test.pass");
+        list.beginScope("test.inner");
+        list.draw(3);
+        list.endScope();
+        list.endRenderPass();
+        drawing.begin(list, "test.counted");
+        drawing.counted(device, list);
+        list.endRenderPass();
+        kit.upscale();
+        if (timed)
+        {
+            test::requireTimed(list);
+        }
+        Recorded recorded{ .calls = state.counts.nativeRecordCalls - calls, .encoders = state.counts.encodersOpened - encoders };
+        for (const core::ScopeRecord& scope : state.scopeLog)
+        {
+            recorded.timestamps.push_back(scope.timestamp);
+        }
+        CHECK(CommandListImpl::of(list).state.scopeTimestamps.empty());
+        CHECK(CommandListImpl::of(list).state.scopeLabels.empty());
+        CHECK(holdsNoHeap(device) == !timed);
+        submitFrame(device, std::array{ list });
+        retireOpenFrame(device);
+        CHECK(device.scopeTimings().size() == (timed ? kScopes : 0));
+        CHECK(holdsNoHeap(device) == !timed);
+        device.endFrame();
+        destroyDevice(device);
+        return recorded;
+    };
+    const Recorded timed = record(true);
+    const Recorded untimed = record(false);
+    // The debug groups and every encoder are the same; only the two timestamp writes of each scope are gone.
+    CHECK(untimed.calls == timed.calls - 2 * kScopes);
+    CHECK(untimed.encoders == timed.encoders);
+    REQUIRE(untimed.timestamps.size() == kScopes);
+    for (const uint32_t timestamp : untimed.timestamps)
+    {
+        CHECK(timestamp == core::kNoTimestamp);
+    }
+}
+
+//======================================================================================================================
+TEST_CASE("a device without scopeTimings resolves and invalidates nothing at the frame wait", "[metal4]")
+{
+    // On a timed device the frame wait of a frame with scopes adds a resolve and an invalidation per used heap.
+    for (const bool timed : { true, false })
+    {
+        CAPTURE(timed);
+        Device device = *createDevice({ .scopeTimings = timed, .framesInFlight = 2 });
+        for (const uint32_t scopes : { 0u, 3u })
+        {
+            device.beginFrame();
+            CommandList list = device.acquireCommandList(QueueType::Graphics, "test.list");
+            recordScopes(list, scopes);
+            submitFrame(device, std::array{ list });
+            device.endFrame();
+        }
+        // Frame 3 retires the frame without scopes, frame 4 the one with them.
+        const uint64_t plain = hostCallsOfBeginFrame(device);
+        device.endFrame();
+        CHECK(hostCallsOfBeginFrame(device) == plain + (timed ? 2 : 0));
+        CHECK(device.scopeTimings().size() == (timed ? 3 : 0));
+        CHECK(holdsNoHeap(device) == !timed);
+        device.endFrame();
+        destroyDevice(device);
+    }
+}
+
+//======================================================================================================================
 TEST_CASE("requireTimed fails a case whose list recorded a scope without a timestamp pair", "[metal4][!shouldfail]")
 {
     // The guard of the count pins must fail, not pass, when a pair is missing: past the slot's capacity none is claimed.
     constexpr uint32_t kCapacity = metal4::Timestamps::kSlotHeaps * metal4::Timestamps::kHeapEntries / 2;
-    Device device = *createDevice({ .framesInFlight = 2 });
+    Device device = *createDevice({ .scopeTimings = true, .framesInFlight = 2 });
     device.beginFrame();
     CommandList list = device.acquireCommandList(QueueType::Graphics, "test.list");
     recordScopes(list, kCapacity + 1);

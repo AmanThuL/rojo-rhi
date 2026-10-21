@@ -69,10 +69,11 @@ namespace rojoRHI::d3d12 {
         std::vector<uint32_t> open; ///< The first query of each open scope, innermost last; `core::kNoTimestamp` when untimed.
 
         /// Claims the next pair of queries for a scope of `list`, which owns these timestamps, and returns its first index.
-        /// Returns `core::kNoTimestamp` when the recording has claimed `kMaxQueries` queries, when the list's ordinal exceeds
-        /// `kMaxOrdinal`, or on a Copy list of a device without copy-queue timestamps. A pair that needs one more heap makes it
-        /// and its readback buffer, named after the list, counting two `nativeCreateCalls`, one `gpuAllocations` and the
-        /// mapping's one `nativeHostCalls`; a refused creation logs and aborts, in every build. Takes no lock.
+        /// Returns `core::kNoTimestamp` on a device created without `DeviceDesc::scopeTimings`, when the recording has claimed
+        /// `kMaxQueries` queries, when the list's ordinal exceeds `kMaxOrdinal`, or on a Copy list of a device without
+        /// copy-queue timestamps. A pair that needs one more heap makes it and its readback buffer, named after the list,
+        /// counting two `nativeCreateCalls`, one `gpuAllocations` and the mapping's one `nativeHostCalls`; a refused creation
+        /// logs and aborts, in every build. Takes no lock.
         uint32_t claimPair(CommandListImpl& list);
 
         /// Forgets the previous recording's queries; called at each acquisition, after the native list's `Reset`. The heaps stay.

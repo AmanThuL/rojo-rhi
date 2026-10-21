@@ -120,7 +120,7 @@ TEST_CASE("declareAccess names a compute stage for a dispatch and an empty span 
 //======================================================================================================================
 TEST_CASE("scopeTimings is empty until a frame has retired", "[contract]")
 {
-    Device device = *createDevice(DeviceDesc{ .framesInFlight = 2 });
+    Device device = *createDevice(DeviceDesc{ .scopeTimings = true, .framesInFlight = 2 });
     CHECK(device.scopeTimings().empty());
     device.beginFrame();
     CommandList list = device.acquireCommandList(QueueType::Graphics, "test.list");
@@ -140,7 +140,7 @@ TEST_CASE("scopeTimings is empty until a frame has retired", "[contract]")
 //======================================================================================================================
 TEST_CASE("scopeTimings reports the scopes of the frame beginFrame waited for, parents first", "[contract]")
 {
-    Device device = *createDevice(DeviceDesc{ .framesInFlight = 2 });
+    Device device = *createDevice(DeviceDesc{ .scopeTimings = true, .framesInFlight = 2 });
     device.beginFrame();
     CommandList list = device.acquireCommandList(QueueType::Graphics, "test.list");
     list.beginScope("outer");
@@ -174,7 +174,7 @@ TEST_CASE("scopeTimings reports the scopes of the frame beginFrame waited for, p
 //======================================================================================================================
 TEST_CASE("scopeTimings is empty again for the next retired frame when it had no scopes", "[contract]")
 {
-    Device device = *createDevice(DeviceDesc{ .framesInFlight = 2 });
+    Device device = *createDevice(DeviceDesc{ .scopeTimings = true, .framesInFlight = 2 });
     device.beginFrame();
     CommandList list = device.acquireCommandList(QueueType::Graphics, "test.list");
     list.beginScope("scope");
@@ -194,7 +194,7 @@ TEST_CASE("scopeTimings is empty again for the next retired frame when it had no
 //======================================================================================================================
 TEST_CASE("every render pass forms a scope labeled with the pass label, defaulted when empty", "[contract]")
 {
-    Device device = *createDevice(DeviceDesc{ .framesInFlight = 2 });
+    Device device = *createDevice(DeviceDesc{ .scopeTimings = true, .framesInFlight = 2 });
     const Texture target =
         *device.createTexture(TextureDesc{ .format = Format::RGBA8Unorm, .extent = { 8, 8, 1 }, .usage = TextureUsage::RenderTarget, .label = "test.target" });
     device.beginFrame();
@@ -225,7 +225,7 @@ TEST_CASE("every render pass forms a scope labeled with the pass label, defaulte
 //======================================================================================================================
 TEST_CASE("an empty scope label is replaced by the scope default", "[contract]")
 {
-    Device device = *createDevice(DeviceDesc{ .framesInFlight = 2 });
+    Device device = *createDevice(DeviceDesc{ .scopeTimings = true, .framesInFlight = 2 });
     device.beginFrame();
     CommandList list = device.acquireCommandList(QueueType::Graphics, "test.list");
     list.beginScope("");
@@ -244,7 +244,7 @@ TEST_CASE("an empty scope label is replaced by the scope default", "[contract]")
 //======================================================================================================================
 TEST_CASE("an upscale forms a scope named params.label, defaulted to rojorhi.upscale.unnamed", "[contract]")
 {
-    UpscaleKit kit;
+    UpscaleKit kit(QueueType::Graphics, UpscaleKit::defaultDesc(), false, true);
     Device device = kit.kit.device;
     kit.params.label = "named.upscale";
     kit.upscale();
@@ -264,6 +264,28 @@ TEST_CASE("an upscale forms a scope named params.label, defaulted to rojorhi.ups
     REQUIRE(seen.size() == 1);
     CHECK(seen[0].label == "rojorhi.upscale.unnamed");
     CHECK(seen[0].frame == 2);
+}
+
+//======================================================================================================================
+TEST_CASE("a device created without scopeTimings reports no scope after frames with scopes, passes and upscales", "[contract]")
+{
+    UpscaleKit kit;
+    Device device = kit.kit.device;
+    for (uint32_t frame = 0; frame < 4; ++frame)
+    {
+        kit.kit.list.beginScope("outer");
+        kit.kit.list.beginScope("inner");
+        kit.kit.list.endScope();
+        kit.kit.list.endScope();
+        kit.kit.beginSimplePass();
+        kit.kit.list.beginScope("inside");
+        kit.kit.list.endScope();
+        kit.kit.list.endRenderPass();
+        kit.upscale();
+        kit.nextFrame();
+        // From the third iteration on, this beginFrame waited for a frame that recorded scopes, passes and an upscale.
+        CHECK(device.scopeTimings().empty());
+    }
 }
 
 //======================================================================================================================

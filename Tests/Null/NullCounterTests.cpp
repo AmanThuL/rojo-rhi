@@ -54,7 +54,7 @@ namespace {
 //======================================================================================================================
 TEST_CASE("the scripted sequence changes every counter by its exact Null delta", "[null]")
 {
-    Device device = *createDevice(DeviceDesc{ .framesInFlight = 2 });
+    Device device = *createDevice(DeviceDesc{ .scopeTimings = true, .framesInFlight = 2 });
     const Counters start = device.counters();
 
     // Creation: a library, a buffer, two textures, a graphics pipeline and a fence.
@@ -176,6 +176,27 @@ TEST_CASE("the scripted sequence changes every counter by its exact Null delta",
     device.endFrame();
     device.destroy(fence);
     device.destroy(library);
+    destroyDevice(device);
+}
+
+//======================================================================================================================
+TEST_CASE("a Null device without scope timings counts no timestamp read after a frame with a scope", "[null]")
+{
+    Device device = *createDevice(DeviceDesc{ .framesInFlight = 2 });
+    device.beginFrame();
+    CommandList list = device.acquireCommandList(QueueType::Graphics, "null.list");
+    list.beginScope("null.scope");
+    list.endScope();
+    list.end();
+    device.queue(QueueType::Graphics).submit(std::array{ list });
+    device.endFrame();
+    device.beginFrame();
+    device.endFrame();
+    device.beginFrame();
+    const Counters retired = device.counters();
+    CHECK(device.scopeTimings().empty());
+    CHECK(delta(retired, device.counters()).nativeHostCalls == 0);
+    device.endFrame();
     destroyDevice(device);
 }
 

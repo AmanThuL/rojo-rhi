@@ -140,6 +140,7 @@ namespace rojoRHI {
     {
         bool validation = false; ///< Runs the validation tracker; non-Release builds only.
         bool enableCapture = false;
+        bool scopeTimings = false;                ///< GPU timestamps at scope boundaries, read through Device::scopeTimings.
         uint32_t framesInFlight = 3;              ///< 2 or 3.
         std::span<const std::byte> pipelineCache; ///< From Device::pipelineCacheData; empty for none.
         std::string_view label;
@@ -1127,7 +1128,8 @@ namespace rojoRHI {
         TileShape tileShape(Texture texture);
         TileShape tileShape(Buffer buffer);
 
-        // Frame thread class. The next beginFrame invalidates the span.
+        // Frame thread class. The next beginFrame invalidates the span. Always empty on a device created without
+        // DeviceDesc::scopeTimings.
         std::span<const ScopeTiming> scopeTimings();
 
         Counters counters() const;

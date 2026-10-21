@@ -114,7 +114,7 @@ namespace {
 //======================================================================================================================
 TEST_CASE("a graphics list carries the dispatch stage in a barrier until a counted draw has run in an earlier frame", "[metal4]")
 {
-    test::PassKit kit;
+    test::PassKit kit(QueueType::Graphics, false, true);
     const Buffer ordered = kit.buffer(BufferUsage::ShaderWrite);
     const Texture target = kit.target();
     // A closing batch into a compute stage that the pass's encoder covers.
@@ -166,7 +166,7 @@ TEST_CASE("a graphics list carries the dispatch stage in a barrier until a count
 //======================================================================================================================
 TEST_CASE("a pass's encoder stays open after endRenderPass and a barrier after it neither closes nor defers", "[metal4]")
 {
-    test::PassKit kit;
+    test::PassKit kit(QueueType::Graphics, false, true);
     CommandList list = kit.list;
     emptyPass(list, kit.target());
     CHECK(encodersOf(list).lingering());
@@ -192,7 +192,7 @@ TEST_CASE("a pass's encoder stays open after endRenderPass and a barrier after i
 //======================================================================================================================
 TEST_CASE("a pass's closing batch whose sources its opening barrier waited for is carried by the pass's encoder", "[metal4]")
 {
-    test::PassKit kit;
+    test::PassKit kit(QueueType::Graphics, false, true);
     // A counted draw in an earlier frame makes the device's graphics lists use the carry fence.
     runCountedDraw(kit);
     CommandList list = kit.list;
@@ -240,7 +240,7 @@ TEST_CASE("a pass's closing batch whose sources its opening barrier waited for i
 //======================================================================================================================
 TEST_CASE("a closing batch whose sources may lie before the closing encoder takes the trailing encoder, with the carry fence", "[metal4]")
 {
-    test::PassKit kit;
+    test::PassKit kit(QueueType::Graphics, false, true);
     // A counted draw in an earlier frame makes the device's graphics lists use the carry fence.
     runCountedDraw(kit);
     CommandList list = kit.list;
@@ -280,7 +280,7 @@ TEST_CASE("Compute and Copy lists carry a covered closing batch with a producer 
 {
     const QueueType type = GENERATE(QueueType::Compute, QueueType::Copy);
     CAPTURE(static_cast<int>(type));
-    Device device = *createDevice();
+    Device device = *createDevice({ .scopeTimings = true });
     const Buffer a = *device.createBuffer({ .size = 256, .label = "test.a" });
     const Buffer b = *device.createBuffer({ .size = 256, .label = "test.b" });
     device.beginFrame();
@@ -305,7 +305,7 @@ TEST_CASE("a closing batch into IndirectArgs is carried by a producer barrier th
 {
     const bool arguments = GENERATE(false, true);
     CAPTURE(arguments);
-    test::PassKit kit;
+    test::PassKit kit(QueueType::Graphics, false, true);
     // A counted draw in an earlier frame makes the device's graphics lists use the carry fence.
     runCountedDraw(kit);
     CommandList list = kit.list;
@@ -337,7 +337,7 @@ TEST_CASE("a closing batch into IndirectArgs is carried by a producer barrier th
 //======================================================================================================================
 TEST_CASE("a graphics compute encoder waits on the carry fence once, before its first dispatch", "[metal4]")
 {
-    test::PassKit kit;
+    test::PassKit kit(QueueType::Graphics, false, true);
     // A counted draw in an earlier frame makes the device's graphics lists use the carry fence.
     runCountedDraw(kit);
     CommandList list = kit.list;
@@ -377,7 +377,7 @@ TEST_CASE("a counted draw's kernels encoder does not wait on the carry fence, an
 {
     SECTION("the kernels of a counted draw")
     {
-        test::PassKit kit;
+        test::PassKit kit(QueueType::Graphics, false, true);
         CommandList list = kit.list;
         const std::vector<std::byte> zeroes(16 * sizeof(DrawIndirectArgs), std::byte{ 0 });
         const Buffer args = *kit.device.createBuffer(
@@ -394,7 +394,7 @@ TEST_CASE("a counted draw's kernels encoder does not wait on the carry fence, an
     }
     SECTION("a dispatch on a Compute list")
     {
-        test::PassKit kit(QueueType::Compute);
+        test::PassKit kit(QueueType::Compute, false, true);
         CommandList list = kit.list;
         list.setPipeline(kit.compute());
         const uint64_t before = countsOf(list).nativeRecordCalls;
@@ -412,7 +412,7 @@ TEST_CASE("a closing batch whose visibility includes ResourceAlias keeps the dis
 {
     const bool covered = GENERATE(false, true);
     CAPTURE(covered);
-    test::PassKit kit;
+    test::PassKit kit(QueueType::Graphics, false, true);
     // A counted draw in an earlier frame makes the device's graphics lists use the carry fence.
     runCountedDraw(kit);
     CommandList list = kit.list;

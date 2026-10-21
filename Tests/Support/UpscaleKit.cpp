@@ -17,7 +17,8 @@ namespace rojoRHI::test {
     }
 
     //==================================================================================================================
-    UpscaleKit::UpscaleKit(QueueType type, const UpscalerDesc& description, bool validation) : kit(type, validation), desc(description)
+    UpscaleKit::UpscaleKit(QueueType type, const UpscalerDesc& description, bool validation, bool scopeTimings)
+        : kit(type, validation, scopeTimings), desc(description)
     {
         upscaler = *kit.device.createUpscaler(desc);
         params.color = make(desc.color, desc.input, TextureUsage::Sampled);

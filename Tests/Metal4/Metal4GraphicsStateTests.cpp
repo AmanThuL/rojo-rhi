@@ -166,7 +166,7 @@ namespace {
 //======================================================================================================================
 TEST_CASE("state recorded before the first draw waits in the prefix and replays in order at the open", "[metal4]")
 {
-    Device device = *createDevice();
+    Device device = *createDevice({ .scopeTimings = true });
     const ShaderLibrary library = standard(device);
     const Pipeline a = vertexPipeline(device, library);
     const Pipeline b = vertexPipeline(device, library);
@@ -223,7 +223,7 @@ TEST_CASE("state recorded before the first draw waits in the prefix and replays 
 //======================================================================================================================
 TEST_CASE("setPipeline sets only the state that differs from the encoder's", "[metal4]")
 {
-    Device device = *createDevice();
+    Device device = *createDevice({ .scopeTimings = true });
     const ShaderLibrary library = standard(device);
     // C3's pipelines: A culls nothing and tests no depth; B culls back faces and tests depth Greater with writes.
     const Pipeline a = vertexPipeline(device, library, RasterState{ .cull = CullMode::None }, DepthStencilState{}, Format::D32Float);
@@ -275,7 +275,7 @@ TEST_CASE("setPipeline sets only the state that differs from the encoder's", "[m
 //======================================================================================================================
 TEST_CASE("setPipeline reads a pipeline bound again in the recording from the list, and a reused slot's new pipeline from the pool", "[metal4]")
 {
-    Device device = *createDevice({ .framesInFlight = 2 });
+    Device device = *createDevice({ .scopeTimings = true, .framesInFlight = 2 });
     const ShaderLibrary library = standard(device);
     const Pipeline a = vertexPipeline(device, library);
     const Pipeline b = vertexPipeline(device, library, RasterState{ .cull = CullMode::Back });
@@ -357,7 +357,7 @@ TEST_CASE("setPipeline reads a pipeline bound again in the recording from the li
 //======================================================================================================================
 TEST_CASE("dynamic state equal to the encoder's sends no call; a new encoder after a split replays the held state", "[metal4]")
 {
-    Device device = *createDevice();
+    Device device = *createDevice({ .scopeTimings = true });
     const ShaderLibrary library = standard(device);
     // Every raster field differs from Metal's encoder default.
     const Pipeline pipeline = vertexPipeline(
@@ -420,7 +420,7 @@ TEST_CASE("dynamic state equal to the encoder's sends no call; a new encoder aft
 //======================================================================================================================
 TEST_CASE("a pipeline without depthBias applies zero bias and the next depthBias pipeline restores the recorded values", "[metal4]")
 {
-    Device device = *createDevice();
+    Device device = *createDevice({ .scopeTimings = true });
     const ShaderLibrary library = standard(device);
     const Pipeline biased = vertexPipeline(device, library, RasterState{ .depthBias = true });
     const Pipeline plain = vertexPipeline(device, library);
@@ -470,7 +470,7 @@ TEST_CASE("a pipeline without depthBias applies zero bias and the next depthBias
 //======================================================================================================================
 TEST_CASE("a depth bias recorded before a pipeline in the prefix reaches the encoder through the pipeline's replay", "[metal4]")
 {
-    Device device = *createDevice();
+    Device device = *createDevice({ .scopeTimings = true });
     const ShaderLibrary library = standard(device);
     const Pipeline first = vertexPipeline(device, library, RasterState{ .depthBias = true });
     const Pipeline second = vertexPipeline(device, library, RasterState{ .depthBias = true });
@@ -517,7 +517,7 @@ TEST_CASE("a depth bias recorded before a pipeline in the prefix reaches the enc
 //======================================================================================================================
 TEST_CASE("a stencil-only pipeline with no fragment entry sets the winding and a depth-only one does not", "[metal4]")
 {
-    Device device = *createDevice();
+    Device device = *createDevice({ .scopeTimings = true });
     const ShaderLibrary library = standard(device);
     const StencilFaceState replace{ .pass = StencilOp::Replace };
     const Pipeline stencil = *device.createPipeline(
@@ -557,7 +557,7 @@ TEST_CASE("a stencil-only pipeline with no fragment entry sets the winding and a
 //======================================================================================================================
 TEST_CASE("setRoot outside a pass writes the table at once and an unchanged root sends nothing", "[metal4]")
 {
-    Device device = *createDevice();
+    Device device = *createDevice({ .scopeTimings = true });
     const Texture target = makeTexture(device, Format::RGBA8Unorm);
     device.beginFrame();
     CommandList list = device.acquireCommandList(QueueType::Graphics, "test.list");
@@ -591,7 +591,7 @@ TEST_CASE("setRoot outside a pass writes the table at once and an unchanged root
 //======================================================================================================================
 TEST_CASE("a compute pipeline bound before an unequal fill, or before a scope boundary, is set again on the dispatch path, once", "[metal4]")
 {
-    Device device = *createDevice();
+    Device device = *createDevice({ .scopeTimings = true });
     const ShaderLibrary library = standard(device);
     const Pipeline pipeline = *device.createPipeline(ComputePipelineDesc{ .compute = { library, "csMain" }, .label = "test.compute" });
     const Buffer buffer = *device.createBuffer({ .size = 256, .usage = BufferUsage::ShaderWrite, .label = "test.buffer" });
@@ -641,7 +641,7 @@ TEST_CASE("a compute pipeline bound before an unequal fill, or before a scope bo
 //======================================================================================================================
 TEST_CASE("setPipeline with a compute pipeline, then a barrier, emits the barrier on the open encoder before the next dispatch", "[metal4]")
 {
-    Device device = *createDevice();
+    Device device = *createDevice({ .scopeTimings = true });
     const ShaderLibrary library = standard(device);
     const Pipeline pipeline = *device.createPipeline(ComputePipelineDesc{ .compute = { library, "csMain" }, .label = "test.compute" });
     device.beginFrame();
@@ -673,7 +673,7 @@ TEST_CASE("setPipeline with a compute pipeline, then a barrier, emits the barrie
 //======================================================================================================================
 TEST_CASE("direct mesh draws bind one zero record per recording", "[metal4]")
 {
-    Device device = *createDevice();
+    Device device = *createDevice({ .scopeTimings = true });
     const ShaderLibrary library = standard(device);
     const std::array targets{ ColorTarget{ .format = Format::RGBA8Unorm } };
     const Pipeline mesh = *device.createPipeline(
@@ -732,7 +732,7 @@ TEST_CASE("direct mesh draws bind one zero record per recording", "[metal4]")
 //======================================================================================================================
 TEST_CASE("a render encoder binds the list's table to the object and mesh stages at its first mesh pipeline only", "[metal4]")
 {
-    Device device = *createDevice();
+    Device device = *createDevice({ .scopeTimings = true });
     const ShaderLibrary library = standard(device);
     const std::array targets{ ColorTarget{ .format = Format::RGBA8Unorm } };
     const Pipeline plain = vertexPipeline(device, library);
@@ -775,7 +775,7 @@ TEST_CASE("a render encoder binds the list's table to the object and mesh stages
 //======================================================================================================================
 TEST_CASE("a zero-count draw opens no encoder", "[metal4]")
 {
-    Device device = *createDevice();
+    Device device = *createDevice({ .scopeTimings = true });
     const ShaderLibrary library = standard(device);
     const Pipeline pipeline = vertexPipeline(device, library);
     const std::array targets{ ColorTarget{ .format = Format::RGBA8Unorm } };
@@ -811,7 +811,7 @@ TEST_CASE("a zero-count draw opens no encoder", "[metal4]")
 //======================================================================================================================
 TEST_CASE("C8's sequence makes the calls the overhead note registers", "[metal4]")
 {
-    Device device = *createDevice();
+    Device device = *createDevice({ .scopeTimings = true });
     const ShaderLibrary library = standard(device);
     const Pipeline pipeline = vertexPipeline(device, library);
     const Texture target = makeTexture(device, Format::RGBA8Unorm);

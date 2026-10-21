@@ -41,7 +41,7 @@ Null backend, and `null` is the default elsewhere.
 [Command recording](metal4-recording.md) describes the lists, scopes and upscales, and
 [drawing](metal4-drawing.md) passes, pipelines and draws. Every entry of the interface is
 implemented. The device reports no conservative rasterisation.
-`scopeTimings` reports the duration of every scope, render pass and upscale.
+On a device with `DeviceDesc::scopeTimings`, `scopeTimings` times every scope, pass and upscale.
 
 ## Device objects and teardown
 
