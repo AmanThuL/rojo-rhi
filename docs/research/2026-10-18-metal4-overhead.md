@@ -287,6 +287,11 @@ the backend and the harness. Nothing here changes a budget, a workload, a `K` or
 2026-10-20, before any round-2 timed run: round 2 is registered by amendment, as [round 2](
 2026-10-20-metal4-overhead-round2.md) states; it changes no budget, workload, `K` or rule.
 
+2026-10-21, before any round-3 timed run: round 3 is registered by amendment, as [round 3](
+2026-10-21-metal4-overhead-round3.md) states. It changes two rules after results were seen, the CPU
+budget (ADR 0025) and the allocations of C10 at `maxCount` 1, and also N's frame completion and R's
+`DeviceDesc`.
+
 ## Results
 
 Run on 2026-10-19 at 4f2e0d6: 1,260 processes, all nominal on their first attempt. Every row, the
