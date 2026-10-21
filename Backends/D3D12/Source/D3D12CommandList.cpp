@@ -7,6 +7,7 @@
 
 #include <rojoRHI/RHI.h>
 
+#include "Core/Accesses.h"
 #include "Core/CommandLists.h"
 #include "Core/Counters.h"
 #include "Core/DeviceCore.h"
@@ -118,8 +119,9 @@ namespace rojoRHI {
     }
 
     //==================================================================================================================
-    void CommandList::declareAccessChecked(std::span<const ResourceAccess>)
+    void CommandList::declareAccessChecked(std::span<const ResourceAccess> accesses)
     {
-        d3d12::notImplemented("CommandList::declareAccess");
+        // A record for the validation tracker only: no native call.
+        core::declareAccess(CommandListImpl::of(*this).core, accesses);
     }
 } // namespace rojoRHI
