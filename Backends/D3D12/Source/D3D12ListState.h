@@ -28,11 +28,13 @@ namespace rojoRHI::d3d12 {
     struct BufferPayload;
     struct PipelineState;
 
-    /// The root signature the compute side of a list holds: the global one of caller pipelines, or the backend kernels' one.
+    /// The root signature the compute side of a list holds: the global one of caller pipelines, the backend kernels' one, or
+    /// one vendor work set.
     enum class ComputeRoot : uint8_t
     {
         Global, ///< The global root signature, set at acquisition on Graphics and Compute lists.
-        Kernel  ///< The kernel root signature, set by a backend kernel.
+        Kernel, ///< The kernel root signature, set by a backend kernel.
+        Foreign ///< A root signature of vendor work recorded on the list, such as an upscale.
     };
 
     /// The root binding of a list, kept lazily: `setRoot` stores the address and marks both sides dirty, and the next draw or
@@ -43,6 +45,7 @@ namespace rojoRHI::d3d12 {
         bool graphicsRootDirty = false;                  ///< The graphics side has not bound `root` yet.
         bool computeRootDirty = false;                   ///< The compute side has not bound `root` yet.
         bool drawIdDirty = true;                         ///< The draw-record constant has not been set since acquisition.
+        bool graphicsSignatureDirty = false;             ///< The graphics side may hold a root signature vendor work set.
         ComputeRoot computeRoot = ComputeRoot::Global;   ///< The root signature the compute side holds.
         ID3D12PipelineState* computePipeline = nullptr;  ///< The pipeline the compute side holds; null for none.
         ID3D12PipelineState* graphicsPipeline = nullptr; ///< The pipeline the graphics side holds; null for none.
@@ -137,15 +140,24 @@ namespace rojoRHI::d3d12 {
     DeviceImpl& deviceOf(const CommandListImpl& list);
 
     /// Brings the compute side of `list` to what the caller bound before a dispatch, each call only where the native list
-    /// holds something else: the global root signature after a backend kernel switched it, the bound pipeline after another
-    /// displaced it, and the root block after `setRoot` or a root signature switch. A compute pipeline must be bound.
+    /// holds something else: the global root signature after a backend kernel or vendor work switched it, the bound pipeline
+    /// after another displaced it, and the root block after `setRoot` or a root signature switch. A compute pipeline must be
+    /// bound.
     void flushCompute(CommandListImpl& list);
 
     /// Brings the graphics side of `list` to what the caller bound before a draw, each call only where the native list holds
-    /// something else: the bound pipeline, with its recorded depth bias when it has `depthBias`, after another displaced it,
-    /// and the root block after `setRoot`. A list with no root binds none. It writes no draw-record constant: a direct draw
-    /// writes it, and an indirect draw's command signature does. A graphics or mesh pipeline must be bound.
+    /// something else: the global root signature after vendor work, the bound pipeline, with its recorded depth bias when it
+    /// has `depthBias`, after another displaced it, and the root block after `setRoot` or a root signature switch. A list with
+    /// no root binds none. It writes no draw-record constant: a direct draw writes it, and an indirect draw's command
+    /// signature does; a root signature switch marks it unset. A graphics or mesh pipeline must be bound.
     void flushGraphics(CommandListImpl& list);
+
+    /// Brings `list`, a Graphics list, back after vendor work recorded on its native list, which may have set its own
+    /// descriptor heaps, root signatures and pipeline. It sets the device's view and sampler heaps again at once, one native
+    /// call, because clears and fills read them as well as draws and dispatches. It then marks the rest unknown: the global
+    /// root signature of each side, so a root signature set later follows the heaps, both root blocks, the draw-record
+    /// constant `b1`, the pipeline slot and the topology. The next dispatch, draw or `setPipeline` restores each.
+    void resumeAfterVendorWork(CommandListImpl& list);
 
     /// Sets the view of the whole of `buffer`, from offset 0, as indices of `type` on `list`, unless the native list holds
     /// that view: the indices of `type` that fit in the buffer and in the view's 32-bit size. Every indexed draw, direct or

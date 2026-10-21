@@ -1,6 +1,6 @@
 //----------------------------------------------------------------------------------------------------------------------
 /// @file D3D12ListState.cpp
-/// @brief Implements the D3D12 command list pools: each frame slot hands out the lists it keeps and grows when it runs out.
+/// @brief Implements the D3D12 command list pools, which grow when a frame slot runs out, and the restore after vendor work.
 //----------------------------------------------------------------------------------------------------------------------
 
 #include "D3D12ListState.h"
@@ -8,6 +8,7 @@
 #include <rojoRHI/RHI.h>
 
 #include "Base/Assert.h"
+#include "Core/CommandLists.h"
 #include "Core/Counters.h"
 #include "Core/DeviceCore.h"
 #include "D3D12Common.h"
@@ -113,5 +114,27 @@ namespace rojoRHI::d3d12 {
     DeviceImpl& deviceOf(const CommandListImpl& list)
     {
         return *static_cast<DeviceImpl*>(list.core.device->retireHooks().context);
+    }
+
+    //==================================================================================================================
+    void resumeAfterVendorWork(CommandListImpl& list)
+    {
+        ListState& state = list.state;
+        const DeviceImpl& impl = deviceOf(list);
+        // Shaders index both heaps directly, so the heaps are set before the root signatures the next commands set again.
+        ID3D12DescriptorHeap* const heaps[] = { impl.descriptors.views(), impl.descriptors.samplers() };
+        state.list->SetDescriptorHeaps(2, heaps);
+        core::noteNativeCall(list.core);
+        Binding& binding = state.binding;
+        binding.graphicsSignatureDirty = true;
+        binding.computeRoot = ComputeRoot::Foreign;
+        binding.graphicsRootDirty = true;
+        binding.computeRootDirty = true;
+        binding.drawIdDirty = true;
+        // One pipeline slot serves both sides, and neither holds a known pipeline now.
+        binding.computePipeline = nullptr;
+        binding.graphicsPipeline = nullptr;
+        // Every draw after the vendor work follows a setPipeline in a later pass, which sets a topology the list does not hold.
+        state.dynamic.topology = D3D_PRIMITIVE_TOPOLOGY_UNDEFINED;
     }
 } // namespace rojoRHI::d3d12

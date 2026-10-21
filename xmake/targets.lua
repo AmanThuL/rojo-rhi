@@ -294,9 +294,14 @@ target("RojoRHITests")
             "SparseTests.cpp",
             "TrackerDeathTests.cpp", -- one case upscales (#111); the layer stops one clear in General before the tracker (#109)
             "TrackerTests.cpp", -- one case upscales, which D3D12 does not record (#111)
-            "UpscaleDeathTests.cpp", -- upscale recording, #111
-            "UpscalerTests.cpp", -- upscale recording, #111
         }
+        -- Pending under GPU-based validation only: WARP never completes a FidelityFX upscale dispatch with it on, while the
+        -- debug layer alone runs it (the floor probe's fsr section, CI run 39463099719), so every other configuration, the
+        -- Release job's included, runs these.
+        if is_config("rojorhi_d3d12_debug", "gbv") then
+            table.insert(d3d12_pending, "UpscaleDeathTests.cpp")
+            table.insert(d3d12_pending, "UpscalerTests.cpp")
+        end
         local pending = {}
         for _, name in ipairs(d3d12_pending) do
             pending[name] = true
@@ -330,8 +335,11 @@ target("RojoRHITests")
             "DrawConformanceTests.cpp", -- draws with firstVertex and baseVertex assert the base-including vertexIndex, which D3D12 does not produce
             "IndirectConformanceTests.cpp", -- baseVertex records assert the base-including vertexIndex, which D3D12 does not produce
             "ScopeConformanceTests.cpp", -- one case upscales
-            "UpscaleConformanceTests.cpp", -- upscale recording, #111
         }
+        -- Pending under GPU-based validation only, for the reason the contract list gives.
+        if is_config("rojorhi_d3d12_debug", "gbv") then
+            table.insert(d3d12_conformance_pending, "UpscaleConformanceTests.cpp")
+        end
         local conformance_pending = {}
         for _, name in ipairs(d3d12_conformance_pending) do
             conformance_pending[name] = true

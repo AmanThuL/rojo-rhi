@@ -1,6 +1,6 @@
 //----------------------------------------------------------------------------------------------------------------------
 /// @file D3D12CommandList.cpp
-/// @brief Implements D3D12 command list acquisition into native lists, `end`, frame data, the lazy root and declared accesses; `upscale` aborts.
+/// @brief Implements D3D12 command list acquisition into native lists, `end`, frame data, the lazy root and declared accesses.
 //----------------------------------------------------------------------------------------------------------------------
 
 #include "D3D12Device.h"
@@ -110,12 +110,6 @@ namespace rojoRHI {
         binding.root = d3d12::rootAddress(d3d12::deviceOf(list).directory, root);
         binding.graphicsRootDirty = true;
         binding.computeRootDirty = true;
-    }
-
-    //==================================================================================================================
-    void CommandList::upscale(Upscaler, const UpscaleParams&)
-    {
-        d3d12::notImplemented("CommandList::upscale");
     }
 
     //==================================================================================================================
