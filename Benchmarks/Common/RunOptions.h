@@ -21,6 +21,7 @@ namespace rojoRHI::bench {
         uint32_t warmupFrames = 2;
         uint32_t measuredFrames = 3;
         bool validation = false;             ///< DeviceDesc::validation of the RojoRHI arm; Debug builds only.
+        bool scopeTimings = false;           ///< DeviceDesc::scopeTimings of the RojoRHI arm; set where both arms time passes.
         std::filesystem::path dumpDirectory; ///< Empty: no dump.
         bool trace = false;                  ///< Null builds: keep the RojoRHI calls of the first measured frame.
     };

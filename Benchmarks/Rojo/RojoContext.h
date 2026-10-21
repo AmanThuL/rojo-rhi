@@ -24,8 +24,8 @@
 #include <vector>
 
 namespace rojoRHI::bench {
-    // A device created with framesInFlight 3, validation from the run options, enableCapture false, scope timings, an
-    // empty pipeline cache and the label "bench". It owns every object created through it and destroys them, newest first, before
+    // A device created with framesInFlight 3, validation and scope timings from the run options, enableCapture false,
+    // an empty pipeline cache and the label "bench". It owns every object created through it and destroys them, newest first, before
     // destroyDevice, so a validating device reports no live object.
     class RojoContext
     {

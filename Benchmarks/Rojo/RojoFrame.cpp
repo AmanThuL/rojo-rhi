@@ -744,6 +744,9 @@ namespace rojoRHI::bench {
     //==================================================================================================================
     ArmResult runRojoFrame(const Config& config, const RunOptions& options)
     {
-        return runArm<RojoFrame>(config, options);
+        // N writes a debug group and a pair of timestamps per pass, so R times its passes and scopes too.
+        RunOptions timed = options;
+        timed.scopeTimings = true;
+        return runArm<RojoFrame>(config, timed);
     }
 } // namespace rojoRHI::bench
