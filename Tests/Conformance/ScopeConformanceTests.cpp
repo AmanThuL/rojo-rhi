@@ -311,6 +311,7 @@ TEST_CASE("a render pass that draws reports a positive duration", "[conformance]
 TEST_CASE("a pass, a scope inside it and an upscale are each reported with their label, depth and a finite duration", "[conformance]")
 {
     test::requireGpu();
+    test::requireUpscaleCompletion();
     Device device = *createDevice({ .framesInFlight = kFramesInFlight });
     if (device.capabilities().upscalers.empty())
     {

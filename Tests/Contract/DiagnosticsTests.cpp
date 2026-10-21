@@ -4,6 +4,7 @@
 //----------------------------------------------------------------------------------------------------------------------
 #include <rojoRHI/RHI.h>
 
+#include "Support/Conformance.h"
 #include "Support/PassKit.h"
 #include "Support/UpscaleKit.h"
 
@@ -246,6 +247,7 @@ TEST_CASE("an empty scope label is replaced by the scope default", "[contract]")
 //======================================================================================================================
 TEST_CASE("an upscale forms a scope named params.label, defaulted to rojorhi.upscale.unnamed", "[contract]")
 {
+    test::requireUpscaleCompletion();
     UpscaleKit kit;
     Device device = kit.kit.device;
     kit.params.label = "named.upscale";

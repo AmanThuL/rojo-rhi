@@ -388,15 +388,19 @@ jobs:
           foreach ($dll in 'D3D12/D3D12Core.dll', 'D3D12/d3d12SDKLayers.dll', 'd3d10warp.dll') {
             if (-not (Test-Path (Join-Path $dir $dll))) { throw "$dll is missing from $dir" }
           }
-      - run: xmake test RojoRHITests/abi
+      - id: debug_abi
+        run: xmake test RojoRHITests/abi
         timeout-minutes: 15
       # The pinned DXC's disassembly of the module's heap fetches and raw accesses.
       - run: python3 Tools/check_dxil.py
-      - run: xmake test RojoRHITests/contract
+      - id: debug_contract
+        run: xmake test RojoRHITests/contract
         timeout-minutes: 15
-      - run: xmake test RojoRHITests/death
+      - id: debug_death
+        run: xmake test RojoRHITests/death
         timeout-minutes: 15
-      - run: xmake test RojoRHITests/conformance
+      - id: debug_conformance
+        run: xmake test RojoRHITests/conformance
         timeout-minutes: 15
       # Lists the cases of each tag and requires a floor, so a dropped file fails. The floors are the case counts
       # at this commit; they rise as files leave the pending lists.
@@ -454,9 +458,95 @@ jobs:
       # optimization inlined Device::capabilities into its caller (ADR 0012).
       - run: xmake f -m release -y --rojorhi_backend=d3d12 --rojorhi_d3d12_adapter=warp --rojorhi_d3d12_debug=mode
       - run: xmake build RojoRHITests
-      - run: xmake test RojoRHITests/contract
+      - id: release_contract
+        run: xmake test RojoRHITests/contract
         timeout-minutes: 15
-      - run: xmake test RojoRHITests/conformance
+      - id: release_conformance
+        run: xmake test RojoRHITests/conformance
         timeout-minutes: 15
       - run: xmake build RojoRHILtoProbe
       - run: python3 Tools/check_lto_inline.py
+      # Debug with the debug layer alone, under which WARP completes the FidelityFX dispatch it never completes under
+      # GPU-based validation: the files and cases that the configuration above leaves out or skips because they submit
+      # upscales run here, so their checks for layer messages see a layer. Its own build directory keeps the GBV build.
+      - run: xmake f -m debug -y -o build/layer --rojorhi_backend=d3d12 --rojorhi_d3d12_adapter=warp --rojorhi_d3d12_debug=layer
+      - run: xmake build RojoRHITests
+      - id: layer_upscale
+        shell: pwsh
+        timeout-minutes: 15
+        working-directory: build/layer/windows/x64/debug/rojorhi-test
+        run: |
+          .\RojoRHITests.exe -# $env:UPSCALE_CASES
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+        env:
+          UPSCALE_CASES: '[#UpscalerTests]~[death],[#UpscaleConformanceTests],[#D3D12UpscalerTests]~[death],[#DiagnosticsTests]~[death],[#TrackerTests]~[death],[#ScopeConformanceTests]'
+      # After a failed test step, its entry runs again one case per process, so a case that ends the Catch2 process (an
+      # abort, a hang, a removed device) is still named: a PASS, SKIP or FAIL line for each case, and for each failing
+      # case its exit code, the error and assertion lines and the last lines of its output.
+      - name: Run each case of the failed entry alone
+        if: failure()
+        shell: pwsh
+        timeout-minutes: 25
+        env:
+          UPSCALE_CASES: '[#UpscalerTests]~[death],[#UpscaleConformanceTests],[#D3D12UpscalerTests]~[death],[#DiagnosticsTests]~[death],[#TrackerTests]~[death],[#ScopeConformanceTests]'
+        run: |
+          $entries = @(
+            @{ label = 'Debug abi'; outcome = '${{ steps.debug_abi.outcome }}'; mode = 'debug'; filter = '[abi]' }
+            @{ label = 'Debug contract'; outcome = '${{ steps.debug_contract.outcome }}'; mode = 'debug'; filter = '[contract]~[death],[d3d12]~[death]' }
+            @{ label = 'Debug death'; outcome = '${{ steps.debug_death.outcome }}'; mode = 'debug'; filter = '[death]' }
+            @{ label = 'Debug conformance'; outcome = '${{ steps.debug_conformance.outcome }}'; mode = 'debug'; filter = '[conformance]' }
+            @{ label = 'Release contract'; outcome = '${{ steps.release_contract.outcome }}'; mode = 'release'; filter = '[contract]~[death],[d3d12]~[death]' }
+            @{ label = 'Release conformance'; outcome = '${{ steps.release_conformance.outcome }}'; mode = 'release'; filter = '[conformance]' }
+            @{ label = 'Debug layer upscale'; outcome = '${{ steps.layer_upscale.outcome }}'; dir = 'build/layer/windows/x64/debug/rojorhi-test'; filter = $env:UPSCALE_CASES }
+          )
+          $failed = @($entries | Where-Object { $_.outcome -eq 'failure' })
+          if ($failed.Count -eq 0) { Write-Host 'No test step failed, so no entry runs again.'; exit 0 }
+          $wanted = '\[RHI\] \[error\]|D3D12 (ERROR|CORRUPTION)|STATE_|EXECUTION|FAILED|REQUIRE|CHECK|unexpected exception|fatal error'
+          $spec = Join-Path $env:RUNNER_TEMP 'case.txt'
+          $out = Join-Path $env:RUNNER_TEMP 'case.log'
+          $summary = @()
+          foreach ($entry in $failed) {
+            $dir = if ($entry.dir) { $entry.dir } else { "build/windows/x64/$($entry.mode)/rojorhi-test" }
+            Push-Location $dir
+            $names = @(& .\RojoRHITests.exe -# $entry.filter --list-tests --verbosity quiet | Where-Object { $_.Trim() -ne '' })
+            Write-Host "$($entry.label): $($names.Count) cases, each in its own process"
+            $clock = [Diagnostics.Stopwatch]::StartNew()
+            $failures = @()
+            $ran = 0
+            foreach ($name in $names) {
+              if ($clock.Elapsed.TotalSeconds -gt 1080) {
+                Write-Host "::warning::$($entry.label) stopped after $ran of $($names.Count) cases: its time budget ran out"
+                break
+              }
+              $ran++
+              # One test spec per line of the input file, with the characters Catch2 treats specially escaped.
+              $escaped = [regex]::Replace($name, '[,\[\]"\\*]', '\$0')
+              if ($escaped.StartsWith('~')) { $escaped = '\' + $escaped }
+              Set-Content -Path $spec -Value $escaped -Encoding utf8NoBOM
+              $p = Start-Process -FilePath cmd.exe -ArgumentList "/d /c RojoRHITests.exe -# -f `"$spec`" > `"$out`" 2>&1" -WorkingDirectory $PWD -NoNewWindow -PassThru
+              $null = $p.Handle
+              if ($p.WaitForExit(120000)) {
+                $p.WaitForExit()
+                $code = $p.ExitCode
+              } else {
+                & taskkill /PID $p.Id /T /F | Out-Null
+                $code = 'timeout after 120 s'
+              }
+              # Catch2 exits 4 when its one case skipped.
+              if ("$code" -eq '0') { Write-Host "PASS: $name"; continue }
+              if ("$code" -eq '4') { Write-Host "SKIP: $name"; continue }
+              $failures += "$name ($code)"
+              Write-Host "FAIL ($code): $name"
+              $lines = @(Get-Content $out | Where-Object { $_ -notmatch 'Live\s+Object' })
+              $lines | Where-Object { $_ -match $wanted } | Select-Object -First 30 | ForEach-Object { Write-Host "  $_" }
+              Write-Host '  last lines:'
+              $lines | Select-Object -Last 20 | ForEach-Object { Write-Host "    $_" }
+            }
+            Pop-Location
+            Write-Host "$($entry.label): $($failures.Count) of $ran cases failed on their own ($([int]$clock.Elapsed.TotalSeconds) s)"
+            $summary += "### $($entry.label): $($failures.Count) of $ran cases failed on their own"
+            $summary += ''
+            $summary += $failures | ForEach-Object { "- $_" }
+          }
+          $summary -join "`n" | Out-File -Append -Encoding utf8 $env:GITHUB_STEP_SUMMARY
+          exit 1
