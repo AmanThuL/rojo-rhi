@@ -131,7 +131,7 @@ Copies texel data laid out by `layout` in `src` into `region` of `dst`.
 
 | | Metal 4 | D3D12 | Vulkan |
 |---|---|---|---|
-| Call | `MTL4::ComputeCommandEncoder::copyFromBuffer` (buffer to texture), one call per layer, or one over the depth of a 3D texture | `CopyTextureRegion` from a placed footprint, one call per layer | `vkCmdCopyBufferToImage2` |
+| Call | `MTL4::ComputeCommandEncoder::copyFromBuffer` (buffer to texture), one call per layer, or one over the depth of a 3D texture | `CopyTextureRegion` from a placed footprint, one call per layer, or one over the depth of a 3D texture | `vkCmdCopyBufferToImage2` |
 | Cost | native | native | native |
 
 ### `CommandList::copyTextureToBuffer`
@@ -161,7 +161,7 @@ Copies `region` of `src` into `dst`, laid out by `layout`.
 
 | | Metal 4 | D3D12 | Vulkan |
 |---|---|---|---|
-| Call | `MTL4::ComputeCommandEncoder::copyFromTexture` (texture to buffer), one call per layer, or one over the depth of a 3D texture | `CopyTextureRegion` to a placed footprint, one call per layer | `vkCmdCopyImageToBuffer2` |
+| Call | `MTL4::ComputeCommandEncoder::copyFromTexture` (texture to buffer), one call per layer, or one over the depth of a 3D texture | `CopyTextureRegion` to a placed footprint, one call per layer, or one over the depth of a 3D texture | `vkCmdCopyImageToBuffer2` |
 | Cost | native | native | native |
 
 ### `CommandList::copyTexture`
@@ -214,8 +214,8 @@ needs descriptor handles; that is why `dst` needs `ShaderWrite` and why fills ar
 
 | | Metal 4 | D3D12 | Vulkan |
 |---|---|---|---|
-| Call | `MTL4::ComputeCommandEncoder::fillBuffer` when the four pattern bytes are equal, else the backend's fill kernel, one thread per word | backend compute kernel through the buffer's raw unordered-access descriptor | `vkCmdFillBuffer` |
-| Cost | cheap: a one-byte fill value, else one dispatch per 2^31 words on the open encoder | costly: one dispatch, pipeline and root restored after it, copy barriers widened to compute | native |
+| Call | `MTL4::ComputeCommandEncoder::fillBuffer` when the four pattern bytes are equal, else the backend's fill kernel, one thread per word | the backend's compute kernel through the buffer's raw unordered-access descriptor, one dispatch per 512 MiB window, a window past the raw view's reach through a transient raw view | `vkCmdFillBuffer` |
+| Cost | cheap: a one-byte fill value, else one dispatch per 2^31 words on the open encoder | costly: one dispatch per 512 MiB window; the kernel's root signature and pipeline stay bound until the next dispatch rebinds the caller's | native |
 
 ### `ClearValue`
 
@@ -268,5 +268,5 @@ native transitions its clear needs and returns them to `CopyDst`. A texture in `
 
 | | Metal 4 | D3D12 | Vulkan |
 |---|---|---|---|
-| Call | layouts ignored; per mip and layer, and per depth plane of each mip of a 3D texture, a render encoder from `MTL4::CommandBuffer::renderCommandEncoder` with `MTL::LoadActionClear` and `MTL::StoreActionStore`, or for `Storage`-only textures one dispatch of the backend's clear kernel per mip | barriers `COPY_DEST` to `RENDER_TARGET`, `DEPTH_STENCIL_WRITE` or `UNORDERED_ACCESS` and back around `ClearRenderTargetView`, `ClearDepthStencilView` or `ClearUnorderedAccessView*` per subresource; the last needs backend-written GPU and CPU descriptors | `vkCmdClearColorImage` or `vkCmdClearDepthStencilImage` in `TRANSFER_DST_OPTIMAL` |
-| Cost | costly: one render encoder per mip and layer, per depth plane for a 3D texture, closing the compute encoder; or one dispatch per mip on the compute encoder | costly: two hidden layout transitions per subresource and transient descriptors | native |
+| Call | layouts ignored; per mip and layer, and per depth plane of each mip of a 3D texture, a render encoder from `MTL4::CommandBuffer::renderCommandEncoder` with `MTL::LoadActionClear` and `MTL::StoreActionStore`, or for `Storage`-only textures one dispatch of the backend's clear kernel per mip | one barrier from `COPY_DEST` into `RENDER_TARGET`, `DEPTH_STENCIL_WRITE` or `UNORDERED_ACCESS` over the range, `ClearRenderTargetView` or `ClearDepthStencilView` per mip and layer (per depth slice of a 3D texture) or `ClearUnorderedAccessViewFloat` per mip through a transient view, one barrier back | `vkCmdClearColorImage` or `vkCmdClearDepthStencilImage` in `TRANSFER_DST_OPTIMAL` |
+| Cost | costly: one render encoder per mip and layer, per depth plane for a 3D texture, closing the compute encoder; or one dispatch per mip on the compute encoder | costly: two hidden transitions per call and two transient descriptors per mip of a Storage texture, at most 1,024 Storage-mip clears and fill windows per frame slot | native |

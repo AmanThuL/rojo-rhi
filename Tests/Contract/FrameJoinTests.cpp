@@ -101,6 +101,8 @@ TEST_CASE("the graphics submissions of a frame together join its compute and cop
     submitTo(kit.device, kit.list, QueueType::Graphics, computeDone);
     submitTo(kit.device, kit.device.acquireCommandList(QueueType::Graphics, "test.last"), QueueType::Graphics, copyDone);
     kit.device.endFrame();
+    kit.device.destroy(computed);
+    kit.device.destroy(copied);
     destroyDevice(kit.device);
 #endif
 }

@@ -364,6 +364,12 @@ TEST_CASE("three queues submit while another thread waits on and reads their fen
     const std::array<FenceValue, 2> joined{ FenceValue{ fences[1], kRounds }, FenceValue{ fences[2], kRounds } };
     device.queue(QueueType::Graphics).submit({}, joined);
     device.endFrame();
+    for (size_t index = 0; index < kQueues.size(); ++index)
+    {
+        device.destroy(sources[index]);
+        device.destroy(buffers[index]);
+        device.destroy(fences[index]);
+    }
     destroyDevice(device);
 #endif
 }
