@@ -36,7 +36,7 @@ void samplesMain(uint3 tid : SV_DispatchThreadID)
     for (uint j = 0u; j < 16u; ++j)
     {
         uint texture = mix(key * 16u + j) & 127u;
-        Texture2D<float> source = rojoRHI::texture2D<float>(root.viewBase + texture);
+        Texture2D<float> source = rojoRHI::texture2D<float>(rojoRHI::nonUniform(root.viewBase + texture));
         float2 coordinate = float2(float(j & 15u) + 0.5, float((j * 5u) & 15u) + 0.5) / 16.0;
         sum += source.SampleLevel(texelSampler, coordinate, 0.0);
     }
