@@ -18,13 +18,25 @@ namespace rojoRHI::test {
 
     //==================================================================================================================
     UpscaleKit::UpscaleKit(QueueType type, const UpscalerDesc& description, bool validation, bool scopeTimings)
-        : kit(type, validation, scopeTimings), desc(description)
+        : kit(type, validation, scopeTimings), desc(description), m_moveTextures(!validation && type == QueueType::Graphics && layoutsAreNative())
     {
         upscaler = *kit.device.createUpscaler(desc);
-        params.color = make(desc.color, desc.input, TextureUsage::Sampled);
-        params.depth = make(desc.depth, desc.input, TextureUsage::Sampled | TextureUsage::DepthStencil);
-        params.motion = make(desc.motion, desc.input, TextureUsage::Sampled);
-        params.output = make(desc.outputFormat, desc.output, TextureUsage::Storage | TextureUsage::RenderTarget);
+        // A new texture is Undefined (chapter 09). The cases that only record an upscale record no barrier, which Metal and the
+        // Null backend ignore and a D3D12 upscale does not, since it names the layouts chapter 12 requires to the vendor call.
+        params.color = moved(make(desc.color, desc.input, TextureUsage::Sampled), Layout::ShaderRead);
+        params.depth = moved(make(desc.depth, desc.input, TextureUsage::Sampled | TextureUsage::DepthStencil), Layout::ShaderRead);
+        params.motion = moved(make(desc.motion, desc.input, TextureUsage::Sampled), Layout::ShaderRead);
+        params.output = moved(make(desc.outputFormat, desc.output, TextureUsage::Storage | TextureUsage::RenderTarget), Layout::ShaderWrite);
+    }
+
+    //==================================================================================================================
+    Texture UpscaleKit::moved(Texture texture, Layout layout)
+    {
+        if (m_moveTextures)
+        {
+            transition(kit.list, texture, Layout::Undefined, layout);
+        }
+        return texture;
     }
 
     //==================================================================================================================
@@ -36,13 +48,13 @@ namespace rojoRHI::test {
     //==================================================================================================================
     Texture UpscaleKit::exposureTexture()
     {
-        return make(Format::R16Float, { 1, 1 }, TextureUsage::Sampled);
+        return moved(make(Format::R16Float, { 1, 1 }, TextureUsage::Sampled), Layout::ShaderRead);
     }
 
     //==================================================================================================================
     Texture UpscaleKit::reactiveTexture()
     {
-        return make(Format::R8Unorm, desc.input, TextureUsage::Sampled);
+        return moved(make(Format::R8Unorm, desc.input, TextureUsage::Sampled), Layout::ShaderRead);
     }
 
     //==================================================================================================================

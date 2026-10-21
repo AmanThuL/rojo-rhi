@@ -96,6 +96,16 @@ namespace rojoRHI {
                 binding.pipeline != nullptr && binding.pipeline->kind != PipelineKind::Compute, "a draw is recorded with no graphics pipeline bound"
             );
             const PipelineState& pipeline = *binding.pipeline;
+            if (binding.graphicsSignatureDirty)
+            {
+                // Vendor work may have left a root signature of its own; switching back drops every root argument, so the
+                // root and the draw-record constant are bound again.
+                list.state.list->SetGraphicsRootSignature(deviceOf(list).roots.global());
+                core::noteNativeCall(list.core);
+                binding.graphicsSignatureDirty = false;
+                binding.graphicsRootDirty = true;
+                binding.drawIdDirty = true;
+            }
             if (binding.graphicsPipeline != pipeline.pso)
             {
                 // Another pipeline took the slot: whether D3D12 keeps a dynamic depth bias across it is unverified, so the

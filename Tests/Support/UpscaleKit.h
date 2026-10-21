@@ -51,5 +51,14 @@ namespace rojoRHI::test {
         UpscalerDesc desc;    ///< The description of `upscaler`.
         Upscaler upscaler;    ///< The upscaler.
         UpscaleParams params; ///< A valid set of arguments for `upscaler`.
+
+      private:
+        /// Records on `list`, when the kit moves what it creates, a barrier that moves `texture` from `Undefined` to `layout`,
+        /// and returns `texture`.
+        Texture moved(Texture texture, Layout layout);
+
+        /// The kit's valid inputs and output move out of `Undefined` for the upscale: on a Graphics list without validation,
+        /// where the backend's layouts are native (`layoutsAreNative`), as `PassKit` moves its targets.
+        bool m_moveTextures = false;
     };
 } // namespace rojoRHI::test
