@@ -13,6 +13,7 @@
 
 #include <array>
 #include <cstddef>
+#include <cstdint>
 
 using namespace rojoRHI;
 using test::PassKit;
@@ -55,14 +56,20 @@ TEST_CASE("frame data resolves on a list of the frame that produced it", "[core]
 }
 
 //======================================================================================================================
-TEST_CASE("an arena page's record holds the frame of the list that claimed it", "[core]")
+TEST_CASE("an arena page's record holds the frame of the list that claimed it in Debug builds", "[core]")
 {
     PassKit kit;
     const std::array<std::byte, 8> bytes = {};
     (void)kit.list.uploadFrameData(bytes);
     core::DeviceCore& device = core::coreOf(kit.device);
     const Buffer page = device.arena().pageBuffers().front();
-    CHECK(device.pool<Buffer>().lookup(page).record->arenaFrame == 1);
+#ifndef NDEBUG
+    const uint64_t claimed = 1;
+#else
+    // Only Debug-tier code reads the frame (VU-rojo-buffer-0020 and the tracker's references), so a Release claim writes none.
+    const uint64_t claimed = 0;
+#endif
+    CHECK(device.pool<Buffer>().lookup(page).record->arenaFrame == claimed);
     CHECK(device.pool<Buffer>().lookup(kit.buffer(BufferUsage::None)).record->arenaFrame == 0);
     kit.finish();
 }
