@@ -20,7 +20,7 @@ floor probe and the toolchain record.
 | 03 memory and buffers, 04 textures and heaps | implemented, with views and samplers |
 | 15 formats and limits | implemented: the format table and the limits |
 | 10 queues and frames (with the fences of 09) | implemented: fences, `submit`, frames; `Queue::present` and `Queue::mapTiles` abort |
-| 07 command recording, 08 GPU-driven work | lists, `setRoot`, copies, fills, clears, scopes, barriers (09), passes, dispatches, direct and indirect draws record ([recording](d3d12-recording.md), [drawing](d3d12-drawing.md)); `upscale` and `declareAccess` abort |
+| 07 command recording, 08 GPU-driven work | lists, `setRoot`, copies, fills, clears, scopes, barriers (09), passes, dispatches, direct and indirect draws record ([recording](d3d12-recording.md), [drawing](d3d12-drawing.md)); `declareAccess` records for the tracker alone; `upscale` aborts |
 | 06 pipelines | implemented: shader libraries, graphics, mesh and compute pipelines and the pipeline cache ([drawing](d3d12-drawing.md)) |
 | 11 presentation, 12 upscaling, 13 sparse | not implemented: entries return `Unsupported` or abort, and `createSwapchain` is `Unsupported` |
 | 14 diagnostics | the core's counters and checks; no capture hook, so `beginCapture` is `Unsupported` |
