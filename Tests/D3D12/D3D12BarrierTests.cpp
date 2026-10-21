@@ -1235,3 +1235,98 @@ TEST_CASE("a barrier side with no access waits in a scope the layer accepts", "[
     device.destroy(done);
     destroyDevice(device);
 }
+
+//======================================================================================================================
+TEST_CASE("a global barrier names a layout's accesses only where that layout admits both sides", "[d3d12]")
+{
+    constexpr D3D12_BARRIER_ACCESS kShaderRead = D3D12_BARRIER_ACCESS_SHADER_RESOURCE | D3D12_BARRIER_ACCESS_CONSTANT_BUFFER;
+    Device device = makeDevice();
+    const MessageCollection messages;
+    const Fence done = makeFence(device, "test.done");
+    const Texture depth = makeTexture(
+        device, { .format = Format::D32Float, .extent = { 4, 4, 1 }, .usage = TextureUsage::DepthStencil | TextureUsage::Sampled, .label = "test.depth" }
+    );
+    device.beginFrame();
+    CommandList list = device.acquireCommandList(QueueType::Graphics, "test.globals");
+    const std::array<TextureBarrier, 1> entering = { transition(depth, Layout::Undefined, Layout::DepthStencilWrite, QueueType::Graphics) };
+    list.barrier({}, {}, entering);
+    // A depth prepass read by fragment shaders: the depth-stencil write leaves the source, whose depth scope stays, and
+    // the texture barrier that takes the depth texture out of DepthStencilWrite orders the write.
+    const std::array<GlobalBarrier, 1> prepass = { GlobalBarrier{ Stage::DepthStencil, Access::DepthStencilWrite, Stage::FragmentShader, Access::ShaderRead } };
+    list.barrier(prepass, {}, {});
+    {
+        const d3d12::BarrierScratch& scratch = scratchOf(list);
+        REQUIRE(scratch.globals.size() == 1u);
+        CHECK(scratch.globals[0].SyncBefore == D3D12_BARRIER_SYNC_DEPTH_STENCIL);
+        CHECK(scratch.globals[0].AccessBefore == D3D12_BARRIER_ACCESS_NO_ACCESS);
+        CHECK(scratch.globals[0].SyncAfter == D3D12_BARRIER_SYNC_PIXEL_SHADING);
+        CHECK(scratch.globals[0].AccessAfter == kShaderRead);
+    }
+    // The layout change after it waits for fragment work only, yet its source still names the depth accesses its layout
+    // admits, in every scope, so the depth writes the global no longer names finish before the texture moves.
+    const std::array<TextureBarrier, 1> reading = { TextureBarrier{ .texture = depth,
+                                                                    .srcStage = Stage::FragmentShader,
+                                                                    .srcAccess = Access::None,
+                                                                    .dstStage = Stage::FragmentShader,
+                                                                    .dstAccess = Access::ShaderRead,
+                                                                    .oldLayout = Layout::DepthStencilWrite,
+                                                                    .newLayout = Layout::DepthStencilRead } };
+    list.barrier({}, {}, reading);
+    CHECK(loweredTexture(list, 0).SyncBefore == D3D12_BARRIER_SYNC_ALL);
+    CHECK(loweredTexture(list, 0).AccessBefore == (D3D12_BARRIER_ACCESS_DEPTH_STENCIL_READ | D3D12_BARRIER_ACCESS_DEPTH_STENCIL_WRITE));
+    // Render-target writes before copies: the destination keeps its copy access alone.
+    const std::array<GlobalBarrier, 1> toCopy = { GlobalBarrier{ Stage::ColorAttachment, Access::ColorAttachmentWrite, Stage::Copy, Access::CopyRead } };
+    list.barrier(toCopy, {}, {});
+    {
+        const d3d12::BarrierScratch& scratch = scratchOf(list);
+        REQUIRE(scratch.globals.size() == 1u);
+        CHECK(scratch.globals[0].SyncBefore == D3D12_BARRIER_SYNC_RENDER_TARGET);
+        CHECK(scratch.globals[0].AccessBefore == D3D12_BARRIER_ACCESS_NO_ACCESS);
+        CHECK(scratch.globals[0].SyncAfter == D3D12_BARRIER_SYNC_COPY);
+        CHECK(scratch.globals[0].AccessAfter == D3D12_BARRIER_ACCESS_COPY_SOURCE);
+    }
+    // One layout admits both sides: the barrier lowers as named.
+    const std::array<GlobalBarrier, 2> sameLayout = {
+        GlobalBarrier{
+            Stage::ColorAttachment, Access::ColorAttachmentWrite, Stage::ColorAttachment, Access::ColorAttachmentRead | Access::ColorAttachmentWrite },
+        GlobalBarrier{ Stage::DepthStencil, Access::DepthStencilWrite, Stage::DepthStencil, Access::DepthStencilRead },
+    };
+    list.barrier(sameLayout, {}, {});
+    {
+        const d3d12::BarrierScratch& scratch = scratchOf(list);
+        REQUIRE(scratch.globals.size() == 2u);
+        CHECK(scratch.globals[0].SyncBefore == D3D12_BARRIER_SYNC_RENDER_TARGET);
+        CHECK(scratch.globals[0].AccessBefore == D3D12_BARRIER_ACCESS_RENDER_TARGET);
+        CHECK(scratch.globals[0].SyncAfter == D3D12_BARRIER_SYNC_RENDER_TARGET);
+        CHECK(scratch.globals[0].AccessAfter == D3D12_BARRIER_ACCESS_RENDER_TARGET);
+        CHECK(scratch.globals[1].SyncBefore == D3D12_BARRIER_SYNC_DEPTH_STENCIL);
+        CHECK(scratch.globals[1].AccessBefore == D3D12_BARRIER_ACCESS_DEPTH_STENCIL_WRITE);
+        CHECK(scratch.globals[1].SyncAfter == D3D12_BARRIER_SYNC_DEPTH_STENCIL);
+        CHECK(scratch.globals[1].AccessAfter == D3D12_BARRIER_ACCESS_DEPTH_STENCIL_READ);
+    }
+    // Depth and shader accesses on both sides: the shader accesses wait in every scope, since their own leave the depth
+    // scope out, and the depth accesses get a global barrier of their own.
+    const std::array<GlobalBarrier, 1> mixed = { GlobalBarrier{ Stage::DepthStencil | Stage::ComputeShader,
+                                                                Access::DepthStencilWrite | Access::ShaderWrite,
+                                                                Stage::DepthStencil | Stage::FragmentShader,
+                                                                Access::DepthStencilRead | Access::ShaderRead } };
+    list.barrier(mixed, {}, {});
+    {
+        const d3d12::BarrierScratch& scratch = scratchOf(list);
+        REQUIRE(scratch.globals.size() == 2u);
+        CHECK(scratch.globals[0].SyncBefore == D3D12_BARRIER_SYNC_ALL);
+        CHECK(scratch.globals[0].AccessBefore == D3D12_BARRIER_ACCESS_UNORDERED_ACCESS);
+        CHECK(scratch.globals[0].SyncAfter == D3D12_BARRIER_SYNC_ALL);
+        CHECK(scratch.globals[0].AccessAfter == kShaderRead);
+        CHECK(scratch.globals[1].SyncBefore == D3D12_BARRIER_SYNC_DEPTH_STENCIL);
+        CHECK(scratch.globals[1].AccessBefore == D3D12_BARRIER_ACCESS_DEPTH_STENCIL_WRITE);
+        CHECK(scratch.globals[1].SyncAfter == D3D12_BARRIER_SYNC_DEPTH_STENCIL);
+        CHECK(scratch.globals[1].AccessAfter == D3D12_BARRIER_ACCESS_DEPTH_STENCIL_READ);
+    }
+    submitAndWait(device, list, done, 1);
+    device.endFrame();
+    CHECK(messages.count() == 0u);
+    device.destroy(depth);
+    device.destroy(done);
+    destroyDevice(device);
+}

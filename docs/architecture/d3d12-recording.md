@@ -174,9 +174,10 @@ A `SYNC_ALL` sync is kept, a side with `NO_ACCESS` drops only `CLEAR_UNORDERED_A
   second and last on Compute; `COPY` alone on Copy. `Resolve` is `RENDER_TARGET | RESOLVE`.
 - **Access per queue.** A side's access is masked by what the queue performs (a Copy list: copy
   source and destination; a Compute list: also shader, unordered, constant and indirect access). A
-  side left with none is `NO_ACCESS`, so a `Stage::All` side is valid on every queue. A side
-  whose stage is `None` starts as `NO_ACCESS`; out of a defined layout the sync rule above then
-  gives a texture side the accesses that layout admits. `Resolve` is `RENDER_TARGET` access.
+  side left with none is `NO_ACCESS`, so a `Stage::All` side is valid on every queue. A side whose
+  stage is `None` starts as `NO_ACCESS`; out of a defined layout the sync rule above gives a texture
+  side the accesses that layout admits. `Resolve` is `RENDER_TARGET` access. A global barrier no one
+  layout admits drops attachment accesses, keeping them in a global per layout that both sides name.
 - **`CopyWrite`** is `COPY_DEST`, and also `UNORDERED_ACCESS` on global barriers and on buffers
   with a raw UAV (`ShaderWrite` usage), because the fill kernel writes through that view.
 - **Texture reads.** `ShaderRead` is `SHADER_RESOURCE`, or `UNORDERED_ACCESS` when the texture

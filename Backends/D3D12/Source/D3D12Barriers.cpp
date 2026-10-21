@@ -21,6 +21,7 @@
 #include <array>
 #include <cstdint>
 #include <span>
+#include <vector>
 
 namespace rojoRHI {
     namespace d3d12 {
@@ -186,6 +187,89 @@ namespace rojoRHI {
                     return { sync, run };
                 }
                 return { D3D12_BARRIER_SYNC_ALL, admitted };
+            }
+
+            /// The accesses a texture performs only in its own layout: render-target, depth-stencil, resolve and
+            /// shading-rate. A global barrier changes no layout, and the layer rejects one whose two sides no single layout
+            /// admits, such as a depth-stencil write before a shader read.
+            constexpr D3D12_BARRIER_ACCESS kLayoutBoundAccesses = D3D12_BARRIER_ACCESS_RENDER_TARGET | D3D12_BARRIER_ACCESS_DEPTH_STENCIL_WRITE |
+                                                                  D3D12_BARRIER_ACCESS_DEPTH_STENCIL_READ | D3D12_BARRIER_ACCESS_RESOLVE_DEST |
+                                                                  D3D12_BARRIER_ACCESS_RESOLVE_SOURCE | D3D12_BARRIER_ACCESS_SHADING_RATE_SOURCE;
+
+            /// The layout-bound accesses the lowering names, grouped by the one layout that admits each group:
+            /// `LAYOUT_RENDER_TARGET` and `LAYOUT_DEPTH_STENCIL_WRITE`.
+            constexpr std::array<D3D12_BARRIER_ACCESS, 2> kLayoutFamilies = {
+                D3D12_BARRIER_ACCESS_RENDER_TARGET, D3D12_BARRIER_ACCESS_DEPTH_STENCIL_READ | D3D12_BARRIER_ACCESS_DEPTH_STENCIL_WRITE
+            };
+
+            //==========================================================================================================
+            /// Returns the access bits `access` names, none for `ACCESS_NO_ACCESS`.
+            D3D12_BARRIER_ACCESS namedBits(D3D12_BARRIER_ACCESS access)
+            {
+                return access == D3D12_BARRIER_ACCESS_NO_ACCESS ? D3D12_BARRIER_ACCESS_COMMON : access;
+            }
+
+            //==========================================================================================================
+            /// Returns one side of a global barrier, `sync` and `access`, without its layout-bound accesses. The sync still
+            /// waits in the scopes of every access the side named: a side left with no access keeps it, and one whose
+            /// remaining accesses do not run in every scope it names waits in every scope, rather than name a scope its
+            /// accesses never run in.
+            SyncAccess withoutLayoutBound(D3D12_BARRIER_SYNC sync, D3D12_BARRIER_ACCESS access)
+            {
+                if ((namedBits(access) & kLayoutBoundAccesses) == D3D12_BARRIER_ACCESS_COMMON)
+                {
+                    return { sync, access };
+                }
+                const D3D12_BARRIER_ACCESS kept = access & ~kLayoutBoundAccesses;
+                if (kept == D3D12_BARRIER_ACCESS_COMMON)
+                {
+                    return { sync, D3D12_BARRIER_ACCESS_NO_ACCESS };
+                }
+                return { narrowSync(sync, kept) == sync ? sync : D3D12_BARRIER_SYNC_ALL, kept };
+            }
+
+            //==========================================================================================================
+            /// Appends to `lowered` the global barriers `global` lowers to on a list of `type`. A barrier whose accesses one
+            /// layout admits on both sides lowers to one global barrier. Otherwise a layout-bound access touches only a
+            /// texture in its own layout, which a texture barrier takes out of it: the first global barrier names every
+            /// stage and the other accesses, and each layout's accesses that both sides name get a global barrier of
+            /// their own.
+            void lowerGlobal(const GlobalBarrier& global, QueueType type, std::vector<D3D12_GLOBAL_BARRIER>& lowered)
+            {
+                const D3D12_BARRIER_ACCESS before = sideAccess(global.srcStage, global.srcAccess, AccessTarget::Global, Layout::Undefined, type);
+                const D3D12_BARRIER_ACCESS after = sideAccess(global.dstStage, global.dstAccess, AccessTarget::Global, Layout::Undefined, type);
+                const D3D12_BARRIER_SYNC syncBefore = narrowSync(syncOf(global.srcStage, type), before);
+                const D3D12_BARRIER_SYNC syncAfter = narrowSync(syncOf(global.dstStage, type), after);
+                const D3D12_BARRIER_ACCESS named = namedBits(before) | namedBits(after);
+                bool oneLayout = (named & kLayoutBoundAccesses) == D3D12_BARRIER_ACCESS_COMMON;
+                for (const D3D12_BARRIER_ACCESS family : kLayoutFamilies)
+                {
+                    oneLayout = oneLayout || (named & ~family) == D3D12_BARRIER_ACCESS_COMMON;
+                }
+                if (oneLayout)
+                {
+                    lowered.push_back({ .SyncBefore = syncBefore, .SyncAfter = syncAfter, .AccessBefore = before, .AccessAfter = after });
+                    return;
+                }
+                const SyncAccess source = withoutLayoutBound(syncBefore, before);
+                const SyncAccess destination = withoutLayoutBound(syncAfter, after);
+                lowered.push_back(
+                    { .SyncBefore = source.sync, .SyncAfter = destination.sync, .AccessBefore = source.access, .AccessAfter = destination.access }
+                );
+                for (const D3D12_BARRIER_ACCESS family : kLayoutFamilies)
+                {
+                    const D3D12_BARRIER_ACCESS familyBefore = namedBits(before) & family;
+                    const D3D12_BARRIER_ACCESS familyAfter = namedBits(after) & family;
+                    if (familyBefore != D3D12_BARRIER_ACCESS_COMMON && familyAfter != D3D12_BARRIER_ACCESS_COMMON)
+                    {
+                        lowered.push_back(
+                            { .SyncBefore = narrowSync(syncBefore, familyBefore),
+                              .SyncAfter = narrowSync(syncAfter, familyAfter),
+                              .AccessBefore = familyBefore,
+                              .AccessAfter = familyAfter }
+                        );
+                    }
+                }
             }
         } // namespace
 
@@ -422,11 +506,7 @@ namespace rojoRHI {
         const QueueType type = list.type;
         for (const GlobalBarrier& global : globals)
         {
-            D3D12_GLOBAL_BARRIER& lowered = scratch.globals.emplace_back();
-            lowered.AccessBefore = d3d12::sideAccess(global.srcStage, global.srcAccess, d3d12::AccessTarget::Global, Layout::Undefined, type);
-            lowered.AccessAfter = d3d12::sideAccess(global.dstStage, global.dstAccess, d3d12::AccessTarget::Global, Layout::Undefined, type);
-            lowered.SyncBefore = d3d12::narrowSync(d3d12::syncOf(global.srcStage, type), lowered.AccessBefore);
-            lowered.SyncAfter = d3d12::narrowSync(d3d12::syncOf(global.dstStage, type), lowered.AccessAfter);
+            d3d12::lowerGlobal(global, type, scratch.globals);
         }
         // Payloads are fixed while their resources live, so each is read with one acquire load and no lock (ADR 0020).
         const auto& bufferPool = list.device->pool<Buffer>();
