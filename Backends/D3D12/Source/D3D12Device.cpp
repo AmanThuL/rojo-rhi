@@ -88,6 +88,7 @@ namespace rojoRHI {
             impl->core.beginDestroy();
             // Every pipeline has retired, so the library and the bytes it reads go now.
             impl->pipelineCache.release();
+            d3d12::releaseSwapchains(*impl);
             impl->frames.releaseAll();
             // The factory that made the device outlives it, and the device's reference is the last one released.
             d3d12::Com<ID3D12DeviceFactory> factory = impl->loaded.factory;

@@ -341,8 +341,10 @@ namespace rojoRHI {
         void retireTexture(void* context, core::TextureRecord& record)
         {
             auto* payload = static_cast<TexturePayload*>(record.native);
-            if (payload == nullptr)
+            // A swapchain image borrows its payload from the swapchain, which releases the back buffer and its view itself.
+            if (payload == nullptr || record.swapchainImage)
             {
+                record.native = nullptr;
                 return;
             }
             if (payload->targets)

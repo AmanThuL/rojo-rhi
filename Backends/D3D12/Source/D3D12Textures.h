@@ -45,6 +45,7 @@ namespace rojoRHI::d3d12 {
     D3D12_CPU_DESCRIPTOR_HANDLE targetView(const TexturePayload& payload, uint32_t mip, uint32_t layer);
 
     /// Releases the target heap, counting one `nativeCreateCalls` for it, the resource and the payload of a retiring texture
-    /// record. `context` is the `DeviceImpl`; a null payload is skipped. It runs under the texture pool's lock.
+    /// record. `context` is the `DeviceImpl`; a null payload, and the borrowed payload of a swapchain image, are skipped. It
+    /// runs under the texture pool's lock.
     void retireTexture(void* context, core::TextureRecord& record);
 } // namespace rojoRHI::d3d12

@@ -85,7 +85,7 @@ namespace rojoRHI::d3d12 {
     /// Blocks until frame `frame` has completed on the graphics queue. `context` is the `DeviceImpl`.
     void waitFrame(void* context, uint64_t frame);
 
-    /// Returns frame slot `slot`'s command lists and transient descriptors for reuse and releases the kept fences every queue
-    /// has passed. `context` is the `DeviceImpl`.
+    /// Returns frame slot `slot`'s command lists and transient descriptors for reuse, releases the kept fences every queue has
+    /// passed and frees the destroyed swapchains whose frame the core has waited for. `context` is the `DeviceImpl`.
     void reuseSlot(void* context, uint32_t slot);
 } // namespace rojoRHI::d3d12

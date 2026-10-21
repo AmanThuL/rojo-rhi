@@ -21,6 +21,7 @@
 #include "D3D12PipelineCache.h"
 #include "D3D12RootSignature.h"
 #include "D3D12Stager.h"
+#include "D3D12Swapchain.h"
 #include "D3D12Timestamps.h"
 
 #include <array>
@@ -63,10 +64,11 @@ namespace rojoRHI {
         static CommandList wrap(CommandListImpl* impl);
     };
 
-    /// The D3D12 backend's swapchain: the core's record of the images and their state.
+    /// The D3D12 backend's swapchain: the core's record of the images and their state, and the DXGI swapchain behind them.
     struct SwapchainImpl
     {
-        core::SwapchainCore core; ///< The description, extent and image state the presentation rules read.
+        core::SwapchainCore core;      ///< The description, extent and image state the presentation rules read.
+        d3d12::SwapchainNative native; ///< The DXGI swapchain, its back buffers and their render-target views.
 
         /// Returns the state `swapchain` wraps; checks VU-rojo-core-0004.
         static SwapchainImpl& of(Swapchain swapchain);
@@ -96,6 +98,7 @@ namespace rojoRHI {
         d3d12::DeviceFeatures features;       ///< The optional features the device reports.
         std::array<QueueImpl, 3> queues = {}; ///< One queue per `QueueType`, indexed by its value.
         d3d12::FrameState frames;             ///< The frame fence and the fences of destroyed caller fences.
+        d3d12::Presentation presentation;     ///< The live swapchains and the destroyed ones by frame.
         d3d12::DescriptorHeaps descriptors;   ///< The shader-visible view and sampler heaps.
         d3d12::HeapDirectory directory;       ///< The buffer of each raw SRV, by view-heap index.
         d3d12::RootSignatures roots;          ///< The root and command signatures every pipeline shares.
