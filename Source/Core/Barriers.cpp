@@ -302,6 +302,12 @@ namespace rojoRHI::core {
                 static_cast<int>(entry.newLayout)
             );
             ROJORHI_VU(
+                entry.newLayout != Layout::DepthStencilRead || (record->usage & TextureUsage::Sampled) != TextureUsage::None,
+                "VU-rojo-sync-0027",
+                "a barrier moves the texture \"{}\" to DepthStencilRead, but it was created without the Sampled usage that layout needs",
+                record->label
+            );
+            ROJORHI_VU(
                 (entry.srcAccess & ~accessesOf(entry.oldLayout)) == Access::None && (entry.dstAccess & ~accessesOf(entry.newLayout)) == Access::None,
                 "VU-rojo-sync-0016",
                 "the accesses {:#x} and {:#x} of a barrier of the texture \"{}\" are not permitted by the layouts {} and {}",
