@@ -216,12 +216,20 @@ namespace {
         list.endRenderPass();
     }
 
-    /// The edge of a small render target, whose 16384 bytes follow the first buffer's in the heap.
+    /// The edge of a small render target, placed after the first buffer's bytes in the heap.
     constexpr uint32_t kSmall = 64;
     /// The edge of a large render target that covers the bytes of both.
     constexpr uint32_t kLarge = 256;
-    /// The heap offset of the small render target.
-    constexpr uint64_t kSmallOffset = 16384;
+
+    //==================================================================================================================
+    /// Returns the heap offset of the small render target: the first offset past the first buffer's bytes that the device
+    /// places a texture at.
+    uint64_t smallOffset(PassKit& kit)
+    {
+        const TextureDesc desc{ .format = Format::RGBA8Unorm, .extent = { kSmall, kSmall, 1 }, .usage = TextureUsage::RenderTarget };
+        const uint64_t alignment = kit.device.placementRequirements(desc).alignment;
+        return (kBytes + alignment - 1) / alignment * alignment;
+    }
 } // namespace
 
 //======================================================================================================================
@@ -231,7 +239,7 @@ TEST_CASE("VU-rojo-sync-0017 a discard waits for the newest use of some bytes bu
         PassKit kit(QueueType::Graphics, true);
         const Heap heap = makeHeap(kit);
         const Buffer buffer = placedBuffer(kit, heap, 0);
-        const Texture small = placedTarget(kit, heap, kSmallOffset, kSmall);
+        const Texture small = placedTarget(kit, heap, smallOffset(kit), kSmall);
         const Texture large = placedTarget(kit, heap, 0, kLarge);
         kit.list.fillBuffer(buffer, 0, kBytes, 0);
         discardAndClear(kit.list, small, Stage::None, kSmall);
@@ -248,7 +256,7 @@ TEST_CASE("VU-rojo-sync-0017 a texture placed after uses of disjoint bytes disca
         PassKit kit(QueueType::Graphics, true);
         const Heap heap = makeHeap(kit);
         const Buffer buffer = placedBuffer(kit, heap, 0);
-        const Texture small = placedTarget(kit, heap, kSmallOffset, kSmall);
+        const Texture small = placedTarget(kit, heap, smallOffset(kit), kSmall);
         kit.list.fillBuffer(buffer, 0, kBytes, 0);
         discardAndClear(kit.list, small, Stage::None, kSmall);
         kit.list.end();

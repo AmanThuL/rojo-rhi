@@ -105,6 +105,14 @@ TEST_CASE("a tile maps again onto other heap memory without being unmapped", "[c
 TEST_CASE("one call maps a region, a mip tail and a buffer range together", "[contract]")
 {
     SparseKit kit;
+    if (kit.shape.mipTailFirst >= SparseKit::kMips)
+    {
+        kit.device.destroy(kit.texture);
+        kit.device.destroy(kit.buffer);
+        kit.device.destroy(kit.heap);
+        destroyDevice(kit.device);
+        SKIP("the device packs no mip tail for the sparse texture, so there is no tail to map");
+    }
     const uint64_t regionTiles = 16;
     const std::array mappings = { kit.wholeLevel(0), kit.tail(regionTiles * kit.shape.bytes), kit.bufferTiles(2, 20 * kit.shape.bytes) };
     kit.queue.mapTiles(mappings);

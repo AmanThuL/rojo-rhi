@@ -124,18 +124,22 @@ TEST_CASE("placed resources that share no heap bytes need no barrier between the
 #else
     PassKit kit(QueueType::Graphics, true);
     const Heap heap = makeHeap(kit);
-    const uint64_t textureOffset = kit.device.placementRequirements(targetDesc()).alignment;
+    // The second buffer and the texture sit at the device's placement alignments, past the bytes before them.
+    const uint64_t bufferAlignment = kit.device.placementRequirements(BufferDesc{ .size = kBytes, .usage = BufferUsage::ShaderWrite }).alignment;
+    const uint64_t secondOffset = (kBytes + bufferAlignment - 1) / bufferAlignment * bufferAlignment;
+    const uint64_t textureAlignment = kit.device.placementRequirements(targetDesc()).alignment;
+    const uint64_t textureOffset = (secondOffset + kBytes + textureAlignment - 1) / textureAlignment * textureAlignment;
     const Buffer first = placedBuffer(kit, heap, 0);
-    const Buffer second = placedBuffer(kit, heap, kBytes);
+    const Buffer second = placedBuffer(kit, heap, secondOffset);
     const Texture texture = placedTexture(kit, heap, textureOffset);
     // A buffer over the bytes of both buffers that touches only the second one's.
-    const Buffer wide = placedBuffer(kit, heap, 0, 2 * kBytes);
+    const Buffer wide = placedBuffer(kit, heap, 0, secondOffset + kBytes);
     kit.list.fillBuffer(first, 0, kBytes, 0);
     kit.list.fillBuffer(second, 0, kBytes, 1);
     discardAfterCopy(kit.list, texture);
     kit.list.clearTexture(texture, {}, {});
     global(kit.list, Stage::Copy, Access::CopyWrite, Stage::Copy, Access::CopyWrite);
-    kit.list.fillBuffer(wide, kBytes, kBytes, 2);
+    kit.list.fillBuffer(wide, secondOffset, kBytes, 2);
     // The first buffer's bytes were used by no other resource since its fill; its own barrier orders this fill.
     kit.list.fillBuffer(first, 0, kBytes, 3);
     kit.finish();

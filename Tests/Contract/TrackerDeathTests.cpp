@@ -133,7 +133,8 @@ TEST_CASE("VU-rojo-cmd-0072 a cleared range is in General", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-cmd-0072", [] {
         PassKit kit(QueueType::Graphics, true);
-        const Texture target = kit.target();
+        // A Storage usage makes the move to General legal natively, so only the tracker judges the clear.
+        const Texture target = kit.texture(Format::RGBA8Unorm, TextureUsage::RenderTarget | TextureUsage::Storage);
         move(kit.list, target, Layout::Undefined, Layout::General);
         kit.list.clearTexture(target, {}, {});
         kit.finish();
