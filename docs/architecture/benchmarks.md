@@ -30,10 +30,9 @@ There is one executable because the note requires one process to run both arms o
 links `RojoRHI` of the configured backend and defines `ROJORHI_BENCH_BACKEND_NULL` or
 `ROJORHI_BENCH_BACKEND_METAL4`. It compiles no metal-cpp unit of its own: it links
 `RojoRHIMetalCpp`, the one a `metal4` `RojoRHI` and `RojoRHILegacy` link, on every backend, so the
-link holds one copy of metal-cpp's tables. The target is built with
-link-time optimization in Release, and `xmake/slang.lua` and the `rojorhi.metal` rule of
-`xmake/metal.lua` write each target's generated headers and metallibs under that target's own
-directory.
+link holds one copy of metal-cpp's tables. The target is built with link-time optimization in
+Release, and `xmake/slang.lua` and the `rojorhi.metal` rule of `xmake/metal.lua` write each target's
+generated headers and metallibs under that target's own directory.
 
 ## Arms
 
@@ -188,12 +187,14 @@ python3 Tools/bench.py analyze                         writes summary.json and a
   comparison. A CPU miss is an interval off zero with a median delta above the larger of 5% of N and
   5 ns times `c` ([ADR 0025](../decisions/0025-cpu-budget-per-call-floor.md)); the 5% verdict is
   reported beside it, in the "5% rule" column, which is how rounds 1 and 2 read. The count rule uses
-  the registered N column; a count varying across frames or processes is judged on its maximum.
+  the registered N column; a count varying across frames or processes is judged on its maximum. An
+  allocation miss is R's median above N's in any one configuration; the allocations of C10 at
+  `maxCount` 1 are reported only ([round 3](../research/2026-10-21-metal4-overhead-round3.md)).
 
-The note's owner amended two rules and the harness implements the amended form: C8 registers a
-barrier between passes, with `c` 7 and K up to 10,000, and the composed frame's depth and shadow
-barriers (rows 2 and 4) use `DepthStencilRead | DepthStencilWrite`. `SHA256SUMS` covers every file
-under the output directory, recursively.
+The note's owner amended two of its rules on 2026-10-18, and the harness implements the amended
+form: C8 registers a barrier between passes, with `c` 7 and K up to 10,000, and the composed frame's
+depth and shadow barriers (rows 2 and 4) use `DepthStencilRead | DepthStencilWrite`. Round 3's
+changes are on its page, linked above. `SHA256SUMS` covers every file under the output directory.
 
 ## State and what remains
 
@@ -252,9 +253,8 @@ overhead and not a defect of the harness. In particular:
   submission that follows their making updates, so a list with counted draws sends its command
   buffer no `useResidencySet`: one native call and two Metal allocations fewer per such list, C10's
   frame one and the composed frame two (`gbuffer`, `shadows`).
-- Allocator resets count in `nativeHostCalls`, outside every timed window and outside every
-  per-operation count, though inside the composed frame's per-frame count; they are not native-call
-  targets.
+- Allocator resets count in `nativeHostCalls`, outside every timed window and per-operation count,
+  though inside the composed frame's per-frame count; they are not native-call targets.
 - C9's count window spans the same `K` submit calls as its timed span, but in R it sums only the
   deltas of `nativeSubmitCalls` and `nativeHostCalls`: the lists' record calls and barriers, which
   fold into the counters at submission, are left out. Any submit-time encoding the backend does

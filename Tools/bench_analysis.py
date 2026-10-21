@@ -4,7 +4,8 @@
 Every function is pure: it reads the per-process results it is given and returns plain data. The
 numbers and rules come from the round's pre-registration
 (docs/research/2026-10-18-metal4-overhead.md), with the CPU budget of ADR 0025
-(docs/decisions/0025-cpu-budget-per-call-floor.md). `Tools/bench.py` reads the files and calls
+(docs/decisions/0025-cpu-budget-per-call-floor.md) and the allocation rule of the round-3 amendment
+(docs/research/2026-10-21-metal4-overhead-round3.md). `Tools/bench.py` reads the files and calls
 `summary`.
 """
 
@@ -50,6 +51,9 @@ K_PAIRS = {"C9": (100, 10)}
 
 # Decision rules, CPU: C1 to C10 are judged; C10 at maxCount 1 is reported only.
 CPU_WORKLOADS = tuple(CALLS_PER_REPETITION)
+
+# Round-3 amendment: the allocations of C10 at maxCount 1 are reported only, as its CPU time is.
+ALLOCATION_REPORTED_WORKLOADS = ("C10m1",)
 
 # Decision rules, GPU: only the composed frame is judged.
 GPU_WORKLOAD = "frame"
@@ -194,11 +198,15 @@ def count_rule(workload: str, r_count: dict | None, n_count: dict | None) -> dic
     return rule(True, miss, "over budget" if miss else "within budget", limit=limit)
 
 
-def allocation_rule(comparison: dict | None) -> dict:
+def allocation_rule(workload: str, comparison: dict | None) -> dict:
     """Decision rules, counts: R's allocations per frame at most N's, as medians of processes.
 
-    The note says "any workload"; this rule is judged per configuration, which is stricter.
+    The note says "any workload"; this rule is judged per configuration, which is stricter. C10 at
+    maxCount 1 is reported only, by the round-3 amendment; rounds 1 and 2 judged it, and their
+    results pages keep that verdict.
     """
+    if workload in ALLOCATION_REPORTED_WORKLOADS:
+        return rule(False, None, "reported only, by the round-3 amendment")
     if comparison is None:
         return rule(True, None, "not run")
     miss = comparison["rMedian"] > comparison["nMedian"]
@@ -302,7 +310,7 @@ def configuration_summary(config: dict, held: Mapping[int, dict] | None, notrun:
         entry["rules"] = {
             "cpu": cpu_rule(workload, k, None),
             "gpu": gpu_rule(workload, None),
-            "allocations": allocation_rule(None),
+            "allocations": allocation_rule(workload, None),
             "pipelines": pipeline_rule(None),
         }
         return entry
@@ -323,7 +331,7 @@ def configuration_summary(config: dict, held: Mapping[int, dict] | None, notrun:
     entry["rules"] = {
         "cpu": cpu_rule(workload, k, cpu),
         "gpu": gpu_rule(workload, gpu),
-        "allocations": allocation_rule(allocations),
+        "allocations": allocation_rule(workload, allocations),
         "pipelines": pipeline_rule(pipelines["created"] if pipelines else None),
     }
     return entry
@@ -455,7 +463,7 @@ def format_report(result: Mapping[str, Any]) -> str:
                      number(w["c"], 0),
                      "yes" if any(w[a] and w[a]["unstable"] for a in ("R", "N")) else "no"]
                     for name, w in result["workloads"].items()])
-    lines += table("Allocations per frame (miss: R median above N)",
+    lines += table("Allocations per frame (miss: R median above N; C10 at maxCount 1 reported)",
                    ["id", "rule", *comparison_header, "R cpuAllocations"],
                    [[e["id"], verdict_word(e["rules"]["allocations"]),
                      *comparison_cells(e.get("allocations"), 1),
