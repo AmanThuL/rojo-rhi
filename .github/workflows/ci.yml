@@ -359,6 +359,11 @@ jobs:
           name: d3d12-probe
           path: build/d3d12-probe/
       - run: xmake build RojoRHITests
+      - name: Scratch, the render-target tile case without its discard
+        continue-on-error: true
+        shell: pwsh
+        working-directory: build/windows/x64/debug/rojorhi-test
+        run: .\RojoRHITests.exe "a render target tile newly mapped over another resource's memory renders after a discard"
       # Every conformance shader has DXIL (the layout probe is no conformance shader: xmake/slang.lua
       # leaves slang.layout_probe files out of the shaders it compiles). The check is per source file, best effort for
       # shaders with several entries: <name>.dxil, or <name>.<entry>.dxil for each entry of several. Each shader

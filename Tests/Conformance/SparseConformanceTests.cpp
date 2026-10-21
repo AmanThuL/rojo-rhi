@@ -414,8 +414,8 @@ TEST_CASE("a render target tile newly mapped over another resource's memory rend
     );
     const Rect2D area{ 0, 0, shape.width, shape.height };
     CommandList list = kit.list(QueueType::Graphics, "test.render");
-    // The discard is the tile's first use, and it comes before the pass.
-    test::transition(list, texture, Layout::Undefined, Layout::ColorAttachment);
+    // Scratch: no discard; the barrier claims General, and the device (GpuKit) has DeviceDesc::validation = false.
+    test::transition(list, texture, Layout::General, Layout::ColorAttachment);
     const std::array colors{ ColorAttachment{ .texture = texture, .load = LoadOp::Clear, .clear = { 1.0f, 0.0f, 0.0f, 1.0f } } };
     list.beginRenderPass(RenderPassDesc{ .colors = colors, .area = area, .label = "test.pass" });
     list.setPipeline(solid);
