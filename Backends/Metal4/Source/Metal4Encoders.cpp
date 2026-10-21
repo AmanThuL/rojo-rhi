@@ -328,7 +328,7 @@ namespace rojoRHI::metal4 {
                 m_compute->endEncoding();
             }
             core::noteNativeCall(list);
-            m_compute->release();
+            m_ended.push_back(m_compute);
             m_compute = nullptr;
         }
         else
@@ -337,7 +337,7 @@ namespace rojoRHI::metal4 {
             const CommandPool pool(m_commandPools);
             m_render->endEncoding();
             core::noteNativeCall(list);
-            m_render->release();
+            m_ended.push_back(m_render);
             m_render = nullptr;
         }
         m_kind = EncoderKind::None;
@@ -352,9 +352,19 @@ namespace rojoRHI::metal4 {
     }
 
     //==================================================================================================================
+    void Encoders::releaseEnded()
+    {
+        for (MTL4::CommandEncoder* encoder : m_ended)
+        {
+            encoder->release();
+        }
+        m_ended.clear();
+    }
+
+    //==================================================================================================================
     void Encoders::release()
     {
-        if (m_compute != nullptr || m_render != nullptr)
+        if (m_compute != nullptr || m_render != nullptr || !m_ended.empty())
         {
             const AutoreleasePool pool;
             if (m_compute != nullptr)
@@ -365,6 +375,7 @@ namespace rojoRHI::metal4 {
             {
                 m_render->release();
             }
+            releaseEnded();
         }
         m_compute = nullptr;
         m_render = nullptr;

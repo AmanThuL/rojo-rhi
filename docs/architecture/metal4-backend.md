@@ -110,9 +110,10 @@ record's field to null. A list's cached pipelines do not read the table
 A hook opens an autorelease pool, tolerates a null payload and releases in reverse order of
 creation. The backend registers hooks for buffers, heaps, textures, fences, views, samplers,
 shader libraries, pipelines and upscalers ([command recording](metal4-recording.md#upscalers)), a
-`frameSlot` hook that returns a slot's lists to their pool, frees the swapchains destroyed in the
-slot's frames, readies the slot's timestamps and releases the fence events the queues have passed,
-a `scopeTimes` hook that converts the slot's timestamps and a `waitFrame` hook.
+`frameSlot` hook that releases the encoders each of a slot's lists ended and returns the lists to
+their pool, frees the swapchains destroyed in the slot's frames, readies the slot's timestamps and
+releases the fence events the queues have passed, a `scopeTimes` hook that converts the slot's
+timestamps and a `waitFrame` hook.
 
 ## Addresses and the address map
 

@@ -11,7 +11,9 @@
 #include <Metal/Metal.hpp>
 
 #include <atomic>
+#include <cstddef>
 #include <cstdint>
+#include <vector>
 
 namespace rojoRHI::metal4 {
     /// The kind of encoder a list has open.
@@ -254,17 +256,29 @@ namespace rojoRHI::metal4 {
             return m_barriers;
         }
 
-        /// Ends the open encoder, counting its `endEncoding` on `list`, and releases it; an encoder-level barrier still held
-        /// back joins the pending barrier, as do the stages its opening barrier held back in which it ran no command (for a
-        /// render encoder, those `markRan` did not name besides the fragment stage); what that barrier covered, and the kernel
-        /// pipeline set on it, are then forgotten. A render encoder ends inside an autorelease pool, because the validation
-        /// layer autoreleases there. A lingering encoder added those stages when it began to linger. Does nothing when none
-        /// is open.
+        /// Ends the open encoder, counting its `endEncoding` on `list`, and keeps it for `releaseEnded`; an encoder-level
+        /// barrier still held back joins the pending barrier, as do the stages its opening barrier held back in which it ran no
+        /// command (for a render encoder, those `markRan` did not name besides the fragment stage); what that barrier covered,
+        /// and the kernel pipeline set on it, are then forgotten. A render encoder ends inside an autorelease pool, because the
+        /// validation layer autoreleases there. A lingering encoder added those stages when it began to linger. Does nothing
+        /// when none is open.
         void close(core::CommandListCore& list);
 
-        /// Releases an encoder still open without ending it and forgets every barrier: a list that never ended, which only a
-        /// Release build lets through, leaves them behind. It opens an autorelease pool only when there is one to release.
+        /// Releases an encoder still open without ending it, releases the ended ones (`releaseEnded`) and forgets every
+        /// barrier: a list that never ended, which only a Release build lets through, leaves them behind. It opens an
+        /// autorelease pool only when there is one to release.
         void release();
+
+        /// Releases the encoders `close` ended, which the list keeps retained until its frame slot is reused, as an
+        /// autorelease pool drained once per frame would, so that no encoder is freed inside a recording. The `frameSlot` hook
+        /// calls it after the frame wait proved their work done; the caller holds an autorelease pool.
+        void releaseEnded();
+
+        /// Returns how many ended encoders the list keeps until its slot is reused.
+        size_t endedCount() const
+        {
+            return m_ended.size();
+        }
 
       private:
         /// `compute` for every case its inline test does not take: opens the encoder, or emits what is owed before the command.
@@ -308,5 +322,7 @@ namespace rojoRHI::metal4 {
         /// again while the encoder holds it, which the validation layer reports as redundant. Reset when an encoder opens or
         /// closes. Every entry that sets a compute pipeline on the encoder records it with `setKernelPipeline`.
         const MTL::ComputePipelineState* m_kernelPipeline = nullptr;
+        /// The encoders `close` ended, each still retained, until `releaseEnded`; the vector keeps its capacity.
+        std::vector<MTL4::CommandEncoder*> m_ended;
     };
 } // namespace rojoRHI::metal4

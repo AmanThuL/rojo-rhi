@@ -25,13 +25,13 @@ counts four, and the list counts one `cpuAllocations`.
 resolve the same text, and `setLabel` goes to the command buffer only when the string is new, since
 the command buffer keeps its label across recordings. `end` runs the core's `endList`, carries a
 barrier still owed (below), ends the encoder and calls `endCommandBuffer`. `Queue::submit` commits
-every list's command buffer in one `commit(buffers, count)` between the waits and the signals, from
-a vector the queue reuses, and a submission with no lists commits nothing. When a frame slot is
-reused, the `frameSlot` hook resets the allocator of every list the slot took, one `nativeHostCalls`
-each, before returning them to the pool. `destroyDevice` releases every list's objects, in reverse
-order of creation inside a pool, after the queues drain; a drain ends with an empty commit that
-waits for its feedback handler, as the stager does, so a list's allocator is released for the last
-time on the destroying thread and not on Metal's completion thread, which holds no autorelease pool.
+every list's command buffer in one `commit(buffers, count)` between the waits and the signals; a
+submission with no lists commits nothing. A list keeps the encoders it ended, so it frees none while
+recording; when its frame slot is reused, the `frameSlot` hook releases them in a pool and resets
+the list's allocator (one `nativeHostCalls`). `destroyDevice` releases every list's objects, in
+reverse order of creation inside a pool, after the queues drain; each drain ends with an empty
+commit that waits for its feedback handler, so a list's allocator is last released on the destroying
+thread, not on Metal's completion thread, which has no autorelease pool.
 
 ## The open encoder
 
