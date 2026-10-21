@@ -432,7 +432,7 @@ TEST_CASE("a placed texture's discard after a use a fence orders before it needs
 }
 
 //======================================================================================================================
-TEST_CASE("a General texture uploaded on Copy is read on Graphics after a fence wait", "[contract]")
+TEST_CASE("a new texture uploaded on Copy is read on Graphics after a fence wait", "[contract]")
 {
 #ifdef NDEBUG
     SKIP("validation exists only in a Debug build");
@@ -442,23 +442,21 @@ TEST_CASE("a General texture uploaded on Copy is read on Graphics after a fence 
     const Buffer staging = storage(kit);
     const Buffer readback = kit.buffer(BufferUsage::ShaderWrite, 64 * 1024);
     const Fence fence = *kit.device.createFence(0, "test.fence");
-    const std::array<FenceValue, 1> preparedValue{ FenceValue{ fence, 1 } };
-    const std::array<FenceValue, 1> uploadedValue{ FenceValue{ fence, 2 } };
+    const std::array<FenceValue, 1> uploadedValue{ FenceValue{ fence, 1 } };
     const TextureRegion region{ .extent = { PassKit::kSize, 1, 1 } };
-    // A Copy list keeps its textures in General and takes no barrier out of Undefined, so Graphics moves the texture first.
-    CommandList prepare = kit.device.acquireCommandList(QueueType::Graphics, "test.prepare");
+    // A Copy list finds a new texture in General, so its first barrier on it keeps General, the only texture barrier the
+    // Copy list may record, and needs no barrier on another queue first.
+    CommandList copy = kit.device.acquireCommandList(QueueType::Copy, "test.copy");
     const std::array<TextureBarrier, 1> barriers{ TextureBarrier{ .texture = uploaded,
                                                                   .srcStage = Stage::All,
                                                                   .dstStage = Stage::All,
                                                                   .dstAccess = Access::CopyRead | Access::CopyWrite,
-                                                                  .oldLayout = Layout::Undefined,
+                                                                  .oldLayout = Layout::General,
                                                                   .newLayout = Layout::General } };
-    prepare.barrier({}, {}, barriers);
-    CommandList copy = kit.device.acquireCommandList(QueueType::Copy, "test.copy");
+    copy.barrier({}, {}, barriers);
     copy.copyBufferToTexture(staging, BufferTextureLayout{ .rowPitch = 256 }, uploaded, region);
     kit.list.copyTextureToBuffer(uploaded, region, readback, BufferTextureLayout{ .rowPitch = 256 });
-    submitTo(kit.device, prepare, QueueType::Graphics, {}, preparedValue);
-    submitTo(kit.device, copy, QueueType::Copy, preparedValue, uploadedValue);
+    submitTo(kit.device, copy, QueueType::Copy, {}, uploadedValue);
     submitTo(kit.device, kit.list, QueueType::Graphics, uploadedValue);
     close(kit);
 #endif

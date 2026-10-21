@@ -276,10 +276,16 @@
 - API reference change for the planned D3D12 backend: `VU-rojo-sync-0026` is added, so a texture
   barrier recorded on a `Copy` list has `General` as both its old and new layout and discards
   nothing from `Undefined`. A D3D12 copy queue takes no layout barrier, and such a barrier lowers to
-  a global one. A caller moves a texture to `General` on the graphics or compute queue before the
-  copy queue uses it; `VU-rojo-sync-0006` still reports a use on a Copy list in another layout.
+  a global one. A caller moves a texture another queue used, or a placed or `Sparse` one, to
+  `General` on the graphics or compute queue before the copy queue uses it; `VU-rojo-sync-0006`
+  still reports a use on a Copy list in another layout.
 - API reference change for the planned D3D12 backend: `VU-rojo-sync-0027` is added, so a texture
   moves to `DepthStencilRead` only when it was created with `Sampled` as well as `DepthStencil`.
   D3D12 lowers the layout to `LAYOUT_SHADER_RESOURCE`, which a texture created without
   shader-resource access cannot take; the layout permits only `Sampled` view reads, so a texture
   without `Sampled` could not use it.
+- API reference change for the planned D3D12 backend: a texture created without initial data that
+  is neither placed nor `Sparse` is in `General` for its first use or barrier on a `Copy` list, so
+  the copy queue uploads into a new texture with no graphics or compute barrier first. A placed or
+  `Sparse` texture is still discarded from `Undefined` on the graphics or compute queue first, and
+  `VU-rojo-sync-0006` reports one a Copy list uses before that.

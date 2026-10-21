@@ -43,7 +43,7 @@ TEST_CASE("a buffer copied on the Copy queue is read on the Compute queue after 
 }
 
 //======================================================================================================================
-TEST_CASE("a texture written on the Copy queue in General is read back on the Graphics queue", "[conformance]")
+TEST_CASE("a new texture written on the Copy queue with no barrier is read back on the Graphics queue", "[conformance]")
 {
     test::requireGpu();
     test::GpuKit kit;
@@ -55,15 +55,40 @@ TEST_CASE("a texture written on the Copy queue in General is read back on the Gr
     );
     const BufferTextureLayout layout{ .offset = 0, .rowPitch = static_cast<uint32_t>(kRowPitch), .rowsPerImage = kEdge };
     const TextureRegion whole{ .extent = { kEdge, kEdge, 1 } };
-    // A Copy list keeps its textures in General and takes no barrier out of Undefined, so the Graphics queue moves the new
-    // texture to General first.
-    CommandList prepare = kit.list(QueueType::Graphics, "test.prepare");
-    test::transition(prepare, texture, Layout::Undefined, Layout::General);
+    // A Copy list finds a new texture in General, so the Copy queue uploads into it with no barrier on another queue first.
     CommandList copy = kit.list(QueueType::Copy, "test.copy");
     copy.copyBufferToTexture(upload, layout, texture, whole);
     CommandList graphics = kit.list(QueueType::Graphics, "test.graphics");
     graphics.copyTextureToBuffer(texture, whole, readback, layout);
-    kit.run(std::array{ prepare, copy, graphics });
+    kit.run(std::array{ copy, graphics });
+    const std::vector<std::byte> got = kit.read(readback);
+    for (uint32_t row = 0; row < kEdge; ++row)
+    {
+        CHECK(std::memcmp(got.data() + row * kRowPitch, rows.data() + row * kRowPitch, kEdge * 4) == 0);
+    }
+}
+
+//======================================================================================================================
+TEST_CASE("a new texture written on the Copy queue is moved from General on the Graphics queue and read back", "[conformance]")
+{
+    test::requireGpu();
+    test::GpuKit kit;
+    const std::vector<std::byte> rows = test::pattern(kRowPitch * kEdge, 13);
+    const Buffer upload = kit.buffer(rows.size(), Memory::Upload, BufferUsage::None, rows);
+    const Buffer readback = kit.buffer(rows.size(), Memory::Readback);
+    const Texture texture = *kit.device.createTexture(
+        TextureDesc{ .format = Format::RGBA8Unorm, .extent = { kEdge, kEdge, 1 }, .usage = TextureUsage::Sampled, .label = "test.texture" }
+    );
+    const BufferTextureLayout layout{ .offset = 0, .rowPitch = static_cast<uint32_t>(kRowPitch), .rowsPerImage = kEdge };
+    const TextureRegion whole{ .extent = { kEdge, kEdge, 1 } };
+    CommandList copy = kit.list(QueueType::Copy, "test.copy");
+    copy.copyBufferToTexture(upload, layout, texture, whole);
+    // The Copy queue leaves the texture in General, the layout it was created in on D3D12, so the Graphics queue's barrier
+    // starts from there.
+    CommandList graphics = kit.list(QueueType::Graphics, "test.graphics");
+    test::transition(graphics, texture, Layout::General, Layout::CopySrc);
+    graphics.copyTextureToBuffer(texture, whole, readback, layout);
+    kit.run(std::array{ copy, graphics });
     const std::vector<std::byte> got = kit.read(readback);
     for (uint32_t row = 0; row < kEdge; ++row)
     {

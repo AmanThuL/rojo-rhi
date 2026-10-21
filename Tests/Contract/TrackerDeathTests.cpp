@@ -220,13 +220,22 @@ TEST_CASE("VU-rojo-present-0018 an image is presented in a layout other than Pre
 }
 
 //======================================================================================================================
-TEST_CASE("VU-rojo-sync-0006 is reported before the entry rule", "[contract][death]")
+TEST_CASE("VU-rojo-sync-0006 is reported before the entry rule for a placed texture", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-sync-0006", [] {
         PassKit kit(QueueType::Copy, true);
         const Buffer buffer = kit.buffer(BufferUsage::None, 4096);
-        // The texture stays in Undefined, which breaks VU-rojo-cmd-0067 as well.
-        kit.list.copyBufferToTexture(buffer, kLayout, kit.texture(), kRegion);
+        // A Copy list finds only a texture that is neither placed nor Sparse in General. This one is placed in a fresh heap, so
+        // no earlier use of its memory reports VU-rojo-sync-0017 first, and it stays in Undefined, which breaks
+        // VU-rojo-cmd-0067 as well.
+        const Heap heap = *kit.device.createHeap(HeapDesc{ .size = 1u << 20, .label = "test.heap" });
+        const Texture texture = *kit.device.createTexture(
+            TextureDesc{
+                .format = Format::RGBA8Unorm, .extent = { PassKit::kSize, PassKit::kSize, 1 }, .usage = TextureUsage::Sampled, .label = "test.placed" },
+            {},
+            Placement{ .heap = heap, .offset = 0 }
+        );
+        kit.list.copyBufferToTexture(buffer, kLayout, texture, kRegion);
         kit.finish();
     });
 }

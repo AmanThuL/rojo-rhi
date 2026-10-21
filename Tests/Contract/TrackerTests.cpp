@@ -253,18 +253,75 @@ TEST_CASE("General permits a copy to and from a texture on a Copy list", "[contr
     PassKit kit(QueueType::Copy, true);
     const Texture texture = kit.texture();
     const Buffer buffer = kit.buffer(BufferUsage::None, 4096);
-    // A Copy list keeps its textures in General and takes no barrier out of Undefined, so Graphics moves the texture first,
-    // and the Copy queue waits for the move before the kit submits its list.
-    const Fence fence = *kit.device.createFence(0, "test.fence");
-    const std::array<FenceValue, 1> moved{ FenceValue{ fence, 1 } };
-    CommandList prepare = kit.device.acquireCommandList(QueueType::Graphics, "test.prepare");
-    test::transition(prepare, texture, Layout::Undefined, Layout::General);
-    prepare.end();
-    kit.device.queue(QueueType::Graphics).submit(std::array{ prepare }, {}, moved);
-    kit.device.queue(QueueType::Copy).submit({}, moved);
+    // A Copy list finds a new texture in General, so it copies with no barrier.
     kit.list.copyBufferToTexture(buffer, { .rowPitch = 256 }, texture, TextureRegion{ .extent = { 4, 4, 1 } });
     copiesDone(kit.list);
     kit.list.copyTextureToBuffer(texture, TextureRegion{ .extent = { 4, 4, 1 } }, buffer, { .rowPitch = 256 });
+    kit.finish();
+#endif
+}
+
+//======================================================================================================================
+TEST_CASE("a Copy list's first barrier on a new texture starts from General", "[contract]")
+{
+#ifndef NDEBUG
+    PassKit kit(QueueType::Copy, true);
+    const Texture texture = kit.texture();
+    const Buffer buffer = kit.buffer(BufferUsage::None, 4096);
+    // The only texture barrier a Copy list records keeps General, the layout it finds a new texture in.
+    const std::array<TextureBarrier, 1> barriers{ TextureBarrier{ .texture = texture,
+                                                                  .srcStage = Stage::All,
+                                                                  .dstStage = Stage::All,
+                                                                  .dstAccess = Access::CopyRead | Access::CopyWrite,
+                                                                  .oldLayout = Layout::General,
+                                                                  .newLayout = Layout::General } };
+    kit.list.barrier({}, {}, barriers);
+    kit.list.copyBufferToTexture(buffer, { .rowPitch = 256 }, texture, TextureRegion{ .extent = { 4, 4, 1 } });
+    kit.finish();
+#endif
+}
+
+//======================================================================================================================
+TEST_CASE("a Copy list uses a mip of a new texture that Graphics never moved", "[contract]")
+{
+#ifndef NDEBUG
+    PassKit kit(QueueType::Copy, true);
+    const Texture texture = kit.texture(Format::RGBA8Unorm, TextureUsage::Sampled, 2);
+    const Buffer buffer = kit.buffer(BufferUsage::None, 4096);
+    const Fence fence = *kit.device.createFence(0, "test.fence");
+    const std::array<FenceValue, 1> moved{ FenceValue{ fence, 1 } };
+    CommandList graphics = kit.device.acquireCommandList(QueueType::Graphics, "test.graphics");
+    test::transition(graphics, texture, Layout::Undefined, Layout::ShaderRead, SubresourceRange{ .baseMip = 0, .mipCount = 1 });
+    graphics.end();
+    kit.device.queue(QueueType::Graphics).submit(std::array{ graphics }, {}, moved);
+    kit.device.queue(QueueType::Copy).submit({}, moved);
+    // Layouts are per subresource: no use or barrier reached mip 1, so the Copy list finds it in General.
+    kit.list.copyBufferToTexture(buffer, { .rowPitch = 256 }, texture, TextureRegion{ .mip = 1, .extent = { 4, 4, 1 } });
+    kit.finish();
+#endif
+}
+
+//======================================================================================================================
+TEST_CASE("a placed texture is discarded on Graphics before its first use on a Copy list", "[contract]")
+{
+#ifndef NDEBUG
+    PassKit kit(QueueType::Copy, true);
+    const Heap heap = *kit.device.createHeap(HeapDesc{ .size = 1u << 20, .label = "test.heap" });
+    const Texture texture = *kit.device.createTexture(
+        TextureDesc{ .format = Format::RGBA8Unorm, .extent = { PassKit::kSize, PassKit::kSize, 1 }, .usage = TextureUsage::Sampled, .label = "test.placed" },
+        {},
+        Placement{ .heap = heap, .offset = 0 }
+    );
+    const Buffer buffer = kit.buffer(BufferUsage::None, 4096);
+    const Fence fence = *kit.device.createFence(0, "test.fence");
+    const std::array<FenceValue, 1> discarded{ FenceValue{ fence, 1 } };
+    // A Copy list cannot discard and does not find a placed texture in General, so Graphics discards it first.
+    CommandList graphics = kit.device.acquireCommandList(QueueType::Graphics, "test.graphics");
+    test::transition(graphics, texture, Layout::Undefined, Layout::General);
+    graphics.end();
+    kit.device.queue(QueueType::Graphics).submit(std::array{ graphics }, {}, discarded);
+    kit.device.queue(QueueType::Copy).submit({}, discarded);
+    kit.list.copyBufferToTexture(buffer, { .rowPitch = 256 }, texture, TextureRegion{ .extent = { 4, 4, 1 } });
     kit.finish();
 #endif
 }

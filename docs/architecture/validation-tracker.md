@@ -83,9 +83,14 @@ queues page](validation-tracker-queues.md)). Release recording takes no tracker 
 `TextureState` holds the label, the mip and layer counts and one layout event per subresource,
 indexed by mip and then layer, keyed in a map by the texture handle's bits. A texture starts in
 `Undefined`, or in `ShaderRead` when created with initial data; an acquired swapchain image starts
-in `Undefined` and is flagged until its first barrier. A texture barrier that changes the layout
-or discards from `Undefined` sets every subresource of its range to its `newLayout`, as an event on
-its queue; so does another resource's use of a placed texture's memory, as an `Undefined` event.
+in `Undefined` and is flagged until its first barrier. A Copy list finds a new texture in `General`
+instead (09 `Layout`): `newOnCopy` accepts a subresource whose creation event left it `Undefined`
+and that no use or barrier has reached since, of a texture neither placed, sparse nor an acquired
+image, and the first use or barrier a Copy list makes of it sets that creation event to `General`
+before its layout is read. The rule is per subresource, so a mip another queue never touched still
+qualifies. A texture barrier that changes the layout or discards from `Undefined` sets every
+subresource of its range to its `newLayout`, as an event on its queue; so does another resource's
+use of a placed texture's memory, as an `Undefined` event.
 The state persists across submissions and frames. Which layout a queue sees is the queues page's.
 
 For each subresource of a use, replay reports the first rule that fails: `VU-rojo-sync-0017` for a

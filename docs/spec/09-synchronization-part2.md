@@ -227,7 +227,11 @@ belongs to the caller's graph. The first use of a placed texture is a barrier fr
 (`VU-rojo-sync-0017`), which discards whatever the earlier resource left and, on D3D12,
 initializes compression metadata. The first use of a placed buffer is a global barrier
 (`VU-rojo-sync-0009`). Either barrier's source covers the last use of the resource that held the
-memory before. A placed texture's first use after another resource used its memory is therefore not
-on a Copy list, which cannot discard (`VU-rojo-sync-0026`): a Graphics or Compute list discards it,
-and a fence orders that barrier before the Copy list. A tile `Queue::mapTiles` newly maps follows
-the same rule (`VU-rojo-sparse-0014`, [sparse resources](13-sparse.md)).
+memory before. A placed texture's first use is therefore not on a Copy list, which cannot discard
+(`VU-rojo-sync-0026`) and finds only a texture that is neither placed nor `Sparse` in `General`
+before its first event ([`Layout`](09-synchronization.md#layout)): a Graphics or Compute list
+discards it, and a fence orders that barrier before the Copy list. Otherwise the Copy list's use
+breaks `VU-rojo-sync-0017` when another resource used the memory, and `VU-rojo-sync-0006` when
+none did; its barrier, which keeps `General`, breaks `VU-rojo-sync-0017` or `VU-rojo-sync-0013`
+the same way. A `Sparse` texture follows the same rule, and so does a tile `Queue::mapTiles` newly
+maps (`VU-rojo-sparse-0014`, [sparse resources](13-sparse.md)).

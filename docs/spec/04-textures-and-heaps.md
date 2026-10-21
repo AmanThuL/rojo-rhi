@@ -19,7 +19,10 @@ as `uint32` fields in roots and other shader data and fetched through the
 resource descriptors and 2,048 samplers. A texture created without initial data starts in
 `Layout::Undefined`; one created with initial data starts in `Layout::ShaderRead`, which the
 graphics and compute queues both accept
-([cross-queue handoff](09-synchronization-part2.md#cross-queue-handoff)).
+([cross-queue handoff](09-synchronization-part2.md#cross-queue-handoff)). A Copy list finds a
+texture created without initial data, neither placed nor `Sparse`, in `Layout::General` at its
+first use or barrier there, when no use or barrier on any queue reached it first
+([`Layout`](09-synchronization.md#layout)).
 
 On Metal 4 a view index reads a CPU-written table of 8-byte `MTL::ResourceID`s that the backend
 binds at a reserved argument-table slot. Spike 2 of
@@ -177,10 +180,12 @@ Result<Texture> Device::createTexture(const TextureDesc& desc,
 Creates a texture, labels it and adds it to the residency set. A non-null `placement.heap` creates
 it inside that heap (see [`Placement`](03-memory-and-buffers-part2.md#placement)). `initial` holds
 one entry per subresource, ordered by layer and then by mip within a layer (index
-`mip + layer * mips`). Without initial data the texture starts in `Layout::Undefined`. With initial
-data the backend stages and copies it and transitions the texture; the copy completes and is
-visible before any work submitted after the call returns, and the texture starts in
-`Layout::ShaderRead`. Out of memory, an unsupported format and a native refusal are error results.
+`mip + layer * mips`). Without initial data the texture starts in `Layout::Undefined`, and a Copy
+list finds it in `Layout::General` at its first use or barrier when no use or barrier on any queue
+reached it first, unless it is placed or `Sparse`. With initial data the backend stages and copies
+it and transitions the texture; the copy completes and is visible before any work submitted after
+the call returns, and the texture starts in `Layout::ShaderRead`. Out of memory, an unsupported
+format and a native refusal are error results.
 #### Valid usage
 - `VU-rojo-texture-0018` `initial` is empty or has exactly `desc.mips * desc.layers` entries.
 - `VU-rojo-texture-0019` `initial` is empty when `desc.usage` contains `Sparse`.
@@ -191,7 +196,7 @@ visible before any work submitted after the call returns, and the texture starts
 #### Mapping
 | | Metal 4 | D3D12 | Vulkan |
 |---|---|---|---|
-| Allocation | `MTL::Device::newTexture(descriptor)`; placed: `MTL::Heap::newTexture(descriptor, offset)` | `ID3D12Device10::CreateCommittedResource3` with `D3D12_BARRIER_LAYOUT_COMMON`, the one layout a copy queue accesses, or `D3D12_BARRIER_LAYOUT_COPY_DEST` when `initial` is not empty; placed: `CreatePlacedResource2`; sparse: `CreateReservedResource2` | `vkCreateImage` with `VK_IMAGE_LAYOUT_UNDEFINED`, `vkAllocateMemory`, `vkBindImageMemory` |
+| Allocation | `MTL::Device::newTexture(descriptor)`; placed: `MTL::Heap::newTexture(descriptor, offset)` | `ID3D12Device10::CreateCommittedResource3` with `D3D12_BARRIER_LAYOUT_COMMON`, the one layout a copy queue accesses, or `D3D12_BARRIER_LAYOUT_COPY_DEST` when `initial` is not empty; placed: `CreatePlacedResource2`; sparse: `CreateReservedResource2` | `vkCreateImage` with `VK_IMAGE_LAYOUT_UNDEFINED`, `vkAllocateMemory`, `vkBindImageMemory`; a texture without initial data that is neither placed nor sparse is then moved from `VK_IMAGE_LAYOUT_UNDEFINED` to `VK_IMAGE_LAYOUT_GENERAL` by a staged barrier, the layout a Copy list finds it in |
 | Initial data | staged `MTL4::ComputeCommandEncoder::copyFromBuffer` into the texture; no layout | created in `D3D12_BARRIER_LAYOUT_COPY_DEST`; `GetCopyableFootprints`, staged `CopyTextureRegion`, then a texture barrier from `D3D12_BARRIER_LAYOUT_COPY_DEST` to the generic `D3D12_BARRIER_LAYOUT_SHADER_RESOURCE`, which direct and compute queues both accept | staged `vkCmdCopyBufferToImage2`, then `VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL` to `VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL` |
 | Cost | native | native | native |
 
