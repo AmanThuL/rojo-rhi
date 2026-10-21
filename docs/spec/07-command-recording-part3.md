@@ -199,7 +199,7 @@ void CommandList::fillBuffer(Buffer dst, uint64_t offset, uint64_t size, uint32_
 ```
 
 Writes `pattern`, repeated in little-endian byte order, over `size` bytes of `dst` from `offset`.
-On D3D12 the planned backend runs its own compute kernel, because `ClearUnorderedAccessViewUint`
+On D3D12 the backend runs its own compute kernel, because `ClearUnorderedAccessViewUint`
 needs descriptor handles; that is why `dst` needs `ShaderWrite` and why fills are invalid on
 `Copy` lists, which cannot dispatch on D3D12.
 

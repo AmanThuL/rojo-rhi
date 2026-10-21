@@ -9,9 +9,10 @@ backend. It defines nothing: each row links to the entry that owns it, and that 
 and note are the authority. The classes are the four of
 [conventions](00-conventions.md#mapping-tables-and-cost-classes), `native`, `cheap`, `costly` and
 `impossible`, each the cost of the entry over the best hand-written native code for the same work.
-The entry's note says whether the CPU or the GPU pays. The D3D12 column describes the designed
-mapping of a planned backend and the Vulkan column a design oracle; neither is a capability
-RojoRHI has ([conventions](00-conventions.md#scope-and-backends)).
+The entry's note says whether the CPU or the GPU pays. The D3D12 column maps the D3D12 backend,
+which is implemented, verified on WARP only, not on hardware; its costs are design estimates until
+the T2 round on hardware. The Vulkan column is a design oracle and not a capability RojoRHI has
+([conventions](00-conventions.md#scope-and-backends)).
 
 Read the table for its `costly` and `impossible` cells: they are the places where the design pays
 for one interface over three APIs, by emulating, tracking or giving an entry up on a backend. Every

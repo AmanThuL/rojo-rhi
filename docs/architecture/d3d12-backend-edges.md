@@ -274,21 +274,21 @@ acceptance, which waits for a hardware adapter ([ADR 0009](
 
 Debug: `abi` 10 cases (8 passed, 2 skipped), `contract` 578 (567, 11), `death` 555 (550, 3, and 2
 that fail as expected), `conformance` 147 (136, 11). Release (no validation, no layer): `contract`
-588 (485, 103) and `conformance` 152 (142, 10).
+588 (485, 103) and `conformance` 152 (142, 10). With the draw, indirect and graphics ABI files of
+#100 ([run 39660621919](https://github.com/AmanThuL/rojo-rhi/actions/runs/39660621919)):
+`conformance` 173 (162, 11) Debug, 178 (168, 10) Release, floor 173.
 
 A third Debug configure, with the debug layer alone, runs the six files holding 64 upscale cases
-WARP does not complete under GPU-based validation; all pass. No case is PC-only.
-
-`xmake/targets.lua` leaves out `UpscalerTests.cpp` and `UpscaleConformanceTests.cpp` under GPU-based
-validation, where the shared cases that wait for an upscale skip through
-`test::requireUpscaleCompletion`. Cases that skip print their reasons: `maxDrawIndirectCount` is
-`UINT32_MAX`, so no `maxCount` lies above it (`DrawDeathTests`, #109), and its records exceed
-`maxBufferSize` (`DrawTests`); the device packs no mip tail for the sparse test texture
-(`SparseTests`, `SparseOrderTests`, `SparseOrderDeathTests`, `SparseConformanceTests`, #102); the
-`TrackerDeathTests` case "a cleared range is in General" ends the process in the layer on the
-clear's own barrier before the tracker judges the list; `D3D12PipelineTests` skips a refusal the
-debug layer reports as an error message, and `D3D12IndirectTests` a `maxCount` of 0, which a Debug
-build checks (`VU-rojo-indirect-0003`).
+WARP does not complete under GPU-based validation; all pass. No case is PC-only. `xmake/targets.lua`
+leaves out `UpscalerTests.cpp` and `UpscaleConformanceTests.cpp` under GPU-based validation, where
+the shared cases that wait for an upscale skip through `test::requireUpscaleCompletion`. Cases that
+skip print their reasons: `maxDrawIndirectCount` is `UINT32_MAX`, so no `maxCount` lies above it
+(`DrawDeathTests`, #109), and its records exceed `maxBufferSize` (`DrawTests`); the device packs no
+mip tail for the sparse test texture (`SparseTests`, `SparseOrderTests`, `SparseOrderDeathTests`,
+`SparseConformanceTests`, #102); the `TrackerDeathTests` case "a cleared range is in General" ends
+the process in the layer on the clear's own barrier before the tracker judges the list;
+`D3D12PipelineTests` skips a refusal the debug layer reports as an error message, and
+`D3D12IndirectTests` a `maxCount` of 0, which a Debug build checks (`VU-rojo-indirect-0003`).
 
 **Newly mapped tiles (#68).** Two `SparseConformanceTests.cpp` cases render into a newly mapped
 tile of a render target and of a depth texture after the discard `VU-rojo-sparse-0014` requires.

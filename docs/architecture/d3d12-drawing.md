@@ -240,10 +240,10 @@ buffer's width capped at `UINT32_MAX` and rounded down to the index size, unless
 location, size and format are equal. `firstIndex` is `StartIndexLocation` and `baseVertex` is
 `BaseVertexLocation`; direct and indirect indexed draws call the same function.
 
-`vertexIndex` on D3D12 lacks the base vertex: `SV_VertexID` excludes `firstVertex` and `baseVertex`,
-which the reference includes, and [ADR 0011](../decisions/0011-shader-abi.md) names the fallback
-that excludes them on every target. The cases that read `vertexIndex` with a nonzero base stay out
-of the D3D12 run (see Tests); the `[d3d12]` cases draw with base 0.
+`vertexIndex` on D3D12 is plain `SV_VertexID`, which excludes `firstVertex` and `baseVertex` as it
+does on every target ([ADR 0024](../decisions/0024-vertex-index-excludes-the-base.md)). The draw,
+indirect and graphics ABI conformance files check it with nonzero bases on WARP (run 39660621919),
+and the `[d3d12]` cases draw with base 0.
 
 ## Indirect drawing
 

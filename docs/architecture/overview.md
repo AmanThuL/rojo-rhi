@@ -63,8 +63,9 @@ default there, `d3d12`, which builds on Windows only and takes the options `rojo
 (`hardware` or `warp`) and `rojorhi_d3d12_debug` (`mode`, `off`, `layer` or `gbv`), and `null`, the
 GPU-free Null backend and the default elsewhere. `Source/Base/` is
 the private base (the Debug-tier `ROJORHI_VU` check and the message sink) and `Source/Core/` the
-backend-neutral core every backend embeds; `Backends/Null/Source/` and `Backends/Metal4/Source/`
-implement the public entries over it, each one backend per build. `Backends/Metal4/MetalCpp/` holds
+backend-neutral core every backend embeds; `Backends/Null/Source/`, `Backends/Metal4/Source/` and
+`Backends/D3D12/` implement the public entries over it, each one backend per build
+([the D3D12 backend](d3d12-backend.md) describes the last). `Backends/Metal4/MetalCpp/` holds
 `MetalCppImpl.cpp`, the one unit that defines metal-cpp's class and selector tables: the
 `RojoRHIMetalCpp` target compiles it on macOS for any backend option, and the Metal 4 backend,
 `RojoRHILegacy` and `RojoRHIBench` link it, so a host that links more than one has one definition of
@@ -82,8 +83,10 @@ public interface, one header in sections by API-reference chapter.
 tests, `death` runs the `[death]` cases and `abi` the shader ABI cases. With `metal4`, `contract`
 runs `Tests/Contract/` and `Tests/Metal4/`, `death` and `abi` run as on Null, and `conformance` runs
 the `[conformance]` cases of `Tests/Conformance/`, which observe GPU results; every Metal 4 entry
-runs under `MTL_DEBUG_LAYER=1`. `Tests/Core/` and `Tests/Null/` build with Null only.
-`Tests/Support/` holds the death-test harness and the helpers of each backend.
+runs under `MTL_DEBUG_LAYER=1`. With `d3d12`, `contract` also runs the `[d3d12]` cases of
+`Tests/D3D12/`, which may include the backend's own headers, and the other entries run as on
+Metal 4. `Tests/Core/` and `Tests/Null/` build with Null only. `Tests/Support/` holds the
+death-test harness and the helpers of each backend, `Tests/Support/D3D12/` those of D3D12.
 [Testing](../conventions/testing.md) owns the tiers. v1 lives frozen beside them under `Legacy/` and
 is deleted with the consumer port; ADR 0017 owns the layout, the freeze and the consumer's
 dependency rename.
@@ -125,6 +128,8 @@ conformance set until the v2 tiers of ADR 0009 exist.
 valid-usage identifier of the reference, `check_lto_inline.py` with its probe `LtoProbe/`, which
 shows a Release build inlining a library entry into its caller, the public-header check that rejects
 an include root not spelled exactly `rojoRHI/`, the maintained `Patches/`, and `ImGuiBufferProbe/`.
+`Tools/D3D12Probe/` holds the Windows probe executables that report, as JSON, whether WARP meets the
+hardware floor and how the D3D12 runtime loaded ([the wiring page](d3d12-backend.md)).
 `Tools/Rename/` holds the substitution table that renamed the component inside Luminex before the
 extraction and stays as the record of what that rename did; `Tools/Extract/` holds the scripts that
 ran the extraction itself and the verifier that checked its result, both kept for a future re-run.
@@ -133,7 +138,9 @@ ran the extraction itself and the verifier that checked its result, both kept fo
 interface jobs on hosted macOS; and the interface job also on Windows. The metal4 job builds the
 Metal 4 backend in Debug and Release and counts its cases per tag. The `d3d12` job, on hosted
 Windows, builds the D3D12 backend and runs its entries on WARP: implemented, verified on WARP only,
-not on hardware ([the run](d3d12-backend-edges.md#the-t1-run-on-warp)). Hosted macOS has no Metal 4
+not on hardware ([the run](d3d12-backend-edges.md#the-t1-run-on-warp)). The `tracker-stress` job,
+also on hosted Windows, runs the tracker's hidden `[stress]` cases on the Null backend under MSVC
+AddressSanitizer. Hosted macOS has no Metal 4
 device, so the GPU cases run on Apple Silicon before merge ([testing](../conventions/testing.md)).
 
 `docs/conventions/`, `docs/decisions/`, `docs/architecture/` and `docs/guides/` hold this
@@ -145,8 +152,9 @@ provenance.
 `docs/spec/` is the API reference for the v2 interface: a conventions chapter and one chapter per
 area, each entry giving semantics, valid usage and a mapping to Metal 4, D3D12 and Vulkan. It
 specifies the interface and does not describe code that exists. Metal 4 is the only native backend
-implemented today, and only in part; the D3D12 and Vulkan columns are designed mappings, since D3D12
-is planned and Vulkan is a design oracle with no code (ADR 0008).
+verified on a device, and its v2 backend is complete; D3D12 is implemented, verified on WARP only,
+not on hardware, so its column is a mapping the WARP run has exercised and no hardware has, and
+Vulkan is a design oracle with no code, so its column is designed only (ADR 0008, ADR 0026).
 
 `docs/research/` holds the dated evidence notes the decisions cite, such as
 `docs/research/2026-10-11-rhi-redesign/`. Notes record what was found and are not binding;
