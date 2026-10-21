@@ -10,16 +10,20 @@ backend business: public headers name no vendor type, and an implementation eith
 into the backend or is not. `Device::capabilities().upscalers` ([device](02-device.md)) lists the
 kinds the device can create.
 
-On Metal 4 the implementation is MetalFX, recorded between encoders. The planned D3D12 backend
-will ship FSR as its always-available implementation and compile DLSS and XeSS in when their SDKs
-are present at build time. `Upscaler` is a resource handle ([fundamentals](01-fundamentals.md))
-released with `Device::destroy`, deferred like any resource. Inputs and outputs are ordered by
-ordinary barriers ([synchronization](09-synchronization.md)); the implementation's own resources
-are synchronized by the backend.
+On Metal 4 the implementation is MetalFX, recorded between encoders. The D3D12 backend compiles
+FSR in always, loading the FidelityFX runtime beside the executable at device creation, and lists
+it when that runtime is present; DLSS and XeSS are compiled in when their SDKs are present at
+build time. `Upscaler` is a resource handle ([fundamentals](01-fundamentals.md)) released with
+`Device::destroy`, deferred like any resource. Inputs and outputs are ordered by ordinary barriers
+([synchronization](09-synchronization.md)); the implementation's own resources are synchronized by
+the backend.
 
-**Unverified identifiers.** The DLSS (NGX), FSR (FidelityFX) and XeSS identifiers in this
-chapter's mapping tables, and the FidelityFX SDK's Vulkan support, are unverified against the SDK
-headers; cells that name them say so. They are confirmed when the backend integrates each SDK.
+**Unverified identifiers.** The DLSS (NGX) and XeSS identifiers in this chapter's mapping tables,
+the FSR (FidelityFX) identifiers of the Vulkan column and of the `UpscaleParams` and
+`CommandList::upscale` rows, and the FidelityFX SDK's Vulkan support are unverified against the
+SDK headers; cells that name them say so. The FSR identifiers of the D3D12 `UpscalerKind`,
+`UpscalerFlags`, `UpscalerDesc` and `Device::createUpscaler` rows are checked against the headers
+of FidelityFX SDK v2.3.0. The others are confirmed when the backend integrates each SDK.
 
 ### `UpscalerKind`
 ```cpp
@@ -44,7 +48,7 @@ Requesting a kind that is not compiled in, or that the device or driver refuses,
 |---|---|---|---|
 | `MetalFX` | `MTL4FX::TemporalScaler` | impossible | impossible |
 | `DLSS` | impossible | NGX DLSS feature, when its SDK is compiled in (unverified) | NGX DLSS feature through its Vulkan entry points (unverified) |
-| `FSR` | impossible: the FidelityFX SDK has no Metal backend | FidelityFX upscale context, always compiled in (unverified) | FidelityFX upscale context through a Vulkan backend (unverified: Vulkan support of the current FidelityFX SDK) |
+| `FSR` | impossible: the FidelityFX SDK has no Metal backend | FidelityFX upscale context, always compiled in; listed only when the loaded runtime offers an upscaler provider for the device | FidelityFX upscale context through a Vulkan backend (unverified: Vulkan support of the current FidelityFX SDK) |
 | `XeSS` | impossible | XeSS context, when its SDK is compiled in (unverified) | XeSS context through its Vulkan entry points (unverified) |
 | Cost | native: MetalFX only; every other kind fails creation | native: FSR always; DLSS and XeSS when compiled in | native: FSR, DLSS and XeSS through their Vulkan SDKs |
 
@@ -67,9 +71,9 @@ A bit set fixed at creation; the usual bitwise operators apply.
 #### Mapping
 | | Metal 4 | D3D12 | Vulkan |
 |---|---|---|---|
-| `HDR` | no descriptor flag: MetalFX takes the scene-linear input as given | unverified: FSR `FFX_UPSCALE_ENABLE_HIGH_DYNAMIC_RANGE`; DLSS `NVSDK_NGX_DLSS_Feature_Flags_IsHDR`; XeSS without `XESS_INIT_FLAG_LDR_INPUT_COLOR` | unverified: the same SDK flags |
-| `ReversedDepth` | `depthReversed` | unverified: FSR `FFX_UPSCALE_ENABLE_DEPTH_INVERTED`; DLSS `NVSDK_NGX_DLSS_Feature_Flags_DepthInverted`; XeSS `XESS_INIT_FLAG_INVERTED_DEPTH` | unverified: the same SDK flags |
-| `AutoExposure` | `autoExposureEnabled` | unverified: FSR `FFX_UPSCALE_ENABLE_AUTO_EXPOSURE`; DLSS `NVSDK_NGX_DLSS_Feature_Flags_AutoExposure`; XeSS `XESS_INIT_FLAG_ENABLE_AUTOEXPOSURE` | unverified: the same SDK flags |
+| `HDR` | no descriptor flag: MetalFX takes the scene-linear input as given | FSR `FFX_UPSCALE_ENABLE_HIGH_DYNAMIC_RANGE`; unverified: DLSS `NVSDK_NGX_DLSS_Feature_Flags_IsHDR`; XeSS without `XESS_INIT_FLAG_LDR_INPUT_COLOR` | unverified: the same SDK flags |
+| `ReversedDepth` | `depthReversed` | FSR `FFX_UPSCALE_ENABLE_DEPTH_INVERTED`; unverified: DLSS `NVSDK_NGX_DLSS_Feature_Flags_DepthInverted`; XeSS `XESS_INIT_FLAG_INVERTED_DEPTH` | unverified: the same SDK flags |
+| `AutoExposure` | `autoExposureEnabled` | FSR `FFX_UPSCALE_ENABLE_AUTO_EXPOSURE`; unverified: DLSS `NVSDK_NGX_DLSS_Feature_Flags_AutoExposure`; XeSS `XESS_INIT_FLAG_ENABLE_AUTOEXPOSURE` | unverified: the same SDK flags |
 | Cost | native | native | native |
 
 ### `UpscalerDesc`
@@ -109,8 +113,8 @@ one upscaler serves dynamic resolution without re-creation.
 #### Mapping
 | | Metal 4 | D3D12 | Vulkan |
 |---|---|---|---|
-| Descriptor | `MTLFX::TemporalScalerDescriptor` | unverified: FSR `ffxCreateContextDescUpscale`; DLSS `NVSDK_NGX_DLSS_Create_Params`; XeSS `xess_d3d12_init_params_t` | unverified: FSR `ffxCreateContextDescUpscale`; DLSS `NVSDK_NGX_DLSS_Create_Params`; XeSS `xess_vk_init_params_t` |
-| Dynamic content | `inputContentPropertiesEnabled`, with the scale range derived from `input`, `output` and device support; a content extent whose scale passes `supportedInputContentMaxScale` is raised to the smallest the range takes | unverified: FSR `FFX_UPSCALE_ENABLE_DYNAMIC_RESOLUTION`; DLSS and XeSS take a per-frame input size | the same as D3D12 |
+| Descriptor | `MTLFX::TemporalScalerDescriptor` | FSR `ffxCreateContextDescUpscale`, `maxRenderSize` the input and `maxUpscaleSize` the output, chained to `ffxCreateContextDescUpscaleVersion` and `ffxCreateBackendDX12Desc`; unverified: DLSS `NVSDK_NGX_DLSS_Create_Params`; XeSS `xess_d3d12_init_params_t` | unverified: FSR `ffxCreateContextDescUpscale`; DLSS `NVSDK_NGX_DLSS_Create_Params`; XeSS `xess_vk_init_params_t` |
+| Dynamic content | `inputContentPropertiesEnabled`, with the scale range derived from `input`, `output` and device support; a content extent whose scale passes `supportedInputContentMaxScale` is raised to the smallest the range takes | FSR `FFX_UPSCALE_ENABLE_DYNAMIC_RESOLUTION`, always set; unverified: DLSS and XeSS take a per-frame input size | the same as D3D12 |
 | Cost | native | native | native |
 
 ### `Device::createUpscaler`
@@ -127,7 +131,7 @@ refuses the object. Creation is free-threaded and synchronous.
 #### Mapping
 | | Metal 4 | D3D12 | Vulkan |
 |---|---|---|---|
-| Call | `MTLFX::TemporalScalerDescriptor::newTemporalScaler(device, compiler)`, one at a time in the process under a backend mutex, because MetalFX creation fills a table of Metal's without a lock; an extent ratio above `supportedInputContentMaxScale` or an output under 4 texels in an axis is refused first | unverified: FSR `ffxCreateContext`; DLSS `NVSDK_NGX_D3D12_CreateFeature`; XeSS `xessD3D12CreateContext` and `xessD3D12Init` | unverified: FSR `ffxCreateContext`; DLSS `NVSDK_NGX_VULKAN_CreateFeature`; XeSS `xessVKCreateContext` and `xessVKInit` |
+| Call | `MTLFX::TemporalScalerDescriptor::newTemporalScaler(device, compiler)`, one at a time in the process under a backend mutex, because MetalFX creation fills a table of Metal's without a lock; an extent ratio above `supportedInputContentMaxScale` or an output under 4 texels in an axis is refused first | FSR `ffxCreateContext`, one at a time in the process under a backend mutex, because the FidelityFX loader is one per process and documents no thread safety; a device that does not list FSR refuses it with `Unsupported` first; unverified: DLSS `NVSDK_NGX_D3D12_CreateFeature`; XeSS `xessD3D12CreateContext` and `xessD3D12Init` | unverified: FSR `ffxCreateContext`; DLSS `NVSDK_NGX_VULKAN_CreateFeature`; XeSS `xessVKCreateContext` and `xessVKInit` |
 | Cost | native | cheap: DLSS feature creation records into a backend-owned command list | cheap: DLSS feature creation records into a backend-owned command buffer |
 
 ### `UpscaleParams`

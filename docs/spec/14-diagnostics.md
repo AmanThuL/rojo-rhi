@@ -133,7 +133,7 @@ the Metal-specific frame-data counter the v1 conformance checkpoint flags as non
 | `frameDataUploads` | `CommandList::uploadFrameData` calls |
 | `frameArenaBytes` | Bytes those calls copied, excluding alignment padding |
 | `frameArenaGrowths` | Frame-arena growth events |
-| `descriptorWrites` | Heap-slot writes: Metal 4 ID-table entries, descriptors on the planned D3D12 backend |
+| `descriptorWrites` | Heap-slot writes: Metal 4 ID-table entries, descriptors on the D3D12 backend |
 | `globalBarriers`, `bufferBarriers`, `textureBarriers` | Barrier records passed to `CommandList::barrier`, by kind |
 | `nativeBarriers` | Native barrier commands emitted after batching |
 | `pipelinesCreated` | Pipelines created, including any variant a backend creates on its own |
@@ -234,13 +234,12 @@ Result<void> Device::beginCapture(std::string_view path);
 ```
 Starts a GPU capture of everything the device's queues execute until `Device::endCapture`, written
 to the file `path`. The caller supplies the platform's extension: `.gputrace` on Metal 4, `.wpix` on
-the planned D3D12 backend. The call returns an error when capture tooling is unavailable to the
-process: on Metal 4 when capture is not enabled, or when the process-global `MTL::CaptureManager` is
-already capturing for another device or tool; on the planned D3D12 backend when the device was
-created without `DeviceDesc::enableCapture` ([device](02-device.md)), which loads the PIX GPU
-capturer before the native device exists. It also returns an error when the destination cannot be
-written. After an error no capture is in progress. RenderDoc is the Vulkan counterpart and is
-reserved.
+the D3D12 backend. The call returns an error when capture tooling is unavailable to the process: on
+Metal 4 when capture is not enabled, or when the process-global `MTL::CaptureManager` is already
+capturing for another device or tool; on the D3D12 backend when the device was created without
+`DeviceDesc::enableCapture` ([device](02-device.md)), which loads the PIX GPU capturer before the
+native device exists. It also returns an error when the destination cannot be written. After an
+error no capture is in progress. RenderDoc is the Vulkan counterpart and is reserved.
 
 #### Valid usage
 - `VU-rojo-diag-0008` No capture started by this device's `Device::beginCapture` is in progress.
@@ -248,7 +247,7 @@ reserved.
 #### Mapping
 | | Metal 4 | D3D12 | Vulkan |
 |---|---|---|---|
-| Call | `MTL::CaptureManager::startCapture` with an `MTL::CaptureDescriptor`, capturing the device to a GPU trace document | `PIXBeginCapture` with `PIX_CAPTURE_GPU` and the file name | reserved: RenderDoc `StartFrameCapture` with `SetCaptureFilePathTemplate` |
+| Call | `MTL::CaptureManager::startCapture` with an `MTL::CaptureDescriptor`, capturing the device to a GPU trace document | `BeginProgrammaticGpuCapture`, the export of the loaded `WinPixGpuCapturer.dll` that `PIXBeginCapture` with `PIX_CAPTURE_GPU` calls, given the absolute file name; `Unsupported` naming PIX while the capturer is not loaded | reserved: RenderDoc `StartFrameCapture` with `SetCaptureFilePathTemplate` |
 | Cost | native | native | native: RenderDoc in-application API |
 
 ### `Device::endCapture`
@@ -263,5 +262,5 @@ before the call is in the capture.
 #### Mapping
 | | Metal 4 | D3D12 | Vulkan |
 |---|---|---|---|
-| Call | `MTL::CaptureManager::stopCapture` | `PIXEndCapture` | reserved: RenderDoc `EndFrameCapture` |
+| Call | `MTL::CaptureManager::stopCapture` | `EndProgrammaticGpuCapture`, the export of `WinPixGpuCapturer.dll` that `PIXEndCapture` calls | reserved: RenderDoc `EndFrameCapture` |
 | Cost | native | native | native: RenderDoc in-application API |

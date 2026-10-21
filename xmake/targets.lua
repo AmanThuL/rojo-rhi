@@ -249,12 +249,13 @@ target("RojoRHI")
         add_rules("rojorhi.d3d12_kernels")
         add_files(path.join(component, "Backends/D3D12/Kernels/*.hlsl"))
         set_values("rojorhi.dxc", path.join(thirdparty_dir, "dxc/bin/x64/dxc.exe"))
-        -- A system include, so the Agility headers shadow the Windows SDK's older d3d12.h and /external:W0 covers them.
-        add_sysincludedirs(path.join(thirdparty, "agility/include"))
+        -- System includes, so the Agility headers shadow the Windows SDK's older d3d12.h and /external:W0 covers them and
+        -- the FidelityFX headers the upscaler compiles against; its runtime is loaded beside the executable.
+        add_sysincludedirs(path.join(thirdparty, "agility/include"), path.join(thirdparty, "fidelityfx/include"))
         add_defines("WIN32_LEAN_AND_MEAN", "NOMINMAX")
         d3d12_selection()
-        -- user32 for IsWindow, the surface check.
-        add_syslinks("d3d12", "dxgi", "dxguid", "user32", {public = true})
+        -- user32 for IsWindow, the surface check; shell32 and ole32 for the Program Files folder the PIX capturer is found under.
+        add_syslinks("d3d12", "dxgi", "dxguid", "user32", "shell32", "ole32", {public = true})
     -- The Null backend directory holds no source until a part adds one, and xmake warns on an empty glob.
     elseif #os.files(path.join(component_dir, "Backends/Null/Source/*.cpp")) > 0 then
         add_files(path.join(component, "Backends/Null/Source/*.cpp"))
@@ -287,14 +288,14 @@ target("RojoRHITests")
             "CopyTests.cpp", -- two cases clear textures they never moved out of Undefined, which a D3D12 clear needs in CopyDst
             "DiagnosticsTests.cpp", -- one case upscales, which D3D12 does not record (#111); one renders into Undefined (#109)
             "LifetimeDeathTests.cpp", -- one case upscales, which D3D12 does not record (#111)
-            "SparseDeathTests.cpp",
+            -- WARP packs no mip tail for the sparse kit texture, and one case of each maps or uses a tail (#102).
             "SparseOrderDeathTests.cpp",
             "SparseOrderTests.cpp",
             "SparseTests.cpp",
             "TrackerDeathTests.cpp", -- one case upscales (#111); the layer stops one clear in General before the tracker (#109)
             "TrackerTests.cpp", -- one case upscales, which D3D12 does not record (#111)
-            "UpscaleDeathTests.cpp",
-            "UpscalerTests.cpp",
+            "UpscaleDeathTests.cpp", -- upscale recording, #111
+            "UpscalerTests.cpp", -- upscale recording, #111
         }
         local pending = {}
         for _, name in ipairs(d3d12_pending) do
@@ -329,8 +330,7 @@ target("RojoRHITests")
             "DrawConformanceTests.cpp", -- draws with firstVertex and baseVertex assert the base-including vertexIndex, which D3D12 does not produce
             "IndirectConformanceTests.cpp", -- baseVertex records assert the base-including vertexIndex, which D3D12 does not produce
             "ScopeConformanceTests.cpp", -- one case upscales
-            "SparseConformanceTests.cpp",
-            "UpscaleConformanceTests.cpp",
+            "UpscaleConformanceTests.cpp", -- upscale recording, #111
         }
         local conformance_pending = {}
         for _, name in ipairs(d3d12_conformance_pending) do
@@ -379,7 +379,7 @@ target("RojoRHITests")
         add_includedirs(path.join(component, "Backends/D3D12/Source"))
         add_defines("WIN32_LEAN_AND_MEAN", "NOMINMAX")
         d3d12_selection()
-        add_sysincludedirs(path.join(thirdparty, "agility/include"))
+        add_sysincludedirs(path.join(thirdparty, "agility/include"), path.join(thirdparty, "fidelityfx/include"))
         add_rules("rojorhi.d3d12_runtime")
         set_values("rojorhi.thirdparty", thirdparty_dir)
     end

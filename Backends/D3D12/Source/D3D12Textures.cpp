@@ -18,6 +18,7 @@
 #include "D3D12Debug.h"
 #include "D3D12Device.h"
 #include "D3D12Formats.h"
+#include "D3D12Sparse.h"
 #include "D3D12Stager.h"
 
 #include <algorithm>
@@ -398,6 +399,17 @@ namespace rojoRHI {
             {
                 return std::unexpected(d3d12::failure(impl, created, std::format("ID3D12Device10::CreatePlacedResource2 for texture \"{}\"", record.label)));
             }
+        }
+        else if (hasUsage(desc.usage, TextureUsage::Sparse))
+        {
+            Result<d3d12::Com<ID3D12Resource>> reserved = d3d12::createReservedTexture(impl, desc, native, castable, record.label);
+            if (!reserved)
+            {
+                return std::unexpected(std::move(reserved.error()));
+            }
+            resource = std::move(*reserved);
+            // The shape is measured once, before the record is published, and never changes while the texture lives.
+            record.tiles = d3d12::readTileShape(*impl.device(), *resource, desc.mips);
         }
         else
         {

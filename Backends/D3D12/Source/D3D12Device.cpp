@@ -8,11 +8,10 @@
 #include <rojoRHI/RHI.h>
 
 #include "Base/Assert.h"
-#include "Core/Captures.h"
 #include "Core/DeviceCore.h"
-#include "Core/Sparse.h"
 #include "D3D12Buffers.h"
 #include "D3D12Capabilities.h"
+#include "D3D12Capture.h"
 #include "D3D12Common.h"
 #include "D3D12Fences.h"
 #include "D3D12Loader.h"
@@ -20,6 +19,7 @@
 #include "D3D12ShaderLibrary.h"
 #include "D3D12Textures.h"
 #include "D3D12Timestamps.h"
+#include "D3D12Upscaler.h"
 #include "D3D12Views.h"
 
 #include <cstddef>
@@ -89,6 +89,7 @@ namespace rojoRHI {
             // Every pipeline has retired, so the library and the bytes it reads go now.
             impl->pipelineCache.release();
             d3d12::releaseSwapchains(*impl);
+            d3d12::unloadFidelityFx(impl->fsr);
             impl->frames.releaseAll();
             // The factory that made the device outlives it, and the device's reference is the last one released.
             d3d12::Com<ID3D12DeviceFactory> factory = impl->loaded.factory;
@@ -175,7 +176,11 @@ namespace rojoRHI {
         {
             return std::unexpected(std::move(valid.error()));
         }
-        // DeviceDesc::enableCapture is not read: the backend has no capture tool.
+        // The PIX GPU capturer loads before the device factory, so that the capturer can attach to it.
+        if (desc.enableCapture)
+        {
+            d3d12::loadCapturer();
+        }
         Result<d3d12::Loaded> loaded = d3d12::loadDevice();
         if (!loaded)
         {
@@ -183,6 +188,7 @@ namespace rojoRHI {
         }
         auto impl = std::make_unique<DeviceImpl>(desc, std::move(*loaded));
         d3d12::setName(impl->device(), impl->core.label());
+        impl->fsr.fidelityFx = d3d12::loadFidelityFx(d3d12::executableDirectory());
         core::RetireHooks hooks;
         hooks.context = impl.get();
         hooks.buffer = d3d12::retireBuffer;
@@ -192,6 +198,7 @@ namespace rojoRHI {
         hooks.fence = d3d12::retireFence;
         hooks.pipeline = d3d12::retirePipeline;
         hooks.shaderLibrary = d3d12::retireShaderLibrary;
+        hooks.upscaler = d3d12::retireUpscaler;
         hooks.frameSlot = d3d12::reuseSlot;
         hooks.waitFrame = d3d12::waitFrame;
         hooks.scopeTimes = d3d12::scopeTimes;
@@ -204,6 +211,8 @@ namespace rojoRHI {
         // The cache copies the bytes it keeps, so the caller's blob is read only here.
         impl->pipelineCache.open(*impl, desc.pipelineCache);
         impl->core.setSurfaceCheck(isWindow);
+        // Only a device created with enableCapture captures: the capturer is process-wide, and another device may have loaded it.
+        impl->core.setCaptureAvailable(desc.enableCapture ? d3d12::startCapture : d3d12::refuseCapture);
         impl->core.setArenaSource(d3d12::createArenaPage);
         return DeviceImpl::wrap(impl.release());
     }
@@ -248,31 +257,6 @@ namespace rojoRHI {
     }
 
     //==================================================================================================================
-    Result<void> Device::beginCapture(std::string_view path)
-    {
-        // No capture hook is registered, so the core refuses with Unsupported after its checks.
-        return core::beginCapture(DeviceImpl::of(*this).core, path);
-    }
-
-    //==================================================================================================================
-    void Device::endCapture()
-    {
-        core::endCapture(DeviceImpl::of(*this).core);
-    }
-
-    //==================================================================================================================
-    TileShape Device::tileShape(Texture texture)
-    {
-        return core::tileShape(DeviceImpl::of(*this).core, texture);
-    }
-
-    //==================================================================================================================
-    TileShape Device::tileShape(Buffer buffer)
-    {
-        return core::tileShape(DeviceImpl::of(*this).core, buffer);
-    }
-
-    //==================================================================================================================
     void Device::destroy(Pipeline pipeline)
     {
         DeviceImpl::of(*this).core.destroy(pipeline);
@@ -288,11 +272,5 @@ namespace rojoRHI {
     void Device::destroy(Upscaler upscaler)
     {
         DeviceImpl::of(*this).core.destroy(upscaler);
-    }
-
-    //==================================================================================================================
-    Result<Upscaler> Device::createUpscaler(const UpscalerDesc&)
-    {
-        return d3d12::unsupported("Device::createUpscaler");
     }
 } // namespace rojoRHI

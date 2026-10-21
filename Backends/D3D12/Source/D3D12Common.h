@@ -111,9 +111,6 @@ namespace rojoRHI::d3d12 {
     /// Logs that the D3D12 backend does not implement `entry`, named `Class::member`, then aborts, in every build.
     [[noreturn]] void notImplemented(std::string_view entry);
 
-    /// Returns the `Unsupported` error an entry that returns a `Result` gives, naming `entry` as `Class::member`.
-    std::unexpected<Error> unsupported(std::string_view entry);
-
     /// Returns the 32 bits of `result`, which a message prints as eight hexadecimal digits.
     uint32_t hresultBits(HRESULT result);
 
