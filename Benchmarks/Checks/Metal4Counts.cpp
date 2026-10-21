@@ -130,11 +130,12 @@ TEST_CASE("a C8 render pass allocates less on Metal 4 than the native arm's, whi
 }
 
 //======================================================================================================================
-TEST_CASE("C4 to C7 allocate at most two blocks a frame more on Metal 4 than the native arm: the frame event's signal", "[metal4]")
+TEST_CASE("C4 to C7 allocate no more a frame on Metal 4 than the native arm, which signals its own frame event", "[metal4]")
 {
-    // From the first measured frame at K 100, after nine warm-up frames. Both arms' commits allocate alike; R adds the frame event's signalEvent, two
-    // blocks inside Metal (2026-10-20 probe), and nothing else: none of these workloads draws counted, so no list waits on or
-    // updates the carry fence, each of which would allocate one more.
+    // From the first measured frame at K 100, after nine warm-up frames. Both arms' commits allocate alike, and both signal
+    // a frame event once a frame, two blocks inside Metal (2026-10-20 probe), and wait on it before reusing a frame slot.
+    // R adds nothing else: none of these workloads draws counted, so no list waits on or updates the carry fence, each of
+    // which would allocate one more.
     for (const std::string_view workload : { "C4", "C5", "C6", "C7" })
     {
         DYNAMIC_SECTION(workload)
@@ -142,7 +143,7 @@ TEST_CASE("C4 to C7 allocate at most two blocks a frame more on Metal 4 than the
             const uint64_t rojo = frameAllocations(workload, 100, Arm::Rojo, steadyOptions());
             const uint64_t native = frameAllocations(workload, 100, Arm::Native, steadyOptions());
             CAPTURE(rojo, native);
-            CHECK(rojo <= native + 2);
+            CHECK(rojo <= native);
         }
     }
 }

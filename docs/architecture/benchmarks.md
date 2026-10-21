@@ -45,10 +45,15 @@ virtual call sits in a timed span.
 Each workload family registers its configurations through one function: `registerCpuWorkloads`,
 `registerCountedWorkloads`, `registerKernelWorkloads` and `registerFrameWorkloads`.
 
-The native arm (N) is the registered minimum of Metal 4 calls for the workload. The RojoRHI arm (R)
-includes only `<rojoRHI/RHI.h>`, and records through `bench::List` and `bench::QueueRef`: aliases of
-`CommandList` and `Queue` on a `metal4` build, tracing wrappers on a Null build. G2 has a third arm,
-F, spike 2's fixed-binding variant; it runs after R and N in every process.
+The native arm (N) is the registered minimum of Metal 4 calls for the workload. As a renderer with
+three frames in flight, `NativeContext::endFrame` signals a shared frame event on the graphics queue
+after the frame's commits, and `beginFrame` waits on the CPU for the value of the slot's last frame
+before it resets the slot: one queue call and one host call a frame, as R's `endFrame` and
+`beginFrame` make, except that N waits at a slot's first use too, for 0, so its frames count alike.
+The RojoRHI arm (R) includes only `<rojoRHI/RHI.h>`, and records through `bench::List` and
+`bench::QueueRef`: aliases of `CommandList` and `Queue` on a `metal4` build, tracing wrappers on a
+Null build. G2 has a third arm, F, spike 2's fixed-binding variant; it runs after R and N in every
+process.
 
 ## Configurations and the command line
 
@@ -91,8 +96,10 @@ Each measurement has one definition for both arms.
 - **GPU span.** Every commit of both arms carries commit feedback, in every run. A frame's span is
   the earliest `GPUStartTime` to the latest `GPUEndTime` over its commits. A `FeedbackCollector`
   with preallocated slots receives them, and a frame is complete when every commit has reported.
-  The harness adds no fence or event the note does not register to either arm; the backend's own
-  events (the frame event, and a queue's progress signal, which no registered workload makes) are
+  Each arm's `endFrame` waits for that feedback, so one frame runs at a time and each arm's wait on
+  its frame event (N's in `NativeContext`, R's in the backend) returns at once; it still guards the
+  slot's reuse, as in a renderer. The harness adds no other fence or event the note does not
+  register to either arm; a queue's progress signal, which no registered workload makes, would be
   R's measured overhead. Both arms attach the same handler, a block that opens an autorelease pool,
   so their feedback allocates alike. On Null a submission completes inside the call and no GPU time
   exists.
@@ -121,7 +128,7 @@ the call sequence and the counts are. `RojoRHIBench check` is a Catch2 session o
 |---|---|---|
 | `[host]` | everywhere | the clock, the JSON writer, the allocation counter, the runner, the comparison of outputs |
 | `[null]` | Null builds | every R workload's `Counters` delta at the note's K pair, the per-operation delta, the traced call sequence at K 1 and 2; in Debug with validation on, so the tracker accepts every barrier |
-| `[native]` | local Apple Silicon | N's outputs against CPU oracles for C1 to C10, G1 and G2, and the composed frame's determinism across frames |
+| `[native]` | local Apple Silicon | N's outputs against CPU oracles for C1 to C10, G1 and G2, its frame event's two calls a frame, and the composed frame's determinism across frames |
 | `[metal4]` | `metal4` builds | R's per-operation count is at most N's plus `c`, and N's equals the note's column, for C1 to C9 |
 
 `xmake test RojoRHIBench/null` runs `[null],[host]`, `RojoRHIBench/native` runs `[native]` under
@@ -228,7 +235,7 @@ overhead and not a defect of the harness. In particular:
   counted draw, never do, so C6's dispatch encoder carries its last barrier with
   `barrierAfterStages` alone and no encoder of C4, C6, G1 or G2 waits on the fence.
   Both are measured overhead; in the integrated gate R makes 1280 native calls per composed frame
-  with the validation layer on (Debug) and 1259 without it (Release) to N's 1254; the figure depends
+  with the validation layer on (Debug) and 1259 without it (Release) to N's 1256; the figure depends
   on the layer because encoder labels are native calls. They are per frame, so they change no
   per-operation count. A render pass's last encoder ends at the next encoder, a scope boundary or
   `end` rather than at `endRenderPass`, after the pass's pop, and its end timestamp is written on
@@ -289,5 +296,5 @@ defect:
   the frame's retirement covers it, so R makes two per submit, the commit and the fence's
   `signalEvent`, as N does, against a budget of 3. The composed frame loses the progress signals of
   its `cull`, `gbuffer`, `ao` and `lighting` submissions, four native calls per frame. `endFrame`'s
-  frame-event signal remains, one native call per frame that N, which waits on its commits'
-  feedback, does not make. A change to `Queue::submit` reruns C9 first.
+  frame-event signal remains, and N makes the same signal and wait. A change to `Queue::submit`
+  reruns C9 first.
