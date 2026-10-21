@@ -278,3 +278,8 @@
   nothing from `Undefined`. A D3D12 copy queue takes no layout barrier, and such a barrier lowers to
   a global one. A caller moves a texture to `General` on the graphics or compute queue before the
   copy queue uses it; `VU-rojo-sync-0006` still reports a use on a Copy list in another layout.
+- API reference change for the planned D3D12 backend: `VU-rojo-sync-0027` is added, so a texture
+  moves to `DepthStencilRead` only when it was created with `Sampled` as well as `DepthStencil`.
+  D3D12 lowers the layout to `LAYOUT_SHADER_RESOURCE`, which a texture created without
+  shader-resource access cannot take; the layout permits only `Sampled` view reads, so a texture
+  without `Sampled` could not use it.

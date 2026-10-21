@@ -171,6 +171,15 @@ TEST_CASE("VU-rojo-sync-0015 a texture barrier moves to a layout the usage lacks
 }
 
 //======================================================================================================================
+TEST_CASE("VU-rojo-sync-0027 a texture barrier moves a depth texture without Sampled to DepthStencilRead", "[contract][death]")
+{
+    ROJORHI_EXPECT_DEATH("VU-rojo-sync-0027", [] {
+        PassKit kit;
+        recordTexture(kit, TextureBarrier{ .texture = kit.texture(Format::D32Float, TextureUsage::DepthStencil), .newLayout = Layout::DepthStencilRead });
+    });
+}
+
+//======================================================================================================================
 TEST_CASE("VU-rojo-sync-0016 an access is not permitted by the layout it follows", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-sync-0016", [] {

@@ -115,6 +115,9 @@ A memory dependency and layout transition for a range of one texture.
 - `VU-rojo-sync-0015` `newLayout` is allowed by the texture's usage: `ShaderRead` needs `Sampled`,
   `ShaderWrite` needs `Storage`, `ColorAttachment` needs `RenderTarget`, and `DepthStencilWrite`
   and `DepthStencilRead` need `DepthStencil`.
+- `VU-rojo-sync-0027` When `newLayout` is `DepthStencilRead`, the texture's usage also has
+  `Sampled`: the layout permits only shader reads through `Sampled` views, and D3D12 lowers it to
+  `LAYOUT_SHADER_RESOURCE`, which a texture created without `Sampled` cannot take.
 - `VU-rojo-sync-0016` `srcAccess` is permitted by `oldLayout`, or is `None` when `oldLayout` is
   `Undefined`, and `dstAccess` is permitted by `newLayout`.
 - `VU-rojo-sync-0017` The first use of a placed texture whose memory overlaps a resource used
