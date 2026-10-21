@@ -278,38 +278,49 @@ target("RojoRHITests")
     set_default(false)
     set_targetdir("$(builddir)/$(plat)/$(arch)/$(mode)/rojorhi-test")
     add_files(path.join(component, "Tests/*.cpp"))
-    -- WARP+GBV: WARP never completes a FidelityFX upscale dispatch under GPU-based validation, while the debug layer alone
-    -- runs it, so the two files whose cases submit upscales are left out of that configuration and every other one runs them;
-    -- evidence: the floor probe's fsr section, CI run 39463099719.
-    local warp_gbv = is_config("rojorhi_backend", "d3d12") and is_config("rojorhi_d3d12_adapter", "warp") and is_config("rojorhi_d3d12_debug", "gbv")
-    if warp_gbv then
-        -- A renamed or deleted file must be renamed here too, so on_config fails on a name that matches no file. The check
+    local contract_left_out = {}
+    local conformance_left_out = {}
+    if is_config("rojorhi_backend", "d3d12") then
+        -- The conformance files that assert the base-including vertexIndex, which D3D12 does not produce (#100).
+        conformance_left_out = {
+            "AbiGraphicsConformanceTests.cpp", -- draws with firstVertex and baseVertex assert the base-including vertexIndex, which D3D12 does not produce
+            "DrawConformanceTests.cpp", -- draws with firstVertex and baseVertex assert the base-including vertexIndex, which D3D12 does not produce
+            "IndirectConformanceTests.cpp", -- baseVertex records assert the base-including vertexIndex, which D3D12 does not produce
+        }
+        -- WARP+GBV: WARP never completes a FidelityFX upscale dispatch under GPU-based validation, while the debug layer alone
+        -- runs it, so the two files whose cases submit upscales are left out of that configuration and every other one runs
+        -- them; evidence: the floor probe's fsr section, CI run 39463099719.
+        if is_config("rojorhi_d3d12_adapter", "warp") and is_config("rojorhi_d3d12_debug", "gbv") then
+            table.insert(contract_left_out, "UpscalerTests.cpp")
+            table.insert(conformance_left_out, "UpscaleConformanceTests.cpp")
+        end
+        -- A renamed or deleted file must leave the lists too, so on_config fails on a name that matches no file. The check
         -- runs in script scope, the only scope that can fail a configuration, so the values travel absolute.
-        set_values("rojorhi.warp_gbv_left_out", path.join(component_dir, "Tests/Contract/UpscalerTests.cpp"),
-                   path.join(component_dir, "Tests/Conformance/UpscaleConformanceTests.cpp"))
+        local left_out = {}
+        for _, name in ipairs(contract_left_out) do
+            table.insert(left_out, path.join(component_dir, "Tests/Contract", name))
+        end
+        for _, name in ipairs(conformance_left_out) do
+            table.insert(left_out, path.join(component_dir, "Tests/Conformance", name))
+        end
+        set_values("rojorhi.d3d12_left_out", left_out)
         on_config(function (target)
-            for _, file in ipairs(table.wrap(target:values("rojorhi.warp_gbv_left_out"))) do
-                assert(os.isfile(file), format("the WARP+GBV configuration leaves out %s, which does not exist; rename the entry", file))
+            for _, file in ipairs(table.wrap(target:values("rojorhi.d3d12_left_out"))) do
+                assert(os.isfile(file), format("the d3d12 build leaves out %s, which does not exist; remove or rename the entry", file))
             end
         end)
-        for _, file in ipairs(os.files(path.join(component_dir, "Tests/Contract/*.cpp"))) do
-            if path.filename(file) ~= "UpscalerTests.cpp" then
-                add_files(path.join(component, "Tests/Contract", path.filename(file)))
-            end
+    end
+    for _, file in ipairs(os.files(path.join(component_dir, "Tests/Contract/*.cpp"))) do
+        if not table.contains(contract_left_out, path.filename(file)) then
+            add_files(path.join(component, "Tests/Contract", path.filename(file)))
         end
-    else
-        add_files(path.join(component, "Tests/Contract/*.cpp"))
     end
     add_files(path.join(component, "Tests/Support/*.cpp"))
-    if warp_gbv then
-        for _, file in ipairs(os.files(path.join(component_dir, "Tests/Conformance/*.cpp"))) do
-            if path.filename(file) ~= "UpscaleConformanceTests.cpp" then
-                add_files(path.join(component, "Tests/Conformance", path.filename(file)))
-            end
+    -- The conformance directory may hold no source, and a glob that matches nothing makes xmake warn, so each file is added.
+    for _, file in ipairs(os.files(path.join(component_dir, "Tests/Conformance/*.cpp"))) do
+        if not table.contains(conformance_left_out, path.filename(file)) then
+            add_files(path.join(component, "Tests/Conformance", path.filename(file)))
         end
-    -- The conformance directory holds no source until a part adds one, and xmake warns on an empty glob.
-    elseif #os.files(path.join(component_dir, "Tests/Conformance/*.cpp")) > 0 then
-        add_files(path.join(component, "Tests/Conformance/*.cpp"))
     end
     -- Core and Null cases test the core through the Null backend, which never ships, so they build only with it.
     if is_config("rojorhi_backend", "null") then
