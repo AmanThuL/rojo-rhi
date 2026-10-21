@@ -49,15 +49,19 @@
 //   sampler,       Metal   the same read from the sampler ID table at `[[buffer(2)]]`
 //   comparisonSampler HLSL `SamplerDescriptorHeap[index]`; SPIR-V as for textures
 //   VertexIds      the vertex entry point's parameter, its fields internal to the module (a consumer's entry
-//                  point still compiles taking it). Metal: `SV_VertexID`, `SV_InstanceID` and
-//                  `SV_StartInstanceLocation`, emitted as `[[vertex_id]]`, `[[instance_id]]` and
-//                  `[[base_instance]]` entry parameters. SPIR-V: `SV_VulkanVertexID`, `SV_VulkanInstanceID`
-//                  and `SV_StartInstanceLocation`, the raw `VertexIndex`, `InstanceIndex` and `BaseInstance`
-//                  (Slang's plain `SV_VertexID` and `SV_InstanceID` already subtract the bases there). HLSL:
-//                  `SV_VertexID` and `SV_InstanceID` only, since `SV_StartInstanceLocation` needs Shader Model
-//                  6.8, above the 6.6 floor. A module-level `in` global for the base
-//                  instance was rejected: with a user-semantic vertex output Slang moved it into `[[stage_in]]`
-//   vertexIndex    every target returns `vertexId`
+//                  point still compiles taking it). Metal: `SV_VertexID`, `SV_InstanceID`,
+//                  `SV_StartVertexLocation` and `SV_StartInstanceLocation`, emitted as `[[vertex_id]]`,
+//                  `[[instance_id]]`, `[[base_vertex]]` and `[[base_instance]]` entry parameters. SPIR-V:
+//                  `SV_VulkanVertexID`, `SV_VulkanInstanceID`, `SV_StartVertexLocation` and
+//                  `SV_StartInstanceLocation`, the raw `VertexIndex`, `InstanceIndex`, `BaseVertex` and
+//                  `BaseInstance` (Slang's plain `SV_VertexID` and `SV_InstanceID` already subtract the bases
+//                  there). HLSL: `SV_VertexID` and `SV_InstanceID` only, which exclude the bases, since
+//                  `SV_StartVertexLocation` and `SV_StartInstanceLocation` need Shader Model 6.8, above the 6.6
+//                  floor. A module-level `in` global for the base instance was rejected: with a user-semantic
+//                  vertex output Slang moved it into `[[stage_in]]`
+//   vertexIndex    Metal, SPIR-V   `vertexId - baseVertex`; HLSL   `vertexId`, which excludes the base. Metal's
+//                  `[[base_vertex]]` holds vertexStart in a non-indexed draw, direct or through the indirect command
+//                  buffer, which Apple does not document; the firstVertex conformance cases fail if it does not
 //   instanceIndex  Metal, SPIR-V   `instanceId - baseInstance`; HLSL   `instanceId`, which excludes the base
 //   drawId(ids)    Metal   the base instance; HLSL   the root constant `b1`; SPIR-V   as for the record below
 //   drawId()       Metal task and mesh   offset 0 of the record at `[[buffer(3)]]`
@@ -126,13 +130,16 @@ namespace rojoRHI
         // The raw Vulkan indices: Slang's SV_VertexID and SV_InstanceID on SPIR-V subtract the base.
         uint vertexId : SV_VulkanVertexID;
         uint instanceId : SV_VulkanInstanceID;
+        uint baseVertex : SV_StartVertexLocation;
         uint baseInstance : SV_StartInstanceLocation;
 #elif defined(ROJORHI_TARGET_METAL)
         uint vertexId : SV_VertexID;
         uint instanceId : SV_InstanceID;
+        uint baseVertex : SV_StartVertexLocation;
         uint baseInstance : SV_StartInstanceLocation;
 #else
-        // No base instance on D3D12: SV_StartInstanceLocation needs Shader Model 6.8, above the 6.6 floor.
+        // No base values on D3D12: SV_VertexID and SV_InstanceID exclude them, and SV_StartVertexLocation and
+        // SV_StartInstanceLocation need Shader Model 6.8, above the 6.6 floor.
         uint vertexId : SV_VertexID;
         uint instanceId : SV_InstanceID;
 #endif
@@ -336,7 +343,11 @@ namespace rojoRHI
 
     public uint vertexIndex(VertexIds ids)
     {
+#if defined(ROJORHI_TARGET_HLSL)
         return ids.vertexId;
+#else
+        return ids.vertexId - ids.baseVertex;
+#endif
     }
 
     public uint instanceIndex(VertexIds ids)
@@ -378,5 +389,5 @@ namespace rojoRHI
     }
 }
 
-/// The shader ABI version; changing a reserved binding bumps it.
-public static const uint ROJORHI_SHADER_ABI_VERSION = 1; // Mirrored by core::kShaderAbiVersion in Source/Core/Pipelines.h.
+/// The shader ABI version; changing a reserved binding or the value a built-in returns bumps it.
+public static const uint ROJORHI_SHADER_ABI_VERSION = 2; // Mirrored by core::kShaderAbiVersion in Source/Core/Pipelines.h.

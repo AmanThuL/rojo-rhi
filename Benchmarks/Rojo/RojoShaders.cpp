@@ -22,7 +22,7 @@ namespace rojoRHI::bench {
         {
 #if defined(ROJORHI_BENCH_BACKEND_NULL)
             (void)name;
-            std::string text = "rojorhi.null.shaderlibrary\nabi 1\n";
+            std::string text = "rojorhi.null.shaderlibrary\nabi 2\n";
             for (const ShaderEntryName& entry : entries)
             {
                 text += std::format("entry {} {}\n", entry.name, entry.stage);

@@ -272,14 +272,14 @@ executes.
 ### `ROJORHI_SHADER_ABI_VERSION`
 
 ```slang
-static const uint ROJORHI_SHADER_ABI_VERSION = 1;   // RojoRHI.slang
+static const uint ROJORHI_SHADER_ABI_VERSION = 2;   // RojoRHI.slang
 ```
 
 A positive integer naming the ABI contract this chapter defines: the root binding, the `Addr`
-encoding, the hidden heap tables and the bytes and bindings each built-in reads and writes. It
-increases whenever any of them changes. A new built-in that leaves them as they were does not
-change it, nor does a target emitting different instructions for the same accesses, because a
-library compiled before either binds the same entries and reads the same bytes.
+encoding, the hidden heap tables, the bytes and bindings each built-in reads and writes and the
+value it returns. It increases whenever any of them changes. A new built-in that leaves them as
+they were does not change it, nor does a target emitting different instructions for the same
+accesses, because a library compiled before either binds the same entries and reads the same bytes.
 `RojoRHI.slang` declares it as a constant rather than a macro, because macros do not cross a Slang
 `import`. The shader rule reads the value from that file and stamps it into every compiled Metal
 library, and `Device::loadShaderLibrary` returns `ErrorCategory::ShaderAbiMismatch` for a library

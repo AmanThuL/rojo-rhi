@@ -119,7 +119,7 @@ A Null library is a text blob, the format `parseNullShaderLibrary` reads:
 
 ```
 rojorhi.null.shaderlibrary
-abi 1
+abi 2
 entry vsMain vertex
 entry fsMain fragment
 ```

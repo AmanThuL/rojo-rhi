@@ -311,3 +311,6 @@
   it, and, for a buffer, ordered after the mapping by a global barrier; the tracker now checks the
   rule (#68). On Metal 4 a discard of a `Sparse` texture is lowered with alias visibility, which
   chapter 09's Visibility row states.
+- `rojoRHI::vertexIndex` excludes the first vertex and base vertex on every target, as D3D12's
+  `SV_VertexID` does, and the shader ABI version is 2
+  ([ADR 0024](docs/decisions/0024-vertex-index-excludes-the-base.md)).

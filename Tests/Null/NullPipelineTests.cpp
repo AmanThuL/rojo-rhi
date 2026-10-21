@@ -4,11 +4,13 @@
 //----------------------------------------------------------------------------------------------------------------------
 #include <rojoRHI/RHI.h>
 
+#include "Core/Pipelines.h"
 #include "Support/Backend.h"
 #include "Support/Null/NullLibrary.h"
 
 #include <catch2/catch_test_macros.hpp>
 
+#include <format>
 #include <string>
 #include <vector>
 
@@ -33,7 +35,8 @@ namespace {
 TEST_CASE("a Null library of the magic, the ABI stamp and no entries loads", "[null]")
 {
     Device device = *createDevice();
-    CHECK(device.loadShaderLibrary(bytesOf("rojorhi.null.shaderlibrary\nabi 1\n"), "null.library").has_value());
+    const std::string text = std::format("rojorhi.null.shaderlibrary\nabi {}\n", core::kShaderAbiVersion);
+    CHECK(device.loadShaderLibrary(bytesOf(text), "null.library").has_value());
     destroyDevice(device);
 }
 
@@ -41,7 +44,7 @@ TEST_CASE("a Null library of the magic, the ABI stamp and no entries loads", "[n
 TEST_CASE("a Null library of another magic is a DriverFailure", "[null]")
 {
     Device device = *createDevice();
-    const Result<ShaderLibrary> library = device.loadShaderLibrary(test::nullLibrary({}, 1, "metallib"), "null.library");
+    const Result<ShaderLibrary> library = device.loadShaderLibrary(test::nullLibrary({}, core::kShaderAbiVersion, "metallib"), "null.library");
     REQUIRE_FALSE(library.has_value());
     CHECK(library.error().category == ErrorCategory::DriverFailure);
     destroyDevice(device);
@@ -68,10 +71,10 @@ TEST_CASE("a Null library with an unknown stage is a DriverFailure", "[null]")
 }
 
 //======================================================================================================================
-TEST_CASE("a Null library of ABI version 0 or 2 is a ShaderAbiMismatch", "[null]")
+TEST_CASE("a Null library of ABI version 0 or one above the current is a ShaderAbiMismatch", "[null]")
 {
     Device device = *createDevice();
-    for (uint32_t abi : { 0u, 2u })
+    for (uint32_t abi : { 0u, core::kShaderAbiVersion + 1 })
     {
         const Result<ShaderLibrary> library = device.loadShaderLibrary(test::nullLibrary({ { "main", "compute" } }, abi), "null.library");
         REQUIRE_FALSE(library.has_value());
@@ -135,8 +138,8 @@ TEST_CASE("a malformed Null library is an error and never a crash", "[null]")
         magic + "\nabi \n",
         magic + "\nabi 1x\n",
         magic + "\nabi 99999999999999999999999999\n",
-        magic + "\nabi 1\nentry  vertex\n",
-        magic + "\nabi 1\nmain vertex\n",
+        std::format("{}\nabi {}\nentry  vertex\n", magic, core::kShaderAbiVersion),
+        std::format("{}\nabi {}\nmain vertex\n", magic, core::kShaderAbiVersion),
         std::string(1 << 20, '\n'),
         std::string(1 << 20, '\xFF'),
     };

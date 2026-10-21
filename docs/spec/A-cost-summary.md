@@ -88,7 +88,7 @@ leaving its rows `costly`, and moved `drawId` into the base instance, making two
 | [`rojoRHI::texture`](05-shader-abi-part2.md#rojorhitexture) | 05 | cheap | native | cheap |
 | [`rojoRHI::sampler`](05-shader-abi-part2.md#rojorhisampler) | 05 | cheap | native | cheap |
 | [`rojoRHI::VertexIds`](05-shader-abi-part3.md#rojorhivertexids) | 05 | native | native | native |
-| [`rojoRHI::vertexIndex`](05-shader-abi-part3.md#rojorhivertexindex) | 05 | native | native | native |
+| [`rojoRHI::vertexIndex`](05-shader-abi-part3.md#rojorhivertexindex) | 05 | cheap | native | cheap |
 | [`rojoRHI::instanceIndex`](05-shader-abi-part3.md#rojorhiinstanceindex) | 05 | cheap | native | cheap |
 | [`rojoRHI::drawId`](05-shader-abi-part3.md#rojorhidrawid) | 05 | cheap | native | cheap |
 | [`ShaderEntry`](06-pipelines.md#shaderentry) | 06 | native | native | native |

@@ -217,10 +217,10 @@ namespace {
 } // namespace
 
 //======================================================================================================================
-TEST_CASE("draw writes each instance of each vertex range with drawId 0, firstInstance invisible", "[conformance]")
+TEST_CASE("draw writes each instance of each vertex range with drawId 0, firstVertex and firstInstance invisible", "[conformance]")
 {
     test::requireGpu();
-    // A multiple of 3, so the oracle's flat value, its triangle's first vertex rounded down to one, is the first vertex.
+    // vertexIndex excludes firstVertex, so every range draws vertices 0 to 2 and the oracle's flat value is 0.
     const uint32_t firstVertex = GENERATE(0u, 3u, 999u);
     const uint32_t instances = GENERATE(1u, 4u);
     const uint32_t firstInstance = GENERATE(0u, 7u);
@@ -243,7 +243,7 @@ TEST_CASE("draw writes each instance of each vertex range with drawId 0, firstIn
     Image expected;
     for (uint32_t instance = 0; instance < instances; ++instance)
     {
-        expected.set(0, instance * kInstanceRows, oracleValue(instance, firstVertex));
+        expected.set(0, instance * kInstanceRows, oracleValue(instance, 0));
     }
     const std::string difference = differences(readImage(kit, target), expected);
     INFO(difference);
@@ -251,11 +251,11 @@ TEST_CASE("draw writes each instance of each vertex range with drawId 0, firstIn
 }
 
 //======================================================================================================================
-TEST_CASE("drawIndexed applies firstIndex and baseVertex with UInt16 and UInt32 indices", "[conformance]")
+TEST_CASE("drawIndexed applies firstIndex with UInt16 and UInt32 indices, baseVertex invisible", "[conformance]")
 {
     test::requireGpu();
     const IndexType type = GENERATE(IndexType::UInt16, IndexType::UInt32);
-    // Each makes the drawn vertices 3 + baseVertex to 5 + baseVertex, the first a multiple of 3.
+    // vertexIndex excludes baseVertex, so each draws the index values 3 to 5 and the oracle's flat value is 3.
     const int32_t baseVertex = GENERATE(0, 27, -3);
     CAPTURE(static_cast<uint32_t>(type), baseVertex);
     test::GpuKit kit;
@@ -276,10 +276,9 @@ TEST_CASE("drawIndexed applies firstIndex and baseVertex with UInt16 and UInt32 
     list.endRenderPass();
     test::transition(list, target, Layout::ColorAttachment, Layout::CopySrc);
     kit.run(std::array{ list });
-    const auto base = static_cast<uint32_t>(3 + baseVertex);
     Image expected;
-    expected.set(0, 0, oracleValue(0, base));
-    expected.set(0, kInstanceRows, oracleValue(1, base));
+    expected.set(0, 0, oracleValue(0, 3));
+    expected.set(0, kInstanceRows, oracleValue(1, 3));
     const std::string difference = differences(readImage(kit, target), expected);
     INFO(difference);
     CHECK(difference.empty());

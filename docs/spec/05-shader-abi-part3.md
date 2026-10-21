@@ -11,15 +11,16 @@ divergence markers are in [part 2](05-shader-abi-part2.md). Every function lives
 shader's use of them (see [part 1](05-shader-abi.md#model)).
 
 The D3D12 lowerings below are designed mappings, `unverified` until the planned backend's
-compile-and-run test passes.
+compile-and-run test passes, except where a cell says "verified on WARP only".
 
 ## Built-ins
 
 Built-ins are wrapped because their meaning differs: D3D12's `SV_InstanceID` excludes the base
 instance, and the Metal lowering of the instance index changed meaning across Slang releases. Each
-wrapper has one definition on every target: `rojoRHI::vertexIndex` includes the first vertex or
-base vertex, provisionally and unverified on D3D12, and `rojoRHI::instanceIndex` is zero-based. No
-base value travels through a root constant, which `ExecuteIndirect` could not supply per draw.
+wrapper has one definition on every target: `rojoRHI::vertexIndex` excludes the first vertex and
+base vertex, and `rojoRHI::instanceIndex` is zero-based. No base value travels through a root
+constant, which `ExecuteIndirect` could not supply per draw; a shader that needs a base adds it
+from its root or its record.
 Per-draw data in an indirect draw comes through `rojoRHI::drawId`.
 
 ### `rojoRHI::VertexIds`
@@ -34,8 +35,9 @@ parameter and passes it to `rojoRHI::vertexIndex`, `rojoRHI::instanceIndex` and
 globals because on Metal `[[base_instance]]` is reachable only as an entry-point parameter: a
 global system-value input lands in `[[stage_in]]` when the vertex shader has varyings, and the
 Metal compiler rejects that (Slang `v2026.14.1`). It carries the vertex ID, the instance ID and,
-except on D3D12, the base instance; `SV_StartInstanceLocation` needs Shader Model 6.8, above the
-6.6 floor of [ADR 0010](../decisions/0010-hardware-floor.md).
+except on D3D12, the base vertex and base instance; `SV_StartVertexLocation` and
+`SV_StartInstanceLocation` need Shader Model 6.8, above the 6.6 floor of
+[ADR 0010](../decisions/0010-hardware-floor.md).
 
 Requirements: the vertex entry point takes exactly one `VertexIds` parameter, unmodified.
 
@@ -47,7 +49,7 @@ Requirements: the vertex entry point takes exactly one `VertexIds` parameter, un
 
 | | Metal 4 | D3D12 | Vulkan |
 |---|---|---|---|
-| Lowering | `[[vertex_id]]`, `[[instance_id]]` and `[[base_instance]]` entry parameters | `SV_VertexID` and `SV_InstanceID`; no base instance; unverified | `SV_VulkanVertexID`, `SV_VulkanInstanceID` and `SV_StartInstanceLocation`, the raw `VertexIndex`, `InstanceIndex` and `BaseInstance`, because Slang's plain `SV_VertexID` and `SV_InstanceID` already subtract the bases there |
+| Lowering | `[[vertex_id]]`, `[[base_vertex]]`, `[[instance_id]]` and `[[base_instance]]` entry parameters | `SV_VertexID` and `SV_InstanceID`; no base instance or base vertex; unverified | `SV_VulkanVertexID`, `SV_VulkanInstanceID`, `SV_StartVertexLocation` and `SV_StartInstanceLocation`, the raw `VertexIndex`, `InstanceIndex`, `BaseVertex` and `BaseInstance`, because Slang's plain `SV_VertexID` and `SV_InstanceID` already subtract the bases there |
 | Cost | native | native: unverified | native |
 
 ### `rojoRHI::vertexIndex`
@@ -56,15 +58,12 @@ Requirements: the vertex entry point takes exactly one `VertexIds` parameter, un
 uint vertexIndex(VertexIds ids);
 ```
 
-Returns the index of the current vertex including the base: `firstVertex + i` for a non-indexed
-draw, and the index-buffer value plus `baseVertex` for an indexed one, direct or indirect.
-
-This definition is provisional. It rests on D3D12's `SV_VertexID` including the base vertex in
-direct and `ExecuteIndirect` draws, which is unverified. The fallback, should the D3D12
-compile-and-run check of the planned backend find otherwise, is one definition that excludes the
-base everywhere: `vertexIndex` returns `i` or the index-buffer value alone, and a shader that needs
-the base adds `firstVertex` or `baseVertex` from the per-draw record it finds through
-`rojoRHI::drawId`. That check chooses between the two before this chapter is accepted.
+Returns the zero-based index of the current vertex: `i` for a non-indexed draw and the
+index-buffer value alone for an indexed one, direct or indirect. `firstVertex` and `baseVertex` are
+not included. A shader that needs the base adds `firstVertex` or `baseVertex` from its root block in
+a direct draw, or from the per-draw record it finds through `rojoRHI::drawId` in an indirect one.
+D3D12's `SV_VertexID` excludes both and its start-vertex system value needs Shader Model 6.8
+([ADR 0024](../decisions/0024-vertex-index-excludes-the-base.md)).
 
 Requirements: `ids` is the unmodified `VertexIds` parameter of a vertex entry point.
 
@@ -76,8 +75,8 @@ Requirements: `ids` is the unmodified `VertexIds` parameter of a vertex entry po
 
 | | Metal 4 | D3D12 | Vulkan |
 |---|---|---|---|
-| Lowering | the vertex ID, `[[vertex_id]]`, which includes the base vertex | the vertex ID, `SV_VertexID`, taken to include the base vertex; unverified | the raw `VertexIndex`, which includes the base vertex |
-| Cost | native | native: unverified | native |
+| Lowering | `[[vertex_id]]` minus `[[base_vertex]]` | `SV_VertexID`, which excludes the base vertex; verified on WARP only ([evidence](../research/2026-10-21-d3d12-vertex-index-warp.md)) | the raw `VertexIndex` minus `BaseVertex`, subtracted once |
+| Cost | cheap: one subtract | native: verified on WARP only | cheap: one subtract |
 
 ### `rojoRHI::instanceIndex`
 

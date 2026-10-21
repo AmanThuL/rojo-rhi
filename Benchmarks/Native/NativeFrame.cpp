@@ -739,7 +739,7 @@ namespace rojoRHI::bench {
         emitBarrier(forward, FrameBatch::Forward, calls);
         setRenderState(forward, kForwardPass, m_pipelines.forward, table);
         const uint64_t indices = m_resources.indices()->gpuAddress();
-        const Addr vertices = nativeAddr(m_resources.vertices()->gpuAddress());
+        const uint64_t vertices = m_resources.vertices()->gpuAddress();
         for (uint32_t index = 0; index < kForwardDraws; ++index)
         {
             const ForwardBox box = forwardBox(index);
@@ -750,7 +750,7 @@ namespace rojoRHI::bench {
                 .transform2 = box.transform.row2,
                 .transform3 = box.transform.row3,
                 .color = box.color,
-                .vertices = vertices,
+                .vertices = nativeAddr(vertices + uint64_t{ kMeshVertexCount } * mesh * sizeof(MeshVertex)),
                 .camera = nativeAddr(cameraAddress),
             };
             table->setAddress(slot.push(bytesOf(root)), 0);

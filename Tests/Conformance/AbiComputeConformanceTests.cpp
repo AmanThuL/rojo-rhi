@@ -30,7 +30,7 @@ namespace {
     using Float4 = std::array<float, 4>;
 
     /// The shader ABI version `ROJORHI_SHADER_ABI_VERSION` holds.
-    constexpr uint32_t kAbiVersion = 1;
+    constexpr uint32_t kAbiVersion = 2;
 
     /// AbiTextures' root.
     struct FetchRoot

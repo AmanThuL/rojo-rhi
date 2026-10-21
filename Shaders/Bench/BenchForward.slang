@@ -26,7 +26,7 @@ struct ForwardRoot
     float4 transform2;
     float4 transform3;
     float4 color;
-    rojoRHI::Addr vertices;
+    rojoRHI::Addr vertices; // The first vertex of the box's mesh; vertex index excludes the draw's base vertex.
     rojoRHI::Addr camera;
 };
 

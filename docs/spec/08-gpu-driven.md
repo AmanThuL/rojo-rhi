@@ -73,8 +73,8 @@ One non-indexed draw read by `CommandList::drawIndirect`.
 - `drawId`: caller-defined value that `rojoRHI::drawId` returns in every invocation of this draw.
 - `vertexCount`: vertices per instance; zero makes the record a no-op.
 - `instanceCount`: instances; zero makes the record a no-op.
-- `firstVertex`: first vertex index; `rojoRHI::vertexIndex` includes it, provisionally on D3D12
-  ([unverified](05-shader-abi-part3.md#rojorhivertexindex)).
+- `firstVertex`: first vertex index, hidden from shaders, which read it through `drawId`:
+  [`rojoRHI::vertexIndex`](05-shader-abi-part3.md#rojorhivertexindex) is zero-based.
 - `firstInstance`: first instance index. It is not visible to shaders:
   [`rojoRHI::instanceIndex`](05-shader-abi-part3.md#rojorhiinstanceindex) is zero-based, and
   per-draw data comes through `drawId`.
@@ -110,8 +110,9 @@ One indexed draw read by `CommandList::drawIndexedIndirect`.
 - `indexCount`: indices per instance; zero makes the record a no-op.
 - `instanceCount`: instances; zero makes the record a no-op.
 - `firstIndex`: first element read from the index buffer.
-- `baseVertex`: signed value added to each fetched index; `rojoRHI::vertexIndex` includes it,
-  provisionally on D3D12 ([unverified](05-shader-abi-part3.md#rojorhivertexindex)).
+- `baseVertex`: signed value added to each fetched index, not visible to shaders:
+  [`rojoRHI::vertexIndex`](05-shader-abi-part3.md#rojorhivertexindex) returns the index-buffer
+  value alone; a shader reads it through `drawId`.
 - `firstInstance`: first instance index. It is not visible to shaders:
   [`rojoRHI::instanceIndex`](05-shader-abi-part3.md#rojorhiinstanceindex) is zero-based, and
   per-draw data comes through `drawId`.

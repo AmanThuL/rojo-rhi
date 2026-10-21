@@ -7,9 +7,9 @@ This part of the command-recording chapter ([command recording](07-command-recor
 pipeline binding, direct draws and dispatches, and debug scopes. A shader finds its data through
 the root block bound by `CommandList::setRoot` or `CommandList::pushRoot`
 ([shader ABI](05-shader-abi.md)); indirect forms are in [GPU-driven rendering](08-gpu-driven.md).
-`rojoRHI::vertexIndex` includes the first vertex or base vertex, natively on Metal 4 and Vulkan and
-provisionally on D3D12, where it is unverified, and `rojoRHI::instanceIndex` is zero-based
-([built-ins](05-shader-abi-part3.md#built-ins)), so no base value travels through a root constant.
+`rojoRHI::vertexIndex` excludes the first vertex and base vertex and `rojoRHI::instanceIndex` is
+zero-based ([built-ins](05-shader-abi-part3.md#built-ins)), so no base value travels through a root
+constant; a shader that needs a base carries it in its root.
 A draw or dispatch with a zero count records nothing.
 
 ### `CommandList::setPipeline`
