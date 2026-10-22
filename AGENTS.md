@@ -169,13 +169,13 @@ python3 Tools/bench.py analyze        # writes summary.json and analysis.txt fro
 
 `bench.py build` takes `--backend metal4` (the default), `null` or `d3d12` (with `--adapter`). On
 `metal4` the harness links and `RojoRHIBench/metal4` and `correctness` (R against N, untimed) pass;
-on `d3d12` the `d3d12-bench` CI job runs `host`, `native`, `d3d12` and `correctness` on WARP.
-Timing follows ADR 0014: Release, validation off, on AC power, never on hosted runners. Round 1
-(2026-10-19) missed the CPU, GPU and allocation budgets and met the pipeline and native-call ones
-([results](docs/research/2026-10-18-metal4-overhead-results.md)); round 2 (2026-10-20) measured
-the fixed backend, met the GPU, pipeline and native-call budgets and missed CPU in 15 of 34 judged
-configurations and allocations in 57 of 63
-([round 2 results](docs/research/2026-10-20-metal4-overhead-round2-results.md)).
+on `d3d12` the `d3d12-bench` CI job runs `host`, `native`, `d3d12` and `correctness` on WARP. Timing
+follows ADR 0014: Release, validation off, on AC power, never on hosted runners. Round 1
+(2026-10-19) missed the CPU, GPU and allocation budgets; round 2 (2026-10-20) met GPU, pipelines and
+native calls and missed CPU in 15 of 34 judged configurations and allocations in 57 of 63. Round 3
+(2026-10-21), judged by ADR 0025, met the GPU, allocation, pipeline and native-call budgets and
+missed CPU in 1 of 34, C3-k100 (13.96 ns against 10; by the 5% rule, reported, C3 misses at every
+judged `K`) ([round 3 results](docs/research/2026-10-21-metal4-overhead-round3-results.md)).
 
 `python3 Tools/check_lto_inline.py`, after `xmake build RojoRHILtoProbe` in a Release configure,
 fails unless link-time optimization inlined `Device::capabilities` into its caller in the probe
