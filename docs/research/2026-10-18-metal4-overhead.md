@@ -292,6 +292,10 @@ the backend and the harness. Nothing here changes a budget, a workload, a `K` or
 budget (ADR 0025) and the allocations of C10 at `maxCount` 1, and also N's frame completion and R's
 `DeviceDesc`.
 
+2026-10-22, before any round-4 timed run: round 4 is registered by amendment, as [round 4](
+2026-10-22-metal4-overhead-round4.md) states; it keeps every rule of round 3 and changes no budget,
+workload, `K` or rule.
+
 ## Results
 
 Run on 2026-10-19 at 4f2e0d6: 1,260 processes, all nominal on their first attempt. Every row, the
