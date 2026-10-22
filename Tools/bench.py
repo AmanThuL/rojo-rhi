@@ -9,6 +9,7 @@ a result that exists is never run again.
     python3 Tools/bench.py correctness
     python3 Tools/bench.py timing
     python3 Tools/bench.py analyze
+    python3 Tools/bench.py seal
 """
 
 from __future__ import annotations
@@ -583,6 +584,7 @@ def parse_arguments(argv: list[str] | None) -> argparse.Namespace:
     for command in (correctness, commands.add_parser("timing", help="run the timed processes")):
         command.add_argument("--only", help="comma-separated workloads, such as C1,G2")
     commands.add_parser("analyze", help="write summary.json and analysis.txt")
+    commands.add_parser("seal", help="rewrite SHA256SUMS; run last, after every file is written")
     args = parser.parse_args(argv)
     if args.command == "build" and args.adapter and args.backend != "d3d12":
         parser.error("--adapter applies to the d3d12 backend only")
@@ -602,7 +604,7 @@ def main(argv: list[str] | None = None, hooks: Hooks | None = None) -> int:
             driver.correctness(args.arms, only)
         elif args.command == "timing":
             driver.timing(only)
-        else:
+        elif args.command == "analyze":
             driver.analyze()
         return 0
     except BenchError as error:
