@@ -259,9 +259,9 @@ python3 Tools/bench.py --topic t2-d3d12 analyze
 `--root` and `--date` default to `rojo-rhi-evidence` beside the main checkout and today's date;
 `correctness` and `timing` take `--only C1,G2` to narrow the workloads, which a full round does not
 use. `timing` refuses a WARP build. Record `rojo-rhi-evidence/t2-d3d12/<date>/` with its
-`SHA256SUMS` and add the topic to [recording GPU evidence](gpu-evidence.md). The commit timing seam
-of the GPU span is not in the harness yet, so the round reports `gpuNs` as the benchmark
-architecture page says ([the benchmark harness](../architecture/benchmarks.md)).
+`SHA256SUMS` and add the topic to [recording GPU evidence](gpu-evidence.md). Both arms report the
+GPU span of each submission through the submission timing seam and N's timestamps
+([the benchmark harness](../architecture/benchmarks.md)).
 
 ## 7. After the run
 

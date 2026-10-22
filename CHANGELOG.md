@@ -324,3 +324,6 @@
   [the hardware run](docs/guides/d3d12-hardware-run.md) and the findings are in
   [the evidence note](docs/research/2026-10-21-d3d12-warp-evidence.md)
   ([ADR 0026](docs/decisions/0026-d3d12-implemented-before-hardware.md)).
+- `RojoRHIBench` builds on Windows with a D3D12 native arm and a submission timing seam, and its
+  correctness gate passes on WARP in CI. Implemented, verified on WARP only, not on hardware; there
+  is no D3D12 timing yet ([the harness](docs/architecture/benchmarks.md)).

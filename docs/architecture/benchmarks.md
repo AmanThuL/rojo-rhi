@@ -54,9 +54,7 @@ The native arm (N) is the registered minimum of Metal 4 calls for the workload. 
 is the registered minimum of D3D12 calls instead, in `Benchmarks/NativeD3D12/`: it creates its own
 device on the adapter R uses, loads the Agility runtime through its own device factory, keeps three
 frame slots and its own fence, and uses the same DXIL as R for the Slang workloads and hand-written
-HLSL for G1 and G2. The composed frame's N arm is not built on d3d12 yet: `runNativeFrame` returns
-a failed result that says so, `frame` stays registered with R and N, and the correctness gate of a
-d3d12 build selects every other workload. As a renderer with
+HLSL for G1 and G2, and the composed frame has its N arm too. As a renderer with
 three frames in flight, `NativeContext::endFrame` signals a shared frame event on the graphics queue
 after the frame's commits, and `beginFrame` waits on the CPU for the value of the slot's last frame
 before it resets the slot: one queue call and one host call a frame, as R's `endFrame` and
@@ -117,12 +115,17 @@ Each measurement has one definition for both arms.
   exists.
 - **Native calls on d3d12.** N counts a plain increment beside each call on an `ID3D12Device`,
   `ID3D12CommandQueue`, `ID3D12GraphicsCommandList`, `ID3D12Fence`, `ID3D12Resource` (`Map` and
-  `Unmap`), query heap or descriptor heap; R's definition is unchanged. The GPU span is not measured
-  on d3d12 yet (below), so no timestamp query is counted. The registered column is in
+  `Unmap`), query heap or descriptor heap; R's definition is unchanged. The timestamp queries and
+  their resolves, which the GPU span needs (below), are counted nowhere. The registered column is in
   [the D3D12 note](../research/2026-10-20-d3d12-overhead.md).
-- **GPU span on d3d12.** None yet: the GPU span of a submission needs the backend's submission
-  timing seam, which arrives with the composed frame's N arm, so a d3d12 run reports `gpuNs` as
-  null.
+- **GPU span on d3d12.** A frame's span is the earliest start to the latest end over its
+  submissions, from two timestamps for each submission, in seconds of the CPU's
+  `QueryPerformanceCounter` (the seam, below). R receives them from the backend's submission timing
+  seam and N writes the same two timestamps inside the first and last list of each submission, with
+  the same calibration, so the lists, the `ExecuteCommandLists` calls and the native-call counts are
+  the same with and without them. Before they report, N waits for its frame fence and R's drain for
+  the seam's fence. N resolves into one readback buffer per queue (direct, compute); RojoRHI's drain
+  signals and waits once per queue in `endFrame`, outside every CPU window.
 - **Allocations on d3d12.** The harness replaces the global `operator new` and `operator delete`
   in every form and counts the C++ allocations of both arms; allocations made inside the D3D12
   runtime are not seen.
@@ -175,6 +178,26 @@ nothing else on a caller's queue except the empty commit that `destroyDevice` dr
 never timed; the stager's internal queue is unreachable from the seam. The harness calls it from one
 file, `Benchmarks/Rojo/RojoGpuTiming.cpp`, under `ROJORHI_BENCH_BACKEND_METAL4`, and the `[metal4]`
 tests call it too; on Null the R arm reports no GPU time.
+
+The D3D12 backend has the same kind of seam in `Backends/D3D12/Source/SubmitTiming.h`, private and
+test-only too: `rojoRHI::d3d12::setSubmitTiming(queue, callback, user)` and
+`drainSubmitTiming(queue)`, with a `SubmitTime` of the same shape as `CommitTime`. While a queue is
+attached, each list of its type writes a `TIMESTAMP` query first and last, after its last command,
+into a heap and readback buffer the seam allocated at attach, so recording and submitting allocate
+nothing and make no native call the counters see. A submission that names lists makes one report,
+from its first list's first timestamp to its last list's last, with a serial counted from 1 per
+queue. D3D12 has no completion callback, so reports are made only by the drain: it signals a fence
+of the seam's own once on the queue, waits for it, and reports every pending submission in serial
+order on the calling thread. The harness drains from `RojoContext::endFrame`, before its feedback
+collector's wait. Seconds come from each queue's `GetTimestampFrequency` and the
+`GetClockCalibration` pair read at attach, which puts the graphics and compute queues on one time
+base. A report is `failed`, among other cases, when its lists were acquired while detached or under
+an earlier attachment, when the queue writes no timestamps (a Copy queue without copy-queue
+timestamps), when the drain's wait timed out or the device was removed, when more submissions were
+made between two drains than the seam holds (1024), or when more than 4096 lists were acquired
+between two drains, so that a later list claimed its timestamps again. The harness calls it from
+`RojoGpuTiming.cpp` under `ROJORHI_BENCH_BACKEND_D3D12`, and the `[d3d12]` cases of
+`D3D12SubmitTimingTests.cpp` test it.
 
 ## The driver
 
@@ -247,12 +270,18 @@ ADR 0025. The allocation misses remain defects for the next round.
 The d3d12 harness is implemented and verified on WARP only, not on hardware. The `d3d12-bench` CI
 job builds it in Debug (with the debug layer) and Release on WARP, runs `RojoRHIBench/host` in both
 modes, `native` and `d3d12` in Debug, and the correctness gate (`bench.py build --backend d3d12
---adapter warp`, then `correctness`, which runs R and N in both modes) for every configuration but
-`frame`, whose N arm is not built on d3d12 yet. The gate fails unless each selected workload's
-`summary.json` entry has `passed` true and `gate` `compared`, and the job uploads
-`build/bench-evidence/`. `bench.py timing` refuses a WARP build; D3D12 allocation counts are
-recorded but no `[d3d12]` case judges them yet. Timing waits for the Windows GPU machine (issue
-#21).
+--adapter warp`, then `correctness`, which runs R and N in both modes) for every configuration,
+`frame` included, and every configuration passes: the gate passed in Debug and Release on WARP
+1.0.21 in [run 39711745231](https://github.com/AmanThuL/rojo-rhi/actions/runs/39711745231) (job
+`d3d12-bench`, 11 minutes), with both arms reporting GPU spans. Its evidence (run JSON, logs and
+`summary.json`; raw dumps omitted) is in `rojo-rhi-evidence/t2-gate-d3d12/2026-10-22/` with a
+`SHA256SUMS` manifest. The gate
+fails unless each workload's `summary.json` entry has `passed` true and `gate` `compared`, and the
+job uploads `build/bench-evidence/` (the topic `t2-gate-d3d12`). WARP evidence is correctness
+evidence only, not T1 or T2 acceptance. `bench.py timing` refuses a WARP build; D3D12 allocation
+counts are recorded but no `[d3d12]` case judges them yet. No D3D12 cost is measured: the first
+timed round waits for the Windows GPU machine and follows the procedure of
+[the D3D12 note](../research/2026-10-20-d3d12-overhead.md) (issue #21).
 
 ## Backend obligations the N arm encodes
 
