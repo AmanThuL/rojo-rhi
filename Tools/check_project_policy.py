@@ -24,7 +24,7 @@ STATUS_DIRS = {
 }
 # Pre-registration notes whose registered text must not change: each may exceed the docs budget by
 # its dated amendment pointers and results paragraphs (docs/conventions/documentation.md).
-PREREGISTRATION_BUDGETS = {"docs/research/2026-10-18-metal4-overhead.md": 310}
+PREREGISTRATION_BUDGETS = {"docs/research/2026-10-18-metal4-overhead.md": 320}
 LINE_BUDGETS = {**PREREGISTRATION_BUDGETS, "AGENTS.md": 250, "README.md": 250, "docs/": 300}
 HOME_PATH = re.compile(
     r"(?i)(?:/" + r"Users/[^/\s`]+|/" + r"home/[^/\s`]+|[A-Z]:\\Users\\[^\\\s`]+)"

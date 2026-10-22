@@ -65,7 +65,7 @@ class ProjectPolicyTests(unittest.TestCase):
             with mock.patch.object(policy, "read_text", return_value="line\n" * lines):
                 policy.check_line_budgets([note], errors)
             self.assertEqual(len(errors), failures)
-        self.assertGreater(budget, 300)
+        self.assertEqual(budget, 320)
         self.assertIn(f"{budget}-line budget", errors[0])
 
     def test_other_research_notes_keep_the_docs_budget(self) -> None:
