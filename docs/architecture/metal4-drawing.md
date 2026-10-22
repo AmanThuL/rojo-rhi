@@ -169,11 +169,11 @@ the filtered setters, so each execute sees the state recorded before it.
   that differs, so a depth-stencil state is compared by pointer; null is sent as the untested
   state, which Metal binds about 1 ns faster (C3, Apple M3 Max).
 - `setPipeline` keeps the last two payloads it resolved in the recording, by handle, and reads a
-  handle bound again from them; another is read through the native table and replaces the older. A
-  handle's bits name one allocation (a release advances the generation) and a payload retires after
-  the list's frame, so a live handle's entry is its payload. A hit reads no table: a list still
-  recording after its frame retired (`VU-rojo-device-0005`, checked at `endFrame` in Debug) can read
-  a retired one. Acquisition empties them.
+  handle bound again from them, picking the entry without a branch; another is read through the
+  native table and replaces the older. A handle's bits name one allocation (a release advances the
+  generation) and a payload retires after the list's frame, so a live handle's entry is its payload.
+  A hit reads no table: a list still recording after its frame retired (`VU-rojo-device-0005`,
+  checked at `endFrame` in Debug) can read a retired one. Acquisition empties them.
 - The winding decides front and back faces even with culling off, since two-sided stencil and
   `SV_IsFrontFace` read it. A pipeline's winding is applied, filtered, when it culls, tests stencil
   or has a fragment entry (`setsWinding`); a depth-only or rasterization-off pipeline skips it.
