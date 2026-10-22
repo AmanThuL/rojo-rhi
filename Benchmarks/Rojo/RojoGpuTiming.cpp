@@ -1,11 +1,13 @@
 //----------------------------------------------------------------------------------------------------------------------
 /// @file RojoGpuTiming.cpp
-/// @brief Implements the RojoRHI arm's commit timing over the Metal 4 backend's commit timing seam.
+/// @brief Implements the RojoRHI arm's commit timing over the Metal 4 and D3D12 backends' timing seams.
 //----------------------------------------------------------------------------------------------------------------------
 #include "Rojo/RojoGpuTiming.h"
 
 #if defined(ROJORHI_BENCH_BACKEND_METAL4)
 #include "CommitTiming.h"
+#elif defined(ROJORHI_BENCH_BACKEND_D3D12)
+#include "SubmitTiming.h"
 #endif
 
 #include <algorithm>
@@ -41,6 +43,16 @@ namespace rojoRHI::bench {
             metal4::setCommitTiming(device.queue(type), callback, this);
         }
         return true;
+#elif defined(ROJORHI_BENCH_BACKEND_D3D12)
+        // Runs on the frame thread, inside drain.
+        constexpr d3d12::SubmitTimingCallback callback = [](void* user, const d3d12::SubmitTime& time) {
+            static_cast<RojoGpuTiming*>(user)->report(time.queue, time.serial, time.gpuStartSeconds, time.gpuEndSeconds, time.failed);
+        };
+        for (const QueueType type : kQueueTypes)
+        {
+            d3d12::setSubmitTiming(device.queue(type), callback, this);
+        }
+        return true;
 #else
         (void)device;
         (void)kQueueTypes;
@@ -55,6 +67,24 @@ namespace rojoRHI::bench {
         for (const QueueType type : kQueueTypes)
         {
             metal4::setCommitTiming(device.queue(type), nullptr, nullptr);
+        }
+#elif defined(ROJORHI_BENCH_BACKEND_D3D12)
+        for (const QueueType type : kQueueTypes)
+        {
+            d3d12::setSubmitTiming(device.queue(type), nullptr, nullptr);
+        }
+#else
+        (void)device;
+#endif
+    }
+
+    //==================================================================================================================
+    void RojoGpuTiming::drain(Device device)
+    {
+#if defined(ROJORHI_BENCH_BACKEND_D3D12)
+        for (const QueueType type : kQueueTypes)
+        {
+            d3d12::drainSubmitTiming(device.queue(type));
         }
 #else
         (void)device;

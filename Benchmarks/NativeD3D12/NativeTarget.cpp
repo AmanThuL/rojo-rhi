@@ -228,12 +228,14 @@ namespace rojoRHI::bench {
         {
             return std::unexpected(std::format("ID3D12GraphicsCommandList::Reset of list {} failed (0x{:08X})", list, static_cast<uint32_t>(reset)));
         }
+        context.startTimestamps(slot.lists[list]);
         return {};
     }
 
     //==================================================================================================================
     std::expected<void, std::string> closeList(NativeContext& context, ID3D12GraphicsCommandList9* list)
     {
+        context.endTimestamps(list);
         const HRESULT closed = list->Close();
         ++context.calls().record;
         if (FAILED(closed))

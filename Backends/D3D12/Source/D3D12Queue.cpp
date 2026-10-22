@@ -15,6 +15,7 @@
 #include "Core/Tracker/Tracker.h"
 #include "D3D12Common.h"
 #include "D3D12Fences.h"
+#include "D3D12SubmitTiming.h"
 
 #include <atomic>
 #include <cstdint>
@@ -61,6 +62,7 @@ namespace rojoRHI {
                 }
                 queue.native->ExecuteCommandLists(static_cast<UINT>(queue.executing.size()), queue.executing.data());
                 core::DeviceCounts::add(core.counts().nativeSubmitCalls);
+                d3d12::noteSubmitTiming(queue, lists);
             }
             for (const FenceValue& entry : signal)
             {

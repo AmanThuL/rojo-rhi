@@ -21,12 +21,15 @@
 #include "D3D12PipelineCache.h"
 #include "D3D12RootSignature.h"
 #include "D3D12Stager.h"
+#include "D3D12SubmitTiming.h"
 #include "D3D12Swapchain.h"
 #include "D3D12Timestamps.h"
 #include "D3D12Upscaler.h"
 
 #include <array>
+#include <atomic>
 #include <cstddef>
+#include <memory>
 #include <string>
 #include <utility>
 #include <vector>
@@ -44,6 +47,12 @@ namespace rojoRHI {
         d3d12::QueueProgress progress;         ///< The fence only this queue signals, and its last submitted value.
         /// The native lists of the submission being made, kept so the next submission reuses the storage.
         std::vector<ID3D12CommandList*> executing;
+        /// The submission timing attached by `d3d12::setSubmitTiming`; null while detached. Its hooks read it with one relaxed
+        /// load.
+        std::atomic<d3d12::SubmitTimingState*> timing = nullptr;
+        /// Every submission timing attached to the queue, the current one last, kept until the device is destroyed: a list
+        /// acquired while one was attached may still write into it.
+        std::vector<std::unique_ptr<d3d12::SubmitTimingState>> timings;
 
         /// Returns the state `queue` wraps; checks VU-rojo-core-0004.
         static QueueImpl& of(Queue queue);

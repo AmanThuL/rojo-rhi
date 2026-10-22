@@ -231,7 +231,7 @@ TEST_CASE("the native composed frame culls 6,000 boxes per view, draws, and make
     REQUIRE(frame.ready().has_value());
 
     // Per frame: five ExecuteCommandLists, the three fences' signals and waits and the frame fence's signal; one Barrier
-    // per batch; and the same recorded calls in every frame. N measures no GPU span on D3D12, so none is checked.
+    // per batch; the same recorded calls in every frame; and the frame's GPU span from its submissions' timestamps.
     std::vector<uint64_t> recorded;
     for (uint32_t index = 0; index < 3; ++index)
     {
@@ -241,6 +241,7 @@ TEST_CASE("the native composed frame culls 6,000 boxes per view, draws, and make
         INFO((result.has_value() ? std::string() : result.error()));
         REQUIRE(result.has_value());
         CHECK(!result->cpuNs.has_value());
+        CHECK(result->gpuNs.has_value());
         const NativeCalls& after = context.calls();
         CHECK(after.submit - before.submit == kListCount + 6 + 1);
         CHECK(after.barriers - before.barriers == kFrameBatchCount);

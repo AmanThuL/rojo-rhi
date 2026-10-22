@@ -384,10 +384,11 @@ namespace rojoRHI::bench {
     }
 
     //==================================================================================================================
-    // A list's end: one ResolveQueryData of its passes' timestamps into the slot's READBACK buffer of the list's queue,
-    // then Close.
+    // A list's end: the submission timestamps' last, then one ResolveQueryData of its passes' timestamps into the slot's
+    // READBACK buffer of the list's queue, then Close.
     HRESULT NativeFrame::finish(ID3D12GraphicsCommandList9& list, const SlotLists& lists, FrameList frameList)
     {
+        m_context.endTimestamps(&list);
         const UINT first = 2 * firstPass(frameList);
         ID3D12Resource* resolved = lists.resolved[listSpec(frameList).queue == QueueType::Graphics ? 0 : 1];
         list.ResolveQueryData(lists.timestamps, D3D12_QUERY_TYPE_TIMESTAMP, first, 2 * passCount(frameList), resolved, uint64_t{ first } * sizeof(uint64_t));
@@ -695,6 +696,11 @@ namespace rojoRHI::bench {
             const HRESULT cleared = list->Reset(allocator, nullptr);
             ++calls.host;
             reset = FAILED(reset) ? reset : cleared;
+            if (SUCCEEDED(cleared))
+            {
+                const bool onCompute = list == lists.cull.list || list == lists.ao.list;
+                m_context.startTimestamps(list, onCompute ? D3D12_COMMAND_LIST_TYPE_COMPUTE : D3D12_COMMAND_LIST_TYPE_DIRECT);
+            }
         }
         if (FAILED(reset))
         {

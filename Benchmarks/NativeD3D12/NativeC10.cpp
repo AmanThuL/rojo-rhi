@@ -249,6 +249,7 @@ namespace rojoRHI::bench {
                 (void)m_context.endFrame();
                 return std::unexpected(failedCall("ID3D12GraphicsCommandList::Reset", reset));
             }
+            m_context.startTimestamps(list);
             list->Barrier(1, &discard);
             ++calls.record;
             ++calls.barriers;
@@ -271,6 +272,7 @@ namespace rojoRHI::bench {
                 m_indirect.execute(*list, m_draw);
             }
             list->EndRenderPass();
+            m_context.endTimestamps(list);
             const HRESULT closed = list->Close();
             calls.record += 2;
             const uint64_t end = hostTicks();

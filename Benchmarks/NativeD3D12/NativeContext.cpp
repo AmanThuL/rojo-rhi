@@ -282,6 +282,31 @@ namespace rojoRHI::bench {
         {
             return D3D12_PIPELINE_STATE_STREAM_DESC{ stream.size, stream.words.data() };
         }
+
+        //==============================================================================================================
+        // `ticks`, a timestamp of the queue `clock` calibrates, in seconds of QueryPerformanceCounter: the CPU time of the
+        // calibration pair plus the GPU ticks since its GPU time, the arithmetic RojoRHI's submission timing uses.
+        double cpuSeconds(const NativeQueueClock& clock, double cpuTicksPerSecond, uint64_t ticks)
+        {
+            const auto sinceCalibration = static_cast<int64_t>(ticks - clock.gpuCalibration);
+            return static_cast<double>(clock.cpuCalibration) / cpuTicksPerSecond + static_cast<double>(sinceCalibration) / clock.gpuTicksPerSecond;
+        }
+
+        //==============================================================================================================
+        // The index of the entry of `timed` whose list is `list`, searched from `from` onwards and then from the start, so
+        // lists committed or ended in the order they were reset are found at once; timed.size() when none is.
+        size_t findTimedList(std::span<const NativeTimedList> timed, const ID3D12CommandList* list, size_t from)
+        {
+            for (size_t step = 0; step < timed.size(); ++step)
+            {
+                const size_t index = (from + step) % timed.size();
+                if (static_cast<const ID3D12CommandList*>(timed[index].list) == list)
+                {
+                    return index;
+                }
+            }
+            return timed.size();
+        }
     } // namespace
 
     //==================================================================================================================
@@ -1159,7 +1184,117 @@ namespace rojoRHI::bench {
                 slot.arenaSize = shape.arenaBytes;
             }
         }
+        // The timestamps count nowhere: the counts their creation adds are taken back out.
+        const NativeCalls counted = m_calls;
+        const std::expected<void, std::string> timed = prepareTimestamps(shape.lists + kExtraTimedLists);
+        m_calls = counted;
+        return timed;
+    }
+
+    //==================================================================================================================
+    std::expected<void, std::string> NativeContext::prepareTimestamps(uint32_t pairs)
+    {
+        constexpr std::array<std::string_view, 2> kNames{ "direct", "compute" };
+        const std::array<ID3D12CommandQueue*, 2> queues{ m_graphics, m_compute };
+        for (size_t queue = 0; queue < queues.size(); ++queue)
+        {
+            UINT64 frequency = 0;
+            if (const HRESULT read = queues[queue]->GetTimestampFrequency(&frequency); FAILED(read))
+            {
+                return std::unexpected(failed(std::format("GetTimestampFrequency of the {} queue", kNames[queue]), read));
+            }
+            UINT64 gpuTimestamp = 0;
+            UINT64 cpuTimestamp = 0;
+            if (const HRESULT read = queues[queue]->GetClockCalibration(&gpuTimestamp, &cpuTimestamp); FAILED(read))
+            {
+                return std::unexpected(failed(std::format("GetClockCalibration of the {} queue", kNames[queue]), read));
+            }
+            m_clocks[queue] =
+                NativeQueueClock{ .gpuTicksPerSecond = static_cast<double>(frequency), .gpuCalibration = gpuTimestamp, .cpuCalibration = cpuTimestamp };
+        }
+        // QueryPerformanceFrequency cannot fail on Windows XP or later.
+        LARGE_INTEGER cpuFrequency{};
+        QueryPerformanceFrequency(&cpuFrequency);
+        m_cpuTicksPerSecond = static_cast<double>(cpuFrequency.QuadPart);
+
+        for (uint32_t index = 0; index < kFrameSlots; ++index)
+        {
+            NativeSlotTimestamps& timestamps = m_slots[index].timestamps;
+            const std::expected<ID3D12QueryHeap*, std::string> heap = timestampHeap(2 * pairs, std::format("bench.timestamps.{}", index));
+            if (!heap)
+            {
+                return std::unexpected(heap.error());
+            }
+            timestamps.queries = *heap;
+            timestamps.pairs = pairs;
+            // One buffer per queue, so no resource is written by both queues at once.
+            for (size_t queue = 0; queue < queues.size(); ++queue)
+            {
+                const std::string label = std::format("bench.timestamps.{}.{}.readback", index, kNames[queue]);
+                const std::expected<NativeBuffer, std::string> readback = readbackBuffer(uint64_t{ 2 } * pairs * sizeof(uint64_t), label);
+                if (!readback)
+                {
+                    return std::unexpected(readback.error());
+                }
+                // The buffer stays mapped: the CPU reads it only after the frame fence shows the frame's resolves complete.
+                void* mapped = nullptr;
+                if (const HRESULT read = readback->resource->Map(0, nullptr, &mapped); FAILED(read))
+                {
+                    return std::unexpected(failed(std::format("Map of {}", label), read));
+                }
+                timestamps.readbacks[queue] = readback->resource;
+                timestamps.ticks[queue] = static_cast<const uint64_t*>(mapped);
+            }
+        }
+        m_timedLists.reserve(pairs);
+        m_timed.reserve(pairs);
         return {};
+    }
+
+    //==================================================================================================================
+    void NativeContext::startTimestamps(ID3D12GraphicsCommandList9* list, D3D12_COMMAND_LIST_TYPE type)
+    {
+        if (m_frameSlot == nullptr)
+        {
+            if (m_frameError.empty())
+            {
+                m_frameError = "a list wrote its first timestamp outside a frame";
+            }
+            return;
+        }
+        const NativeSlotTimestamps& timestamps = m_frameSlot->timestamps;
+        if (m_timedLists.size() == timestamps.pairs)
+        {
+            if (m_frameError.empty())
+            {
+                m_frameError = std::format("the frame recorded more than {} lists, the timestamp pairs its slot holds", timestamps.pairs);
+            }
+            return;
+        }
+        const auto pair = static_cast<uint32_t>(m_timedLists.size());
+        list->EndQuery(timestamps.queries, D3D12_QUERY_TYPE_TIMESTAMP, 2 * pair);
+        const uint32_t queue = type == D3D12_COMMAND_LIST_TYPE_COMPUTE ? 1 : 0;
+        m_timedLists.push_back(NativeTimedList{ .list = list, .pair = pair, .queue = queue, .ended = false });
+    }
+
+    //==================================================================================================================
+    void NativeContext::endTimestamps(ID3D12GraphicsCommandList9* list)
+    {
+        if (m_frameSlot == nullptr || m_timedLists.empty())
+        {
+            return;
+        }
+        const size_t found = findTimedList(m_timedLists, list, m_timedLists.size() - 1);
+        if (found == m_timedLists.size() || m_timedLists[found].ended)
+        {
+            return;
+        }
+        const NativeSlotTimestamps& timestamps = m_frameSlot->timestamps;
+        const UINT first = 2 * m_timedLists[found].pair;
+        list->EndQuery(timestamps.queries, D3D12_QUERY_TYPE_TIMESTAMP, first + 1);
+        ID3D12Resource* readback = timestamps.readbacks[m_timedLists[found].queue];
+        list->ResolveQueryData(timestamps.queries, D3D12_QUERY_TYPE_TIMESTAMP, first, 2, readback, uint64_t{ first } * sizeof(uint64_t));
+        m_timedLists[found].ended = true;
     }
 
     //==================================================================================================================
@@ -1177,6 +1312,10 @@ namespace rojoRHI::bench {
         m_frameSlot = &slot;
         m_submissions = submissions;
         m_committed = 0;
+        m_timed.clear();
+        m_timedLists.clear();
+        m_commitCursor = 0;
+        m_collector->begin(submissions);
         if (const std::expected<void, std::string> waited = waitFor(m_frameFence, slot.frameValue, "the frame fence"); !waited)
         {
             m_frameError = std::format("frame slot {}: {}", index % kFrameSlots, waited.error());
@@ -1207,12 +1346,26 @@ namespace rojoRHI::bench {
     void NativeContext::commit(ID3D12CommandQueue* queue, std::span<ID3D12CommandList* const> lists)
     {
         ++m_committed;
-        if (!m_frameError.empty() || (m_frameSlot != nullptr && m_frameSlot->overrunBytes != 0))
+        if (m_frameSlot == nullptr && m_frameError.empty())
+        {
+            m_frameError = "a submission was committed outside a frame";
+        }
+        if (!m_frameError.empty() || m_frameSlot->overrunBytes != 0)
         {
             return;
         }
+        const size_t first = lists.empty() ? m_timedLists.size() : findTimedList(m_timedLists, lists.front(), m_commitCursor);
+        const size_t last = lists.empty() ? m_timedLists.size() : findTimedList(m_timedLists, lists.back(), first);
+        if (first == m_timedLists.size() || last == m_timedLists.size() || !m_timedLists[first].ended || !m_timedLists[last].ended)
+        {
+            m_frameError = "a submission's first or last list wrote no timestamps, so its GPU span is unknown";
+            return;
+        }
+        m_commitCursor = last + 1;
         queue->ExecuteCommandLists(static_cast<UINT>(lists.size()), lists.data());
         ++m_calls.submit;
+        const uint32_t onQueue = queue == m_compute ? 1 : 0;
+        m_timed.push_back(TimedSubmission{ .queue = onQueue, .start = 2 * m_timedLists[first].pair, .end = 2 * m_timedLists[last].pair + 1 });
     }
 
     //==================================================================================================================
@@ -1253,11 +1406,38 @@ namespace rojoRHI::bench {
         {
             return std::unexpected(std::format("the frame announced {} submissions and made {}", m_submissions, m_committed));
         }
-        return std::optional<double>{};
+        if (slot == nullptr)
+        {
+            return std::optional<double>{};
+        }
+        return reportTimestamps(*slot);
     }
 
     //==================================================================================================================
-    std::expected<void, std::string> NativeContext::waitFor(ID3D12Fence* target, uint64_t value, std::string_view what)
+    std::expected<std::optional<double>, std::string> NativeContext::reportTimestamps(const Slot& slot)
+    {
+        if (const std::expected<void, std::string> waited = waitFor(m_frameFence, m_frameValue, "the frame's timestamps", false); !waited)
+        {
+            return std::unexpected(waited.error());
+        }
+        for (const TimedSubmission& submission : m_timed)
+        {
+            const NativeQueueClock& clock = m_clocks[submission.queue];
+            const uint64_t* ticks = slot.timestamps.ticks[submission.queue];
+            const double start = cpuSeconds(clock, m_cpuTicksPerSecond, ticks[submission.start]);
+            const double end = cpuSeconds(clock, m_cpuTicksPerSecond, ticks[submission.end]);
+            m_collector->report(start, end, false);
+        }
+        const std::expected<double, std::string> span = m_collector->wait();
+        if (!span)
+        {
+            return std::unexpected(span.error());
+        }
+        return std::optional<double>{ *span };
+    }
+
+    //==================================================================================================================
+    std::expected<void, std::string> NativeContext::waitFor(ID3D12Fence* target, uint64_t value, std::string_view what, bool counted)
     {
         if (m_abandoned)
         {
@@ -1268,7 +1448,10 @@ namespace rojoRHI::bench {
             return {};
         }
         const HRESULT armed = target->SetEventOnCompletion(value, m_event);
-        ++m_calls.host;
+        if (counted)
+        {
+            ++m_calls.host;
+        }
         if (FAILED(armed))
         {
             m_abandoned = true;
