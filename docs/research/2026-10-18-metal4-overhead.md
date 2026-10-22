@@ -303,3 +303,7 @@ with no margin) are met. Texture indexing is not the cause of the GPU miss; #30 
 
 Round 2 ran on 2026-10-20 at 0a0b53f ([results](2026-10-20-metal4-overhead-round2-results.md)): it
 meets GPU (−2.40%), pipelines and native calls; misses CPU (15 of 34) and allocations (57 of 63).
+
+Round 3 ran on 2026-10-21 at 378f219a ([results](2026-10-21-metal4-overhead-round3-results.md)),
+judged by ADR 0025: it meets GPU (−2.20%), allocations, pipelines and native calls, and misses CPU
+in 1 of 34, C3-k100 (13.96 ns against 10); the 5% rule, reported, misses C3 at every judged `K`.
