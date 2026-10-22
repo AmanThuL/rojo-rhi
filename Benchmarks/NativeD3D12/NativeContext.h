@@ -210,6 +210,8 @@ namespace rojoRHI::bench {
         ID3D12Fence* frameFence() const;
         // The cookie RegisterMessageCallback returned; 0 when the build enables no debug layer.
         DWORD messageCookie() const;
+        // True once the open frame failed to begin: its slot's wait failed, so the GPU may still use the slot's lists.
+        bool frameFailed() const;
         NativeCalls& calls();
         CallSnapshot callSnapshot() const;
         FeedbackCollector& collector();

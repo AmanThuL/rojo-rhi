@@ -593,15 +593,14 @@ jobs:
         run: '"BENCH_DATE=$(Get-Date -Format yyyy-MM-dd)" | Out-File -Append -Encoding utf8 $env:GITHUB_ENV'
       - run: python3 Tools/bench.py --root build/bench-evidence --topic t2-gate-d3d12 --date ${{ env.BENCH_DATE }} build --backend d3d12 --adapter warp
         timeout-minutes: 15
-      # The workload list is joined to its flag with an equals sign: the layout test reads every flag followed by a space as a directory.
-      - run: python3 Tools/bench.py --root build/bench-evidence --topic t2-gate-d3d12 --date ${{ env.BENCH_DATE }} correctness --only=C1,C2,C3,C4,C5,C6,C7,C8,C9,C10,G1,G2
+      - run: python3 Tools/bench.py --root build/bench-evidence --topic t2-gate-d3d12 --date ${{ env.BENCH_DATE }} correctness
         timeout-minutes: 30
       # The gate passes only when every selected workload was compared and passed.
       - shell: pwsh
         run: |
           $summary = Get-Content "build/bench-evidence/t2-gate-d3d12/$env:BENCH_DATE/correctness/summary.json" -Raw | ConvertFrom-Json
           $failed = 0
-          foreach ($workload in 'C1','C2','C3','C4','C5','C6','C7','C8','C9','C10','G1','G2') {
+          foreach ($workload in 'C1','C2','C3','C4','C5','C6','C7','C8','C9','C10','G1','G2','frame') {
             $entry = $summary.$workload
             if ($null -eq $entry -or $entry.passed -ne $true -or $entry.gate -ne 'compared') {
               Write-Host "::error::$workload did not pass the gate: $($entry | ConvertTo-Json -Compress)"
