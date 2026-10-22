@@ -238,17 +238,16 @@ namespace rojoRHI {
 
         //==============================================================================================================
         /// Returns the payload of `pipeline`: from the list's resolved pair when it holds the handle, else read with the pool's
-        /// acquire load, one entry replacing the older one.
+        /// acquire load, one entry replacing the older one. A hit selects its entry without a branch on which entry holds the
+        /// handle: a recording that alternates two pipelines flips that branch at every bind, and the predictor misses it once
+        /// the driver's work between two binds grows.
         const metal4::PipelineState* resolvePipeline(CommandListImpl& list, Pipeline pipeline)
         {
             metal4::ResolvedPipelines& resolved = list.draw.resolved;
-            if (pipeline.bits == resolved.handles[0])
+            const bool older = pipeline.bits == resolved.handles[1];
+            if ((pipeline.bits == resolved.handles[0]) | older) [[likely]]
             {
-                return resolved.states[0];
-            }
-            if (pipeline.bits == resolved.handles[1])
-            {
-                return resolved.states[1];
+                return resolved.states[older ? 1 : 0];
             }
             // A record's payload is fixed from creation to retirement, so it is read with no lock (ADR 0020).
             const auto* state = static_cast<const metal4::PipelineState*>(list.core.device->pool<Pipeline>().native(pipeline));
