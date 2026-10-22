@@ -124,6 +124,7 @@ namespace rojoRHI::bench {
         {
             return std::optional<double>{};
         }
+        m_timing->drain(m_device);
         const std::expected<double, std::string> span = m_collector->wait();
         if (!span)
         {

@@ -19,6 +19,7 @@
 #include "D3D12Buffers.h"
 #include "D3D12Common.h"
 #include "D3D12ListState.h"
+#include "D3D12SubmitTiming.h"
 #include "D3D12Timestamps.h"
 
 #include <cstddef>
@@ -48,6 +49,7 @@ namespace rojoRHI {
         // The allocator is the list's own and was reset when the slot was reused, so no other list records into it.
         d3d12::requireSucceeded(impl, state.list->Reset(state.allocator.get(), nullptr), "ID3D12GraphicsCommandList::Reset in Device::acquireCommandList");
         core::noteNativeCall(list.core);
+        d3d12::beginSubmitTiming(list);
         state.timestamps.reset();
         state.binding = {};
         // Reset leaves the native list's dynamic state unknown, so the list's first pass writes every starting value.
@@ -83,6 +85,7 @@ namespace rojoRHI {
         CommandListImpl& list = CommandListImpl::of(*this);
         // The core's checks run before any native call.
         core::endList(list.core);
+        d3d12::endSubmitTiming(list);
         d3d12::resolveTimestamps(list);
         d3d12::requireSucceeded(d3d12::deviceOf(list), list.state.list->Close(), "ID3D12GraphicsCommandList::Close in CommandList::end");
         core::noteNativeCall(list.core);

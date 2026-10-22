@@ -267,3 +267,85 @@ TEST_CASE("the native arm signals its frame fence at each frame's end and waits 
     REQUIRE(context.runSetup([](ID3D12GraphicsCommandList9&) {}).has_value());
     CHECK(context.frameFence()->GetCompletedValue() == kFrames);
 }
+
+//======================================================================================================================
+TEST_CASE("N's frames report one GPU span per submission", "[native]")
+{
+    // Each frame makes a compute submission, which signals a fence the direct queue waits on, then a direct one; each
+    // list writes its two timestamps through the context, which counts none of them.
+    NativeContext context;
+    openContext(context);
+    REQUIRE(context.prepareFrames(NativeFrameShape{}).has_value());
+    const std::expected<NativeList, std::string> compute = context.commandList(D3D12_COMMAND_LIST_TYPE_COMPUTE, "bench.check.compute");
+    REQUIRE(compute.has_value());
+    const std::expected<ID3D12Fence*, std::string> joined = context.fence("bench.check.joined");
+    REQUIRE(joined.has_value());
+    constexpr uint32_t kFrames = 2 * NativeContext::kFrameSlots;
+    for (uint32_t index = 0; index < kFrames; ++index)
+    {
+        CAPTURE(index);
+        NativeContext::Slot& slot = context.beginFrame(index, 2);
+        const NativeCalls before = context.calls();
+        // endFrame waited for the frame before, which joined the compute list, so its allocator is free to reset.
+        REQUIRE(SUCCEEDED(compute->allocator->Reset()));
+        REQUIRE(SUCCEEDED(compute->list->Reset(compute->allocator, nullptr)));
+        context.startTimestamps(compute->list, D3D12_COMMAND_LIST_TYPE_COMPUTE);
+        context.endTimestamps(compute->list);
+        REQUIRE(SUCCEEDED(compute->list->Close()));
+        REQUIRE(SUCCEEDED(slot.lists[0]->Reset(slot.allocators[0], nullptr)));
+        context.startTimestamps(slot.lists[0]);
+        context.endTimestamps(slot.lists[0]);
+        REQUIRE(SUCCEEDED(slot.lists[0]->Close()));
+        ID3D12CommandList* const computeLists[] = { compute->list };
+        context.commit(context.computeQueue(), computeLists);
+        REQUIRE(SUCCEEDED(context.computeQueue()->Signal(*joined, index + 1)));
+        REQUIRE(SUCCEEDED(context.graphicsQueue()->Wait(*joined, index + 1)));
+        ID3D12CommandList* const directLists[] = { slot.lists[0] };
+        context.commit(context.graphicsQueue(), directLists);
+        const std::expected<std::optional<double>, std::string> span = context.endFrame();
+        INFO((span ? std::string() : span.error()));
+        REQUIRE(span.has_value());
+        // Two commits and the frame fence's signal; the timestamps and the frame's wait for them count nowhere.
+        CHECK(context.calls().submit == before.submit + 3);
+        CHECK(context.calls().host == before.host);
+        CHECK(context.calls().record == before.record);
+        REQUIRE(span->has_value());
+        const std::span<const CommitSpan> commits = context.collector().commits();
+        REQUIRE(commits.size() == 2);
+        for (const CommitSpan& commit : commits)
+        {
+            CHECK_FALSE(commit.failed);
+            CHECK(commit.gpuStartSeconds <= commit.gpuEndSeconds);
+            CHECK(commit.gpuStartSeconds > 0.0);
+        }
+        // The direct submission waited for the compute one; the queues' calibrations differ by far less than 5 ms.
+        CHECK(commits[1].gpuStartSeconds >= commits[0].gpuEndSeconds - 0.005);
+        CHECK(**span >= 0.0);
+    }
+
+    // A commit with no frame open executes nothing and fails the next frame.
+    ID3D12CommandList* const stray[] = { compute->list };
+    context.commit(context.computeQueue(), stray);
+    (void)context.beginFrame(kFrames, 0);
+    const std::expected<std::optional<double>, std::string> failed = context.endFrame();
+    REQUIRE(!failed.has_value());
+    CHECK(failed.error().find("outside a frame") != std::string::npos);
+}
+
+//======================================================================================================================
+TEST_CASE("N fails a frame that submits a list without timestamps", "[native]")
+{
+    NativeContext context;
+    openContext(context);
+    REQUIRE(context.prepareFrames(NativeFrameShape{}).has_value());
+    NativeContext::Slot& slot = context.beginFrame(0, 1);
+    REQUIRE(SUCCEEDED(slot.lists[0]->Reset(slot.allocators[0], nullptr)));
+    REQUIRE(SUCCEEDED(slot.lists[0]->Close()));
+    const NativeCalls before = context.calls();
+    ID3D12CommandList* const lists[] = { slot.lists[0] };
+    context.commit(context.graphicsQueue(), lists);
+    CHECK(context.calls().submit == before.submit);
+    const std::expected<std::optional<double>, std::string> ended = context.endFrame();
+    REQUIRE(!ended.has_value());
+    CHECK(ended.error().find("wrote no timestamps") != std::string::npos);
+}

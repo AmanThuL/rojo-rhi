@@ -154,6 +154,8 @@ namespace rojoRHI::bench {
                 list->EndEvent();
                 ++calls.record;
             }
+            // The submission's last timestamp precedes the list's own resolve, as RojoRHI's does; closeList then writes none.
+            m_context.endTimestamps(list);
             list->ResolveQueryData(heap, D3D12_QUERY_TYPE_TIMESTAMP, 0, 2 * m_k, m_resolved[slotIndex].resource, 0);
             ++calls.record;
             if (const std::expected<void, std::string> closed = closeList(m_context, list); !closed)

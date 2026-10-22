@@ -300,6 +300,7 @@ namespace rojoRHI::bench {
                 (void)m_context.endFrame();
                 return std::unexpected(failedCall("ID3D12GraphicsCommandList::Reset", reset));
             }
+            m_context.startTimestamps(list);
             list->SetDescriptorHeaps(static_cast<UINT>(heaps.size()), heaps.data());
             list->SetComputeRootSignature(m_root);
             list->SetPipelineState(m_pipeline);
@@ -317,6 +318,7 @@ namespace rojoRHI::bench {
                 calls.record += 2;
             }
             list->Dispatch(kKernelThreads / kKernelGroup, 1, 1);
+            m_context.endTimestamps(list);
             const HRESULT closed = list->Close();
             calls.record += 2;
             const uint64_t end = hostTicks();

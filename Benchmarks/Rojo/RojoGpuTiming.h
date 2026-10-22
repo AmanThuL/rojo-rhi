@@ -33,8 +33,11 @@ namespace rojoRHI::bench {
         // RojoRHI arm reports none.
         bool attach(Device device);
         void detach(Device device);
+        // Makes the backend report every commit of the device's queues made so far, on this thread, once each has
+        // completed: D3D12 reports only when drained; Metal 4 reports from its completion thread, so there it does nothing.
+        void drain(Device device);
 
-        // One commit's time, from the backend's completion thread or a check.
+        // One commit's time, from the backend's completion thread, the thread that drains, or a check.
         void report(QueueType queue, uint64_t serial, double gpuStartSeconds, double gpuEndSeconds, bool failed);
         // After the frame's wait succeeded: checks and advances each queue's serials.
         std::expected<void, std::string> closeFrame();

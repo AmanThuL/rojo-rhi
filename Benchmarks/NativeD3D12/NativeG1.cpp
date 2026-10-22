@@ -140,12 +140,14 @@ namespace rojoRHI::bench {
                 (void)m_context.endFrame();
                 return std::unexpected(failedCall("ID3D12GraphicsCommandList::Reset", reset));
             }
+            m_context.startTimestamps(list);
             list->SetComputeRootSignature(m_root);
             list->SetPipelineState(m_pipeline);
             list->SetComputeRootShaderResourceView(kDataParameter, m_data.address);
             list->SetComputeRootUnorderedAccessView(kOutputParameter, m_output.address);
             list->SetComputeRoot32BitConstant(kDivergentParameter, m_divergent, 0);
             list->Dispatch(kKernelThreads / kKernelGroup, 1, 1);
+            m_context.endTimestamps(list);
             const HRESULT closed = list->Close();
             calls.record += 7;
             const uint64_t end = hostTicks();

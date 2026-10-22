@@ -71,6 +71,36 @@ namespace rojoRHI::bench {
         uint64_t size = 0;
     };
 
+    // A queue's timestamp calibration, read once: its tick frequency and one GetClockCalibration pair, whose CPU side is a
+    // QueryPerformanceCounter value.
+    struct NativeQueueClock
+    {
+        double gpuTicksPerSecond = 0.0;
+        uint64_t gpuCalibration = 0;
+        uint64_t cpuCalibration = 0;
+    };
+
+    // The timestamps of one frame slot's lists, made by prepareFrames and counted nowhere: `pairs` pairs of queries, the
+    // frame's n-th list reset for timing owning queries 2n and 2n + 1, and a READBACK buffer per queue, direct (0) and
+    // compute (1), that each list of the queue's type resolves its pair into, so no resource is written by both queues.
+    struct NativeSlotTimestamps
+    {
+        ID3D12QueryHeap* queries = nullptr;
+        std::array<ID3D12Resource*, 2> readbacks{};
+        std::array<const uint64_t*, 2> ticks{}; ///< The readback buffers, mapped while the context lives.
+        uint32_t pairs = 0;
+    };
+
+    // A list of the open frame that wrote its first timestamp, its pair, its queue (0 direct, 1 compute), and whether it
+    // has written its last.
+    struct NativeTimedList
+    {
+        ID3D12GraphicsCommandList9* list = nullptr;
+        uint32_t pair = 0;
+        uint32_t queue = 0;
+        bool ended = false;
+    };
+
     // The fixed-function state of a graphics pipeline, each member starting neutral (solid fill, no culling, depth clip on,
     // depth and stencil tests off, blending off, one sample) until a workload sets it. An empty pixel shader makes a
     // depth-only pipeline; a null root signature names the context's global one.
@@ -133,6 +163,9 @@ namespace rojoRHI::bench {
         static constexpr uint32_t kViewHeapSize = 65'536;
         static constexpr uint32_t kSamplerHeapSize = 2'048;
         static constexpr uint32_t kFirstFreeView = 2;
+        // The lists per frame a slot's timestamps hold beyond the frame's direct lists, such as the composed frame's
+        // compute lists.
+        static constexpr uint32_t kExtraTimedLists = 8;
         // The debug features the build selects (rojorhi_d3d12_debug), as RojoRHI's D3D12 backend enables them: the debug
         // layer and DRED for layer and gbv, and for mode in Debug builds; GPU-based validation for gbv.
 #if defined(ROJORHI_D3D12_DEBUG_GBV)
@@ -159,6 +192,7 @@ namespace rojoRHI::bench {
             uint64_t frameValue = 0;   ///< The frame fence's value at the end of the slot's last frame; 0 before its first.
             uint64_t overrunAt = 0;    ///< The offset of the first push that did not fit, valid when overrunBytes is not 0.
             uint64_t overrunBytes = 0; ///< The size of the first push of the frame that did not fit; 0 when every push fit.
+            NativeSlotTimestamps timestamps;
 
             // Copies bytes into the arena at the next 256-byte boundary and returns their GPU address. A push past the size
             // fixed at setup writes nothing and returns the arena's base address, so the list stays valid; the frame's
@@ -268,12 +302,24 @@ namespace rojoRHI::bench {
         // none for a slot's first frame, whose value 0 the fence holds from creation), resets the slot's allocators
         // (one counted host call each) and arena, and expects `submissions` calls of commit. endFrame signals the frame
         // fence on the direct queue after the frame's submissions (one counted queue call). A frame's work on the compute
-        // queue must be joined by a later direct-queue submission of the frame, which the signal follows. No GPU span is
-        // measured on D3D12 yet, so endFrame returns an empty one.
+        // queue must be joined by a later direct-queue submission of the frame, which the signal follows. endFrame then
+        // waits for the frame fence to hold that value, a wait counted nowhere, reports each submission's two timestamps
+        // to the collector, in seconds of QueryPerformanceCounter through its queue's calibration, and returns the
+        // collector's span of the frame.
         Slot& beginFrame(uint32_t index, uint32_t submissions);
-        // ExecuteCommandLists of `lists` on `queue`: one counted queue call. A frame that failed to begin or whose arena
-        // overran executes nothing.
+        // ExecuteCommandLists of `lists` on `queue`, the direct or the compute queue: one counted queue call. The
+        // submission's span runs from its first list's first timestamp to its last list's last, so both must have written
+        // them. A frame that failed to begin or whose arena overran executes nothing; a commit outside a frame, or of a
+        // first or last list without timestamps, executes nothing more and fails the frame at endFrame.
         void commit(ID3D12CommandQueue* queue, std::span<ID3D12CommandList* const> lists);
+        // Timestamps, as RojoRHI's D3D12 submission timing writes them, counted nowhere. startTimestamps, right after a
+        // frame list's Reset, claims the slot's next pair and writes its first timestamp; a frame that resets more lists
+        // than the slot holds pairs fails at endFrame. endTimestamps, after the list's last command and before its own
+        // resolves and Close, writes the last and resolves the pair into the slot's readback buffer; it does nothing for
+        // a list that wrote no first timestamp or already wrote its last, so calling it again before Close is harmless.
+        // `type` is the list's type, direct or compute, which picks the readback buffer of its queue.
+        void startTimestamps(ID3D12GraphicsCommandList9* list, D3D12_COMMAND_LIST_TYPE type = D3D12_COMMAND_LIST_TYPE_DIRECT);
+        void endTimestamps(ID3D12GraphicsCommandList9* list);
         std::expected<std::optional<double>, std::string> endFrame();
 
         // Outside every measurement. Each waits for every frame signalled so far, records into the context's own direct list,
@@ -294,9 +340,15 @@ namespace rojoRHI::bench {
         std::expected<uint32_t, std::string> claimViews(uint32_t count, std::string_view what);
         std::expected<NativeBuffer, std::string> committedBuffer(D3D12_HEAP_TYPE heap, uint64_t size, std::string_view label);
         std::expected<ID3D12PipelineState*, std::string> createPipeline(const D3D12_PIPELINE_STATE_STREAM_DESC& desc, std::string_view label);
-        // Waits up to the frame wait limit for `target` to reach `value`, counting one SetEventOnCompletion; a timeout marks
-        // the context abandoned, after which every wait fails at once.
-        std::expected<void, std::string> waitFor(ID3D12Fence* target, uint64_t value, std::string_view what);
+        // Waits up to the frame wait limit for `target` to reach `value`, counting one SetEventOnCompletion when `counted`;
+        // a timeout marks the context abandoned, after which every wait fails at once.
+        std::expected<void, std::string> waitFor(ID3D12Fence* target, uint64_t value, std::string_view what, bool counted = true);
+        // Reads both queues' calibration and makes every slot's timestamps, `pairs` pairs each; the caller takes the
+        // counts of the calls back out.
+        std::expected<void, std::string> prepareTimestamps(uint32_t pairs);
+        // After endFrame's checks passed: waits for the frame, reports each submission's timestamps of `slot` and returns
+        // the collector's span.
+        std::expected<std::optional<double>, std::string> reportTimestamps(const Slot& slot);
 
         std::vector<ComPtr<IUnknown>> m_owned;
         ID3D12Device12* m_device = nullptr;
@@ -327,6 +379,19 @@ namespace rojoRHI::bench {
         uint32_t m_committed = 0;    ///< Submissions the open frame made.
         std::string m_frameError;    ///< A failed slot wait of the frame open now, which its endFrame returns.
         std::vector<Slot> m_slots;
+        // One submission of the open frame: its queue, 0 direct or 1 compute, and the queries of its first list's first
+        // timestamp and its last list's last.
+        struct TimedSubmission
+        {
+            uint32_t queue = 0;
+            uint32_t start = 0;
+            uint32_t end = 0;
+        };
+        std::vector<TimedSubmission> m_timed;          ///< The open frame's submissions, reserved by prepareFrames.
+        std::vector<NativeTimedList> m_timedLists;     ///< The open frame's lists with timestamps, reserved by prepareFrames.
+        size_t m_commitCursor = 0;                     ///< Where commit looks for its first list in m_timedLists.
+        std::array<NativeQueueClock, 2> m_clocks{};    ///< The direct and the compute queue's calibration.
+        double m_cpuTicksPerSecond = 0.0;              ///< QueryPerformanceFrequency.
         std::vector<std::vector<std::byte>> m_shaders; ///< The DXIL every library call read.
         NativeCalls m_calls;
         // On the heap so an abandoned context can leave it behind for reports still in flight.

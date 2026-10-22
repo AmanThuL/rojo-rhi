@@ -465,6 +465,8 @@ if is_plat("macosx") or is_config("rojorhi_backend", "d3d12") then
             add_files(path.join(component, "Tests/Support/D3D12/D3D12NoDialog.cpp"))
             add_defines("ROJORHI_BENCH_BACKEND_D3D12", "ROJORHI_BENCH_NATIVE_D3D12", "WIN32_LEAN_AND_MEAN", "NOMINMAX", "UNICODE", "_UNICODE")
             d3d12_selection()
+            -- The RojoRHI arm reads its GPU time through the backend's private submission timing seam.
+            add_includedirs(path.join(component, "Backends/D3D12/Source"))
             -- System includes, so the Agility headers shadow the Windows SDK's older d3d12.h and /external:W0 covers them.
             add_sysincludedirs(path.join(thirdparty, "agility/include"))
             -- bcrypt for the outputs' SHA-256, version for the runtime DLLs' file versions the environment records.

@@ -27,6 +27,7 @@ namespace rojoRHI {
 namespace rojoRHI::d3d12 {
     struct BufferPayload;
     struct PipelineState;
+    struct SubmitTimingState;
 
     /// The root signature the compute side of a list holds: the global one of caller pipelines, the backend kernels' one, or
     /// one vendor work set.
@@ -103,6 +104,10 @@ namespace rojoRHI::d3d12 {
         ListTimestamps timestamps;             ///< The timestamps the list records.
         DynamicState dynamic;                  ///< The dynamic state the native list holds.
         PassStorage pass;                      ///< The native description of the list's last render pass.
+        /// The submission timing the recording writes its first and last timestamps into; null for none.
+        SubmitTimingState* submitTiming = nullptr;
+        /// The query pair the recording claimed in `submitTiming`.
+        uint64_t submitPair = 0;
     };
 
     /// The command lists of one frame slot: those taken since the slot was reused come first and the rest wait to be reused.

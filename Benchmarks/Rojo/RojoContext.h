@@ -42,8 +42,8 @@ namespace rojoRHI::bench {
         CallSnapshot callSnapshot() const;
 
         // Frames. beginFrame expects `commits` commit reports and calls Device::beginFrame; endFrame calls
-        // Device::endFrame, then waits for those reports where the backend gives them (Metal 4) and returns the frame's
-        // GPU span; on Null a submission completes inside the call and the span is empty.
+        // Device::endFrame, then waits for those reports where the backend gives them (Metal 4, and D3D12 once drained)
+        // and returns the frame's GPU span; on Null a submission completes inside the call and the span is empty.
         void beginFrame(uint32_t commits);
         std::expected<std::optional<double>, std::string> endFrame();
 
