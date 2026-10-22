@@ -217,6 +217,7 @@ python3 Tools/bench.py build [--backend metal4|null|d3d12] [--adapter hardware|w
 python3 Tools/bench.py correctness [--arms R,N] [--only C1,G2]
 python3 Tools/bench.py timing [--only C1,G2]
 python3 Tools/bench.py analyze                         writes summary.json and analysis.txt
+python3 Tools/bench.py seal                            rewrites SHA256SUMS, run last
 ```
 
 - **Correctness** runs each configuration twice, in Release without validation and in Debug with
@@ -244,7 +245,9 @@ python3 Tools/bench.py analyze                         writes summary.json and a
 The note's owner amended two of its rules on 2026-10-18, and the harness implements the amended
 form: C8 registers a barrier between passes, with `c` 7 and K up to 10,000, and the composed frame's
 depth and shadow barriers (rows 2 and 4) use `DepthStencilRead | DepthStencilWrite`. Round 3's
-changes are on its page, linked above. `SHA256SUMS` covers every file under the output directory.
+changes are on its page, linked above. `SHA256SUMS` covers every file under the output directory, and every command rewrites it on exit.
+A round script that redirects a command's output into the directory (`analyze > load/x.out`) runs
+`bench.py seal` after that redirect closes, so the manifest holds the file's final content.
 
 ## State and what remains
 

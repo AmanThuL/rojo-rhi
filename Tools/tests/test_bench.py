@@ -3,6 +3,7 @@ from __future__ import annotations
 import contextlib
 import ctypes
 import io
+import hashlib
 import json
 import shutil
 import subprocess
@@ -682,6 +683,18 @@ class BuildAndMainTests(DriverCase):
         self.assertIn("  timing/x.json", sums)
         self.assertIn("  summary.json", sums)
         self.assertTrue((self.out / "analysis.txt").exists())
+
+    def test_seal_hashes_a_file_written_after_analyze(self) -> None:
+        hooks = bench.Hooks(run=self.fake, sleep=lambda s: None, clock=lambda: 0.0,
+                            power=lambda: "AC Power", environment=lambda: {}, base_env={})
+        argv = ["--root", str(self.out.parents[1]), "--topic", "t2", "--date", "2026-10-18"]
+        (self.out / "load").mkdir()
+        (self.out / "load" / "driver-analyze.out").write_text("")
+        self.assertEqual(bench.main(argv + ["analyze"], hooks), 0)
+        (self.out / "load" / "driver-analyze.out").write_text("final report\n")
+        self.assertEqual(bench.main(argv + ["seal"], hooks), 0)
+        digest = hashlib.sha256(b"final report\n").hexdigest()
+        self.assertIn(f"{digest}  load/driver-analyze.out", (self.out / "SHA256SUMS").read_text())
 
     def test_analyze_reads_kept_results_only(self) -> None:
         (self.out / "timing").mkdir()
