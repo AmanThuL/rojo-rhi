@@ -53,9 +53,9 @@ namespace rojoRHI::d3d12 {
     /// the loader is one per process and documents no thread safety.
     bool fsrAvailable(const FidelityFx& fidelityFx, ID3D12Device12& device);
 
-    /// Returns the upscaler kinds a device lists: `FSR` when `fidelityFx` loaded and `fsrAvailable` holds for `device`, else
-    /// none. The span views static storage.
-    std::span<const UpscalerKind> listedUpscalers(const std::optional<FidelityFx>& fidelityFx, ID3D12Device12& device);
+    /// Returns the upscalers a device lists: `FSR`, with FidelityFX's documented input scale range, when `fidelityFx` loaded
+    /// and `fsrAvailable` holds for `device`, else none. The span views static storage.
+    std::span<const UpscalerSupport> listedUpscalers(const std::optional<FidelityFx>& fidelityFx, ID3D12Device12& device);
 
     /// Destroys the FSR context of a retiring upscaler record with `ffxDestroyContext`, under the FidelityFX mutex. `context`
     /// is the `DeviceImpl`; a null payload is skipped. It runs under the upscaler pool's lock. Logs and aborts, in every

@@ -225,17 +225,17 @@ returns the core's report and counts nothing.
 
 ## Upscalers
 
-The device lists `MetalFX` when `MTLFX::TemporalScalerDescriptor::supportsMetal4FX` holds.
-`createUpscaler` runs `core::prepareUpscaler`, then refuses with `Unsupported` an extent ratio above
-`supportedInputContentMaxScale` (3 on an M3 Max) or an output under 4 texels in an axis, on which
-MetalFX's creation aborts. It makes an `MTL4FX::TemporalScaler` with the device's compiler, the
-four formats, the reactive mask enabled as `R8Unorm`, content properties enabled with a scale range
-from the whole input's scale to the device's maximum, auto exposure from `AutoExposure` and
-synchronous initialisation; `ReversedDepth` sets `depthReversed`. A nil scaler is `Unsupported`
-naming the extents and formats. The payload also holds an `MTL::Fence` set on the scaler and the
-cleared mask, an `R8Unorm` Private texture of the input extent zeroed through the stager and kept
-in the device set. The pool counts the scaler; the fence and the mask count one `nativeCreateCalls`
-each when made and when the retire hook releases them, inside a pool.
+The device lists `MetalFX` when `MTLFX::TemporalScalerDescriptor::supportsMetal4FX` holds, its range
+the inverted content scales. `createUpscaler` runs `core::prepareUpscaler`, then refuses with
+`Unsupported` an extent ratio above `supportedInputContentMaxScale` (3 on an M3 Max) or an output
+under 4 texels in an axis, on which MetalFX's creation aborts. It makes an `MTL4FX::TemporalScaler`
+with the device's compiler, the four formats, the reactive mask enabled as `R8Unorm`, content
+properties enabled with a scale range from the whole input's scale to the device's maximum, auto
+exposure from `AutoExposure` and synchronous initialisation; `ReversedDepth` sets `depthReversed`. A
+nil scaler is `Unsupported` naming the extents and formats. The payload also holds an `MTL::Fence`
+set on the scaler and the cleared mask, an `R8Unorm` Private texture of the input extent zeroed
+through the stager and kept in the device set. The pool counts the scaler; the fence and the mask
+count one `nativeCreateCalls` each when made and when the retire hook releases them, inside a pool.
 
 `upscale` runs the core's `upscale`, closes the open encoder and pushes a debug group named after
 the upscale's scope, whose string also labels the carrier: a compute encoder opened only to wait on

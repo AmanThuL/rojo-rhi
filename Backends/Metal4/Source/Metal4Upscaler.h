@@ -11,6 +11,7 @@
 #include <Metal/Metal.hpp>
 #include <MetalFX/MetalFX.hpp>
 
+#include <array>
 #include <span>
 
 namespace rojoRHI::metal4 {
@@ -27,9 +28,9 @@ namespace rojoRHI::metal4 {
         Extent2D minContent = {};
     };
 
-    /// Returns the upscaler kinds `device` creates: `MetalFX` when MetalFX supports the device on Metal 4, else none. The
-    /// span views static storage.
-    std::span<const UpscalerKind> metalUpscalers(MTL::Device* device);
+    /// Returns the upscalers `device` creates: `MetalFX` when MetalFX supports the device on Metal 4, else none. MetalFX's
+    /// content scales are output over input, so the input scale range inverts them. The span views `storage`.
+    std::span<const UpscalerSupport> metalUpscalers(MTL::Device* device, std::array<UpscalerSupport, 1>& storage);
 
     /// Releases the scaler, the fence and the mask of a retiring record inside an autorelease pool, after the mask leaves the
     /// device residency set, and counts the fence and the mask as released native objects. `context` is the `DeviceImpl`; a

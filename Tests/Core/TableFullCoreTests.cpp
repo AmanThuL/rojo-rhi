@@ -146,7 +146,7 @@ TEST_CASE("a frame-arena page that finds the buffer table full is OutOfMemory an
 //======================================================================================================================
 TEST_CASE("an upscaler that finds its table full is OutOfMemory and counts nothing", "[core]")
 {
-    static constexpr std::array<UpscalerKind, 1> kOffered = { UpscalerKind::FSR };
+    static constexpr std::array<UpscalerSupport, 1> kOffered = { { { UpscalerKind::FSR, 0.5f, 1.0f } } };
     core::DeviceCore core{ DeviceDesc{}, kSmallPool };
     core.capabilities().upscalers = kOffered;
     const UpscalerDesc desc{ .kind = UpscalerKind::FSR,

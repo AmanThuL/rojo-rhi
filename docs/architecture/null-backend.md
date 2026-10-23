@@ -155,7 +155,7 @@ The Null device is deterministic and does no work.
 
 - `capabilities` reports the floor name `"Null"` and the adapter name `"Null"`, every optional
   feature as supported (upload in device memory, placement sparse, mesh task indirect,
-  conservative rasterisation) and every upscaler kind except `Auto`.
+  conservative rasterisation) and every upscaler kind but `Auto`, each with the range 0.25 to 1.
 - `Limits` takes the Floor column of the limits table in
   [formats and limits](../spec/15-formats-and-limits-part2.md) wherever that column gives a number.
   `maxBufferSize` has no number there, so the Null device reports 2^32 bytes, a value no hardware

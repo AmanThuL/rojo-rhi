@@ -175,14 +175,17 @@ namespace rojoRHI {
 
     namespace metal4 {
         //==============================================================================================================
-        std::span<const UpscalerKind> metalUpscalers(MTL::Device* device)
+        std::span<const UpscalerSupport> metalUpscalers(MTL::Device* device, std::array<UpscalerSupport, 1>& storage)
         {
-            static constexpr std::array<UpscalerKind, 1> kMetalFX = { UpscalerKind::MetalFX };
-            if (MTLFX::TemporalScalerDescriptor::supportsMetal4FX(device))
+            if (!MTLFX::TemporalScalerDescriptor::supportsMetal4FX(device))
             {
-                return kMetalFX;
+                return {};
             }
-            return {};
+            const float minSupported = MTLFX::TemporalScalerDescriptor::supportedInputContentMinScale(device);
+            const float maxSupported = MTLFX::TemporalScalerDescriptor::supportedInputContentMaxScale(device);
+            storage[0] =
+                UpscalerSupport{ .kind = UpscalerKind::MetalFX, .minInputScale = 1.0f / maxSupported, .maxInputScale = std::min(1.0f, 1.0f / minSupported) };
+            return storage;
         }
 
         //==============================================================================================================

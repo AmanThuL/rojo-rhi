@@ -495,9 +495,12 @@ TEST_CASE("upscalers lists FSR when the runtime sits beside the executable", "[d
     const ULONG before = references(impl.device());
     CHECK(d3d12::fsrAvailable(*impl.fsr.fidelityFx, *impl.device()));
     CHECK(references(impl.device()) == before);
-    const std::span<const UpscalerKind> upscalers = created->capabilities().upscalers;
+    const std::span<const UpscalerSupport> upscalers = created->capabilities().upscalers;
     REQUIRE(upscalers.size() == 1u);
-    CHECK(upscalers.front() == UpscalerKind::FSR);
+    CHECK(upscalers.front().kind == UpscalerKind::FSR);
+    // FidelityFX's documented quality modes, native AA (1.0x) to ultra performance (3.0x).
+    CHECK(upscalers.front().minInputScale == 1.0f / 3.0f);
+    CHECK(upscalers.front().maxInputScale == 1.0f);
     destroyDevice(*created);
 }
 
@@ -595,7 +598,7 @@ TEST_CASE("a device whose runtime is absent refuses Auto with Unsupported", "[d3
     std::filesystem::remove_all(empty);
     REQUIRE_FALSE(impl.fsr.fidelityFx.has_value());
     Capabilities& capabilities = impl.core.capabilities();
-    const std::span<const UpscalerKind> listed = std::exchange(capabilities.upscalers, d3d12::listedUpscalers(impl.fsr.fidelityFx, *impl.device()));
+    const std::span<const UpscalerSupport> listed = std::exchange(capabilities.upscalers, d3d12::listedUpscalers(impl.fsr.fidelityFx, *impl.device()));
     CHECK(created->capabilities().upscalers.empty());
     for (const UpscalerKind kind : { UpscalerKind::Auto, UpscalerKind::FSR })
     {

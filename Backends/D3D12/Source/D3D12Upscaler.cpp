@@ -348,9 +348,11 @@ namespace rojoRHI {
         }
 
         //==============================================================================================================
-        std::span<const UpscalerKind> listedUpscalers(const std::optional<FidelityFx>& fidelityFx, ID3D12Device12& device)
+        std::span<const UpscalerSupport> listedUpscalers(const std::optional<FidelityFx>& fidelityFx, ID3D12Device12& device)
         {
-            static constexpr std::array<UpscalerKind, 1> kFsr = { UpscalerKind::FSR };
+            // FidelityFX's documented quality modes run from native AA (1.0x) to ultra performance (3.0x); the range is not
+            // read from the runtime.
+            static constexpr std::array<UpscalerSupport, 1> kFsr = { { { UpscalerKind::FSR, 1.0f / 3.0f, 1.0f } } };
             if (fidelityFx.has_value() && fsrAvailable(*fidelityFx, device))
             {
                 return kFsr;

@@ -1,14 +1,14 @@
 # 12. Upscaling
 
 **Status**: Accepted
-**API version**: 0.1.0
+**API version**: 0.2.0
 
 An upscaler reconstructs a high-resolution image from a jittered low-resolution frame, its depth,
 its motion and the upscaler's private history. The interface mirrors the v1 temporal scaler and
 fronts several vendor implementations behind one descriptor. Vendor SDKs and their licensing are
 backend business: public headers name no vendor type, and an implementation either is compiled
 into the backend or is not. `Device::capabilities().upscalers` ([device](02-device.md)) lists the
-kinds the device can create.
+kinds the device can create, each with the input scale range it reconstructs within.
 
 On Metal 4 the implementation is MetalFX, recorded between encoders. The D3D12 backend compiles
 FSR in always, loading the FidelityFX runtime beside the executable at device creation, and lists
@@ -50,6 +50,30 @@ Requesting a kind that is not compiled in, or that the device or driver refuses,
 | `FSR` | impossible: the FidelityFX SDK has no Metal backend | FidelityFX upscale context, always compiled in; listed only when the loaded runtime offers an upscaler provider for the device | FidelityFX upscale context through a Vulkan backend (unverified: Vulkan support of the current FidelityFX SDK) |
 | `XeSS` | impossible | XeSS context, when its SDK is compiled in (unverified) | XeSS context through its Vulkan entry points (unverified) |
 | Cost | native: MetalFX only; every other kind fails creation | native: FSR always; DLSS and XeSS when compiled in | native: FSR, DLSS and XeSS through their Vulkan SDKs |
+
+### `UpscalerSupport`
+```cpp
+struct UpscalerSupport {
+    UpscalerKind kind = UpscalerKind::MetalFX;
+    float minInputScale = 1.0f;  // smallest input extent over output extent, per axis, in (0, 1]
+    float maxInputScale = 1.0f;  // largest, at least minInputScale and at most 1
+};
+```
+One entry of `Capabilities::upscalers`: a kind the device creates and the input scales it takes. A
+scale is an input extent over the output extent, per axis. Within `[minInputScale, maxInputScale]`
+the implementation reconstructs the content. To get that reconstruction, a caller that varies
+`UpscaleParams::inputContent` keeps each axis inside it, and one that sizes `UpscalerDesc::input`
+from `output` keeps the ratio there too. Outside it, Metal 4's creation returns `Unsupported` for a
+descriptor whose `input` over `output` is below `minInputScale` and raises a smaller per-frame
+content to the smallest it takes; FSR takes any content.
+
+#### Valid usage
+- None.
+#### Mapping
+| | Metal 4 | D3D12 | Vulkan |
+|---|---|---|---|
+| `minInputScale`, `maxInputScale` | `1 / MTLFX::TemporalScalerDescriptor::supportedInputContentMaxScale` and `min(1, 1 / supportedInputContentMinScale)` | FSR: 1/3 and 1, FidelityFX's quality modes from native AA to ultra performance (unverified: documented, not read from the runtime); DLSS and XeSS not compiled in | as D3D12 (unverified) |
+| Cost | native: queried once at creation | native: queried once at creation | native: queried once at creation |
 
 ### `UpscalerFlags`
 ```cpp
@@ -120,10 +144,10 @@ one upscaler serves dynamic resolution without re-creation.
 ```cpp
 Result<Upscaler> Device::createUpscaler(const UpscalerDesc& desc);
 ```
-Creates the implementation `desc.kind` selects, with its private history; `Auto` selects the first
-kind `Capabilities::upscalers` lists. Creation returns an error when the kind is unavailable on
-this device, when the implementation rejects the extent ratio or a format, or when the platform
-refuses the object. Creation is free-threaded and synchronous.
+Creates the implementation `desc.kind` selects, with its private history; `Auto` selects the kind of
+the first entry `Capabilities::upscalers` lists. Creation returns an error when the kind is
+unavailable on this device, when the implementation rejects the extent ratio or a format, or when
+the platform refuses the object. Creation is free-threaded and synchronous.
 
 #### Valid usage
 - None.

@@ -20,10 +20,15 @@ TEST_CASE("the Null device reports every optional feature and the floor name Nul
     CHECK(caps.meshTasksIndirect);
     CHECK(caps.conservativeRaster);
     REQUIRE(caps.upscalers.size() == 4);
-    CHECK(caps.upscalers[0] == UpscalerKind::MetalFX);
-    CHECK(caps.upscalers[1] == UpscalerKind::DLSS);
-    CHECK(caps.upscalers[2] == UpscalerKind::FSR);
-    CHECK(caps.upscalers[3] == UpscalerKind::XeSS);
+    CHECK(caps.upscalers[0].kind == UpscalerKind::MetalFX);
+    CHECK(caps.upscalers[1].kind == UpscalerKind::DLSS);
+    CHECK(caps.upscalers[2].kind == UpscalerKind::FSR);
+    CHECK(caps.upscalers[3].kind == UpscalerKind::XeSS);
+    for (const UpscalerSupport& support : caps.upscalers)
+    {
+        CHECK(support.minInputScale == 0.25f);
+        CHECK(support.maxInputScale == 1.0f);
+    }
     destroyDevice(device);
 }
 

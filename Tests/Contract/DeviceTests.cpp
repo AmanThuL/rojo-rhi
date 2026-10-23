@@ -8,6 +8,8 @@
 
 #include <catch2/catch_test_macros.hpp>
 
+#include <cstddef>
+#include <span>
 #include <string>
 #include <string_view>
 #include <thread>
@@ -122,9 +124,28 @@ TEST_CASE("capabilities never list Auto as an upscaler and name the device", "[c
     const Capabilities& caps = device.capabilities();
     CHECK_FALSE(caps.adapterName.empty());
     CHECK_FALSE(caps.floorName.empty());
-    for (const UpscalerKind kind : caps.upscalers)
+    for (const UpscalerSupport& support : caps.upscalers)
     {
-        CHECK(kind != UpscalerKind::Auto);
+        CHECK(support.kind != UpscalerKind::Auto);
+    }
+    destroyDevice(device);
+}
+
+//======================================================================================================================
+TEST_CASE("every listed upscaler has a scale range inside (0, 1] and a kind of its own", "[contract]")
+{
+    Device device = makeDevice();
+    const std::span<const UpscalerSupport> upscalers = device.capabilities().upscalers;
+    for (std::size_t i = 0; i < upscalers.size(); ++i)
+    {
+        const UpscalerSupport& support = upscalers[i];
+        CHECK(0.0f < support.minInputScale);
+        CHECK(support.minInputScale <= support.maxInputScale);
+        CHECK(support.maxInputScale <= 1.0f);
+        for (std::size_t j = i + 1; j < upscalers.size(); ++j)
+        {
+            CHECK(upscalers[j].kind != support.kind);
+        }
     }
     destroyDevice(device);
 }

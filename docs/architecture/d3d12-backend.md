@@ -91,7 +91,7 @@ Debug builds: a child object that outlives the device is a defect. The factory g
 
 `checkFloor` runs at creation and `reportCapabilities` fills the report from the device
 (`D3D12Capabilities.cpp`). The report is honest about what the backend does: `placementSparse` is
-true at tiled-resources tier 2 or higher, `upscalers` lists FSR when the FidelityFX runtime loads,
+true at tiled-resources tier 2 or higher, `upscalers` lists FSR (1/3 to 1) when its runtime loads,
 `conservativeRaster` is false, `meshTasksIndirect` is true, `uploadInDeviceMemory` is
 `GPUUploadHeapSupported`, and `floorName` reads `FL 12_2, SM 6.<n>` with the highest shader model.
 `maxViews` is the view heap size less the reserved leading slots, `maxSamplers` is 2,048,

@@ -35,7 +35,10 @@
 
 namespace rojoRHI {
     namespace {
-        constexpr std::array<UpscalerKind, 4> kUpscalers = { UpscalerKind::MetalFX, UpscalerKind::DLSS, UpscalerKind::FSR, UpscalerKind::XeSS };
+        constexpr std::array<UpscalerSupport, 4> kUpscalers = { { { UpscalerKind::MetalFX, 0.25f, 1.0f },
+                                                                  { UpscalerKind::DLSS, 0.25f, 1.0f },
+                                                                  { UpscalerKind::FSR, 0.25f, 1.0f },
+                                                                  { UpscalerKind::XeSS, 0.25f, 1.0f } } };
 
         //==============================================================================================================
         /// Each field takes the Floor column of the limits table in the reference where that column gives a number, and

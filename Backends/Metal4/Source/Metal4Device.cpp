@@ -325,7 +325,7 @@ namespace rojoRHI {
             capabilities.placementSparse = impl.device->supportsPlacementSparse();
             capabilities.meshTasksIndirect = impl.device->supportsFamily(MTL::GPUFamilyApple9);
             capabilities.conservativeRaster = false; // Metal 4 has no conservative rasterization.
-            capabilities.upscalers = metal4::metalUpscalers(impl.device);
+            capabilities.upscalers = metal4::metalUpscalers(impl.device, impl.upscalerSupport);
             impl.core.setFormatTable(metal4::metalFormatTable(impl.device));
         }
     } // namespace
