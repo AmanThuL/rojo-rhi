@@ -10,6 +10,7 @@
 - `ROJORHI_VERSION_MINOR` is 2: the interface is 0.2.0, unreleased
   ([ADR 0022](docs/decisions/0022-versioning-in-the-single-header.md)). Pipeline-cache blobs of
   0.1.0 embed that version and become misses.
+- Chapter 10 states that a submission with no lists is valid with no frame open.
 
 ## 0.1.0 (2026-10-22)
 

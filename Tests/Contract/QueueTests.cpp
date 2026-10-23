@@ -84,6 +84,27 @@ TEST_CASE("a submission with no lists signals its fences", "[contract]")
 }
 
 //======================================================================================================================
+TEST_CASE("a submission with no lists is valid with no frame open", "[contract]")
+{
+    Device device = makeDevice();
+    for (const QueueType type : { QueueType::Graphics, QueueType::Compute, QueueType::Copy })
+    {
+        const Fence fence = makeFence(device, 0);
+        Queue queue = device.queue(type);
+        const std::array<FenceValue, 1> first{ FenceValue{ fence, 1 } };
+        const std::array<FenceValue, 1> second{ FenceValue{ fence, 2 } };
+        queue.submit({}, {}, first);
+        CHECK(device.wait({ fence, 1 }, UINT64_MAX));
+        device.beginFrame();
+        device.endFrame();
+        queue.submit({}, first, second);
+        CHECK(device.wait({ fence, 2 }, UINT64_MAX));
+        CHECK(device.completedValue(fence) == 2);
+    }
+    destroyDevice(device);
+}
+
+//======================================================================================================================
 TEST_CASE("a submission may wait for a value at most the initial value", "[contract]")
 {
     Device device = makeDevice();
