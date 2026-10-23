@@ -135,6 +135,30 @@ TEST_CASE("declareAccess names a compute stage for a dispatch and an empty span 
 }
 
 //======================================================================================================================
+TEST_CASE("declareAccess accepts a read of a Storage-only texture after its producer", "[contract]")
+{
+#ifndef NDEBUG
+    PassKit kit(QueueType::Graphics, true);
+    const Texture texture = kit.texture(Format::RGBA8Unorm, TextureUsage::Storage);
+    test::transition(kit.list, texture, Layout::Undefined, Layout::CopyDst);
+    kit.list.clearTexture(texture, {}, ClearValue{ .color = { 1, 0, 1, 1 } });
+    const std::array barriers{ TextureBarrier{ .texture = texture,
+                                               .srcStage = Stage::Copy,
+                                               .srcAccess = Access::CopyWrite,
+                                               .dstStage = Stage::ComputeShader,
+                                               .dstAccess = Access::ShaderRead,
+                                               .oldLayout = Layout::CopyDst,
+                                               .newLayout = Layout::ShaderWrite } };
+    kit.list.barrier({}, {}, barriers);
+    kit.list.setPipeline(kit.compute());
+    const std::array accesses{ ResourceAccess{ .texture = texture, .stage = Stage::ComputeShader, .access = Access::ShaderRead } };
+    kit.list.declareAccess(accesses);
+    kit.list.dispatch(1, 1, 1);
+    kit.finish();
+#endif
+}
+
+//======================================================================================================================
 TEST_CASE("scopeTimings is empty until a frame has retired", "[contract]")
 {
     Device device = *createDevice(DeviceDesc{ .scopeTimings = true, .framesInFlight = 2 });
