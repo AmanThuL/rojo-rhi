@@ -13,6 +13,8 @@
 - Chapter 10 states that a submission with no lists is valid with no frame open.
 - The Metal 4 backend writes a message it aborts after to stderr as well when a message callback
   took it.
+- The Metal 4 backend's per-frame scope warning counts claimed timestamp pairs the GPU never wrote
+  apart from untimed scopes.
 
 ## 0.1.0 (2026-10-22)
 
