@@ -60,6 +60,17 @@ class CppCommentTests(unittest.TestCase):
                 ["Backends/Metal4/Source/Private.h", "Include/rojoRHI/RHI.h", "Source/Validate.h"],
             )
 
+    def test_adapter_sources_are_owned(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            path = root / "Adapters/ImGui/Source/ImGuiAdapter.cpp"
+            path.parent.mkdir(parents=True)
+            path.write_text("", encoding="utf-8")
+            self.assertEqual(
+                [p.relative_to(root).as_posix() for p in comments.project_cpp_files(root)],
+                ["Adapters/ImGui/Source/ImGuiAdapter.cpp"],
+            )
+
     def test_benchmark_sources_are_owned(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
@@ -77,7 +88,7 @@ class CppCommentTests(unittest.TestCase):
             root = Path(directory)
             for relative in (
                 "Include/rojoRHI/RHI.h",
-                f"{comments.ADAPTER_DIR}/Include/rojoRHI/Metal4/Metal4ImGui.h",
+                f"{comments.ADAPTER_DIRS[0]}/Include/rojoRHI/Metal4/Metal4ImGui.h",
                 "Legacy/Include/rojoRHI/Legacy.h",
                 "Backends/Metal4/Source/Private.h",
                 "Source/Validate.h",
@@ -89,7 +100,7 @@ class CppCommentTests(unittest.TestCase):
                 [path.relative_to(root).as_posix() for path in comments.public_header_files(root)],
                 [
                     "Include/rojoRHI/RHI.h",
-                    f"{comments.ADAPTER_DIR}/Include/rojoRHI/Metal4/Metal4ImGui.h",
+                    f"{comments.ADAPTER_DIRS[0]}/Include/rojoRHI/Metal4/Metal4ImGui.h",
                     "Legacy/Include/rojoRHI/Legacy.h",
                 ],
             )
@@ -98,7 +109,7 @@ class CppCommentTests(unittest.TestCase):
         root = Path(directory)
         for relative in (
             "Include/rojoRHI/RHI.h",
-            f"{comments.ADAPTER_DIR}/Include/rojoRHI/Metal4/Metal4ImGui.h",
+            f"{comments.ADAPTER_DIRS[0]}/Include/rojoRHI/Metal4/Metal4ImGui.h",
         ):
             path = root / relative
             path.parent.mkdir(parents=True, exist_ok=True)
@@ -112,14 +123,42 @@ class CppCommentTests(unittest.TestCase):
             headers, notices = comments.api_headers(root, entries)
             self.assertEqual([p.relative_to(root).as_posix() for p in headers], ["Include/rojoRHI/RHI.h"])
             self.assertEqual(len(notices), 1)
-            self.assertIn(comments.ADAPTER_DIR, notices[0])
+            self.assertIn(comments.ADAPTER_DIRS[0], notices[0])
 
     def test_adapter_headers_are_checked_when_the_database_has_them(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = self.adapter_root(directory)
             entries = [
                 {"directory": str(root.parent), "file": f"{root.name}/Source/Validate.cpp"},
-                {"directory": str(root), "file": f"{comments.ADAPTER_DIR}/Source/Metal4ImGui.cpp"},
+                {"directory": str(root), "file": f"{comments.ADAPTER_DIRS[0]}/Source/Metal4ImGui.cpp"},
+            ]
+            headers, notices = comments.api_headers(root, entries)
+            self.assertEqual(len(headers), 2)
+            self.assertEqual(notices, [])
+
+    def test_new_adapter_headers_are_skipped_with_a_notice_when_the_database_lacks_them(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            for relative in ("Include/rojoRHI/RHI.h", "Adapters/ImGui/Include/rojoRHI/ImGuiAdapter.h"):
+                path = root / relative
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_text("", encoding="utf-8")
+            entries = [{"directory": str(root), "file": "Source/Validate.cpp"}]
+            headers, notices = comments.api_headers(root, entries)
+            self.assertEqual([p.relative_to(root).as_posix() for p in headers], ["Include/rojoRHI/RHI.h"])
+            self.assertEqual(len(notices), 1)
+            self.assertIn("Adapters/ImGui", notices[0])
+
+    def test_new_adapter_headers_are_checked_when_the_database_has_them(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            for relative in ("Include/rojoRHI/RHI.h", "Adapters/ImGui/Include/rojoRHI/ImGuiAdapter.h"):
+                path = root / relative
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_text("", encoding="utf-8")
+            entries = [
+                {"directory": str(root), "file": "Source/Validate.cpp"},
+                {"directory": str(root), "file": "Adapters/ImGui/Source/ImGuiAdapter.cpp"},
             ]
             headers, notices = comments.api_headers(root, entries)
             self.assertEqual(len(headers), 2)

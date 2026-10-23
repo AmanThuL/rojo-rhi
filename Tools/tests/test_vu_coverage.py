@@ -168,6 +168,15 @@ class VuCoverageTests(unittest.TestCase):
         self.assertEqual(1, len(errors))
         self.assertIn("Backends/Null/Source/B.cpp", errors[0])
 
+    def test_vu_under_adapters_is_an_error(self):
+        root = tree(RULE, DEATH, "", SITE)
+        (root / "Adapters/ImGui/Source").mkdir(parents=True)
+        (root / "Adapters/ImGui/Source/C.cpp").write_text(SITE, encoding="utf-8")
+        errors = []
+        check_vu_coverage.check_sites(root, errors)
+        self.assertEqual(1, len(errors))
+        self.assertIn("Adapters/ImGui/Source/C.cpp", errors[0])
+
     def test_a_site_naming_an_undefined_identifier_fails(self):
         errors = self.errors(RULE, DEATH, "", SITE + SITE.replace("0001", "0009"))
         self.assertTrue(any("VU-rojo-core-0009" in error and "not defined" in error for error in errors))

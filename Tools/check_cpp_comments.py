@@ -17,14 +17,15 @@ from typing import Any
 ROOT = Path(__file__).resolve().parents[1]
 SOURCE_ROOTS = (
     "Include", "Source", "Backends", "Benchmarks", "Legacy/Include", "Legacy/Source", "Legacy/Backends",
+    "Adapters",
 )
 # Test sources carry no file envelope; the Tests root already lies outside SOURCE_ROOTS.
 EXCLUDED_ROOTS = ()
 SOURCE_SUFFIXES = {".h", ".cpp"}
 FILE_RULER = "//" + "-" * 118
-# The ImGui adapter compiles only against a host's ImGui target, so a standalone compilation
-# database never holds it. Its public headers are compiled whenever the database covers it.
-ADAPTER_DIR = "Legacy/Backends/Metal4/ImGui"
+# The ImGui adapters compile only against an ImGui target, so a compilation database that lacks one
+# never holds them. Each directory's public headers are compiled whenever the database covers it.
+ADAPTER_DIRS = ("Legacy/Backends/Metal4/ImGui", "Adapters/ImGui")
 # The v2 public tree is a declaration list whose documentation is the API reference, so its
 # declarations carry no doc comment and its comments carry no reference into that documentation.
 MINIMAL_ROOT = "Include"
@@ -55,11 +56,11 @@ def project_cpp_files(root: Path) -> list[Path]:
 def public_header_files(root: Path) -> list[Path]:
     """Return headers whose declarations form project API.
 
-    The component exports two include trees, the core interfaces and the optional ImGui adapter;
+    The component exports the core interfaces and the optional ImGui adapters' include trees;
     backend and shared implementation headers are excluded.
     """
     public: list[Path] = []
-    for name in ("Include", "Legacy/Include", f"{ADAPTER_DIR}/Include"):
+    for name in ("Include", "Legacy/Include", *(f"{adapter}/Include" for adapter in ADAPTER_DIRS)):
         include_root = root / name
         if include_root.is_dir():
             public.extend(include_root.rglob("*.h"))
@@ -271,13 +272,17 @@ def component_entries(entries: list[dict[str, Any]], root: Path) -> list[dict[st
 def api_headers(root: Path, entries: list[dict[str, Any]]) -> tuple[list[Path], list[str]]:
     """Return the public headers to compile, skipping the adapter only when the database lacks it."""
     headers = public_header_files(root)
-    adapter = (root / ADAPTER_DIR).resolve()
-    if any(_entry_path(entry).is_relative_to(adapter) for entry in entries):
-        return headers, []
-    kept = [path for path in headers if not path.resolve().is_relative_to(adapter)]
-    if len(kept) == len(headers):
-        return headers, []
-    return kept, [f"{ADAPTER_DIR} skipped: the compilation database has no entry for the ImGui adapter"]
+    kept = headers
+    notices: list[str] = []
+    for name in ADAPTER_DIRS:
+        adapter = (root / name).resolve()
+        if any(_entry_path(entry).is_relative_to(adapter) for entry in entries):
+            continue
+        remaining = [path for path in kept if not path.resolve().is_relative_to(adapter)]
+        if len(remaining) != len(kept):
+            notices.append(f"{name} skipped: the compilation database has no entry for the ImGui adapter")
+            kept = remaining
+    return kept, notices
 
 
 def _entry_for_header(header: Path, entries: list[dict[str, Any]], root: Path) -> dict[str, Any]:

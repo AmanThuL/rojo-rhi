@@ -1,5 +1,8 @@
 #!/usr/bin/env python3
-"""Check that every valid-usage rule in the API reference has a death test or a pending entry."""
+"""Check that every valid-usage rule in the API reference has a death test or a pending entry.
+
+A check under Backends/ or Adapters/ is an error: every check lives in Source/.
+"""
 
 from __future__ import annotations
 
@@ -13,6 +16,7 @@ SPEC = Path("docs/spec")
 TESTS = Path("Tests")
 SOURCE = Path("Source")
 BACKENDS = Path("Backends")
+ADAPTERS = Path("Adapters")
 CODE_SUFFIXES = (".cpp", ".h", ".inl", ".mm")
 PENDING = Path("Tools/vu_pending.txt")
 PARTS = ("resources", "recording", "edges", "tracker")
@@ -184,17 +188,17 @@ def check_calls(text: str) -> list[str | None]:
 
 
 def check_sites(root: Path, errors: list[str]) -> Counter[str]:
-    """Count the `ROJORHI_VU` call sites of each identifier under Source/; a check anywhere under Backends/ is an error."""
+    """Count the `ROJORHI_VU` call sites of each identifier under Source/; a check anywhere under Backends/ or Adapters/ is an error."""
     sites: Counter[str] = Counter()
-    for base in (SOURCE, BACKENDS):
+    for base in (SOURCE, BACKENDS, ADAPTERS):
         for source in sorted((root / base).rglob("*")):
             if source.suffix not in CODE_SUFFIXES:
                 continue
             calls = check_calls(strip_dead_blocks(strip_comments(source.read_text(encoding="utf-8"))))
             relative = source.relative_to(root)
-            if base == BACKENDS:
+            if base != SOURCE:
                 if calls:
-                    errors.append(f"{relative}: {len(calls)} ROJORHI_VU call(s) under {BACKENDS}; every check lives in {SOURCE}")
+                    errors.append(f"{relative}: {len(calls)} ROJORHI_VU call(s) under {base}; every check lives in {SOURCE}")
                 continue
             for identifier in calls:
                 if identifier is None:
