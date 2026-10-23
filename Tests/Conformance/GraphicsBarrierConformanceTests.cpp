@@ -109,6 +109,17 @@ namespace {
         Addr output;         ///< Where the entry stores its `float4`.
     };
 
+    /// FormatOracle's root for the kernels that store.
+    struct WriteRoot
+    {
+        uint32_t view;              ///< The view written.
+        uint32_t pad0;              ///< Padding.
+        uint32_t pad1;              ///< Padding.
+        uint32_t pad2;              ///< Padding.
+        std::array<float, 4> left;  ///< The value of the left two columns.
+        std::array<float, 4> right; ///< The value of the right two columns.
+    };
+
     //==================================================================================================================
     /// The half-precision bits of `value`, which is zero or a normal half-precision value held exactly.
     uint16_t halfOf(float value)
@@ -527,6 +538,47 @@ namespace {
         INFO(difference);
         CHECK(difference.empty());
     }
+
+    //==================================================================================================================
+    /// Creates a `kBigEdge` square `RGBA16Float` storage texture that a dispatch can also sample, holding `kStale`, in
+    /// `ShaderWrite`.
+    Texture storageTarget(test::GpuKit& kit)
+    {
+        const Texture texture = textureOf(kit.device, kBigEdge, Format::RGBA16Float, TextureUsage::Storage | TextureUsage::Sampled);
+        const ClearValue stale{ .color = kStale };
+        prepare(kit, texture, Layout::ShaderWrite, &stale);
+        return texture;
+    }
+
+    //==================================================================================================================
+    /// Records on `list` the slow storage producer: a dispatch of `FormatOracle`'s store kernel writing `kSolid` over every
+    /// texel of `texture` through a storage view.
+    void storeOn(test::GpuKit& kit, CommandList list, Texture texture)
+    {
+        const ShaderLibrary library = loadLibrary(kit.device, "FormatOracle");
+        const Pipeline store = computeOf(kit.device, library, "storeTexelsMain");
+        const ViewIndex view = *kit.device.createView(texture, TextureViewDesc{ .usage = TextureUsage::Storage });
+        list.setPipeline(store);
+        list.pushRoot(WriteRoot{ static_cast<uint32_t>(view), 0, 0, 0, kSolid, kSolid });
+        list.dispatch(kBigEdge / 4, kBigEdge / 4, 1);
+    }
+
+    //==================================================================================================================
+    /// Records on `list` a dispatch of the AbiTextures entry `entry` over `view` and `sampler` that stores its `float4` into
+    /// `output`.
+    void fetchOn(test::GpuKit& kit, CommandList list, std::string_view entry, ViewIndex view, SamplerIndex sampler, Buffer output)
+    {
+        const ShaderLibrary textures = loadLibrary(kit.device, "AbiTextures");
+        list.setPipeline(computeOf(kit.device, textures, entry));
+        list.pushRoot(
+            FetchRoot{ .view = static_cast<uint32_t>(view),
+                       .sampler = static_cast<uint32_t>(sampler),
+                       .comparison = 0,
+                       .pad = 0,
+                       .output = kit.device.address(output) }
+        );
+        list.dispatch(1, 1, 1);
+    }
 } // namespace
 
 //======================================================================================================================
@@ -576,6 +628,82 @@ TEST_CASE("a compute shader's buffer writes are pulled by the next pass's vertex
     Oracles::drawOn(list, target, pulled, PullRoot{ kit.device.address(positions, kTailOffset) });
     kit.run(std::array{ list });
     checkImage(oracles.read(target), solidImage());
+}
+
+//======================================================================================================================
+TEST_CASE("a compute shader's storage-texture writes are loaded by the next dispatch through a storage view", "[conformance]")
+{
+    test::requireGpu();
+    test::GpuKit kit;
+    const Texture texture = storageTarget(kit);
+    const ViewIndex view = *kit.device.createView(texture, TextureViewDesc{ .usage = TextureUsage::Storage });
+    const std::vector<std::byte> zeroes(16, std::byte{ 0 });
+    const Buffer output = kit.buffer(16, Memory::Gpu, BufferUsage::ShaderWrite, zeroes);
+    CommandList list = kit.list(QueueType::Graphics, "test.list");
+    storeOn(kit, list, texture);
+    list.barrier(
+        {},
+        {},
+        std::array{ textureBarrier(
+            texture,
+            Stage::ComputeShader,
+            Access::ShaderWrite,
+            Layout::ShaderWrite,
+            Stage::ComputeShader,
+            Access::ShaderRead | Access::ShaderWrite,
+            Layout::ShaderWrite
+        ) }
+    );
+    fetchOn(kit, list, "rwTexture2DMain", view, SamplerIndex{}, output);
+    kit.run(std::array{ list });
+    CHECK(kit.readBuffer(output) == bytesOf(std::span<const float>(kSolid)));
+}
+
+//======================================================================================================================
+TEST_CASE("a compute shader's storage-texture writes are sampled by the next dispatch", "[conformance]")
+{
+    test::requireGpu();
+    test::GpuKit kit;
+    const Oracles oracles(kit);
+    const Texture texture = storageTarget(kit);
+    const ViewIndex view = *kit.device.createView(texture, {});
+    const std::vector<std::byte> zeroes(16, std::byte{ 0 });
+    const Buffer output = kit.buffer(16, Memory::Gpu, BufferUsage::ShaderWrite, zeroes);
+    CommandList list = kit.list(QueueType::Graphics, "test.list");
+    storeOn(kit, list, texture);
+    list.barrier(
+        {},
+        {},
+        std::array{ textureBarrier(
+            texture, Stage::ComputeShader, Access::ShaderWrite, Layout::ShaderWrite, Stage::ComputeShader, Access::ShaderRead, Layout::ShaderRead
+        ) }
+    );
+    fetchOn(kit, list, "texture2DMain", view, oracles.nearest(), output);
+    kit.run(std::array{ list });
+    CHECK(kit.readBuffer(output) == bytesOf(std::span<const float>(kSolid)));
+}
+
+//======================================================================================================================
+TEST_CASE("a compute shader's storage-texture writes are sampled by the next pass's fragment stage", "[conformance]")
+{
+    test::requireGpu();
+    test::GpuKit kit;
+    const Oracles oracles(kit);
+    const Pipeline sampled = oracles.sampled();
+    const Texture texture = storageTarget(kit);
+    const Texture target = oracles.target();
+    CommandList list = kit.list(QueueType::Graphics, "test.list");
+    storeOn(kit, list, texture);
+    list.barrier(
+        {},
+        {},
+        std::array{ textureBarrier(
+            texture, Stage::ComputeShader, Access::ShaderWrite, Layout::ShaderWrite, Stage::FragmentShader, Access::ShaderRead, Layout::ShaderRead
+        ) }
+    );
+    oracles.sampleOn(list, target, sampled, texture);
+    kit.run(std::array{ list });
+    checkImage(oracles.read(target), firstPixel(kSolid));
 }
 
 //======================================================================================================================
