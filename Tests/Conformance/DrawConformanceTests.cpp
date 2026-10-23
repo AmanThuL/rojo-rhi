@@ -581,6 +581,103 @@ TEST_CASE("depth bias moves a D32Float depth by the constant term", "[conformanc
 }
 
 //======================================================================================================================
+TEST_CASE("a Greater depth test over a depth cleared to 0 passes only nearer fragments, and GreaterOrEqual passes an equal one", "[conformance]")
+{
+    test::requireGpu();
+    test::GpuKit kit;
+    const Oracle oracle(kit.device);
+    // The first probe replaces what it passes over with the constant times the solid color; the second adds to it.
+    const BlendState replace{
+        .enable = true, .srcColor = BlendFactor::Constant, .dstColor = BlendFactor::Zero, .srcAlpha = BlendFactor::Constant, .dstAlpha = BlendFactor::Zero
+    };
+    const BlendState accumulate{
+        .enable = true, .srcColor = BlendFactor::Constant, .dstColor = BlendFactor::One, .srcAlpha = BlendFactor::Constant, .dstAlpha = BlendFactor::One
+    };
+    const auto pipeline = [&](CompareOp compare, bool write, const BlendState& blend) {
+        return pipelineOf(
+            kit.device,
+            GraphicsPipelineDesc{ .vertex = { oracle.library, "fullscreenVertexMain" },
+                                  .fragment = { oracle.library, "solidFragmentMain" },
+                                  .depthStencil = { .depthTest = true, .depthWrite = write, .depthCompare = compare },
+                                  .depthFormat = Format::D32Float },
+            ColorTarget{ .format = Format::RGBA16Float, .blend = blend }
+        );
+    };
+    const Pipeline nearer = pipeline(CompareOp::Greater, true, {});
+    const Pipeline probeGreater = pipeline(CompareOp::Greater, false, replace);
+    const Pipeline probeEqualPasses = pipeline(CompareOp::GreaterOrEqual, false, accumulate);
+    const Texture target = targetOf(kit.device);
+    const Texture depth = targetOf(kit.device, Format::D32Float, TextureUsage::DepthStencil);
+    // Clip z is 0.5, so the viewport's depth range puts it at (minDepth + maxDepth) / 2.
+    const auto viewport = [](float minDepth, float maxDepth) {
+        return Viewport{ .width = kEdge, .height = kEdge, .minDepth = minDepth, .maxDepth = maxDepth };
+    };
+    CommandList list = kit.list(QueueType::Graphics, "test.draw");
+    const std::array colors{ ColorAttachment{ .texture = target, .load = LoadOp::Clear } };
+    test::transition(list, target, Layout::Undefined, Layout::ColorAttachment);
+    test::transition(list, depth, Layout::Undefined, Layout::DepthStencilWrite);
+    list.beginRenderPass(passOf(colors, DepthAttachment{ .texture = depth, .load = LoadOp::Clear, .store = StoreOp::Store, .clearDepth = 0.0f }));
+    // Depth 0.25 passes Greater over a depth cleared to 0 everywhere; 0.75 then passes on the left half only.
+    list.setPipeline(nearer);
+    list.setViewport(viewport(0.0f, 0.5f));
+    list.setScissor(kFullRect);
+    list.draw(3);
+    list.setViewport(viewport(0.5f, 1.0f));
+    list.setScissor(Rect2D{ 0, 0, kEdge / 2, kEdge });
+    list.draw(3);
+    // 0.25 against 0.75 on the left and against an equal 0.25 on the right: Greater fails both. Were it to pass the right half, it would
+    // replace the solid color with zero.
+    list.setPipeline(probeGreater);
+    list.setBlendConstants(0.0f, 0.0f, 0.0f, 0.0f);
+    list.setViewport(viewport(0.0f, 0.5f));
+    list.setScissor(kFullRect);
+    list.draw(3);
+    // GreaterOrEqual passes the equal depth on the right half only and adds half the solid color to what draw 3 left.
+    list.setPipeline(probeEqualPasses);
+    list.setBlendConstants(0.5f, 0.5f, 0.5f, 0.5f);
+    list.setViewport(viewport(0.0f, 0.5f));
+    list.setScissor(kFullRect);
+    list.draw(3);
+    list.endRenderPass();
+    test::transition(list, target, Layout::ColorAttachment, Layout::CopySrc);
+    test::transition(list, depth, Layout::DepthStencilWrite, Layout::CopySrc);
+    kit.run(std::array{ list });
+    Image expected;
+    for (uint32_t y = 0; y < kEdge; ++y)
+    {
+        for (uint32_t x = 0; x < kEdge; ++x)
+        {
+            expected.set(x, y, x < kEdge / 2 ? kSolid : std::array<float, 4>{ 0.375f, 0.75f, 1.125f, 1.5f });
+        }
+    }
+    const std::string difference = differences(readImage(kit, target), expected);
+    INFO(difference);
+    CHECK(difference.empty());
+    const std::vector<std::byte> bytes = kit.readTexture(depth, TextureRegion{ .extent = { kEdge, kEdge, 1 } }, Format::D32Float);
+    REQUIRE(bytes.size() == size_t{ kEdge } * kEdge * sizeof(float));
+    std::vector<float> depths(size_t{ kEdge } * kEdge);
+    std::memcpy(depths.data(), bytes.data(), bytes.size());
+    uint32_t wrong = 0;
+    for (uint32_t y = 0; y < kEdge; ++y)
+    {
+        for (uint32_t x = 0; x < kEdge; ++x)
+        {
+            const float value = depths[size_t{ y } * kEdge + x];
+            const float expectedDepth = x < kEdge / 2 ? 0.75f : 0.25f;
+            if (value != expectedDepth)
+            {
+                if (wrong == 0)
+                {
+                    UNSCOPED_INFO(std::format("first difference at ({}, {}): {:a}, expected {:a}", x, y, value, expectedDepth));
+                }
+                ++wrong;
+            }
+        }
+    }
+    CHECK(wrong == 0);
+}
+
+//======================================================================================================================
 TEST_CASE("back-face culling drops the triangles of one winding", "[conformance]")
 {
     test::requireGpu();
