@@ -91,14 +91,36 @@ class ShaderImportTests(unittest.TestCase):
         errors, _, _ = self.check({"Tests/Smoke.slang": '#include "Tests/Oracle.slang"'})
         self.assertTrue(any("textual includes" in error for error in errors))
 
-    def check_bench(self, sources: dict[str, str]) -> list[str]:
+    def test_second_module_directory_is_importable(self) -> None:
+        errors, files, imports = self.check_tree({
+            "RojoRHI/RojoRHI.slang": "module RojoRHI;",
+            "Tests/Modules/TestShared.slang": "module TestShared; import RojoRHI;",
+            "Tests/SharedImport.slang": 'import RojoRHI; import TestShared; [shader("compute")] void sharedMain() {}',
+        })
+        self.assertEqual(errors, [])
+        self.assertEqual((files, imports), (3, 3))
+
+    def test_second_module_directory_cannot_own_entries(self) -> None:
+        errors, _, _ = self.check_tree({
+            "RojoRHI/RojoRHI.slang": "module RojoRHI;",
+            "Tests/Modules/TestShared.slang": '[shader("compute")] void sharedMain() {}',
+        })
+        self.assertTrue(any(
+            "Shaders/Tests/Modules/TestShared.slang: shared modules cannot declare shader entry points" in error
+            for error in errors
+        ))
+
+    def check_tree(self, sources: dict[str, str]) -> tuple[list[str], int, int]:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             for name, text in sources.items():
                 path = root / "Shaders" / name
                 path.parent.mkdir(parents=True, exist_ok=True)
                 path.write_text(text, encoding="utf-8")
-            return check_shaders(root)[0]
+            return check_shaders(root)
+
+    def check_bench(self, sources: dict[str, str]) -> list[str]:
+        return self.check_tree(sources)[0]
 
     def test_bench_struct_copy_matching_the_probe_passes(self) -> None:
         errors = self.check_bench({

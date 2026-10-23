@@ -1,32 +1,58 @@
--- Slang -> MSL, SPIR-V, HLSL (and, where the host can, .metallib and DXIL) for the shader entry files
--- of a target in the new interface tree. A target opts in with add_rules("rojorhi.slang") plus its own
--- add_files("<dir>/*.slang"), and supplies two absolute values, because the project root differs
--- between this component's own root and a host that mounts it:
+-- Slang -> MSL, SPIR-V, HLSL, a Null shader library and, where the host can, .metallib and DXIL for the shader
+-- entry files of a target in the new interface tree. This comment is the rule's consumer interface. A target opts
+-- in with add_rules("rojorhi.slang") plus add_files(<entry files>), and sets these values. Every path value is
+-- truly absolute, because the project root differs between this component's own root and a host that mounts it,
+-- and target:values() expands no `$(projectdir)` or other variable: build each path from os.scriptdir(), as
+-- path.join(os.scriptdir(), "Shaders/Modules").
 --
---   slang.slangc      the Slang compiler
---   slang.moduledir   the directory `import` resolves through (-I)
+--   slang.slangc         required: the pinned Slang compiler (slangc.exe on Windows)
+--   slang.moduledir      required: RojoRHI's Shaders/RojoRHI, passed first as -I; its grandparent locates
+--                        xmake/slang.lua and Tools/
+--   slang.includedirs    optional: directories of shared modules, passed as -I after moduledir in the given
+--                        order and scanned for staleness; each must be an existing absolute directory.
+--                        rojorhi.shader_layout honours them too
+--   slang.embed          optional: a bare header file name, such as "ImGuiShaders.h", never a path; the header
+--                        is written into the generated header directory below. Renaming it leaves the header
+--                        of the old name there until the build directory is cleaned
+--   slang.embed_files    optional: basenames of the entry files to embed; default every entry file
 --
--- Outputs land in <targetdir>/Shaders/<name>.{metal,spv,hlsl} plus <name>.metal.json, the reflection of the
--- MSL compile, and .metallib and .dxil when the host has the toolchain; a d3d12 configure requires DXIL and
--- fails without a DXC beside slangc. Beside each .metallib the rule writes <name>.metal4lib, a RojoRHI
--- shader library: the metallib behind a text header with the
--- ROJORHI_SHADER_ABI_VERSION stamp and each entry's stage and threadgroup size, which
--- Tools/shader_library.py packages from the reflection and the SPIR-V module. A host without the Metal
--- toolchain builds no .metal4lib. Where DXIL is built, the rule also writes <name>.d3d12lib, the same kind of library
--- around each entry's signed DXIL (shader_library.py --format d3d12). Metallibs target the macOS 26
--- deployment floor. The basenames are written to $(builddir)/rojorhi/<target>/ShaderList.h as
--- `kConformanceShaders` for a test to enumerate, with `kMetalLibrariesBuilt` and `kD3D12LibrariesBuilt`
--- saying whether the .metal4lib and .d3d12lib files exist. The directory is per target, so two targets
--- using the rule each include their own list. Any failed compile fails the build with
--- the compiler's own output, and a successful compile's warnings, `metal`'s included, are printed. An entry
--- named `main` fails the MSL compile, which would rename it. This rule is separate from the v1 rule of
--- shaders.lua, which Legacy/ keeps.
+-- Inputs: every add_files input declares at least one [shader("<stage>")] entry outside comments, or the build
+-- fails; shared modules are reached through slang.includedirs, never listed. Outputs are flat, so basenames are
+-- unique case-insensitively, and no entry is named `main` (the MSL compile would rename it). Basenames
+-- are checked per target only, so two targets sharing a targetdir must not reuse an entry basename.
+--
+-- Outputs land in <targetdir>/Shaders/, per entry file <name>: <name>.metal, <name>.metal.json (the reflection
+-- of the MSL compile), <name>.spv, <name>.hlsl and <name>.nulllib on every host; <name>.metallib and
+-- <name>.metal4lib with the Metal toolchain; <name>.dxil (or <name>.<entry>.dxil for a file of several entries)
+-- and <name>.d3d12lib with a DXC beside slangc. A d3d12 configure requires DXIL and fails without that DXC.
+-- Tools/shader_library.py packages each library from the reflection: the .metal4lib is the metallib behind a
+-- text header with the ROJORHI_SHADER_ABI_VERSION stamp and each entry's stage and threadgroup size (read from
+-- the SPIR-V module), the .d3d12lib the same around each entry's signed DXIL, and the .nulllib the text header
+-- alone, which the Null backend loads. Metallibs target the macOS 26 deployment floor. Requirements: Python 3 on
+-- every host (python3, else python, on PATH), the Metal toolchain for metallibs, a DXC for DXIL.
+--
+-- Generated headers land in $(builddir)/rojorhi/<target>/, which the rule adds to that target's include path
+-- only, and are rewritten only when their text changes, so a no-op build recompiles nothing:
+--
+--   ShaderList.h     `kConformanceShaders`, the entry basenames sorted, for a test to enumerate, with
+--                    `kMetalLibrariesBuilt` and `kD3D12LibrariesBuilt` saying whether the .metal4lib and
+--                    .d3d12lib files exist, and `kNullLibrariesBuilt`, always true
+--   <slang.embed>    namespace rojoRHI::embedded holding `inline constexpr std::byte k<Name>Library[]` for
+--                    each embedded entry file: the configured backend's library (metal4 .metal4lib, d3d12
+--                    .d3d12lib, null .nulllib), written by Tools/embed_library.py, ready for
+--                    Device::loadShaderLibrary. A library the build did not produce fails the build. The
+--                    embed step runs on every build, so a backend switch takes effect, and rewrites the
+--                    header only when its text changes.
+--
+-- Any failed compile fails the build with the compiler's own output, and a successful compile's warnings,
+-- `metal`'s included, are printed. This rule is separate from the v1 rule of shaders.lua, which Legacy/ keeps.
 --
 -- Rule "rojorhi.shader_layout", declared below, checks C++ struct layouts against the reflection of a probe.
 --
--- The work runs in before_build so the generated header exists before the target's C++ compiles. Each
--- output is skipped while it is newer than every entry, every module, the compiler and this rule. A shader
--- library is also rebuilt when its metallib or DXIL, reflection, SPIR-V or the packaging tool is newer.
+-- The work runs in before_build so the generated headers exist before the target's C++ compiles. Each output is
+-- skipped while it is newer than every entry, every module under moduledir and slang.includedirs, the compiler
+-- and this rule. A shader library is also rebuilt when its metallib or DXIL, reflection, SPIR-V or the packaging
+-- tool is newer.
 
 -- Script scope does not see this file's locals, so the helpers live inside the callback.
 rule("rojorhi.slang")
@@ -38,9 +64,10 @@ rule("rojorhi.slang")
 
     before_build(function (target)
         import("core.project.config")
+        import("lib.detect.find_program")
         -- Entry points of a source file, read from its [shader("stage")] attributes with comments removed.
         -- Each result is {name = <function>, stage = <stage>}. A file with several attributes compiles every
-        -- entry; with none, the compiler decides what to do and the list is empty.
+        -- entry; a file with none is not an entry file and fails the build before any compile.
         local function entry_points(source)
             local text = io.readfile(source):gsub("/%*.-%*/", ""):gsub("//[^\n]*", "")
             local entries = {}
@@ -48,24 +75,28 @@ rule("rojorhi.slang")
             while true do
                 local first, last, stage = text:find("%[%s*shader%s*%(%s*\"(%w+)\"%s*%)%s*%]", init)
                 if not first then break end
-                -- After the attribute come further bracketed attributes, then the return type and
-                -- the function name.
+                -- After the attribute come further bracketed attributes, then the declaration: the return
+                -- type, which may hold spaces (`vector<float, 4>`), and the function name, the identifier
+                -- right before the first `(`.
                 local tail = text:sub(last + 1)
                 local stripped = tail:gsub("^%s*%b[]", "")
                 while stripped ~= tail do
                     tail = stripped
                     stripped = tail:gsub("^%s*%b[]", "")
                 end
-                local name = tail:match("^%s*[%w_<>:,]+%s+([%w_]+)%s*%(")
-                assert(name, format("rojorhi.slang: no function follows the [shader(\"%s\")] attribute in %s",
-                                    stage, source))
+                local declaration = tail:match("^([^(;{}]*)%(")
+                local name = declaration and declaration:match("%S%s+([%a_][%w_]*)%s*$")
+                if not name then
+                    os.raise("rojorhi.slang: no function declaration (return type, name, `(`) follows the "
+                             .. "[shader(\"%s\")] attribute in %s", stage, source)
+                end
                 table.insert(entries, {name = name, stage = stage})
                 init = last + 1
             end
             return entries
         end
 
-        -- Runs `program` (slangc, xcrun or python3) and raises with its own output, under `label`, when it
+        -- Runs `program` (slangc, xcrun or Python) and raises with its own output, under `label`, when it
         -- fails. `stdout_file` captures standard output into a file, which is how the HLSL target delivers
         -- every entry point of a file in one text. Returns whether it succeeded plus the error text, when
         -- `soft` asks to handle the failure. A successful run's own warnings are printed, not hidden.
@@ -87,11 +118,26 @@ rule("rojorhi.slang")
             return ok and true or false, err
         end
 
+        -- Python 3 runs the packaging tools. Windows installs from python.org ship python.exe and no
+        -- python3.exe, so `python` is the fallback; the check rejects a Python 2 and the Windows Store stub.
+        local python_check = {"-c", "import sys; sys.exit(sys.version_info[0] < 3)"}
+        local python = find_program("python3", {check = python_check})
+                       or find_program("python", {check = python_check})
+        if not python then
+            os.raise("rojorhi.slang: no Python 3 found as python3 or python on PATH")
+        end
+
         local moduledir = assert(target:values("slang.moduledir"),
                                  "rojorhi.slang: set_values(\"slang.moduledir\", <dir>)")
         local slangc = assert(target:values("slang.slangc"),
                               "rojorhi.slang: set_values(\"slang.slangc\", <slangc>)")
         assert(os.isfile(slangc), format("rojorhi.slang: %s is missing; run `xmake setup`", slangc))
+        local includedirs = table.wrap(target:values("slang.includedirs"))
+        for _, dir in ipairs(includedirs) do
+            if not path.is_absolute(dir) or not os.isdir(dir) then
+                os.raise("rojorhi.slang: slang.includedirs entry '%s' is not an existing absolute directory", dir)
+            end
+        end
 
         -- Layout probes (see rojorhi.shader_layout) have no entry point of their own to ship, so they are not
         -- conformance shaders.
@@ -126,6 +172,16 @@ rule("rojorhi.slang")
             table.insert(names, name)
         end
 
+        -- Every input is an entry file; a shared module listed by mistake would compile to empty outputs.
+        local entries_of = {}
+        for _, source in ipairs(sources) do
+            entries_of[source] = entry_points(source)
+            if #entries_of[source] == 0 then
+                os.raise("rojorhi.slang: %s declares no [shader(\"...\")] entry point; pass only entry files to "
+                         .. "add_files and reach shared modules through slang.includedirs", source)
+            end
+        end
+
         -- Metallibs and the shader libraries around them need the Metal toolchain, which only macOS has.
         local has_metal = is_host("macosx") and try {function ()
             os.runv("xcrun", {"-f", "metal"}); return true
@@ -138,13 +194,17 @@ rule("rojorhi.slang")
             cprint("${yellow}slang: metallib skipped, the host is not macOS")
         end
 
-        -- Anything a compile reads: the entries, every module under -I, the compiler, and this rule for its
-        -- flags. The rule sits in xmake/ beside Shaders/, as Tools/ does.
+        -- Anything a compile reads: the entries, every module under each -I directory, the compiler, and this rule
+        -- for its flags. The rule sits in xmake/ beside Shaders/, as Tools/ does.
         local root = path.directory(path.directory(moduledir))
         local rule_file = path.join(root, "xmake", "slang.lua")
         assert(os.isfile(rule_file), format("rojorhi.slang: %s is missing", rule_file))
         local newest = math.max(os.mtime(slangc), os.mtime(rule_file))
-        for _, file in ipairs(table.join(sources, os.files(path.join(moduledir, "**.slang")))) do
+        local modules = os.files(path.join(moduledir, "**.slang"))
+        for _, dir in ipairs(includedirs) do
+            table.join2(modules, os.files(path.join(dir, "**.slang")))
+        end
+        for _, file in ipairs(table.join(sources, modules)) do
             newest = math.max(newest, os.mtime(file))
         end
         local function stale(output)
@@ -195,6 +255,7 @@ rule("rojorhi.slang")
         table.insert(lines, format("inline constexpr bool kMetalLibrariesBuilt = %s;", has_metal and "true" or "false"))
         table.insert(lines, format("inline constexpr bool kD3D12LibrariesBuilt = %s;",
                                    dxil_available and "true" or "false"))
+        table.insert(lines, "inline constexpr bool kNullLibrariesBuilt = true;")
         local header = path.join(config.builddir(), "rojorhi", target:name(), "ShaderList.h")
         local content = table.concat(lines, "\n") .. "\n"
         if not os.isfile(header) or io.readfile(header) ~= content then
@@ -202,18 +263,28 @@ rule("rojorhi.slang")
             io.writefile(header, content)
         end
 
-        local module, tool
-        if has_metal or dxil_available then
-            module = path.join(moduledir, "RojoRHI.slang")
-            assert(os.isfile(module), format("rojorhi.slang: %s is missing", module))
-            tool = path.join(root, "Tools", "shader_library.py")
-            assert(os.isfile(tool), format("rojorhi.slang: %s is missing", tool))
+        -- Every host packages a Null library, so the module (for the ABI stamp) and the tool are always needed.
+        local module = path.join(moduledir, "RojoRHI.slang")
+        assert(os.isfile(module), format("rojorhi.slang: %s is missing", module))
+        local tool = path.join(root, "Tools", "shader_library.py")
+        assert(os.isfile(tool), format("rojorhi.slang: %s is missing", tool))
+        local include_args = {"-I", moduledir}
+        for _, dir in ipairs(includedirs) do
+            table.join2(include_args, {"-I", dir})
         end
         for _, source in ipairs(sources) do
             local name = path.basename(source)
-            local entries = entry_points(source)
-            local base = {source, "-I", moduledir}
-            cprint("${color.build.object}slang %s", source)
+            local entries = entries_of[source]
+            local base = table.join({source}, include_args)
+            -- The source is named once, before its first stale output is rebuilt, so a no-op build prints none.
+            local announced = false
+            local function run(...)
+                if not announced then
+                    cprint("${color.build.object}slang %s", source)
+                    announced = true
+                end
+                return run_tool(...)
+            end
 
             -- The reflection gives the shader library its entry names and stages. Slang renames an entry
             -- named `main` in MSL and warns with E40100 while the reflection keeps `main`, so that warning
@@ -222,7 +293,7 @@ rule("rojorhi.slang")
             local reflection = path.join(outdir, name .. ".metal.json")
             if stale(msl) or stale(reflection) then
                 clear(msl, reflection)
-                run_tool(slangc, "slangc", table.join(base, {"-D", "ROJORHI_TARGET_METAL", "-target", "metal",
+                run(slangc, "slangc", table.join(base, {"-D", "ROJORHI_TARGET_METAL", "-target", "metal",
                     "-warnings-as-errors", "40100", "-reflection-json", reflection, "-o", msl}))
             end
             -- The SPIR-V module gives the shader library each entry's threadgroup size, by entry name; without
@@ -230,15 +301,21 @@ rule("rojorhi.slang")
             local spv = path.join(outdir, name .. ".spv")
             if stale(spv) then
                 clear(spv)
-                run_tool(slangc, "slangc", table.join(base, {"-D", "ROJORHI_TARGET_SPIRV", "-target", "spirv",
+                run(slangc, "slangc", table.join(base, {"-D", "ROJORHI_TARGET_SPIRV", "-target", "spirv",
                     "-fvk-use-scalar-layout", "-fvk-use-entrypoint-name", "-o", spv}))
             end
             -- HLSL has no single-output form for several entries, so its text is the compiler's
             -- standard output, which holds every entry of the file.
             local hlsl = path.join(outdir, name .. ".hlsl")
             if stale(hlsl) then
-                run_tool(slangc, "slangc", table.join(base, {"-D", "ROJORHI_TARGET_HLSL", "-target", "hlsl",
+                run(slangc, "slangc", table.join(base, {"-D", "ROJORHI_TARGET_HLSL", "-target", "hlsl",
                     "-profile", "sm_6_6"}), hlsl)
+            end
+            -- The Null library lists the reflection's entries, in the order the other two libraries use.
+            local nulllib = path.join(outdir, name .. ".nulllib")
+            if not os.isfile(nulllib) or os.mtime(nulllib) < math.max(newest, os.mtime(reflection), os.mtime(tool)) then
+                run(python, "shader_library", {tool, "--format", "null", "--module", module,
+                    "--reflection", reflection, "--out", nulllib})
             end
 
             if has_metal then
@@ -246,13 +323,13 @@ rule("rojorhi.slang")
                 local lib = path.join(outdir, name .. ".metallib")
                 if stale(lib) then
                     clear(lib)
-                    run_tool("xcrun", "metal", {"-sdk", "macosx", "metal", "-std=metal4.0",
+                    run("xcrun", "metal", {"-sdk", "macosx", "metal", "-std=metal4.0",
                         "-mmacosx-version-min=26.0", "-o", lib, msl})
                 end
                 local library = path.join(outdir, name .. ".metal4lib")
                 local inputs = math.max(newest, os.mtime(lib), os.mtime(reflection), os.mtime(spv), os.mtime(tool))
                 if not os.isfile(library) or os.mtime(library) < inputs then
-                    run_tool("python3", "shader_library", {tool, "--module", module, "--reflection", reflection,
+                    run(python, "shader_library", {tool, "--module", module, "--reflection", reflection,
                         "--spirv", spv, "--metallib", lib, "--out", library})
                 end
             end
@@ -265,7 +342,7 @@ rule("rojorhi.slang")
                                        or format("%s.%s.dxil", name, entry.name))
                 if dxil_available and stale(dxil) then
                     clear(dxil)
-                    run_tool(slangc, "slangc", table.join(base, {"-D", "ROJORHI_TARGET_HLSL", "-target", "dxil",
+                    run(slangc, "slangc", table.join(base, {"-D", "ROJORHI_TARGET_HLSL", "-target", "dxil",
                         "-profile", "sm_6_6", "-entry", entry.name, "-stage", entry.stage, "-o", dxil}))
                 end
                 table.insert(dxil_args, "--dxil")
@@ -279,17 +356,62 @@ rule("rojorhi.slang")
                     inputs = math.max(inputs, os.mtime(dxil))
                 end
                 if not os.isfile(library) or os.mtime(library) < inputs then
-                    run_tool("python3", "shader_library", table.join({tool, "--format", "d3d12", "--module", module,
+                    run(python, "shader_library", table.join({tool, "--format", "d3d12", "--module", module,
                         "--reflection", reflection, "--spirv", spv}, dxil_args, {"--out", library}))
                 end
             end
+        end
+
+        -- The embed header holds the configured backend's library of each selected entry file. The tool runs on
+        -- every build and writes only when the text changes, so a backend switch rewrites it and a no-op build
+        -- does not.
+        local embed = target:values("slang.embed")
+        if not embed and target:values("slang.embed_files") then
+            os.raise("rojorhi.slang: target '%s' sets slang.embed_files without slang.embed", target:name())
+        end
+        if embed then
+            embed = table.concat(table.wrap(embed), " ")
+            if embed ~= path.filename(embed) or not embed:endswith(".h") or embed:find("%s") then
+                os.raise("rojorhi.slang: slang.embed '%s' must be one bare header file name ending in .h", embed)
+            end
+            local selected = table.wrap(target:values("slang.embed_files"))
+            if #selected == 0 then
+                selected = names
+            end
+            local known = {}
+            for _, name in ipairs(names) do
+                known[name] = true
+            end
+            local backend = get_config("rojorhi_backend")
+            local embed_format = (backend == "metal4" or backend == "d3d12") and backend or "null"
+            local extension = "." .. embed_format .. "lib"
+            local embed_tool = path.join(root, "Tools", "embed_library.py")
+            assert(os.isfile(embed_tool), format("rojorhi.slang: %s is missing", embed_tool))
+            local args = {embed_tool, "--out", path.join(config.builddir(), "rojorhi", target:name(), embed),
+                          "--format", embed_format}
+            for _, name in ipairs(selected) do
+                if not known[name] then
+                    os.raise("rojorhi.slang: slang.embed_files names '%s', which is not an entry file of target '%s'",
+                             name, target:name())
+                end
+                local library = path.join(outdir, name .. extension)
+                if not os.isfile(library) then
+                    if embed_format == "metal4" then
+                        os.raise("rojorhi.slang: slang.embed needs %s, which the Metal toolchain builds", library)
+                    end
+                    os.raise("rojorhi.slang: slang.embed needs %s, which this build did not produce", library)
+                end
+                table.join2(args, {"--library", name .. "=" .. library})
+            end
+            run_tool(python, "embed_library", args)
         end
     end)
 
 
 -- Compares the layout of C++ structs with what Slang reflects for a probe shader on every target, and fails
 -- the build on drift. A target opts in with add_rules("rojorhi.shader_layout") and supplies, besides the
--- two values rojorhi.slang reads (slang.slangc, slang.moduledir):
+-- two values rojorhi.slang reads (slang.slangc, slang.moduledir) and its optional slang.includedirs, passed as -I
+-- after moduledir and scanned for staleness:
 --
 --   slang.layout_probe    the probe .slang file: StructuredBuffer<T> parameters named gRecord_<Name> and
 --                         gRoot_<Name> (Tools/shader_layout.py documents them). rojorhi.slang leaves a
@@ -306,6 +428,7 @@ rule("rojorhi.shader_layout")
 
     before_build(function (target)
         import("core.project.config")
+        import("lib.detect.find_program")
         local moduledir = assert(target:values("slang.moduledir"),
                                  "rojorhi.shader_layout: set_values(\"slang.moduledir\", <dir>)")
         local slangc = assert(target:values("slang.slangc"),
@@ -318,11 +441,25 @@ rule("rojorhi.shader_layout")
 
         local outdir = path.join(config.builddir(), "rojorhi", target:name())
         local header = path.join(outdir, "ShaderLayout.h")
-        local newest = math.max(os.mtime(slangc), os.mtime(tool), os.mtime(probe))
-        for _, file in ipairs(os.files(path.join(moduledir, "**.slang"))) do
-            newest = math.max(newest, os.mtime(file))
+        local includedirs = table.wrap(target:values("slang.includedirs"))
+        local include_args = {"-I", moduledir}
+        for _, dir in ipairs(includedirs) do
+            if not path.is_absolute(dir) or not os.isdir(dir) then
+                os.raise("rojorhi.shader_layout: slang.includedirs entry '%s' is not an existing absolute directory", dir)
+            end
+            table.join2(include_args, {"-I", dir})
         end
-        if os.isfile(header) and os.mtime(header) >= newest then
+        local newest = math.max(os.mtime(slangc), os.mtime(tool), os.mtime(probe))
+        for _, dir in ipairs(table.join({moduledir}, includedirs)) do
+            for _, file in ipairs(os.files(path.join(dir, "**.slang"))) do
+                newest = math.max(newest, os.mtime(file))
+            end
+        end
+        -- The generator rewrites the header only when its text changes, so the stamp, written after each run,
+        -- records when the check last ran; without it an input edit that changes no layout reruns the check on
+        -- every later build.
+        local stamp = path.join(outdir, "ShaderLayout.stamp")
+        if os.isfile(header) and os.isfile(stamp) and os.mtime(stamp) >= newest then
             return
         end
 
@@ -340,9 +477,9 @@ rule("rojorhi.shader_layout")
         local inputs = {}
         for _, t in ipairs(targets) do
             local json = path.join(outdir, "layout." .. t.name .. ".json")
-            local args = {probe, "-I", moduledir, "-D", t.define, "-target", t.name,
+            local args = table.join({probe}, include_args, {"-D", t.define, "-target", t.name,
                           "-entry", "probeMain", "-stage", "compute",
-                          "-o", path.join(outdir, "layout." .. t.name .. ".out"), "-reflection-json", json}
+                          "-o", path.join(outdir, "layout." .. t.name .. ".out"), "-reflection-json", json})
             if t.profile then
                 table.insert(args, "-profile")
                 table.insert(args, t.profile)
@@ -367,5 +504,13 @@ rule("rojorhi.shader_layout")
         for _, include in ipairs(table.wrap(target:values("slang.layout_include"))) do
             table.join2(args, {"--include", include})
         end
-        os.runv("python3", args)
+        -- As in rojorhi.slang: python3, else a Python 3 named python, as python.org installs it on Windows.
+        local python_check = {"-c", "import sys; sys.exit(sys.version_info[0] < 3)"}
+        local python = find_program("python3", {check = python_check})
+                       or find_program("python", {check = python_check})
+        if not python then
+            os.raise("rojorhi.shader_layout: no Python 3 found as python3 or python on PATH")
+        end
+        os.runv(python, args)
+        io.writefile(stamp, "")
     end)

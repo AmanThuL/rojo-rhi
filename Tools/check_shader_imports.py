@@ -15,11 +15,12 @@ IMPORT = re.compile(r"\bimport\b([^;]*)(?:;|$)")
 MODULE_NAME = re.compile(r"[A-Za-z_]\w*(?:(?:::|\.)[A-Za-z_]\w*)*")
 ENTRY = re.compile(r'\[\s*shader\s*\(')
 INCLUDE = re.compile(r"^\s*#\s*include\b", re.MULTILINE)
-# Each Slang tree, paired with the directory holding its shared modules. The component has two
+# Each Slang tree, paired with the directories holding its shared modules. The component has two
 # trees: the frozen v1 test oracles under Legacy/Shaders/Tests with the modules they share under
-# Legacy/Shaders/Tests/Modules, and the interface's module under Shaders/RojoRHI with the entry
-# files that import it under Shaders/Tests and Shaders/Bench.
-TREES = (("Legacy/Shaders", "Tests/Modules"), ("Shaders", "RojoRHI"))
+# Legacy/Shaders/Tests/Modules, and the interface's module under Shaders/RojoRHI, with the test
+# modules under Shaders/Tests/Modules, imported by the entry files under Shaders/Tests and
+# Shaders/Bench.
+TREES = (("Legacy/Shaders", ("Tests/Modules",)), ("Shaders", ("RojoRHI", "Tests/Modules")))
 
 
 def without_comments(text: str) -> str:
@@ -66,7 +67,7 @@ def check_probe_copies(root: Path, shaders: Path) -> list[str]:
 def check_shaders(root: Path) -> tuple[list[str], int, int]:
     """Check every Slang tree in the component, each in its own namespace.
 
-    A tree is a shader root paired with the directory its shared modules live in. Each tree compiles
+    A tree is a shader root paired with the directories its shared modules live in. Each tree compiles
     into its own target directory, so output basenames are unique within a tree.
     """
     errors: list[str] = []
@@ -83,7 +84,15 @@ def check_shaders(root: Path) -> tuple[list[str], int, int]:
     return errors, files, imports
 
 
-def check_tree(root: Path, shaders: Path, modules_dir: str) -> tuple[list[str], int, int]:
+def module_directory(relative: Path, modules_dirs: tuple[str, ...]) -> str | None:
+    """The module directory holding a file of the tree, or None for an entry file."""
+    for modules_dir in modules_dirs:
+        if relative.is_relative_to(modules_dir):
+            return modules_dir
+    return None
+
+
+def check_tree(root: Path, shaders: Path, modules_dirs: tuple[str, ...]) -> tuple[list[str], int, int]:
     files = sorted(shaders.rglob("*.slang"))
     errors: list[str] = []
     names: dict[str, Path] = {}
@@ -97,7 +106,8 @@ def check_tree(root: Path, shaders: Path, modules_dir: str) -> tuple[list[str], 
                 f"also owned by {names[key].relative_to(root)}"
             )
         names[key] = path
-        if relative.is_relative_to(modules_dir):
+        modules_dir = module_directory(relative, modules_dirs)
+        if modules_dir is not None:
             name = ".".join(relative.relative_to(modules_dir).with_suffix("").parts)
             modules[name] = path
 
@@ -110,7 +120,7 @@ def check_tree(root: Path, shaders: Path, modules_dir: str) -> tuple[list[str], 
         masked = re.sub(
             r'"(?:\\.|[^"\\])*"', lambda match: re.sub(r"[^\n]", "?", match.group()), text
         )
-        if path.relative_to(shaders).is_relative_to(modules_dir) and ENTRY.search(masked):
+        if module_directory(path.relative_to(shaders), modules_dirs) is not None and ENTRY.search(masked):
             errors.append(f"{relative}: shared modules cannot declare shader entry points")
         for match in INCLUDE.finditer(masked):
             line = text.count("\n", 0, match.start()) + 1
@@ -126,11 +136,11 @@ def check_tree(root: Path, shaders: Path, modules_dir: str) -> tuple[list[str], 
             if name in modules:
                 continue
             other = names.get(name.split(".")[-1].casefold())
-            if other is not None and not other.relative_to(shaders).is_relative_to(modules_dir):
+            if other is not None and module_directory(other.relative_to(shaders), modules_dirs) is None:
+                targets = " or ".join(str((shaders / modules_dir).relative_to(root)) for modules_dir in modules_dirs)
                 errors.append(
                     f"{relative}:{line}: import '{name}' reaches entry point "
-                    f"{other.relative_to(root)}; imports may target "
-                    f"{(shaders / modules_dir).relative_to(root)} only"
+                    f"{other.relative_to(root)}; imports may target {targets} only"
                 )
             else:
                 errors.append(f"{relative}:{line}: unresolved module import '{name}'")
