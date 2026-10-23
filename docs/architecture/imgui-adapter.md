@@ -132,11 +132,16 @@ distinguishable from "no texture". Both work at any time, before `init` included
   `BGRA8Unorm`, `ColorSpace::SRGB`, three images and `Fifo`. A failure is fatal. The adapter cannot
   read a swapchain's extent, so it records it as unknown until `newFrame`.
 - **Resize.** The OS resizes windows behind ImGui's back, so `Renderer_SetWindowSize` does nothing.
-  `newFrame` compares each swapchain's recorded extent with
-  `round(Size x FramebufferScale)` and calls `Swapchain::resize`, which waits for the graphics
-  queue; it is called with no frame open and no image held. During a live resize the window draws
-  every frame against its swapchain extent, stretched when ImGui's size moved after `newFrame`; the
-  extent catches up at the next `newFrame`, one frame stale and never missing.
+  `newFrame` compares each swapchain's recorded extent with the window's size times its framebuffer
+  scale, rounded, both read from the platform's `Platform_GetWindowSize` and
+  `Platform_GetWindowFramebufferScale` (the viewport's `Size` and `FramebufferScale` where the
+  platform installs neither), and calls `Swapchain::resize`, which waits for the graphics queue;
+  it is called with no frame open and no image held. The viewport's own values lag by a frame:
+  `ImGui::NewFrame` refreshes them after `newFrame`, while the OS has already resized the surface,
+  on which a swapchain of the old extent may acquire nothing (Metal 4 waits up to a second for a
+  drawable of its size). During a live resize the window draws every frame against its swapchain
+  extent, stretched when ImGui's size moved after `newFrame`; the extent catches up at the next
+  `newFrame`.
 - **Minimized and zero size.** `newFrame` does not resize a window that is flagged minimized,
   whose platform reports it minimized before `ImGui::NewFrame` refreshes the flag, or whose extent
   is zero.
@@ -184,8 +189,9 @@ drift on the shader side shows as a mismatch.
 
 The cases are tagged `[imgui]` and live in `Tests/ImGui/`: the ring (slot reuse, a frame that writes
 nothing, growth), `init` and `shutdown`, `textureId`, texture create/update/destroy, a fake platform
-backend driving two viewports (create, close, resize, minimize, consecutive resizes) and one pixel
-case. They build into `RojoRHITests` and run as `xmake test RojoRHITests/imgui`.
+backend driving two viewports (create, close, resize, an OS resize ImGui has not seen, minimize,
+consecutive resizes) and one pixel case. They build into `RojoRHITests` and run as
+`xmake test RojoRHITests/imgui`.
 
 | Where | What runs |
 |---|---|

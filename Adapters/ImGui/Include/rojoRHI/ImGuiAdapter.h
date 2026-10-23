@@ -62,9 +62,11 @@ namespace rojoRHI::imgui {
     /// Call once per frame, before `ImGui::NewFrame`, with no device frame open, and at most once per device frame: the
     /// frame buffers advance on the first write after it, so a frame that draws nothing does not consume a slot. It
     /// destroys frame buffers retired by growth in the previous frame, and resizes the swapchain of every platform window
-    /// whose framebuffer size (`Size` times `FramebufferScale`, rounded) changed, skipping a minimized window and a zero
-    /// size; that resize waits until the graphics queue has finished with the window's images. Calling it before `init` is
-    /// an `IM_ASSERT`.
+    /// whose framebuffer size changed, skipping a minimized window and a zero size; that resize waits until the graphics
+    /// queue has finished with the window's images. The size is the platform's `Platform_GetWindowSize` times its
+    /// `Platform_GetWindowFramebufferScale`, rounded, read now because the viewport's `Size` and `FramebufferScale` lag the
+    /// OS until `ImGui::NewFrame`; the viewport's values stand in for a callback the platform does not install. Calling it
+    /// before `init` is an `IM_ASSERT`.
     void newFrame();
 
     /// Creates, updates and destroys the textures `drawData->Textures` asks for (`ImGuiBackendFlags_RendererHasTextures`).

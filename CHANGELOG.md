@@ -19,6 +19,8 @@
   apart from untimed scopes.
 - The Metal 4 backend times a render pass or scope that records nothing, about zero, without the
   warning for timestamp pairs never written; chapter 14 states what such a scope reports.
+- The ImGui adapter sizes a platform window's swapchain from the platform's current window size,
+  not the viewport's, which lags an OS resize by a frame.
 
 ## 0.1.0 (2026-10-22)
 

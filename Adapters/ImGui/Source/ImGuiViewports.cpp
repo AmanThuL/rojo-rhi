@@ -57,6 +57,20 @@ namespace rojoRHI::imgui {
         }
 
         //==============================================================================================================
+        // The framebuffer size of a platform window as its platform reports it now. `viewport->Size` and its scale are
+        // refreshed by ImGui::NewFrame, after newFrame runs, while the OS may already have resized the window's surface, so
+        // a swapchain sized from them would lag the surface by a frame. Without the platform's callbacks the viewport's own
+        // values are used.
+        Extent2D platformExtent(const ImGuiPlatformIO& platformIo, ImGuiViewport* viewport)
+        {
+            const bool created = viewport->PlatformWindowCreated;
+            const ImVec2 size = created && platformIo.Platform_GetWindowSize != nullptr ? platformIo.Platform_GetWindowSize(viewport) : viewport->Size;
+            const ImVec2 scale = created && platformIo.Platform_GetWindowFramebufferScale != nullptr ? platformIo.Platform_GetWindowFramebufferScale(viewport)
+                                                                                                     : viewport->FramebufferScale;
+            return framebufferExtent(size, scale);
+        }
+
+        //==============================================================================================================
         void createWindow(ImGuiViewport* viewport)
         {
             IM_ASSERT(detail::g_state != nullptr && "a platform window was created without rojoRHI::imgui::init");
@@ -149,7 +163,7 @@ namespace rojoRHI::imgui {
             {
                 continue;
             }
-            const Extent2D want = framebufferExtent(viewport->Size, viewport->FramebufferScale);
+            const Extent2D want = platformExtent(platformIo, viewport);
             if (want.width == 0 || want.height == 0 || (want.width == data->extent.width && want.height == data->extent.height))
             {
                 continue;
@@ -157,6 +171,13 @@ namespace rojoRHI::imgui {
             data->swapchain.resize(want);
             data->extent = want;
         }
+    }
+
+    //==================================================================================================================
+    Extent2D detail::platformWindowExtent(ImGuiViewport* viewport)
+    {
+        const ViewportData* data = dataOf(viewport);
+        return data != nullptr ? data->extent : Extent2D{};
     }
 
     //==================================================================================================================

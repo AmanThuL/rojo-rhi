@@ -52,8 +52,13 @@ namespace rojoRHI::imgui::detail {
     /// Removes the callbacks `installPlatformWindowCallbacks` installed.
     void removePlatformWindowCallbacks();
 
-    /// Resizes every platform window's swapchain whose extent differs from its viewport's framebuffer size. No frame is open.
+    /// Resizes every platform window's swapchain whose extent differs from its framebuffer size, read from the platform's
+    /// `Platform_GetWindowSize` and `Platform_GetWindowFramebufferScale` where it installs them, else from the viewport. No
+    /// frame is open.
     void resizePlatformWindows();
+
+    /// The extent `viewport`'s swapchain was last resized to, zero for a viewport without one or before its first resize.
+    Extent2D platformWindowExtent(ImGuiViewport* viewport);
 
     /// The presents of `viewport`'s swapchain since its creation, 0 for a viewport without one.
     uint32_t platformWindowPresents(ImGuiViewport* viewport);
