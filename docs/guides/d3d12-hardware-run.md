@@ -101,8 +101,8 @@ python3 Tools/gpu_evidence.py --topic d3d12-t1 --label conformance-release -- xm
 ```
 
 Topic: `d3d12-t1/<date>/`. Each case count must stay at or above the floors the CI job `d3d12`
-checks in its step "Count the cases" (`.github/workflows/ci.yml`), which on 2026-10-21 were
-`[conformance]` 173, `[d3d12]` 255 and `[contract]` 878;
+checks in its step "Count the cases" (`.github/workflows/ci.yml`, the `$floors` table for
+`[conformance]`, `[d3d12]` and `[contract]`);
 `.\RojoRHITests.exe --list-tests "[conformance]"` prints a count.
 
 No case was left out as PC-only in the full T1 run on WARP (the `d3d12` job of [run

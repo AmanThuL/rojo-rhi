@@ -60,12 +60,12 @@ jobs:
           grep -q '^ *rojorhi_backend = "metal4"' .xmake/*/*/xmake.conf
       - run: xmake f -m debug -y --rojorhi_backend=metal4 --ccache=n
       - run: xmake build RojoRHITests
-      # Lists the cases of each tag and requires a floor, 165 for conformance so a dropped file fails;
+      # Lists the cases of each tag and requires a floor, 169 for conformance so a dropped file fails;
       # no GPU case runs in this job.
       - run: |
           for tag in conformance contract metal4; do
             floor=1
-            if test "$tag" = conformance; then floor=165; fi
+            if test "$tag" = conformance; then floor=169; fi
             n=$(./build/macosx/arm64/debug/rojorhi-test/RojoRHITests --list-tests "[$tag]" | \
               sed -n 's/^\([0-9][0-9]*\) matching test cases$/\1/p')
             test -n "$n" && test "$n" -ge "$floor"
@@ -409,7 +409,7 @@ jobs:
         shell: pwsh
         run: |
           $exe = 'build/windows/x64/debug/rojorhi-test/RojoRHITests.exe'
-          $floors = [ordered]@{ conformance = 176; d3d12 = 255; contract = 878 }
+          $floors = [ordered]@{ conformance = 180; d3d12 = 255; contract = 878 }
           foreach ($tag in $floors.Keys) {
             $out = & $exe --list-tests "[$tag]" | Out-String
             if ($out -notmatch '(\d+) matching test cases') { throw "no case count for [$tag]" }
