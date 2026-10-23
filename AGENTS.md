@@ -21,9 +21,9 @@ compiled in); it has run on WARP only ([the hardware run](docs/guides/d3d12-hard
 will mount the library as a submodule at `RojoRHI/` and drive every change through a RojoRHI branch
 and pull request first ([commits](docs/conventions/commits.md) owns that workflow). The repository
 is public and licensed under the Apache License, Version 2.0 ([`LICENSE`](LICENSE)); it holds the
-library itself — public headers, shared implementation, the Metal 4 and D3D12 backends, the optional
-ImGui adapter, tests and shaders — alongside its founding documents (see
-[architecture](docs/architecture/overview.md) for directory responsibilities).
+library itself — public headers, shared implementation, the Metal 4 and D3D12 backends, the
+backend-neutral ImGui adapter (`Adapters/ImGui`, `RojoRHIImGui`), tests and shaders — with its
+founding documents ([architecture](docs/architecture/overview.md) maps the directories).
 
 ## Golden sources
 
@@ -63,8 +63,8 @@ ImGui adapter, tests and shaders — alongside its founding documents (see
 - Guides: [extracting RojoRHI from Luminex](docs/guides/luminex-extraction.md),
   [recording GPU evidence](docs/guides/gpu-evidence.md),
   [the Windows GPU run](docs/guides/d3d12-hardware-run.md)
-- Architecture: [overview](docs/architecture/overview.md),
-  [the Null backend](docs/architecture/null-backend.md),
+- Architecture: [overview](docs/architecture/overview.md), [the ImGui adapter](
+  docs/architecture/imgui-adapter.md), [the Null backend](docs/architecture/null-backend.md),
   [command recording on it](docs/architecture/null-backend-recording.md),
   [its edges: presentation, upscaling, sparse, diagnostics](
   docs/architecture/null-backend-edges.md),
@@ -89,8 +89,8 @@ xmake         # builds the frozen v1 library, RojoRHILegacy
 xmake test RojoRHILegacyTests/unit   # runs the v1 CPU contract cases
 xmake test RojoRHITests/contract     # runs the v2 contract cases on the default backend
 xmake test RojoRHITests/death        # runs the v2 death tests (Debug only)
-xmake test RojoRHITests/abi          # compiles the ABI shaders, checks shared layouts and, on macOS,
-                                     # the packaged Metal shader library headers
+xmake test RojoRHITests/imgui        # runs the [imgui] adapter cases
+xmake test RojoRHITests/abi          # compiles ABI shaders, checks layouts, on macOS the packaged Metal library headers
 xmake f -m debug -y                  # the default backend: metal4 on macOS, null elsewhere
 xmake f -m debug -y --rojorhi_backend=null   # the Null backend; Tests/Core, Tests/Null need it
 ```
@@ -130,6 +130,7 @@ xmake -P .
 xmake test RojoRHILegacyTests/unit -P .
 xmake test RojoRHITests/contract -P .
 xmake test RojoRHITests/death -P .
+xmake test RojoRHITests/imgui -P .
 ```
 
 On a Metal 4 configure the same `-P .` applies to its entries, `conformance` included. The default
@@ -180,11 +181,10 @@ amends it, C3-k100 8.33 ns against 10; by the 5% rule, reported, C3 misses at th
 fails unless link-time optimization inlined `Device::capabilities` into its caller in the probe
 (ADR 0012); the interface CI job runs it on macOS and Windows.
 
-`python3 Tools/check_vu_coverage.py` fails when a valid-usage identifier of `docs/spec/` has
-neither a death test nor an entry in `Tools/vu_pending.txt`, when an identifier has fewer death
-tests than `ROJORHI_VU` sites in `Source/`, and on any `ROJORHI_VU` under `Backends/`; the policy CI
-job runs it
-([testing](docs/conventions/testing.md)).
+`python3 Tools/check_vu_coverage.py` fails when a valid-usage identifier of `docs/spec/` has neither
+a death test nor an entry in `Tools/vu_pending.txt`, when an identifier has fewer death tests than
+`ROJORHI_VU` sites in `Source/`, and on any `ROJORHI_VU` under `Backends/` or `Adapters/`; the
+policy CI job runs it ([testing](docs/conventions/testing.md)).
 
 v1 GPU conformance is checkpoint A, the cases tagged `[checkpoint-a]`
 ([ADR 0005](docs/decisions/0005-conformance-checkpoint.md)). The v2 interface's T1 conformance

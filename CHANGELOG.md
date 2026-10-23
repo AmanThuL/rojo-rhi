@@ -2,6 +2,8 @@
 
 ## 0.2.0 (unreleased)
 
+- The optional `RojoRHIImGui` adapter renders Dear ImGui, including platform windows, on every
+  backend through the public interface ([architecture](docs/architecture/imgui-adapter.md)).
 - **Breaking**: `Capabilities::upscalers` is a span of `UpscalerSupport`, each kind with its input
   scale range ([upscaling](docs/spec/12-upscaling.md)); code that read `UpscalerKind` elements
   reads `.kind`.
