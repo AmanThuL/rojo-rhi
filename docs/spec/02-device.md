@@ -133,13 +133,15 @@ struct Capabilities {
     bool placementSparse = false;                // BufferUsage::Sparse and TextureUsage::Sparse work
     bool meshTasksIndirect = false;              // CommandList::drawMeshTasksIndirect works
     bool conservativeRaster = false;             // RasterState conservative rasterization works
+    bool capture = false;                        // Device::beginCapture can start a capture
     std::span<const UpscalerSupport> upscalers;  // each creatable kind and its input scale range
     Limits limits;                               // numeric limits; see formats and limits
 };
 ```
 A device's capabilities are fixed for its lifetime. Every string and span points at device-owned
-storage valid until `destroyDevice`. Each `bool` gates the entries it names: using a gated feature
-on a device that reports `false` is a valid-usage violation of the owning chapter.
+storage valid until `destroyDevice`. Each `bool` gates the entries it names, except `capture`, which
+gates nothing: using a gated feature on a device that reports `false` is a valid-usage violation of
+the owning chapter.
 
 - `adapterName` and `floorName` are for people: logs and bug reports. A caller branches only on
   the typed fields. `floorName` names the GPU family on Metal 4 and the feature level and highest
@@ -155,6 +157,9 @@ on a device that reports `false` is a valid-usage violation of the owning chapte
   ([GPU-driven rendering](08-gpu-driven.md)) is available. Direct mesh draws need no capability.
 - `conservativeRaster` reports whether a pipeline may enable conservative rasterization
   ([pipelines](06-pipelines.md)).
+- `capture` reports whether `Device::beginCapture` ([diagnostics](14-diagnostics.md)) can start a
+  capture in this process; the call may still return an error, and on a device that reports
+  `false` it returns `Unsupported`.
 - `upscalers` lists one `UpscalerSupport` ([upscaling](12-upscaling.md#upscalersupport)) per kind
   other than `Auto` that creation would accept, in the order `Auto` prefers; it may be empty.
 - `limits` holds the `Limits` defined in
@@ -173,6 +178,7 @@ on a device that reports `false` is a valid-usage violation of the owning chapte
 | `placementSparse` | `MTL::Device::supportsPlacementSparse` | `D3D12_FEATURE_D3D12_OPTIONS::TiledResourcesTier`: tier 2 or higher; 3D textures at tier 3 | `VkPhysicalDeviceFeatures::sparseBinding` and the sparse residency features |
 | `meshTasksIndirect` | `MTL::Device::supportsFamily` with `MTL::GPUFamilyApple9`, the family the feature tables list for indirect mesh draws (*unverified*) | always true at the floor: `ExecuteIndirect` with `D3D12_INDIRECT_ARGUMENT_TYPE_DISPATCH_MESH` | `VkPhysicalDeviceMeshShaderFeaturesEXT::meshShader` |
 | `conservativeRaster` | always false: Metal 4 has no conservative rasterization | `D3D12_FEATURE_D3D12_OPTIONS::ConservativeRasterizationTier` | `VK_EXT_conservative_rasterization` |
+| `capture` | `MTL::CaptureManager::supportsDestination` with `MTL::CaptureDestinationGPUTraceDocument` | `DeviceDesc::enableCapture` and the PIX GPU capturer loaded | reserved: RenderDoc's in-application API loaded |
 | `upscalers` | `MTLFX::TemporalScalerDescriptor::supportsMetal4FX`; the range from `supportedInputContentMinScale` and `supportedInputContentMaxScale` | FSR when the FidelityFX runtime it loads is present beside the executable, with FidelityFX's documented range (unverified); DLSS and XeSS when built in and their runtime accepts the adapter | as D3D12: FSR, DLSS and XeSS have Vulkan variants |
 | Cost | native: queried once at creation | native: queried once at creation | native: queried once at creation |
 

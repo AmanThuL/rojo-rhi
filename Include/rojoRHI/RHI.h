@@ -1003,6 +1003,7 @@ namespace rojoRHI {
         bool placementSparse = false;
         bool meshTasksIndirect = false;
         bool conservativeRaster = false;
+        bool capture = false; ///< Device::beginCapture can start a capture in this process.
         std::span<const UpscalerSupport> upscalers;
         Limits limits;
     };

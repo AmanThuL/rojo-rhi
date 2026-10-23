@@ -304,3 +304,22 @@ TEST_CASE("beginCapture with a path either starts a capture or returns an error,
     }
     destroyDevice(device);
 }
+
+//======================================================================================================================
+TEST_CASE("a device that reports no capture refuses beginCapture and starts nothing", "[contract]")
+{
+    Device device = *createDevice();
+    if (device.capabilities().capture)
+    {
+        destroyDevice(device);
+        SKIP("this device reports capture");
+    }
+    const Result<void> first = device.beginCapture("rojorhi-no-capture.trace");
+    REQUIRE_FALSE(first.has_value());
+    CHECK(first.error().category == ErrorCategory::Unsupported);
+    // Nothing started, so a second call reaches the same refusal and not VU-rojo-diag-0008.
+    const Result<void> second = device.beginCapture("rojorhi-no-capture.trace");
+    REQUIRE_FALSE(second.has_value());
+    CHECK(second.error().category == ErrorCategory::Unsupported);
+    destroyDevice(device);
+}

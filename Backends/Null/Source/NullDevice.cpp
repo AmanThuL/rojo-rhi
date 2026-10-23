@@ -211,6 +211,7 @@ namespace rojoRHI {
         capabilities.placementSparse = true;
         capabilities.meshTasksIndirect = true;
         capabilities.conservativeRaster = true;
+        capabilities.capture = false;
         capabilities.upscalers = kUpscalers;
         impl->core.setFormatTable(core::formatCeilings());
         impl->core.setTileExtents(core::standardTileExtent);

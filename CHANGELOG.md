@@ -5,6 +5,8 @@
 - **Breaking**: `Capabilities::upscalers` is a span of `UpscalerSupport`, each kind with its input
   scale range ([upscaling](docs/spec/12-upscaling.md)); code that read `UpscalerKind` elements
   reads `.kind`.
+- `Capabilities::capture` reports whether `Device::beginCapture` can start a capture in the process
+  ([device](docs/spec/02-device.md)); it gates no entry.
 - `ROJORHI_VERSION_MINOR` is 2: the interface is 0.2.0, unreleased
   ([ADR 0022](docs/decisions/0022-versioning-in-the-single-header.md)). Pipeline-cache blobs of
   0.1.0 embed that version and become misses.

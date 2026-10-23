@@ -35,6 +35,7 @@ TEST_CASE("Null reports every scope with a duration of zero", "[null]")
 TEST_CASE("Null has no capture tool: beginCapture is Unsupported and starts nothing", "[null]")
 {
     Device device = *createDevice();
+    CHECK_FALSE(device.capabilities().capture);
     const Result<void> first = device.beginCapture("capture.gputrace");
     REQUIRE_FALSE(first.has_value());
     CHECK(first.error().category == ErrorCategory::Unsupported);

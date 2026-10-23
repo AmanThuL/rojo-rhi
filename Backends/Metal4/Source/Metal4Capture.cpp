@@ -26,16 +26,24 @@
 namespace rojoRHI {
     namespace metal4 {
         //==============================================================================================================
-        Result<void> startCapture(std::string_view path)
+        bool captureSupported()
         {
             const AutoreleasePool pool;
             MTL::CaptureManager* manager = MTL::CaptureManager::sharedCaptureManager();
-            if (manager == nullptr || !manager->supportsDestination(MTL::CaptureDestinationGPUTraceDocument))
+            return manager != nullptr && manager->supportsDestination(MTL::CaptureDestinationGPUTraceDocument);
+        }
+
+        //==============================================================================================================
+        Result<void> startCapture(std::string_view path)
+        {
+            if (!captureSupported())
             {
                 return std::unexpected(
                     Error{ ErrorCategory::Unsupported, "this process cannot write a .gputrace document; relaunch it with MTL_CAPTURE_ENABLED=1" }
                 );
             }
+            const AutoreleasePool pool;
+            MTL::CaptureManager* manager = MTL::CaptureManager::sharedCaptureManager();
             if (manager->isCapturing())
             {
                 return std::unexpected(Error{ ErrorCategory::Unsupported, "another capture is in progress" });

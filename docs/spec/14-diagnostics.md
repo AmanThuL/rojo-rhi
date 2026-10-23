@@ -233,13 +233,14 @@ It is owned by the device, labels included, and invalidated by the next `Device:
 Result<void> Device::beginCapture(std::string_view path);
 ```
 Starts a GPU capture of everything the device's queues execute until `Device::endCapture`, written
-to the file `path`. The caller supplies the platform's extension: `.gputrace` on Metal 4, `.wpix` on
-the D3D12 backend. The call returns an error when capture tooling is unavailable to the process: on
-Metal 4 when capture is not enabled, or when the process-global `MTL::CaptureManager` is already
-capturing for another device or tool; on the D3D12 backend when the device was created without
-`DeviceDesc::enableCapture` ([device](02-device.md)), which loads the PIX GPU capturer before the
-native device exists. It also returns an error when the destination cannot be written. After an
-error no capture is in progress. RenderDoc is the Vulkan counterpart and is reserved.
+to `path`. The caller supplies the platform's extension: `.gputrace` on Metal 4, `.wpix` on the
+D3D12 backend. The call returns an error when capture tooling is unavailable: on Metal 4 when
+capture is not enabled, or when the process-global `MTL::CaptureManager` is capturing for another
+device or tool; on the D3D12 backend when the device was created without `DeviceDesc::enableCapture`
+([device](02-device.md)), which loads the PIX GPU capturer before the native device exists, or with
+it and no capturer loaded. It also returns an error when the destination cannot be written. After an
+error no capture is in progress. `Capabilities::capture` ([device](02-device.md)) reports whether
+the call can succeed at all. RenderDoc is the Vulkan counterpart and is reserved.
 
 #### Valid usage
 - `VU-rojo-diag-0008` No capture started by this device's `Device::beginCapture` is in progress.

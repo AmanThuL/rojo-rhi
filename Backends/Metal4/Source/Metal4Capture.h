@@ -9,6 +9,9 @@
 #include <string_view>
 
 namespace rojoRHI::metal4 {
+    /// Returns whether this process can write a `.gputrace` document, which Metal decides from `MTL_CAPTURE_ENABLED` at launch.
+    bool captureSupported();
+
     /// Starts a GPU capture of the system default Metal device to the `.gputrace` document at `path`, made absolute first.
     /// Returns `ErrorCategory::Unsupported` when the process cannot write a trace document (Metal reads `MTL_CAPTURE_ENABLED`
     /// at launch), when another capture is in progress or when the path cannot be made absolute, and

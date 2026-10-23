@@ -177,10 +177,7 @@ namespace rojoRHI {
             return std::unexpected(std::move(valid.error()));
         }
         // The PIX GPU capturer loads before the device factory, so that the capturer can attach to it.
-        if (desc.enableCapture)
-        {
-            d3d12::loadCapturer();
-        }
+        const bool capturer = desc.enableCapture && d3d12::loadCapturer();
         Result<d3d12::Loaded> loaded = d3d12::loadDevice();
         if (!loaded)
         {
@@ -208,11 +205,20 @@ namespace rojoRHI {
             teardown(impl.release());
             return std::unexpected(std::move(created.error()));
         }
+        impl->core.capabilities().capture = capturer;
         // The cache copies the bytes it keeps, so the caller's blob is read only here.
         impl->pipelineCache.open(*impl, desc.pipelineCache);
         impl->core.setSurfaceCheck(isWindow);
         // Only a device created with enableCapture captures: the capturer is process-wide, and another device may have loaded it.
-        impl->core.setCaptureAvailable(desc.enableCapture ? d3d12::startCapture : d3d12::refuseCapture);
+        // The hook follows Capabilities::capture, fixed at creation, since a loaded capturer is never unloaded.
+        if (capturer)
+        {
+            impl->core.setCaptureAvailable(d3d12::startCapture);
+        }
+        else
+        {
+            impl->core.setCaptureAvailable(desc.enableCapture ? d3d12::refuseWithoutCapturer : d3d12::refuseCapture);
+        }
         impl->core.setArenaSource(d3d12::createArenaPage);
         return DeviceImpl::wrap(impl.release());
     }

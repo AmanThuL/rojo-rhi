@@ -28,12 +28,16 @@ namespace rojoRHI::d3d12 {
     /// Returns `text` converted from UTF-8 to UTF-16; empty when `text` is empty or is not valid UTF-8.
     std::wstring wide(std::string_view text);
 
-    /// The capture hook of a device created with `DeviceDesc::enableCapture`: starts a programmatic GPU capture written to
-    /// `path`. Returns `Unsupported` while the PIX GPU capturer is not loaded, and `DriverFailure` when the capturer refuses
-    /// the capture.
+    /// The capture hook of a device created with `DeviceDesc::enableCapture` once the PIX GPU capturer has loaded: starts a
+    /// programmatic GPU capture written to `path`. Returns `Unsupported` when the capturer lacks the export, and
+    /// `DriverFailure` when the capturer refuses the capture.
     Result<void> startCapture(std::string_view path);
 
     /// The capture hook of a device created without `DeviceDesc::enableCapture`: returns `Unsupported` naming
     /// `enableCapture`, whether or not another device loaded the capturer into the process.
     Result<void> refuseCapture(std::string_view path);
+
+    /// The capture hook of a device created with `DeviceDesc::enableCapture` while the PIX GPU capturer did not load: returns
+    /// `Unsupported` naming PIX, so a device that reports `Capabilities::capture` false never starts a capture.
+    Result<void> refuseWithoutCapturer(std::string_view path);
 } // namespace rojoRHI::d3d12

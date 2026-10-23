@@ -153,22 +153,22 @@ The backend captures through PIX's programmatic GPU capture. With `DeviceDesc::e
 it. `loadCapturer` lists `%ProgramFiles%\Microsoft PIX` (`FOLDERID_ProgramFiles`), keeps the
 directories that hold `WinPixGpuCapturer.dll`, picks the one with the highest version by comparing
 its runs of digits as numbers from left to right (`newestVersion`) and loads that file with
-`LoadLibraryExW`, searching the default directories and its own. The module stays loaded for the
-process: the capturer cannot be unloaded safely. A process that already holds it, a machine with
-no PIX installed and a device created without `enableCapture` load nothing; a capturer that fails
-to load logs a warning.
+`LoadLibraryExW`, searching the default directories and its own. It stays loaded for the process:
+the capturer cannot be unloaded safely. A process that already holds it, a machine with no PIX
+installed and a device created without `enableCapture` load nothing; a capturer that fails to load
+logs a warning. `Capabilities::capture` is true only with `enableCapture` and the capturer loaded.
 
 `Device::beginCapture` runs `core::beginCapture`, which refuses an empty path and a second capture.
 A device created without `enableCapture` registers the hook `refuseCapture`, which returns
 `Unsupported` naming `enableCapture` even when another device loaded the process-wide capturer. On a
-device created with it, the hook `startCapture` resolves `BeginProgrammaticGpuCapture` from the
-loaded module and calls it with the absolute form of the path, converted from UTF-8 to UTF-16. PIX's
+device created with it once the capturer loaded, the hook `startCapture` resolves
+`BeginProgrammaticGpuCapture` and calls it with the absolute form of the path, in UTF-16. PIX's
 `pix3_win.h` implements `PIXBeginCapture2` and `PIXEndCapture` as inline helpers over the capturer's
-exports, so the backend calls the exports itself and links no PIX runtime. Without the capturer,
-`beginCapture` returns `Unsupported` saying PIX is not loaded and `enableCapture` is needed; a path
-that is not valid UTF-8 or cannot be made absolute is `Unsupported` too, since `ErrorCategory` has
-no invalid-argument value. A capturer that refuses the capture returns an error of the refusal's
-`HRESULT`, `DriverFailure` unless it is `E_OUTOFMEMORY`. `Device::endCapture` resolves
+exports, so the backend calls the exports itself and links no PIX runtime. Without the capturer the
+hook is `refuseWithoutCapturer`, `Unsupported` saying PIX is not loaded; a path that is not valid
+UTF-8 or cannot be made absolute is `Unsupported` too, since `ErrorCategory` has no invalid-argument
+value. A capturer that refuses the capture returns an error of the refusal's `HRESULT`,
+`DriverFailure` unless it is `E_OUTOFMEMORY`. `Device::endCapture` resolves
 `EndProgrammaticGpuCapture` and logs an error when it fails. Each successful `beginCapture` and each
 `endCapture` that reaches the capturer counts one `nativeHostCalls`.
 

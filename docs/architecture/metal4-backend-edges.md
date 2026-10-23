@@ -214,4 +214,5 @@ working directory). Errors:
 Metal creates missing directories, so only a path below a regular file is refused. A started capture
 counts one `nativeHostCalls` in `Device::beginCapture`, and `Device::endCapture` counts one more
 when it stops a capture the manager reports. `DeviceDesc::enableCapture` only makes encoders carry
-labels.
+labels. `Capabilities::capture` reads `metal4::captureSupported`, the destination check the hook
+makes first, once at creation: `false` when the process was launched without `MTL_CAPTURE_ENABLED`.
