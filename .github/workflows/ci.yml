@@ -63,9 +63,10 @@ jobs:
       # Lists the cases of each tag and requires a floor, 169 for conformance so a dropped file fails;
       # no GPU case runs in this job.
       - run: |
-          for tag in conformance contract metal4; do
+          for tag in conformance contract metal4 imgui; do
             floor=1
             if test "$tag" = conformance; then floor=169; fi
+            if test "$tag" = imgui; then floor=12; fi
             n=$(./build/macosx/arm64/debug/rojorhi-test/RojoRHITests --list-tests "[$tag]" | \
               sed -n 's/^\([0-9][0-9]*\) matching test cases$/\1/p')
             test -n "$n" && test "$n" -ge "$floor"
@@ -141,6 +142,7 @@ jobs:
       - run: xmake test RojoRHITests/contract
       - run: xmake test RojoRHITests/death
       - run: xmake test RojoRHITests/abi
+      - run: xmake test RojoRHITests/imgui
       # The DXIL of the module's heap fetches and raw accesses; the check fails, rather than skips,
       # when the build compiled no DXIL.
       - if: runner.os == 'Windows'
@@ -156,6 +158,7 @@ jobs:
       - run: xmake f -m release -y --rojorhi_backend=null
       - run: xmake build RojoRHITests
       - run: xmake test RojoRHITests/contract
+      - run: xmake test RojoRHITests/imgui
       - if: runner.os == 'macOS'
         run: xmake build RojoRHIBench && xmake test RojoRHIBench/null
       # Release links with LTO (ADR 0012); the probe shows a library entry inlined into its caller.
@@ -403,13 +406,16 @@ jobs:
       - id: debug_conformance
         run: xmake test RojoRHITests/conformance
         timeout-minutes: 15
+      - id: debug_imgui
+        run: xmake test RojoRHITests/imgui
+        timeout-minutes: 15
       # Lists the cases of each tag and requires a floor, so a dropped file fails. The floors are the case counts
       # at this commit; they rise as cases are added.
       - name: Count the cases
         shell: pwsh
         run: |
           $exe = 'build/windows/x64/debug/rojorhi-test/RojoRHITests.exe'
-          $floors = [ordered]@{ conformance = 180; d3d12 = 255; contract = 878 }
+          $floors = [ordered]@{ conformance = 180; d3d12 = 255; contract = 878; imgui = 12 }
           foreach ($tag in $floors.Keys) {
             $out = & $exe --list-tests "[$tag]" | Out-String
             if ($out -notmatch '(\d+) matching test cases') { throw "no case count for [$tag]" }
@@ -466,6 +472,9 @@ jobs:
       - id: release_conformance
         run: xmake test RojoRHITests/conformance
         timeout-minutes: 15
+      - id: release_imgui
+        run: xmake test RojoRHITests/imgui
+        timeout-minutes: 15
       - run: xmake build RojoRHILtoProbe
       - run: python3 Tools/check_lto_inline.py
       # Debug with the debug layer alone, under which WARP completes the FidelityFX dispatch it never completes under
@@ -497,8 +506,10 @@ jobs:
             @{ label = 'Debug contract'; outcome = '${{ steps.debug_contract.outcome }}'; mode = 'debug'; filter = '[contract]~[death],[d3d12]~[death]' }
             @{ label = 'Debug death'; outcome = '${{ steps.debug_death.outcome }}'; mode = 'debug'; filter = '[death]' }
             @{ label = 'Debug conformance'; outcome = '${{ steps.debug_conformance.outcome }}'; mode = 'debug'; filter = '[conformance]' }
+            @{ label = 'Debug imgui'; outcome = '${{ steps.debug_imgui.outcome }}'; mode = 'debug'; filter = '[imgui]' }
             @{ label = 'Release contract'; outcome = '${{ steps.release_contract.outcome }}'; mode = 'release'; filter = '[contract]~[death],[d3d12]~[death]' }
             @{ label = 'Release conformance'; outcome = '${{ steps.release_conformance.outcome }}'; mode = 'release'; filter = '[conformance]' }
+            @{ label = 'Release imgui'; outcome = '${{ steps.release_imgui.outcome }}'; mode = 'release'; filter = '[imgui]' }
             @{ label = 'Debug layer upscale'; outcome = '${{ steps.layer_upscale.outcome }}'; dir = 'build/layer/windows/x64/debug/rojorhi-test'; filter = $env:UPSCALE_CASES }
           )
           $failed = @($entries | Where-Object { $_.outcome -eq 'failure' })
