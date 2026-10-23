@@ -37,26 +37,34 @@ namespace rojoRHI::imgui {
     /// Initializes the renderer for the current ImGui context.
     ///
     /// Call once, after `ImGui::CreateContext` and the platform backend's init, outside a device frame. It loads the
-    /// adapter's shader library, creates its pipelines, its sampler and a fence, and sets `io.BackendRendererName`,
+    /// adapter's shader library, creates its pipelines, its sampler and a fence, sets `io.BackendRendererName`,
     /// `io.BackendRendererUserData` and the flags `ImGuiBackendFlags_RendererHasVtxOffset`, `RendererHasTextures` and
-    /// `RendererHasViewports`. A creation failure returns its `Error` after destroying what was created, and leaves the
+    /// `RendererHasViewports`, and installs `Renderer_CreateWindow`, `Renderer_DestroyWindow` and `Renderer_SetWindowSize`
+    /// in `ImGuiPlatformIO`. A creation failure returns its `Error` after destroying what was created, and leaves the
     /// context untouched. Calling it twice, without a current context, or with a renderer backend already set is an
     /// `IM_ASSERT`. Not thread-safe: the adapter's state is one per process.
     Result<void> init(const InitDesc& desc);
 
-    /// Destroys everything `init` and the frames created: the ImGui textures this adapter created (their status becomes
-    /// `ImTextureStatus_Destroyed` and their identifier `ImTextureID_Invalid`), the frame buffers, the pipelines, the
-    /// sampler, the shader library and the fence, then clears the renderer name, user data and flags.
+    /// Destroys everything `init` and the frames created. It first calls `ImGui::DestroyPlatformWindows`, which closes every
+    /// platform window as described for `presentPlatformWindows`, then destroys the ImGui textures this adapter created
+    /// (their identifier becomes `ImTextureID_Invalid` and their status `ImTextureStatus_Destroyed`, except that ImGui turns
+    /// a texture that keeps its pixels and was not scheduled for destruction, such as the font atlas, back to
+    /// `ImTextureStatus_WantCreate`, so a later `init` recreates it), the frame buffers, the pipelines, the sampler, the
+    /// shader library and the fence, and clears the renderer name, user data, flags and platform-window callbacks.
     ///
-    /// Call outside a device frame, before the platform backend's shutdown and `ImGui::DestroyContext`. Destruction is
-    /// deferred by the device, so the call does not wait. Calling it before `init` is an `IM_ASSERT`.
+    /// Call outside a device frame, while the device is alive, before `ImGui::DestroyContext`; it works before or after the
+    /// platform backend's shutdown. Apart from one wait per open platform window, destruction is deferred by the device and
+    /// the call does not wait. Calling it before `init` is an `IM_ASSERT`.
     void shutdown();
 
     /// Starts an ImGui frame on the renderer side.
     ///
     /// Call once per frame, before `ImGui::NewFrame`, with no device frame open, and at most once per device frame: the
     /// frame buffers advance on the first write after it, so a frame that draws nothing does not consume a slot. It
-    /// destroys frame buffers retired by growth in the previous frame. Calling it before `init` is an `IM_ASSERT`.
+    /// destroys frame buffers retired by growth in the previous frame, and resizes the swapchain of every platform window
+    /// whose framebuffer size (`Size` times `FramebufferScale`, rounded) changed, skipping a minimized window and a zero
+    /// size; that resize waits until the graphics queue has finished with the window's images. Calling it before `init` is
+    /// an `IM_ASSERT`.
     void newFrame();
 
     /// Creates, updates and destroys the textures `drawData->Textures` asks for (`ImGuiBackendFlags_RendererHasTextures`).
@@ -79,12 +87,25 @@ namespace rojoRHI::imgui {
     /// the frame buffer is fatal on failure.
     void render(CommandList& list, ImDrawData* drawData);
 
-    /// Records the passes of every platform window acquired this frame. Call inside the device frame, outside a render pass,
-    /// after `render`'s pass ends and before the list is submitted.
+    /// Acquires and draws every platform window into its own swapchain (`BGRA8Unorm`, `ColorSpace::SRGB`).
+    ///
+    /// Call once per frame, inside the device frame, outside a render pass, after `render`'s pass ends and before `list` is
+    /// submitted to the graphics queue. For each platform window that is not flagged `ImGuiViewportFlags_IsMinimized`, has a
+    /// known non-zero extent and has draw data, it acquires an image, records a barrier from `Layout::Undefined`, one render
+    /// pass that clears to opaque black (left undefined under `ImGuiViewportFlags_NoRendererClear`) and draws the window over
+    /// the whole image, and a barrier to `Layout::Present`. A window resized since `newFrame` is drawn stretched into the
+    /// extent `newFrame` set, which catches up at the next `newFrame`. A window whose acquire returns a null texture is
+    /// skipped this frame. A platform window created in one frame is first drawn in the next.
+    ///
+    /// Each window's swapchain is created by ImGui's `Renderer_CreateWindow`, on the surface `SurfaceCallbacks::create`
+    /// returns; a creation failure is fatal. Closing a window (`Renderer_DestroyWindow`) destroys its swapchain, signals the
+    /// adapter's fence from a submission with no lists on the graphics queue, waits for it (fatal after 5 s), then calls
+    /// `SurfaceCallbacks::destroy`, so the surface outlives every frame that drew into it. ImGui closes windows in
+    /// `ImGui::UpdatePlatformWindows`, which the host therefore calls after `Device::endFrame`, outside any frame.
     void renderPlatformWindows(CommandList& list);
 
     /// Presents every platform window `renderPlatformWindows` drew on `queue`, the graphics queue. Call after the submission
-    /// of the list it recorded into, before `Device::endFrame`.
+    /// of the list it recorded into, after the host's own present and before `Device::endFrame`.
     void presentPlatformWindows(Queue queue);
 
     /// Returns the `ImTextureID` naming the host view `view`, for `ImGui::Image` and the draw list's image calls.

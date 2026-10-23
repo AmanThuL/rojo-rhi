@@ -22,23 +22,21 @@
 #include <utility>
 
 namespace rojoRHI::imgui {
-    namespace {
-        /// Everything `init` creates, freed by `shutdown`.
-        struct State
-        {
-            Device device;
-            std::string label;
-            Format colorFormat = Format::BGRA8Unorm;
-            SurfaceCallbacks surfaces;
-            ShaderLibrary library;
-            Pipeline hostPipeline;
-            Pipeline platformPipeline; // Equal to hostPipeline when the host format is the platform windows' format.
-            std::optional<SamplerIndex> sampler;
-            Fence fence;
-            uint64_t fenceValue = 0;
-            detail::FrameRing ring;
-        };
+    using detail::fatal;
+    using detail::g_state;
+    using detail::kPlatformFormat;
+    using detail::State;
 
+    detail::State* detail::g_state = nullptr;
+
+    //==================================================================================================================
+    void detail::fatal(const std::string& message)
+    {
+        std::fprintf(stderr, "rojoRHI::imgui: %s\n", message.c_str());
+        std::abort();
+    }
+
+    namespace {
         /// The GPU objects behind one ImGui texture this adapter created, held in `ImTextureData::BackendUserData`.
         struct TextureRecord
         {
@@ -46,16 +44,11 @@ namespace rojoRHI::imgui {
             ViewIndex view;
         };
 
-        /// Platform windows present `BGRA8Unorm` with `ColorSpace::SRGB`, the one pair presentation lists for SRGB.
-        constexpr Format kPlatformFormat = Format::BGRA8Unorm;
-
         constexpr uint64_t kVertexAlignment = 16;
         constexpr uint64_t kIndexAlignment = 16;
         constexpr uint64_t kStagingAlignment = 512;
         constexpr uint64_t kRowPitchAlignment = 256;
         constexpr uint32_t kBytesPerTexel = 4;
-
-        State* g_state = nullptr;
 
         //==============================================================================================================
         constexpr uint64_t alignUp(uint64_t value, uint64_t alignment)
@@ -67,13 +60,6 @@ namespace rojoRHI::imgui {
         // An identifier the draw loop compares callbacks against; never called.
         void resetRenderState(const ImDrawList*, const ImDrawCmd*)
         {
-        }
-
-        //==============================================================================================================
-        [[noreturn]] void fatal(const std::string& message)
-        {
-            std::fprintf(stderr, "rojoRHI::imgui: %s\n", message.c_str());
-            std::abort();
         }
 
         //==============================================================================================================
@@ -286,6 +272,7 @@ namespace rojoRHI::imgui {
         io.BackendRendererUserData = state;
         io.BackendFlags |= ImGuiBackendFlags_RendererHasVtxOffset | ImGuiBackendFlags_RendererHasTextures | ImGuiBackendFlags_RendererHasViewports;
         ImGui::GetPlatformIO().DrawCallback_ResetRenderState = resetRenderState;
+        detail::installPlatformWindowCallbacks();
         return {};
     }
 
@@ -293,6 +280,9 @@ namespace rojoRHI::imgui {
     void shutdown()
     {
         IM_ASSERT(g_state != nullptr && "rojoRHI::imgui::shutdown before init");
+        // Every platform window's swapchain and surface go first, while the platform backend still owns its windows.
+        ImGui::DestroyPlatformWindows();
+        detail::removePlatformWindowCallbacks();
         State& state = *g_state;
         ImGuiPlatformIO& platformIo = ImGui::GetPlatformIO();
         for (ImTextureData* tex : platformIo.Textures)
@@ -320,6 +310,7 @@ namespace rojoRHI::imgui {
     {
         IM_ASSERT(g_state != nullptr && "rojoRHI::imgui::newFrame before init");
         g_state->ring.newFrame();
+        detail::resizePlatformWindows();
     }
 
     //==================================================================================================================
@@ -364,21 +355,19 @@ namespace rojoRHI::imgui {
     void render(CommandList& list, ImDrawData* drawData)
     {
         IM_ASSERT(g_state != nullptr && "rojoRHI::imgui::render before init");
-        detail::renderDrawData(list, drawData, g_state->hostPipeline);
-    }
-
-    //==================================================================================================================
-    void renderPlatformWindows(CommandList& list)
-    {
-        IM_ASSERT(g_state != nullptr && "rojoRHI::imgui::renderPlatformWindows before init");
-        (void)list;
-    }
-
-    //==================================================================================================================
-    void presentPlatformWindows(Queue queue)
-    {
-        IM_ASSERT(g_state != nullptr && "rojoRHI::imgui::presentPlatformWindows before init");
-        (void)queue;
+        if (drawData == nullptr)
+        {
+            return;
+        }
+        const float width = std::round(drawData->DisplaySize.x * drawData->FramebufferScale.x);
+        const float height = std::round(drawData->DisplaySize.y * drawData->FramebufferScale.y);
+        if (width <= 0.0f || height <= 0.0f)
+        {
+            return;
+        }
+        detail::renderDrawData(
+            list, drawData, g_state->hostPipeline, Extent2D{ .width = static_cast<uint32_t>(width), .height = static_cast<uint32_t>(height) }
+        );
     }
 
     //==================================================================================================================
@@ -394,23 +383,22 @@ namespace rojoRHI::imgui {
     }
 
     //==================================================================================================================
-    void detail::renderDrawData(CommandList& list, ImDrawData* drawData, Pipeline pipeline)
+    void detail::renderDrawData(CommandList& list, ImDrawData* drawData, Pipeline pipeline, Extent2D target)
     {
         IM_ASSERT(g_state != nullptr && "rojoRHI::imgui::render before init");
-        if (drawData == nullptr || drawData->DisplaySize.x <= 0.0f || drawData->DisplaySize.y <= 0.0f || drawData->TotalVtxCount == 0)
+        if (drawData == nullptr || drawData->DisplaySize.x <= 0.0f || drawData->DisplaySize.y <= 0.0f || drawData->TotalVtxCount == 0 || target.width == 0 ||
+            target.height == 0)
         {
             return;
         }
         State& state = *g_state;
         const ImVec2 origin = drawData->DisplayPos;
         const ImVec2 size = drawData->DisplaySize;
-        const ImVec2 framebufferScale = drawData->FramebufferScale;
-        const float framebufferWidth = std::round(size.x * framebufferScale.x);
-        const float framebufferHeight = std::round(size.y * framebufferScale.y);
-        if (framebufferWidth <= 0.0f || framebufferHeight <= 0.0f)
-        {
-            return;
-        }
+        // The display fills the target. A platform window resized since newFrame draws stretched into its old extent until
+        // the next newFrame resizes it, so pixels are counted in the target, not in the draw data's framebuffer size.
+        const float framebufferWidth = float(target.width);
+        const float framebufferHeight = float(target.height);
+        const ImVec2 framebufferScale(framebufferWidth / size.x, framebufferHeight / size.y);
         setRenderState(list, pipeline, framebufferWidth, framebufferHeight);
 
         // ImGui pixels, y down from DisplayPos, to clip space, +y up: x' = 2 (x - left) / width - 1, y' = 1 - 2 (y - top) / height.
