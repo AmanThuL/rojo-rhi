@@ -1,8 +1,9 @@
 //----------------------------------------------------------------------------------------------------------------------
 /// @file ShaderLibraryTests.cpp
-/// @brief Tests the header of the RojoRHI shader library written around each conformance metallib and DXIL.
+/// @brief Tests the RojoRHI shader library containers, the Null libraries the build writes and the embedded library.
 //----------------------------------------------------------------------------------------------------------------------
 #include "Core/Pipelines.h"
+#include "EmbeddedShaders.h"
 #include "ShaderList.h"
 
 #include <catch2/catch_test_macros.hpp>
@@ -127,6 +128,18 @@ namespace {
     }
 
     //==================================================================================================================
+    bool knownStage(std::string_view stage)
+    {
+        bool known = false;
+        for (const core::ShaderStage candidate :
+             { core::ShaderStage::Vertex, core::ShaderStage::Fragment, core::ShaderStage::Task, core::ShaderStage::Mesh, core::ShaderStage::Compute })
+        {
+            known = known || core::stageName(candidate) == stage;
+        }
+        return known;
+    }
+
+    //==================================================================================================================
     // Reads an `entry <name> <stage> <x> <y> <z>` line, with a trailing byte count in a D3D12 library, into `header`, or
     // returns the breach.
     std::string readEntry(const LibraryFormat& format, std::string_view line, LibraryHeader& header, std::set<std::string, std::less<>>& names)
@@ -147,13 +160,7 @@ namespace {
         {
             return std::format("entry '{}' is repeated", entry.name);
         }
-        bool known = false;
-        for (const core::ShaderStage stage :
-             { core::ShaderStage::Vertex, core::ShaderStage::Fragment, core::ShaderStage::Task, core::ShaderStage::Mesh, core::ShaderStage::Compute })
-        {
-            known = known || core::stageName(stage) == entry.stage;
-        }
-        if (!known)
+        if (!knownStage(entry.stage))
         {
             return std::format("entry '{}' has unknown stage '{}'", entry.name, entry.stage);
         }
@@ -286,31 +293,106 @@ namespace {
 
     using Entries = std::vector<LibraryEntry>;
 
+    /// A conformance shader whose entries are known in full.
+    struct ExpectedLibrary
+    {
+        std::string_view shader; ///< The entry file's basename.
+        Entries entries;         ///< Its entries, in the order of the reflection.
+    };
+
+    // One kernel per texture type of AbiTextures: seven sampled, the comparison sample, two multisample and five storage.
+    constexpr std::size_t kTextureEntries = 15;
+
+    //==================================================================================================================
+    std::vector<ExpectedLibrary> expectedLibraries()
+    {
+        return {
+            { "AbiMesh", { { "taskMain", "task", { 1, 1, 1 } }, { "meshMain", "mesh", { 3, 1, 1 } } } },
+            { "AbiVertex", { { "vertexMain", "vertex", { 0, 0, 0 } } } },
+            { "AbiFragment", { { "fragmentMain", "fragment", { 0, 0, 0 } } } },
+            { "AbiCompute", { { "computeMain", "compute", { 1, 1, 1 } } } },
+            { "Standard",
+              { { "vsMain", "vertex", { 0, 0, 0 } },
+                { "fsMain", "fragment", { 0, 0, 0 } },
+                { "tsMain", "task", { 1, 1, 1 } },
+                { "msMain", "mesh", { 1, 1, 1 } },
+                { "csMain", "compute", { 1, 1, 1 } } } },
+            { "SharedImport", { { "sharedMain", "compute", { 1, 1, 1 } } } },
+        };
+    }
+
     //==================================================================================================================
     // Checks the entry lists of every conformance shader's library in `format`; both formats carry the same ones.
     void checkEntryLists(const LibraryFormat& format)
     {
-        CHECK(readLibrary(format, "AbiMesh").entries == Entries{ { "taskMain", "task", { 1, 1, 1 } }, { "meshMain", "mesh", { 3, 1, 1 } } });
-        CHECK(readLibrary(format, "AbiVertex").entries == Entries{ { "vertexMain", "vertex", { 0, 0, 0 } } });
-        CHECK(readLibrary(format, "AbiFragment").entries == Entries{ { "fragmentMain", "fragment", { 0, 0, 0 } } });
-        CHECK(readLibrary(format, "AbiCompute").entries == Entries{ { "computeMain", "compute", { 1, 1, 1 } } });
-        CHECK(
-            readLibrary(format, "Standard").entries == Entries{ { "vsMain", "vertex", { 0, 0, 0 } },
-                                                                { "fsMain", "fragment", { 0, 0, 0 } },
-                                                                { "tsMain", "task", { 1, 1, 1 } },
-                                                                { "msMain", "mesh", { 1, 1, 1 } },
-                                                                { "csMain", "compute", { 1, 1, 1 } } }
-        );
+        for (const ExpectedLibrary& expected : expectedLibraries())
+        {
+            INFO(expected.shader);
+            CHECK(readLibrary(format, expected.shader).entries == expected.entries);
+        }
 
-        // One kernel per texture type: seven sampled, the comparison sample, two multisample and five storage.
         const Entries textures = readLibrary(format, "AbiTextures").entries;
-        CHECK(textures.size() == 15);
+        CHECK(textures.size() == kTextureEntries);
         for (const LibraryEntry& entry : textures)
         {
             INFO(entry.name);
             CHECK(entry.stage == "compute");
             CHECK(entry.size == std::array<uint64_t, 3>{ 1, 1, 1 });
         }
+    }
+
+    /// One `entry <name> <stage>` line of a Null library.
+    struct NullEntry
+    {
+        std::string name;  ///< The entry point's name.
+        std::string stage; ///< The stage word, as `core::stageName` spells it.
+
+        /// Compares two entries by name and stage.
+        friend bool operator==(const NullEntry&, const NullEntry&) = default;
+    };
+
+    //==================================================================================================================
+    // Catch2 prints a failed comparison of Null entries through this.
+    std::ostream& operator<<(std::ostream& stream, const NullEntry& entry)
+    {
+        return stream << std::format("{} {}", entry.name, entry.stage);
+    }
+
+    //==================================================================================================================
+    // Reads the LF-ended lines of a conformance shader's Null library, failing the case on a missing file, a missing final
+    // line feed or a carriage return.
+    std::vector<std::string> readNullLines(std::string_view shader)
+    {
+        const auto file = std::filesystem::path("Shaders") / (std::string(shader) + ".nulllib");
+        INFO(file.string());
+        REQUIRE(std::filesystem::exists(file));
+        const std::vector<char> bytes = readFile(file);
+        const std::string_view text(bytes.data(), bytes.size());
+        REQUIRE(text.ends_with('\n'));
+        REQUIRE(text.find('\r') == std::string_view::npos);
+        std::vector<std::string> lines;
+        for (std::size_t first = 0; first < text.size();)
+        {
+            const std::size_t end = text.find('\n', first);
+            lines.emplace_back(text.substr(first, end - first));
+            first = end + 1;
+        }
+        return lines;
+    }
+
+    //==================================================================================================================
+    // The entries of a conformance shader's Null library, in file order.
+    std::vector<NullEntry> readNullEntries(std::string_view shader)
+    {
+        const std::vector<std::string> lines = readNullLines(shader);
+        std::vector<NullEntry> entries;
+        for (std::size_t i = 2; i < lines.size(); ++i)
+        {
+            const std::vector<std::string_view> tokens = splitSpaces(lines[i]);
+            REQUIRE(tokens.size() == 3);
+            entries.push_back({ std::string(tokens[1]), std::string(tokens[2]) });
+        }
+        return entries;
     }
 } // namespace
 
@@ -422,4 +504,70 @@ TEST_CASE("each entry's DXIL in a D3D12 library is the rule's .dxil for that ent
             at += entry.bytes;
         }
     }
+}
+
+//======================================================================================================================
+TEST_CASE("every conformance shader packages a Null shader library", "[abi]")
+{
+    STATIC_REQUIRE(kNullLibrariesBuilt);
+    for (const std::string_view name : kConformanceShaders)
+    {
+        INFO(name);
+        const std::vector<std::string> lines = readNullLines(name);
+        REQUIRE(lines.size() >= 3);
+        CHECK(lines[0] == "rojorhi.null.shaderlibrary");
+        CHECK(lines[1] == std::format("abi {}", core::kShaderAbiVersion));
+        std::set<std::string, std::less<>> names;
+        for (std::size_t i = 2; i < lines.size(); ++i)
+        {
+            INFO(lines[i]);
+            const std::vector<std::string_view> tokens = splitSpaces(lines[i]);
+            REQUIRE(tokens.size() == 3);
+            CHECK(tokens[0] == "entry");
+            CHECK(validName(tokens[1]));
+            CHECK(names.insert(std::string(tokens[1])).second);
+            CHECK(knownStage(tokens[2]));
+        }
+    }
+}
+
+//======================================================================================================================
+TEST_CASE("the Null shader libraries list the entries the Metal and D3D12 libraries carry", "[abi]")
+{
+    for (const ExpectedLibrary& expected : expectedLibraries())
+    {
+        INFO(expected.shader);
+        std::vector<NullEntry> entries;
+        for (const LibraryEntry& entry : expected.entries)
+        {
+            entries.push_back({ entry.name, entry.stage });
+        }
+        CHECK(readNullEntries(expected.shader) == entries);
+    }
+
+    const std::vector<NullEntry> textures = readNullEntries("AbiTextures");
+    CHECK(textures.size() == kTextureEntries);
+    for (const NullEntry& entry : textures)
+    {
+        INFO(entry.name);
+        CHECK(entry.stage == "compute");
+    }
+}
+
+//======================================================================================================================
+TEST_CASE("the embedded Standard library is the configured backend's library", "[abi]")
+{
+#if defined(ROJORHI_TEST_BACKEND_METAL4)
+    constexpr std::string_view magic = "rojorhi.metal4.shaderlibrary\n";
+#elif defined(ROJORHI_TEST_BACKEND_D3D12)
+    constexpr std::string_view magic = "rojorhi.d3d12.shaderlibrary\n";
+#elif defined(ROJORHI_TEST_BACKEND_NULL)
+    constexpr std::string_view magic = "rojorhi.null.shaderlibrary\n";
+#else
+#error "the test build defines no ROJORHI_TEST_BACKEND_*"
+#endif
+    const std::span<const std::byte> library = embedded::kStandardLibrary;
+    REQUIRE(library.size() > magic.size());
+    const std::string first(reinterpret_cast<const char*>(library.data()), magic.size());
+    CHECK(first == magic);
 }

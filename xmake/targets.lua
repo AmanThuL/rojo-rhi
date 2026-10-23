@@ -316,6 +316,14 @@ target("RojoRHITests")
             add_files(path.join(component, "Tests/Conformance", path.filename(file)))
         end
     end
+    -- The shader library cases name the configured backend's container, which EmbeddedShaders.h holds.
+    if is_config("rojorhi_backend", "metal4") then
+        add_defines("ROJORHI_TEST_BACKEND_METAL4")
+    elseif is_config("rojorhi_backend", "d3d12") then
+        add_defines("ROJORHI_TEST_BACKEND_D3D12")
+    else
+        add_defines("ROJORHI_TEST_BACKEND_NULL")
+    end
     -- Core and Null cases test the core through the Null backend, which never ships, so they build only with it.
     if is_config("rojorhi_backend", "null") then
         add_files(path.join(component, "Tests/Core/*.cpp"))
@@ -381,6 +389,11 @@ target("RojoRHITests")
     set_values("slang.slangc", path.join(thirdparty_dir, is_host("windows") and "slang/bin/slangc.exe"
                                                          or "slang/bin/slangc"))
     add_files(path.join(component, "Shaders/Tests/*.slang"))
+    -- SharedImport.slang reaches the test module through an include directory, which the non-recursive glob above
+    -- keeps out of the entry files; EmbeddedShaders.h holds the configured backend's library of Standard.slang.
+    set_values("slang.includedirs", path.join(component_dir, "Shaders/Tests/Modules"))
+    set_values("slang.embed", "EmbeddedShaders.h")
+    set_values("slang.embed_files", "Standard")
     -- The probe is among those files, and the layout rule keeps it out of the conformance list: it
     -- compares the shared structs with what each target reflects.
     add_rules("rojorhi.shader_layout")

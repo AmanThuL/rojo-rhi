@@ -96,12 +96,17 @@ dependency rename.
 `Shaders/RojoRHI/RojoRHI.slang` is the module every v2 shader imports: it owns every binding and
 lowers the entries of chapter 05 per target, selected by one `ROJORHI_TARGET_*` macro (ADR 0018).
 `Shaders/Tests/` holds compile-only conformance shaders that call every entry in every stage it
-allows, and a layout probe. `xmake/slang.lua` declares two rules: `rojorhi.slang` compiles each
-shader to MSL, SPIR-V and HLSL on every host, to a metallib when the Metal toolchain is present
-(packaged with the ABI stamp and each entry's stage and threadgroup size into a `.metal4lib` by
-`Tools/shader_library.py`) and to DXIL when a DXC is reachable; `rojorhi.shader_layout` runs
-`Tools/shader_layout.py`, which reads the probe's reflection on each target and generates
-`static_assert`s compiled into `RojoRHITests`. The tests tagged `[abi]` run both.
+allows, and a layout probe; `Shaders/Tests/Modules/` holds a shared test module with no entry
+point, which `SharedImport.slang` imports. `xmake/slang.lua` declares two rules: `rojorhi.slang`
+compiles each entry file to MSL, SPIR-V and HLSL and packages a Null library (`.nulllib`) on every
+host; it also compiles to a metallib when the Metal toolchain is present (packaged with the ABI
+stamp and each entry's stage and threadgroup size into a `.metal4lib` by `Tools/shader_library.py`)
+and to DXIL and a `.d3d12lib` when a DXC is reachable. Every input must declare an entry point, or
+the build fails; shared modules are reached through `slang.includedirs`, and `slang.embed` writes
+the configured backend's libraries into a generated header (`Tools/embed_library.py`).
+`rojorhi.shader_layout` runs `Tools/shader_layout.py`, which reads the probe's reflection on each
+target and generates `static_assert`s compiled into `RojoRHITests`. The tests tagged `[abi]` run
+both. The header comment of `xmake/slang.lua` states the rule's full consumer interface.
 
 `Benchmarks/` builds the executable `RojoRHIBench` on macOS and, on a `d3d12` build, on Windows.
 It runs a native arm (Metal 4 or D3D12) and a RojoRHI arm of the same workloads in one process and
