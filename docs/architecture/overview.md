@@ -27,6 +27,7 @@ rojo-rhi/
   Backends/Metal4/Source/                     the Metal 4 backend
     Backends/Metal4/Kernels/                    the Metal 4 backend's own MSL kernels
   Backends/Metal4/MetalCpp/                   the one metal-cpp unit, shared with Legacy
+  Adapters/ImGui/                             the backend-neutral ImGui adapter: Include/, Source/, Shaders/
   Tests/Contract/                             backend-neutral contract cases
   Tests/Core/  Tests/Null/                    core internals; Null expectations (Null builds)
   Tests/Metal4/  Tests/Conformance/           Metal 4 expectations; T1 readback oracles
@@ -126,6 +127,12 @@ logging) that replaces the Core dependency the component had inside Luminex.
 `Legacy/Backends/Metal4/Source/` is the Metal 4 backend, built through metal-cpp;
 `Legacy/Backends/Metal4/ImGui/` is the optional ImGui adapter, with its maintained patch and buffer
 probe under `Tools/`.
+
+`Adapters/ImGui/` is the backend-neutral ImGui adapter, `RojoRHIImGui`, written against the public
+interface alone, so it runs on the Null, Metal 4 and D3D12 builds. Its header includes `<imgui.h>`
+and lives in its own include root, `Adapters/ImGui/Include`, so `Include/` stays free of third-party
+types. The v1 adapter above stays until `Legacy/` goes. [The ImGui adapter](imgui-adapter.md)
+describes its target, host loop, frame buffers and platform windows.
 
 `Legacy/Tests/` and `Legacy/Shaders/Tests/` hold the contract, validation and GPU conformance
 suite, including the checkpoint A cases ADR 0005 (superseded by ADR 0009) freezes by name, carried

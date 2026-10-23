@@ -6,8 +6,8 @@ grows feature by feature, adding a capability only when a consumer has demonstra
 takes no shader-toolchain, windowing or logging dependency of its own.
 
 Metal 4, through metal-cpp, is its backend, and requires Apple Silicon macOS with the
-`MTLGPUFamilyMetal4` device family; there is no Metal 3 fallback. An optional ImGui adapter builds
-as a separate target.
+`MTLGPUFamilyMetal4` device family; there is no Metal 3 fallback. A backend-neutral ImGui adapter
+builds as a separate target.
 
 A D3D12 backend is also implemented, verified on WARP only, not on hardware.
 

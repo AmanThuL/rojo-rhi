@@ -255,6 +255,10 @@ GPU case is RojoRHI's, while a fixture that builds a consumer's scene is not.
 | Synchronization or lifetime | a stress or recycle case and a labelled GPU capture |
 | Performance claim | a repeatable command, the device and configuration, several samples, the raw measurement |
 
+`Tests/ImGui/` holds the `[imgui]` cases of the ImGui adapter. They build into `RojoRHITests` only
+when the host declares an ImGui target, which the standalone root always does, and run as
+`xmake test RojoRHITests/imgui`. The pixel case skips without a GPU.
+
 Hosted runners have no Metal 4 device, so they compile the GPU cases and inventory them without
 running them. The GPU tiers run on Metal 4 Apple Silicon before merge.
 

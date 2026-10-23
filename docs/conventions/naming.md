@@ -11,6 +11,7 @@ differently, ADR 0001 wins; nothing here may contradict its table.
 | Kind | Spelling | Example |
 |---|---|---|
 | Namespace | `rojoRHI` | `rojoRHI::Device` |
+| ImGui adapter namespace | `rojoRHI::imgui` | `rojoRHI::imgui::textureId` |
 | Backend namespace | `rojoRHI::metal4` | `rojoRHI::metal4::frameDataCounters` |
 | Diagnostics namespace | `rojoRHI::debug` | the capture-schema names in `CaptureSchema.h` |
 | Public include root | `rojoRHI/` | `#include <rojoRHI/RHI.h>` |
@@ -18,6 +19,7 @@ differently, ADR 0001 wins; nothing here may contradict its table.
 | Macro prefix | `ROJORHI_` | `ROJORHI_ASSERT`, `ROJORHI_LOG_INFO` |
 | Default GPU label prefix | `rojorhi.` | `rojorhi.buffer.unnamed` |
 | Build targets | `RojoRHI`, `RojoRHITests` | the v2 library and its tests (ADR 0017) |
+| Optional adapter target | `RojoRHIImGui` | the backend-neutral ImGui adapter, built when a host names its ImGui target |
 | Frozen v1 targets | `RojoRHILegacy`, `RojoRHILegacyMetal4ImGui`, `RojoRHILegacyTests` | the v1 library, its ImGui adapter and its tests (ADR 0017, which amends ADR 0001's target row) |
 | Repository | `rojo-rhi` | the directory this file lives in |
 | Prose name | RojoRHI | "RojoRHI exposes no backend type" |
