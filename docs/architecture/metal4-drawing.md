@@ -137,19 +137,19 @@ the object and mesh stages too: each bound stage costs every draw that follows a
   `writePassBegin` right after it opens, before any command: the compute encoder of the pass's
   leading counted draws, when their kernels run first, else the render encoder, after
   `RenderStageVertex`. `endRenderPass` opens the encoder when nothing did, sets the deferred store
-  actions, writes the end timestamp on it after `RenderStageFragment` and pops the pass's debug
-  group; the encoder then lingers, running no further command and hidden from the draw state, until
-  the next encoder, a scope boundary or `end` ends it, so a barrier the list still owes at `end` can
-  be carried on it ([command recording](metal4-recording.md#barriers)). Both are written at
-  `TimestampGranularityPrecise`, which adds no encoder at an encoder's start or end; the kernels of
-  counted draws and the encoders splits resume fall between the two. A command buffer's
-  `writeTimestampIntoHeap` around a render encoder costs CPU and allocations per write and slows
-  that encoder's draws on the GPU, so no pass writes one. `end` nulls the textures the descriptor
-  holds, so an idle list keeps no destroyed target alive; descriptor setters are not counted.
+  actions, writes the end timestamp after `RenderStageFragment` (`RenderStageVertex` on an encoder
+  with no draw: Metal may never write the other) and pops the group; the encoder lingers, running
+  no command and hidden from the draw state, until the next encoder, a scope boundary or `end`, so
+  it can carry a barrier the list owes at `end` ([command recording](metal4-recording.md#barriers)).
+  Both are written at `Precise` granularity, which adds no encoder; counted draws' kernels and
+  resumed encoders fall between. A command buffer's `writeTimestampIntoHeap` around a render
+  encoder costs CPU and allocations per write and slows its draws on the GPU, so no pass writes one.
+  `end` nulls the descriptor's textures, keeping no destroyed target alive; setters are uncounted.
 - A scope that begins or ends inside a pass opens the render encoder and pushes or pops a debug
-  group on it. A split pops the open groups first and the resumed encoder pushes them again,
-  outermost first. Such a scope writes its timestamps on the render encoder after the fragment
-  stage, at `TimestampGranularityPrecise`; a split writes none ([command
+  group on it; a split pops the open groups and the resumed encoder pushes them again, outermost
+  first. Its timestamps go on the render encoder after the fragment stage, `Precise`, or after the
+  vertex stage while the encoder holds no draw, so a scope opened before the encoder's first draw
+  measures from the encoder's start, load actions included; a split writes none ([command
   recording](metal4-recording.md)).
 - Ending a render encoder opens a command pool, once per encoder and never per command, because
   the validation layer autoreleases when a stencil attachment ends.

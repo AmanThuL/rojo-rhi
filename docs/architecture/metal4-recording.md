@@ -193,14 +193,14 @@ the core's scope record and on a second stack, and writes the begin timestamp wi
 `writeTimestampIntoHeap` on the buffer. `endScope` closes the encoder, writes the end timestamp,
 calls `popDebugGroup` and releases the string. Inside a pass a scope is a debug group on the render
 encoder ([drawing](metal4-drawing.md)) and claims a pair likewise; the encoder writes it with
-`writeTimestamp` at `TimestampGranularityPrecise` after `RenderStageFragment`, which adds no encoder
-and measured no change in a pass's duration against `Relaxed`. A split pushes the open groups again
-on the resumed encoder but writes no timestamp, so the end timestamp may sit on a later encoder than
-the begin. A render pass claims its pair at `beginRenderPass` and writes it on its encoders: the
-begin timestamp first on its first encoder (the kernels' compute encoder of its leading counted
-draws, else its render encoder), the end timestamp on its last render encoder just before it
-lingers, so its counted draws' kernels and its splits fall inside it ([drawing](metal4-drawing.md)).
-An upscale writes its pair around its carrier and MetalFX's encoders (below).
+`writeTimestamp` at `TimestampGranularityPrecise` after `RenderStageFragment`, or after
+`RenderStageVertex` while the encoder holds no draw, so an empty pass or scope is timed; it adds no
+encoder and measured no change in a pass's duration against `Relaxed`. A split pushes the open
+groups again on the resumed encoder but writes none, so the end may sit on a later encoder. A
+render pass claims its pair at `beginRenderPass` and writes the begin first on its first encoder
+(the kernels' compute encoder of its leading counted draws, else its render encoder), the end on
+its last render encoder as it lingers, so its counted draws' kernels and splits fall inside it
+([drawing](metal4-drawing.md)). An upscale's pair goes around its carrier and MetalFX's encoders.
 
 A claim is one relaxed `fetch_add(2)` on the slot's cursor. A device created without
 `DeviceDesc::scopeTimings` makes none and gets `core::kNoTimestamp`, so it writes, creates and

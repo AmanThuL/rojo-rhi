@@ -132,7 +132,9 @@ namespace rojoRHI::metal4 {
 
     /// Writes entry `index` of `list`'s frame slot on `encoder`, the open render encoder of its pass, after the fragment stage
     /// of the work recorded before it, at `kEncoderGranularity`: both entries of a scope inside the pass, and the pass's end
-    /// entry just before its last encoder ends. Writes nothing for `core::kNoTimestamp`. Counts one native call; the encoder's
+    /// entry just before its last encoder ends. While the encoder holds no draw the write follows the vertex stage instead,
+    /// at the encoder's start, because Metal may never write a fragment-stage timestamp on an encoder that draws nothing;
+    /// so an empty pass or scope is timed. Writes nothing for `core::kNoTimestamp`. Counts one native call; the encoder's
     /// write autoreleases nothing, so it opens no pool.
     void writeInPass(CommandListImpl& list, MTL4::RenderCommandEncoder* encoder, uint32_t index);
 

@@ -13,6 +13,7 @@
 #include <array>
 #include <cstdint>
 #include <string>
+#include <string_view>
 #include <vector>
 
 using namespace rojoRHI;
@@ -57,6 +58,21 @@ namespace {
         {
             device.beginFrame();
             device.endFrame();
+        }
+    }
+
+    /// The edge of the empty passes' target, in texels.
+    constexpr uint32_t kEmptyEdge = 256;
+
+    /// The warnings `collectWarning` saw since the case cleared them.
+    std::vector<std::string> g_warnings;
+
+    //==================================================================================================================
+    void collectWarning(MessageSeverity severity, std::string_view message, void*)
+    {
+        if (severity == MessageSeverity::Warning)
+        {
+            g_warnings.emplace_back(message);
         }
     }
 
@@ -223,6 +239,54 @@ TEST_CASE("every render pass forms a scope labeled with the pass label, defaulte
     CHECK(seen[2].depth == 0);
     device.endFrame();
     destroyDevice(device);
+}
+
+//======================================================================================================================
+TEST_CASE("an empty render pass, an empty scope inside it and an empty scope outside a pass report a time and no warning", "[contract]")
+{
+    g_warnings.clear();
+    setMessageCallback(collectWarning, nullptr);
+    Device device = *createDevice(DeviceDesc{ .scopeTimings = true, .framesInFlight = 2 });
+    // A cleared target of many tiles: Metal 4 left unwritten a fragment-stage timestamp on an encoder that draws nothing
+    // for such a target.
+    const Texture target = *device.createTexture(
+        TextureDesc{ .format = Format::RGBA8Unorm, .extent = { kEmptyEdge, kEmptyEdge, 1 }, .usage = TextureUsage::RenderTarget, .label = "test.target" }
+    );
+    device.beginFrame();
+    CommandList list = device.acquireCommandList(QueueType::Graphics, "test.list");
+    test::transition(list, target, Layout::Undefined, Layout::ColorAttachment);
+    const std::array<ColorAttachment, 1> colors{ ColorAttachment{ .texture = target, .load = LoadOp::Clear } };
+    list.beginRenderPass(RenderPassDesc{ .colors = colors, .area = { 0, 0, kEmptyEdge, kEmptyEdge }, .label = "empty.pass" });
+    list.endRenderPass();
+    list.beginRenderPass(RenderPassDesc{ .colors = colors, .area = { 0, 0, kEmptyEdge, kEmptyEdge }, .label = "holding.pass" });
+    list.beginScope("empty.inside");
+    list.endScope();
+    list.endRenderPass();
+    list.beginScope("empty.outside");
+    list.endScope();
+    submit(device, list);
+    device.endFrame();
+    idleFrames(device, 1);
+    device.beginFrame();
+    // Chapter 14, `ScopeTiming`: a scope that records nothing is still a row, with a duration of about zero.
+    const std::vector<Seen> seen = seenBy(device);
+    device.endFrame();
+    destroyDevice(device);
+    setMessageCallback(nullptr, nullptr);
+    REQUIRE(seen.size() == 4);
+    CHECK(seen[0].label == "empty.pass");
+    CHECK(seen[1].label == "holding.pass");
+    CHECK(seen[2].label == "empty.inside");
+    CHECK(seen[3].label == "empty.outside");
+    for (const Seen& scope : seen)
+    {
+        CAPTURE(scope.label);
+        CHECK(scope.frame == 1);
+        CHECK(scope.gpuMilliseconds >= 0.0);
+    }
+    // On Metal 4 the warning check is the one that matters: an entry that resolves unwritten reads 0, so a non-negative
+    // duration proves nothing, while the frame's warning names every claimed pair the GPU never wrote.
+    CHECK(g_warnings.empty());
 }
 
 //======================================================================================================================
