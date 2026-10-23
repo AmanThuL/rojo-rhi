@@ -89,7 +89,7 @@ namespace rojoRHI::metal4 {
         MTL::IndirectCommandBuffer* buffer = newIcb(device, kind, capacity);
         if (buffer == nullptr)
         {
-            ROJORHI_LOG_ERROR("an indirect command buffer {} of {} commands was not created", kIcbLabels[static_cast<size_t>(kind)], capacity);
+            ROJORHI_LOG_FATAL("an indirect command buffer {} of {} commands was not created", kIcbLabels[static_cast<size_t>(kind)], capacity);
             std::abort();
         }
         core::DeviceCounts::add(core.counts().nativeCreateCalls);

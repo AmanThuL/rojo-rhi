@@ -11,6 +11,8 @@
   ([ADR 0022](docs/decisions/0022-versioning-in-the-single-header.md)). Pipeline-cache blobs of
   0.1.0 embed that version and become misses.
 - Chapter 10 states that a submission with no lists is valid with no frame open.
+- The Metal 4 backend writes a message it aborts after to stderr as well when a message callback
+  took it.
 
 ## 0.1.0 (2026-10-22)
 

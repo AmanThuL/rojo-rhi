@@ -35,7 +35,7 @@ namespace rojoRHI {
         /// Logs that Metal refused to create `what` and aborts, in every build: chapter 04 makes a refused write fatal.
         [[noreturn]] void refused(std::string_view what)
         {
-            ROJORHI_LOG_ERROR("Metal refused to create {}", what);
+            ROJORHI_LOG_FATAL("Metal refused to create {}", what);
             std::abort();
         }
 
