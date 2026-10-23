@@ -1,6 +1,15 @@
 # Changelog
 
-## 0.1.0 (unreleased)
+## 0.2.0 (unreleased)
+
+- **Breaking**: `Capabilities::upscalers` is a span of `UpscalerSupport`, each kind with its input
+  scale range ([upscaling](docs/spec/12-upscaling.md)); code that read `UpscalerKind` elements
+  reads `.kind`.
+- `ROJORHI_VERSION_MINOR` is 2: the interface is 0.2.0, unreleased
+  ([ADR 0022](docs/decisions/0022-versioning-in-the-single-header.md)). Pipeline-cache blobs of
+  0.1.0 embed that version and become misses.
+
+## 0.1.0 (2026-10-22)
 
 - The v2 interface begins beside the frozen v1 interface
   ([ADR 0017](docs/decisions/0017-v1-frozen-under-legacy.md)).

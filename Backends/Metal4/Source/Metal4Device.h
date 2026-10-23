@@ -185,6 +185,7 @@ namespace rojoRHI {
         MTL::Buffer* samplerTable = nullptr;               ///< The `MTL::ResourceID` of each sampler slot, `maxSamplers` entries, Shared.
         std::string adapterName;                           ///< The storage `Capabilities::adapterName` views.
         std::string floorName;                             ///< The storage `Capabilities::floorName` views.
+        std::array<UpscalerSupport, 1> upscalerSupport{};  ///< The storage `Capabilities::upscalers` views.
         metal4::Presentation presentation;                 ///< The swapchains and what they leave to the graphics queue.
 
         /// Returns the state `device` wraps; checks VU-rojo-core-0004.

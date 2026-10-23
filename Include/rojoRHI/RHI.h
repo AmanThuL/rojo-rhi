@@ -15,7 +15,7 @@
 
 // Version
 #define ROJORHI_VERSION_MAJOR 0
-#define ROJORHI_VERSION_MINOR 1
+#define ROJORHI_VERSION_MINOR 2
 #define ROJORHI_VERSION_PATCH 0
 
 namespace rojoRHI {
@@ -825,6 +825,13 @@ namespace rojoRHI {
         XeSS,
     };
 
+    struct UpscalerSupport
+    {
+        UpscalerKind kind = UpscalerKind::MetalFX;
+        float minInputScale = 1.0f; ///< Smallest input extent over output extent, per axis, in (0, 1].
+        float maxInputScale = 1.0f; ///< Largest, at least minInputScale and at most 1.
+    };
+
     enum class UpscalerFlags : uint32_t
     {
         None = 0,
@@ -996,7 +1003,7 @@ namespace rojoRHI {
         bool placementSparse = false;
         bool meshTasksIndirect = false;
         bool conservativeRaster = false;
-        std::span<const UpscalerKind> upscalers;
+        std::span<const UpscalerSupport> upscalers;
         Limits limits;
     };
 

@@ -89,16 +89,16 @@ namespace rojoRHI::core {
         );
         UpscalerRecord record;
         record.label = resolveLabel(desc.label, "rojorhi.upscaler.unnamed");
-        const std::span<const UpscalerKind> offered = core.capabilities().upscalers;
+        const std::span<const UpscalerSupport> offered = core.capabilities().upscalers;
         if (desc.kind == UpscalerKind::Auto)
         {
             if (offered.empty())
             {
                 return std::unexpected(Error{ ErrorCategory::Unsupported, "the device lists no upscaler kind for Auto to select" });
             }
-            record.kind = offered.front();
+            record.kind = offered.front().kind;
         }
-        else if (std::find(offered.begin(), offered.end(), desc.kind) != offered.end())
+        else if (std::ranges::find(offered, desc.kind, &UpscalerSupport::kind) != offered.end())
         {
             record.kind = desc.kind;
         }

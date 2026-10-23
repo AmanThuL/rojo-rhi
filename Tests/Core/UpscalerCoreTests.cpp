@@ -17,7 +17,7 @@ using rojoRHI::test::UpscaleKit;
 
 namespace {
     /// The kinds a device with a short list offers.
-    constexpr std::array<UpscalerKind, 2> kShortList = { UpscalerKind::FSR, UpscalerKind::XeSS };
+    constexpr std::array<UpscalerSupport, 2> kShortList = { { { UpscalerKind::FSR, 0.5f, 1.0f }, { UpscalerKind::XeSS, 0.5f, 1.0f } } };
 
     //==================================================================================================================
     const core::UpscalerRecord& recordOf(Device device, Upscaler upscaler)

@@ -189,12 +189,12 @@ SDK file: setup pins the headers and the two DLLs under `ThirdParty/fidelityfx/`
 copies the DLLs beside an executable only when they are there
 ([the build record](d3d12-build.md)).
 
-**Availability.** `capabilities.upscalers` is `{FSR}` when the loader loaded and an `ffxQuery`
-with `ffxQueryDescGetVersions` for the upscale description and the device reports at least one
-provider; otherwise it is empty. `UpscalerKind::Auto` resolves to FSR; DLSS, XeSS and MetalFX are
-not listed, so `createUpscaler` refuses them with `Unsupported` naming the kind. When the runtime
-did not load, a refusal of `Auto` or FSR adds that FSR needs `amd_fidelityfx_loader_dx12.dll`
-beside the executable.
+**Availability.** `capabilities.upscalers` is FSR, scale range 1/3 to 1 as FidelityFX documents,
+when the loader loaded and an `ffxQuery` with `ffxQueryDescGetVersions` for the upscale description
+and the device reports at least one provider; otherwise it is empty. `UpscalerKind::Auto` resolves
+to FSR; DLSS, XeSS and MetalFX are not listed, so `createUpscaler` refuses them with `Unsupported`
+naming the kind. When the runtime did not load, a refusal of `Auto` or FSR adds that FSR needs
+`amd_fidelityfx_loader_dx12.dll` beside the executable.
 
 **Creation.** After `core::prepareUpscaler`, `ffxCreateContext` takes an
 `ffxCreateContextDescUpscale` (the input as `maxRenderSize`, the output as `maxUpscaleSize`)

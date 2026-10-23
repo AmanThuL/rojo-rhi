@@ -62,8 +62,8 @@ and it is the frame of the acquire". A destroyed swapchain waits in a per-frame-
 
 ## Upscalers
 
-Every upscaler kind the Null device reports can be created. `Auto` resolves to the first kind of
-the capabilities list, which is MetalFX on Null, and the `UpscalerRecord` keeps the resolved
+Every upscaler kind the Null device reports can be created. `Auto` resolves to the kind of the
+first entry of the capabilities list, MetalFX on Null, and the `UpscalerRecord` keeps the resolved
 kind. `core::prepareUpscaler` holds the creation checks and the kind resolution and allocates
 nothing: a backend creates its native object, stores it in the record's `native` and only then
 allocates the handle, so the payload is in place before the handle exists. Null has no native

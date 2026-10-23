@@ -10,6 +10,9 @@
 
 #include <algorithm>
 #include <array>
+#include <cmath>
+#include <cstdint>
+#include <span>
 
 using namespace rojoRHI;
 using rojoRHI::test::UpscaleKit;
@@ -28,10 +31,24 @@ TEST_CASE("an upscaler is created from the default description with Auto", "[con
 TEST_CASE("every kind the device lists can be created", "[contract]")
 {
     Device device = *createDevice();
-    for (const UpscalerKind kind : device.capabilities().upscalers)
+    for (const UpscalerSupport& support : device.capabilities().upscalers)
     {
-        const Result<Upscaler> upscaler = device.createUpscaler(UpscalerDesc{ .kind = kind, .input = { 64, 64 }, .output = { 64, 64 } });
+        const Result<Upscaler> upscaler = device.createUpscaler(UpscalerDesc{ .kind = support.kind, .input = { 64, 64 }, .output = { 64, 64 } });
         CHECK(upscaler.has_value());
+    }
+    destroyDevice(device);
+}
+
+//======================================================================================================================
+TEST_CASE("an upscaler at a listed kind's smallest input scale is created", "[contract]")
+{
+    Device device = *createDevice();
+    for (const UpscalerSupport& support : device.capabilities().upscalers)
+    {
+        const auto axis = static_cast<uint32_t>(std::ceil(128.0 * support.minInputScale));
+        const Result<Upscaler> upscaler = device.createUpscaler(UpscalerDesc{ .kind = support.kind, .input = { axis, axis }, .output = { 128, 128 } });
+        REQUIRE(upscaler.has_value());
+        device.destroy(*upscaler);
     }
     destroyDevice(device);
 }
@@ -40,10 +57,10 @@ TEST_CASE("every kind the device lists can be created", "[contract]")
 TEST_CASE("a kind the device does not list is an error, never a substitution", "[contract]")
 {
     Device device = *createDevice();
-    const std::span<const UpscalerKind> listed = device.capabilities().upscalers;
+    const std::span<const UpscalerSupport> listed = device.capabilities().upscalers;
     for (const UpscalerKind kind : { UpscalerKind::MetalFX, UpscalerKind::DLSS, UpscalerKind::FSR, UpscalerKind::XeSS })
     {
-        if (std::find(listed.begin(), listed.end(), kind) == listed.end())
+        if (std::ranges::find(listed, kind, &UpscalerSupport::kind) == listed.end())
         {
             const Result<Upscaler> upscaler = device.createUpscaler(UpscalerDesc{ .kind = kind, .input = { 64, 64 }, .output = { 64, 64 } });
             REQUIRE_FALSE(upscaler.has_value());

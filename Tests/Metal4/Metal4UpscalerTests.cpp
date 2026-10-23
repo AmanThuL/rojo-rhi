@@ -20,6 +20,7 @@
 #include <Metal/Metal.hpp>
 #include <MetalFX/MetalFX.hpp>
 
+#include <algorithm>
 #include <array>
 #include <atomic>
 #include <cmath>
@@ -109,16 +110,33 @@ namespace {
 TEST_CASE("the device lists MetalFX when MetalFX supports it", "[metal4]")
 {
     Device device = *createDevice({ .scopeTimings = true });
-    const std::span<const UpscalerKind> upscalers = device.capabilities().upscalers;
+    const std::span<const UpscalerSupport> upscalers = device.capabilities().upscalers;
     if (MTLFX::TemporalScalerDescriptor::supportsMetal4FX(DeviceImpl::of(device).device))
     {
         REQUIRE(upscalers.size() == 1);
-        CHECK(upscalers.front() == UpscalerKind::MetalFX);
+        CHECK(upscalers.front().kind == UpscalerKind::MetalFX);
     }
     else
     {
         CHECK(upscalers.empty());
     }
+    destroyDevice(device);
+}
+
+//======================================================================================================================
+TEST_CASE("MetalFX reports the device's content scale range as input over output", "[metal4]")
+{
+    Device device = *createDevice();
+    if (device.capabilities().upscalers.empty())
+    {
+        destroyDevice(device);
+        SKIP("MetalFX does not support this device");
+    }
+    MTL::Device* native = DeviceImpl::of(device).device;
+    const UpscalerSupport& support = device.capabilities().upscalers.front();
+    CHECK(support.minInputScale == 1.0f / MTLFX::TemporalScalerDescriptor::supportedInputContentMaxScale(native));
+    CHECK(support.maxInputScale == std::min(1.0f, 1.0f / MTLFX::TemporalScalerDescriptor::supportedInputContentMinScale(native)));
+    UNSCOPED_INFO("minInputScale " << support.minInputScale << ", maxInputScale " << support.maxInputScale);
     destroyDevice(device);
 }
 
