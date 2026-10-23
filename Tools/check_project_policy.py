@@ -45,9 +45,10 @@ PROCESS_PATTERNS = (
 PROCESS_ROOTS = (
     "xmake/", "Include/", "Source/", "Backends/", "Benchmarks/", "Shaders/", "Tests/", "Legacy/",
     "Tools/ImGuiBufferProbe/",
+    "Adapters/",
 )
 COMMIT_SUBJECT = re.compile(
-    r"^(?:rhi|metal|d3d12|render|shader|scene|asset|engine|editor|app|core|tool|build|ci|docs|test|spike): "
+    r"^(?:rhi|metal|d3d12|render|shader|scene|asset|engine|editor|app|core|tool|build|ci|docs|test|imgui|spike): "
     r"[a-z0-9]"
 )
 NON_IMPERATIVE_START = re.compile(
@@ -324,7 +325,7 @@ def check_process_narration(files: list[Path], errors: list[str]) -> None:
                 )
 
 
-FAIL_ROOTS = ("Source/", "Backends/", "Tests/", "Benchmarks/")
+FAIL_ROOTS = ("Source/", "Backends/", "Tests/", "Benchmarks/", "Adapters/")
 FAIL_CALL = re.compile(r"\bFAIL\s*\(")
 CPP_LITERAL_OR_COMMENT = re.compile(
     r'''//[^\n]*|/\*.*?\*/|R"(?P<d>[^()\\\s]{0,16})\(.*?\)(?P=d)"|"(?:\\.|[^"\\\n])*"|'(?:\\.|[^'\\\n])*''''',

@@ -23,14 +23,14 @@ from typing import Any, BinaryIO
 
 
 ROOT = Path(__file__).resolve().parents[1]
-CPP_ROOTS = ("Source", "Backends", "Benchmarks", "Tests", "Tools", "Legacy")
+CPP_ROOTS = ("Source", "Backends", "Benchmarks", "Tests", "Tools", "Legacy", "Adapters")
 FUNCTION_SYMBOL_KINDS = {6, 9, 12}  # Method, Constructor, Function (LSP SymbolKind)
 RULER = re.compile(r"^\s*//.*(?:={8,}|-{8,})")
 SEPARATOR_BODY = re.compile(r"^//={8,}$")
 FILE_RULER = "//" + "-" * 118
-# The ImGui adapter compiles only against a host's ImGui target, so a standalone compilation
-# database never holds it. It is checked whenever the database covers it.
-ADAPTER_DIR = "Legacy/Backends/Metal4/ImGui"
+# The ImGui adapters compile only against an ImGui target, so a compilation database that lacks one
+# never holds them. Each directory is checked whenever the database covers it.
+ADAPTER_DIRS = ("Legacy/Backends/Metal4/ImGui", "Adapters/ImGui")
 
 
 class LayoutSetupError(RuntimeError):
@@ -91,14 +91,18 @@ def compilation_database_files(database: Path) -> set[Path]:
 def select_checked_files(
     files: list[Path], covered: set[Path], root: Path
 ) -> tuple[list[Path], list[str]]:
-    """Drop the ImGui adapter, with a notice, only when the database has no entry under it."""
-    adapter = (root / ADAPTER_DIR).resolve()
-    if any(path.is_relative_to(adapter) for path in covered):
-        return files, []
-    kept = [path for path in files if not path.resolve().is_relative_to(adapter)]
-    if len(kept) == len(files):
-        return files, []
-    return kept, [f"{ADAPTER_DIR} skipped: the compilation database has no entry for the ImGui adapter"]
+    """Drop each ImGui adapter, with a notice, only when the database has no entry under it."""
+    kept = files
+    notices: list[str] = []
+    for name in ADAPTER_DIRS:
+        adapter = (root / name).resolve()
+        if any(path.is_relative_to(adapter) for path in covered):
+            continue
+        remaining = [path for path in kept if not path.resolve().is_relative_to(adapter)]
+        if len(remaining) != len(kept):
+            notices.append(f"{name} skipped: the compilation database has no entry for the ImGui adapter")
+            kept = remaining
+    return kept, notices
 
 
 def databases_files(databases: list[Path]) -> set[Path]:

@@ -6,6 +6,9 @@
 -- when no host overrides it.
 local metalcpp_pin = "release/metal-cpp_macOS26.4_iOS26.4"
 local metalcpp_commit = "c595afef4a5dc388f4047cd0c69f9e7f9468d9ed"
+-- Dear ImGui, the docking branch (1.93.0 WIP), at the same commit as the consumer's pin. It is test-only: the
+-- adapter's cases compile its core files, and nothing else links it. Git verifies the commit.
+local imgui_pin = "83f668625ad45364de71d385aeb6a5dd04bee02e"
 -- Every downloaded archive is checked by its SHA-256 before anything is extracted from it, and the
 -- Slang compiler binary is checked again by its own hash after extraction. metal-cpp is pinned by
 -- commit, which git verifies.
@@ -144,6 +147,36 @@ task("setup")
             return #files
         end
 
+        -- Fetches Dear ImGui by commit on every host, as metal-cpp is fetched, and checks that the core files are
+        -- unmodified. backends/ is not checked: the adapter compiles none of it, and a checkout may carry a
+        -- consumer's backend patch.
+        local function fetch_imgui()
+            local imgui = path.join(thirdparty, "imgui")
+            -- A directory without a git HEAD is a fetch that was interrupted: fetch it again.
+            if os.isdir(imgui) and not os.isdir(path.join(imgui, ".git")) then
+                os.tryrm(imgui)
+            end
+            if not os.isdir(imgui) then
+                os.mkdir(imgui)
+                os.execv("git", {"-C", imgui, "init", "-q"})
+                os.execv("git", {"-C", imgui, "remote", "add", "origin", "https://github.com/ocornut/imgui.git"})
+                os.execv("git", {"-C", imgui, "fetch", "--depth", "1", "origin", imgui_pin})
+                os.execv("git", {"-C", imgui, "checkout", "-q", "FETCH_HEAD"})
+            end
+            local head = os.iorunv("git", {"-C", imgui, "rev-parse", "HEAD"}):trim()
+            assert(head == imgui_pin, format("%s is at %s; expected %s", imgui, head, imgui_pin))
+            local core = {"imgui.cpp", "imgui_draw.cpp", "imgui_tables.cpp", "imgui_widgets.cpp", "imgui.h",
+                          "imgui_internal.h", "imconfig.h", "imstb_rectpack.h", "imstb_textedit.h", "imstb_truetype.h"}
+            local args = {"-C", imgui, "diff", "--quiet", "HEAD", "--"}
+            for _, file in ipairs(core) do
+                table.insert(args, file)
+            end
+            local clean = try {function () os.iorunv("git", args); return true end}
+            assert(clean, format("%s has modified core files (%s); restore them with git checkout, or delete the directory "
+                                 .. "and run xmake setup again", imgui, table.concat(core, ", ")))
+        end
+        fetch_imgui()
+
         if is_host("windows") then
             -- Slang and the D3D12 runtime are fetched on Windows: the shader checks need Slang and
             -- no Metal toolchain, and the D3D12 executables load the Agility SDK and WARP.
@@ -228,12 +261,12 @@ task("setup")
                     os.cp(from, to)
                 end
             end
-            print("setup done: slang %s, agility %s, warp %s, dxc %s, fidelityfx %s", slang_pin, agility_pin, warp_pin, dxc_pin,
-                  fidelityfx_pin)
+            print("setup done: slang %s, agility %s, warp %s, dxc %s, fidelityfx %s, imgui %s", slang_pin, agility_pin,
+                  warp_pin, dxc_pin, fidelityfx_pin, imgui_pin:sub(1, 8))
             return
         end
         if not is_host("macosx") then
-            print("setup done: nothing to fetch on %s", os.host())
+            print("setup done: imgui %s, nothing else to fetch on %s", imgui_pin:sub(1, 8), os.host())
             return
         end
         local metalcpp = path.join(thirdparty, "metal-cpp")
@@ -271,5 +304,5 @@ task("setup")
         assert(slang_hash == slang_sha256,
                format("%s checksum mismatch; expected %s, got %s", slangc, slang_sha256, slang_hash))
 
-        print("setup done: metal-cpp %s, slang %s", metalcpp_pin, slang_pin)
+        print("setup done: metal-cpp %s, slang %s, imgui %s", metalcpp_pin, slang_pin, imgui_pin:sub(1, 8))
     end)

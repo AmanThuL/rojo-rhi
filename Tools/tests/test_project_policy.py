@@ -199,6 +199,15 @@ class ProjectPolicyTests(unittest.TestCase):
                     policy.check_process_narration([Path(path)], errors)
                 self.assertEqual(len(errors), 1)
 
+    def test_imgui_scope_is_accepted(self) -> None:
+        self.assertIsNotNone(policy.COMMIT_SUBJECT.match("imgui: add a renderer"))
+
+    def test_adapters_tree_is_checked_for_process_narration(self) -> None:
+        errors: list[str] = []
+        with mock.patch.object(policy, "read_text", return_value="// Ask the subagent."):
+            policy.check_process_narration([Path("Adapters/ImGui/Source/ImGuiAdapter.cpp")], errors)
+        self.assertEqual(len(errors), 1)
+
     def test_process_policy_covers_benchmark_sources(self) -> None:
         errors: list[str] = []
         with mock.patch.object(policy, "read_text", return_value="// Close the backlog."):
@@ -228,7 +237,7 @@ class ProjectPolicyTests(unittest.TestCase):
 
     def test_fail_scan_covers_v2_sources_only(self) -> None:
         text = 'void f() {\n  FAIL("x");\n  g();\n}\n'
-        for name, expected in (("Tests/a.cpp", 1), ("Legacy/a.cpp", 0)):
+        for name, expected in (("Tests/a.cpp", 1), ("Adapters/ImGui/a.cpp", 1), ("Legacy/a.cpp", 0)):
             errors: list[str] = []
             with mock.patch.object(policy, "read_text", return_value=text):
                 policy.check_code_after_fail([Path(name)], errors)

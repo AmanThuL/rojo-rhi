@@ -63,11 +63,14 @@ if is_plat("macosx") then
     -- Frozen v1 interface: optional Dear ImGui renderer integration. Keeping this in a separate
     -- target lets the core RHI build and link without ImGui while a host opts into the
     -- editor-specific bridge explicitly. Only a host that owns an ImGui target can supply the
-    -- headers this adapter compiles against, so a standalone configure of the component simply has
-    -- no such target.
-    if imgui_target then
+    -- headers this adapter compiles against (the host's patched imgui_impl_metal4), so a standalone
+    -- configure, whose test-only RojoRHIDearImGui target carries the unpatched core files, has no
+    -- such target.
+    if imgui_target and imgui_target ~= "RojoRHIDearImGui" then
         target("RojoRHILegacyMetal4ImGui")
             set_kind("static")
+            -- Built only as a dependency of a host target that asks for it.
+            set_default(false)
             add_files(path.join(component, "Legacy/Backends/Metal4/ImGui/Source/Metal4ImGui.cpp"))
             add_files(path.join(component, "Legacy/Backends/Metal4/ImGui/Source/ImGuiBackendContract.cpp"))
             add_includedirs(path.join(component, "Legacy/Backends/Metal4/ImGui/Include"), {public = true})
