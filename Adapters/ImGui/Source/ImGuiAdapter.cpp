@@ -150,14 +150,15 @@ namespace rojoRHI::imgui {
         }
 
         //==============================================================================================================
-        // Copies each update rectangle through the frame buffer; the texture is in ShaderRead before and after.
+        // Copies the bounding rectangle of the queued updates through the frame buffer, in one copy; the texture is in
+        // ShaderRead before and after. Copies of the individual rectangles would write one subresource several times, which
+        // needs a barrier between each write; the pixels between the rectangles are current in the texture data, so copying
+        // them again is correct.
         void updateTexture(State& state, CommandList& list, ImTextureData* tex)
         {
             const auto* record = static_cast<const TextureRecord*>(tex->BackendUserData);
             IM_ASSERT(record != nullptr);
-            const ImTextureRect whole = tex->UpdateRect;
-            const std::span<const ImTextureRect> rects = tex->Updates.Size > 0 ? std::span<const ImTextureRect>(tex->Updates.Data, size_t(tex->Updates.Size))
-                                                                               : std::span<const ImTextureRect>(&whole, 1);
+            const ImTextureRect rect = tex->UpdateRect;
             const std::array<TextureBarrier, 1> toCopy{ TextureBarrier{ .texture = record->texture,
                                                                         .srcStage = Stage::FragmentShader,
                                                                         .srcAccess = Access::ShaderRead,
@@ -166,17 +167,13 @@ namespace rojoRHI::imgui {
                                                                         .oldLayout = Layout::ShaderRead,
                                                                         .newLayout = Layout::CopyDst } };
             list.barrier({}, {}, toCopy);
-            const int pitch = tex->GetPitch();
-            for (const ImTextureRect& rect : rects)
+            if (rect.w != 0 && rect.h != 0)
             {
-                if (rect.w == 0 || rect.h == 0)
-                {
-                    continue;
-                }
                 const uint64_t rowBytes = uint64_t(rect.w) * kBytesPerTexel;
                 const uint64_t rowPitch = alignUp(rowBytes, kRowPitchAlignment);
                 const detail::FrameRing::Allocation staging = state.ring.allocate(rowPitch * rect.h, kStagingAlignment);
                 const auto* source = static_cast<const std::byte*>(tex->GetPixelsAt(rect.x, rect.y));
+                const int pitch = tex->GetPitch();
                 for (uint32_t row = 0; row < rect.h; ++row)
                 {
                     std::memcpy(staging.cpu + row * rowPitch, source + size_t(row) * size_t(pitch), size_t(rowBytes));

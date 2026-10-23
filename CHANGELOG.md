@@ -21,6 +21,8 @@
   warning for timestamp pairs never written; chapter 14 states what such a scope reports.
 - The ImGui adapter sizes a platform window's swapchain from the platform's current window size,
   not the viewport's, which lags an OS resize by a frame.
+- The ImGui adapter copies a texture update of several rectangles as one bounding rectangle, which
+  a validating device accepts.
 
 ## 0.1.0 (2026-10-22)
 

@@ -72,8 +72,8 @@ namespace rojoRHI::imgui {
     /// Creates, updates and destroys the textures `drawData->Textures` asks for (`ImGuiBackendFlags_RendererHasTextures`).
     ///
     /// Call once per frame, after `ImGui::Render`, inside the device frame and outside any render pass, before `render`, on
-    /// the main viewport's draw data. A new texture is created with its pixels as initial data; an update copies its
-    /// rectangles from the frame buffer into the texture, recording the copy and its barriers into `list`; a destroy request
+    /// the main viewport's draw data. A new texture is created with its pixels as initial data; an update copies the
+    /// bounding box of its rectangles from the frame buffer into the texture, recording the copy and its barriers into `list`; a destroy request
     /// is honoured once the texture went unused for a frame. Creating a texture or growing the frame buffer is fatal on
     /// failure: a message on stderr, then `std::abort()`. A texture format other than `ImTextureFormat_RGBA32` is an
     /// `IM_ASSERT`.

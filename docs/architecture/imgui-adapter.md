@@ -102,9 +102,11 @@ ImGui owns each `ImTextureData`; the adapter creates the GPU side in `prepare`, 
 
 - `WantCreate`: `createTexture(Tex2D, RGBA8Unorm, Sampled)` with the pixels as initial data (the
   texture starts in `ShaderRead`), a view, `SetTexID(textureId(view))`, status OK.
-- `WantUpdates`: for each rectangle of `Updates` (or `UpdateRect` when the list is empty), the rows
-  are copied into ring staging, a barrier moves the texture `ShaderRead` to `CopyDst`,
-  `copyBufferToTexture` runs and a second barrier restores `ShaderRead`.
+- `WantUpdates`: the rows of `UpdateRect`, the bounding box of `Updates`, are copied into ring
+  staging, a barrier moves the texture `ShaderRead` to `CopyDst`, one `copyBufferToTexture` runs
+  and a second barrier restores `ShaderRead`. A copy per rectangle would write the subresource
+  several times, each write needing a barrier before the next; the pixels between the rectangles
+  are current in the texture data, so the one copy is correct, as in Dear ImGui's Vulkan backend.
 - `WantDestroy` with `UnusedFrames > 0`: destroy the view and the texture, `SetTexID` to
   `ImTextureID_Invalid`, status Destroyed.
 - `shutdown` sets the status Destroyed on the textures it created. ImGui's `SetStatus` turns that

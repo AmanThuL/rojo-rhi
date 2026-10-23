@@ -443,15 +443,15 @@ TEST_CASE("newFrame sizes a platform window's swapchain from the platform's size
     CHECK(extent.height == pixels(dragged.y, 2.0f));
     CHECK(extent.width == 360);
     CHECK(extent.height == 280);
-    // The window moves back before ImGui::NewFrame reads the scale, so the font atlas is not rebuilt at another density.
-    g_framebufferScale = ImVec2(1.0f, 1.0f);
+    // ImGui::NewFrame then takes the denser scale and rebuilds the font atlas for it, an update of several rectangles.
     host.finishFrame(drawBoth);
+    CHECK(two->FramebufferScale.x == 2.0f);
     CHECK(imgui::detail::platformWindowPresents(two) == 2);
 
-    // The platform window keeps the size the OS gave it, and its swapchain follows the scale back.
+    // The platform window keeps the size and scale the OS gave it, and so does its swapchain.
     host.frame(drawBoth);
-    CHECK(imgui::detail::platformWindowExtent(two).width == pixels(dragged.x, 1.0f));
-    CHECK(imgui::detail::platformWindowExtent(two).height == pixels(dragged.y, 1.0f));
+    CHECK(imgui::detail::platformWindowExtent(two).width == extent.width);
+    CHECK(imgui::detail::platformWindowExtent(two).height == extent.height);
     CHECK(imgui::detail::platformWindowPresents(two) == 3);
 }
 
