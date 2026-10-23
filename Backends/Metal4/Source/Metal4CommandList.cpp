@@ -116,7 +116,7 @@ namespace rojoRHI {
                     );
                     !made)
                 {
-                    ROJORHI_LOG_ERROR("acquireCommandList on device \"{}\": {}", impl.core.label(), made.error().message);
+                    ROJORHI_LOG_FATAL("acquireCommandList on device \"{}\": {}", impl.core.label(), made.error().message);
                     std::abort();
                 }
                 core::DeviceCounts::add(impl.core.counts().nativeCreateCalls, 4);

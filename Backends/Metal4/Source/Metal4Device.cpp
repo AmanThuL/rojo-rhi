@@ -71,7 +71,7 @@ namespace rojoRHI {
             MTL::SharedEvent* drained = device->newSharedEvent();
             if (drained == nullptr)
             {
-                ROJORHI_LOG_ERROR("Metal made no event to drain queue \"{}\" at device destruction", label);
+                ROJORHI_LOG_FATAL("Metal made no event to drain queue \"{}\" at device destruction", label);
                 std::abort();
             }
             queue->signalEvent(drained, 1);
@@ -81,7 +81,7 @@ namespace rojoRHI {
             MTL4::CommandBuffer* last = device->newCommandBuffer();
             if (allocator == nullptr || last == nullptr)
             {
-                ROJORHI_LOG_ERROR("Metal made no command buffer to drain queue \"{}\" at device destruction", label);
+                ROJORHI_LOG_FATAL("Metal made no command buffer to drain queue \"{}\" at device destruction", label);
                 std::abort();
             }
             last->beginCommandBuffer(allocator);
