@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Package one shader's compile outputs into a RojoRHI shader library, for Metal 4 or D3D12.
+"""Package one shader's compile outputs into a RojoRHI shader library, for Metal 4, D3D12 or the Null backend.
 
 The Metal 4 library (--format metal4, the default) is a text header followed by the raw metallib:
 
@@ -26,6 +26,14 @@ byte count of that entry's DXIL, and a closing `dxil` line:
 <total> is the sum of the entries' byte counts. Each DXIL container is the signed output of the
 compiler (--dxil NAME=PATH, one for each entry): it starts with `DXBC`, its size field at byte 24
 equals the file's length and its digest at bytes 4 to 19 is not all zero.
+
+The Null library (--format null) is text only:
+
+  rojorhi.null.shaderlibrary
+  abi <N>
+  entry <name> <stage>                         one line per entry point, in reflection order
+
+It has no sizes and no payload; the parser of Backends/Null/Source/NullShaderLibrary.cpp reads it.
 """
 
 from __future__ import annotations
@@ -44,6 +52,7 @@ from typing import NamedTuple
 MAGIC_LINE = "rojorhi.metal4.shaderlibrary"
 METALLIB_MAGIC = b"MTLB"
 D3D12_MAGIC_LINE = "rojorhi.d3d12.shaderlibrary"
+NULL_MAGIC_LINE = "rojorhi.null.shaderlibrary"
 DXIL_MAGIC = b"DXBC"
 DXIL_DIGEST = slice(4, 20)
 DXIL_SIZE_FIELD = 24
@@ -225,6 +234,12 @@ def package(abi: int, entries: list[Entry], metallib: bytes) -> bytes:
     return ("\n".join(lines) + "\n").encode("ascii") + metallib
 
 
+def package_null(abi: int, entries: list[Reflected]) -> bytes:
+    lines = [NULL_MAGIC_LINE, f"abi {abi}"]
+    lines += [f"entry {e.name} {e.stage}" for e in entries]
+    return ("\n".join(lines) + "\n").encode("ascii")
+
+
 def check_dxil(name: str, data: bytes) -> None:
     if not data.startswith(DXIL_MAGIC):
         raise LibraryError(f"the DXIL of entry '{name}' is not a DXIL container: it does not start with DXBC")
@@ -312,6 +327,18 @@ def build_d3d12(module: Path, reflection: Path, spirv: Path, dxil: dict[str, Pat
         raise LibraryError(f"{spirv}: {error}") from error
 
 
+def build_null(module: Path, reflection: Path) -> bytes:
+    try:
+        abi = abi_version(read_input(module, False))
+    except LibraryError as error:
+        raise LibraryError(f"{module}: {error}") from error
+    try:
+        reflected = reflected_entries(json.loads(read_input(reflection, False)))
+    except (ValueError, LibraryError) as error:
+        raise LibraryError(f"{reflection}: {error}") from error
+    return package_null(abi, reflected)
+
+
 def dxil_argument(text: str) -> tuple[str, Path]:
     name, separator, path = text.partition("=")
     if not separator or not NAME_PATTERN.fullmatch(name) or not path:
@@ -334,8 +361,8 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--module", required=True, type=Path, help="Slang module holding the ABI version")
     parser.add_argument("--reflection", required=True, type=Path, help="-reflection-json of the MSL compile")
-    parser.add_argument("--spirv", required=True, type=Path, help="SPIR-V compile of the same shader")
-    parser.add_argument("--format", choices=("metal4", "d3d12"), default="metal4", help="library to write")
+    parser.add_argument("--spirv", type=Path, help="SPIR-V compile of the same shader (metal4, d3d12)")
+    parser.add_argument("--format", choices=("metal4", "d3d12", "null"), default="metal4", help="library to write")
     parser.add_argument("--metallib", type=Path, help="metallib of the same shader (metal4)")
     parser.add_argument(
         "--dxil", action="append", default=[], type=dxil_argument, metavar="NAME=PATH",
@@ -343,12 +370,18 @@ def main(argv: list[str] | None = None) -> int:
     )  # fmt: skip
     parser.add_argument("--out", required=True, type=Path, help="library to write")
     args = parser.parse_args(argv)
+    if args.format == "null" and (args.spirv is not None or args.metallib is not None or args.dxil):
+        parser.error("--format null takes no --spirv, --metallib or --dxil")
+    if args.format != "null" and args.spirv is None:
+        parser.error(f"--format {args.format} takes --spirv")
     if args.format == "metal4" and (args.metallib is None or args.dxil):
         parser.error("--format metal4 takes --metallib and no --dxil")
     if args.format == "d3d12" and (args.metallib is not None or not args.dxil):
         parser.error("--format d3d12 takes --dxil NAME=PATH and no --metallib")
     try:
-        if args.format == "d3d12":
+        if args.format == "null":
+            data = build_null(args.module, args.reflection)
+        elif args.format == "d3d12":
             dxil = dict(args.dxil)
             if len(dxil) != len(args.dxil):
                 raise LibraryError("--dxil names an entry twice")
