@@ -268,14 +268,15 @@ the misses is kept under `t2-diagnosis`. Round 2, registered by the note's amend
 frame), pipeline and native-call budgets, and missed CPU per operation in 15 of 34 judged
 configurations (C1 to C3 at `K` 100, C2 and C3 above, C5-k10000, C6, and C1-k100000 narrowly) and
 allocations in 57 of 63, by 2 to 7 a frame. Both rounds stand as judged at 5%; later rounds use
-ADR 0025. Round 3, registered by the amendment of 2026-10-21 ([round 3](
-../research/2026-10-21-metal4-overhead-round3.md)), measured the backend fixed after round 2 on
-2026-10-21 from a clean checkout of 378f219a into `t2/2026-10-21-round3/` ([round 3 results](
-../research/2026-10-21-metal4-overhead-round3-results.md)). Judged by ADR 0025, it met the GPU
-(−2.20% on the composed frame), allocation, pipeline and native-call budgets, and missed CPU per
-operation in 1 of 34 judged configurations, C3-k100 (13.96 ns [13.33, 14.17] against 10); the 5%
-rule, reported, misses C3 at every judged `K`. C10m1, reported only, allocates one block a frame
-over N. The C3 miss is a defect for a later round.
+ADR 0025. Round 3 (2026-10-21, at 378f219a, [results](
+../research/2026-10-21-metal4-overhead-round3-results.md)) met every budget but CPU at C3-k100,
+13.96 ns [13.33, 14.17] against 10. Round 4, registered by the amendment of 2026-10-22 ([round 4](
+../research/2026-10-22-metal4-overhead-round4.md)), measured the backend after that fix on
+2026-10-22 from a clean checkout of 18ab6cf2 into `t2/2026-10-22-round4/` ([round 4 results](
+../research/2026-10-22-metal4-overhead-round4-results.md)). Judged by ADR 0025 it met every budget:
+C3-k100 8.33 ns [7.92, 9.06] against 10, the composed frame's GPU time −2.02%, allocations R at
+most N (C10m1, reported only, one a frame over), pipelines and native calls. By the 5% rule,
+reported, C3 misses at `K` 100, 10,000 and 100,000.
 
 The d3d12 harness is implemented and verified on WARP only, not on hardware. The `d3d12-bench` CI
 job builds it in Debug (with the debug layer) and Release on WARP, runs `RojoRHIBench/host` in both
