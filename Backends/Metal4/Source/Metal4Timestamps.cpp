@@ -22,6 +22,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <format>
+#include <optional>
 #include <span>
 #include <string>
 
@@ -131,13 +132,13 @@ namespace rojoRHI::metal4 {
     }
 
     //==================================================================================================================
-    double Timestamps::milliseconds(const Slot& slot, uint32_t index) const
+    std::optional<double> Timestamps::milliseconds(const Slot& slot, uint32_t index) const
     {
         const NS::Data* data = slot.resolved[index / kHeapEntries];
         const uint32_t entry = index % kHeapEntries;
-        if (data == nullptr || m_frequency == 0 || (entry + 2) * sizeof(MTL4::TimestampHeapEntry) > data->length())
+        if (data == nullptr || (entry + 2) * sizeof(MTL4::TimestampHeapEntry) > data->length())
         {
-            return 0.0;
+            return std::nullopt;
         }
         const auto* entries = static_cast<const MTL4::TimestampHeapEntry*>(data->bytes());
         const uint64_t begin = entries[entry].timestamp;
@@ -146,7 +147,7 @@ namespace rojoRHI::metal4 {
         // what Metal documents for one, and is taken as unwritten too.
         if (begin == 0 || end == 0 || begin == MTL::CounterErrorValue || end == MTL::CounterErrorValue || end < begin)
         {
-            return 0.0;
+            return std::nullopt;
         }
         return static_cast<double>(end - begin) * 1000.0 / static_cast<double>(m_frequency);
     }
@@ -183,7 +184,19 @@ namespace rojoRHI::metal4 {
                 ++state.untimed;
                 continue;
             }
-            report[i].gpuMilliseconds = milliseconds(state, records[i].timestamp);
+            // A device that reports no timestamp frequency converts no tick to a time: every pair reports zero, and none is
+            // counted as unwritten, since the GPU may have written it.
+            if (m_frequency == 0)
+            {
+                report[i].gpuMilliseconds = 0.0;
+                continue;
+            }
+            const std::optional<double> time = milliseconds(state, records[i].timestamp);
+            report[i].gpuMilliseconds = time.value_or(0.0);
+            if (!time)
+            {
+                ++state.unwritten;
+            }
         }
     }
 
@@ -212,6 +225,9 @@ namespace rojoRHI::metal4 {
                 data = nullptr;
             }
         }
+        // A claimed pair the GPU never wrote is named apart from an untimed scope: it reports zero like one, but no capacity or
+        // refusal explains it.
+        const std::string unwritten = state.unwritten > 0 ? std::format("{} claimed timestamp pair(s) were never written", state.unwritten) : std::string();
         if (state.untimed > 0)
         {
             // Scopes go untimed past the slot's capacity, for a heap Metal refused, and wherever no timestamp is written for
@@ -223,12 +239,17 @@ namespace rojoRHI::metal4 {
             }
             const bool beyondCapacity = state.cursor.load(std::memory_order_relaxed) > kSlotEntries;
             ROJORHI_LOG_WARN(
-                "frame {}: {} scope(s) report no GPU time{}{}",
+                "frame {}: {} scope(s) report no GPU time{}{}{}",
                 state.frame,
                 state.untimed,
                 beyondCapacity ? std::format("; the frame claimed more than the {} timestamp pairs of a frame slot", kSlotEntries / 2) : std::string(),
-                refusedUsed ? "; Metal refused a counter heap the frame needed" : ""
+                refusedUsed ? "; Metal refused a counter heap the frame needed" : "",
+                unwritten.empty() ? std::string() : "; " + unwritten
             );
+        }
+        else if (state.unwritten > 0)
+        {
+            ROJORHI_LOG_WARN("frame {}: {}", state.frame, unwritten);
         }
         state.cursor.store(0, std::memory_order_relaxed);
         // Another process may have released heaps by the next frame, so a refused heap is asked for again.
@@ -238,6 +259,7 @@ namespace rojoRHI::metal4 {
         }
         state.resolvedFrame = false;
         state.untimed = 0;
+        state.unwritten = 0;
     }
 
     //==================================================================================================================

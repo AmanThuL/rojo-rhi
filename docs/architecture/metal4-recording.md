@@ -218,10 +218,10 @@ At the frame wait the core calls the scope-time hook once per queue with records
 the frame resolves each heap the slot used, once, with `resolveCounterRange` inside a pool, and
 keeps the data; every call converts each record's pair through `queryTimestampFrequency`, read at
 device creation. An entry Metal resolves as unwritten (zero in a new or invalidated heap, or
-`MTL::CounterErrorValue`) and an end before its begin give 0. The slot's reuse then invalidates
-the used ranges, resets the cursor and logs one warning naming the frame when any scope it reported
-went untimed. `destroyDevice` releases the heaps after the queues drain. `Device::scopeTimings`
-returns the core's report and counts nothing.
+`MTL::CounterErrorValue`) and an end before its begin give 0. The slot's reuse invalidates the
+used ranges, resets the cursor and logs one warning naming the frame when a scope went untimed or a
+claimed pair resolved to no time, counted apart. `destroyDevice` releases the heaps after the queues
+drain. `Device::scopeTimings` returns the core's report and counts nothing.
 
 ## Upscalers
 

@@ -390,6 +390,7 @@ TEST_CASE("a frame with more scopes than the heaps hold reports zero for the res
     REQUIRE(g_warnings.size() == 1);
     CHECK(g_warnings[0].find("frame 1") != std::string::npos);
     CHECK(g_warnings[0].find("1 scope") != std::string::npos);
+    CHECK(g_warnings[0].find("claimed timestamp pair(s) were never written") == std::string::npos);
     device.endFrame();
     // The next retired frame recorded no scope, so it warns of nothing.
     device.beginFrame();
@@ -563,6 +564,65 @@ TEST_CASE("a pair no timestamp was written into reports zero", "[metal4]")
         timestamps.release();
         native->release();
     }
+}
+
+//======================================================================================================================
+TEST_CASE("a claimed pair no timestamp was written into is counted apart in the frame's warning", "[metal4]")
+{
+    g_warnings.clear();
+    setMessageCallback(collectWarning, nullptr);
+    // Creating the system device autoreleases objects, so the case holds a pool for its whole body.
+    const metal4::AutoreleasePool outer;
+    MTL::Device* native = MTL::CreateSystemDefaultDevice();
+    REQUIRE(native != nullptr);
+    core::DeviceCounts counts;
+    metal4::Timestamps timestamps;
+    timestamps.create(native);
+    const uint32_t pair = timestamps.claim(0, counts);
+    REQUIRE(pair == 0);
+    const std::array<core::ScopeRecord, 1> records{ core::ScopeRecord{ .label = "test.unwritten", .timestamp = pair } };
+    std::array<ScopeTiming, 1> report{ ScopeTiming{ .label = "test.unwritten", .gpuMilliseconds = -1.0 } };
+    timestamps.resolve(0, records, report, counts);
+    CHECK(report[0].gpuMilliseconds == 0.0);
+    CHECK(g_warnings.empty());
+    timestamps.reuse(0, counts);
+    REQUIRE(g_warnings.size() == 1);
+    CAPTURE(g_warnings[0]);
+    CHECK(g_warnings[0].find("1 claimed timestamp pair(s) were never written") != std::string::npos);
+    CHECK(g_warnings[0].find("scope(s) report no GPU time") == std::string::npos);
+    CHECK(g_warnings[0].find("timestamp pairs of a frame slot") == std::string::npos);
+    // The reuse reset the count, so a frame that claims nothing warns of nothing.
+    timestamps.resolve(0, {}, {}, counts);
+    timestamps.reuse(0, counts);
+    CHECK(g_warnings.size() == 1);
+    {
+        const metal4::AutoreleasePool pool;
+        timestamps.release();
+        native->release();
+    }
+    setMessageCallback(nullptr, nullptr);
+}
+
+//======================================================================================================================
+TEST_CASE("a frame whose scopes were all written warns nothing", "[metal4]")
+{
+    g_warnings.clear();
+    setMessageCallback(collectWarning, nullptr);
+    Device device = *createDevice({ .scopeTimings = true });
+    device.beginFrame();
+    CommandList list = device.acquireCommandList(QueueType::Graphics, "test.list");
+    recordScopes(list, 1);
+    test::requireTimed(list);
+    submitFrame(device, std::array{ list });
+    retireOpenFrame(device);
+    const std::span<const ScopeTiming> report = device.scopeTimings();
+    REQUIRE(report.size() == 1);
+    CHECK(std::isfinite(report[0].gpuMilliseconds));
+    CHECK(report[0].gpuMilliseconds >= 0.0);
+    device.endFrame();
+    destroyDevice(device);
+    setMessageCallback(nullptr, nullptr);
+    CHECK(g_warnings.empty());
 }
 
 //======================================================================================================================
@@ -1087,6 +1147,7 @@ TEST_CASE("a pass, a scope inside it and an upscale past the slot's capacity wri
         }
         REQUIRE(g_warnings.size() == 1);
         CHECK(g_warnings[0].find("3 scope") != std::string::npos);
+        CHECK(g_warnings[0].find("claimed timestamp pair(s) were never written") == std::string::npos);
         device.endFrame();
         destroyDevice(device);
     }

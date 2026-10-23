@@ -15,6 +15,7 @@
 #include <array>
 #include <atomic>
 #include <cstdint>
+#include <optional>
 #include <span>
 
 namespace rojoRHI {
@@ -61,14 +62,16 @@ namespace rojoRHI::metal4 {
         /// Fills `report[i]` with the GPU duration of `records[i]`, a scope of the frame that retired from slot `slot`. The
         /// first call after the slot's reuse resolves each heap the slot used, once, counting one `nativeHostCalls` in
         /// `counts` per heap; later calls for other queues read what it resolved. A record without a timestamp, an entry Metal
-        /// reports as unwritten and an end before its begin give zero. Opens an autorelease pool. The scope-time hook calls it.
+        /// reports as unwritten and an end before its begin give zero; a claimed pair that resolves to no time is counted
+        /// for the slot's reuse warning. Opens an autorelease pool. The scope-time hook calls it.
         void resolve(uint32_t slot, std::span<const core::ScopeRecord> records, std::span<ScopeTiming> report, core::DeviceCounts& counts);
 
         /// Readies frame slot `slot` for its next frame, after its frame wait and its resolve: invalidates each used range,
         /// counting one `nativeHostCalls` in `counts` per heap, lets go of what `resolve` read, resets the cursor, and logs one
         /// warning naming the retired frame when any of its reported scopes went untimed, with the capacity or a refused heap
-        /// as the reason when one applies. It clears the slot's refusals, since Metal's limit holds per process or on the
-        /// system and may have room by the next frame. Opens an autorelease pool.
+        /// as the reason when one applies, or when any claimed pair resolved to no time, counted apart. It clears the slot's
+        /// refusals, since Metal's limit holds per process or on the system and may have room by the next frame. Opens an
+        /// autorelease pool.
         void reuse(uint32_t slot, core::DeviceCounts& counts);
 
         /// Releases every heap and what `resolve` kept, at device destruction; the caller holds an autorelease pool and no queue
@@ -86,6 +89,7 @@ namespace rojoRHI::metal4 {
             bool resolvedFrame = false;                                         ///< True once the frame retiring from this slot was resolved.
             uint64_t frame = 0;                                                 ///< The frame the reported scopes belong to.
             uint64_t untimed = 0;                                               ///< Reported scopes of that frame with no timestamp.
+            uint64_t unwritten = 0;                                             ///< Claimed pairs of that frame that resolved to no time.
         };
 
         /// Creates heap `number` of frame slot `slot` and publishes it, unless another claim did first; returns false when
@@ -95,8 +99,10 @@ namespace rojoRHI::metal4 {
         /// Returns the entries of frame slot `slot` claims have used: the cursor, capped at the slot's capacity.
         uint32_t used(const Slot& slot) const;
 
-        /// Returns the duration in milliseconds between the timestamps of entries `index` and `index + 1`, or zero.
-        double milliseconds(const Slot& slot, uint32_t index) const;
+        /// Returns the duration in milliseconds between the timestamps of entries `index` and `index + 1`, or `std::nullopt`
+        /// when the slot resolved no data for them, either entry is zero or `MTL::CounterErrorValue`, or the end precedes the
+        /// begin. The caller handles a zero frequency.
+        std::optional<double> milliseconds(const Slot& slot, uint32_t index) const;
 
         MTL::Device* m_device = nullptr;           ///< The device heaps are created on; the device owns it.
         uint64_t m_frequency = 0;                  ///< GPU timestamp ticks per second.
