@@ -385,5 +385,67 @@ class D3D12PackageTest(unittest.TestCase):
             library.main(["--format", "d3d12", "--module", "m", "--reflection", "r", "--spirv", "s", "--out", "o"])
 
 
+class NullLibraryTests(unittest.TestCase):
+    MODULE = "public static const uint ROJORHI_SHADER_ABI_VERSION = 2;\n"
+
+    def inputs(self, directory: Path, reflection: object) -> list[str]:
+        (directory / "m.slang").write_text(self.MODULE)
+        (directory / "r.json").write_text(json.dumps(reflection))
+        return ["--format", "null", "--module", str(directory / "m.slang"),
+                "--reflection", str(directory / "r.json"), "--out", str(directory / "o.nulllib")]  # fmt: skip
+
+    def test_null_library_lists_reflection_entries(self) -> None:
+        entries = [library.Reflected("vsMain", "vertex", None), library.Reflected("fsMain", "fragment", None)]
+        self.assertEqual(
+            library.package_null(2, entries),
+            b"rojorhi.null.shaderlibrary\nabi 2\nentry vsMain vertex\nentry fsMain fragment\n",
+        )
+
+    def test_amplification_is_task(self) -> None:
+        with tempfile.TemporaryDirectory() as name:
+            directory = Path(name)
+            argv = self.inputs(directory, mesh_pair_reflection())
+            self.assertEqual(library.main(argv), 0)
+            self.assertEqual(
+                (directory / "o.nulllib").read_bytes(),
+                b"rojorhi.null.shaderlibrary\nabi 2\nentry taskMain task\nentry meshMain mesh\n",
+            )
+
+    def test_null_needs_no_spirv(self) -> None:
+        with tempfile.TemporaryDirectory() as name:
+            directory = Path(name)
+            argv = self.inputs(directory, {"entryPoints": [reflected("csMain", "compute", [8, 1, 1])]})
+            self.assertEqual(library.main(argv), 0)
+            self.assertTrue((directory / "o.nulllib").is_file())
+
+    def test_null_refuses_metallib_spirv_and_dxil(self) -> None:
+        with tempfile.TemporaryDirectory() as name:
+            argv = self.inputs(Path(name), mesh_pair_reflection())
+            for extra in (["--metallib", "x"], ["--spirv", "x"], ["--dxil", "a=b"]):
+                with self.subTest(extra=extra), redirect_stderr(io.StringIO()):
+                    with self.assertRaises(SystemExit) as raised:
+                        library.main(argv + extra)
+                    self.assertEqual(raised.exception.code, 2)
+
+    def test_null_bad_reflection_fails_and_removes_out(self) -> None:
+        with tempfile.TemporaryDirectory() as name:
+            directory = Path(name)
+            argv = self.inputs(directory, [])
+            (directory / "o.nulllib").write_bytes(b"stale")
+            err = io.StringIO()
+            with redirect_stderr(err):
+                code = library.main(argv)
+            self.assertEqual(code, 1)
+            self.assertIn(f"{directory / 'r.json'}:", err.getvalue())
+            self.assertFalse((directory / "o.nulllib").exists())
+
+    def test_spirv_is_required_for_metal4_and_d3d12(self) -> None:
+        for fmt in ("metal4", "d3d12"):
+            with self.subTest(format=fmt), redirect_stderr(io.StringIO()):
+                with self.assertRaises(SystemExit) as raised:
+                    library.main(["--format", fmt, "--module", "m", "--reflection", "r", "--out", "o"])
+                self.assertEqual(raised.exception.code, 2)
+
+
 if __name__ == "__main__":
     unittest.main()
