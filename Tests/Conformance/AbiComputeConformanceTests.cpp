@@ -560,6 +560,60 @@ TEST_CASE("AbiTextures rwTexture2DArrayMain reads texel (1, 1) of layer 1 of a 2
 }
 
 //======================================================================================================================
+TEST_CASE("AbiTextures reads a Storage-only texture under declared-access validation", "[conformance]")
+{
+    test::requireGpu();
+#ifndef NDEBUG
+    constexpr bool kValidation = true;
+#else
+    constexpr bool kValidation = false;
+#endif
+    test::GpuKit kit(2, false, kValidation);
+    constexpr SubresourceRange kRange{ .baseMip = 0, .mipCount = 1, .baseLayer = 0, .layerCount = 2 };
+    const Texture texture = *kit.device.createTexture(
+        TextureDesc{ .type = TextureType::Tex2DArray,
+                     .format = Format::RGBA16Float,
+                     .extent = { 2, 2, 1 },
+                     .layers = 2,
+                     .usage = TextureUsage::Storage,
+                     .label = "test.storageRead" }
+    );
+    const ViewIndex view = *kit.device.createView(texture, TextureViewDesc{ .type = TextureType::Tex2DArray, .range = kRange, .usage = TextureUsage::Storage });
+    const ShaderLibrary library = loadLibrary(kit.device, "AbiTextures");
+    const Pipeline pipeline = computeOf(kit.device, library, "rwTexture2DArrayMain");
+    const std::array<uint32_t, 4> untouched{ 0xDEADBEEFu, 0xDEADBEEFu, 0xDEADBEEFu, 0xDEADBEEFu };
+    const Buffer output = kit.buffer(sizeof(untouched), Memory::Gpu, BufferUsage::ShaderWrite, bytesOf<uint32_t>(untouched));
+    CommandList list = kit.list(QueueType::Graphics, "test.declaredStorageRead");
+    test::transition(list, texture, Layout::Undefined, Layout::CopyDst, kRange);
+    list.clearTexture(texture, kRange, ClearValue{ .color = { 7, 3, 1, 1 } });
+    const std::array textureBarriers{ TextureBarrier{ .texture = texture,
+                                                      .range = kRange,
+                                                      .srcStage = Stage::Copy,
+                                                      .srcAccess = Access::CopyWrite,
+                                                      .dstStage = Stage::ComputeShader,
+                                                      .dstAccess = Access::ShaderRead,
+                                                      .oldLayout = Layout::CopyDst,
+                                                      .newLayout = Layout::ShaderWrite } };
+    list.barrier({}, {}, textureBarriers);
+    list.setPipeline(pipeline);
+    list.pushRoot(FetchRoot{ .view = static_cast<uint32_t>(view), .output = kit.device.address(output) });
+    const std::array accesses{ ResourceAccess{ .texture = texture, .range = kRange, .stage = Stage::ComputeShader, .access = Access::ShaderRead },
+                               ResourceAccess{
+                                   .buffer = output, .offset = 0, .size = sizeof(untouched), .stage = Stage::ComputeShader, .access = Access::ShaderWrite } };
+    list.declareAccess(accesses);
+    list.dispatch(1, 1, 1);
+    const std::array bufferBarriers{ BufferBarrier{ .buffer = output,
+                                                    .size = sizeof(untouched),
+                                                    .srcStage = Stage::ComputeShader,
+                                                    .srcAccess = Access::ShaderWrite,
+                                                    .dstStage = Stage::Copy,
+                                                    .dstAccess = Access::CopyRead } };
+    list.barrier({}, bufferBarriers, {});
+    kit.run(std::array{ list });
+    CHECK(kit.readBuffer(output) == bytesOf<float>(Float4{ 7, 3, 1, 1 }));
+}
+
+//======================================================================================================================
 TEST_CASE("AbiTextures rwTexture3DMain reads texel (1, 1, 1) of a 3D storage texture", "[conformance]")
 {
     test::requireGpu();

@@ -132,14 +132,14 @@ namespace rojoRHI::core {
                     texture->mips,
                     texture->layers
                 );
-                const TextureUsage needed = writes(access.access) ? TextureUsage::Storage : TextureUsage::Sampled;
+                const TextureUsage needed = writes(access.access) ? TextureUsage::Storage : TextureUsage::Sampled | TextureUsage::Storage;
                 ROJORHI_VU(
                     (texture->usage & needed) != TextureUsage::None,
                     "VU-rojo-diag-0005",
                     "a {} was declared on the texture \"{}\", which was not created with {}",
                     writes(access.access) ? "write" : "read",
                     texture->label,
-                    writes(access.access) ? "Storage" : "Sampled"
+                    writes(access.access) ? "Storage" : "Sampled or Storage"
                 );
             }
             list.pendingAccesses.push_back(access);

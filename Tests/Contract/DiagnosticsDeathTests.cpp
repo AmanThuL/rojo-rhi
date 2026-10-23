@@ -214,12 +214,12 @@ TEST_CASE("VU-rojo-diag-0005 a buffer write is declared on a buffer without Shad
 }
 
 //======================================================================================================================
-TEST_CASE("VU-rojo-diag-0005 a texture read is declared on a texture without Sampled", "[contract][death]")
+TEST_CASE("VU-rojo-diag-0005 a texture read is declared without Sampled or Storage", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-diag-0005", [] {
         Rig rig;
         ResourceAccess access = validTexture(rig);
-        access.texture = rig.kit.texture(Format::RGBA8Unorm, TextureUsage::Storage);
+        access.texture = rig.kit.texture(Format::RGBA8Unorm, TextureUsage::RenderTarget);
         declare(rig, access);
     });
 }
@@ -233,6 +233,42 @@ TEST_CASE("VU-rojo-diag-0005 a texture write is declared on a texture without St
         access.texture = rig.kit.texture(Format::RGBA8Unorm, TextureUsage::Sampled);
         access.access = Access::ShaderWrite;
         declare(rig, access);
+    });
+}
+
+//======================================================================================================================
+TEST_CASE("VU-rojo-diag-0005 a texture read and write are declared without Storage", "[contract][death]")
+{
+    ROJORHI_EXPECT_DEATH("VU-rojo-diag-0005", [] {
+        Rig rig;
+        ResourceAccess access = validTexture(rig);
+        access.texture = rig.kit.texture(Format::RGBA8Unorm, TextureUsage::Sampled);
+        access.access = Access::ShaderRead | Access::ShaderWrite;
+        declare(rig, access);
+    });
+}
+
+//======================================================================================================================
+TEST_CASE("VU-rojo-sync-0024 a Storage-only texture read lacks its producer's destination access", "[contract][death]")
+{
+    ROJORHI_EXPECT_DEATH("VU-rojo-sync-0024", [] {
+        PassKit kit(QueueType::Graphics, true);
+        const Texture texture = kit.texture(Format::RGBA8Unorm, TextureUsage::Storage);
+        test::transition(kit.list, texture, Layout::Undefined, Layout::CopyDst);
+        kit.list.clearTexture(texture, {}, ClearValue{ .color = { 1, 0, 1, 1 } });
+        const std::array barriers{ TextureBarrier{ .texture = texture,
+                                                   .srcStage = Stage::Copy,
+                                                   .srcAccess = Access::CopyWrite,
+                                                   .dstStage = Stage::ComputeShader,
+                                                   .dstAccess = Access::ShaderWrite,
+                                                   .oldLayout = Layout::CopyDst,
+                                                   .newLayout = Layout::ShaderWrite } };
+        kit.list.barrier({}, {}, barriers);
+        kit.list.setPipeline(kit.compute());
+        const std::array accesses{ ResourceAccess{ .texture = texture, .stage = Stage::ComputeShader, .access = Access::ShaderRead } };
+        kit.list.declareAccess(accesses);
+        kit.list.dispatch(1, 1, 1);
+        kit.finish();
     });
 }
 

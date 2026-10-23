@@ -89,8 +89,8 @@ the consumer and the library are therefore built with the same `NDEBUG` setting.
 #### Valid usage
 - `VU-rojo-diag-0004` The command list is recording: acquired and not yet ended.
 - `VU-rojo-diag-0005` The resource's usage permits the access: a buffer write needs
-  `BufferUsage::ShaderWrite`, a texture read `TextureUsage::Sampled`, a texture write
-  `TextureUsage::Storage`.
+  `BufferUsage::ShaderWrite`, a read-only texture access needs `TextureUsage::Sampled` or
+  `TextureUsage::Storage`, and a texture access containing a write needs `TextureUsage::Storage`.
 - `VU-rojo-diag-0006` Each declared `stage` is one the next command runs: `Stage::ComputeShader`
   for a dispatch, a graphics shader stage for a draw.
 - `VU-rojo-diag-0007` A draw or dispatch follows the declaration before `CommandList::end`.

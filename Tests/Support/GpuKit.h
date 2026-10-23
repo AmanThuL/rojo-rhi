@@ -20,8 +20,8 @@ namespace rojoRHI::test {
     {
       public:
         /// Creates the device with `framesInFlight` frame slots, and with `DeviceDesc::scopeTimings` when `scopeTimings` is
-        /// set, and opens a frame.
-        explicit GpuKit(uint32_t framesInFlight = 2, bool scopeTimings = false);
+        /// set, and opens a frame. `validation` selects the tracker, which only Debug builds support.
+        explicit GpuKit(uint32_t framesInFlight = 2, bool scopeTimings = false, bool validation = false);
 
         /// Ends the frame and destroys the device.
         ~GpuKit();

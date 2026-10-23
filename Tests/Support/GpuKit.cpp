@@ -65,9 +65,9 @@ namespace rojoRHI::test {
     } // namespace
 
     //==================================================================================================================
-    GpuKit::GpuKit(uint32_t framesInFlight, bool scopeTimings)
+    GpuKit::GpuKit(uint32_t framesInFlight, bool scopeTimings, bool validation)
     {
-        device = *createDevice(DeviceDesc{ .scopeTimings = scopeTimings, .framesInFlight = framesInFlight, .label = "kit.device" });
+        device = *createDevice(DeviceDesc{ .validation = validation, .scopeTimings = scopeTimings, .framesInFlight = framesInFlight, .label = "kit.device" });
         m_fence = *device.createFence(0, "kit.fence");
         device.beginFrame();
     }
