@@ -24,25 +24,26 @@ backend-neutral reference rules, one file per area, tagged `[contract]`: every e
 must hold for any backend, so it states only what the reference states, and it includes no backend
 header. A case that loads a shader library takes its blob from `Support/Backend.h`, which supplies
 each backend's standard library (`Shaders/Tests/Standard.slang`: `vsMain`, `fsMain`, `tsMain`,
-`msMain` and `csMain`, which touch no reserved binding; Metal 4 reads the packaged
-`Shaders/Standard.metal4lib` from the test directory), that library re-stamped with another ABI
-version and a foreign library, a well-formed blob of the other backend, which the backend must
-refuse. A case that needs a conformance shader reads it with `shaderLibraryFile`. `Tests/Null/`
-holds what only the Null backend promises (the values it reports for limits and formats), tagged
-`[null]`. `Tests/Metal4/` holds what only the Metal 4 backend makes (native call counts, residency
-commits, the descriptors it builds), tagged `[metal4]`; it may include `Backends/Metal4/Source`
-headers and metal-cpp. `Tests/Core/` holds the core's internals, such as the handle pool, tagged
-`[core]`, and may include private headers; it builds with Null only, as `Tests/Null/` does.
-`Tests/Support/` holds shared helpers, and `Tests/Support/Null/` and `Tests/Support/Metal4/` the
-helpers of each backend (the Metal 4 ones create a surface, read Private memory back, report
-`runsOnGpu` and guard counts that include timestamp writes): `Death.h`, `Null/NullLibrary.h` (builds
-Null shader library blobs, including ones the backend must refuse), `PassKit.h` (a device with an
-open frame, a library, a list, attachment textures and pipelines for recording tests; it loads its
-library on first use) and `GpuKit.h` (a device with an open frame that runs lists to completion on
-the GPU and reads buffers and textures back through public entries, for conformance cases). On Null
-the `contract` entry runs `[contract]`, `[core]` and `[null]` and excludes `[death]`; on Metal 4 it
-runs `[contract]` and `[metal4]`, with the Metal 4 entries running from the test directory under
-`MTL_DEBUG_LAYER=1`. Release CI runs it too. A failing validation-layer message is a failure.
+`msMain` and `csMain`, which touch no reserved binding; each backend reads its packaged standard
+library from the test directory, Null `Shaders/Standard.nulllib`), that library re-stamped with
+another ABI version and a foreign library, a well-formed blob of the other backend, which the
+backend must refuse. A case that needs a conformance shader reads it with `shaderLibraryFile`.
+`Tests/Null/` holds what only the Null backend promises (the values it reports for limits and
+formats), tagged `[null]`. `Tests/Metal4/` holds what only the Metal 4 backend makes (native call
+counts, residency commits, the descriptors it builds), tagged `[metal4]`; it may include
+`Backends/Metal4/Source` headers and metal-cpp. `Tests/Core/` holds the core's internals, such as
+the handle pool, tagged `[core]`, and may include private headers; it builds with Null only, as
+`Tests/Null/` does. `Tests/Support/` holds shared helpers, and `Tests/Support/Null/` and
+`Tests/Support/Metal4/` the helpers of each backend (the Metal 4 ones create a surface, read Private
+memory back, report `runsOnGpu` and guard counts that include timestamp writes): `Death.h`,
+`Null/NullLibrary.h` (builds the Null shader library blobs a backend must refuse), `PassKit.h` (a
+device with an open frame, a library, a list, attachment textures and pipelines for recording tests;
+it loads its library on first use) and `GpuKit.h` (a device with an open frame that runs lists to
+completion on the GPU and reads buffers and textures back through public entries, for conformance
+cases). On Null the `contract` entry runs `[contract]`, `[core]` and `[null]` and excludes
+`[death]`; on Metal 4 it runs `[contract]` and `[metal4]`, with the Metal 4 entries running from the
+test directory under `MTL_DEBUG_LAYER=1`. Release CI runs it too. A failing validation-layer message
+is a failure.
 
 The Metal 4 surfaces (`test::surface`) are `CAMetalLayer`s outside any window, created on first
 use and shared by the process; each starts with a drawable size of 256 x 256, as a Null surface

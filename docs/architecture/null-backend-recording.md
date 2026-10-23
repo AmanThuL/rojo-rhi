@@ -135,8 +135,10 @@ results, never violations:
 - a malformed second line, an entry line that is not `entry <name> <stage>` or a repeated entry
   name: `DriverFailure` with the line number.
 
-The entries go into the `ShaderLibraryRecord`, which pipeline creation checks against. Tests build
-blobs in code with `Tests/Support/Null/NullLibrary.h`.
+The entries go into the `ShaderLibraryRecord`, which pipeline creation checks against. The
+`rojorhi.slang` rule writes this format for every entry file, as `<Name>.nulllib`, from the
+reflection the Metal and D3D12 libraries use. Tests read those files and build the blobs a backend
+must refuse with `Tests/Support/Null/NullLibrary.h`.
 
 ## Pipelines and the pipeline cache
 

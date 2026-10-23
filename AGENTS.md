@@ -199,7 +199,8 @@ the layout of the shared structs against Slang reflection. That is the hosted ha
 the ABI stamp into each shader library (`.metal4lib`), and the Metal 4 backend's
 `Device::loadShaderLibrary` reads that container, refuses another ABI version with
 `ShaderAbiMismatch` and compiles pipelines from it; the `[conformance]` cases run the ABI
-shaders on the GPU, the T3 tier's other half. The Null backend loads a text format (see [command
+shaders on the GPU, the T3 tier's other half. The Null backend loads a text format, which the
+rule writes for every entry file as `.nulllib` (see [command
 recording](docs/architecture/null-backend-recording.md)).
 
 ## Hard rules

@@ -11,7 +11,8 @@
 
 namespace rojoRHI::test {
     /// The compiled backend's standard library: entries vsMain (vertex), fsMain (fragment), msMain (mesh), tsMain (task) and
-    /// csMain (compute), in the backend's library format.
+    /// csMain (compute), read from the packaged `Shaders/Standard` file beside the test binary in the backend's library format
+    /// (the Null backend reads `Standard.nulllib`).
     std::vector<std::byte> standardLibrary();
 
     /// The standard library's entries stamped with shader ABI version `abi`.
@@ -21,8 +22,8 @@ namespace rojoRHI::test {
     std::vector<std::byte> foreignLibrary();
 
     /// The conformance shader library `name` (a file of `Shaders/Tests/` without its extension) in the compiled backend's
-    /// format, read from the `Shaders/` directory beside the test binary. Fails the running case when the backend packages no
-    /// such file: the Null backend never does, so a case calls it only after `requireGpu()` has passed.
+    /// format, read from the packaged file in the `Shaders/` directory beside the test binary (the Null backend reads its
+    /// `.nulllib`). Fails the running case when the file is missing or empty.
     std::vector<std::byte> shaderLibraryFile(std::string_view name);
 
     /// A native surface of the compiled backend's type, distinct for each `index` below 8 and alive for the process.
