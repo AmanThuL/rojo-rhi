@@ -281,3 +281,31 @@ TEST_CASE("a registered texture is created, updated and destroyed as ImGui asks"
     ImGui::UnregisterUserTexture(&texture);
     imgui::shutdown();
 }
+
+//======================================================================================================================
+TEST_CASE("an update of several rectangles records valid usage on a validating device", "[imgui]")
+{
+    // ImGui queues several rectangles in one update when it adds glyphs or rebuilds the atlas at a new density; copying
+    // them one after another into the texture with no barrier between is a write after write the validation tracker aborts
+    // on (Debug builds).
+    Fixture fixture;
+    REQUIRE(imgui::init(imgui::InitDesc{ .device = fixture.device, .colorFormat = Format::RGBA8Unorm }).has_value());
+    ImTextureData texture;
+    texture.Create(ImTextureFormat_RGBA32, 16, 16);
+    ImGui::RegisterUserTexture(&texture);
+    const auto nothing = [] {};
+    fixture.frame(nothing, nullptr);
+    REQUIRE(texture.Status == ImTextureStatus_OK);
+
+    fixture.frame(nothing, [&](ImDrawData*) {
+        texture.Updates.push_back(ImTextureRect{ 0, 0, 4, 4 });
+        texture.Updates.push_back(ImTextureRect{ 8, 8, 4, 4 });
+        texture.Updates.push_back(ImTextureRect{ 12, 0, 2, 2 });
+        texture.UpdateRect = ImTextureRect{ 0, 0, 14, 12 };
+        texture.SetStatus(ImTextureStatus_WantUpdates);
+    });
+    CHECK(texture.Status == ImTextureStatus_OK);
+
+    ImGui::UnregisterUserTexture(&texture);
+    imgui::shutdown();
+}
