@@ -333,9 +333,12 @@ namespace rojoRHI::metal4 {
             return;
         }
         const Timestamps& timestamps = deviceOf(list.core).timestamps;
+        // Metal may never write a timestamp after the fragment stage of an encoder that draws nothing, so until the encoder
+        // holds a draw the write follows its vertex stage, as the pass's begin does, and lands at the encoder's start.
+        const MTL::RenderStages stage = list.encoders.holdsWork() ? MTL::RenderStageFragment : MTL::RenderStageVertex;
         // Unlike the command buffer's write, an encoder's autoreleases nothing, with or without the validation layer, so it
         // opens no pool.
-        encoder->writeTimestamp(kEncoderGranularity, MTL::RenderStageFragment, timestamps.heapFor(slotOf(list.core), index), index % Timestamps::kHeapEntries);
+        encoder->writeTimestamp(kEncoderGranularity, stage, timestamps.heapFor(slotOf(list.core), index), index % Timestamps::kHeapEntries);
         core::noteNativeCall(list.core);
     }
 

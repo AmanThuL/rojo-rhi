@@ -17,6 +17,8 @@
   took it.
 - The Metal 4 backend's per-frame scope warning counts claimed timestamp pairs the GPU never wrote
   apart from untimed scopes.
+- The Metal 4 backend times a render pass or scope that records nothing, about zero, without the
+  warning for timestamp pairs never written; chapter 14 states what such a scope reports.
 
 ## 0.1.0 (2026-10-22)
 
