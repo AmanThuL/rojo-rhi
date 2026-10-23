@@ -161,6 +161,45 @@ namespace {
     }
 
     //==================================================================================================================
+    /// The `RGBA16Float` texels of mip `mip` of an 8x8 texture, tight rows, texel (x, y) holding `texelValue(mip, x, y, 0)`.
+    std::vector<std::byte> mipPattern(uint32_t mip)
+    {
+        const uint32_t edge = (2 * kEdge) >> mip;
+        std::vector<uint16_t> texels;
+        for (uint32_t y = 0; y < edge; ++y)
+        {
+            for (uint32_t x = 0; x < edge; ++x)
+            {
+                for (const float channel : texelValue(mip, x, y, 0))
+                {
+                    texels.push_back(halfOf(channel));
+                }
+            }
+        }
+        return bytesOf<uint16_t>(texels);
+    }
+
+    //==================================================================================================================
+    /// Creates an 8x8 `RGBA16Float` texture of two mips with the usage `usage` besides `Sampled`, whose mip `m` holds
+    /// `mipPattern(m)`.
+    Texture mipPatternTexture(Device device, TextureUsage usage)
+    {
+        constexpr uint64_t kTexelBytes = 4 * sizeof(uint16_t);
+        const std::vector<std::byte> base = mipPattern(0);
+        const std::vector<std::byte> second = mipPattern(1);
+        const std::array data{ TextureData{ base, 2 * kEdge * kTexelBytes, 0 }, TextureData{ second, kEdge * kTexelBytes, 0 } };
+        return *device.createTexture(
+            TextureDesc{ .type = TextureType::Tex2D,
+                         .format = Format::RGBA16Float,
+                         .extent = { 2 * kEdge, 2 * kEdge, 1 },
+                         .mips = 2,
+                         .usage = TextureUsage::Sampled | usage,
+                         .label = "test.mips" },
+            data
+        );
+    }
+
+    //==================================================================================================================
     /// Runs the kernel `entry` of AbiTextures with the root `root`, whose output the helper fills in, and returns the `float4`
     /// it stored.
     Float4 fetch(test::GpuKit& kit, std::string_view entry, FetchRoot root)
@@ -526,4 +565,48 @@ TEST_CASE("AbiTextures rwTexture3DMain reads texel (1, 1, 1) of a 3D storage tex
     test::requireGpu();
     test::GpuKit kit;
     CHECK(storageFetch(kit, "rwTexture3DMain", TextureType::Tex3D, 1, TextureType::Tex3D, 1) == texelValue(0, 1, 1, 1));
+}
+
+//======================================================================================================================
+TEST_CASE("AbiTextures texture2DMain samples a view of mip 1 alone", "[conformance]")
+{
+    test::requireGpu();
+    test::GpuKit kit;
+    const Texture texture = mipPatternTexture(kit.device, TextureUsage::None);
+    const ViewIndex view = *kit.device.createView(
+        texture,
+        TextureViewDesc{ .type = TextureType::Tex2D, .range = { .baseMip = 1, .mipCount = 1, .baseLayer = 0, .layerCount = 1 }, .usage = TextureUsage::Sampled }
+    );
+    CHECK(fetch(kit, "texture2DMain", FetchRoot{ .view = static_cast<uint32_t>(view), .sampler = linearClamp(kit.device) }) == centerValue(1, true, false));
+}
+
+//======================================================================================================================
+TEST_CASE("AbiTextures rwTexture2DMain reads and writes mip 1 through a storage view of that mip alone", "[conformance]")
+{
+    test::requireGpu();
+    test::GpuKit kit;
+    const Texture texture = mipPatternTexture(kit.device, TextureUsage::Storage);
+    constexpr SubresourceRange kMip1{ .baseMip = 1, .mipCount = 1 };
+    constexpr SubresourceRange kMip0{ .baseMip = 0, .mipCount = 1 };
+    // Mip 0 stays in ShaderRead; only mip 1 moves.
+    CommandList toWrite = kit.list(QueueType::Graphics, "test.mip1.toWrite");
+    test::transition(toWrite, texture, Layout::ShaderRead, Layout::ShaderWrite, kMip1);
+    kit.run(std::array{ toWrite });
+    const ViewIndex view = *kit.device.createView(
+        texture,
+        TextureViewDesc{ .type = TextureType::Tex2D, .range = { .baseMip = 1, .mipCount = 1, .baseLayer = 0, .layerCount = 1 }, .usage = TextureUsage::Storage }
+    );
+    CHECK(fetch(kit, "rwTexture2DMain", FetchRoot{ .view = static_cast<uint32_t>(view) }) == texelValue(1, 1, 1, 0));
+    CommandList toCopy = kit.list(QueueType::Graphics, "test.mip1.toCopy");
+    test::transition(toCopy, texture, Layout::ShaderWrite, Layout::CopySrc, kMip1);
+    test::transition(toCopy, texture, Layout::ShaderRead, Layout::CopySrc, kMip0);
+    kit.run(std::array{ toCopy });
+    // The kernel wrote the value of texel (1, 1) of mip 1 to its texel (0, 0).
+    std::vector<std::byte> expectedMip1 = mipPattern(1);
+    const Float4 written = texelValue(1, 1, 1, 0);
+    const std::array<uint16_t, 4> writtenBits{ halfOf(written[0]), halfOf(written[1]), halfOf(written[2]), halfOf(written[3]) };
+    std::memcpy(expectedMip1.data(), writtenBits.data(), sizeof(writtenBits));
+    CHECK(kit.readTexture(texture, TextureRegion{ .mip = 1, .extent = { kEdge, kEdge, 1 } }, Format::RGBA16Float) == expectedMip1);
+    // Mip 0 is untouched.
+    CHECK(kit.readTexture(texture, TextureRegion{ .mip = 0, .extent = { 2 * kEdge, 2 * kEdge, 1 } }, Format::RGBA16Float) == mipPattern(0));
 }
