@@ -275,6 +275,30 @@ target("RojoRHI")
         end
     end)
 
+-- The backend-neutral Dear ImGui renderer, written against the public interface alone, so it builds with whichever
+-- backend RojoRHI was configured for. It is declared only when the host names its ImGui target, whose headers it compiles
+-- against, and is not built by default while Legacy/ exists, so a host's plain build keeps building the v1 adapter it links.
+-- Its shader library embeds into its sources through the slang rule; its own target directory keeps its Shaders/ apart
+-- from the test binary's.
+if imgui_target then
+    target("RojoRHIImGui")
+        set_kind("static")
+        set_default(false)
+        warn_unreachable()
+        release_lto()
+        set_targetdir("$(builddir)/$(plat)/$(arch)/$(mode)/rojorhi-imgui")
+        add_files(path.join(component, "Adapters/ImGui/Source/*.cpp"))
+        add_includedirs(path.join(component, "Adapters/ImGui/Include"), {public = true})
+        add_includedirs(path.join(component, "Adapters/ImGui/Source"))
+        add_deps("RojoRHI", imgui_target)
+        add_rules("rojorhi.slang")
+        set_values("slang.moduledir", path.join(component_dir, "Shaders/RojoRHI"))
+        set_values("slang.slangc", path.join(thirdparty_dir, is_host("windows") and "slang/bin/slangc.exe"
+                                                             or "slang/bin/slangc"))
+        set_values("slang.embed", "ImGuiShaders.h")
+        add_files(path.join(component, "Adapters/ImGui/Shaders/ImGui.slang"))
+end
+
 target("RojoRHITests")
     set_kind("binary")
     warn_unreachable()
@@ -356,6 +380,14 @@ target("RojoRHITests")
         add_rules("rojorhi.d3d12_runtime")
         set_values("rojorhi.thirdparty", thirdparty_dir)
     end
+    -- The ImGui adapter's cases, with its private headers for the frame-buffer cases, exist when a host ImGui target does.
+    if imgui_target then
+        if #os.files(path.join(component_dir, "Tests/ImGui/*.cpp")) > 0 then
+            add_files(path.join(component, "Tests/ImGui/*.cpp"))
+        end
+        add_includedirs(path.join(component, "Adapters/ImGui/Source"))
+        add_deps("RojoRHIImGui")
+    end
     add_includedirs(path.join(component, "Source"))
     add_includedirs(path.join(component, "Tests"))
     add_deps("RojoRHI")
@@ -373,6 +405,9 @@ target("RojoRHITests")
         -- Each case spawns this executable again, so keep Catch2's summary in the log and bound a hang.
         add_tests("death", {runargs = {"[death]"}, runenvs = layer, realtime_output = true, run_timeout = 300000})
         add_tests("conformance", {runargs = {"[conformance]"}, runenvs = layer, realtime_output = true})
+        if imgui_target then
+            add_tests("imgui", {runargs = {"[imgui]"}, runenvs = layer, realtime_output = true})
+        end
     elseif is_config("rojorhi_backend", "d3d12") then
         -- contract runs the shared and [d3d12] cases without the death ones, death runs every death case, and
         -- conformance runs the [conformance] cases.
@@ -380,10 +415,16 @@ target("RojoRHITests")
         -- Each case spawns this executable again, so keep Catch2's summary in the log and bound a hang.
         add_tests("death", {runargs = {"[death]"}, realtime_output = true, run_timeout = 300000})
         add_tests("conformance", {runargs = {"[conformance]"}, realtime_output = true})
+        if imgui_target then
+            add_tests("imgui", {runargs = {"[imgui]"}, realtime_output = true})
+        end
     else
         add_tests("contract", {runargs = {"[contract]~[death],[core]~[death],[null]~[death]"}, realtime_output = true})
         -- Each case spawns this executable again, so keep Catch2's summary in the log and bound a hang.
         add_tests("death", {runargs = {"[death]"}, realtime_output = true, run_timeout = 300000})
+        if imgui_target then
+            add_tests("imgui", {runargs = {"[imgui]"}, realtime_output = true})
+        end
     end
     -- Conformance shaders compile for every target on any host; the rule needs only the Slang
     -- compiler, which setup fetches. Windows names it slangc.exe.
