@@ -327,3 +327,11 @@
 - `RojoRHIBench` builds on Windows with a D3D12 native arm and a submission timing seam, and its
   correctness gate passes on WARP in CI. Implemented, verified on WARP only, not on hardware; there
   is no D3D12 timing yet ([the harness](docs/architecture/benchmarks.md)).
+- The Metal 4 backend's CPU, GPU, allocation, pipeline and native-call overhead against hand-written
+  native Metal 4 code (T2) is measured in four pre-registered rounds on an Apple M3 Max. [ADR
+  0025](docs/decisions/0025-cpu-budget-per-call-floor.md) amends ADR 0014's CPU budget to the larger
+  of 5% of native time and 5 ns per RojoRHI call. Rounds 1 to 3 missed budgets; the backend was
+  fixed between rounds, and round 3's amendment also adopted that rule, after rounds 1 and 2 had
+  been seen, and had the native arm pay its own frame completion. Round 4 is within every budget; by
+  the 5% rule, reported only, C3 (alternating pipelines) is over at three `K` ([round 4
+  results](docs/research/2026-10-22-metal4-overhead-round4-results.md)).

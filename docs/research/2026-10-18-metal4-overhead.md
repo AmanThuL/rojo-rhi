@@ -311,3 +311,8 @@ meets GPU (−2.40%), pipelines and native calls; misses CPU (15 of 34) and allo
 Round 3 ran on 2026-10-21 at 378f219a ([results](2026-10-21-metal4-overhead-round3-results.md)),
 judged by ADR 0025: it meets GPU (−2.20%), allocations, pipelines and native calls, and misses CPU
 in 1 of 34, C3-k100 (13.96 ns against 10); the 5% rule, reported, misses C3 at every judged `K`.
+
+Round 4 ran on 2026-10-22 at 18ab6cf2 ([results](2026-10-22-metal4-overhead-round4-results.md)),
+judged by ADR 0025: it meets every budget, CPU included (C3-k100 8.33 ns [7.92, 9.06] against 10),
+GPU at −2.02%. The 5% rule, reported, misses C3 at `K` 100, 10,000 and 100,000. The backend's
+overhead exit is met: every budget of ADR 0014, as ADR 0025 amends it, is met in round 4.
