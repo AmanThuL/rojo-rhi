@@ -6,6 +6,7 @@
 
 #include "Core/DeviceCore.h"
 #include "Core/Pipelines.h"
+#include "EmbeddedShaders.h"
 #include "Support/Backend.h"
 
 #include <catch2/catch_test_macros.hpp>
@@ -143,6 +144,33 @@ TEST_CASE("createPipeline creates a compute pipeline", "[contract]")
     const Result<Pipeline> pipeline = device.createPipeline(ComputePipelineDesc{ .compute = { library, "csMain" }, .label = "test.compute" });
     REQUIRE(pipeline.has_value());
     device.destroy(*pipeline);
+    destroyDevice(device);
+}
+
+//======================================================================================================================
+TEST_CASE("createPipeline creates a compute pipeline from a rule-built library whose entry imports a shared module", "[contract]")
+{
+    Device device = *createDevice();
+    const std::vector<std::byte> blob = test::shaderLibraryFile("SharedImport");
+    const Result<ShaderLibrary> library = device.loadShaderLibrary(blob, "test.shared");
+    REQUIRE(library.has_value());
+    const Result<Pipeline> pipeline = device.createPipeline(ComputePipelineDesc{ .compute = { *library, "sharedMain" }, .label = "test.shared" });
+    REQUIRE(pipeline.has_value());
+    device.destroy(*pipeline);
+    device.destroy(*library);
+    destroyDevice(device);
+}
+
+//======================================================================================================================
+TEST_CASE("an embedded shader library loads and creates a compute pipeline", "[contract]")
+{
+    Device device = *createDevice();
+    const Result<ShaderLibrary> library = device.loadShaderLibrary(rojoRHI::embedded::kStandardLibrary, "test.embedded");
+    REQUIRE(library.has_value());
+    const Result<Pipeline> pipeline = device.createPipeline(ComputePipelineDesc{ .compute = { *library, "csMain" }, .label = "test.embedded" });
+    REQUIRE(pipeline.has_value());
+    device.destroy(*pipeline);
+    device.destroy(*library);
     destroyDevice(device);
 }
 

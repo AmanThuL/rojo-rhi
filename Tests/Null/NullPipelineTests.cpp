@@ -5,6 +5,7 @@
 #include <rojoRHI/RHI.h>
 
 #include "Core/Pipelines.h"
+#include "ShaderList.h"
 #include "Support/Backend.h"
 #include "Support/Null/NullLibrary.h"
 
@@ -12,6 +13,7 @@
 
 #include <format>
 #include <string>
+#include <string_view>
 #include <vector>
 
 using namespace rojoRHI;
@@ -147,6 +149,34 @@ TEST_CASE("a malformed Null library is an error and never a crash", "[null]")
     {
         const Result<ShaderLibrary> library = device.loadShaderLibrary(bytesOf(text), "null.library");
         CHECK_FALSE(library.has_value());
+    }
+    destroyDevice(device);
+}
+
+//======================================================================================================================
+TEST_CASE("every rule-built Null library loads", "[null]")
+{
+    Device device = *createDevice();
+    for (const std::string_view name : kConformanceShaders)
+    {
+        INFO(name);
+        const std::vector<std::byte> blob = test::shaderLibraryFile(name);
+        const Result<ShaderLibrary> library = device.loadShaderLibrary(blob, "null.library");
+        CHECK(library.has_value());
+        if (!library.has_value())
+        {
+            continue;
+        }
+        if (name == "DispatchOracle")
+        {
+            const Result<Pipeline> pipeline = device.createPipeline(ComputePipelineDesc{ .compute = { *library, "gridMain" } });
+            CHECK(pipeline.has_value());
+            if (pipeline.has_value())
+            {
+                device.destroy(*pipeline);
+            }
+        }
+        device.destroy(*library);
     }
     destroyDevice(device);
 }
