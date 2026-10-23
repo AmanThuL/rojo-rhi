@@ -114,8 +114,9 @@ void Queue::submit(std::span<const CommandList> lists, std::span<const FenceValu
 
 Submits `lists` for execution in span order. No list starts before every fence in `wait` has
 reached its value; every fence in `signal` is set to its value once every list has completed. A
-submission with no lists only waits and signals. On Metal 4 the backend commits the device's
-residency set first when it has changed ([memory and buffers](03-memory-and-buffers.md)).
+submission with no lists only waits and signals. It is valid with no frame open. On Metal 4 the
+backend commits the device's residency set first when it has changed
+([memory and buffers](03-memory-and-buffers.md)).
 
 No other thread submits, presents or maps tiles on this queue during the call; such a race breaks
 the per-queue threading class of [fundamentals](01-fundamentals.md) and no tier detects it. Work
