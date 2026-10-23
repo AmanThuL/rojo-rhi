@@ -165,12 +165,7 @@ namespace rojoRHI {
             const auto begin = capturerExport<BeginCaptureFn>("BeginProgrammaticGpuCapture");
             if (begin == nullptr)
             {
-                return std::unexpected(
-                    Error{
-                        ErrorCategory::Unsupported,
-                        "the PIX GPU capturer is not loaded; install PIX and create the device with DeviceDesc::enableCapture",
-                    }
-                );
+                return refuseWithoutCapturer(path);
             }
             const std::wstring name = wide(path);
             if (name.empty())
@@ -202,6 +197,17 @@ namespace rojoRHI {
         {
             return std::unexpected(
                 Error{ ErrorCategory::Unsupported, "the device was created without DeviceDesc::enableCapture, which loads the PIX GPU capturer" }
+            );
+        }
+
+        //==============================================================================================================
+        Result<void> refuseWithoutCapturer(std::string_view)
+        {
+            return std::unexpected(
+                Error{
+                    ErrorCategory::Unsupported,
+                    "the PIX GPU capturer is not loaded; install PIX and create the device with DeviceDesc::enableCapture",
+                }
             );
         }
     } // namespace d3d12

@@ -91,6 +91,7 @@ TEST_CASE("a device without enableCapture loads no capturer and refuses capture"
     const OwnedDevice device(DeviceDesc{});
     Device created = device.get();
     CHECK(capturerLoaded() == loadedBefore);
+    CHECK_FALSE(created.capabilities().capture);
     checkRefusesWithoutEnableCapture(created);
 }
 
@@ -101,6 +102,10 @@ TEST_CASE("a device without enableCapture refuses capture beside a device with i
     enabled.enableCapture = true;
     const OwnedDevice capturing(enabled);
     const OwnedDevice plain(DeviceDesc{});
+    // A device with enableCapture reports whether the capturer loaded; hosted WARP has no PIX installed, so false there.
+    // WARP checks only the false path; hardware with PIX installed is the real check of the true one.
+    CHECK(capturing.get().capabilities().capture == d3d12::loadCapturer());
+    CHECK_FALSE(plain.get().capabilities().capture);
     // The capturer, when the first device loaded it, is process-wide; the second device still refuses.
     checkRefusesWithoutEnableCapture(plain.get());
 }

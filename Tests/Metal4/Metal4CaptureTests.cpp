@@ -1,10 +1,14 @@
 //----------------------------------------------------------------------------------------------------------------------
 /// @file Metal4CaptureTests.cpp
-/// @brief Tests programmatic capture on Metal 4: the refusal without MTL_CAPTURE_ENABLED and the capture with it.
+/// @brief Tests programmatic capture on Metal 4: the capability, the refusal without MTL_CAPTURE_ENABLED and the capture with it.
 //----------------------------------------------------------------------------------------------------------------------
 #include <rojoRHI/RHI.h>
 
+#include "Metal4Common.h"
+
 #include <catch2/catch_test_macros.hpp>
+
+#include <Metal/Metal.hpp>
 
 #include <cstdlib>
 #include <filesystem>
@@ -62,6 +66,23 @@ namespace {
         return started;
     }
 } // namespace
+
+//======================================================================================================================
+TEST_CASE("capture reports whether the process can write a GPU trace document", "[metal4][capture]")
+{
+    // The manager answers false until the process has a Metal device, so the device comes first.
+    Device device = *createDevice();
+    bool writable = false;
+    {
+        const metal4::AutoreleasePool pool;
+        writable = MTL::CaptureManager::sharedCaptureManager()->supportsDestination(MTL::CaptureDestinationGPUTraceDocument);
+    }
+    const bool capture = device.capabilities().capture;
+    WARN("capture: " << capture);
+    CHECK(capture == writable);
+    CHECK(capture == captureEnabled());
+    destroyDevice(device);
+}
 
 //======================================================================================================================
 TEST_CASE("beginCapture without MTL_CAPTURE_ENABLED is unsupported and leaves no capture in progress", "[metal4][capture]")
