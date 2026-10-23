@@ -14,6 +14,7 @@
 #include <imgui_internal.h>
 
 #include <array>
+#include <cmath>
 #include <cstdint>
 #include <functional>
 #include <span>
@@ -42,6 +43,10 @@ namespace {
 
     /// The fake platform's windows; a viewport's `PlatformHandle` is its window's index plus one, so none is null.
     std::vector<FakeWindow> g_windows;
+
+    /// The framebuffer scale the fake platform reports for every window; a case changes it as an OS would when a window
+    /// moves to a denser display.
+    ImVec2 g_framebufferScale(1.0f, 1.0f);
 
     /// What the surface callbacks observed.
     struct SurfaceLog
@@ -118,6 +123,19 @@ namespace {
     }
 
     //==================================================================================================================
+    ImVec2 platformGetWindowFramebufferScale(ImGuiViewport*)
+    {
+        return g_framebufferScale;
+    }
+
+    //==================================================================================================================
+    // The pixels of `size` at `scale`, rounded to nearest as the adapter rounds a framebuffer size.
+    uint32_t pixels(float size, float scale)
+    {
+        return uint32_t(std::lround(size * scale));
+    }
+
+    //==================================================================================================================
     bool platformGetWindowFocus(ImGuiViewport*)
     {
         return false;
@@ -162,6 +180,9 @@ namespace {
         /// Runs one frame in the documented host order, with the callback between `ImGui::NewFrame` and `ImGui::Render`.
         void frame(const std::function<void()>&);
 
+        /// Runs the frame `frame` runs after `imgui::newFrame`, for a case that calls that itself.
+        void finishFrame(const std::function<void()>&);
+
         Device device;
         ImGuiContext* context = nullptr;
         Texture target;
@@ -172,6 +193,7 @@ namespace {
     {
         g_windows.assign(1, FakeWindow{ .pos = ImVec2(0.0f, 0.0f), .size = ImVec2(float(kEdge), float(kEdge)) });
         g_surfaces = {};
+        g_framebufferScale = ImVec2(1.0f, 1.0f);
         device = *createDevice(DeviceDesc{ .validation = kValidation, .label = "imgui.device" });
         context = ImGui::CreateContext();
         ImGuiIO& io = ImGui::GetIO();
@@ -194,6 +216,7 @@ namespace {
         platformIo.Platform_GetWindowPos = platformGetWindowPos;
         platformIo.Platform_SetWindowSize = platformSetWindowSize;
         platformIo.Platform_GetWindowSize = platformGetWindowSize;
+        platformIo.Platform_GetWindowFramebufferScale = platformGetWindowFramebufferScale;
         platformIo.Platform_GetWindowFocus = platformGetWindowFocus;
         platformIo.Platform_GetWindowMinimized = platformGetWindowMinimized;
         platformIo.Platform_SetWindowTitle = platformSetWindowTitle;
@@ -231,6 +254,12 @@ namespace {
     void Host::frame(const std::function<void()>& draw)
     {
         imgui::newFrame();
+        finishFrame(draw);
+    }
+
+    //==================================================================================================================
+    void Host::finishFrame(const std::function<void()>& draw)
+    {
         ImGui::NewFrame();
         draw();
         ImGui::Render();
@@ -389,4 +418,65 @@ TEST_CASE("a platform window resized on consecutive frames presents every frame"
     // The last frame restored the full size; this one resizes the shared surface back to it.
     host.frame(drawBoth);
     CHECK(imgui::detail::platformWindowPresents(two) == 5);
+}
+
+//======================================================================================================================
+TEST_CASE("newFrame sizes a platform window's swapchain from the platform's size and scale, not the viewport's older ones", "[imgui]")
+{
+    Host host;
+    host.frame(drawBoth);
+    host.frame(drawBoth);
+    ImGuiViewport* two = viewportOf("two");
+    REQUIRE(two != nullptr);
+    CHECK(imgui::detail::platformWindowExtent(two).width == kEdge);
+
+    // The OS resized the window and moved it to a denser display: the platform reports both at once, and ImGui::NewFrame
+    // has not yet run to copy them into the viewport.
+    const ImVec2 dragged(180.0f, 140.0f);
+    windowOf(two).size = dragged;
+    g_framebufferScale = ImVec2(2.0f, 2.0f);
+    imgui::newFrame();
+    CHECK(two->Size.x == float(kEdge));
+    CHECK(two->FramebufferScale.x == 1.0f);
+    const Extent2D extent = imgui::detail::platformWindowExtent(two);
+    CHECK(extent.width == pixels(dragged.x, 2.0f));
+    CHECK(extent.height == pixels(dragged.y, 2.0f));
+    CHECK(extent.width == 360);
+    CHECK(extent.height == 280);
+    // The window moves back before ImGui::NewFrame reads the scale, so the font atlas is not rebuilt at another density.
+    g_framebufferScale = ImVec2(1.0f, 1.0f);
+    host.finishFrame(drawBoth);
+    CHECK(imgui::detail::platformWindowPresents(two) == 2);
+
+    // The platform window keeps the size the OS gave it, and its swapchain follows the scale back.
+    host.frame(drawBoth);
+    CHECK(imgui::detail::platformWindowExtent(two).width == pixels(dragged.x, 1.0f));
+    CHECK(imgui::detail::platformWindowExtent(two).height == pixels(dragged.y, 1.0f));
+    CHECK(imgui::detail::platformWindowPresents(two) == 3);
+}
+
+//======================================================================================================================
+TEST_CASE("newFrame sizes a platform window's swapchain from the viewport when the platform reports no window size", "[imgui]")
+{
+    Host host;
+    host.frame(drawBoth);
+    host.frame(drawBoth);
+    ImGuiViewport* two = viewportOf("two");
+    REQUIRE(two != nullptr);
+
+    // Without Platform_GetWindowSize and Platform_GetWindowFramebufferScale, the window's own size goes unread: newFrame
+    // keeps the viewport's extent. ImGui::NewFrame needs the size callback, so it is restored before that runs.
+    windowOf(two).size = ImVec2(180.0f, 140.0f);
+    ImGuiPlatformIO& platformIo = ImGui::GetPlatformIO();
+    platformIo.Platform_GetWindowSize = nullptr;
+    platformIo.Platform_GetWindowFramebufferScale = nullptr;
+    imgui::newFrame();
+    platformIo.Platform_GetWindowSize = platformGetWindowSize;
+    platformIo.Platform_GetWindowFramebufferScale = platformGetWindowFramebufferScale;
+    const Extent2D extent = imgui::detail::platformWindowExtent(two);
+    CHECK(extent.width == pixels(two->Size.x, two->FramebufferScale.x));
+    CHECK(extent.height == pixels(two->Size.y, two->FramebufferScale.y));
+    CHECK(extent.width == kEdge);
+    host.finishFrame(drawBoth);
+    CHECK(imgui::detail::platformWindowPresents(two) == 2);
 }
