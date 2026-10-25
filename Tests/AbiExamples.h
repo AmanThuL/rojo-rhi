@@ -6,6 +6,7 @@
 
 #include <rojoRHI/RHI.h>
 
+#include <cstddef>
 #include <cstdint>
 
 namespace rojoRHI::test {
@@ -25,4 +26,23 @@ namespace rojoRHI::test {
         /// Explicit padding up to 32 bytes.
         uint32_t pad;
     };
+    /// The flat root shared by the atomic-add entries and the reflection probe.
+    struct alignas(16) AtomicRoot
+    {
+        Addr target;    ///< The target base, or the address of the two-base table for the divergent entry.
+        Addr output;    ///< One returned old value per invocation.
+        uint32_t count; ///< Participating invocations.
+        uint32_t index; ///< Target uint index relative to the base.
+        uint32_t value; ///< Amount added by each invocation.
+        uint32_t pad;   ///< Explicit padding to 32 bytes.
+    };
+
+    static_assert(alignof(AtomicRoot) == 16);
+    static_assert(sizeof(AtomicRoot) == 32);
+    static_assert(offsetof(AtomicRoot, target) == 0);
+    static_assert(offsetof(AtomicRoot, output) == 8);
+    static_assert(offsetof(AtomicRoot, count) == 16);
+    static_assert(offsetof(AtomicRoot, index) == 20);
+    static_assert(offsetof(AtomicRoot, value) == 24);
+    static_assert(offsetof(AtomicRoot, pad) == 28);
 } // namespace rojoRHI::test

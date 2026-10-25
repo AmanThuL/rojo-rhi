@@ -4,14 +4,15 @@
 **API version**: 0.1.0
 
 This part defines the `RojoRHI.slang` functions that dereference `Addr`, fetch textures and samplers
-by heap index and mark divergent indices. The model, the layout rules and the root block are in
-[part 1](05-shader-abi.md); the built-ins are in [part 3](05-shader-abi-part3.md). Every function
-lives in namespace `rojoRHI`. As [part 1](05-shader-abi.md#model) explains, each entry states its
-requirements as normative prose, because no tier can diagnose a shader's use of them.
+by heap index, add atomically to uint buffer words and mark divergent indices. The model, the layout
+rules and the root block are in [part 1](05-shader-abi.md); the built-ins are in [part
+3](05-shader-abi-part3.md). Every function lives in namespace `rojoRHI`. As [part
+1](05-shader-abi.md#model) explains, each entry states its requirements as normative prose, because
+no tier can diagnose a shader's use of them.
 
 Where a cell does not say `unverified`, the D3D12 lowerings below are implemented, verified on WARP
 only, not on hardware: the ABI conformance cases ran them on WARP, and `Tools/check_dxil.py` checks
-the DXIL of each heap fetch and of the raw accesses
+the DXIL of each existing heap fetch and of the raw accesses
 ([evidence](../research/2026-10-21-d3d12-warp-evidence.md)).
 
 ## Divergence
@@ -28,8 +29,8 @@ Addr nonUniform(Addr base);
 ```
 
 Returns its argument unchanged, marked as possibly different between the threads of a wave, for
-passing to `rojoRHI::load`, `rojoRHI::store`, `rojoRHI::texture`, `rojoRHI::wTexture` and
-`rojoRHI::sampler`.
+passing to `rojoRHI::load`, `rojoRHI::store`, `rojoRHI::atomicAdd`, `rojoRHI::texture`,
+`rojoRHI::wTexture` and `rojoRHI::sampler`.
 
 Requirements: the result is passed directly to a `rojoRHI` fetch or dereference, not stored in
 memory or a shader output first.
@@ -42,7 +43,7 @@ memory or a shader output first.
 
 | | Metal 4 | D3D12 | Vulkan |
 |---|---|---|---|
-| Lowering | none: returns the argument | `NonUniformResourceIndex` on the heap index; DXC carries it into the `load`, texture and sampler fetches and drops it through the store's `+ 1`, so `rojoRHI::store` marks its own index; on a device unverified | none for an `Addr`, a pointer rather than a descriptor index; for a `uint`, `NonUniformResourceIndex`, which Slang decorates only where the index reaches a descriptor |
+| Lowering | none: returns the argument | `NonUniformResourceIndex` on the heap index; DXC carries it into the `load`, texture and sampler fetches and drops it through `+ 1`, so `rojoRHI::store` and `rojoRHI::atomicAdd` mark their own final indices; on a device unverified | none for an `Addr`, a pointer rather than a descriptor index; for a `uint`, `NonUniformResourceIndex`, which Slang decorates only where the index reaches a descriptor |
 | Cost | native | native: divergent fetches may serialize in hardware, as in native code | native |
 
 ## Addresses
@@ -50,18 +51,18 @@ memory or a shader output first.
 `Addr` dereference is native on Metal 4 and Vulkan and costly on D3D12, where HLSL and DXIL have no
 pointers: an `Addr` there carries a raw shader-resource heap index and a byte offset, and each
 distinct base costs a descriptor fetch. A `ShaderWrite` buffer's raw unordered-access descriptor
-sits in the heap slot immediately after its raw shader-resource descriptor, so `rojoRHI::store` uses
-the index plus one. The D3D12 `Addr` is the heap index in `lo` and the 32-bit byte offset in `hi`
-([memory and buffers](03-memory-and-buffers.md)). The emitted HLSL has `NonUniformResourceIndex`
-in two places: the return of the helper behind `nonUniform`, and around every store's `index + 1`.
-DXC keeps the qualifier through that function return and the `uint2` pack and unpack, so `load`,
-texture and sampler fetches carry it from the helper, and drops it through the addition, so the
-store marks its own index, which is correct for a uniform index too
-([ADR 0023](../decisions/0023-d3d12-store-marks-its-index.md)). `Tools/check_dxil.py` checks the
-DXIL handle flag of each fetch kind on hosted Windows CI. Whether the fetch is cheap enough for hot
-paths is spike 1 of [ADR 0014](../decisions/0014-overhead-measurement.md), still pending. Until it
-reports, per-draw hot data belongs in root fields and heap indices, and an `Addr` hop is for bulk
-and cold data.
+sits in the heap slot immediately after its raw shader-resource descriptor, so `rojoRHI::store` and
+`rojoRHI::atomicAdd` use the index plus one. The D3D12 `Addr` is the heap index in `lo` and the
+32-bit byte offset in `hi` ([memory and buffers](03-memory-and-buffers.md)). The emitted HLSL has
+`NonUniformResourceIndex` in two places: the return of the helper behind `nonUniform`, and around
+every store's or atomic add's `index + 1`. DXC keeps the qualifier through that function return and
+the `uint2` pack and unpack, so `load`, texture and sampler fetches carry it from the helper, and
+drops it through the addition, so the store or atomic add marks its own index, which is correct for
+a uniform index too ([ADR 0023](../decisions/0023-d3d12-store-marks-its-index.md)).
+`Tools/check_dxil.py` checks the DXIL handle flag of each fetch kind on hosted Windows CI. Whether
+the fetch is cheap enough for hot paths is spike 1 of [ADR
+0014](../decisions/0014-overhead-measurement.md), still pending. Until it reports, per-draw hot data
+belongs in root fields and heap indices, and an `Addr` hop is for bulk and cold data.
 
 In SPIR-V, with the pinned Slang, a helper that is not inlined and takes a texture parameter loses
 the `NonUniform` decoration on its fetch; the conformance shaders mark such helpers `[ForceInline]`.
@@ -120,6 +121,42 @@ uniform across the wave or marked with `rojoRHI::nonUniform`.
 |---|---|---|---|
 | Lowering | `device T*` store | `RWByteAddressBuffer` from `ResourceDescriptorHeap[NonUniformResourceIndex(index + 1)]`, then `StoreAligned<T>` at offset: one raw access for a 2- or 4-component vector `T`, or a struct member at a multiple of its size, 4-byte accesses otherwise | `PhysicalStorageBuffer` store |
 | Cost | native | costly: one descriptor fetch per base; spike 1 pending | native |
+
+### `rojoRHI::atomicAdd`
+
+```slang
+uint atomicAdd(Addr base, uint index, uint value);
+```
+
+Atomically adds `value` to the unsigned 32-bit word at byte address `base + index * 4` and returns
+its original value. Addition wraps modulo 2^32. Concurrent atomic additions to the same word form
+indivisible read-modify-write operations; each returns the word immediately before its own addition.
+
+Memory semantics are relaxed: this provides atomicity only at that location, with no implicit fence,
+ordering or publication of other locations, or synchronization between workgroups. The caller retains
+barriers from initialization to the atomic dispatch and from that dispatch to a read, copy or later
+dispatch (see [synchronization](09-synchronization.md)). Declare the atomic target at its shader stage
+with `Access::ShaderWrite`, which includes atomics; no additional `ShaderRead` access is required.
+
+Requirements: `base` is not the null address and names a buffer created with
+`BufferUsage::ShaderWrite` that is alive when the operation executes; the four target bytes lie
+inside that buffer; their byte address is a multiple of 4; and `base` is dynamically uniform across
+the wave or passed directly through `rojoRHI::nonUniform`. Ordinary reads or writes to the word do
+not race with atomic additions.
+
+The helper adds no binding and changes neither the `Addr` encoding nor any existing built-in's
+bytes or value, so `ROJORHI_SHADER_ABI_VERSION` remains 2.
+
+#### Valid usage
+
+- None.
+
+#### Mapping
+
+| | Metal 4 | D3D12 | Vulkan |
+|---|---|---|---|
+| Lowering | `atomic_fetch_add_explicit` through `atomic_uint device*`, `memory_order_relaxed` | `RWByteAddressBuffer` from `ResourceDescriptorHeap[NonUniformResourceIndex(index + 1)]`, then `InterlockedAdd` at the byte offset, returning the original uint; compile-checked, runtime unverified | `OpAtomicIAdd` through a `PhysicalStorageBuffer` uint pointer, Device scope and relaxed memory semantics; compile-checked oracle |
+| Cost | native | costly: one raw-UAV descriptor fetch per base, as for store | native |
 
 ## Heap indices
 
