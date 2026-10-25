@@ -27,8 +27,8 @@ local dxc_sha256 = "a1dfb116ba3eeae6a1582291b53a8e7bf65ad760676bd3194685c8f7367c
 -- the SHA-256 of the NuGet package, checked before anything is extracted from it.
 local agility_pin    = "1.619.6"
 local agility_sha256 = "08f0489281401aa430fc37322d6c3fc98a8025175aacd714c10d562f4963f1e9"
-local warp_pin       = "1.0.21"
-local warp_sha256    = "ea44b77eb30eec14427193e20f40cdb2e4c31ed11ab39cb880538fdf4bac2681"
+local warp_pin       = "1.0.20"
+local warp_sha256    = "e5fe5de661ce98b58ef9cfb736e73c0a7a2623d3bbf5f14839b2d55566d87e40"
 -- The FidelityFX SDK's upscaler runtime a D3D12 executable loads from beside itself, and the API headers that declare
 -- it: raw files of the tag (commit 60f4ea81909200d8542eca14dccb2628b763a9a3), each checked by the SHA-256 of the file
 -- downloaded. The headers keep their layout under Kits/FidelityFX, which ffx_upscale.h's relative includes need; the

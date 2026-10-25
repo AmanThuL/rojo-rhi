@@ -127,3 +127,22 @@ passes its unmodified `VertexIds` parameter.
 |---|---|---|---|
 | Lowering | vertex stage: `[[base_instance]]`, which the backend sets to the record's `drawId` for an indirect draw and to 0 for a direct draw; task and mesh stages: the backend binds the record's address for the draw and the shader loads offset 0, or for a direct draw binds a zero record, four bytes the list writes into its frame arena once per recording | root constant read from record offset 0 by the `ExecuteIndirect` command signature, or written as 0 by a direct draw when the list does not hold 0 there, which it does not after acquisition or an indirect draw | the backend binds the records' base address and stride, and the shader loads offset 0 of record `DrawIndex`; a direct draw binds a zero record, and `DrawIndex` is 0 |
 | Cost | native in the vertex stage; cheap in task and mesh stages: one load | native: unverified | cheap: one load |
+
+## Offline precision policy
+
+A target may set `slang.precise_files` to exact entry-file basenames without extension, the same
+unit as `slang.embed_files`. The default is empty: ordinary sources keep their existing compiler
+arguments. Selection applies to every entry function in that file. Unknown names, paths, extensions,
+case mismatches, duplicates (including case variants), layout probes and non-string values fail
+before tool probes or output changes. Selected files receive Slang `-fp-mode precise` for MSL,
+SPIR-V, HLSL and each entry-specific DXIL compile. DXIL also forwards `-Gis` to DXC through
+Slang `-Xdxc`; their Metal compile receives `-fno-fast-math -ffp-contract=off`. This preserves the
+requested compilation policy, rather than promising identical floating-point results across targets.
+
+The rule keeps a per-source effective-policy success record beside its outputs, including compiler,
+ordered module/include paths, fixed precision flags (including selected downstream DXC flags) and
+available optional outputs. A changed or missing record rebuilds all products of that source; the
+record is removed before artifact changes and written only after all required products succeed. A failed build followed by a
+retry or policy reversal therefore rebuilds. The initial migration may rebuild ordinary files once;
+a later sibling's selection change leaves them untouched, and a no-op rewrites no source product or
+success record. Existing source/module/compiler/rule/tool mtime dependencies still apply.

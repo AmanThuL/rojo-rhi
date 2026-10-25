@@ -98,6 +98,15 @@ TEST_CASE("the Agility runtime loads from the D3D12 directory beside the executa
     const std::wstring loaded = modulePath(runtime);
     INFO("loaded " << d3d12::utf8(loaded) << ", expected " << d3d12::utf8(expected));
     CHECK(samePath(loaded, expected));
+    if (kWarpAdapter)
+    {
+        const HMODULE warp = GetModuleHandleW(L"d3d10warp.dll");
+        REQUIRE(warp != nullptr);
+        const std::wstring expectedWarp = executable.substr(0, slash) + L"\\d3d10warp.dll";
+        const std::wstring loadedWarp = modulePath(warp);
+        INFO("loaded WARP " << d3d12::utf8(loadedWarp) << ", expected " << d3d12::utf8(expectedWarp));
+        CHECK(samePath(loadedWarp, expectedWarp));
+    }
     destroyDevice(*created);
 }
 

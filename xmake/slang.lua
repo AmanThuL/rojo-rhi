@@ -15,6 +15,11 @@
 --                        is written into the generated header directory below. Renaming it leaves the header
 --                        of the old name there until the build directory is cleaned
 --   slang.embed_files    optional: basenames of the entry files to embed; default every entry file
+--   slang.precise_files  optional: exact entry-file basenames without extension, as for embed_files;
+--                        default empty. Every function in a selected file gets Slang -fp-mode precise
+--                        on all four targets, DXIL -Xdxc -Gis and Metal -fno-fast-math -ffp-contract=off. Names are
+--                        case-sensitive; unknown names, paths, extensions, duplicates (including case
+--                        variants), layout probes and non-strings fail before probes or output changes
 --
 -- Inputs: every add_files input declares at least one [shader("<stage>")] entry outside comments, or the build
 -- fails; shared modules are reached through slang.includedirs, never listed. Outputs are flat, so basenames are
@@ -52,7 +57,11 @@
 -- The work runs in before_build so the generated headers exist before the target's C++ compiles. Each output is
 -- skipped while it is newer than every entry, every module under moduledir and slang.includedirs, the compiler
 -- and this rule. A shader library is also rebuilt when its metallib or DXIL, reflection, SPIR-V or the packaging
--- tool is newer.
+-- tool is newer. A per-source <name>.compile-policy success record also captures the effective compiler,
+-- ordered module/include paths, precision flags and optional-output availability. Missing or changed policy
+-- rebuilds all products of that source. Invalidate the record before artifact mutation and write it only after
+-- all products succeed, so failures/retries/policy reversals cannot reuse an old success. Initial migration
+-- may rebuild ordinary files once; sibling policy changes and no-op builds then preserve their outputs.
 
 -- Script scope does not see this file's locals, so the helpers live inside the callback.
 rule("rojorhi.slang")
@@ -64,6 +73,7 @@ rule("rojorhi.slang")
 
     before_build(function (target)
         import("core.project.config")
+        import("core.base.json")
         import("lib.detect.find_program")
         -- Entry points of a source file, read from its [shader("stage")] attributes with comments removed.
         -- Each result is {name = <function>, stage = <stage>}. A file with several attributes compiles every
@@ -116,15 +126,6 @@ rule("rojorhi.slang")
                 cprint("${yellow}%s", err)
             end
             return ok and true or false, err
-        end
-
-        -- Python 3 runs the packaging tools. Windows installs from python.org ship python.exe and no
-        -- python3.exe, so `python` is the fallback; the check rejects a Python 2 and the Windows Store stub.
-        local python_check = {"-c", "import sys; sys.exit(sys.version_info[0] < 3)"}
-        local python = find_program("python3", {check = python_check})
-                       or find_program("python", {check = python_check})
-        if not python then
-            os.raise("rojorhi.slang: no Python 3 found as python3 or python on PATH")
         end
 
         local moduledir = assert(target:values("slang.moduledir"),
@@ -182,6 +183,43 @@ rule("rojorhi.slang")
             end
         end
 
+        -- Precision is owned by an entry file, not a function or a naming convention. Validate before
+        -- any tool probe or output mutation, including the Python and optional-output probes below.
+        local precise_files, seen = {}, {}
+        local known = {}
+        for _, name in ipairs(names) do known[name] = true end
+        -- xmake deduplicates values.<key> before callbacks. Its original values dictionary preserves
+        -- repetitions from set_values/add_values, so inspect it as well instead of silently accepting them.
+        local declared = target:get("values") or {}
+        local selection = declared["slang.precise_files"]
+        if selection == nil then selection = target:values("slang.precise_files") end
+        for _, name in ipairs(table.wrap(selection)) do
+            if type(name) ~= "string" then
+                os.raise("rojorhi.slang: target '%s' slang.precise_files value '%s' must be a string entry-file basename",
+                         target:name(), tostring(name))
+            end
+            local key = name:lower()
+            if seen[key] then
+                os.raise("rojorhi.slang: target '%s' slang.precise_files repeats basename '%s' (already '%s')",
+                         target:name(), name, seen[key])
+            end
+            seen[key] = name
+            if not known[name] then
+                os.raise("rojorhi.slang: target '%s' slang.precise_files names '%s'; expected an exact entry-file "
+                         .. "basename without extension (case-sensitive, no paths or layout probes)", target:name(), name)
+            end
+            precise_files[name] = true
+        end
+
+        -- Python 3 runs the packaging tools. Windows installs from python.org ship python.exe and no
+        -- python3.exe, so `python` is the fallback; the check rejects a Python 2 and the Windows Store stub.
+        local python_check = {"-c", "import sys; sys.exit(sys.version_info[0] < 3)"}
+        local python = find_program("python3", {check = python_check})
+                       or find_program("python", {check = python_check})
+        if not python then
+            os.raise("rojorhi.slang: no Python 3 found as python3 or python on PATH")
+        end
+
         -- Metallibs and the shader libraries around them need the Metal toolchain, which only macOS has.
         local has_metal = is_host("macosx") and try {function ()
             os.runv("xcrun", {"-f", "metal"}); return true
@@ -215,6 +253,9 @@ rule("rojorhi.slang")
         local function clear(...)
             for _, output in ipairs({...}) do
                 os.tryrm(output)
+                -- A fresh old product surviving cleanup must never certify a new policy. Check every
+                -- output, including containers and the success record, before any generator can skip it.
+                assert(not os.exists(output), format("rojorhi.slang: cannot remove stale shader output %s", output))
             end
         end
 
@@ -275,7 +316,76 @@ rule("rojorhi.slang")
         for _, source in ipairs(sources) do
             local name = path.basename(source)
             local entries = entries_of[source]
-            local base = table.join({source}, include_args)
+            local precision_args = precise_files[name] and {"-fp-mode", "precise"} or {}
+            local metal_args = precise_files[name] and {"-fno-fast-math", "-ffp-contract=off"} or {}
+            local downstream_args = precise_files[name] and {"-Xdxc", "-Gis"} or {}
+            local base = table.join({source}, include_args, precision_args)
+            -- Ordered arrays give a canonical effective policy: a sibling's selection never appears here.
+            -- This is a success record, not a timestamp dependency. Its absence also makes a partial
+            -- failure stale when the user reverts to the policy that succeeded before that failure.
+            local effective_policy = {1, path.absolute(source), path.absolute(slangc), path.absolute(moduledir),
+                                      includedirs, precision_args, metal_args, has_metal and true or false,
+                                      dxil_available}
+            -- Preserve ordinary records byte-for-byte; only selected sources acquire the downstream policy.
+            if precise_files[name] then table.insert(effective_policy, downstream_args) end
+            local policy = json.encode(effective_policy)
+            local stamp = path.join(outdir, name .. ".compile-policy")
+            local changed_policy = not os.isfile(stamp) or io.readfile(stamp) ~= policy
+            local products = {}
+            for _, ext in ipairs({"metal", "metal.json", "spv", "hlsl", "nulllib", "metallib", "metal4lib",
+                                  "dxil", "d3d12lib"}) do
+                table.insert(products, path.join(outdir, name .. "." .. ext))
+            end
+            for _, entry in ipairs(entries) do
+                if #entries > 1 then
+                    table.insert(products, path.join(outdir, format("%s.%s.dxil", name, entry.name)))
+                end
+            end
+            local required = {path.join(outdir, name .. ".metal"), path.join(outdir, name .. ".metal.json"),
+                              path.join(outdir, name .. ".spv"), path.join(outdir, name .. ".hlsl"),
+                              path.join(outdir, name .. ".nulllib")}
+            if has_metal then
+                table.join2(required, {path.join(outdir, name .. ".metallib"), path.join(outdir, name .. ".metal4lib")})
+            end
+            if dxil_available then
+                table.insert(required, path.join(outdir, name .. ".d3d12lib"))
+                for _, entry in ipairs(entries) do
+                    table.insert(required, path.join(outdir, #entries == 1 and (name .. ".dxil")
+                                           or format("%s.%s.dxil", name, entry.name)))
+                end
+            end
+            local rebuild = changed_policy
+            for _, output in ipairs(required) do
+                if stale(output) or os.mtime(output) < os.mtime(tool) then rebuild = true end
+            end
+            local function older_than(output, inputs)
+                if not os.isfile(output) then return true end
+                for _, input in ipairs(inputs) do
+                    if os.isfile(input) and os.mtime(output) < os.mtime(input) then return true end
+                end
+                return false
+            end
+            local reflection_file = path.join(outdir, name .. ".metal.json")
+            local spirv_file = path.join(outdir, name .. ".spv")
+            if older_than(path.join(outdir, name .. ".nulllib"), {reflection_file, tool}) then rebuild = true end
+            if has_metal and older_than(path.join(outdir, name .. ".metal4lib"),
+                                       {path.join(outdir, name .. ".metallib"), reflection_file, spirv_file, tool}) then
+                rebuild = true
+            end
+            if dxil_available then
+                local inputs = {reflection_file, spirv_file, tool}
+                for _, entry in ipairs(entries) do
+                    table.insert(inputs, path.join(outdir, #entries == 1 and (name .. ".dxil")
+                                          or format("%s.%s.dxil", name, entry.name)))
+                end
+                if older_than(path.join(outdir, name .. ".d3d12lib"), inputs) then rebuild = true end
+            end
+            if rebuild then
+                -- Invalidate BEFORE touching any artifact. Rebuild the whole source transaction so its
+                -- reflection and every container always describe the same successful compilation policy.
+                clear(stamp)
+                for _, output in ipairs(products) do clear(output) end
+            end
             -- The source is named once, before its first stale output is rebuilt, so a no-op build prints none.
             local announced = false
             local function run(...)
@@ -323,8 +433,8 @@ rule("rojorhi.slang")
                 local lib = path.join(outdir, name .. ".metallib")
                 if stale(lib) then
                     clear(lib)
-                    run("xcrun", "metal", {"-sdk", "macosx", "metal", "-std=metal4.0",
-                        "-mmacosx-version-min=26.0", "-o", lib, msl})
+                    run("xcrun", "metal", table.join({"-sdk", "macosx", "metal", "-std=metal4.0",
+                        "-mmacosx-version-min=26.0"}, metal_args, {"-o", lib, msl}))
                 end
                 local library = path.join(outdir, name .. ".metal4lib")
                 local inputs = math.max(newest, os.mtime(lib), os.mtime(reflection), os.mtime(spv), os.mtime(tool))
@@ -343,7 +453,8 @@ rule("rojorhi.slang")
                 if dxil_available and stale(dxil) then
                     clear(dxil)
                     run(slangc, "slangc", table.join(base, {"-D", "ROJORHI_TARGET_HLSL", "-target", "dxil",
-                        "-profile", "sm_6_6", "-entry", entry.name, "-stage", entry.stage, "-o", dxil}))
+                        "-profile", "sm_6_6", "-entry", entry.name, "-stage", entry.stage, "-o", dxil},
+                        downstream_args))
                 end
                 table.insert(dxil_args, "--dxil")
                 table.insert(dxil_args, entry.name .. "=" .. dxil)
@@ -359,6 +470,12 @@ rule("rojorhi.slang")
                     run(python, "shader_library", table.join({tool, "--format", "d3d12", "--module", module,
                         "--reflection", reflection, "--spirv", spv}, dxil_args, {"--out", library}))
                 end
+            end
+            if rebuild then
+                for _, output in ipairs(required) do
+                    assert(os.isfile(output), format("rojorhi.slang: successful compile did not produce %s", output))
+                end
+                io.writefile(stamp, policy)
             end
         end
 
