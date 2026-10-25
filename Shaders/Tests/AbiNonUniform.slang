@@ -51,6 +51,15 @@ void storeMain(uint3 tid : SV_DispatchThreadID)
 
 [shader("compute")]
 [numthreads(64, 1, 1)]
+void atomicMain(uint3 tid : SV_DispatchThreadID)
+{
+    NonUniformRoot root = rojoRHI::root<NonUniformRoot>();
+    uint old = rojoRHI::atomicAdd(rojoRHI::nonUniform(perThread(tid.x, root.evenBase, root.oddBase)), 3, 1);
+    rojoRHI::store<uint>(rojoRHI::nonUniform(root.output), tid.x, old);
+}
+
+[shader("compute")]
+[numthreads(64, 1, 1)]
 void textureMain(uint3 tid : SV_DispatchThreadID)
 {
     NonUniformRoot root = rojoRHI::root<NonUniformRoot>();
