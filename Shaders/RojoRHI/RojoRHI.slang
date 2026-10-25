@@ -20,6 +20,10 @@
 //                          `Load2`/`Load4` or `Store2`/`Store4`, where plain `Load<T>` splits it into 4-byte
 //                          scalars; any other member stays 4-byte scalars. D3D12 raw access needs only 4-byte
 //                          alignment
+//   atomicAdd      Metal   `atomic_fetch_add_explicit` on an `atomic_uint device*`, `memory_order_relaxed`
+//                  SPIR-V  `OpAtomicIAdd` on a `PhysicalStorageBuffer` uint pointer, Device scope, relaxed semantics
+//                  HLSL    `RWByteAddressBuffer.InterlockedAdd` at `base.y + index * 4`, the final raw-UAV
+//                          index marked `NonUniformResourceIndex(base.x + 1)` as for store
 //   nonUniform     Metal   returns its argument
 //                  HLSL    `NonUniformResourceIndex` on the heap index
 //                  SPIR-V  `NonUniformResourceIndex`, which Slang decorates `NonUniform` only where the index
@@ -180,6 +184,20 @@ namespace rojoRHI
 #else
         *pointerAt<T>(base, index) = value;
 #endif
+    }
+
+    /// Adds modulo 2^32, returning the original word; atomicity is per location, without a memory fence.
+    public uint atomicAdd(Addr base, uint index, uint value)
+    {
+        uint old;
+#if defined(ROJORHI_TARGET_HLSL)
+        // Mark the final raw-UAV index, as for store: DXC drops a marker through the addition.
+        RWByteAddressBuffer heap = ResourceDescriptorHeap[NonUniformResourceIndex(base.x + 1)];
+        heap.InterlockedAdd(base.y + index * 4, value, old);
+#else
+        InterlockedAdd(*pointerAt<uint>(base, index), value, old);
+#endif
+        return old;
     }
 
     public uint nonUniform(uint index)

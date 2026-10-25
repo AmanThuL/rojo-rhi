@@ -442,8 +442,8 @@ target("RojoRHITests")
     -- compares the shared structs with what each target reflects.
     add_rules("rojorhi.shader_layout")
     set_values("slang.layout_probe", path.join(component_dir, "Shaders/Tests/LayoutProbe.slang"))
-    set_values("slang.layout_map", "DrawRoot=rojoRHI::test::DrawRoot")
-    set_values("slang.layout_include", "rojoRHI/RHI.h")
+    set_values("slang.layout_map", "DrawRoot=rojoRHI::test::DrawRoot", "AtomicRoot=rojoRHI::test::AtomicRoot")
+    set_values("slang.layout_include", "rojoRHI/RHI.h", "AbiExamples.h")
     if is_config("rojorhi_backend", "metal4") then
         add_tests("abi", {runargs = {"[abi]"}, runenvs = {MTL_DEBUG_LAYER = "1"}, realtime_output = true})
     else

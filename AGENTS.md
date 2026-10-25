@@ -231,9 +231,9 @@ recording](docs/architecture/null-backend-recording.md)).
   unchanged, and a change there is a defect fix only, in a commit that touches nothing outside
   `Legacy/` except `xmake/targets.lua` and carries a `V1-fix:` trailer. The commit that deletes
   `Legacy/` is exempt. The project policy check enforces it.
-- The module owns every shader binding and each shader compile defines exactly one
-  `ROJORHI_TARGET_*` macro; a consumer shader declares no binding (ADR 0018). Changing a reserved
-  binding or the value a built-in returns bumps `ROJORHI_SHADER_ABI_VERSION` (ADR 0024).
+- Shader `uint atomicAdd(Addr,uint,uint)` returns the old word with relaxed atomicity and no fence.
+- The module owns all bindings; consumers declare none (ADR 0018). One `ROJORHI_TARGET_*` per compile;
+  binding or built-in value changes bump `ROJORHI_SHADER_ABI_VERSION` (ADR 0024).
 - Release recording takes no locks except when a list claims a new frame-arena page, for
   `uploadFrameData` or for a debug scope's label; a lookup that only feeds a Debug-tier check is
   compiled out of Release builds (ADR 0020).
