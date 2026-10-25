@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
 """Check the DXIL the build compiled for the module's heap fetches and raw accesses.
 
-`Shaders/Tests/AbiNonUniform.slang` has one kernel per heap fetch kind (`load`, `store`, texture,
-write-only texture, sampler), each indexing the heap through `rojoRHI::nonUniform`. Every heap
+`Shaders/Tests/AbiNonUniform.slang` has one kernel per heap fetch kind (`load`, `store`, atomic add,
+texture, write-only texture, sampler), each indexing the heap through `rojoRHI::nonUniform`. Every heap
 descriptor handle in their DXIL must carry the non-uniform flag, and each kernel must still hold a
-handle of its kind. `Shaders/Tests/AbiRawAccess.slang` reads two fields of a flat root, loads one
+handle of its kind. The atomic kernel must use uint32 AtomicBinOp add through its own marked raw-UAV
+handle. `Shaders/Tests/AbiRawAccess.slang` reads two fields of a flat root, loads one
 `uint4` and stores one: its DXIL must load the root exactly twice and make the load and the store
 one full-width raw access each, with nothing spilled to a local array. The check disassembles each
 file with `dxc -dumpbin` and fails, rather than skips, when a file, the shader directory or `dxc`
@@ -30,11 +31,13 @@ ROOT = Path(__file__).resolve().parents[1]
 NONUNIFORM: dict[str, str] = {
     "AbiNonUniform.loadMain.dxil": "ByteAddressBuffer",
     "AbiNonUniform.storeMain.dxil": "RWByteAddressBuffer",
+    "AbiNonUniform.atomicMain.dxil": "RWByteAddressBuffer",
     "AbiNonUniform.textureMain.dxil": "Texture2D",
     "AbiNonUniform.wTextureMain.dxil": "RWTexture2D",
     "AbiNonUniform.samplerMain.dxil": "SamplerState",
 }
 RAW_ACCESS = "AbiRawAccess.dxil"
+ATOMIC_ADD = "AbiNonUniform.atomicMain.dxil"
 ROOT_FIELDS_READ = 2  # AbiRawAccess reads root.input and root.output
 FULL_WIDTH_MASK = 15  # four 32-bit components in one rawBufferLoad or rawBufferStore
 
@@ -53,6 +56,11 @@ RAW = re.compile(
     rf".*\bi8 (\d+), i32 \d+\)"
 )
 ALLOCA = re.compile(r"=\s*alloca\b")
+ATOMIC = re.compile(
+    rf"^\s*(?:{VALUE}\s*=\s*)?call i32 @dx\.op\.atomicBinOp\.i32\(i32 (\d+),"
+    rf" %dx\.types\.Handle ({VALUE}), i32 (\d+),"
+    rf" i32 [^,()]+, i32 [^,()]+, i32 [^,()]+, i32 [^,()]+\)"
+)
 
 
 @dataclass(frozen=True)
@@ -138,6 +146,27 @@ def raw_access_errors(name: str, disassembly: str) -> list[str]:
     return errors
 
 
+def atomic_add_errors(name: str, disassembly: str) -> list[str]:
+    """Require uint32 AtomicBinOp add, following each call's own final raw-UAV handle."""
+    handles = parse_handles(disassembly)
+    errors: list[str] = []
+    calls = [match for line in instruction_lines(disassembly) if (match := ATOMIC.match(line))]
+    if not calls:
+        errors.append(f"{name}: no uint32 dx.op.atomicBinOp.i32 call; the kernel no longer adds atomically")
+    for call in calls:
+        opcode, ssa, operation = call.groups()
+        # DXIL AtomicBinOp is opcode 78; its binary-op operand 0 is integer add.
+        if int(opcode) != 78 or int(operation) != 0:
+            errors.append(f"{name}: atomicBinOp.i32 has opcode {opcode} and operation {operation}, "
+                          "expected opcode 78 and add operation 0")
+        handle = handles.get(ssa, Handle("", False, False, ""))
+        if (handle.source != "heap" or handle.sampler_heap or not handle.non_uniform
+                or handle.resource != "RWByteAddressBuffer"):
+            errors.append(f"{name}: atomic handle {ssa} must be a non-uniform RWByteAddressBuffer "
+                          "from the resource heap")
+    return errors
+
+
 def find_shader_dirs(root: Path) -> list[Path]:
     """Return the shader output directories of every configured test build under root."""
     return sorted(root.glob("build/*/*/*/rojorhi-test/Shaders"))
@@ -203,6 +232,8 @@ def main(argv: list[str] | None = None) -> int:
                 errors = raw_access_errors(str(path), listing)
             else:
                 errors = nonuniform_errors(str(path), listing, NONUNIFORM[file])
+                if file == ATOMIC_ADD:
+                    errors.extend(atomic_add_errors(str(path), listing))
             for error in errors:
                 print(error)
             if not errors:
