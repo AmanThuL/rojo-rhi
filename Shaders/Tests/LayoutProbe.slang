@@ -6,6 +6,8 @@
 import RojoRHI;
 import AtomicTest;
 
+import PreciseTest;
+
 // A parameter named gRecord_<Name> mirrors the C++ struct rojoRHI::<Name> in natural layout. A parameter named
 // gRoot_<Name> mirrors a root block and must also satisfy the flat root rules. Tools/shader_layout.py reads them.
 
@@ -59,6 +61,8 @@ StructuredBuffer<DrawMeshTasksIndirectArgs> gRecord_DrawMeshTasksIndirectArgs;
 StructuredBuffer<DispatchIndirectArgs> gRecord_DispatchIndirectArgs;
 StructuredBuffer<DrawRoot> gRoot_DrawRoot;
 StructuredBuffer<AtomicRoot> gRoot_AtomicRoot;
+
+StructuredBuffer<rojoRHI::test::PreciseRoot> gRoot_PreciseRoot;
 
 // Reflection lists every global parameter whether or not the entry reads it; the entry only gives each target
 // something to compile.

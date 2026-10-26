@@ -140,10 +140,11 @@ above. The rules keep the check passing; the check, not the rules, is the author
 
 ## Shader build, ABI version and Slang upgrades
 
-The xmake shader rule compiles Slang offline. On every host and at every build it emits MSL,
-SPIR-V and HLSL, so the Vulkan and D3D12 mappings are checked mechanically rather than on paper; it
-adds a metallib when the Metal toolchain exists and DXIL when a DXC loads, and prints which of the
-two it enabled. Hosted Windows CI compiles DXIL. RojoRHI never compiles shaders at run time.
+The xmake rule compiles Slang offline to MSL, SPIR-V and HLSL on every host; it adds a metallib
+with the Metal toolchain and DXIL when a DXC loads, printing which it enabled. Windows CI compiles
+DXIL. `slang.precise_files` opts files into the
+[precision policy](05-shader-abi-part3.md#offline-precision-policy); its default is empty.
+RojoRHI never compiles shaders at run time.
 
 On Metal the rule packages each metallib into a RojoRHI shader library, `<name>.metal4lib`. Its
 text header, one LF-ended line each, holds the magic `rojorhi.metal4.shaderlibrary`,
@@ -170,10 +171,9 @@ count, and `dxil <total>` in place of the `metallib` line, then each entry's sig
 in entry order. A reader also checks that the counts sum to `<total>`, that exactly `<total>` bytes
 remain and that each entry's slice starts with `DXBC`; the writer refuses an unsigned container.
 
-A vertex entry point that returns non-void and reaches the root or a table draws the Metal
-compiler's warning "writable resources in non-void vertex function". The pinned Slang lowers every
-reserved binding to a writable `device` pointer and has no `const` form, the compiler offers no
-switch to silence the warning, and the writes are legal; the rule prints it.
+A non-void vertex entry that reaches a root or table warns "writable resources in non-void vertex
+function": pinned Slang uses writable `device` pointers for every reserved binding with no `const`
+form. Writes are legal; the compiler cannot silence the warning, so the rule prints it.
 
 Slang's Metal bindless support is young and fails silently in places: handle pointers inside
 structs, unsized arrays and combined texture-samplers miscompile, and HLSL pointer text is emitted

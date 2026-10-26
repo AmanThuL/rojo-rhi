@@ -119,6 +119,9 @@ jobs:
             Write-Host '::notice::dxcompiler.dll and dxil.dll not found in the Windows SDK; DXIL will be skipped'
           }
       - run: xmake setup
+      - if: runner.os == 'macOS'
+        name: Actual shader rule invocation and cache fixtures
+        run: python3 -m unittest discover -s Tools/SlangRuleTests -v
       # Some hosted images ship Xcode without the Metal toolchain the metallibs and shader libraries need.
       - if: runner.os == 'macOS'
         run: xcrun metal --version >/dev/null 2>&1 || xcodebuild -downloadComponent MetalToolchain
@@ -392,6 +395,79 @@ jobs:
           foreach ($dll in 'D3D12/D3D12Core.dll', 'D3D12/d3d12SDKLayers.dll', 'd3d10warp.dll') {
             if (-not (Test-Path (Join-Path $dir $dll))) { throw "$dll is missing from $dir" }
           }
+      - id: debug_warp_before
+        name: Record Debug WARP runtime before tests
+        shell: pwsh
+        run: |
+          $out = (New-Item -ItemType Directory -Force 'build/warp-runtime-identities').FullName
+          $identityScript = @'
+          param(
+            [Parameter(Mandatory)][ValidateSet('debug','release','layer')][string]$Phase,
+            [Parameter(Mandatory)][ValidateSet('before','after')][string]$Position
+          )
+          $ErrorActionPreference = 'Stop'
+          $directories = @{
+            debug = 'build/windows/x64/debug/rojorhi-test'
+            release = 'build/windows/x64/release/rojorhi-test'
+            layer = 'build/layer/windows/x64/debug/rojorhi-test'
+          }
+          $dll = [IO.Path]::GetFullPath((Join-Path $directories[$Phase] 'd3d10warp.dll'))
+          $source = [IO.Path]::GetFullPath('ThirdParty/warp/bin/d3d10warp.dll')
+          $head = (& git rev-parse HEAD).Trim()
+          if ($LASTEXITCODE -ne 0 -or $head -cne $env:GITHUB_SHA) { throw 'runtime receipt does not match the checked-out workflow source' }
+          $version = (Get-Item $dll).VersionInfo
+          $identity = [ordered]@{
+            schema = 1
+            phase = $Phase
+            position = $Position
+            runId = $env:GITHUB_RUN_ID
+            head = $head
+            path = $dll
+            sha256 = (Get-FileHash -Algorithm SHA256 $dll).Hash.ToLowerInvariant()
+            fileVersion = '{0}.{1}.{2}.{3}' -f $version.FileMajorPart, $version.FileMinorPart, $version.FileBuildPart, $version.FilePrivatePart
+            sourcePath = $source
+            sourceSHA256 = (Get-FileHash -Algorithm SHA256 $source).Hash.ToLowerInvariant()
+            scriptSHA256 = (Get-FileHash -Algorithm SHA256 $PSCommandPath).Hash.ToLowerInvariant()
+            powershellVersion = $PSVersionTable.PSVersion.ToString()
+          }
+          $out = Split-Path $PSCommandPath
+          $receipt = Join-Path $out "$Phase-$Position.json"
+          if (Test-Path $receipt) { throw "runtime receipt already exists: $receipt" }
+          $identity | ConvertTo-Json -Depth 4 | Set-Content -Encoding utf8 $receipt
+          Write-Host ($identity | ConvertTo-Json -Compress)
+          $expected = '2a08692cba4c130593329255627fb915d666c90cda53d284594bc8438fd4f49d'
+          if ($identity.sha256 -cne $expected -or $identity.sourceSHA256 -cne $expected -or $identity.fileVersion -cne '1.0.20.0') {
+            throw 'the tested app-local WARP is not the pinned 1.0.20 binary'
+          }
+          if ($Position -eq 'after') {
+            $before = Get-Content -Raw (Join-Path $out "$Phase-before.json") | ConvertFrom-Json
+            foreach ($key in 'schema','phase','runId','head','path','sha256','fileVersion','sourcePath','sourceSHA256','scriptSHA256','powershellVersion') {
+              if ($identity[$key] -cne $before.$key) { throw "runtime identity changed during $Phase tests: $key" }
+            }
+          }
+          '@
+          $script = Join-Path $out 'record.ps1'
+          if (Test-Path $script) { throw 'runtime identity helper already exists' }
+          Set-Content -Encoding utf8 $script $identityScript
+          & $script -Phase debug -Position before
+      # A later normal gate may fail before conformance. Bind its exact Debug GBV inputs now; the
+      # independent tail below refuses to relabel files rebuilt by a later configure as this build.
+      - id: precision_snapshot
+        name: Snapshot focused precision Debug inputs
+        continue-on-error: true
+        shell: pwsh
+        timeout-minutes: 3
+        run: |
+          python3 Tools/precision_diagnostic.py before
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+          $out = [IO.Path]::GetFullPath('build/precision-focused')
+          $before = Get-Content -Raw (Join-Path $out 'before.json') | ConvertFrom-Json -AsHashtable
+          $versions = [ordered]@{}
+          foreach ($name in ($before.files.Keys | Where-Object { $_.EndsWith('.dll') } | Sort-Object)) {
+            $v = (Get-Item $name).VersionInfo
+            $versions[$name] = '{0}.{1}.{2}.{3}' -f $v.FileMajorPart, $v.FileMinorPart, $v.FileBuildPart, $v.FilePrivatePart
+          }
+          $versions | ConvertTo-Json | Set-Content -Encoding utf8 (Join-Path $out 'versions-before.json')
       - id: debug_abi
         run: xmake test RojoRHITests/abi
         timeout-minutes: 15
@@ -464,8 +540,17 @@ jobs:
       # Release with debug features mode, which enables none in Release; /WX makes the build warning-free. The LTO
       # probe only builds and is not run, and check_lto_inline.py disassembles it to require that link-time
       # optimization inlined Device::capabilities into its caller (ADR 0012).
+      - id: debug_warp_after
+        name: Record Debug WARP runtime after tests
+        if: always() && steps.debug_warp_before.outcome == 'success'
+        shell: pwsh
+        run: '& ./build/warp-runtime-identities/record.ps1 -Phase debug -Position after'
       - run: xmake f -m release -y --rojorhi_backend=d3d12 --rojorhi_d3d12_adapter=warp --rojorhi_d3d12_debug=mode
       - run: xmake build RojoRHITests
+      - id: release_warp_before
+        name: Record Release WARP runtime before tests
+        shell: pwsh
+        run: '& ./build/warp-runtime-identities/record.ps1 -Phase release -Position before'
       - id: release_contract
         run: xmake test RojoRHITests/contract
         timeout-minutes: 15
@@ -477,11 +562,20 @@ jobs:
         timeout-minutes: 15
       - run: xmake build RojoRHILtoProbe
       - run: python3 Tools/check_lto_inline.py
+      - id: release_warp_after
+        name: Record Release WARP runtime after tests
+        if: always() && steps.release_warp_before.outcome == 'success'
+        shell: pwsh
+        run: '& ./build/warp-runtime-identities/record.ps1 -Phase release -Position after'
       # Debug with the debug layer alone, under which WARP completes the FidelityFX dispatch it never completes under
       # GPU-based validation: the files and cases that the configuration above leaves out or skips because they submit
       # upscales run here, so their checks for layer messages see a layer. Its own build directory keeps the GBV build.
       - run: xmake f -m debug -y -o build/layer --rojorhi_backend=d3d12 --rojorhi_d3d12_adapter=warp --rojorhi_d3d12_debug=layer
       - run: xmake build RojoRHITests
+      - id: layer_warp_before
+        name: Record layer-only Debug WARP runtime before tests
+        shell: pwsh
+        run: '& ./build/warp-runtime-identities/record.ps1 -Phase layer -Position before'
       - id: layer_upscale
         shell: pwsh
         timeout-minutes: 15
@@ -491,6 +585,11 @@ jobs:
           if ($LASTEXITCODE -ne 0) { exit 1 }
         env:
           UPSCALE_CASES: '[#UpscalerTests]~[death],[#UpscaleConformanceTests],[#D3D12UpscalerTests]~[death],[#DiagnosticsTests]~[death],[#TrackerTests]~[death],[#ScopeConformanceTests]'
+      - id: layer_warp_after
+        name: Record layer-only Debug WARP runtime after tests
+        if: always() && steps.layer_warp_before.outcome == 'success'
+        shell: pwsh
+        run: '& ./build/warp-runtime-identities/record.ps1 -Phase layer -Position after'
       # After a failed test step, its entry runs again one case per process, so a case that ends the Catch2 process (an
       # abort, a hang, a removed device) is still named: a PASS, SKIP or FAIL line for each case, and for each failing
       # case its exit code, the error and assertion lines and the last lines of its output.
@@ -563,6 +662,99 @@ jobs:
           }
           $summary -join "`n" | Out-File -Append -Encoding utf8 $env:GITHUB_STEP_SUMMARY
           exit 1
+      - name: Upload WARP runtime identities
+        if: always() && (steps.debug_warp_before.outcome == 'success' || steps.debug_warp_before.outcome == 'failure')
+        uses: actions/upload-artifact@v4
+        with:
+          name: warp-runtime-identities
+          path: build/warp-runtime-identities/
+          if-no-files-found: error
+      # This diagnostic cannot repair a failed normal gate. It obtains the unchanged original
+      # eight-assertion result even when death stopped the ordinary conformance entry above.
+      - name: Record the original precision case independently
+        if: always()
+        shell: pwsh
+        timeout-minutes: 3
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $PSNativeCommandUseErrorActionPreference = $false
+          python3 Tools/precision_diagnostic.py check
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+          $out = [IO.Path]::GetFullPath('build/precision-focused')
+          $case = 'AbiPrecise preserves separate dynamic fp32 multiply and add'
+          $exe = [IO.Path]::GetFullPath('build/windows/x64/debug/rojorhi-test/RojoRHITests.exe')
+          $cwd = Split-Path $exe
+          $inventoryArgs = @('-#', $case, '--list-tests', '--verbosity', 'quiet')
+          $testArgs = @('--warn', 'UnmatchedTestSpec', $case, '--success', '--reporter', 'xml', '--out', (Join-Path $out 'result.xml'))
+          $invocation = [ordered]@{
+            case = $case; executable = $exe; cwd = $cwd
+            inventoryArguments = $inventoryArgs; arguments = $testArgs
+            inventoryExit = $null; testExit = $null
+            debugFeatures = 'compiled-in GBV, bound by the pre-test snapshot'
+            moduleObservationRequested = $true
+            moduleObservationPath = (Join-Path $out 'mapped-modules.json')
+          }
+          try {
+            Push-Location $cwd
+            try {
+              & $exe @inventoryArgs 1> (Join-Path $out 'inventory.stdout') 2> (Join-Path $out 'inventory.stderr')
+              $invocation.inventoryExit = $LASTEXITCODE
+              if ($LASTEXITCODE -eq 0) {
+                if (Test-Path Env:ROJORHI_PRECISION_MODULES_PATH) { throw 'unexpected existing mapped-image diagnostic environment' }
+                $env:ROJORHI_PRECISION_MODULES_PATH = $invocation.moduleObservationPath
+                try {
+                  & $exe @testArgs 1> (Join-Path $out 'test.stdout') 2> (Join-Path $out 'test.stderr')
+                  $invocation.testExit = $LASTEXITCODE
+                } finally { Remove-Item Env:ROJORHI_PRECISION_MODULES_PATH }
+              }
+            } finally { Pop-Location }
+          } catch {
+            $_ | Out-String | Set-Content -Encoding utf8 (Join-Path $out 'powershell-error.txt')
+          } finally {
+            $invocation | ConvertTo-Json | Set-Content -Encoding utf8 (Join-Path $out 'invocation.json')
+            try {
+              $before = Get-Content -Raw (Join-Path $out 'before.json') | ConvertFrom-Json -AsHashtable
+              $versions = [ordered]@{}
+              foreach ($name in ($before.files.Keys | Where-Object { $_.EndsWith('.dll') } | Sort-Object)) {
+                $v = (Get-Item $name).VersionInfo
+                $versions[$name] = '{0}.{1}.{2}.{3}' -f $v.FileMajorPart, $v.FileMinorPart, $v.FileBuildPart, $v.FilePrivatePart
+              }
+              $versions | ConvertTo-Json | Set-Content -Encoding utf8 (Join-Path $out 'versions-after.json')
+            } catch {
+              $_ | Out-String | Set-Content -Encoding utf8 (Join-Path $out 'versions-error.txt')
+            }
+            try {
+              $mappedVersions = [ordered]@{}
+              $mappedErrors = [ordered]@{}
+              $mappedPath = Join-Path $out 'mapped-modules.json'
+              $mapped = Get-Content -Raw -LiteralPath $mappedPath | ConvertFrom-Json -AsHashtable
+              $relevant = @('d3d12.dll', 'd3d12core.dll', 'd3d12sdklayers.dll', 'd3d10warp.dll',
+                            'amd_fidelityfx_loader_dx12.dll', 'amd_fidelityfx_upscaler_dx12.dll')
+              foreach ($mappedImage in $mapped.snapshots[-1].modules) {
+                if ([IO.Path]::GetFileName($mappedImage.path).ToLowerInvariant() -notin $relevant) { continue }
+                try {
+                  $v = (Get-Item -LiteralPath $mappedImage.path).VersionInfo
+                  $mappedVersions[$mappedImage.path] = '{0}.{1}.{2}.{3}' -f $v.FileMajorPart, $v.FileMinorPart, $v.FileBuildPart, $v.FilePrivatePart
+                } catch { $mappedErrors[$mappedImage.path] = $_ | Out-String }
+              }
+              $mappedVersions | ConvertTo-Json | Set-Content -Encoding utf8 (Join-Path $out 'mapped-versions.json')
+              if ($mappedErrors.Count -ne 0) {
+                $mappedErrors | ConvertTo-Json | Set-Content -Encoding utf8 (Join-Path $out 'mapped-versions-error.txt')
+              }
+            } catch {
+              $_ | Out-String | Set-Content -Encoding utf8 (Join-Path $out 'mapped-versions-error.txt')
+            }
+            python3 Tools/precision_diagnostic.py after
+            if ($LASTEXITCODE -ne 0) { exit 1 }
+          }
+      - name: Upload focused precision diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: focused-precision
+          path: build/precision-focused/
+          if-no-files-found: error
+          include-hidden-files: true
   # The benchmark harness on D3D12 (WARP): the Windows host layer, the native arm's context and the checks of both, built
   # warning-free in Debug with the debug layer and in Release with no debug feature. It never times anything (ADR 0014).
   d3d12-bench:

@@ -45,4 +45,16 @@ namespace rojoRHI::test {
     static_assert(offsetof(AtomicRoot, index) == 20);
     static_assert(offsetof(AtomicRoot, value) == 24);
     static_assert(offsetof(AtomicRoot, pad) == 28);
+
+    /// The dynamic precision probe's flat 16-byte root block.
+    struct alignas(16) PreciseRoot
+    {
+        Addr input;
+        Addr output;
+    };
+
+    static_assert(alignof(PreciseRoot) == 16);
+    static_assert(sizeof(PreciseRoot) == 16);
+    static_assert(offsetof(PreciseRoot, input) == 0);
+    static_assert(offsetof(PreciseRoot, output) == 8);
 } // namespace rojoRHI::test

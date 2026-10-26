@@ -5,7 +5,7 @@
 
 //======================================================================================================================
 // The layout asserts in ShaderLayout.h fail the build on drift; this case pins how many structs they cover.
-TEST_CASE("the layout probe covers the four records and the two roots", "[abi]")
+TEST_CASE("the layout probe covers four records and three roots", "[abi]")
 {
-    CHECK(kShaderLayoutStructCount == 6);
+    CHECK(kShaderLayoutStructCount == 7);
 }

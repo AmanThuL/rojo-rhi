@@ -192,16 +192,16 @@ cases of ADR 0009 are the `[conformance]` entry on Metal 4, one file for each ca
 `MTL_DEBUG_LAYER=1` and a real device on Metal 4 Apple Silicon, and there is no CPU-only substitute
 for either. The `d3d12` CI job also runs `[conformance]` on WARP, which is not T1 acceptance.
 
-The shader ABI module `Shaders/RojoRHI/RojoRHI.slang` and its hosted checks exist: the conformance
-shaders under `Shaders/Tests/` compile to MSL, SPIR-V and HLSL on every host, and the build checks
-the layout of the shared structs against Slang reflection. That is the hosted half of the T3 tier
-(ADR 0009). DXIL compiles wherever a DXC loads, as on hosted Windows CI. On Metal the rule writes
-the ABI stamp into each shader library (`.metal4lib`), and the Metal 4 backend's
-`Device::loadShaderLibrary` reads that container, refuses another ABI version with
-`ShaderAbiMismatch` and compiles pipelines from it; the `[conformance]` cases run the ABI
-shaders on the GPU, the T3 tier's other half. The Null backend loads a text format, which the
-rule writes for every entry file as `.nulllib` (see [command
-recording](docs/architecture/null-backend-recording.md)).
+The shader ABI module `Shaders/RojoRHI/RojoRHI.slang` compiles to MSL, SPIR-V and HLSL on every
+host, plus DXIL where a DXC loads (including Windows CI). Reflection checks shared layouts; Metal
+libraries carry the ABI stamp, and `Device::loadShaderLibrary` rejects another version with
+`ShaderAbiMismatch`. These hosted checks and GPU `[conformance]` runs form T3 (ADR 0009). Every
+entry file also gets a text `.nulllib` ([Null recording](docs/architecture/null-backend-recording.md)).
+`slang.precise_files` selects exact entry-file basenames without extension, default empty, for all
+functions: Slang `-fp-mode precise`, DXIL `-Xdxc -Gis`, Metal `-fno-fast-math -ffp-contract=off`.
+Invalid/duplicate names fail before probes or mutation; per-source success records force rebuilds
+on policy changes/failures, preserving ordinary siblings and no-ops after initial migration.
+CPU fixtures (requires xmake): `python3 -m unittest discover -s Tools/SlangRuleTests -v`.
 
 ## Hard rules
 
