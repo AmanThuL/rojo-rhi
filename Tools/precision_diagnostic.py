@@ -1,7 +1,8 @@
 """Bind the existing Debug GBV precision test's inputs and inspect its ordinary CLI results.
 
 This temporary diagnostic never starts a process. The workflow invokes the original test directly;
-this tool records disk identities, not loaded module identities or hardware acceptance.
+this tool retains a source-bound own-process module observation and disk identities, not memory
+code, active-device vtable ownership or hardware acceptance.
 """
 
 from __future__ import annotations
@@ -9,6 +10,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import ntpath
 import os
 from pathlib import Path
 import re
@@ -39,7 +41,10 @@ SOURCES = (
     "Tests/Support/GpuKit.cpp", "Shaders/Tests/AbiPrecise.slang", "Shaders/Tests/Modules/PreciseTest.slang",
     "Shaders/RojoRHI/RojoRHI.slang", "xmake/slang.lua", "xmake/targets.lua", "xmake/setup.lua",
     "Tools/precision_diagnostic.py", "Tools/shader_library.py", ".github/workflows/ci.yml",
+    "Tests/D3D12/PrecisionModuleDiagnostics.cpp",
 )
+MODULE_NAMES = frozenset({"d3d12.dll", "d3d12core.dll", "d3d12sdklayers.dll", "d3d10warp.dll",
+                          "amd_fidelityfx_loader_dx12.dll", "amd_fidelityfx_upscaler_dx12.dll"})
 
 
 def require(condition, message):
@@ -95,6 +100,109 @@ def validate_result(xml, inventory, invocation):
 
 def compare_closure(before, after):
     return [key for key in ("files", "versions") if before.get(key) != after.get(key)]
+
+
+def canonical_path(value):
+    require(type(value) is str and value and "\x00" not in value, "invalid observed path")
+    if ntpath.splitdrive(value)[0] and ntpath.isabs(value):
+        return ntpath.normcase(ntpath.normpath(value))
+    require(Path(value).is_absolute(), "observed path is not absolute")
+    return str(Path(value))
+
+
+def image_name(value):
+    return ntpath.basename(value.replace("/", "\\")).lower()
+
+
+def validate_mapped_snapshot(value, executable):
+    require(type(value) is dict and type(value.get("schemaVersion")) is int and value["schemaVersion"] == 1,
+            "mapped-image schema differs")
+    require(value.get("complete") is True and value.get("errors") == [], "mapped-image capture is incomplete")
+    require(value.get("case") == CASE and value.get("phase") == "assertionStarting"
+            and type(value.get("sourceLine")) is int and value["sourceLine"] == 75
+            and type(value.get("sourceFile")) is str
+            and ntpath.basename(value["sourceFile"].replace("/", "\\")) == "PrecisionConformanceTests.cpp"
+            and value.get("expression") == "resultBits == 0u", "mapped-image source point differs")
+    require(type(value.get("processId")) is int and 0 < value["processId"] < 2**32
+            and type(value.get("pointerBytes")) is int and value["pointerBytes"] == 8, "mapped-image process metadata differs")
+    expected_exe = canonical_path(executable)
+    require(canonical_path(value.get("executablePath")) == expected_exe, "observed executable differs")
+    snapshots = value.get("snapshots")
+    require(type(snapshots) is list and len(snapshots) == 2, "two complete enumeration observations are required")
+    identities = []
+    for snapshot in snapshots:
+        require(type(snapshot) is dict and snapshot.get("complete") is True and snapshot.get("errors") == [],
+                "module enumeration failed")
+        modules, attempts = snapshot.get("modules"), snapshot.get("attempts")
+        require(type(modules) is list and 1 <= len(modules) <= 4096 and type(attempts) is list and 1 <= len(attempts) <= 3,
+                "module enumeration metadata is missing")
+        for attempt in attempts:
+            require(type(attempt) is dict and attempt.get("success") is True
+                    and type(attempt.get("error")) is int and attempt["error"] == 0
+                    and type(attempt.get("capacityBytes")) is int and 0 < attempt["capacityBytes"] <= 4096 * 8
+                    and type(attempt.get("neededBytes")) is int and attempt["neededBytes"] > 0,
+                    "module enumeration attempt failed")
+        require(attempts[-1]["neededBytes"] <= attempts[-1]["capacityBytes"]
+                and attempts[-1]["neededBytes"] == len(modules) * 8, "module enumeration is truncated")
+        current, bases = [], set()
+        for module in modules:
+            require(type(module) is dict and type(module.get("base")) is str
+                    and re.fullmatch(r"0x[0-9a-fA-F]+", module["base"]), "invalid module base")
+            address = int(module["base"], 16)
+            require(0 < address < 2**64 and address not in bases, "module instance is zero or repeated")
+            bases.add(address)
+            require(type(module.get("size")) is int and 0 < module["size"] < 2**32, "invalid mapped image size")
+            path = canonical_path(module.get("path"))
+            require(type(module.get("pathCharacters")) is int
+                    and module["pathCharacters"] == len(module["path"].encode("utf-16-le")) // 2
+                    and type(module.get("pathCapacity")) is int
+                    and 0 < module["pathCharacters"] < module["pathCapacity"] <= 32768, "mapped path is truncated")
+            current.append((address, path, module["size"]))
+        require(any(path == expected_exe for _, path, _ in current), "executable mapping is absent")
+        identities.append(sorted(current))
+    require(identities[0] == identities[1], "module enumeration changed between observations")
+    relevant = [module for module in snapshots[-1]["modules"] if image_name(module["path"]) in MODULE_NAMES]
+    names = {image_name(module["path"]) for module in relevant}
+    require({"d3d12.dll", "d3d12core.dll", "d3d10warp.dll"} <= names, "required runtime mapping is absent")
+    warp = [module for module in relevant if image_name(module["path"]) == "d3d10warp.dll"]
+    expected_warp = canonical_path(ntpath.join(ntpath.dirname(executable), "d3d10warp.dll")
+                                   if ntpath.splitdrive(executable)[0] else str(Path(executable).parent / "d3d10warp.dll"))
+    expected_core = canonical_path(ntpath.join(ntpath.dirname(executable), "D3D12", "D3D12Core.dll")
+                                   if ntpath.splitdrive(executable)[0] else str(Path(executable).parent / "D3D12/D3D12Core.dll"))
+    return {"relevantImages": relevant, "processId": value["processId"],
+            "expectedUniqueWarp": len(warp) == 1 and canonical_path(warp[0]["path"]) == expected_warp,
+            "expectedPrivateCoreMapped": any(canonical_path(image["path"]) == expected_core for image in relevant)}
+
+
+def mapped_identity(raw, executable, observed_versions, read_bytes=None, frozen_files=None):
+    observation = validate_mapped_snapshot(raw, executable)
+    paths = {image["path"] for image in observation["relevantImages"]}
+    require(type(observed_versions) is dict and set(observed_versions) == paths, "mapped DLL version inventory differs")
+    require(all(type(version) is str and re.fullmatch(r"[0-9]+(?:\.[0-9]+){3}", version)
+                for version in observed_versions.values()), "mapped DLL version is incomplete")
+    read_bytes = read_bytes or (lambda path: Path(path).read_bytes())
+    frozen_files = frozen_files or {}
+    files, errors = {}, []
+    for path in sorted(paths):
+        try:
+            data = read_bytes(path)
+            require(type(data) is bytes and bool(data), "mapped disk image is empty")
+            files[path] = {"size": len(data), "sha256": digest(data), "version": observed_versions[path]}
+            frozen = frozen_files.get(canonical_path(path))
+            files[path]["binding"] = "frozen-input" if frozen is not None else "after-only"
+            if frozen is not None:
+                require({key: files[path][key] for key in ("size", "sha256")} == frozen,
+                        "observed mapped path differs from its frozen input")
+        except (OSError, ValueError) as error:
+            errors.append({"path": path, "errorType": type(error).__name__, "message": str(error)})
+    warp = [image for image in observation["relevantImages"] if image_name(image["path"]) == "d3d10warp.dll"]
+    expected = (observation["expectedUniqueWarp"] and observation["expectedPrivateCoreMapped"] and len(warp) == 1
+                and files.get(warp[0]["path"], {}).get("sha256") == WARP_SHA
+                and files.get(warp[0]["path"], {}).get("version") == "1.0.20.0")
+    return {"complete": not errors, "expectedDeployment": expected and not errors, "errors": errors,
+            "expectedPrivateCoreMapped": observation["expectedPrivateCoreMapped"],
+            "images": observation["relevantImages"], "files": files, "processId": observation["processId"],
+            "identityScope": "mapped paths at the assertion plus disk identities read afterward; not active-Core, JIT or memory code"}
 
 
 def verify_config(text):
@@ -188,9 +296,28 @@ def after(root, output):
     invocation = json.loads((output / "invocation.json").read_text(encoding="utf-8-sig"))
     outcome = validate_result((output / "result.xml").read_bytes(),
                               (output / "inventory.stdout").read_text(encoding="utf-8-sig"), invocation)
+    try:
+        require(b"precision mapped-image observation:" not in (output / "test.stderr").read_bytes(),
+                "mapped-image observer reported failure; see test.stderr")
+        require(invocation.get("moduleObservationRequested") is True
+                and invocation.get("moduleObservationPath") == str((output / "mapped-modules.json").resolve()),
+                "mapped-image observation was not requested at its fixed output")
+        require(not (output / "mapped-versions-error.txt").exists(), "mapped-image disk version collection failed")
+        frozen = {canonical_path(str((root / name).resolve())): value for name, value in final["files"].items()}
+        identity = mapped_identity(json.loads((output / "mapped-modules.json").read_text(encoding="utf-8")),
+                                   str((root / TEST_DIR / "RojoRHITests.exe").resolve()),
+                                   json.loads((output / "mapped-versions.json").read_text(encoding="utf-8-sig")),
+                                   frozen_files=frozen)
+    except (OSError, ValueError) as error:
+        identity = {"complete": False, "expectedDeployment": False,
+                    "errors": [{"errorType": type(error).__name__, "message": str(error)}]}
+    write_json(output / "mapped-after.json", identity)
+    passed = outcome["passed"] and identity["complete"] and identity["expectedDeployment"]
     write_json(output / "result.json", {"case": CASE, "invocation": invocation, "outcome": outcome,
-               "diskInputsUnchanged": True, "normalGateAcceptance": False, "identityScope": "disk only"})
-    return 0 if outcome["passed"] else 1
+               "numericalComplete": True, "diagnosticPassed": passed, "mappedIdentity": identity,
+               "diskInputsUnchanged": True, "normalGateAcceptance": False,
+               "identityScope": "source-bound mapped-image observation and separate disk identities"})
+    return 0 if passed else 1
 
 
 def main(argv=None):

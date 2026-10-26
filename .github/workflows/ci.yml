@@ -691,6 +691,8 @@ jobs:
             inventoryArguments = $inventoryArgs; arguments = $testArgs
             inventoryExit = $null; testExit = $null
             debugFeatures = 'compiled-in GBV, bound by the pre-test snapshot'
+            moduleObservationRequested = $true
+            moduleObservationPath = (Join-Path $out 'mapped-modules.json')
           }
           try {
             Push-Location $cwd
@@ -698,8 +700,12 @@ jobs:
               & $exe @inventoryArgs 1> (Join-Path $out 'inventory.stdout') 2> (Join-Path $out 'inventory.stderr')
               $invocation.inventoryExit = $LASTEXITCODE
               if ($LASTEXITCODE -eq 0) {
-                & $exe @testArgs 1> (Join-Path $out 'test.stdout') 2> (Join-Path $out 'test.stderr')
-                $invocation.testExit = $LASTEXITCODE
+                if (Test-Path Env:ROJORHI_PRECISION_MODULES_PATH) { throw 'unexpected existing mapped-image diagnostic environment' }
+                $env:ROJORHI_PRECISION_MODULES_PATH = $invocation.moduleObservationPath
+                try {
+                  & $exe @testArgs 1> (Join-Path $out 'test.stdout') 2> (Join-Path $out 'test.stderr')
+                  $invocation.testExit = $LASTEXITCODE
+                } finally { Remove-Item Env:ROJORHI_PRECISION_MODULES_PATH }
               }
             } finally { Pop-Location }
           } catch {
@@ -717,6 +723,27 @@ jobs:
             } catch {
               $_ | Out-String | Set-Content -Encoding utf8 (Join-Path $out 'versions-error.txt')
             }
+            try {
+              $mappedVersions = [ordered]@{}
+              $mappedErrors = [ordered]@{}
+              $mappedPath = Join-Path $out 'mapped-modules.json'
+              $mapped = Get-Content -Raw -LiteralPath $mappedPath | ConvertFrom-Json -AsHashtable
+              $relevant = @('d3d12.dll', 'd3d12core.dll', 'd3d12sdklayers.dll', 'd3d10warp.dll',
+                            'amd_fidelityfx_loader_dx12.dll', 'amd_fidelityfx_upscaler_dx12.dll')
+              foreach ($mappedImage in $mapped.snapshots[-1].modules) {
+                if ([IO.Path]::GetFileName($mappedImage.path).ToLowerInvariant() -notin $relevant) { continue }
+                try {
+                  $v = (Get-Item -LiteralPath $mappedImage.path).VersionInfo
+                  $mappedVersions[$mappedImage.path] = '{0}.{1}.{2}.{3}' -f $v.FileMajorPart, $v.FileMinorPart, $v.FileBuildPart, $v.FilePrivatePart
+                } catch { $mappedErrors[$mappedImage.path] = $_ | Out-String }
+              }
+              $mappedVersions | ConvertTo-Json | Set-Content -Encoding utf8 (Join-Path $out 'mapped-versions.json')
+              if ($mappedErrors.Count -ne 0) {
+                $mappedErrors | ConvertTo-Json | Set-Content -Encoding utf8 (Join-Path $out 'mapped-versions-error.txt')
+              }
+            } catch {
+              $_ | Out-String | Set-Content -Encoding utf8 (Join-Path $out 'mapped-versions-error.txt')
+            }
             python3 Tools/precision_diagnostic.py after
             if ($LASTEXITCODE -ne 0) { exit 1 }
           }
@@ -727,6 +754,7 @@ jobs:
           name: focused-precision
           path: build/precision-focused/
           if-no-files-found: error
+          include-hidden-files: true
   # The benchmark harness on D3D12 (WARP): the Windows host layer, the native arm's context and the checks of both, built
   # warning-free in Debug with the debug layer and in Release with no debug feature. It never times anything (ADR 0014).
   d3d12-bench:

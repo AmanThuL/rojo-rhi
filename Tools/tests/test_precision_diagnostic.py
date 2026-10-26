@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import copy
 import struct
 import tempfile
 import unittest
@@ -196,6 +197,248 @@ class PrecisionSnapshotTests(unittest.TestCase):
             with patch.object(diagnostic, "DXIL_SHA", hashlib.sha256(dxil).hexdigest()), \
                  patch.object(diagnostic, "WARP_SHA", hashlib.sha256(b"runtime").hexdigest()), self.assertRaises(ValueError):
                 diagnostic.checked_closure(root, output)
+
+
+def mapped_snapshot(executable=r"D:\work\build\windows\x64\debug\rojorhi-test\RojoRHITests.exe", system_folder=None):
+    folder = str(Path(executable).parent) if executable.startswith("/") else executable.rsplit("\\", 1)[0]
+    separator = "/" if executable.startswith("/") else "\\"
+    system_folder = system_folder or r"C:\Windows\System32"
+    paths = [executable, folder + separator + "D3D12" + separator + "D3D12Core.dll",
+             folder + separator + "d3d10warp.dll", system_folder + separator + "d3d12.dll",
+             system_folder + separator + "D3D12Core.dll"]
+    modules = [{"path": path, "base": hex((i + 1) * 65536), "size": 4096,
+                "pathCharacters": len(path.encode("utf-16-le")) // 2, "pathCapacity": 260} for i, path in enumerate(paths)]
+    snapshot = {"complete": True, "errors": [], "attempts": [{"success": True, "error": 0,
+                "capacityBytes": 1024, "neededBytes": len(modules) * 8}], "modules": modules}
+    return {"schemaVersion": 1, "complete": True, "errors": [], "case": diagnostic.CASE,
+            "sourceFile": "Tests/Conformance/PrecisionConformanceTests.cpp", "sourceLine": 75,
+            "expression": "resultBits == 0u", "phase": "assertionStarting", "processId": 1234,
+            "pointerBytes": 8, "executablePath": executable, "snapshots": [snapshot, copy.deepcopy(snapshot)]}
+
+
+class PrecisionMappedModulesTests(unittest.TestCase):
+    def validate(self, raw):
+        return getattr(diagnostic, "validate_mapped_snapshot", lambda *unused: {})(raw, raw["executablePath"])
+
+    def test_all_core_instances_remain_distinct(self):
+        raw = mapped_snapshot()
+        result = self.validate(raw)
+        self.assertEqual(len(result.get("relevantImages", [])), 4)
+        self.assertEqual(len([m for m in result.get("relevantImages", []) if m["path"].lower().endswith("d3d12core.dll")]), 2)
+
+    def test_wrong_trigger_and_types_are_rejected(self):
+        for key, value in (("case", "another case"), ("sourceLine", 74), ("sourceLine", True),
+                           ("sourceFile", "Another.cpp"), ("expression", "resultBits != 0u"),
+                           ("phase", "testCaseEnded"), ("processId", 0), ("processId", True), ("pointerBytes", 4)):
+            raw = mapped_snapshot()
+            raw[key] = value
+            with self.subTest(key=key), self.assertRaises(ValueError):
+                self.validate(raw)
+
+    def test_failed_partial_and_unstable_enumerations_are_rejected(self):
+        samples = []
+        raw = mapped_snapshot(); raw["complete"] = False; raw["errors"] = ["native failure"]; samples.append(raw)
+        raw = mapped_snapshot(); raw["snapshots"] = raw["snapshots"][:1]; samples.append(raw)
+        raw = mapped_snapshot(); raw["snapshots"][1]["modules"][0]["size"] += 1; samples.append(raw)
+        raw = mapped_snapshot(); raw["snapshots"][0]["attempts"][0]["success"] = False; samples.append(raw)
+        raw = mapped_snapshot(); raw["snapshots"][0]["attempts"][0]["neededBytes"] = 2048; samples.append(raw)
+        for raw in samples:
+            with self.subTest(raw=raw), self.assertRaises(ValueError):
+                self.validate(raw)
+
+    def test_truncated_relative_and_repeated_instance_paths_are_rejected(self):
+        for change in ("truncate", "relative", "repeat", "base", "nul"):
+            raw = mapped_snapshot()
+            for snapshot in raw["snapshots"]:
+                if change == "truncate": snapshot["modules"][0]["pathCapacity"] = 1
+                if change == "relative": snapshot["modules"][0]["path"] = "relative.dll"
+                if change == "repeat": snapshot["modules"][1]["base"] = snapshot["modules"][0]["base"]
+                if change == "base": snapshot["modules"][0]["base"] = "0x0"
+                if change == "nul": snapshot["modules"][0]["path"] += "\x00"
+            with self.subTest(change=change), self.assertRaises(ValueError):
+                self.validate(raw)
+
+    def test_unexpected_or_duplicate_warp_is_observed_but_not_accepted(self):
+        for duplicate in (False, True):
+            raw = mapped_snapshot()
+            for snapshot in raw["snapshots"]:
+                entry = copy.deepcopy(snapshot["modules"][2])
+                entry.update(path=r"C:\Windows\System32\d3d10warp.dll", base="0x990000")
+                entry["pathCharacters"] = len(entry["path"])
+                if duplicate: snapshot["modules"].append(entry)
+                else: snapshot["modules"][2] = entry
+                snapshot["attempts"][-1]["neededBytes"] = len(snapshot["modules"]) * 8
+            result = self.validate(raw)
+            self.assertEqual(result.get("expectedUniqueWarp"), False)
+            self.assertEqual(len([m for m in result.get("relevantImages", []) if m["path"].lower().endswith("d3d10warp.dll")]),
+                             2 if duplicate else 1)
+
+    def test_observed_disk_paths_are_hashed_and_versions_are_required(self):
+        raw = mapped_snapshot()
+        paths = {m["path"] for m in raw["snapshots"][0]["modules"] if m["path"].lower().endswith(".dll")}
+        versions = {p: "1.0.20.0" for p in paths}
+        function = getattr(diagnostic, "mapped_identity", lambda *args, **kwargs: {})
+        result = function(raw, raw["executablePath"], versions, read_bytes=lambda path: b"runtime")
+        self.assertEqual(set(result.get("files", {})), paths)
+        self.assertEqual(result.get("complete"), True)
+        with self.assertRaises(ValueError):
+            function(raw, raw["executablePath"], {}, read_bytes=lambda path: b"runtime")
+
+    def test_mistyped_error_and_out_of_range_native_metadata_fail(self):
+        for field in ("error-type", "capacity", "process"):
+            raw = mapped_snapshot()
+            if field == "process": raw["processId"] = 2**40
+            for snapshot in raw["snapshots"]:
+                if field == "error-type": snapshot["attempts"][0]["error"] = False
+                if field == "capacity": snapshot["attempts"][0]["capacityBytes"] = 2**40
+            with self.subTest(field=field), self.assertRaises(ValueError):
+                self.validate(raw)
+
+    def test_system_core_alone_does_not_confirm_the_expected_private_mapping(self):
+        raw = mapped_snapshot()
+        for snapshot in raw["snapshots"]:
+            del snapshot["modules"][1]
+            snapshot["attempts"][0]["neededBytes"] = len(snapshot["modules"]) * 8
+        versions = {m["path"]: "1.0.20.0" for m in raw["snapshots"][0]["modules"] if m["path"].endswith(".dll")}
+        with patch.object(diagnostic, "WARP_SHA", hashlib.sha256(b"runtime").hexdigest()):
+            result = diagnostic.mapped_identity(raw, raw["executablePath"], versions, read_bytes=lambda path: b"runtime")
+        self.assertEqual(result.get("complete"), True)
+        self.assertEqual(result.get("expectedPrivateCoreMapped"), False)
+        self.assertEqual(result.get("expectedDeployment"), False)
+
+
+class PrecisionMappedOutcomeTests(unittest.TestCase):
+    def prepared(self, root, failed=False, observed=True):
+        fixture = PrecisionSnapshotTests()
+        dxil = fixture.fixture(root)
+        output, _, versions = fixture.prepare(root, dxil)
+        (output / "versions-after.json").write_text(json.dumps(versions))
+        (output / "inventory.stdout").write_text(diagnostic.CASE + "\n")
+        for name in ("inventory.stderr", "test.stdout", "test.stderr"):
+            (output / name).write_text("")
+        (output / "result.xml").write_bytes(result_xml(7, 1) if failed else result_xml())
+        invocation = {"case": diagnostic.CASE, "inventoryExit": 0, "testExit": 42 if failed else 0,
+                      "moduleObservationRequested": True,
+                      "moduleObservationPath": str((output / "mapped-modules.json").resolve())}
+        (output / "invocation.json").write_text(json.dumps(invocation))
+        if observed:
+            executable = str((root / diagnostic.TEST_DIR / "RojoRHITests.exe").resolve())
+            system_folder = root / "external-system"
+            system_folder.mkdir()
+            for name in ("d3d12.dll", "D3D12Core.dll"):
+                (system_folder / name).write_bytes(b"external runtime")
+            raw = mapped_snapshot(executable, str(system_folder))
+            (output / "mapped-modules.json").write_text(json.dumps(raw))
+            (output / "mapped-versions.json").write_text(json.dumps({m["path"]: "1.0.20.0"
+                for m in raw["snapshots"][0]["modules"] if m["path"].endswith(".dll")}))
+        return output, dxil
+
+    def finish(self, root, output, dxil):
+        with patch.object(diagnostic, "DXIL_SHA", hashlib.sha256(dxil).hexdigest()), \
+             patch.object(diagnostic, "WARP_SHA", hashlib.sha256(b"runtime").hexdigest()):
+            return diagnostic.after(root, output)
+
+    def test_numeric_pass_without_observer_does_not_pass_diagnostic(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            output, dxil = self.prepared(root, observed=False)
+            self.assertEqual(self.finish(root, output, dxil), 1)
+            result = json.loads((output / "result.json").read_text())
+            self.assertTrue(result["outcome"]["passed"])
+            self.assertEqual(result.get("mappedIdentity", {}).get("complete"), False)
+
+    def test_numeric_failure_and_valid_identity_remain_independent(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            output, dxil = self.prepared(root, failed=True)
+            self.assertEqual(self.finish(root, output, dxil), 1)
+            result = json.loads((output / "result.json").read_text())
+            self.assertFalse(result["outcome"]["passed"])
+            self.assertEqual(result.get("mappedIdentity", {}).get("expectedDeployment"), True)
+
+    def test_positive_identity_keeps_after_only_system_files_distinct(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            output, dxil = self.prepared(root)
+            self.assertEqual(self.finish(root, output, dxil), 0)
+            identity = json.loads((output / "result.json").read_text()).get("mappedIdentity", {})
+            self.assertEqual(identity.get("complete"), True)
+            self.assertEqual(identity.get("expectedDeployment"), True)
+            files = identity.get("files", {})
+            self.assertEqual({item.get("binding") for item in files.values()}, {"frozen-input", "after-only"})
+
+    def test_partial_write_and_sticky_version_error_preserve_numeric_result(self):
+        for error in ("partial", "versions"):
+            with self.subTest(error=error), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+                output, dxil = self.prepared(root)
+                if error == "partial": (output / "mapped-modules.json").write_text('{"incomplete":')
+                else: (output / "mapped-versions-error.txt").write_text("an earlier metadata failure")
+                self.assertEqual(self.finish(root, output, dxil), 1)
+                result = json.loads((output / "result.json").read_text())
+                self.assertTrue(result["outcome"]["passed"])
+                self.assertEqual(result.get("mappedIdentity", {}).get("complete"), False)
+
+    def test_complete_json_with_observer_write_or_close_error_stays_failed(self):
+        for marker in ("mapped-image output write failed", "mapped-image output close failed"):
+            for failed in (False, True):
+                with self.subTest(marker=marker, failed=failed), tempfile.TemporaryDirectory() as directory:
+                    root = Path(directory)
+                    output, dxil = self.prepared(root, failed=failed)
+                    raw = (output / "mapped-modules.json").read_bytes()
+                    stderr = ("precision mapped-image observation: " + marker + "\n").encode()
+                    (output / "test.stderr").write_bytes(stderr)
+                    self.assertEqual(self.finish(root, output, dxil), 1)
+                    result = json.loads((output / "result.json").read_text())
+                    self.assertTrue(result["numericalComplete"])
+                    self.assertEqual(result["outcome"], {"passed": not failed, "assertions": 8,
+                                     "successes": 7 if failed else 8, "failures": 1 if failed else 0})
+                    self.assertFalse(result["mappedIdentity"]["complete"])
+                    self.assertFalse(result["mappedIdentity"]["expectedDeployment"])
+                    self.assertIn("observer reported failure", result["mappedIdentity"]["errors"][0]["message"])
+                    self.assertFalse(result["diagnosticPassed"])
+                    self.assertEqual((output / "test.stderr").read_bytes(), stderr)
+                    self.assertEqual((output / "mapped-modules.json").read_bytes(), raw)
+
+    def test_observer_error_channel_read_failure_preserves_numeric_result(self):
+        for failed in (False, True):
+            with self.subTest(failed=failed), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+                output, dxil = self.prepared(root, failed=failed)
+                stderr = output / "test.stderr"
+                raw = (output / "mapped-modules.json").read_bytes()
+                read_bytes = Path.read_bytes
+
+                def read(path):
+                    if path == stderr:
+                        raise OSError("synthetic observer error-channel read failure")
+                    return read_bytes(path)
+
+                with patch.object(Path, "read_bytes", read):
+                    self.assertEqual(self.finish(root, output, dxil), 1)
+                result = json.loads((output / "result.json").read_text())
+                self.assertTrue(result["numericalComplete"])
+                self.assertEqual(result["outcome"]["passed"], not failed)
+                self.assertEqual(result["outcome"]["assertions"], 8)
+                self.assertFalse(result["mappedIdentity"]["complete"])
+                self.assertFalse(result["mappedIdentity"]["expectedDeployment"])
+                self.assertEqual(result["mappedIdentity"]["errors"][0]["errorType"], "OSError")
+                self.assertFalse(result["diagnosticPassed"])
+                self.assertEqual(stderr.read_bytes(), b"")
+                self.assertEqual((output / "mapped-modules.json").read_bytes(), raw)
+
+    def test_unrelated_stderr_does_not_invalidate_complete_identity(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            output, dxil = self.prepared(root)
+            stderr = b"ordinary diagnostic output\n\xff\n"
+            (output / "test.stderr").write_bytes(stderr)
+            self.assertEqual(self.finish(root, output, dxil), 0)
+            result = json.loads((output / "result.json").read_text())
+            self.assertTrue(result["numericalComplete"])
+            self.assertTrue(result["mappedIdentity"]["complete"])
+            self.assertTrue(result["diagnosticPassed"])
+            self.assertEqual((output / "test.stderr").read_bytes(), stderr)
 
 
 if __name__ == "__main__":
