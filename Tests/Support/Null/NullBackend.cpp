@@ -129,4 +129,10 @@ namespace rojoRHI::test {
     {
         return {};
     }
+
+    //==================================================================================================================
+    std::string_view fusesPreciseArithmetic()
+    {
+        return {};
+    }
 } // namespace rojoRHI::test

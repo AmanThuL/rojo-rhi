@@ -119,6 +119,9 @@ jobs:
             Write-Host '::notice::dxcompiler.dll and dxil.dll not found in the Windows SDK; DXIL will be skipped'
           }
       - run: xmake setup
+      # The shader rule's fixtures run xmake on a mock compiler, so they skip in the policy job, which has no xmake.
+      - if: runner.os == 'macOS'
+        run: python3 -m unittest Tools.tests.test_slang_rule -v
       # Some hosted images ship Xcode without the Metal toolchain the metallibs and shader libraries need.
       - if: runner.os == 'macOS'
         run: xcrun metal --version >/dev/null 2>&1 || xcodebuild -downloadComponent MetalToolchain
