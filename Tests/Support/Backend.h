@@ -47,4 +47,8 @@ namespace rojoRHI::test {
     /// Why the compiled backend's device never completes a submitted upscale, or empty when it completes one: a case that
     /// submits an upscale skips with the reason.
     std::string_view upscalesNeverComplete();
+
+    /// Why the compiled backend's device is known to fuse a precise file's multiply and add, or empty when it is not: the
+    /// precision case then accepts the fused result as well as the exact one, and skips with the reason on the fused one.
+    std::string_view fusesPreciseArithmetic();
 } // namespace rojoRHI::test

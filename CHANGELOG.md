@@ -23,6 +23,8 @@
   not the viewport's, which lags an OS resize by a frame.
 - The ImGui adapter copies a texture update of several rectangles as one bounding rectangle, which
   a validating device accepts.
+- The shader rule's `slang.precise_files` compiles the entry files it names with precise floating
+  point on every target ([shader ABI](docs/spec/05-shader-abi-part4.md#precise-floating-point)).
 
 ## 0.1.0 (2026-10-22)
 

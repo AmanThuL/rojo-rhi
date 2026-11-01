@@ -114,7 +114,9 @@ it; on hardware they run in every configuration. If an upscale does not complete
 validation there either, rerun those two files with `--rojorhi_d3d12_debug=layer` (the CI configure
 `xmake f -m debug -y -o build/layer`) and report the hang. Cases that SKIP on WARP for a driver
 limit (`maxDrawIndirectCount`, issue #109) are read in the log: a SKIP that is not a Debug-only
-validation skip is a result to record.
+validation skip is a result to record. The `[precision]` case skips on WARP 1.0.21 alone, which
+returns the fused -2^-46 ([evidence](../research/2026-10-26-warp-precision-runtime.md)); on
+hardware it requires 0.
 
 Success: every case passes, unchanged, in Debug with GPU-based validation and in Release, with the
 debug layer reporting no message of severity corruption, error or warning. Name the adapter and the

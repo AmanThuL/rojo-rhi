@@ -5,10 +5,10 @@
 
 This chapter defines how a shader reaches data: the root block, the `RojoRHI.slang` module and the
 layout rules shared by C++ and Slang. It continues in [part 2](05-shader-abi-part2.md), which
-defines the `Addr` accessors and heap-index fetches, and [part 3](05-shader-abi-part3.md), which
-defines the built-ins. Notation, cost classes and valid-usage identifiers follow
-[conventions](00-conventions.md). The decisions behind this chapter are
-[ADR 0011](../decisions/0011-shader-abi.md), and
+defines the `Addr` accessors and heap-index fetches, [part 3](05-shader-abi-part3.md), which
+defines the built-ins, and [part 4](05-shader-abi-part4.md), on precise floating point. Notation,
+cost classes and valid-usage identifiers follow [conventions](00-conventions.md). The decisions
+behind this chapter are [ADR 0011](../decisions/0011-shader-abi.md), and
 [ADR 0018](../decisions/0018-root-srv-and-reserved-bindings.md) for the root's D3D12 form and the
 reserved bindings. The D3D12 lowerings are implemented, verified on WARP only, not on hardware
 ([evidence](../research/2026-10-21-d3d12-warp-evidence.md)).

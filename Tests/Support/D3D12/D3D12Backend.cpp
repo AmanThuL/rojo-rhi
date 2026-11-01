@@ -193,4 +193,15 @@ namespace rojoRHI::test {
         return {};
 #endif
     }
+
+    //==================================================================================================================
+    std::string_view fusesPreciseArithmetic()
+    {
+#if defined(ROJORHI_D3D12_ADAPTER_WARP)
+        return "WARP 1.0.21, the software adapter, fuses the multiply and add of DXIL that WARP 1.0.13 runs exactly "
+               "(docs/research/2026-10-26-warp-precision-runtime.md); the exact result waits for a hardware adapter (#21)";
+#else
+        return {};
+#endif
+    }
 } // namespace rojoRHI::test

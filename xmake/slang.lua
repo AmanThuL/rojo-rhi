@@ -15,6 +15,11 @@
 --                        is written into the generated header directory below. Renaming it leaves the header
 --                        of the old name there until the build directory is cleaned
 --   slang.embed_files    optional: basenames of the entry files to embed; default every entry file
+--   slang.precise_files  optional: basenames of the entry files compiled with precise floating point, exactly
+--                        as add_files names them minus `.slang`; default none. Every entry of a named file
+--                        gets Slang `-fp-mode precise` on every target, DXIL also DXC's `-Gis` and the
+--                        metallib `-fno-fast-math -ffp-contract=off`. A name that is not an entry file of
+--                        the target fails the build before any compile
 --
 -- Inputs: every add_files input declares at least one [shader("<stage>")] entry outside comments, or the build
 -- fails; shared modules are reached through slang.includedirs, never listed. Outputs are flat, so basenames are
@@ -52,7 +57,11 @@
 -- The work runs in before_build so the generated headers exist before the target's C++ compiles. Each output is
 -- skipped while it is newer than every entry, every module under moduledir and slang.includedirs, the compiler
 -- and this rule. A shader library is also rebuilt when its metallib or DXIL, reflection, SPIR-V or the packaging
--- tool is newer.
+-- tool is newer. Each entry file's compile policy (the compiler's path and version, the -I directories in order
+-- and the precision flags) is recorded in <name>.precision, written after every output of the file is built: a
+-- record that is missing or names another policy removes the record and every output of the file first, so a
+-- changed policy, or a build that failed partway, rebuilds the whole file under one policy. The first build
+-- after the record was introduced rebuilds every file once.
 
 -- Script scope does not see this file's locals, so the helpers live inside the callback.
 rule("rojorhi.slang")
@@ -182,6 +191,20 @@ rule("rojorhi.slang")
             end
         end
 
+        -- Precision belongs to an entry file, so a name must be one of this target's entry files, as for embedding.
+        local precise = {}
+        local entry_names = {}
+        for _, name in ipairs(names) do
+            entry_names[name] = true
+        end
+        for _, name in ipairs(table.wrap(target:values("slang.precise_files"))) do
+            if not entry_names[name] then
+                os.raise("rojorhi.slang: slang.precise_files names '%s', which is not an entry file of target '%s'",
+                         tostring(name), target:name())
+            end
+            precise[name] = true
+        end
+
         -- Metallibs and the shader libraries around them need the Metal toolchain, which only macOS has.
         local has_metal = is_host("macosx") and try {function ()
             os.runv("xcrun", {"-f", "metal"}); return true
@@ -211,10 +234,11 @@ rule("rojorhi.slang")
             return not os.isfile(output) or os.mtime(output) < newest
         end
         -- slangc (v2026.14.1) leaves an -o file untouched when its new text is identical, which would keep
-        -- it stale on every later build, so a compile first removes the outputs it rewrites.
+        -- it stale on every later build, so a compile first removes the outputs it rewrites; os.rm raises when
+        -- an output exists and cannot be removed.
         local function clear(...)
             for _, output in ipairs({...}) do
-                os.tryrm(output)
+                os.rm(output)
             end
         end
 
@@ -272,10 +296,35 @@ rule("rojorhi.slang")
         for _, dir in ipairs(includedirs) do
             table.join2(include_args, {"-I", dir})
         end
+        -- Each file's record names the compiler, its version and the -I directories besides its precision flags.
+        local version_out, version_err = os.iorunv(slangc, {"-version"})
+        local version = ((version_out or "") .. (version_err or "")):trim()
+        local common_policy = format("slangc %s %s\nincludes %s\n", path.absolute(slangc), version,
+                                     table.concat(include_args, " "))
         for _, source in ipairs(sources) do
             local name = path.basename(source)
             local entries = entries_of[source]
-            local base = table.join({source}, include_args)
+            local slang_args = precise[name] and {"-fp-mode", "precise"} or {}
+            local dxc_args = precise[name] and {"-Xdxc", "-Gis"} or {}
+            local metal_args = precise[name] and {"-fno-fast-math", "-ffp-contract=off"} or {}
+            local base = table.join({source}, include_args, slang_args)
+
+            -- No output's time says which flags built it, so the record does: a missing or different record
+            -- removes itself, then every output of the file, and the per-output checks below rebuild them all.
+            local record = path.join(outdir, name .. ".precision")
+            local policy = common_policy .. format("fp-mode %s\ndxc %s\nmetal %s\n", table.concat(slang_args, " "),
+                                                   table.concat(dxc_args, " "), table.concat(metal_args, " "))
+            local recorded = os.isfile(record) and io.readfile(record) == policy
+            if not recorded then
+                os.rm(record)
+                for _, extension in ipairs({"metal", "metal.json", "spv", "hlsl", "nulllib", "metallib", "metal4lib",
+                                            "dxil", "d3d12lib"}) do
+                    os.rm(path.join(outdir, name .. "." .. extension))
+                end
+                for _, entry in ipairs(entries) do
+                    os.rm(path.join(outdir, format("%s.%s.dxil", name, entry.name)))
+                end
+            end
             -- The source is named once, before its first stale output is rebuilt, so a no-op build prints none.
             local announced = false
             local function run(...)
@@ -323,8 +372,8 @@ rule("rojorhi.slang")
                 local lib = path.join(outdir, name .. ".metallib")
                 if stale(lib) then
                     clear(lib)
-                    run("xcrun", "metal", {"-sdk", "macosx", "metal", "-std=metal4.0",
-                        "-mmacosx-version-min=26.0", "-o", lib, msl})
+                    run("xcrun", "metal", table.join({"-sdk", "macosx", "metal", "-std=metal4.0",
+                        "-mmacosx-version-min=26.0"}, metal_args, {"-o", lib, msl}))
                 end
                 local library = path.join(outdir, name .. ".metal4lib")
                 local inputs = math.max(newest, os.mtime(lib), os.mtime(reflection), os.mtime(spv), os.mtime(tool))
@@ -343,7 +392,7 @@ rule("rojorhi.slang")
                 if dxil_available and stale(dxil) then
                     clear(dxil)
                     run(slangc, "slangc", table.join(base, {"-D", "ROJORHI_TARGET_HLSL", "-target", "dxil",
-                        "-profile", "sm_6_6", "-entry", entry.name, "-stage", entry.stage, "-o", dxil}))
+                        "-profile", "sm_6_6", "-entry", entry.name, "-stage", entry.stage, "-o", dxil}, dxc_args))
                 end
                 table.insert(dxil_args, "--dxil")
                 table.insert(dxil_args, entry.name .. "=" .. dxil)
@@ -359,6 +408,10 @@ rule("rojorhi.slang")
                     run(python, "shader_library", table.join({tool, "--format", "d3d12", "--module", module,
                         "--reflection", reflection, "--spirv", spv}, dxil_args, {"--out", library}))
                 end
+            end
+            -- Every compile above raised on failure, so the outputs on disk were all built under this policy.
+            if not recorded then
+                io.writefile(record, policy)
             end
         end
 

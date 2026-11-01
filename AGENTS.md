@@ -201,7 +201,7 @@ the ABI stamp into each shader library (`.metal4lib`), and the Metal 4 backend's
 `ShaderAbiMismatch` and compiles pipelines from it; the `[conformance]` cases run the ABI
 shaders on the GPU, the T3 tier's other half. The Null backend loads a text format, which the
 rule writes for every entry file as `.nulllib` (see [command
-recording](docs/architecture/null-backend-recording.md)).
+recording](docs/architecture/null-backend-recording.md)). `slang.precise_files`: chapter 05.
 
 ## Hard rules
 

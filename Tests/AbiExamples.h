@@ -45,4 +45,16 @@ namespace rojoRHI::test {
     static_assert(offsetof(AtomicRoot, index) == 20);
     static_assert(offsetof(AtomicRoot, value) == 24);
     static_assert(offsetof(AtomicRoot, pad) == 28);
+
+    /// The flat root of the precise multiply-add entry and the reflection probe.
+    struct alignas(16) PreciseRoot
+    {
+        Addr input;  ///< Four floats: the factors x and y, the addend z and an unused word.
+        Addr output; ///< One float, x * y + z.
+    };
+
+    static_assert(alignof(PreciseRoot) == 16);
+    static_assert(sizeof(PreciseRoot) == 16);
+    static_assert(offsetof(PreciseRoot, input) == 0);
+    static_assert(offsetof(PreciseRoot, output) == 8);
 } // namespace rojoRHI::test
