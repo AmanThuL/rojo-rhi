@@ -562,6 +562,10 @@ TEST_CASE("a split keeps the attachment's cleared and drawn contents across the 
     list.beginScope("test.scope");
     list.draw(3);
     metal4::splitPass(CommandListImpl::of(list));
+    // A counted draw splits the pass and then merges the barrier that orders the ended encoder's stores before the resumed
+    // encoder's loads (`runKernel`); Metal 4 tracks no hazard between render encoders, so a split alone leaves the load racing
+    // the store. The case splits without a counted draw, so it merges that barrier as the counted draw does.
+    CommandListImpl::of(list).encoders.barriers().merge(MTL::StageFragment, MTL::StageFragment, MTL4::VisibilityOptionDevice);
     list.setScissor(Rect2D{ 0, 8, 16, 8 });
     list.draw(3);
     list.endScope();

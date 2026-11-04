@@ -290,7 +290,9 @@ namespace rojoRHI::metal4 {
 
     /// Splits the open pass when its render encoder is open: pops the in-pass debug groups from the encoder, innermost first,
     /// stores every attachment (`finishPass` with `split`) and ends the encoder, so the next `ensureRender` resumes the pass.
-    /// Does nothing when the render encoder is not open.
+    /// Does nothing when the render encoder is not open. It orders nothing: Metal 4 tracks no hazard between render encoders,
+    /// so a caller that split merges a barrier from `StageFragment` to `StageFragment` before the pass resumes, after any
+    /// compute work it records in between, so that work's opening barrier does not wait on the ended encoder's fragments.
     void splitPass(CommandListImpl& list);
 
     /// Sets `pipeline`'s render state on the open render encoder where it differs from what the encoder holds: the pipeline
