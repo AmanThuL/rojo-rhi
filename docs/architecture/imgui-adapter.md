@@ -199,7 +199,7 @@ consecutive resizes) and one pixel case. They build into `RojoRHITests` and run 
 |---|---|
 | Null, macOS and Windows | every case except the pixel case, which skips without a GPU |
 | Metal 4, locally | every case, under `MTL_DEBUG_LAYER=1`; a validation message fails the run |
-| d3d12 CI job | every case on WARP, Debug and Release; WARP is not hardware |
+| d3d12 | compiled by the `d3d12-build` CI job, run locally; every case passed on WARP in Debug and Release in hosted CI until 2026-11-04, and WARP is not hardware |
 
 The `metal4` CI job compiles and inventories the entry without running it.
 

@@ -25,6 +25,12 @@
   a validating device accepts.
 - The shader rule's `slang.precise_files` compiles the entry files it names with precise floating
   point on every target ([shader ABI](docs/spec/05-shader-abi-part4.md#precise-floating-point)).
+- Hosted CI executes nothing on D3D12: the `d3d12` and `d3d12-bench` jobs, which ran it on WARP,
+  give way to `d3d12-build`, which compiles the backend, its tests, probes and benchmark harness in
+  Debug and Release and checks DXIL and source layout
+  ([ADR 0027](docs/decisions/0027-hosted-ci-compiles-d3d12.md)). D3D12 stays implemented, verified
+  on WARP only, not on hardware; [the hardware run](docs/guides/d3d12-hardware-run.md) verifies it
+  next.
 
 ## 0.1.0 (2026-10-22)
 

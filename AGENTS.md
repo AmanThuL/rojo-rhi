@@ -54,7 +54,8 @@ founding documents ([architecture](docs/architecture/overview.md) maps the direc
   [0024 vertexIndex excludes the base](docs/decisions/0024-vertex-index-excludes-the-base.md),
   [0025 the per-operation CPU budget has a floor of 5 ns per RojoRHI call](
   docs/decisions/0025-cpu-budget-per-call-floor.md),
-  [0026 D3D12 before hardware](docs/decisions/0026-d3d12-implemented-before-hardware.md)
+  [0026 D3D12 before hardware](docs/decisions/0026-d3d12-implemented-before-hardware.md),
+  [0027 hosted CI compiles D3D12](docs/decisions/0027-hosted-ci-compiles-d3d12.md)
 - API reference: [docs/spec/](docs/spec/00-conventions.md), entered through its conventions
   chapter
 - Research: [docs/research/](docs/research/2026-10-11-rhi-redesign/01-nographicsapi.md), the
@@ -147,13 +148,12 @@ xmake f -m debug -y --rojorhi_backend=d3d12 --rojorhi_d3d12_adapter=warp --rojor
 xmake test RojoRHITests/abi   # then contract, death and conformance
 ```
 
-The hosted `d3d12` CI job runs them on WARP in three configures: Debug with `gbv`, Release with
-`mode` (`contract` and `conformance` only), and Debug with `layer` for the upscale cases WARP cannot
-complete under `gbv`. The `tracker-stress` job builds the Null backend under MSVC AddressSanitizer
-and runs the two hidden `[stress][.]` cases of `Tests/Core/TrackerStressTests.cpp` with
-`RojoRHITests.exe "[stress]"` from the test build directory. D3D12 is implemented, verified on
-WARP only, not on hardware ([the run](docs/architecture/d3d12-backend-edges.md#the-t1-run-on-warp)),
-and so is its benchmark harness; timing waits for the Windows GPU machine (#21).
+The `d3d12-build` CI job compiles D3D12 in Debug and Release and runs nothing (ADR 0027). The
+`tracker-stress` job builds the Null backend under MSVC AddressSanitizer and runs the two hidden
+`[stress][.]` cases of `Tests/Core/TrackerStressTests.cpp` with `RojoRHITests.exe "[stress]"` from
+the test build directory. D3D12 is implemented, verified on WARP only, not on hardware ([the
+run](docs/architecture/d3d12-backend-edges.md#the-t1-run-on-warp)), and so is its benchmark harness;
+[the hardware run](docs/guides/d3d12-hardware-run.md) verifies it next (#21).
 
 The benchmark harness (macOS, or Windows on d3d12; [architecture](docs/architecture/benchmarks.md)):
 
@@ -170,9 +170,9 @@ python3 Tools/bench.py analyze        # writes summary.json and analysis.txt fro
 
 `bench.py build` takes `--backend metal4` (the default), `null` or `d3d12` (with `--adapter`). On
 `metal4` the harness links and `RojoRHIBench/metal4` and `correctness` (R against N, untimed) pass;
-on `d3d12` the `d3d12-bench` CI job runs `host`, `native`, `d3d12` and `correctness` on WARP. Timing
-follows ADR 0014: Release, validation off, on AC power, never on hosted runners. Rounds 1 and 2
-(2026-10-19, 2026-10-20) missed CPU and allocations, round 1 GPU too; round 3 (2026-10-21) missed
+on `d3d12` hosted CI ran `host`, `native`, `d3d12` and `correctness` on WARP until 2026-11-04.
+Timing follows ADR 0014: Release, validation off, on AC power, never on hosted runners. Rounds 1 and
+2 (2026-10-19, 2026-10-20) missed CPU and allocations, round 1 GPU too; round 3 (2026-10-21) missed
 CPU at C3-k100 alone under ADR 0025. Round 4 (2026-10-22) met every budget of ADR 0014 as ADR 0025
 amends it, C3-k100 8.33 ns against 10; by the 5% rule, reported, C3 misses at three `K`
 ([round 4 results](docs/research/2026-10-22-metal4-overhead-round4-results.md)).
@@ -190,7 +190,7 @@ v1 GPU conformance is checkpoint A, the cases tagged `[checkpoint-a]`
 ([ADR 0005](docs/decisions/0005-conformance-checkpoint.md)). The v2 interface's T1 conformance
 cases of ADR 0009 are the `[conformance]` entry on Metal 4, one file for each category. Both need
 `MTL_DEBUG_LAYER=1` and a real device on Metal 4 Apple Silicon, and there is no CPU-only substitute
-for either. The `d3d12` CI job also runs `[conformance]` on WARP, which is not T1 acceptance.
+for either. Hosted CI ran `[conformance]` on WARP until 2026-11-04, which is not T1 acceptance.
 
 The shader ABI module `Shaders/RojoRHI/RojoRHI.slang` and its hosted checks exist: the conformance
 shaders under `Shaders/Tests/` compile to MSL, SPIR-V and HLSL on every host, and the build checks

@@ -151,9 +151,12 @@ ran the extraction itself and the verifier that checked its result, both kept fo
 
 `.github/workflows/` runs the project policy check on Linux; the legacy, metal4, format and
 interface jobs on hosted macOS; and the interface job also on Windows. The metal4 job builds the
-Metal 4 backend in Debug and Release and counts its cases per tag. The `d3d12` job, on hosted
-Windows, builds the D3D12 backend and runs its entries on WARP: implemented, verified on WARP only,
-not on hardware ([the run](d3d12-backend-edges.md#the-t1-run-on-warp)). The `tracker-stress` job,
+Metal 4 backend in Debug and Release and counts its cases per tag. The `d3d12-build` job, on
+hosted Windows, compiles the D3D12 backend, its tests, probes and benchmark harness in Debug and
+Release, checks DXIL and source layout, and executes nothing on D3D12 ([ADR
+0027](../decisions/0027-hosted-ci-compiles-d3d12.md)); D3D12 is implemented, verified on WARP only,
+not on hardware, by hosted runs that ended on 2026-11-04 ([the
+run](d3d12-backend-edges.md#the-t1-run-on-warp)). The `tracker-stress` job,
 also on hosted Windows, runs the tracker's hidden `[stress]` cases on the Null backend under MSVC
 AddressSanitizer. Hosted macOS has no Metal 4
 device, so the GPU cases run on Apple Silicon before merge ([testing](../conventions/testing.md)).

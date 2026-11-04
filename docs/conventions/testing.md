@@ -160,17 +160,19 @@ it is checksummed.
 **D3D12 cases** are tagged `[d3d12]` and live in `Tests/D3D12/`; they may include the backend's
 headers and the Agility headers, and `contract` runs them besides the `[contract]` cases. A d3d12
 build is configured with `--rojorhi_backend=d3d12`, `--rojorhi_d3d12_adapter=hardware` or `warp` and
-`--rojorhi_d3d12_debug=mode`, `off`, `layer` or `gbv`. The `d3d12` CI job runs the `abi`,
-`contract`, `death` and `conformance` entries on WARP in Debug under the debug layer and GPU-based
-validation, whose error messages abort the run, and `contract` and `conformance` in Release, and a
-third Debug configure with `layer` alone runs the upscale cases WARP cannot complete under `gbv`. A
-run on WARP shows the lowering functionally right on the D3D reference implementation; D3D12 stays
-"implemented, verified on WARP only, not on hardware" until a hardware run, and no WARP run counts
-as T1 acceptance ([the run](../architecture/d3d12-backend-edges.md#the-t1-run-on-warp)). An abort
-ends the whole Catch2 process, and every case after it goes unrun, so a case that may abort is a
-death test; the per-case failure step then names the case. No case is limited to hardware: the
-cases that skip print their reason, and [the hardware run](../guides/d3d12-hardware-run.md) is the
-checklist for the first Windows GPU machine.
+`--rojorhi_d3d12_debug=mode`, `off`, `layer` or `gbv`. The `d3d12-build` CI job compiles them in
+Debug and Release and runs none ([ADR 0027](../decisions/0027-hosted-ci-compiles-d3d12.md)); until
+2026-11-04 a `d3d12` job ran the `abi`, `contract`, `death` and `conformance` entries on WARP in
+Debug under the debug layer and GPU-based validation, whose error messages abort the run, `contract`
+and `conformance` in Release, and the upscale cases WARP cannot complete under `gbv` in a third
+Debug configure with `layer` alone. A run on WARP shows the lowering functionally right on the D3D
+reference implementation; D3D12 stays "implemented, verified on WARP only, not on hardware" until a
+hardware run, and no WARP run counts as T1 acceptance ([the
+run](../architecture/d3d12-backend-edges.md#the-t1-run-on-warp)). An abort ends the whole Catch2
+process, and every case after it goes unrun, so a case that may abort is a death test. No case is
+limited to hardware: the cases that skip print their reason, and [the hardware
+run](../guides/d3d12-hardware-run.md) is the checklist for the first Windows GPU machine, where
+D3D12 is verified next.
 
 **Stress cases** are tagged `[stress][.]`, hidden from every default run, and live in
 `Tests/Core/TrackerStressTests.cpp`: a long frame loop and every queue submitting from its own
@@ -197,17 +199,17 @@ than by judgement. A test that reaches a consumer's renderer, scene or editor he
 that consumer, even when the behaviour it observes is ultimately RojoRHI's.
 
 **Benchmark checks** are Catch2 cases in `Benchmarks/Checks/`, run by `RojoRHIBench check` and
-described in [the benchmark harness](../architecture/benchmarks.md). `[host]` cases need nothing
-and run everywhere. `[null]` cases run every RojoRHI workload on the Null backend and assert its
-counters and call sequence, and `xmake test RojoRHIBench/null` runs both tags in the macOS
-interface CI job, in Debug and Release; the `metal4` job does not build the harness. `[native]`
-cases check the native arm against CPU oracles under `MTL_DEBUG_LAYER=1` with
-`xmake test RojoRHIBench/native`, on local Apple Silicon only; CI requires their inventory to be
-non-zero. `[metal4]` holds the counter case of a `metal4` build, run by
-`xmake test RojoRHIBench/metal4`; `[d3d12]` holds the counter case of a `d3d12` build, run by
-`xmake test RojoRHIBench/d3d12`. On a `d3d12` build `[host]` and `[native]` run on WARP in the
-`d3d12-bench` CI job, which also runs the correctness gate. Timed runs are not tests: they follow
-ADR 0014.
+described in [the benchmark harness](../architecture/benchmarks.md). `[host]` cases need nothing and
+run everywhere. `[null]` cases run every RojoRHI workload on the Null backend and assert its
+counters and call sequence, and `xmake test RojoRHIBench/null` runs both tags in the macOS interface
+CI job, in Debug and Release; the `metal4` job does not build the harness. `[native]` cases check
+the native arm against CPU oracles under `MTL_DEBUG_LAYER=1` with `xmake test RojoRHIBench/native`,
+on local Apple Silicon only; CI requires their inventory to be non-zero. `[metal4]` holds the
+counter case of a `metal4` build, run by `xmake test RojoRHIBench/metal4`; `[d3d12]` holds the
+counter case of a `d3d12` build, run by `xmake test RojoRHIBench/d3d12`. On a `d3d12` build `[host]`
+and `[native]` ran on WARP in the hosted `d3d12-bench` CI job, with the correctness gate, until
+2026-11-04; the `d3d12-build` job now compiles the harness and runs nothing, and they run on a local
+Windows build. Timed runs are not tests: they follow ADR 0014.
 
 Test support follows the same rule: the bootstrap that creates a device and a shader library for a
 GPU case is RojoRHI's, while a fixture that builds a consumer's scene is not.

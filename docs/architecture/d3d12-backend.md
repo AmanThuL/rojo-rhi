@@ -38,7 +38,7 @@ Each entry calls the core's check first and then translates; the backend holds n
   asserts it ([ADR 0012](../decisions/0012-language-and-dispatch.md)).
 - `rojorhi_d3d12_adapter` is `hardware` (the default: the first high-performance hardware adapter
   that meets the floor of [ADR 0010](../decisions/0010-hardware-floor.md)) or `warp` (the software
-  rasterizer, for hosted CI, which has no GPU).
+  rasterizer, for a machine with no GPU).
 - `rojorhi_d3d12_debug` is `mode` (the default: the debug layer and DRED in Debug builds, nothing
   in Release; it defines `ROJORHI_D3D12_DEBUG_MODE`), `off`, `layer` (the debug layer and DRED) or
   `gbv` (the debug layer, GPU-based validation and DRED). The value is `mode` and not `auto`
@@ -268,9 +268,9 @@ calls for its caller to count.
 Two probe executables under `Tools/D3D12Probe/` create a device on the app-local WARP at feature
 level 12_2 and record the floor, the loaded modules and the debug-layer messages. On the hosted
 runner both met the floor, loaded exactly the app-local `D3D12Core.dll` 1.619.6.0 and
-`d3d10warp.dll` 1.0.21.0, and showed the layer, GPU-based validation and DRED active. The `d3d12`
-job uploads their output as the artifact `d3d12-probe`. The full results are in [the build
-record](d3d12-build.md#the-floor-probe); they are WARP results, not hardware evidence.
+`d3d10warp.dll` 1.0.21.0, and showed the layer, GPU-based validation and DRED active. The full
+results are in [the build record](d3d12-build.md#the-floor-probe); they are WARP results, not
+hardware evidence.
 
 ## Tests and CI
 
@@ -284,16 +284,17 @@ globs the directory, so no build file lists them. The entries on a d3d12 build:
 - `conformance` runs `[conformance]` over the files the build does not hold back.
 
 `xmake/targets.lua` holds back only what [the edges page](d3d12-backend-edges.md#the-t1-run-on-warp)
-lists; a name that matches no file fails the configure.
-The `d3d12` job on `windows-latest` runs a Debug configure with `--rojorhi_d3d12_adapter=warp
---rojorhi_d3d12_debug=gbv`, the probes and their gate, the `RojoRHITests` build, the DXIL and
-runtime-DLL checks, `abi`, `contract`, `death` and `conformance`, a case-count step with floors for
-`conformance`, `d3d12` and `contract`, the toolchain record and the layout check (`--only
-Backends/D3D12 --only Tests/D3D12 --only Tests/Support/D3D12 --only Tools/D3D12Probe`, with its own
-compilation database and `clangd`; the format job excludes the same directories). A Release
-configure with `--rojorhi_d3d12_debug=mode` then builds warning-free under `/W4 /WX`, runs
-`contract` and `conformance`, and builds the link-time-optimization probe for `check_lto_inline.py`.
-A third Debug configure with `--rojorhi_d3d12_debug=layer` runs the upscale cases WARP cannot
-complete under GPU-based validation. After a failed test step, a Windows-only step runs that entry
-again one case per process. The Release executables still turn off warnings C4702 and C4722
-(issue #83).
+lists; a name that matches no file fails the configure. Hosted CI executes nothing on D3D12 ([ADR
+0027](../decisions/0027-hosted-ci-compiles-d3d12.md)). The `d3d12-build` job compiles the backend,
+its tests, the floor probes and the benchmark harness in Debug with `--rojorhi_d3d12_debug=layer`
+and in Release with `mode` (warning-free under `/W4 /WX`; the Release executables still turn off
+warnings C4702 and C4722, issue #83), checks that every conformance shader has its DXIL and
+`.d3d12lib`, runs `Tools/check_dxil.py` and checks the layout of the D3D12 sources with
+`Tools/check_cpp_layout.py --only Backends/D3D12 --only Tests/D3D12 --only Tests/Support/D3D12
+--only Tools/D3D12Probe --only Benchmarks/HostWindows --only Benchmarks/NativeD3D12 --only
+Benchmarks/ChecksD3D12`, the directories the macOS `format` job excludes. Until 2026-11-04 a `d3d12`
+job ran the entries on WARP in Debug under GPU-based validation, in Release, and in Debug with the
+debug layer alone for the upscale cases; [CI run
+39641225757](https://github.com/AmanThuL/rojo-rhi/actions/runs/39641225757) is its T1 record. The
+entries run on a local Windows build, and next on hardware ([the hardware
+run](../guides/d3d12-hardware-run.md)).

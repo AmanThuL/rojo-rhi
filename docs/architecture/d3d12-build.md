@@ -65,9 +65,10 @@ was tightened; the exports path is corroborated by the
 a device on the app-local WARP at feature level 12_2, record the floor items of ADR 0010, the
 loaded modules and their versions, the debug layer messages, a large raw view and a hidden-window
 presentation, and print one JSON object. A probe exits 0 only when the floor is met on the
-app-local WARP. The `d3d12` CI job prints both objects, writes a step summary table, uploads them
-as the artifact `d3d12-probe`, and fails when the factory probe does not exit 0; the exports
-probe's exit code is printed and does not gate.
+app-local WARP. Until 2026-11-04 the hosted `d3d12` CI job ran both, gated on the factory probe's
+exit code alone and uploaded the objects as the artifact `d3d12-probe`. Since then the
+`d3d12-build` job compiles both and runs neither ([ADR
+0027](../decisions/0027-hosted-ci-compiles-d3d12.md)); the probes run on a local Windows build.
 
 Results, all "WARP on hosted windows-latest" (Windows Server 2025, build 10.0.26100.33438; the
 identical result came from both variants):

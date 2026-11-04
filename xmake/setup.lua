@@ -23,8 +23,8 @@ local dxc_pin    = "v1.9.2607"
 local dxc_archive = "dxc_2026_07_29.zip"
 local dxc_sha256 = "a1dfb116ba3eeae6a1582291b53a8e7bf65ad760676bd3194685c8f7367cd241"
 -- The D3D12 runtime a Windows executable loads from beside itself: the Agility SDK (its headers and
--- D3D12Core.dll with the debug layer) and WARP, the software adapter hosted CI runs on. Each pin is
--- the SHA-256 of the NuGet package, checked before anything is extracted from it.
+-- D3D12Core.dll with the debug layer) and WARP, the software adapter for a machine with no GPU. Each
+-- pin is the SHA-256 of the NuGet package, checked before anything is extracted from it.
 local agility_pin    = "1.619.6"
 local agility_sha256 = "08f0489281401aa430fc37322d6c3fc98a8025175aacd714c10d562f4963f1e9"
 local warp_pin       = "1.0.21"
