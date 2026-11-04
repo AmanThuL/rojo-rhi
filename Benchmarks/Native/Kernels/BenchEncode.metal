@@ -23,7 +23,8 @@ struct Icb
     command_buffer commands;
 };
 
-// One counted draw's inputs. Mirrors NativeIndirect.cpp: count is null when the draw takes exactly maxCount.
+// One counted draw's inputs. Mirrors NativeIndirect.cpp: count is null when the draw takes exactly maxCount. Each command
+// binds root, views, samplers and its own record at buffers 0 to 3, the module's reserved bindings.
 struct Root
 {
     ulong records;
@@ -31,6 +32,9 @@ struct Root
     ulong icb; // The address of a resource ID of the indirect command buffer.
     device uint2* range;
     constant ushort* indices;
+    ulong root;
+    ulong views;
+    ulong samplers;
     uint maxCount;
 };
 
@@ -39,8 +43,25 @@ static uint drawCount(constant Root& root)
     return root.count ? min(*root.count, root.maxCount) : root.maxCount;
 }
 
-// One thread per record encodes the records below the count; thread 0 writes the execution range. The record's
-// drawId is the draw's base instance, which the vertex shader reads back; its firstInstance never reaches a shader.
+// The command inherits no buffer: it binds the reserved buffers on the vertex and fragment stages, its record at buffer 3,
+// whose leading drawId the vertex shader reads.
+static void bindBuffers(thread render_command& command, constant Root& root, const device void* record)
+{
+    const device uchar* rootBytes = reinterpret_cast<const device uchar*>(root.root);
+    const device uchar* views = reinterpret_cast<const device uchar*>(root.views);
+    const device uchar* samplers = reinterpret_cast<const device uchar*>(root.samplers);
+    command.set_vertex_buffer(rootBytes, 0);
+    command.set_vertex_buffer(views, 1);
+    command.set_vertex_buffer(samplers, 2);
+    command.set_vertex_buffer(record, 3);
+    command.set_fragment_buffer(rootBytes, 0);
+    command.set_fragment_buffer(views, 1);
+    command.set_fragment_buffer(samplers, 2);
+    command.set_fragment_buffer(record, 3);
+}
+
+// One thread per record encodes the records below the count; thread 0 writes the execution range. Each command binds its
+// record for the vertex shader's drawId and draws with base instance 0; a record's firstInstance never reaches a shader.
 kernel void encodeDraw(constant Root& root [[buffer(0)]], uint index [[thread_position_in_grid]])
 {
     const uint count = drawCount(root);
@@ -52,9 +73,11 @@ kernel void encodeDraw(constant Root& root [[buffer(0)]], uint index [[thread_po
     {
         return;
     }
-    const DrawArgs args = reinterpret_cast<constant DrawArgs*>(root.records)[index];
+    const device DrawArgs* record = reinterpret_cast<const device DrawArgs*>(root.records) + index;
+    const DrawArgs args = *record;
     render_command command(reinterpret_cast<device Icb*>(root.icb)->commands, index);
-    command.draw_primitives(primitive_type::point, args.firstVertex, args.vertexCount, args.instanceCount, args.drawId);
+    bindBuffers(command, root, record);
+    command.draw_primitives(primitive_type::point, args.firstVertex, args.vertexCount, args.instanceCount, 0u);
 }
 
 static void encodeIndexedRecord(constant Root& root, uint index, primitive_type primitive)
@@ -68,9 +91,11 @@ static void encodeIndexedRecord(constant Root& root, uint index, primitive_type 
     {
         return;
     }
-    const IndexedArgs args = reinterpret_cast<constant IndexedArgs*>(root.records)[index];
+    const device IndexedArgs* record = reinterpret_cast<const device IndexedArgs*>(root.records) + index;
+    const IndexedArgs args = *record;
     render_command command(reinterpret_cast<device Icb*>(root.icb)->commands, index);
-    command.draw_indexed_primitives(primitive, args.indexCount, root.indices + args.firstIndex, args.instanceCount, args.baseVertex, args.drawId);
+    bindBuffers(command, root, record);
+    command.draw_indexed_primitives(primitive, args.indexCount, root.indices + args.firstIndex, args.instanceCount, args.baseVertex, 0u);
 }
 
 kernel void encodeIndexed(constant Root& root [[buffer(0)]], uint index [[thread_position_in_grid]])

@@ -353,6 +353,11 @@ namespace rojoRHI {
                 // The task and mesh entries read the drawId from the caller's record; the native record holds no drawId.
                 applyDrawRecord(list, command.mesh.record);
             }
+            else if (command.kind == PrefixKind::DrawIndirect || command.kind == PrefixKind::IndexedIndirect)
+            {
+                // So does the vertex entry; an indirect command buffer's commands bind their own records.
+                applyDrawRecord(list, command.indirect.drawRecord);
+            }
             {
                 // The validation layer autoreleases in a draw it checks, so each counted draw holds a pool, as a direct draw does.
                 const CommandPool pool(list.state.commandPools);

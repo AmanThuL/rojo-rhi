@@ -142,6 +142,12 @@ namespace rojoRHI {
         void releaseNative(DeviceImpl& impl)
         {
             metal4::releaseRetiringFences(impl);
+            if (impl.zeroRecord != nullptr)
+            {
+                impl.residency.remove(impl.zeroRecord);
+                impl.zeroRecord->release();
+                impl.zeroRecord = nullptr;
+            }
             if (impl.samplerTable != nullptr)
             {
                 impl.residency.remove(impl.samplerTable);
@@ -303,6 +309,14 @@ namespace rojoRHI {
                 );
             }
             impl.residency.add(impl.samplerTable);
+            impl.zeroRecord = impl.device->newBuffer(metal4::kZeroRecordBytes, MTL::ResourceStorageModeShared | MTL::ResourceCPUCacheModeDefaultCache);
+            if (impl.zeroRecord == nullptr)
+            {
+                return std::unexpected(Error{ ErrorCategory::OutOfMemory, "no device memory for the zero draw record" });
+            }
+            std::memset(impl.zeroRecord->contents(), 0, metal4::kZeroRecordBytes);
+            impl.zeroRecord->setLabel(metal4::makeString("rojorhi.zeroRecord"));
+            impl.residency.add(impl.zeroRecord);
             // The set stays dirty: the first commit that needs it, a submission or a staged upload, makes the tables resident.
             return {};
         }

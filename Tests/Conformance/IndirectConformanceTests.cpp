@@ -499,6 +499,63 @@ TEST_CASE("a pass draws counted draws recorded before and after a direct draw an
 }
 
 //======================================================================================================================
+TEST_CASE("direct, lone, written and counted draws interleaved in one pass each read their own drawId", "[conformance]")
+{
+    test::requireGpu();
+    test::GpuKit kit;
+    const Oracle oracle(kit);
+    const Format format = Format::RGBA16Float;
+    const Pipeline pipeline = oracle.pipeline(format);
+    const Texture target = oracle.target(format);
+    // On Metal 4 a lone record with a null count binds itself for a native draw, a record of maxCount 1 with a count runs the
+    // writer kernel and binds itself, sixteen records run the indirect command buffer, whose commands bind their own records,
+    // and a direct draw binds the zero record back. A drawId left bound by the draw before would land a triangle in another's
+    // pixel, and a direct draw that read a record's drawId would leave its own pixel empty.
+    const std::vector<DrawIndirectArgs> counted = drawRecords(16);
+    const std::array<DrawIndirectArgs, 3> lone{ DrawIndirectArgs{ .drawId = 100, .vertexCount = 3, .instanceCount = 1, .firstInstance = 900 },
+                                                DrawIndirectArgs{ .drawId = 102, .vertexCount = 3, .instanceCount = 1, .firstInstance = 7 },
+                                                DrawIndirectArgs{ .drawId = 103, .vertexCount = 3, .instanceCount = 1 } };
+    const DrawIndexedIndirectArgs loneIndexed{ .drawId = 101, .indexCount = 3, .instanceCount = 1, .firstInstance = 77 };
+    const std::array<uint16_t, 3> indices{ 0, 1, 2 };
+    const Buffer countedArgs = kit.buffer(sizeof(DrawIndirectArgs) * 16, Memory::Gpu, BufferUsage::IndirectArgs, bytesOf(std::span(counted)));
+    const Buffer loneArgs = kit.buffer(sizeof(lone), Memory::Gpu, BufferUsage::IndirectArgs, bytesOf(std::span<const DrawIndirectArgs>(lone)));
+    const Buffer indexedArgs = kit.buffer(sizeof(loneIndexed), Memory::Gpu, BufferUsage::IndirectArgs, std::as_bytes(std::span(&loneIndexed, 1)));
+    const Buffer indexBuffer = kit.buffer(sizeof(indices), Memory::Gpu, BufferUsage::Index, bytesOf(std::span<const uint16_t>(indices)));
+    const Buffer one = oracle.count(1);
+    // A direct draw moved `row` rows down lands on drawId 0's pixel of that row.
+    const auto direct = [](CommandList list, uint32_t row, auto draw) {
+        list.setViewport(Viewport{ .y = static_cast<float>(row), .width = static_cast<float>(kEdge), .height = static_cast<float>(kEdge) });
+        draw();
+        list.setViewport(kFull);
+    };
+    CommandList list = kit.list(QueueType::Graphics, "test.indirect");
+    Oracle::begin(list, target, pipeline);
+    list.drawIndirect(kit.device.address(loneArgs), 1);
+    direct(list, 64, [&] { list.draw(3); });
+    list.drawIndirect(kit.device.address(countedArgs), 16);
+    list.drawIndexedIndirect(indexBuffer, IndexType::UInt16, kit.device.address(indexedArgs), 1);
+    direct(list, 65, [&] { list.drawIndexed(indexBuffer, IndexType::UInt16, 3); });
+    list.drawIndirect(kit.device.address(loneArgs, sizeof(DrawIndirectArgs)), 1, kit.device.address(one));
+    list.drawIndirect(kit.device.address(loneArgs, 2 * sizeof(DrawIndirectArgs)), 1);
+    direct(list, 66, [&] { list.draw(3); });
+    list.endRenderPass();
+    test::transition(list, target, Layout::ColorAttachment, Layout::CopySrc);
+    kit.run(std::array{ list });
+    Image expected = drawnImage(counted, 16, Image(format));
+    for (const uint32_t drawId : { 100u, 101u, 102u, 103u })
+    {
+        expected.set(drawId, oracleValue(drawId));
+    }
+    for (const uint32_t row : { 64u, 65u, 66u })
+    {
+        expected.set(row * kEdge, oracleValue(0));
+    }
+    const std::string difference = differences(oracle.read(target, format), expected);
+    INFO(difference);
+    CHECK(difference.empty());
+}
+
+//======================================================================================================================
 TEST_CASE("counted draws recorded before the render encoder opens use the pipeline bound before each", "[conformance]")
 {
     test::requireGpu();

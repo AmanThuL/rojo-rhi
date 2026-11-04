@@ -111,14 +111,17 @@ namespace rojoRHI {
                 auto created = std::make_unique<CommandListImpl>();
                 core::DeviceCounts::add(impl.core.counts().cpuAllocations);
                 // The list's objects are its own for good: the pool keeps the list, and the slot's reuse resets its allocator.
+                const uint64_t zeroRecord = impl.zeroRecord->gpuAddress();
                 if (Result<void> made = created->state.create(
-                        impl.device, impl.viewTable->gpuAddress(), impl.samplerTable->gpuAddress(), impl.commandPools, impl.encoderLabels
+                        impl.device, impl.viewTable->gpuAddress(), impl.samplerTable->gpuAddress(), zeroRecord, impl.commandPools, impl.encoderLabels
                     );
                     !made)
                 {
                     ROJORHI_LOG_FATAL("acquireCommandList on device \"{}\": {}", impl.core.label(), made.error().message);
                     std::abort();
                 }
+                created->draw.zeroRecord = zeroRecord;
+                created->draw.tableDrawRecord = zeroRecord;
                 core::DeviceCounts::add(impl.core.counts().nativeCreateCalls, 4);
                 pool.lists.push_back(std::move(created));
             }
@@ -151,6 +154,14 @@ namespace rojoRHI {
         }
         list->encoders.setQueueStages(queueStages);
         list->draw.reset();
+        // A direct draw's drawId is 0, from the zero record, which the table holds unless the list's last recording left a
+        // draw's record there; writing it back now keeps a direct draw at one compare.
+        if (list->draw.tableDrawRecord != list->draw.zeroRecord)
+        {
+            state.table->setAddress(list->draw.zeroRecord, 3);
+            list->draw.tableDrawRecord = list->draw.zeroRecord;
+            core::DeviceCounts::add(impl.core.counts().nativeHostCalls);
+        }
         for (NS::String* scopeLabel : state.scopeLabels)
         {
             scopeLabel->release();

@@ -61,7 +61,7 @@ vertices; there is no vertex-input state.
 
 | | Metal 4 | D3D12 | Vulkan |
 |---|---|---|---|
-| Call | `MTL4::RenderCommandEncoder::drawPrimitives` with a base instance of 0, which `rojoRHI::drawId` reads; `firstInstance` is invisible to shaders. The shortest form that says so: start and count for one instance, plus the instance count otherwise | `DrawInstanced` | `vkCmdDraw` |
+| Call | `MTL4::RenderCommandEncoder::drawPrimitives` with a base instance of 0, since `firstInstance` is invisible to shaders, after binding the device's zero record at `buffer(3)` for `rojoRHI::drawId` when an indirect draw left another record there. The shortest form that says so: start and count for one instance, plus the instance count otherwise | `DrawInstanced` | `vkCmdDraw` |
 | Cost | native | native | native |
 
 ### `IndexType`
@@ -108,7 +108,7 @@ diagnoses that, and the result of such an index is undefined.
 
 | | Metal 4 | D3D12 | Vulkan |
 |---|---|---|---|
-| Call | `MTL4::RenderCommandEncoder::drawIndexedPrimitives`, index buffer by the GPU address and length read once at the buffer's creation, so the draw sends the buffer no message, with a base instance of 0 as for `draw`; the shortest form that says so: no instance count for one instance and base vertex 0, no base vertex for base vertex 0 | `IASetIndexBuffer` with a view of the whole buffer by GPU virtual address, unless the list holds that view, then `DrawIndexedInstanced` with `firstIndex` as its start index | `vkCmdBindIndexBuffer2`, `vkCmdDrawIndexed` |
+| Call | `MTL4::RenderCommandEncoder::drawIndexedPrimitives`, index buffer by the GPU address and length read once at the buffer's creation, so the draw sends the buffer no message, with a base instance of 0 and the zero record as for `draw`; the shortest form that says so: no instance count for one instance and base vertex 0, no base vertex for base vertex 0 | `IASetIndexBuffer` with a view of the whole buffer by GPU virtual address, unless the list holds that view, then `DrawIndexedInstanced` with `firstIndex` as its start index | `vkCmdBindIndexBuffer2`, `vkCmdDrawIndexed` |
 | Cost | native | native | native |
 
 ### `CommandList::drawMeshTasks`

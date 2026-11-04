@@ -1,6 +1,7 @@
 # ADR 0018: The root block reaches D3D12 as a root SRV, and the module owns the bindings
 
-**Status**: Accepted (2026-10-13)
+**Status**: Accepted (2026-10-13); the Metal 4 cell of its draw-record row superseded by
+[ADR 0028](0028-vertex-drawid-from-the-bound-record.md)
 
 ## Context
 
@@ -54,7 +55,7 @@ none. Changing any row bumps `ROJORHI_SHADER_ABI_VERSION`.
 | Root | `buffer(0)` | root SRV `t0` | push block: root `Addr` |
 | View ID table | `buffer(1)` | `ResourceDescriptorHeap` | resource heap, `__slang_resource_heap` |
 | Sampler ID table | `buffer(2)` | `SamplerDescriptorHeap` | sampler heap, `__slang_resource_heap` |
-| Draw record | `buffer(3)`, mesh and task stages only; the vertex stage reads `[[base_instance]]` | root constant `b1` | push block: record `Addr` and stride |
+| Draw record | `buffer(3)`, mesh and task stages only; the vertex stage reads `[[base_instance]]` (Metal 4: superseded by ADR 0028) | root constant `b1` | push block: record `Addr` and stride |
 
 On D3D12 and Vulkan every stage that reads the record, vertex included, reads it from the root
 constant or push block. The Vulkan push block is `{root Addr, record Addr, recordStride}`: `root` at
@@ -71,9 +72,9 @@ loudly instead of producing a library with the wrong bindings.
 entry point takes as a parameter. Its fields are internal: the vertex ID, the instance ID and the
 base instance, except on D3D12, where `SV_StartInstanceLocation` needs Shader Model 6.8, above the
 6.6 floor of [ADR 0010](0010-hardware-floor.md). The built-ins become `uint vertexIndex(VertexIds)`,
-`uint instanceIndex(VertexIds)` and `uint drawId(VertexIds)` in the vertex stage, and `uint
-drawId()` in the task and mesh stages. SPIR-V uses Vulkan semantics: the raw `VertexIndex`, and
-`InstanceIndex` minus `BaseInstance` once. Chapter 05 is Proposed and API 0.1.0 is unreleased, so
+`uint instanceIndex(VertexIds)` and `uint drawId(VertexIds)` in the vertex stage (Metal 4: its
+lowering superseded by ADR 0028), and `uint drawId()` in the task and mesh stages. SPIR-V uses
+Vulkan semantics: the raw `VertexIndex`, and `InstanceIndex` minus `BaseInstance` once. Chapter 05 is Proposed and API 0.1.0 is unreleased, so
 this changes the reference's signatures without a version bump.
 
 **Mapping corrections.** `nonUniform(Addr)` needs no decoration on SPIR-V, because an `Addr` is a

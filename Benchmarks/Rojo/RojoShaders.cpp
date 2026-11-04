@@ -22,7 +22,8 @@ namespace rojoRHI::bench {
         {
 #if defined(ROJORHI_BENCH_BACKEND_NULL)
             (void)name;
-            std::string text = "rojorhi.null.shaderlibrary\nabi 2\n";
+            // The version is ROJORHI_SHADER_ABI_VERSION, which the Null backend checks.
+            std::string text = "rojorhi.null.shaderlibrary\nabi 3\n";
             for (const ShaderEntryName& entry : entries)
             {
                 text += std::format("entry {} {}\n", entry.name, entry.stage);

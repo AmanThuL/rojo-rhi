@@ -70,7 +70,8 @@ namespace rojoRHI::metal4 {
     constexpr uint32_t kDrawGroupThreads = 64;
 
     /// The parameters of one counted draw's kernel, laid out as the kernels of Metal4DrawIndirect.metal read them from
-    /// `buffer(0)`. Every address is a GPU address.
+    /// `buffer(0)`. Every address is a GPU address. A command of the indirect command buffer binds its buffers itself, since
+    /// it binds its own record, so the parameters carry each address the four reserved bindings hold (ADR 0018, ADR 0028).
     struct DrawParams
     {
         /// The encode kernels: the address of the indirect command buffer's `MTL::ResourceID`, which the kernel reads as a
@@ -80,20 +81,26 @@ namespace rojoRHI::metal4 {
         uint64_t count;       ///< The draw count, or 0 for none, which means `maxCount`.
         uint64_t output;      ///< The execution range the encode kernels write, or the native record the writer kernels write.
         uint64_t indices;     ///< The index buffer of an indexed draw; 0 otherwise.
+        uint64_t root;        ///< `buffer(0)` of each encoded command: the root recorded when the draw was recorded; 0 for none.
+        uint64_t views;       ///< `buffer(1)` of each encoded command: the device's view table.
+        uint64_t samplers;    ///< `buffer(2)` of each encoded command: the device's sampler table.
         uint32_t maxCount;    ///< The most records drawn.
         uint32_t primitive;   ///< The `MTL::PrimitiveType` value of the draws.
         uint32_t indexType;   ///< The `MTL::IndexType` value of an indexed draw.
-        uint32_t reserved[3]; ///< Pads the struct to 64 bytes, where the indirect command buffer's resource ID follows.
+        uint32_t reserved[5]; ///< Pads the struct to 96 bytes, where the indirect command buffer's resource ID follows.
     };
     // The draw kernels declare the same struct in Metal4DrawIndirect.metal; the two must keep this size and these offsets.
-    static_assert(sizeof(DrawParams) == 64);
+    static_assert(sizeof(DrawParams) == 96);
     static_assert(offsetof(DrawParams, records) == 8);
     static_assert(offsetof(DrawParams, count) == 16);
     static_assert(offsetof(DrawParams, output) == 24);
     static_assert(offsetof(DrawParams, indices) == 32);
-    static_assert(offsetof(DrawParams, maxCount) == 40);
-    static_assert(offsetof(DrawParams, primitive) == 44);
-    static_assert(offsetof(DrawParams, indexType) == 48);
+    static_assert(offsetof(DrawParams, root) == 40);
+    static_assert(offsetof(DrawParams, views) == 48);
+    static_assert(offsetof(DrawParams, samplers) == 56);
+    static_assert(offsetof(DrawParams, maxCount) == 64);
+    static_assert(offsetof(DrawParams, primitive) == 68);
+    static_assert(offsetof(DrawParams, indexType) == 72);
     // The writer kernels write the native records Metal's indirect draws read.
     static_assert(sizeof(MTL::DrawPrimitivesIndirectArguments) == 16);
     static_assert(sizeof(MTL::DrawIndexedPrimitivesIndirectArguments) == 20);
@@ -129,13 +136,13 @@ namespace rojoRHI::metal4 {
     /// The bytes a counted draw reserves in its list's frame-arena page: its kernel's `DrawParams`, then either the indirect
     /// command buffer's resource ID and the execution range, or the native record the writer kernel writes. A run of writer
     /// kernels reads its draws' parameters this far apart (Metal4DrawIndirect.metal's `kDrawStride`).
-    constexpr uint64_t kDrawReservation = 96;
+    constexpr uint64_t kDrawReservation = 128;
 
     /// The bytes a counted mesh draw reserves: its kernel's `MeshParams`, then either the indirect command buffer's resource ID
     /// and the execution range, or the native record the writer kernel writes. A run of mesh writer kernels reads its draws'
     /// parameters this far apart (Metal4DrawIndirect.metal's `kMeshStride`).
     constexpr uint64_t kMeshReservation = 128;
-    static_assert(kDrawReservation == 96 && kMeshReservation == 128, "must match kDrawStride/kMeshStride in Metal4DrawIndirect.metal");
+    static_assert(kDrawReservation == 128 && kMeshReservation == 128, "must match kDrawStride/kMeshStride in Metal4DrawIndirect.metal");
 
     /// Where, in the frame-arena reservation of a counted mesh draw that starts with its `MeshParams`, the indirect command
     /// buffer's resource ID or the writer kernel's native record lies.
@@ -156,9 +163,10 @@ namespace rojoRHI::metal4 {
         MTL::ComputePipelineState* fill = nullptr; ///< Writes a 32-bit pattern over a range of words.
         /// Writes a `float4` over one mip of a range of a `Storage` texture, one pipeline per `ClearKernel`.
         std::array<MTL::ComputePipelineState*, kClearKernelCount> clear = {};
-        /// Encodes the records of a counted draw below its count into an indirect command buffer and writes its range.
+        /// Encodes the records of a counted draw below its count into an indirect command buffer, each command binding the
+        /// reserved buffers on the vertex and fragment stages, and writes its range.
         MTL::ComputePipelineState* encodeDraw = nullptr;
-        /// Encodes the records of a counted indexed draw below its count into an indirect command buffer and writes its range.
+        /// Encodes the records of a counted indexed draw below its count into an indirect command buffer, as `encodeDraw` does.
         MTL::ComputePipelineState* encodeIndexed = nullptr;
         /// Writes the one record of a counted draw of `maxCount` 1 as a native record.
         MTL::ComputePipelineState* writeDraw = nullptr;

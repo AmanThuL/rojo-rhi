@@ -180,10 +180,12 @@ TEST_CASE("AbiVertex reads the record's drawId through drawIndirect, firstInstan
 {
     test::requireGpu();
     const bool indexed = GENERATE(false, true);
-    // A maxCount of 1 runs the writer kernel and a native indirect draw; above 1, a count of 1 runs the indirect command
-    // buffer path.
+    // On Metal 4 a maxCount of 1 with a null count is a native indirect draw of the bound record, and with a count the writer
+    // kernel's native record; above 1 the indirect command buffer's commands bind their records, with the count of 1 or
+    // none, every record being the same draw.
     const uint32_t maxCount = GENERATE(1u, 4u);
-    CAPTURE(indexed, maxCount);
+    const bool counted = GENERATE(false, true);
+    CAPTURE(indexed, maxCount, counted);
     constexpr uint32_t kFirstVertex = 5;
     constexpr uint32_t kVertices = 3;
     constexpr uint32_t kInstances = 2;
@@ -226,7 +228,7 @@ TEST_CASE("AbiVertex reads the record's drawId through drawIndirect, firstInstan
     const Buffer args = kit.buffer(records.size(), Memory::Gpu, BufferUsage::IndirectArgs, records);
     const uint32_t one = 1;
     const Buffer count = kit.buffer(sizeof(one), Memory::Gpu, BufferUsage::IndirectArgs, std::as_bytes(std::span(&one, 1)));
-    const Addr countAddress = maxCount == 1 ? Addr{} : kit.device.address(count);
+    const Addr countAddress = counted ? kit.device.address(count) : Addr{};
     CommandList list = kit.list(QueueType::Graphics, "test.abiVertex");
     const std::array colors{ ColorAttachment{ .texture = target, .load = LoadOp::Clear } };
     test::transition(list, target, Layout::Undefined, Layout::ColorAttachment);

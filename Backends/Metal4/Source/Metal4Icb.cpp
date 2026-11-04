@@ -33,35 +33,34 @@ namespace rojoRHI::metal4 {
                                                                                  MTL::IndirectCommandTypeDrawIndexed,
                                                                                  MTL::IndirectCommandTypeDrawMeshThreadgroups };
 
-        /// The buffers a mesh command binds on each of the object, mesh and fragment stages: the four reserved bindings
-        /// (ADR 0018).
-        constexpr NS::UInteger kMeshBufferBindings = 4;
+        /// The buffers a command binds on each stage it runs: the four reserved bindings (ADR 0018).
+        constexpr NS::UInteger kBufferBindings = 4;
 
         //==============================================================================================================
         /// Makes an indirect command buffer of `kind` with `capacity` commands on `device`, labelled. Its commands take the
-        /// pipeline and every piece of render state from the render encoder that runs them. Draw and indexed commands also take
-        /// its buffer bindings and bind nothing themselves. A mesh command binds its own record, which a command that inherits
-        /// buffers cannot, so it inherits none and binds all four reserved buffers on the object, mesh and fragment stages. The
-        /// caller holds an autorelease pool. Returns null when Metal refuses it.
+        /// pipeline and every piece of render state from the render encoder that runs them. Each command binds its own record,
+        /// which a command that inherits buffers cannot, so it inherits none and binds all four reserved buffers on the stages
+        /// it runs: vertex and fragment for draw and indexed commands, object, mesh and fragment for mesh commands. The caller
+        /// holds an autorelease pool. Returns null when Metal refuses it.
         MTL::IndirectCommandBuffer* newIcb(MTL::Device* device, IcbKind kind, uint32_t capacity)
         {
             MTL::IndirectCommandBufferDescriptor* descriptor = MTL::IndirectCommandBufferDescriptor::alloc()->init();
             descriptor->setCommandTypes(kCommandTypes[static_cast<size_t>(kind)]);
             const bool mesh = kind == IcbKind::Mesh;
             descriptor->setInheritPipelineState(true);
-            descriptor->setInheritBuffers(!mesh);
+            descriptor->setInheritBuffers(false);
             descriptor->setInheritCullMode(true);
             descriptor->setInheritDepthBias(true);
             descriptor->setInheritDepthClipMode(true);
             descriptor->setInheritDepthStencilState(true);
             descriptor->setInheritFrontFacingWinding(true);
             descriptor->setInheritTriangleFillMode(true);
-            descriptor->setMaxVertexBufferBindCount(0);
-            descriptor->setMaxFragmentBufferBindCount(mesh ? kMeshBufferBindings : 0);
+            descriptor->setMaxVertexBufferBindCount(mesh ? 0 : kBufferBindings);
+            descriptor->setMaxFragmentBufferBindCount(kBufferBindings);
             if (mesh)
             {
-                descriptor->setMaxObjectBufferBindCount(kMeshBufferBindings);
-                descriptor->setMaxMeshBufferBindCount(kMeshBufferBindings);
+                descriptor->setMaxObjectBufferBindCount(kBufferBindings);
+                descriptor->setMaxMeshBufferBindCount(kBufferBindings);
             }
             MTL::IndirectCommandBuffer* buffer = device->newIndirectCommandBuffer(descriptor, capacity, MTL::ResourceStorageModePrivate);
             descriptor->release();

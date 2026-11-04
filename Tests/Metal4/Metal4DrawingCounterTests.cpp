@@ -359,7 +359,7 @@ TEST_CASE("C10: a counted drawIndirect of 256 records is three native calls per 
 }
 
 //======================================================================================================================
-TEST_CASE("C10 at maxCount 1 with a null count is the writer path, one native call per draw", "[metal4]")
+TEST_CASE("C10 at maxCount 1 with a null count is one native indirect draw per draw, with no kernel", "[metal4]")
 {
     Fixture fixture;
     const uint64_t label = test::encoderLabel(fixture.device);
@@ -372,8 +372,7 @@ TEST_CASE("C10 at maxCount 1 with a null count is the writer path, one native ca
         [&](CommandList list, uint32_t) { list.drawIndirect(records, 1); },
         [](CommandList list) { list.endRenderPass(); }
     );
-    // The native indirect draw, as N's one: the writer kernels of consecutive draws run as one dispatch, whose pipeline,
-    // table, parameters and dispatch come once per pass.
+    // The native indirect draw, as N's one: the record is bound once, at the first draw.
     CHECK(slope.calls == 1);
     CHECK(slope.barriers == 0);
     CHECK(slope.encoders == 0);
@@ -392,7 +391,10 @@ TEST_CASE("C10 at maxCount 1 with a null count is the writer path, one native ca
         nothing
     );
     INFO("the per-pass total with one draw: calls " << pass.calls << ", barriers " << pass.barriers << ", encoders " << pass.encoders);
-    CHECK(pass.calls == slope.calls + 18 + 2 * label);
+    // A direct draw's pass: the pass's debug group and its two timestamps, the render encoder's open, label, table and
+    // consumer barrier, the pipeline with its winding, the viewport, the scissor and endEncoding. The table keeps the record
+    // from one pass to the next.
+    CHECK(pass.calls == slope.calls + 12 + label);
     CHECK(pass.barriers == 1);
-    CHECK(pass.encoders == 2);
+    CHECK(pass.encoders == 1);
 }

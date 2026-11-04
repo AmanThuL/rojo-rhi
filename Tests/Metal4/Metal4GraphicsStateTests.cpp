@@ -671,7 +671,7 @@ TEST_CASE("setPipeline with a compute pipeline, then a barrier, emits the barrie
 }
 
 //======================================================================================================================
-TEST_CASE("direct mesh draws bind one zero record per recording", "[metal4]")
+TEST_CASE("direct draws read drawId 0 from the device's zero record, which every list's table holds when acquired", "[metal4]")
 {
     Device device = *createDevice({ .scopeTimings = true });
     const ShaderLibrary library = standard(device);
@@ -680,47 +680,36 @@ TEST_CASE("direct mesh draws bind one zero record per recording", "[metal4]")
         GraphicsPipelineDesc{ .mesh = { library, "msMain" }, .fragment = { library, "fsMain" }, .colors = targets, .label = "test.mesh" }
     );
     const Texture target = makeTexture(device, Format::RGBA8Unorm);
+    const MTL::Buffer* zero = DeviceImpl::of(device).zeroRecord;
+    REQUIRE(zero != nullptr);
+    REQUIRE(zero->length() >= 4);
+    // The record holds zeroes.
+    const auto* bytes = static_cast<const std::byte*>(const_cast<MTL::Buffer*>(zero)->contents());
+    CHECK(bytes[0] == std::byte{ 0 });
+    CHECK(bytes[1] == std::byte{ 0 });
+    CHECK(bytes[2] == std::byte{ 0 });
+    CHECK(bytes[3] == std::byte{ 0 });
     device.beginFrame();
     const std::array colors{ ColorAttachment{ .texture = target, .load = LoadOp::Clear } };
     for (int recording = 0; recording < 2; ++recording)
     {
         CAPTURE(recording);
         CommandList list = device.acquireCommandList(QueueType::Graphics, "test.list");
-        CHECK(drawOf(list).zeroRecord == 0);
+        CHECK(drawOf(list).zeroRecord == zero->gpuAddress());
+        CHECK(drawOf(list).tableDrawRecord == zero->gpuAddress());
         list.beginRenderPass(passOf(colors));
         list.setPipeline(mesh);
         list.setViewport(kViewport);
         list.setScissor(kScissor);
         uint64_t before = callsOf(list);
         // The open and the pass's begin timestamp, the table at the object and mesh stages, the pipeline and its winding, the
-        // viewport and the scissor, the zero record at buffer(3), then the draw.
+        // viewport and the scissor, then the draw: the table holds the zero record already.
         list.drawMeshTasks(1, 1, 1);
-        CHECK(callsOf(list) - before == openCalls(list) + kPassBegin + 5 + 1 + 1);
-        const uint64_t record = drawOf(list).zeroRecord;
-        REQUIRE(record != 0);
-        CHECK(record % 16 == 0);
-        CHECK(drawOf(list).tableDrawRecord == record);
-        // The record lies in the list's arena page and holds zeroes.
-        const core::ArenaPage& page = core::coreOf(list).page;
-        REQUIRE(record >= page.address);
-        const std::byte* bytes = page.host + (record - page.address);
-        CHECK(bytes[0] == std::byte{ 0 });
-        CHECK(bytes[1] == std::byte{ 0 });
-        CHECK(bytes[2] == std::byte{ 0 });
-        CHECK(bytes[3] == std::byte{ 0 });
+        CHECK(callsOf(list) - before == openCalls(list) + kPassBegin + 5 + 1);
         before = callsOf(list);
         list.drawMeshTasks(2, 1, 1);
         CHECK(callsOf(list) - before == 1);
-        list.endRenderPass();
-        // A later pass of the same recording finds the record bound.
-        list.beginRenderPass(passOf(colors));
-        list.setPipeline(mesh);
-        list.setViewport(kViewport);
-        list.setScissor(kScissor);
-        before = callsOf(list);
-        list.drawMeshTasks(1, 1, 1);
-        CHECK(callsOf(list) - before == openCalls(list) + kPassBegin + 5 + 1);
-        CHECK(drawOf(list).zeroRecord == record);
+        CHECK(drawOf(list).tableDrawRecord == zero->gpuAddress());
         list.endRenderPass();
         list.end();
         device.queue(QueueType::Graphics).submit(std::array{ list });
@@ -802,7 +791,6 @@ TEST_CASE("a zero-count draw opens no encoder", "[metal4]")
     CHECK(callsOf(list) == before);
     CHECK(countsOf(list).encodersOpened == 0);
     CHECK(encodersOf(list).renderEncoder() == nullptr);
-    CHECK(drawOf(list).zeroRecord == 0);
     list.endRenderPass();
     finish(device, list);
     destroyDevice(device);

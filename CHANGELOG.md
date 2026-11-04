@@ -31,6 +31,15 @@
   ([ADR 0027](docs/decisions/0027-hosted-ci-compiles-d3d12.md)). D3D12 stays implemented, verified
   on WARP only, not on hardware; [the hardware run](docs/guides/d3d12-hardware-run.md) verifies it
   next.
+- **Breaking**: `ROJORHI_SHADER_ABI_VERSION` is 3. On Metal 4 a vertex shader's `rojoRHI::drawId`
+  reads the record bound at `buffer(3)`, as task and mesh shaders do, instead of the base instance
+  ([ADR 0028](docs/decisions/0028-vertex-drawid-from-the-bound-record.md)); shader libraries are
+  rebuilt, and one stamped 2 is refused with `ErrorCategory::ShaderAbiMismatch`.
+- The Metal 4 backend draws a `drawIndirect` or `drawIndexedIndirect` of one record with a null
+  count as one native indirect draw on the render encoder, with no kernel, compute encoder or pass
+  split ([GPU-driven rendering](docs/spec/08-gpu-driven.md)). The commands its kernel encodes for a
+  count or several records bind their own buffers, and a direct draw binds the device's zero record
+  only after an indirect draw bound another.
 - The Metal 4 backend writes a render pass's begin timestamp on its first render encoder, so the
   pass's time no longer takes in the kernels of counted draws ahead of it, whose compute encoder may
   overlap earlier work ([diagnostics](docs/spec/14-diagnostics.md)).

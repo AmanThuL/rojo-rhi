@@ -19,7 +19,7 @@
 
 namespace rojoRHI::metal4 {
     namespace {
-        /// The buffer bindings of a list's argument table: the root, the view table, the sampler table and a mesh draw's record.
+        /// The buffer bindings of a list's argument table: the root, the view table, the sampler table and a draw's record.
         constexpr NS::UInteger kTableBindings = 4;
 
         /// The binding of the view table's address (ADR 0018).
@@ -27,6 +27,9 @@ namespace rojoRHI::metal4 {
 
         /// The binding of the sampler table's address (ADR 0018).
         constexpr NS::UInteger kSamplerTableBinding = 2;
+
+        /// The binding of a draw's record, the zero record until a draw binds another (ADR 0028).
+        constexpr NS::UInteger kDrawRecordBinding = 3;
 
         /// The buffer bindings of a list's kernel table: a backend kernel's parameters and the buffer it writes.
         constexpr NS::UInteger kKernelBufferBindings = 2;
@@ -36,7 +39,9 @@ namespace rojoRHI::metal4 {
     } // namespace
 
     //==================================================================================================================
-    Result<void> ListState::create(MTL::Device* device, uint64_t viewTableAddress, uint64_t samplerTableAddress, bool perCommandPools, bool labelEncoders)
+    Result<void> ListState::create(
+        MTL::Device* device, uint64_t viewTableAddress, uint64_t samplerTableAddress, uint64_t zeroRecordAddress, bool perCommandPools, bool labelEncoders
+    )
     {
         commandPools = perCommandPools;
         encoderLabels = labelEncoders;
@@ -68,6 +73,7 @@ namespace rojoRHI::metal4 {
         }
         table->setAddress(viewTableAddress, kViewTableBinding);
         table->setAddress(samplerTableAddress, kSamplerTableBinding);
+        table->setAddress(zeroRecordAddress, kDrawRecordBinding);
         MTL4::ArgumentTableDescriptor* kernelDescriptor = MTL4::ArgumentTableDescriptor::alloc()->init();
         kernelDescriptor->setMaxBufferBindCount(kKernelBufferBindings);
         kernelDescriptor->setMaxTextureBindCount(kKernelTextureBindings);
