@@ -182,10 +182,9 @@ the filtered setters, so each execute sees the state recorded before it.
   resets it to the list form of the pipeline's class, and each draw passes it.
 - `setRoot` writes the table's `buffer(0)` at once outside a pass or with the render encoder open,
   filtered, and joins the prefix otherwise. Slots 1 and 2 hold the view and sampler tables.
-- A direct draw passes base instance 0. An indexed draw passes the index address plus `firstIndex`
-  times the index size and the bytes that remain. A direct mesh draw binds four zero bytes at
-  `buffer(3)`, the `drawId` the shader reads, filtered; the list writes them into its frame-arena
-  page at its first direct mesh draw of a recording.
+- A direct draw passes base instance 0, and an indexed one the index address plus `firstIndex` times
+  the index size and the bytes that remain. It reads `drawId` 0 from the device's zero record, which
+  each list's table holds at `buffer(3)` from acquisition, rebound after an indirect draw (ADR 0028).
 - Every draw skips a zero count, marks the encoder as holding work, and records the stages it ran
   for the barrier lowering. Each native draw runs inside a `CommandPool`, since the validation
   layer autoreleases inside a draw; that is one pool per draw under the layer and none without it.
@@ -208,10 +207,11 @@ command of any compute stage.
 
 ## Counted draws
 
-Every `drawIndirect` and `drawIndexedIndirect` is counted, as is a mesh draw with a count or more
-than one record. With no native form that reads a GPU count, a backend kernel reads the count and
-encodes the draws into an indirect command buffer (ICB) or, at `maxCount` 1, writes one native
-record. Chapter 08 states the cost.
+A lone record with a null count is not counted: it binds the record at `buffer(3)` and draws
+natively from offset 4 on the render encoder (`drawLone`, and for mesh `drawLoneMesh`). Every
+other indirect draw is counted. With no native form that reads a GPU count, a backend kernel reads
+the count and encodes the draws into an indirect command buffer (ICB) or, at `maxCount` 1, writes
+one native record. Chapter 08 states the cost.
 
 - **Hoisting.** While the render encoder is closed, the kernel goes on a compute encoder ahead of
   it, which the batch's kernels share and which holds only kernels: `bindKernelBatch` sets the
@@ -234,9 +234,9 @@ record. Chapter 08 states the cost.
   cursor that resets at acquisition. Slot `i` serves the `i`-th counted draw of that kind in a
   recording and is reused while its capacity reaches `maxCount`; otherwise it is replaced by one of
   `bit_ceil(max(maxCount, 64))` commands, since the list is acquired again only after its frame
-  slot's work retired. A draw command costs about 670 bytes and a mesh command 1,536, measured on an
-  Apple M3 Max. The descriptor inherits the pipeline state and every `inherit*` state, and inherits
-  the buffers for draw and indexed kinds. The slots outlive a recording, so a list that records the
+  slot's work retired. A mesh command costs 1,536 bytes and a draw command, before it bound its
+  buffers, about 670, measured on an Apple M3 Max. The descriptor inherits the pipeline state and
+  every `inherit*` state but no buffer. The slots outlive a recording, so a list that records the
   same counted draws again makes no native object.
 - **Residency.** The ICBs are resident through the device's residency set, which every queue keeps.
   Recording takes no lock (ADR 0020), so the list only notes the ICBs it made and replaced;
@@ -251,34 +251,34 @@ record. Chapter 08 states the cost.
   and clear ones. Topology and index type are run-time parameters, since they vary per call. The
   encode kernels run one thread per command in groups of 64, encode the record when it lies below
   the count and reset the command otherwise (a record with no vertices or instances is an empty
-  command), and write the execution range. A writer, one thread per draw at `maxCount` 1, writes a
-  native record, with no instances when the count is 0.
-- **The parameters.** One 96-byte reservation in the list's frame-arena page, claimed through
-  `core::bumpArenaPage` and counted as no frame data, holds the kernel's `DrawParams` (64 bytes) and
-  either the ICB's resource ID and the execution range or the writer's native record. A counted
-  mesh draw reserves 128 bytes: the kernel's `MeshParams` (96 bytes), which also carries the root
-  recorded with the draw and the addresses of the view and sampler tables that each mesh command
-  bakes in, then the same ICB ID and range or native record. Replay runs
+  command), and write the execution range; a draw or indexed command binds the root, the view and
+  sampler tables and its record at `buffer(0)` to `buffer(3)` on the vertex and fragment stages. A
+  writer, one thread per draw at `maxCount` 1, writes a native record with base instance 0, with no
+  instances when the count is 0, and the replay binds the caller's record.
+- **The parameters.** One 128-byte reservation in the list's frame-arena page, claimed through
+  `core::bumpArenaPage` and counted as no frame data, holds the kernel's `DrawParams` or
+  `MeshParams` (96 bytes), which carry the root recorded with the draw and the view and sampler
+  tables' addresses that each command bakes in, then either the ICB's resource ID and the
+  execution range or the writer's native record. Replay runs
   `executeCommandsInBuffer(icb, rangeAddress)` or the native indirect draw of the record.
 - **Counts.** An encode kernel costs two native messages (address, dispatch) once its pipeline is
   set, three when the kind changes, four on a new encoder, and its execute one at replay. Writers of
   consecutive draws of one kind, reserved back to back, form one run (`Encoders::queueKernel`) that
   the next encode kernel or the encoder's close dispatches at those costs, a thread per draw, so a
-  writer's draw costs only its replay. The batch adds its encoder's open and end and a barrier at the
-  render open, and no timestamp: a timed pass begins on its render encoder. Each runs in a pool.
+  writer's draw costs its replay and a record bind. The batch adds its encoder's open and end and a
+  barrier at the render open; it writes no timestamp, since its encoder may overlap earlier work, so
+  a timed pass begins on its render encoder. Dispatches and executes each run in a pool.
 
 ## Mesh paths
 
-A direct `drawMeshTasks` binds the zero record at `buffer(3)` and calls `drawMeshThreadgroups`
-with the pipeline's object and mesh threadgroup sizes. A mesh draw with a null count and a lone
-record is not counted: it binds the record's address at `buffer(3)`, so the shader's `drawId`
-reads the record's first word, and draws over the three threadgroup counts that follow it at the
-record's address plus four, opening the render encoder like any direct draw. Any other mesh
-indirect draw is counted: its kernels are the batch form of the previous section, its ICB kind is
-the mesh one, and the barrier adds the object and mesh stages. A mesh ICB command binds buffers 0
-to 3 on the object, mesh and fragment stages, with four bind counts and `inheritBuffers` false:
-nothing reaches an ICB command from the table, and Slang gives every entry of a file each reserved
-binding any entry of the file touches. The writer path binds the record at `buffer(3)` to draw.
+A direct `drawMeshTasks` calls `drawMeshThreadgroups` with the pipeline's object and mesh
+threadgroup sizes. A lone mesh record with a null count binds its address at `buffer(3)`, so the
+shader's `drawId` reads its first word, and draws over the three threadgroup counts at its address
+plus four. Any other mesh indirect draw is counted: its kernels are the batch form of the previous
+section, its ICB kind is the mesh one, and the barrier adds the object and mesh stages. A mesh ICB
+command binds buffers 0 to 3 on the object, mesh and fragment stages: Slang gives every entry of a
+file each reserved binding any entry of the file touches. The writer path binds the record at
+`buffer(3)` to draw.
 
 Slang drops the user semantic of mesh vertex outputs when it compiles to MSL, so Metal refuses a
 mesh pipeline whose fragment entry reads a vertex varying; a mesh shader passes its values per

@@ -1,6 +1,6 @@
 //----------------------------------------------------------------------------------------------------------------------
 /// @file Metal4IndirectTests.cpp
-/// @brief Tests how Metal 4 records counted draws: kernels ahead of the render encoder, splits, call counts and the list's ICBs.
+/// @brief Tests how Metal 4 records indirect draws: lone records natively, counted ones by kernels ahead of the render encoder.
 //----------------------------------------------------------------------------------------------------------------------
 #include <rojoRHI/RHI.h>
 
@@ -179,6 +179,10 @@ namespace {
             indices = *device.createBuffer(
                 BufferDesc{ .size = sizeof(values), .usage = BufferUsage::Index, .label = "test.indices" }, std::as_bytes(std::span(values))
             );
+            const uint32_t one = 1;
+            count = *device.createBuffer(
+                BufferDesc{ .size = sizeof(one), .usage = BufferUsage::IndirectArgs, .label = "test.count" }, std::as_bytes(std::span(&one, 1))
+            );
         }
 
         //==============================================================================================================
@@ -206,6 +210,21 @@ namespace {
             list.drawIndexedIndirect(indices, IndexType::UInt32, Device(device).address(indexedRecords), maxCount);
         }
 
+        //==============================================================================================================
+        /// Records a draw of the fixture's first record on `list` with the count of 1: `maxCount` 1 with a count, the writer
+        /// kernel's path.
+        void drawWritten(CommandList list) const
+        {
+            list.drawIndirect(Device(device).address(records), 1, Device(device).address(count));
+        }
+
+        //==============================================================================================================
+        /// Records an indexed draw of the fixture's first indexed record on `list` with the count of 1, as `drawWritten` does.
+        void drawIndexedWritten(CommandList list) const
+        {
+            list.drawIndexedIndirect(indices, IndexType::UInt32, Device(device).address(indexedRecords), 1, Device(device).address(count));
+        }
+
         Device device;         ///< The device.
         ShaderLibrary library; ///< The standard library.
         Pipeline pipeline;     ///< A vertex pipeline over one `RGBA8Unorm` target.
@@ -214,6 +233,7 @@ namespace {
         Buffer records;        ///< `kRecords` draw records of three vertices and one instance.
         Buffer indexedRecords; ///< `kRecords` indexed records of three indices and one instance.
         Buffer indices;        ///< Three `UInt32` indices.
+        Buffer count;          ///< A draw count of 1.
     };
 
     /// The edge of the draw oracle's targets, in pixels.
@@ -347,8 +367,8 @@ TEST_CASE("the kernels of a pass's leading counted draws share one compute encod
     fixture.begin(list);
     fixture.drawIndirect(list);
     fixture.drawIndexedIndirect(list);
-    fixture.drawIndirect(list, 1);
-    fixture.drawIndexedIndirect(list, 1);
+    fixture.drawWritten(list);
+    fixture.drawIndexedWritten(list);
     CHECK(countsOf(list).encodersOpened == 1);
     CHECK(
         prefixKinds(list) ==
@@ -431,7 +451,7 @@ TEST_CASE("a kernel makes four calls on a new encoder, two once the encoder hold
     fixture.drawIndexedIndirect(list);
     CHECK(callsOf(list) - before == 2);
     // The kernels' encoder ends; the render encoder's open with its barrier, the pass's begin timestamp, the state, one
-    // execute per counted draw, the pass's end timestamp and its group.
+    // execute per counted draw, whose commands bind their own records, the pass's end timestamp and its group.
     before = callsOf(list);
     list.endRenderPass();
     CHECK(callsOf(list) - before == 1 + openCalls(list) + 1 + kPassBegin + kStateCalls + 4 + 2);
@@ -439,36 +459,119 @@ TEST_CASE("a kernel makes four calls on a new encoder, two once the encoder hold
 }
 
 //======================================================================================================================
-TEST_CASE("maxCount 1 runs the writer kernel and one native indirect draw", "[metal4]")
+TEST_CASE("maxCount 1 with a count runs the writer kernel and binds the record for one native indirect draw", "[metal4]")
 {
     test::GpuKit kit(2, true);
     const Fixture fixture(kit.device);
     CommandList list = kit.list(QueueType::Graphics, "test.indirect");
     fixture.begin(list);
     uint64_t before = callsOf(list);
-    // The encoder's open, with no timestamp; the writer kernel waits for the run it starts to end. No indirect command buffer.
-    fixture.drawIndirect(list, 1);
+    // The encoder's open; the writer kernel waits for the run it starts to end. No timestamp and no indirect command buffer.
+    fixture.drawWritten(list);
     CHECK(callsOf(list) - before == batchOpenCalls(list));
     CHECK(encodersOf(list).kernelPipeline() == nullptr);
     // Another writer kernel ends the run: its pipeline, the kernel table, the parameters and the dispatch.
     before = callsOf(list);
-    fixture.drawIndexedIndirect(list, 1);
+    fixture.drawIndexedWritten(list);
     CHECK(callsOf(list) - before == 4);
     CHECK(encodersOf(list).kernelPipeline() == kernelsOf(kit.device).writeDraw);
     CHECK(drawOf(list).icbs.slots(metal4::IcbKind::Draw) == 0);
     CHECK(drawOf(list).icbs.slots(metal4::IcbKind::Indexed) == 0);
     CHECK(prefixKinds(list) == std::vector{ Kind::Pipeline, Kind::Viewport, Kind::Scissor, Kind::DrawIndirect, Kind::IndexedIndirect });
     const metal4::PrefixIndirect& indexed = drawOf(list).prefix.back().indirect;
+    CHECK(indexed.drawRecord == gpuAddressOf(kit.device.address(fixture.indexedRecords)));
     CHECK(indexed.primitive == MTL::PrimitiveTypeTriangle);
     CHECK(indexed.indexType == MTL::IndexTypeUInt32);
     CHECK(indexed.indices == gpuAddressOf(kit.device.address(fixture.indices)));
     CHECK(indexed.indexLength == 3 * sizeof(uint32_t));
     // The indexed run's pipeline, parameters and dispatch; the kernels' encoder ends; the render encoder's open with its
-    // barrier, the pass's begin timestamp, the state, two native indirect draws, the pass's end timestamp and its group.
+    // barrier, the pass's begin timestamp, the state, two native indirect draws each after binding its caller's record, the
+    // pass's end timestamp and its group.
     before = callsOf(list);
     list.endRenderPass();
-    CHECK(callsOf(list) - before == 3 + 1 + openCalls(list) + 1 + kPassBegin + kStateCalls + 2 + 2);
+    CHECK(callsOf(list) - before == 3 + 1 + openCalls(list) + 1 + kPassBegin + kStateCalls + 2 * 2 + 2);
+    CHECK(drawOf(list).tableDrawRecord == gpuAddressOf(kit.device.address(fixture.indexedRecords)));
     kit.run(std::array{ list });
+}
+
+//======================================================================================================================
+TEST_CASE("a lone record with no count is drawn natively on the render encoder with its record bound, and no kernel", "[metal4]")
+{
+    test::GpuKit kit(2, true);
+    const Fixture fixture(kit.device);
+    CommandList list = kit.list(QueueType::Graphics, "test.indirect");
+    fixture.begin(list);
+    fixture.drawIndirect(list, 1);
+    // The render encoder opens for the draw: no compute encoder, no kernel, no indirect command buffer, nothing in the prefix.
+    CHECK(encodersOf(list).kind() == metal4::EncoderKind::Render);
+    CHECK(countsOf(list).encodersOpened == 1);
+    CHECK(encodersOf(list).kernelPipeline() == nullptr);
+    CHECK(drawOf(list).prefix.empty());
+    CHECK(drawOf(list).icbs.slots(metal4::IcbKind::Draw) == 0);
+    CHECK(drawOf(list).tableDrawRecord == gpuAddressOf(kit.device.address(fixture.records)));
+    // The same record again is the native draw alone; another record binds it first.
+    uint64_t before = callsOf(list);
+    fixture.drawIndirect(list, 1);
+    CHECK(callsOf(list) - before == 1);
+    before = callsOf(list);
+    fixture.drawIndexedIndirect(list, 1);
+    CHECK(callsOf(list) - before == 2);
+    CHECK(drawOf(list).tableDrawRecord == gpuAddressOf(kit.device.address(fixture.indexedRecords)));
+    // A direct draw binds the zero record back, once.
+    before = callsOf(list);
+    list.draw(3);
+    list.draw(3);
+    CHECK(callsOf(list) - before == 1 + 2);
+    CHECK(drawOf(list).tableDrawRecord == drawOf(list).zeroRecord);
+    list.endRenderPass();
+    CHECK(countsOf(list).encodersOpened == 1);
+    CHECK(encodersOf(list).barriers().pendingDestination == 0);
+    kit.run(std::array{ list });
+}
+
+//======================================================================================================================
+TEST_CASE("a lone record with no count after a direct draw does not split the pass", "[metal4]")
+{
+    test::GpuKit kit(2, true);
+    const Fixture fixture(kit.device);
+    CommandList list = kit.list(QueueType::Graphics, "test.indirect");
+    fixture.begin(list, StoreOp::DontCare);
+    list.draw(3);
+    REQUIRE(encodersOf(list).kind() == metal4::EncoderKind::Render);
+    // The record's bind and the native draw on the open render encoder: no split stores the attachment.
+    const uint64_t before = callsOf(list);
+    fixture.drawIndirect(list, 1);
+    fixture.drawIndexedIndirect(list, 1);
+    CHECK(callsOf(list) - before == 2 * 2);
+    list.draw(3);
+    CHECK(encodersOf(list).kind() == metal4::EncoderKind::Render);
+    list.endRenderPass();
+    CHECK(countsOf(list).encodersOpened == 1);
+    kit.run(std::array{ list });
+}
+
+//======================================================================================================================
+TEST_CASE("a list acquired again holds the zero record after a recording that left a draw's record bound", "[metal4]")
+{
+    Device device = *createDevice({ .scopeTimings = true });
+    const uint32_t slots = core::coreOf(device).framesInFlight();
+    const Fixture fixture(device);
+    for (uint32_t frame = 0; frame < 2 * slots; ++frame)
+    {
+        device.beginFrame();
+        CommandList list = device.acquireCommandList(QueueType::Graphics, "test.indirect");
+        REQUIRE(drawOf(list).zeroRecord != 0);
+        CHECK(drawOf(list).tableDrawRecord == drawOf(list).zeroRecord);
+        fixture.begin(list);
+        // So a direct draw, which binds the zero record only when the table holds another, binds nothing.
+        list.draw(3);
+        CHECK(drawOf(list).tableDrawRecord == drawOf(list).zeroRecord);
+        fixture.drawIndirect(list, 1);
+        list.endRenderPass();
+        CHECK(drawOf(list).tableDrawRecord != drawOf(list).zeroRecord);
+        finish(device, list);
+    }
+    destroyDevice(device);
 }
 
 //======================================================================================================================
@@ -480,9 +583,9 @@ TEST_CASE("consecutive writer kernels of one kind run as one dispatch, and an en
     fixture.begin(list);
     uint64_t before = callsOf(list);
     // Each draw's parameters follow the last in the list's page, so the run grows by a thread and makes no call.
-    fixture.drawIndirect(list, 1);
-    fixture.drawIndirect(list, 1);
-    fixture.drawIndirect(list, 1);
+    fixture.drawWritten(list);
+    fixture.drawWritten(list);
+    fixture.drawWritten(list);
     CHECK(callsOf(list) - before == batchOpenCalls(list));
     // The encode kernel first dispatches the run (pipeline, kernel table, parameters, dispatch), then itself (pipeline,
     // parameters, dispatch).
@@ -491,10 +594,11 @@ TEST_CASE("consecutive writer kernels of one kind run as one dispatch, and an en
     CHECK(callsOf(list) - before == 4 + 3);
     CHECK(encodersOf(list).kernelPipeline() == kernelsOf(kit.device).encodeDraw);
     // A writer after it starts a new run, dispatched when the kernels' encoder ends: its pipeline, parameters and dispatch.
-    fixture.drawIndirect(list, 1);
+    // The render encoder then binds the writers' one caller record once, before the first of its five draws.
+    fixture.drawWritten(list);
     before = callsOf(list);
     list.endRenderPass();
-    CHECK(callsOf(list) - before == 3 + 1 + openCalls(list) + 1 + kPassBegin + kStateCalls + 5 + 2);
+    CHECK(callsOf(list) - before == 3 + 1 + openCalls(list) + 1 + kPassBegin + kStateCalls + 1 + 5 + 2);
     CHECK(countsOf(list).encodersOpened == 2);
     kit.run(std::array{ list });
 }
@@ -514,7 +618,7 @@ TEST_CASE("an execute replays after the root, pipeline and state recorded before
     list.setPipeline(fixture.other);
     list.setRoot(second);
     list.setViewport(Viewport{ .width = 8.0f, .height = 8.0f });
-    fixture.drawIndirect(list, 1);
+    fixture.drawWritten(list);
     // No entry merges across an execute: each sees the root and the pipeline recorded before it.
     CHECK(
         prefixKinds(list) ==
@@ -522,6 +626,15 @@ TEST_CASE("an execute replays after the root, pipeline and state recorded before
     );
     CHECK(drawOf(list).prefix[3].root == gpuAddressOf(first));
     CHECK(drawOf(list).prefix[6].root == gpuAddressOf(second));
+    // The execute's commands bind the root recorded before it, the view and sampler tables and their own records.
+    const core::ArenaPage& page = core::coreOf(list).page;
+    const uint64_t range = drawOf(list).prefix[4].execute.range;
+    metal4::DrawParams params{};
+    std::memcpy(&params, page.host + (range - (sizeof(metal4::DrawParams) + 16) - page.address), sizeof(params));
+    CHECK(params.records == gpuAddressOf(kit.device.address(fixture.records)));
+    CHECK(params.root == gpuAddressOf(first));
+    CHECK(params.views == DeviceImpl::of(kit.device).viewTable->gpuAddress());
+    CHECK(params.samplers == DeviceImpl::of(kit.device).samplerTable->gpuAddress());
     list.draw(3);
     // The replay leaves the encoder holding what was recorded last.
     CHECK(drawOf(list).held.pipeline == drawOf(list).pipeline);
@@ -687,9 +800,11 @@ TEST_CASE("a counted draw that claims a new frame-arena page reads its kernel's 
 {
     test::GpuKit kit(2, true);
     const OracleTarget oracle(kit, Format::R32Float);
-    // Each counted draw reserves 96 bytes of the list's 1 MiB page, so these claim a second page part way through. Each draws
+    // Each counted draw reserves 128 bytes of the list's 1 MiB page, so these claim a second page part way through. Each draws
     // its own drawId into its own pixel; one that read its parameters at the old page's address would draw another's.
     constexpr uint32_t kDraws = 12000;
+    const uint32_t one = 1;
+    const Buffer count = kit.buffer(sizeof(one), Memory::Gpu, BufferUsage::IndirectArgs, std::as_bytes(std::span(&one, 1)));
     std::vector<DrawIndirectArgs> records;
     for (uint32_t i = 0; i < kDraws; ++i)
     {
@@ -701,7 +816,7 @@ TEST_CASE("a counted draw that claims a new frame-arena page reads its kernel's 
     std::set<uint64_t> pages;
     for (uint32_t i = 0; i < kDraws; ++i)
     {
-        list.drawIndirect(kit.device.address(args, uint64_t{ i } * sizeof(DrawIndirectArgs)), 1);
+        list.drawIndirect(kit.device.address(args, uint64_t{ i } * sizeof(DrawIndirectArgs)), 1, kit.device.address(count));
         pages.insert(core::coreOf(list).page.buffer.bits);
     }
     REQUIRE(pages.size() >= 2);
@@ -742,7 +857,8 @@ TEST_CASE("counted indexed draws read the index buffer each names", "[metal4]")
     const Buffer manyFirst = recordsOf(2, 4, 0);
     CommandList list = kit.list(QueueType::Graphics, "test.indirect");
     oracle.begin(list);
-    // The writer kernel's path, then the indirect command buffer's: each changes the index buffer once and keeps it once.
+    // The native path of a lone record, then the indirect command buffer's: each changes the index buffer once and keeps it
+    // once.
     list.drawIndexedIndirect(firstIndices, IndexType::UInt16, kit.device.address(loneFirst), 1);
     list.drawIndexedIndirect(secondIndices, IndexType::UInt16, kit.device.address(loneSecond), 1);
     list.drawIndexedIndirect(secondIndices, IndexType::UInt16, kit.device.address(manySecond), 4);

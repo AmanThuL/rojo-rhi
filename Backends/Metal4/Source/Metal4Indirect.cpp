@@ -1,6 +1,6 @@
 //----------------------------------------------------------------------------------------------------------------------
 /// @file Metal4Indirect.cpp
-/// @brief Implements the indirect draw entries for the Metal 4 backend: a kernel ahead of the render encoder encodes or writes each counted draw.
+/// @brief Implements the indirect draw entries for the Metal 4 backend: a lone record is drawn natively, a kernel encodes or writes the rest.
 //----------------------------------------------------------------------------------------------------------------------
 
 #include "Metal4Device.h"
@@ -146,14 +146,15 @@ namespace rojoRHI {
         }
 
         //==============================================================================================================
-        /// Records `counted` (chapter 08's Metal 4 mapping). Its kernel runs on a compute encoder ahead of the render encoder that
-        /// executes it, so an open render encoder splits the pass first; the kernels of a pass's leading counted draws share one
-        /// compute encoder, which binds the kernel table once. Above `maxCount` 1 the kernel encodes the records below the count
-        /// into an indirect command buffer of the list and writes its range; at 1 it writes the record as a native one. A
-        /// backend barrier from the dispatch stage to the vertex stage, where the execute reads what the kernel wrote, joins the
-        /// pending barrier, which the render encoder emits when it opens; after a split it also orders the ended encoder's
-        /// fragment-stage stores before the resumed encoder's loads. The execute joins the prefix, after the state recorded
-        /// before it.
+        /// Records `counted`, which has a count or several records (chapter 08's Metal 4 mapping). Its kernel runs on a compute
+        /// encoder ahead of the render encoder that executes it, so an open render encoder splits the pass first; the kernels of
+        /// a pass's leading counted draws share one compute encoder, which binds the kernel table once. Above `maxCount` 1 the
+        /// kernel encodes the records below the count into an indirect command buffer of the list, each command binding the
+        /// root recorded before this call, the view and sampler tables and its own record, and writes its range; at 1 it writes
+        /// the record as a native one, and the draw binds the caller's record at `buffer(3)`. A backend barrier from the
+        /// dispatch stage to the vertex stage, where the execute reads what the kernel wrote, joins the pending barrier, which
+        /// the render encoder emits when it opens; after a split it also orders the ended encoder's fragment-stage stores before
+        /// the resumed encoder's loads. The execute joins the prefix, after the state recorded before it.
         void recordCounted(CommandListImpl& list, const Counted& counted)
         {
             const bool split = list.encoders.renderEncoder() != nullptr;
@@ -163,6 +164,11 @@ namespace rojoRHI {
             // The retire hooks' context is the device that owns the core; its kernels and native device are fixed from its
             // creation to its destruction.
             const DeviceImpl& impl = *static_cast<const DeviceImpl*>(device.retireHooks().context);
+            if (draw.viewTableAddress == 0)
+            {
+                draw.viewTableAddress = impl.viewTable->gpuAddress();
+                draw.samplerTableAddress = impl.samplerTable->gpuAddress();
+            }
             const Reservation place = reserve(list, metal4::kDrawReservation);
             const uint64_t base = place.address;
             const bool indexed = counted.kind == metal4::IcbKind::Indexed;
@@ -174,6 +180,9 @@ namespace rojoRHI {
                                        .count = counted.count,
                                        .output = 0,
                                        .indices = indexed ? indices->address : 0,
+                                       .root = draw.root,
+                                       .views = draw.viewTableAddress,
+                                       .samplers = draw.samplerTableAddress,
                                        .maxCount = counted.maxCount,
                                        .primitive = static_cast<uint32_t>(draw.topology),
                                        .indexType = static_cast<uint32_t>(counted.indexType),
@@ -199,7 +208,8 @@ namespace rojoRHI {
                 params.output = base + kRecordOffset;
                 kernel = indexed ? impl.kernels.writeIndexed : impl.kernels.writeDraw;
                 command.kind = indexed ? metal4::PrefixKind::IndexedIndirect : metal4::PrefixKind::DrawIndirect;
-                command.indirect = metal4::PrefixIndirect{ .record = base + kRecordOffset,
+                command.indirect = metal4::PrefixIndirect{ .drawRecord = counted.records,
+                                                           .record = base + kRecordOffset,
                                                            .primitive = draw.topology,
                                                            .indexType = counted.indexType,
                                                            .indices = params.indices,
@@ -295,6 +305,41 @@ namespace rojoRHI {
             const bool task = pipeline.objectThreads.width != 0;
             list.encoders.markRan(MTL::StageMesh | MTL::StageFragment | (task ? MTL::StageObject : MTL::Stages{ 0 }));
         }
+
+        //==============================================================================================================
+        /// Records a lone draw record at `record` with no count, indexed into `indices` of `type` when `indices` is not null,
+        /// which needs no kernel (ADR 0028): on the render encoder, opened if needed, the record is bound at `buffer(3)` for the
+        /// vertex entry's drawId and drawn natively from its fields at offset 4, whose last, `firstInstance`, becomes the base
+        /// instance, which `rojoRHI::instanceIndex` subtracts.
+        void drawLone(CommandListImpl& list, uint64_t record, const metal4::BufferPayload* indices, MTL::IndexType type)
+        {
+            MTL4::RenderCommandEncoder* encoder = metal4::ensureRender(list);
+            metal4::applyDrawRecord(list, record);
+            {
+                // The validation layer autoreleases in a draw it checks.
+                const metal4::CommandPool pool(list.state.commandPools);
+                if (indices != nullptr)
+                {
+                    encoder->drawIndexedPrimitives(
+                        list.draw.topology, type, indices->address, indices->length, record + offsetof(DrawIndexedIndirectArgs, indexCount)
+                    );
+                }
+                else
+                {
+                    encoder->drawPrimitives(list.draw.topology, record + offsetof(DrawIndirectArgs, vertexCount));
+                }
+            }
+            core::noteNativeCall(list.core);
+            list.encoders.markWork();
+            list.encoders.markRan(MTL::StageVertex | MTL::StageFragment);
+        }
+
+        //==============================================================================================================
+        /// True when a draw of `maxCount` records with the count at `count` is a lone record with no count.
+        bool lone(uint32_t maxCount, Addr count)
+        {
+            return maxCount == 1 && count.lo == 0 && count.hi == 0;
+        }
     } // namespace
 
     //==================================================================================================================
@@ -302,6 +347,12 @@ namespace rojoRHI {
     {
         CommandListImpl& list = CommandListImpl::of(*this);
         core::drawIndirect(list.core, args, maxCount, count);
+        // A lone record with no count is drawn natively; the others are counted.
+        if (lone(maxCount, count))
+        {
+            drawLone(list, addressOf(args), nullptr, MTL::IndexTypeUInt16);
+            return;
+        }
         recordCounted(
             list,
             Counted{ .kind = metal4::IcbKind::Draw,
@@ -318,6 +369,12 @@ namespace rojoRHI {
     {
         CommandListImpl& list = CommandListImpl::of(*this);
         core::drawIndexedIndirect(list.core, indices, args, maxCount, count);
+        if (lone(maxCount, count))
+        {
+            // A record's payload is fixed from creation to retirement, so it is read with one load and no lock (ADR 0020).
+            drawLone(list, addressOf(args), metal4::bufferPayload(*list.core.device, indices), metal4::indexType(type));
+            return;
+        }
         recordCounted(
             list,
             Counted{ .kind = metal4::IcbKind::Indexed,
@@ -335,7 +392,7 @@ namespace rojoRHI {
         CommandListImpl& list = CommandListImpl::of(*this);
         core::drawMeshTasksIndirect(list.core, args, maxCount, count);
         // Every indirect mesh draw is counted except a lone record with no count, which Metal draws natively.
-        if (maxCount == 1 && count.lo == 0 && count.hi == 0)
+        if (lone(maxCount, count))
         {
             drawLoneMesh(list, addressOf(args));
             return;

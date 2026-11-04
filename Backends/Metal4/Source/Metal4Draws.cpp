@@ -20,33 +20,19 @@
 #include <Metal/Metal.hpp>
 
 #include <cstdint>
-#include <cstring>
 
 namespace rojoRHI {
     namespace {
-        /// The bytes of the zero record a direct mesh draw binds: the leading `uint32` a mesh or task entry reads as `drawId`.
-        constexpr uint64_t kZeroRecordBytes = 4;
-
-        /// The alignment the zero record is reserved at.
-        constexpr uint32_t kZeroRecordAlignment = 16;
-
         //==============================================================================================================
-        /// Binds the recording's zero record at `buffer(3)` of the list's table unless it holds it, reserving and zeroing
-        /// the record in the list's frame-arena page at the recording's first direct mesh draw.
+        /// Binds the device's zero record at `buffer(3)` of the list's table unless it holds it: a direct draw's drawId is 0.
+        /// One compare when the table holds it, as it does unless an indirect draw of the recording bound its record.
         void bindZeroRecord(CommandListImpl& list)
         {
-            metal4::DrawState& draw = list.draw;
-            if (draw.zeroRecord == 0)
+            const metal4::DrawState& draw = list.draw;
+            if (draw.tableDrawRecord != draw.zeroRecord) [[unlikely]]
             {
-                // Only a list with no page, or a full one, takes the arena's lock to claim a page (ADR 0020). Arena memory is
-                // not cleared, so the record is written here.
-                core::DeviceCore& device = *list.core.device;
-                const core::ArenaAllocation place =
-                    core::bumpArenaPage(device, list.core, kZeroRecordBytes, kZeroRecordAlignment, device.arenaSource(), &device);
-                std::memset(place.memory, 0, kZeroRecordBytes);
-                draw.zeroRecord = place.address;
+                metal4::applyDrawRecord(list, draw.zeroRecord);
             }
-            metal4::applyDrawRecord(list, draw.zeroRecord);
         }
 
         //==============================================================================================================
@@ -129,8 +115,10 @@ namespace rojoRHI {
             return;
         }
         MTL4::RenderCommandEncoder* encoder = metal4::ensureRender(list);
-        // Base instance 0: rojoRHI::drawId reads it in the vertex stage, and firstInstance is invisible to shaders. The
-        // shortest form that says so is sent: one instance, else the instance count, with base instance 0 either way.
+        // rojoRHI::drawId reads 0 from the zero record, after the prefix the open replayed.
+        bindZeroRecord(list);
+        // Base instance 0, since firstInstance is invisible to shaders. The shortest form that says so is sent: one instance,
+        // else the instance count, with base instance 0 either way.
         if (instances == 1 && !list.state.commandPools) [[likely]]
         {
             encoder->drawPrimitives(list.draw.topology, firstVertex, vertices);
@@ -156,6 +144,7 @@ namespace rojoRHI {
             return;
         }
         MTL4::RenderCommandEncoder* encoder = metal4::ensureRender(list);
+        bindZeroRecord(list);
         // A record's payload is fixed from creation to retirement, so it is read with one load and no lock (ADR 0020), and it
         // holds the buffer's GPU address and length, so the draw sends the buffer no message.
         const metal4::BufferPayload& buffer = *metal4::bufferPayload(*list.core.device, indices);
@@ -186,7 +175,7 @@ namespace rojoRHI {
             return;
         }
         MTL4::RenderCommandEncoder* encoder = metal4::ensureRender(list);
-        // A direct draw's drawId is 0: the task and mesh entries read it from a zero record.
+        // A direct draw's drawId is 0: the task and mesh entries read it from the zero record.
         bindZeroRecord(list);
         const metal4::PipelineState& pipeline = *list.draw.pipeline;
         {

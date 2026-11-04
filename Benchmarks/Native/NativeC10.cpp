@@ -135,9 +135,11 @@ namespace rojoRHI::bench {
 
             if (m_nullCount)
             {
-                const MTL::DrawPrimitivesIndirectArguments record{ .vertexCount = 1, .instanceCount = 1, .vertexStart = 0, .baseInstance = kSingleDrawId };
+                // The interface's record: the vertex shader reads drawId from offset 0 of the record bound at buffer 3, and the
+                // draw reads its native fields from offset 4.
+                const std::array<uint32_t, 5> record{ kSingleDrawId, 1, 1, 0, 1000 };
                 const std::expected<MTL::Buffer*, std::string> buffer =
-                    m_context.sharedBuffer(sizeof(record), "bench.c10.nativeRecord", std::as_bytes(std::span(&record, 1)));
+                    m_context.sharedBuffer(sizeof(record), "bench.c10.nativeRecord", std::as_bytes(std::span(record)));
                 if (!buffer)
                 {
                     return std::unexpected(buffer.error());
@@ -184,9 +186,12 @@ namespace rojoRHI::bench {
             calls.record += 4;
             if (m_nullCount)
             {
+                encoder->setArgumentTable(slot.table, MTL::RenderStageVertex);
+                slot.table->setAddress(m_nativeRecord->gpuAddress(), 3);
+                calls.record += 2;
                 for (uint32_t draw = 0; draw < m_k; ++draw)
                 {
-                    encoder->drawPrimitives(MTL::PrimitiveTypePoint, m_nativeRecord->gpuAddress());
+                    encoder->drawPrimitives(MTL::PrimitiveTypePoint, m_nativeRecord->gpuAddress() + sizeof(uint32_t));
                     ++calls.record;
                 }
             }

@@ -173,6 +173,19 @@ TEST_CASE("a library stamped with another ABI version is ShaderAbiMismatch, even
 }
 
 //======================================================================================================================
+TEST_CASE("a library stamped with ABI version 2, whose vertex drawId read the base instance, is ShaderAbiMismatch", "[metal4]")
+{
+    // Version 3 moved the vertex stage's drawId to the bound record (ADR 0028); a library built against 2 would read the
+    // base instance, so it is refused rather than run.
+    REQUIRE(kMetalLibrariesBuilt);
+    REQUIRE(core::kShaderAbiVersion == 3);
+    Device device = *createDevice({});
+    const std::vector<std::byte> payload = computePayload();
+    checkRefused(device, blobOf(header("2", kCompute, std::to_string(payload.size())), payload), ErrorCategory::ShaderAbiMismatch, "ABI version 2");
+    destroyDevice(device);
+}
+
+//======================================================================================================================
 TEST_CASE("a bare metallib and another backend's blob are DriverFailure, not built for Metal 4", "[metal4]")
 {
     REQUIRE(kMetalLibrariesBuilt);

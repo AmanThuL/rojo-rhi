@@ -482,6 +482,9 @@ TEST_CASE("a render pass a counted draw splits reports one duration, more than t
     const Pipeline solid = solidPipeline(device, library);
     const Texture target = square(device, Format::RGBA16Float, kDrawnEdge, TextureUsage::RenderTarget, "test.target");
     const Buffer records = drawRecords(device, 1, 1);
+    const uint32_t one = 1;
+    const Buffer count =
+        *device.createBuffer(BufferDesc{ .size = sizeof(one), .usage = BufferUsage::IndirectArgs, .label = "test.count" }, std::as_bytes(std::span(&one, 1)));
     device.beginFrame();
     CommandList list = device.acquireCommandList(QueueType::Graphics, "test.list");
     transition(list, target, Layout::Undefined, Layout::ColorAttachment, Stage::None, Access::None, Stage::ColorAttachment, Access::ColorAttachmentWrite);
@@ -489,10 +492,11 @@ TEST_CASE("a render pass a counted draw splits reports one duration, more than t
     list.draw(3, kInstances);
     list.endRenderPass();
     betweenPasses(list, target);
-    // A counted draw after a direct one splits the pass on Metal 4 (chapter 08); the second direct draw follows it.
+    // A counted draw after a direct one splits the pass on Metal 4 (chapter 08), one with a count since a lone record with
+    // none is drawn natively; the second direct draw follows it.
     beginDrawing(list, target, kDrawnEdge, solid, "test.split");
     list.draw(3, kInstances);
-    list.drawIndirect(device.address(records), 1);
+    list.drawIndirect(device.address(records), 1, device.address(count));
     list.draw(3, kInstances);
     list.endRenderPass();
     submit(device, std::array{ list }, std::array{ QueueType::Graphics });

@@ -55,9 +55,9 @@ founding documents ([architecture](docs/architecture/overview.md) maps the direc
   [0025 the per-operation CPU budget has a floor of 5 ns per RojoRHI call](
   docs/decisions/0025-cpu-budget-per-call-floor.md),
   [0026 D3D12 before hardware](docs/decisions/0026-d3d12-implemented-before-hardware.md),
-  [0027 hosted CI compiles D3D12](docs/decisions/0027-hosted-ci-compiles-d3d12.md)
-- API reference: [docs/spec/](docs/spec/00-conventions.md), entered through its conventions
-  chapter
+  [0027 hosted CI compiles D3D12](docs/decisions/0027-hosted-ci-compiles-d3d12.md),
+  [0028 drawId from the bound record](docs/decisions/0028-vertex-drawid-from-the-bound-record.md)
+- API reference: [docs/spec/](docs/spec/00-conventions.md), entered through its conventions chapter
 - Research: [docs/research/](docs/research/2026-10-11-rhi-redesign/01-nographicsapi.md), the
   evidence notes behind the decisions, [D3D12 on WARP](
   docs/research/2026-10-21-d3d12-warp-evidence.md) among them
@@ -233,7 +233,7 @@ recording](docs/architecture/null-backend-recording.md)). `slang.precise_files`:
   `Legacy/` is exempt. The project policy check enforces it.
 - Shader `uint atomicAdd(Addr,uint,uint)` returns the old word with relaxed atomicity and no fence.
 - The module owns all bindings; consumers declare none (ADR 0018). One `ROJORHI_TARGET_*` per compile;
-  binding or built-in value changes bump `ROJORHI_SHADER_ABI_VERSION` (ADR 0024).
+  binding or built-in value changes bump `ROJORHI_SHADER_ABI_VERSION` (ADR 0024), now 3 (ADR 0028).
 - Release recording takes no locks except when a list claims a new frame-arena page, for
   `uploadFrameData` or for a debug scope's label; a lookup that only feeds a Debug-tier check is
   compiled out of Release builds (ADR 0020).

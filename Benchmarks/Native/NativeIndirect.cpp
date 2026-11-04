@@ -5,6 +5,7 @@
 #include "Native/NativeIndirect.h"
 
 #include <algorithm>
+#include <cstddef>
 #include <cstring>
 #include <format>
 
@@ -18,10 +19,14 @@ namespace rojoRHI::bench {
             uint64_t icb;
             uint64_t range;
             uint64_t indices;
+            uint64_t root;
+            uint64_t views;
+            uint64_t samplers;
             uint32_t maxCount;
             uint32_t padding;
         };
-        static_assert(sizeof(KernelRoot) == 48);
+        static_assert(sizeof(KernelRoot) == 72);
+        static_assert(offsetof(KernelRoot, root) == 40);
     } // namespace
 
     //==================================================================================================================
@@ -110,7 +115,10 @@ namespace rojoRHI::bench {
             const CountedDraw& counted = draws[draw];
             MTL::IndirectCommandBufferDescriptor* descriptor = MTL::IndirectCommandBufferDescriptor::alloc()->init();
             descriptor->setInheritPipelineState(true);
-            descriptor->setInheritBuffers(true);
+            // Each command binds its own record, so it inherits no buffer and binds the reserved four itself.
+            descriptor->setInheritBuffers(false);
+            descriptor->setMaxVertexBufferBindCount(NativeContext::kArgumentBuffers);
+            descriptor->setMaxFragmentBufferBindCount(NativeContext::kArgumentBuffers);
             descriptor->setCommandTypes(counted.indexed ? MTL::IndirectCommandTypeDrawIndexed : MTL::IndirectCommandTypeDraw);
             for (uint32_t slot = 0; slot < NativeContext::kFrameSlots; ++slot)
             {
@@ -138,6 +146,9 @@ namespace rojoRHI::bench {
                     .icb = inputAddress + kIcbOffset,
                     .range = m_ranges->gpuAddress() + element(slot, draw) * kRangeStride,
                     .indices = counted.indices,
+                    .root = 0,
+                    .views = counted.views,
+                    .samplers = counted.samplers,
                     .maxCount = counted.maxCount,
                     .padding = 0,
                 };
@@ -148,6 +159,13 @@ namespace rojoRHI::bench {
             descriptor->release();
         }
         return {};
+    }
+
+    //==================================================================================================================
+    void NativeIndirect::setRoot(uint32_t slot, uint32_t draw, uint64_t root)
+    {
+        std::byte* base = static_cast<std::byte*>(m_inputs->contents()) + element(slot, draw) * kInputStride;
+        std::memcpy(base + offsetof(KernelRoot, root), &root, sizeof(root));
     }
 
     //==================================================================================================================

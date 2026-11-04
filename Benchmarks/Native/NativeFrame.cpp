@@ -301,6 +301,8 @@ namespace rojoRHI::bench {
                 draws[draw].counts[slot] = m_resources.records(slot)->gpuAddress() + viewCountOffset(view);
             }
             draws[draw].indices = m_resources.indices()->gpuAddress();
+            draws[draw].views = m_resources.viewTable();
+            draws[draw].samplers = m_resources.samplerTable();
             draws[draw].maxCount = kCountedMaxCount;
             draws[draw].indexed = true;
             draws[draw].triangles = true;
@@ -545,6 +547,9 @@ namespace rojoRHI::bench {
         commands->beginCommandBuffer(lists.allocators[list]);
         ++calls.record;
         beginPass(commands, heap, kGeometryPass, 0);
+        // The commands bind the root themselves, so it is uploaded before their kernel runs.
+        const uint64_t rootAddress = slot.push(bytesOf(root));
+        m_indirect.setRoot(slotIndex, kGeometryDraw, rootAddress);
         MTL4::ComputeCommandEncoder* kernels = commands->computeCommandEncoder();
         kernels->setLabel(m_passLabels[kGeometryPass]);
         calls.record += 2;
@@ -556,7 +561,7 @@ namespace rojoRHI::bench {
         emitBarrier(encoder, FrameBatch::Geometry, calls);
         m_indirect.barrier(encoder);
         setRenderState(encoder, kGeometryPass, m_pipelines.geometry, lists.table);
-        lists.table->setAddress(slot.push(bytesOf(root)), 0);
+        lists.table->setAddress(rootAddress, 0);
         ++calls.record;
         m_indirect.execute(encoder, slotIndex, kGeometryDraw);
         encoder->endEncoding();
@@ -641,6 +646,8 @@ namespace rojoRHI::bench {
                 .viewProj3 = view.row3,
             };
             beginPass(commands, heap, pass, 2 * cascade);
+            const uint64_t rootAddress = slot.push(bytesOf(root));
+            m_indirect.setRoot(slotIndex, kShadowDraw + cascade, rootAddress);
             MTL4::ComputeCommandEncoder* kernels = commands->computeCommandEncoder();
             kernels->setLabel(m_passLabels[pass]);
             calls.record += 2;
@@ -655,7 +662,7 @@ namespace rojoRHI::bench {
             }
             m_indirect.barrier(encoder);
             setRenderState(encoder, pass, m_pipelines.shadow, lists.table);
-            lists.table->setAddress(slot.push(bytesOf(root)), 0);
+            lists.table->setAddress(rootAddress, 0);
             ++calls.record;
             m_indirect.execute(encoder, slotIndex, kShadowDraw + cascade);
             encoder->endEncoding();

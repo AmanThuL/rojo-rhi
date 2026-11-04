@@ -67,8 +67,8 @@
 //                  `[[base_vertex]]` holds vertexStart in a non-indexed draw, direct or through the indirect command
 //                  buffer, which Apple does not document; the firstVertex conformance cases fail if it does not
 //   instanceIndex  Metal, SPIR-V   `instanceId - baseInstance`; HLSL   `instanceId`, which excludes the base
-//   drawId(ids)    Metal   the base instance; HLSL   the root constant `b1`; SPIR-V   as for the record below
-//   drawId()       Metal task and mesh   offset 0 of the record at `[[buffer(3)]]`
+//   drawId(ids),   Metal   offset 0 of the record at `[[buffer(3)]]`, which the backend binds for each draw: the
+//   drawId()               caller's record for an indirect draw, a zero record for a direct one (ADR 0028)
 //                  HLSL    the root constant `b1`
 //                  SPIR-V  offset 0 of record `DrawIndex`, from the record base and stride in the push data;
 //                          the push data is {root Addr, record Addr, record stride}
@@ -393,11 +393,7 @@ namespace rojoRHI
     /// The draw identifier from a vertex entry point.
     public uint drawId(VertexIds ids)
     {
-#if defined(ROJORHI_TARGET_METAL)
-        return ids.baseInstance;
-#else
         return recordDrawId();
-#endif
     }
 
     /// The draw identifier from a task or mesh entry point.
@@ -408,4 +404,4 @@ namespace rojoRHI
 }
 
 /// The shader ABI version; changing a reserved binding or the value a built-in returns bumps it.
-public static const uint ROJORHI_SHADER_ABI_VERSION = 2; // Mirrored by core::kShaderAbiVersion in Source/Core/Pipelines.h.
+public static const uint ROJORHI_SHADER_ABI_VERSION = 3; // Mirrored by core::kShaderAbiVersion in Source/Core/Pipelines.h.

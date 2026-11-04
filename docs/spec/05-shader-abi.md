@@ -272,7 +272,7 @@ executes.
 ### `ROJORHI_SHADER_ABI_VERSION`
 
 ```slang
-static const uint ROJORHI_SHADER_ABI_VERSION = 2;   // RojoRHI.slang
+static const uint ROJORHI_SHADER_ABI_VERSION = 3;   // RojoRHI.slang
 ```
 
 A positive integer naming the ABI contract this chapter defines: the root binding, the `Addr`

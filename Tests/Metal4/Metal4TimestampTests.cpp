@@ -731,11 +731,12 @@ TEST_CASE("a render pass with a counted draw writes both its timestamps on its r
     list.endRenderPass();
     // The run dispatches (pipeline, kernel table, parameters, dispatch) and the kernels' encoder ends; the render encoder
     // opens (factory, label, table) with the barrier that orders the kernels before the vertex stage, writes the begin
-    // timestamp, sets the pipeline, its winding, the viewport and the scissor and draws the two records; then the end
-    // timestamp on it and the pop on the command buffer. The render encoder stays open until the list ends.
+    // timestamp, sets the pipeline, its winding, the viewport and the scissor, binds the caller's record and draws the two
+    // records; then the end timestamp on it and the pop on the command buffer. The render encoder stays open until the list
+    // ends.
     CHECK(state.counts.encodersOpened == encoders + 2);
     CHECK(draw.passBegin == core::kNoTimestamp);
-    CHECK(state.counts.nativeRecordCalls == beforeEnd + 4 + 1 + 2 + label + 1 + 1 + 4 + 2 + 1 + 1);
+    CHECK(state.counts.nativeRecordCalls == beforeEnd + 4 + 1 + 2 + label + 1 + 1 + 4 + 1 + 2 + 1 + 1);
     CHECK(CommandListImpl::of(list).encoders.lingering());
     CHECK(native.scopeTimestamps.empty());
     CHECK(native.scopeLabels.empty());

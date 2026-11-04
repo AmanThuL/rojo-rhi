@@ -183,6 +183,7 @@ namespace rojoRHI {
         std::array<uint64_t, 3> progressSeen = {};         ///< Per `QueueType`, the greatest progress value read so far.
         MTL::Buffer* viewTable = nullptr;                  ///< The `MTL::ResourceID` of each view slot, `maxViews` entries, Shared.
         MTL::Buffer* samplerTable = nullptr;               ///< The `MTL::ResourceID` of each sampler slot, `maxSamplers` entries, Shared.
+        MTL::Buffer* zeroRecord = nullptr;                 ///< `kZeroRecordBytes` zeroes, Shared: the record a direct draw binds for drawId 0.
         std::string adapterName;                           ///< The storage `Capabilities::adapterName` views.
         std::string floorName;                             ///< The storage `Capabilities::floorName` views.
         std::array<UpscalerSupport, 1> upscalerSupport{};  ///< The storage `Capabilities::upscalers` views.

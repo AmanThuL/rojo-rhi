@@ -13,12 +13,15 @@ namespace rojoRHI {
         ulong count;        ///< The draw count, or 0 for none, which means `maxCount`.
         ulong output;       ///< The execution range, or the native record the writer kernels write.
         ulong indices;      ///< The index buffer of an indexed draw.
+        ulong root;         ///< What each encoded command binds at `buffer(0)`: the root.
+        ulong views;        ///< What each encoded command binds at `buffer(1)`: the view table.
+        ulong samplers;     ///< What each encoded command binds at `buffer(2)`: the sampler table.
         uint maxCount;      ///< The most records drawn.
         uint primitive;     ///< The `MTL::PrimitiveType` value of the draws.
         uint indexType;     ///< The `MTL::IndexType` value of an indexed draw: 0 for 16-bit indices, 1 for 32-bit ones.
-        uint reserved[3];   ///< Pads the struct to the size of its C++ counterpart.
+        uint reserved[5];   ///< Pads the struct to the size of its C++ counterpart.
     };
-    static_assert(sizeof(DrawParams) == 64, "DrawParams must match metal4::DrawParams in Metal4Kernels.h");
+    static_assert(sizeof(DrawParams) == 96, "DrawParams must match metal4::DrawParams in Metal4Kernels.h");
 
     /// The parameters of one counted mesh draw's kernel, laid out as `metal4::MeshParams` writes them.
     struct MeshParams
@@ -57,7 +60,7 @@ namespace rojoRHI {
     /// Chapter 08's `DrawIndirectArgs`.
     struct DrawArgs
     {
-        uint drawId;        ///< Becomes the draw's base instance.
+        uint drawId;        ///< Read by the vertex entry from offset 0 of the record bound at `buffer(3)`.
         uint vertexCount;   ///< Vertices per instance.
         uint instanceCount; ///< Instances.
         uint firstVertex;   ///< The first vertex.
@@ -67,7 +70,7 @@ namespace rojoRHI {
     /// Chapter 08's `DrawIndexedIndirectArgs`.
     struct IndexedArgs
     {
-        uint drawId;        ///< Becomes the draw's base instance.
+        uint drawId;        ///< Read by the vertex entry from offset 0 of the record bound at `buffer(3)`.
         uint indexCount;    ///< Indices per instance.
         uint instanceCount; ///< Instances.
         uint firstIndex;    ///< The first index read.
@@ -81,7 +84,7 @@ namespace rojoRHI {
         uint vertexCount;   ///< Vertices per instance.
         uint instanceCount; ///< Instances.
         uint vertexStart;   ///< The first vertex.
-        uint baseInstance;  ///< The base instance: the record's drawId.
+        uint baseInstance;  ///< The base instance: 0, since no shader sees it.
     };
 
     /// `MTL::DrawIndexedPrimitivesIndirectArguments`.
@@ -91,7 +94,7 @@ namespace rojoRHI {
         uint instanceCount; ///< Instances.
         uint indexStart;    ///< The first index read.
         int baseVertex;     ///< Added to each index.
-        uint baseInstance;  ///< The base instance: the record's drawId.
+        uint baseInstance;  ///< The base instance: 0, since no shader sees it.
     };
 
     /// What the indirect command buffer's resource ID is read as.
@@ -116,7 +119,7 @@ namespace rojoRHI {
 
     /// The bytes from one draw's parameters to the next's in a run of `rojorhi_write_draw` or `rojorhi_write_indexed`:
     /// `metal4::kDrawReservation`.
-    constant ulong kDrawStride = 96;
+    constant ulong kDrawStride = 128;
 
     /// The bytes from one draw's parameters to the next's in a run of `rojorhi_write_mesh`: `metal4::kMeshReservation`.
     constant ulong kMeshStride = 128;
@@ -153,26 +156,46 @@ namespace rojoRHI {
         }
         return count;
     }
+
+    //==================================================================================================================
+    /// Binds the root, the view and sampler tables of `p` and the record `record` at `buffer(0)` to `buffer(3)` on the vertex
+    /// and fragment stages of `command`, which inherits no buffer, where an entry of the pipeline may read them.
+    static void bindDrawBuffers(thread metal::render_command& command, constant DrawParams& p, const device void* record)
+    {
+        const device uchar* root = reinterpret_cast<const device uchar*>(p.root);
+        const device uchar* views = reinterpret_cast<const device uchar*>(p.views);
+        const device uchar* samplers = reinterpret_cast<const device uchar*>(p.samplers);
+        command.set_vertex_buffer(root, 0);
+        command.set_vertex_buffer(views, 1);
+        command.set_vertex_buffer(samplers, 2);
+        command.set_vertex_buffer(record, 3);
+        command.set_fragment_buffer(root, 0);
+        command.set_fragment_buffer(views, 1);
+        command.set_fragment_buffer(samplers, 2);
+        command.set_fragment_buffer(record, 3);
+    }
 } // namespace rojoRHI
 
 //======================================================================================================================
-/// Encodes record `index` of a counted draw as command `index` of the indirect command buffer, its drawId as the base
-/// instance, one thread per record; thread 0 writes the execution range. A record with no vertices or instances becomes
-/// an empty command, and threads at or past the count encode nothing, since the range ends before them.
+/// Encodes record `index` of a counted draw as command `index` of the indirect command buffer, one thread per record;
+/// thread 0 writes the execution range. The command binds the reserved buffers, its own record at `buffer(3)` for the vertex
+/// entry's drawId, and draws with base instance 0. A record with no vertices or instances becomes an empty command, and
+/// threads at or past the count encode nothing, since the range ends before them.
 kernel void rojorhi_encode_draw(constant rojoRHI::DrawParams& p [[buffer(0)]], uint index [[thread_position_in_grid]])
 {
     if (index >= rojoRHI::writeRange(p, index))
     {
         return;
     }
-    const rojoRHI::DrawArgs args = reinterpret_cast<const device rojoRHI::DrawArgs*>(p.records)[index];
+    const device rojoRHI::DrawArgs* args = reinterpret_cast<const device rojoRHI::DrawArgs*>(p.records) + index;
     metal::render_command command(reinterpret_cast<device rojoRHI::Icb*>(p.icb)->commands, index);
-    if (args.vertexCount == 0 || args.instanceCount == 0)
+    if (args->vertexCount == 0 || args->instanceCount == 0)
     {
         command.reset();
         return;
     }
-    command.draw_primitives(rojoRHI::primitiveOf(p.primitive), args.firstVertex, args.vertexCount, args.instanceCount, args.drawId);
+    rojoRHI::bindDrawBuffers(command, p, args);
+    command.draw_primitives(rojoRHI::primitiveOf(p.primitive), args->firstVertex, args->vertexCount, args->instanceCount, 0u);
 }
 
 //======================================================================================================================
@@ -185,37 +208,39 @@ kernel void rojorhi_encode_indexed(constant rojoRHI::DrawParams& p [[buffer(0)]]
     {
         return;
     }
-    const rojoRHI::IndexedArgs args = reinterpret_cast<const device rojoRHI::IndexedArgs*>(p.records)[index];
+    const device rojoRHI::IndexedArgs* record = reinterpret_cast<const device rojoRHI::IndexedArgs*>(p.records) + index;
+    const rojoRHI::IndexedArgs args = *record;
     metal::render_command command(reinterpret_cast<device rojoRHI::Icb*>(p.icb)->commands, index);
     if (args.indexCount == 0 || args.instanceCount == 0)
     {
         command.reset();
         return;
     }
+    rojoRHI::bindDrawBuffers(command, p, record);
     const metal::primitive_type primitive = rojoRHI::primitiveOf(p.primitive);
     const uint baseVertex = static_cast<uint>(args.baseVertex);
     if (p.indexType == 0)
     {
         const device ushort* indices = reinterpret_cast<const device ushort*>(p.indices) + args.firstIndex;
-        command.draw_indexed_primitives(primitive, args.indexCount, indices, args.instanceCount, baseVertex, args.drawId);
+        command.draw_indexed_primitives(primitive, args.indexCount, indices, args.instanceCount, baseVertex, 0u);
     }
     else
     {
         const device uint* indices = reinterpret_cast<const device uint*>(p.indices) + args.firstIndex;
-        command.draw_indexed_primitives(primitive, args.indexCount, indices, args.instanceCount, baseVertex, args.drawId);
+        command.draw_indexed_primitives(primitive, args.indexCount, indices, args.instanceCount, baseVertex, 0u);
     }
 }
 
 //======================================================================================================================
-/// Writes the one record of a counted draw of `maxCount` 1 as a native record, its drawId as the base instance and no
-/// instances when the count is 0. One thread per draw of a run of consecutive such draws, whose parameters start at
-/// `params`.
+/// Writes the one record of a counted draw of `maxCount` 1 as a native record, with base instance 0 and no instances when
+/// the count is 0; the draw binds the record itself at `buffer(3)`. One thread per draw of a run of consecutive such draws,
+/// whose parameters start at `params`.
 kernel void rojorhi_write_draw(const device uchar* params [[buffer(0)]], uint index [[thread_position_in_grid]])
 {
     const device rojoRHI::DrawParams& p = rojoRHI::runParams<rojoRHI::DrawParams>(params, index, rojoRHI::kDrawStride);
     const rojoRHI::DrawArgs args = *reinterpret_cast<const device rojoRHI::DrawArgs*>(p.records);
     *reinterpret_cast<device rojoRHI::NativeDraw*>(p.output) = rojoRHI::NativeDraw{
-        args.vertexCount, rojoRHI::drawCount(p) != 0 ? args.instanceCount : 0u, args.firstVertex, args.drawId };
+        args.vertexCount, rojoRHI::drawCount(p) != 0 ? args.instanceCount : 0u, args.firstVertex, 0u };
 }
 
 //======================================================================================================================
@@ -226,7 +251,7 @@ kernel void rojorhi_write_indexed(const device uchar* params [[buffer(0)]], uint
     const device rojoRHI::DrawParams& p = rojoRHI::runParams<rojoRHI::DrawParams>(params, index, rojoRHI::kDrawStride);
     const rojoRHI::IndexedArgs args = *reinterpret_cast<const device rojoRHI::IndexedArgs*>(p.records);
     *reinterpret_cast<device rojoRHI::NativeIndexed*>(p.output) = rojoRHI::NativeIndexed{
-        args.indexCount, rojoRHI::drawCount(p) != 0 ? args.instanceCount : 0u, args.firstIndex, args.baseVertex, args.drawId };
+        args.indexCount, rojoRHI::drawCount(p) != 0 ? args.instanceCount : 0u, args.firstIndex, args.baseVertex, 0u };
 }
 
 //======================================================================================================================

@@ -23,8 +23,10 @@ Spike 1 of [ADR 0014](../decisions/0014-overhead-measurement.md) is pending and 
 chapters 03 and 05, which stay `Proposed` until it reports: it measures `Addr` dereference on
 D3D12. Spike 2 kept the Metal 4 ID table for texture and sampler indexing, leaving its rows
 `cheap`. Spike 3 kept the kernel-encoded indirect command buffer for counted multi-draw on Metal 4,
-leaving its rows `costly`, and moved `drawId` into the base instance, making two record rows
-`native`. A change to an entry's `Cost` row updates its row here in the same change.
+leaving its rows `costly`; [ADR 0028](../decisions/0028-vertex-drawid-from-the-bound-record.md)
+moved the vertex stage's `drawId` from the base instance to the bound record, making a lone record
+with a null count native and the two record rows `cheap`. A change to an entry's `Cost` row updates
+its row here in the same change.
 
 | Entry | Chapter | Metal 4 | D3D12 | Vulkan |
 |---|---|---|---|---|
@@ -138,8 +140,8 @@ leaving its rows `costly`, and moved `drawId` into the base instance, making two
 | [`CommandList::fillBuffer`](07-command-recording-part3.md#commandlistfillbuffer) | 07 | cheap | costly | native |
 | [`ClearValue`](07-command-recording-part3.md#clearvalue) | 07 | native | native | native |
 | [`CommandList::clearTexture`](07-command-recording-part3.md#commandlistcleartexture) | 07 | costly | costly | native |
-| [`DrawIndirectArgs`](08-gpu-driven.md#drawindirectargs) | 08 | native | native | cheap |
-| [`DrawIndexedIndirectArgs`](08-gpu-driven.md#drawindexedindirectargs) | 08 | native | native | cheap |
+| [`DrawIndirectArgs`](08-gpu-driven.md#drawindirectargs) | 08 | cheap | native | cheap |
+| [`DrawIndexedIndirectArgs`](08-gpu-driven.md#drawindexedindirectargs) | 08 | cheap | native | cheap |
 | [`DrawMeshTasksIndirectArgs`](08-gpu-driven.md#drawmeshtasksindirectargs) | 08 | cheap | native | cheap |
 | [`DispatchIndirectArgs`](08-gpu-driven.md#dispatchindirectargs) | 08 | native | native | native |
 | [`CommandList::drawIndirect`](08-gpu-driven.md#commandlistdrawindirect) | 08 | costly | cheap | native |

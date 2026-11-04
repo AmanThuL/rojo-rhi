@@ -17,12 +17,15 @@ namespace rojoRHI::bench {
     // One counted draw as the encode kernel reads it. Records are chapter 08's DrawIndirectArgs, or DrawIndexedIndirectArgs
     // when indexed, with the index buffer's UInt16 indices at `indices`. A draw may read different records and a different
     // count in each frame slot; a null count (address 0) means exactly maxCount. Draws are points unless `triangles`, which
-    // only an indexed draw takes.
+    // only an indexed draw takes. Each command binds the root `NativeIndirect::setRoot` gave, `views` and `samplers` and its
+    // own record at buffers 0 to 3.
     struct CountedDraw
     {
         std::array<uint64_t, NativeContext::kFrameSlots> records{};
         std::array<uint64_t, NativeContext::kFrameSlots> counts{};
         uint64_t indices = 0;
+        uint64_t views = 0;
+        uint64_t samplers = 0;
         uint32_t maxCount = 0;
         bool indexed = false;
         bool triangles = false;
@@ -40,6 +43,10 @@ namespace rojoRHI::bench {
         // Setup, before NativeContext::prepareFrames: loads the kernels, creates the indirect command buffers, the
         // ranges and the kernel inputs, and adds them to the residency set. Draw i is `draws[i]` below.
         std::expected<void, std::string> create(std::span<const CountedDraw> draws);
+
+        // Sets the root draw `draw`'s commands bind in slot `slot`, 0 until set; a host write, no native call, before the
+        // slot's kernels are encoded.
+        void setRoot(uint32_t slot, uint32_t draw, uint64_t root);
 
         // Encodes the kernels of draws [first, first + count) in the open compute encoder: one pipeline bind per
         // kind change, the argument table once, then per draw one table write and one dispatch. The caller opens and
@@ -60,7 +67,7 @@ namespace rojoRHI::bench {
         // The kernel's inputs for one draw in one slot, 256-byte aligned; the indirect command buffer's resource ID
         // follows at kIcbOffset. Mirrors Root in Kernels/BenchEncode.metal.
         static constexpr uint64_t kInputStride = 256;
-        static constexpr uint64_t kIcbOffset = 64;
+        static constexpr uint64_t kIcbOffset = 128;
         static constexpr uint64_t kRangeStride = 256;
         static constexpr uint32_t kThreadgroup = 64;
 

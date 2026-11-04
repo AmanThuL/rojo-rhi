@@ -145,7 +145,7 @@ the wave or passed directly through `rojoRHI::nonUniform`. Ordinary reads or wri
 not race with atomic additions.
 
 The helper adds no binding and changes neither the `Addr` encoding nor any existing built-in's
-bytes or value, so `ROJORHI_SHADER_ABI_VERSION` remains 2.
+bytes or value, so it does not bump `ROJORHI_SHADER_ABI_VERSION`.
 
 #### Valid usage
 
