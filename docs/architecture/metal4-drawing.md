@@ -264,8 +264,8 @@ record. Chapter 08 states the cost.
   set, three when the kind changes, four on a new encoder, and its execute one at replay. Writers of
   consecutive draws of one kind, reserved back to back, form one run (`Encoders::queueKernel`) that
   the next encode kernel or the encoder's close dispatches at those costs, a thread per draw, so a
-  writer's draw costs only its replay. The batch adds its encoder's open and end, a barrier at the
-  render open and a timed pass's begin timestamp. Dispatches and executes each run in a pool.
+  writer's draw costs only its replay. The batch adds its encoder's open and end and a barrier at the
+  render open, and no timestamp: a timed pass begins on its render encoder. Each runs in a pool.
 
 ## Mesh paths
 

@@ -31,6 +31,9 @@
   ([ADR 0027](docs/decisions/0027-hosted-ci-compiles-d3d12.md)). D3D12 stays implemented, verified
   on WARP only, not on hardware; [the hardware run](docs/guides/d3d12-hardware-run.md) verifies it
   next.
+- The Metal 4 backend writes a render pass's begin timestamp on its first render encoder, so the
+  pass's time no longer takes in the kernels of counted draws ahead of it, whose compute encoder may
+  overlap earlier work ([diagnostics](docs/spec/14-diagnostics.md)).
 
 ## 0.1.0 (2026-10-22)
 

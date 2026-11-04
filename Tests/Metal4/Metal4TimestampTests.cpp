@@ -681,7 +681,7 @@ TEST_CASE("a heap Metal refuses is asked for again after its slot's reuse, and c
 }
 
 //======================================================================================================================
-TEST_CASE("a render pass with a counted draw writes its begin timestamp on the kernels' encoder and its end on its render encoder", "[metal4]")
+TEST_CASE("a render pass with a counted draw writes both its timestamps on its render encoder and none on the kernels' encoder", "[metal4]")
 {
     Device device = *createDevice({ .scopeTimings = true, .framesInFlight = 2 });
     const Drawing drawing(device);
@@ -713,14 +713,15 @@ TEST_CASE("a render pass with a counted draw writes its begin timestamp on the k
     list.setPipeline(drawing.pipeline);
     list.setViewport(Viewport{ .width = static_cast<float>(kEdge), .height = static_cast<float>(kEdge) });
     list.setScissor(Rect2D{ 0, 0, kEdge, kEdge });
-    // A counted draw first: its kernel's compute encoder is the pass's first encoder, and the begin timestamp goes on it,
-    // after the encoder's factory and label and before the writer kernel, which waits for the run it starts to end.
+    // A counted draw first: its kernel's compute encoder opens ahead of the render encoder with the encoder's factory and
+    // label, and writes no timestamp, since its opening barrier waits for nothing and it may overlap earlier work; the
+    // writer kernel waits for the run it starts to end.
     uint64_t before = state.counts.nativeRecordCalls;
     drawing.counted(device, list);
     CHECK(state.counts.encodersOpened == encoders + 1);
     CHECK(CommandListImpl::of(list).encoders.kind() == metal4::EncoderKind::Compute);
-    CHECK(state.counts.nativeRecordCalls == before + 1 + label + 1);
-    CHECK(draw.passBegin == core::kNoTimestamp);
+    CHECK(state.counts.nativeRecordCalls == before + 1 + label);
+    CHECK(draw.passBegin == pair);
     // A second counted draw shares the kernels' encoder, writes no timestamp and joins the run: no call.
     before = state.counts.nativeRecordCalls;
     drawing.counted(device, list);
@@ -729,11 +730,12 @@ TEST_CASE("a render pass with a counted draw writes its begin timestamp on the k
     const uint64_t beforeEnd = state.counts.nativeRecordCalls;
     list.endRenderPass();
     // The run dispatches (pipeline, kernel table, parameters, dispatch) and the kernels' encoder ends; the render encoder
-    // opens (factory, label, table) with the barrier that orders the kernels before the vertex stage, sets the pipeline, its
-    // winding, the viewport and the scissor and draws the two records; then the end timestamp on it and the pop on the
-    // command buffer. The render encoder stays open until the list ends.
+    // opens (factory, label, table) with the barrier that orders the kernels before the vertex stage, writes the begin
+    // timestamp, sets the pipeline, its winding, the viewport and the scissor and draws the two records; then the end
+    // timestamp on it and the pop on the command buffer. The render encoder stays open until the list ends.
     CHECK(state.counts.encodersOpened == encoders + 2);
-    CHECK(state.counts.nativeRecordCalls == beforeEnd + 4 + 1 + 2 + label + 1 + 4 + 2 + 1 + 1);
+    CHECK(draw.passBegin == core::kNoTimestamp);
+    CHECK(state.counts.nativeRecordCalls == beforeEnd + 4 + 1 + 2 + label + 1 + 1 + 4 + 2 + 1 + 1);
     CHECK(CommandListImpl::of(list).encoders.lingering());
     CHECK(native.scopeTimestamps.empty());
     CHECK(native.scopeLabels.empty());

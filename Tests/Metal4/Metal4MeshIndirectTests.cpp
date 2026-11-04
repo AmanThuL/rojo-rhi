@@ -57,8 +57,8 @@ namespace {
     /// at the object and mesh stages, the pipeline with its counter-clockwise winding, the viewport and the scissor.
     constexpr uint64_t kStateCalls = 5;
 
-    /// The call of the begin timestamp a pass's first encoder writes right after it opens: the kernels' encoder when the pass's
-    /// counted draws run first, else its render encoder.
+    /// The call of the begin timestamp a pass's first render encoder writes right after it opens; the kernels' encoder of
+    /// counted draws ahead of it writes none.
     constexpr uint64_t kPassBegin = 1;
 
     /// The records of these cases.
@@ -270,10 +270,9 @@ TEST_CASE("a mesh draw with a count runs the writer kernel and one native indire
     CommandList list = kit.list(QueueType::Graphics, "test.meshIndirect");
     fixture.begin(list);
     uint64_t before = callsOf(list);
-    // The encoder's open and the pass's begin timestamp; the writer kernel waits for the run it starts to end. No indirect
-    // command buffer.
+    // The encoder's open, with no timestamp; the writer kernel waits for the run it starts to end. No indirect command buffer.
     list.drawMeshTasksIndirect(fixture.record(5), 1, fixture.counted());
-    CHECK(callsOf(list) - before == batchOpenCalls(list) + kPassBegin);
+    CHECK(callsOf(list) - before == batchOpenCalls(list));
     CHECK(encodersOf(list).kind() == metal4::EncoderKind::Compute);
     CHECK(encodersOf(list).kernelPipeline() == nullptr);
     CHECK(drawOf(list).icbs.slots(metal4::IcbKind::Mesh) == 0);
@@ -286,10 +285,11 @@ TEST_CASE("a mesh draw with a count runs the writer kernel and one native indire
     CHECK((encodersOf(list).barriers().pendingSource & MTL::StageDispatch) != 0);
     CHECK((encodersOf(list).barriers().pendingDestination & meshStages) == meshStages);
     // The run's pipeline, kernel table, parameters and dispatch; the kernels' encoder ends; the render encoder's open with its
-    // barrier, the state, the record's binding, the native indirect draw, the pass's end timestamp, endEncoding and its group.
+    // barrier, the pass's begin timestamp, the state, the record's binding, the native indirect draw, the pass's end
+    // timestamp and its group.
     before = callsOf(list);
     list.endRenderPass();
-    CHECK(callsOf(list) - before == 4 + 1 + openCalls(list) + 1 + kStateCalls + 2 + 2);
+    CHECK(callsOf(list) - before == 4 + 1 + openCalls(list) + 1 + kPassBegin + kStateCalls + 2 + 2);
     CHECK(drawOf(list).tableDrawRecord == gpuAddressOf(fixture.record(5)));
     // The draw ran in the stages its barrier covered, so nothing is owed after the pass.
     CHECK(encodersOf(list).barriers().pendingDestination == 0);
@@ -339,9 +339,9 @@ TEST_CASE("a mesh batch encodes an ICB whose commands bind the reserved buffers 
     fixture.begin(list);
     list.setRoot(root);
     uint64_t before = callsOf(list);
-    // The encoder's open, the pass's begin timestamp, then the pipeline, the kernel table, the parameters and the dispatch.
+    // The encoder's open, then the pipeline, the kernel table, the parameters and the dispatch; no timestamp.
     list.drawMeshTasksIndirect(fixture.record(), kRecords, fixture.counted());
-    CHECK(callsOf(list) - before == batchOpenCalls(list) + kPassBegin + 4);
+    CHECK(callsOf(list) - before == batchOpenCalls(list) + 4);
     CHECK(encodersOf(list).kernelPipeline() == impl.kernels.encodeMesh);
     const metal4::IcbPool& icbs = drawOf(list).icbs;
     REQUIRE(icbs.slots(metal4::IcbKind::Mesh) == 1);
@@ -369,11 +369,11 @@ TEST_CASE("a mesh batch encodes an ICB whose commands bind the reserved buffers 
     list.setPipeline(fixture.meshOnly);
     list.drawMeshTasksIndirect(fixture.record(), 4);
     CHECK(paramsOf(list, drawOf(list).prefix.back()).objectThreads[0] == 0);
-    // The kernels' encoder ends; the render encoder's open with its barrier, the state, the root, each execute, the second
-    // pipeline, the pass's end timestamp, endEncoding and its group.
+    // The kernels' encoder ends; the render encoder's open with its barrier, the pass's begin timestamp, the state, the
+    // root, each execute, the second pipeline, the pass's end timestamp and its group.
     before = callsOf(list);
     list.endRenderPass();
-    CHECK(callsOf(list) - before == 1 + openCalls(list) + 1 + kStateCalls + 1 + 3 + 1 + 2);
+    CHECK(callsOf(list) - before == 1 + openCalls(list) + 1 + kPassBegin + kStateCalls + 1 + 3 + 1 + 2);
     CHECK(encodersOf(list).barriers().pendingDestination == 0);
     kit.run(std::array{ list });
 }
