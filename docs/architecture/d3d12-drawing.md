@@ -53,10 +53,10 @@ shader with several entries.
 only when a pipeline is created from it. The `shaderLibrary` retire hook frees the payload with
 the library's frame.
 
-`ShaderList.h` carries `kD3D12LibrariesBuilt`, true when the shader rule found a working DXC and
-so packaged every library. That holds on the `d3d12` CI job and on the `interface` job's Windows
-leg, where the SDK's DXC loads; the D3D12 cases of the `abi` entry run there and skip with that
-reason elsewhere.
+`ShaderList.h` carries `kD3D12LibrariesBuilt`, true when the shader rule found a working DXC and so
+packaged every library. That holds on the `d3d12-build` CI job, which checks it statically, and on
+the `interface` job's Windows leg, where the SDK's DXC loads; the D3D12 cases of the `abi` entry run
+there and skip with that reason elsewhere.
 
 ## Pipelines
 

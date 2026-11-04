@@ -3,8 +3,9 @@
 **Status**: Accepted
 
 The D3D12 backend is implemented, verified on WARP only, not on hardware. WARP is the software
-rasterizer of hosted Windows CI: its runs are correctness evidence under the debug layer and
-GPU-based validation, never T1 acceptance ([ADR
+rasterizer hosted Windows CI ran the backend on until 2026-11-04; hosted CI now compiles it and
+executes nothing on it ([ADR 0027](../decisions/0027-hosted-ci-compiles-d3d12.md)). Its runs are
+correctness evidence under the debug layer and GPU-based validation, never T1 acceptance ([ADR
 0009](../decisions/0009-conformance-and-valid-usage.md)) and never a measurement ([ADR
 0014](../decisions/0014-overhead-measurement.md)). This guide is the ordered checklist for the first
 machine with a Windows GPU, so that T1 acceptance (issue #21), the hardware markers of the API
@@ -26,9 +27,10 @@ decides" names the person who accepts the decision records of the repository.
   `TypedUAVLoadAdditionalFormats`. `createDevice` refuses a device below it and names the missing
   item (`Backends/D3D12/Source/D3D12Capabilities.cpp:63-102`, `checkFloor`).
 - The current driver of the GPU's vendor.
-- The MSVC the CI records ([the D3D12 build](../architecture/d3d12-build.md#toolchain)), xmake,
-  Python 3 and git. `python3` must resolve: the CI job copies `python.exe` to `python3.exe` when the
-  Windows installer provides only the former (`.github/workflows/ci.yml`, job `d3d12`).
+- The MSVC the hosted runs recorded ([the D3D12 build](../architecture/d3d12-build.md#toolchain)),
+  xmake, Python 3 and git. `python3` must resolve: the Windows CI jobs copy `python.exe` to
+  `python3.exe` when the Windows installer provides only the former (`.github/workflows/ci.yml`,
+  job `interface`).
 - Optional: PIX (capture, section 4) and the vendor command-line tool `nvidia-smi`, which the
   thermal rule of sections 5 and 6 reads.
 - On AC power, with the High performance or Ultimate Performance power scheme, and the state of
@@ -100,10 +102,9 @@ python3 Tools/gpu_evidence.py --topic d3d12-t1 --label contract-release -- xmake
 python3 Tools/gpu_evidence.py --topic d3d12-t1 --label conformance-release -- xmake test RojoRHITests/conformance
 ```
 
-Topic: `d3d12-t1/<date>/`. Each case count must stay at or above the floors the CI job `d3d12`
-checks in its step "Count the cases" (`.github/workflows/ci.yml`, the `$floors` table for
-`[conformance]`, `[d3d12]` and `[contract]`);
-`.\RojoRHITests.exe --list-tests "[conformance]"` prints a count.
+Topic: `d3d12-t1/<date>/`. Each case count must stay at or above the floors the last hosted
+`d3d12` job required: 180 for `[conformance]`, 255 for `[d3d12]`, 878 for `[contract]` and 12 for
+`[imgui]`; `.\RojoRHITests.exe --list-tests "[conformance]"` prints a count.
 
 No case was left out as PC-only in the full T1 run on WARP (the `d3d12` job of [run
 39641225757](https://github.com/AmanThuL/rojo-rhi/actions/runs/39641225757),
@@ -111,12 +112,12 @@ No case was left out as PC-only in the full T1 run on WARP (the `d3d12` job of [
 WARP with GPU-based validation, `UpscalerTests.cpp` and `UpscaleConformanceTests.cpp`
 (`xmake/targets.lua`, `contract_left_out`), because WARP never completes a FidelityFX dispatch under
 it; on hardware they run in every configuration. If an upscale does not complete under GPU-based
-validation there either, rerun those two files with `--rojorhi_d3d12_debug=layer` (the CI configure
-`xmake f -m debug -y -o build/layer`) and report the hang. Cases that SKIP on WARP for a driver
-limit (`maxDrawIndirectCount`, issue #109) are read in the log: a SKIP that is not a Debug-only
-validation skip is a result to record. The `[precision]` case skips on WARP 1.0.21 alone, which
-returns the fused -2^-46 ([evidence](../research/2026-10-26-warp-precision-runtime.md)); on
-hardware it requires 0.
+validation there either, rerun those two files with `--rojorhi_d3d12_debug=layer` (the configure
+`xmake f -m debug -y -o build/layer` the hosted job used) and report the hang. Cases that SKIP on
+WARP for a driver limit (`maxDrawIndirectCount`, issue #109) are read in the log: a SKIP that is
+not a Debug-only validation skip is a result to record. The `[precision]` case skips on WARP
+1.0.21 alone, which returns the fused -2^-46
+([evidence](../research/2026-10-26-warp-precision-runtime.md)); on hardware it requires 0.
 
 Success: every case passes, unchanged, in Debug with GPU-based validation and in Release, with the
 debug layer reporting no message of severity corruption, error or warning. Name the adapter and the

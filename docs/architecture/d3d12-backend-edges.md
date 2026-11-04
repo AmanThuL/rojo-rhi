@@ -172,8 +172,8 @@ value. A capturer that refuses the capture returns an error of the refusal's `HR
 `EndProgrammaticGpuCapture` and logs an error when it fails. Each successful `beginCapture` and each
 `endCapture` that reaches the capturer counts one `nativeHostCalls`.
 
-A real capture needs PIX installed and hardware work; hosted CI has no PIX, so the cases cover
-the search, the absent-capturer error and the device without `enableCapture`.
+A real capture needs PIX installed and hardware work; the hosted WARP runs had no PIX, so the
+cases cover the search, the absent-capturer error and the device without `enableCapture`.
 
 ## FSR
 
@@ -278,8 +278,8 @@ that fail as expected), `conformance` 147 (136, 11). Release (no validation, no 
 #100 ([run 39660621919](https://github.com/AmanThuL/rojo-rhi/actions/runs/39660621919)):
 `conformance` 173 (162, 11) Debug, 178 (168, 10) Release, floor 173.
 
-A third Debug configure, with the debug layer alone, runs the six files holding 64 upscale cases
-WARP does not complete under GPU-based validation; all pass. No case is PC-only. `xmake/targets.lua`
+A third Debug configure, with the debug layer alone, ran the six files holding 64 upscale cases WARP
+does not complete under GPU-based validation; all passed. No case is PC-only. `xmake/targets.lua`
 leaves out `UpscalerTests.cpp` and `UpscaleConformanceTests.cpp` under GPU-based validation, where
 the shared cases that wait for an upscale skip through `test::requireUpscaleCompletion`. Cases that
 skip print their reasons: `maxDrawIndirectCount` is `UINT32_MAX`, so no `maxCount` lies above it

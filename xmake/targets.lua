@@ -124,7 +124,7 @@ option("rojorhi_d3d12_adapter")
     set_default("hardware")
     set_values("hardware", "warp")
     set_showmenu(true)
-    set_description("Adapter a d3d12 build creates its device on: hardware (the default) or warp (the software rasterizer, for hosted CI)")
+    set_description("Adapter a d3d12 build creates its device on: hardware (the default) or warp (the software rasterizer, for a machine with no GPU)")
 option_end()
 
 option("rojorhi_d3d12_debug")
