@@ -354,17 +354,4 @@ namespace rojoRHI::metal4 {
         encoder->writeTimestamp(kEncoderGranularity, MTL::RenderStageVertex, timestamps.heapFor(slotOf(list.core), index), index % Timestamps::kHeapEntries);
         core::noteNativeCall(list.core);
     }
-
-    //==================================================================================================================
-    void writePassBegin(CommandListImpl& list, MTL4::ComputeCommandEncoder* encoder)
-    {
-        const uint32_t index = takePassBegin(list);
-        if (index == core::kNoTimestamp)
-        {
-            return;
-        }
-        const Timestamps& timestamps = deviceOf(list.core).timestamps;
-        encoder->writeTimestamp(kEncoderGranularity, timestamps.heapFor(slotOf(list.core), index), index % Timestamps::kHeapEntries);
-        core::noteNativeCall(list.core);
-    }
 } // namespace rojoRHI::metal4

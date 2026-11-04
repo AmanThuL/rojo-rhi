@@ -139,16 +139,12 @@ namespace rojoRHI::metal4 {
     void writeInPass(CommandListImpl& list, MTL4::RenderCommandEncoder* encoder, uint32_t index);
 
     /// Writes the begin entry of the open pass's pair on `encoder`, a render encoder of the pass that just opened, when the
-    /// pass still owes it (`DrawState::passBegin`): the pass's first encoder, when no counted draw's kernels ran before it.
-    /// The write follows the encoder's opening calls and precedes its commands, after the vertex stage at
+    /// pass still owes it (`DrawState::passBegin`): the pass's first render encoder. The kernels of counted draws that ran
+    /// ahead of it are outside the pair, since their encoder's opening barrier waits for nothing and so may overlap earlier
+    /// work. The write follows the encoder's opening calls and precedes its commands, after the vertex stage at
     /// `kEncoderGranularity`: the encoder's first stage, of which no earlier work exists in it, so the timestamp waits for none
     /// of the pass's work. Counts one native call.
     void writePassBegin(CommandListImpl& list, MTL4::RenderCommandEncoder* encoder);
-
-    /// Writes the begin entry of the open pass's pair on `encoder`, the compute encoder the pass's counted draws open for
-    /// their kernels ahead of its render encoder, when the pass still owes it: that encoder is then the pass's first, so the
-    /// pass's time takes in the kernels. At `kEncoderGranularity`; counts one native call.
-    void writePassBegin(CommandListImpl& list, MTL4::ComputeCommandEncoder* encoder);
 
     /// The scope-time hook of a Metal 4 device: `context` is its `DeviceImpl`, whose timestamps resolve the durations.
     void scopeTimes(void* context, uint32_t slot, std::span<const core::ScopeRecord> records, std::span<ScopeTiming> report);

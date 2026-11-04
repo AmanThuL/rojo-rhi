@@ -19,7 +19,6 @@
 #include "Metal4Icb.h"
 #include "Metal4Kernels.h"
 #include "Metal4PipelineState.h"
-#include "Metal4Timestamps.h"
 
 #include <Metal/Metal.hpp>
 
@@ -113,11 +112,10 @@ namespace rojoRHI {
             bool split
         )
         {
-            // The encoder runs only kernels, which bind the kernel table, so it binds no list table.
+            // The encoder runs only kernels, which bind the kernel table, so it binds no list table. It writes no timestamp: its
+            // opening barrier waits for nothing, so it may overlap earlier work, and the pass's begin timestamp goes on the
+            // pass's first render encoder instead.
             MTL4::ComputeCommandEncoder* encoder = list.encoders.compute(list.core, list.state, MTL::StageDispatch, true);
-            // Opened ahead of the pass's first render encoder, the kernels' encoder is the pass's first and writes its begin
-            // timestamp before the first kernel.
-            metal4::writePassBegin(list, encoder);
             if (stride != 0)
             {
                 list.encoders.queueKernel(list.core, list.state, kernel, params, stride);

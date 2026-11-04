@@ -197,10 +197,9 @@ encoder ([drawing](metal4-drawing.md)) and claims a pair likewise; the encoder w
 `RenderStageVertex` while the encoder holds no draw, so an empty pass or scope is timed; it adds no
 encoder and measured no change in a pass's duration against `Relaxed`. A split pushes the open
 groups again on the resumed encoder but writes none, so the end may sit on a later encoder. A
-render pass claims its pair at `beginRenderPass` and writes the begin first on its first encoder
-(the kernels' compute encoder of its leading counted draws, else its render encoder), the end on
-its last render encoder as it lingers, so its counted draws' kernels and splits fall inside it
-([drawing](metal4-drawing.md)). An upscale's pair goes around its carrier and MetalFX's encoders.
+render pass claims its pair at `beginRenderPass` and writes the begin on its first render encoder,
+the end on its last as it lingers, so its splits fall inside it and the kernels of counted draws
+ahead of it, whose encoder may overlap earlier work, outside ([drawing](metal4-drawing.md)). An upscale's pair goes around its carrier and MetalFX's encoders.
 
 A claim is one relaxed `fetch_add(2)` on the slot's cursor. A device created without
 `DeviceDesc::scopeTimings` makes none and gets `core::kNoTimestamp`, so it writes, creates and

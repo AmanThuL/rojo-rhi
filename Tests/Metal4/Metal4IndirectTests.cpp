@@ -56,8 +56,8 @@ namespace {
     /// pipeline with its counter-clockwise winding, the viewport and the scissor.
     constexpr uint64_t kStateCalls = 4;
 
-    /// The call of the begin timestamp a pass's first encoder writes right after it opens: the kernels' encoder when the pass's
-    /// counted draws run first, else its render encoder.
+    /// The call of the begin timestamp a pass's first render encoder writes right after it opens; the kernels' encoder of
+    /// counted draws ahead of it writes none.
     constexpr uint64_t kPassBegin = 1;
 
     /// The records each counted draw of these cases reads.
@@ -416,9 +416,9 @@ TEST_CASE("a kernel makes four calls on a new encoder, two once the encoder hold
     CommandList list = kit.list(QueueType::Graphics, "test.indirect");
     fixture.begin(list);
     uint64_t before = callsOf(list);
-    // The encoder's open, the pass's begin timestamp, then the pipeline, the kernel table, the parameters and the dispatch.
+    // The encoder's open, then the pipeline, the kernel table, the parameters and the dispatch; no timestamp.
     fixture.drawIndirect(list);
-    CHECK(callsOf(list) - before == batchOpenCalls(list) + kPassBegin + 4);
+    CHECK(callsOf(list) - before == batchOpenCalls(list) + 4);
     // The encoder holds the pipeline and the kernel table: the parameters and the dispatch, as the native arm's two.
     before = callsOf(list);
     fixture.drawIndirect(list);
@@ -430,11 +430,11 @@ TEST_CASE("a kernel makes four calls on a new encoder, two once the encoder hold
     before = callsOf(list);
     fixture.drawIndexedIndirect(list);
     CHECK(callsOf(list) - before == 2);
-    // The kernels' encoder ends; the render encoder's open with its barrier, the state, one execute per counted draw,
-    // the pass's end timestamp, endEncoding and its group.
+    // The kernels' encoder ends; the render encoder's open with its barrier, the pass's begin timestamp, the state, one
+    // execute per counted draw, the pass's end timestamp and its group.
     before = callsOf(list);
     list.endRenderPass();
-    CHECK(callsOf(list) - before == 1 + openCalls(list) + 1 + kStateCalls + 4 + 2);
+    CHECK(callsOf(list) - before == 1 + openCalls(list) + 1 + kPassBegin + kStateCalls + 4 + 2);
     kit.run(std::array{ list });
 }
 
@@ -446,10 +446,9 @@ TEST_CASE("maxCount 1 runs the writer kernel and one native indirect draw", "[me
     CommandList list = kit.list(QueueType::Graphics, "test.indirect");
     fixture.begin(list);
     uint64_t before = callsOf(list);
-    // The encoder's open and the pass's begin timestamp; the writer kernel waits for the run it starts to end. No indirect
-    // command buffer.
+    // The encoder's open, with no timestamp; the writer kernel waits for the run it starts to end. No indirect command buffer.
     fixture.drawIndirect(list, 1);
-    CHECK(callsOf(list) - before == batchOpenCalls(list) + kPassBegin);
+    CHECK(callsOf(list) - before == batchOpenCalls(list));
     CHECK(encodersOf(list).kernelPipeline() == nullptr);
     // Another writer kernel ends the run: its pipeline, the kernel table, the parameters and the dispatch.
     before = callsOf(list);
@@ -465,10 +464,10 @@ TEST_CASE("maxCount 1 runs the writer kernel and one native indirect draw", "[me
     CHECK(indexed.indices == gpuAddressOf(kit.device.address(fixture.indices)));
     CHECK(indexed.indexLength == 3 * sizeof(uint32_t));
     // The indexed run's pipeline, parameters and dispatch; the kernels' encoder ends; the render encoder's open with its
-    // barrier, the state, two native indirect draws, the pass's end timestamp, endEncoding and its group.
+    // barrier, the pass's begin timestamp, the state, two native indirect draws, the pass's end timestamp and its group.
     before = callsOf(list);
     list.endRenderPass();
-    CHECK(callsOf(list) - before == 3 + 1 + openCalls(list) + 1 + kStateCalls + 2 + 2);
+    CHECK(callsOf(list) - before == 3 + 1 + openCalls(list) + 1 + kPassBegin + kStateCalls + 2 + 2);
     kit.run(std::array{ list });
 }
 
@@ -484,7 +483,7 @@ TEST_CASE("consecutive writer kernels of one kind run as one dispatch, and an en
     fixture.drawIndirect(list, 1);
     fixture.drawIndirect(list, 1);
     fixture.drawIndirect(list, 1);
-    CHECK(callsOf(list) - before == batchOpenCalls(list) + kPassBegin);
+    CHECK(callsOf(list) - before == batchOpenCalls(list));
     // The encode kernel first dispatches the run (pipeline, kernel table, parameters, dispatch), then itself (pipeline,
     // parameters, dispatch).
     before = callsOf(list);
@@ -495,7 +494,7 @@ TEST_CASE("consecutive writer kernels of one kind run as one dispatch, and an en
     fixture.drawIndirect(list, 1);
     before = callsOf(list);
     list.endRenderPass();
-    CHECK(callsOf(list) - before == 3 + 1 + openCalls(list) + 1 + kStateCalls + 5 + 2);
+    CHECK(callsOf(list) - before == 3 + 1 + openCalls(list) + 1 + kPassBegin + kStateCalls + 5 + 2);
     CHECK(countsOf(list).encodersOpened == 2);
     kit.run(std::array{ list });
 }
