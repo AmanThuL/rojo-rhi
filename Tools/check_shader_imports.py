@@ -15,12 +15,10 @@ IMPORT = re.compile(r"\bimport\b([^;]*)(?:;|$)")
 MODULE_NAME = re.compile(r"[A-Za-z_]\w*(?:(?:::|\.)[A-Za-z_]\w*)*")
 ENTRY = re.compile(r'\[\s*shader\s*\(')
 INCLUDE = re.compile(r"^\s*#\s*include\b", re.MULTILINE)
-# Each Slang tree, paired with the directories holding its shared modules. The component has two
-# trees: the frozen v1 test oracles under Legacy/Shaders/Tests with the modules they share under
-# Legacy/Shaders/Tests/Modules, and the interface's module under Shaders/RojoRHI, with the test
-# modules under Shaders/Tests/Modules, imported by the entry files under Shaders/Tests and
-# Shaders/Bench.
-TREES = (("Legacy/Shaders", ("Tests/Modules",)), ("Shaders", ("RojoRHI", "Tests/Modules")))
+# Each Slang tree, paired with the directories holding its shared modules. The component has one
+# tree: the interface's module under Shaders/RojoRHI, with the test modules under
+# Shaders/Tests/Modules, imported by the entry files under Shaders/Tests and Shaders/Bench.
+TREES = (("Shaders", ("RojoRHI", "Tests/Modules")),)
 
 
 def without_comments(text: str) -> str:

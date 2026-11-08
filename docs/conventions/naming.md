@@ -12,15 +12,13 @@ differently, ADR 0001 wins; nothing here may contradict its table.
 |---|---|---|
 | Namespace | `rojoRHI` | `rojoRHI::Device` |
 | ImGui adapter namespace | `rojoRHI::imgui` | `rojoRHI::imgui::textureId` |
-| Backend namespace | `rojoRHI::metal4` | `rojoRHI::metal4::frameDataCounters` |
-| Diagnostics namespace | `rojoRHI::debug` | the capture-schema names in `CaptureSchema.h` |
+| Backend namespace | `rojoRHI::metal4` | `rojoRHI::metal4::AutoreleasePool` |
 | Public include root | `rojoRHI/` | `#include <rojoRHI/RHI.h>` |
-| Public header | `<rojoRHI/RHI.h>` | keeps the name `RHI.h`; the whole v2 interface, and v1's umbrella |
-| Macro prefix | `ROJORHI_` | `ROJORHI_ASSERT`, `ROJORHI_LOG_INFO` |
+| Public header | `<rojoRHI/RHI.h>` | keeps the name `RHI.h`; the whole interface |
+| Macro prefix | `ROJORHI_` | `ROJORHI_VU`, `ROJORHI_LOG_INFO` |
 | Default GPU label prefix | `rojorhi.` | `rojorhi.buffer.unnamed` |
-| Build targets | `RojoRHI`, `RojoRHITests` | the v2 library and its tests (ADR 0017) |
+| Build targets | `RojoRHI`, `RojoRHITests` | the library and its tests (ADR 0029, which restates ADR 0001's target row) |
 | Optional adapter target | `RojoRHIImGui` | the backend-neutral ImGui adapter, built when a host names its ImGui target |
-| Frozen v1 targets | `RojoRHILegacy`, `RojoRHILegacyMetal4ImGui`, `RojoRHILegacyTests` | the v1 library, its ImGui adapter and its tests (ADR 0017, which amends ADR 0001's target row) |
 | Repository | `rojo-rhi` | the directory this file lives in |
 | Prose name | RojoRHI | "RojoRHI exposes no backend type" |
 | Mount path in a consumer | `RojoRHI/` | `RojoRHI/Include/rojoRHI/RHI.h` |
@@ -46,14 +44,12 @@ with the code import.
 
 ## Files and directories
 
-- The v2 public interface is the single header `Include/rojoRHI/RHI.h`, in sections by
-  API-reference chapter. Private headers (`Source/`, `Backends/`, `Tests/`) keep one primary type
-  per header, in `PascalCase.h` and `PascalCase.cpp` named after it. v1 under `Legacy/` keeps its
-  own layout.
-- Directory names are `PascalCase`: `Include`, `Source`, `Backends/Metal4`, `Tests`, `Shaders`,
-  `Tools`, and `Legacy` for the frozen v1 tree, which repeats the same layout beneath it (ADR
-  0017). Public headers live under `Include/rojoRHI/`; v1's private base lives in
-  `Legacy/Source/Base/`, and the v2 private base in `Source/Base/`.
+- The public interface is the single header `Include/rojoRHI/RHI.h`, in sections by API-reference
+  chapter. Private headers (`Source/`, `Backends/`, `Tests/`) keep one primary type per header, in
+  `PascalCase.h` and `PascalCase.cpp` named after it.
+- Directory names are `PascalCase`: `Include`, `Source`, `Backends/Metal4`, `Adapters/ImGui`,
+  `Tests`, `Shaders` and `Tools`. Public headers live under `Include/rojoRHI/`, and the private base
+  in `Source/Base/`.
 - Backend files carry the backend as a prefix (`Metal4Device.cpp`), so a file name alone says which
   backend owns it.
 - Shader basenames are globally unique including case, per test target; a collision is rejected
@@ -69,14 +65,13 @@ caller-supplied label is used verbatim and keeps the caller's own prefix; RojoRH
 
 - A `TEST_CASE` name is a lowercase sentence stating the observable behaviour, not the function
   under test: "a Greater depth test keeps the nearer fragment in reversed-Z".
-- Tags are lowercase in brackets: `[contract]` for the v2 CPU contract cases in `Tests/Contract/`,
+- Tags are lowercase in brackets: `[contract]` for the CPU contract cases in `Tests/Contract/`,
   `[death]` for the death tests, which also carry `[contract]` and are named `"<identifier>
   <behaviour>"`, `[core]` for the core internals in `Tests/Core/`, `[null]` for expectations only
   the Null backend makes in `Tests/Null/`, `[metal4]` for expectations only the Metal 4 backend
   makes in `Tests/Metal4/`, `[conformance]` for the T1 cases in `Tests/Conformance/`, which
-  skip on the Null backend, `[abi]` for the v2 shader ABI compile and layout cases, `[rhi]` for
-  the v1 CPU contract and validation cases, `[gpu]` for cases needing a real device,
-  `[checkpoint-a]` for the frozen conformance set, `[host]`, `[native]` and `[metal4]` for the
+  skip on the Null backend, `[abi]` for the shader ABI compile and layout cases, `[imgui]` for
+  the ImGui adapter's cases in `Tests/ImGui/`, `[host]`, `[native]` and `[metal4]` for the
   benchmark checks in `Benchmarks/Checks/` (`[null]` also tags the cases there that run every
   RojoRHI workload on the Null backend), `[stress]` for the long-running validation tracker cases in
   `Tests/Core/`, always with `[.]`, and `[.]` for a case hidden from the default run. A case

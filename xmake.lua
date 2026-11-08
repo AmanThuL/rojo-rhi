@@ -14,7 +14,7 @@ if is_plat("windows") then
     add_cxflags("/WX")
 end
 
-add_requires("catch2 3.x", "glm")
+add_requires("catch2 3.x")
 
 -- The adapter's cases need an ImGui target, and a standalone root has none of its own.
 rojorhi_imgui_target = "RojoRHIDearImGui"

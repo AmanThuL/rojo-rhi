@@ -6,7 +6,7 @@
 -- The shader rules the test targets opt into, and the rule that compiles the Metal 4 backend's own
 -- kernels, are part of that interface, so this file includes them rather than leaving a host to
 -- remember more includes.
-includes("shaders.lua", "slang.lua", "metal.lua", "hlsl.lua", "kernels.lua")
+includes("slang.lua", "metal.lua", "hlsl.lua", "kernels.lua")
 
 -- Two values a host may set as plain globals before the include, because xmake evaluates an
 -- included description script in the same interpreter as the including one:
@@ -31,78 +31,6 @@ local thirdparty_dir = rojorhi_thirdparty and path.absolute(rojorhi_thirdparty)
                        or path.join(component_dir, "ThirdParty")
 local thirdparty = path.relative(thirdparty_dir, os.scriptdir())
 local imgui_target = rojorhi_imgui_target
-
--- The frozen v1 interface lives under Legacy/ and builds on macOS only, because its one backend is
--- Metal 4. Its targets carry the Legacy marker; the consumer's dependency names them until the
--- consumer port deletes Legacy/ and these three blocks (ADR 0017).
-if is_plat("macosx") then
-    -- Frozen v1 interface: backend-neutral RHI surface and the Metal 4 implementation. The public
-    -- include directory preserves the existing #include <rojoRHI/...> contract; metal-cpp and
-    -- backend headers remain implementation details of this component.
-    target("RojoRHILegacy")
-        set_kind("static")
-        add_files(path.join(component, "Legacy/Source/*.cpp"))
-        add_files(path.join(component, "Legacy/Source/Base/*.cpp"))
-        add_files(path.join(component, "Legacy/Backends/Metal4/Source/Metal4Capture.cpp"))
-        add_files(path.join(component, "Legacy/Backends/Metal4/Source/Metal4CommandList.cpp"))
-        add_files(path.join(component, "Legacy/Backends/Metal4/Source/Metal4Device.cpp"))
-        add_files(path.join(component, "Legacy/Backends/Metal4/Source/Metal4DeviceFrame.cpp"))
-        add_files(path.join(component, "Legacy/Backends/Metal4/Source/Metal4DevicePipeline.cpp"))
-        add_files(path.join(component, "Legacy/Backends/Metal4/Source/Metal4DeviceResources.cpp"))
-        add_files(path.join(component, "Legacy/Backends/Metal4/Source/Metal4FrameArena.cpp"))
-        add_files(path.join(component, "Legacy/Backends/Metal4/Source/Metal4Resources.cpp"))
-        add_files(path.join(component, "Legacy/Backends/Metal4/Source/Metal4Swapchain.cpp"))
-        add_files(path.join(component, "Legacy/Backends/Metal4/Source/Metal4TemporalScaler.cpp"))
-        add_includedirs(path.join(component, "Legacy/Include"), {public = true})
-        add_includedirs(path.join(component, "Legacy/Source"))
-        add_includedirs(path.join(component, "Legacy/Backends/Metal4/Source"))
-        add_includedirs(path.join(thirdparty, "metal-cpp"))
-        add_frameworks("Metal", "MetalFX", "QuartzCore", "Foundation")
-        add_deps("RojoRHIMetalCpp")
-
-    -- Frozen v1 interface: optional Dear ImGui renderer integration. Keeping this in a separate
-    -- target lets the core RHI build and link without ImGui while a host opts into the
-    -- editor-specific bridge explicitly. Only a host that owns an ImGui target can supply the
-    -- headers this adapter compiles against (the host's patched imgui_impl_metal4), so a standalone
-    -- configure, whose test-only RojoRHIDearImGui target carries the unpatched core files, has no
-    -- such target.
-    if imgui_target and imgui_target ~= "RojoRHIDearImGui" then
-        target("RojoRHILegacyMetal4ImGui")
-            set_kind("static")
-            -- Built only as a dependency of a host target that asks for it.
-            set_default(false)
-            add_files(path.join(component, "Legacy/Backends/Metal4/ImGui/Source/Metal4ImGui.cpp"))
-            add_files(path.join(component, "Legacy/Backends/Metal4/ImGui/Source/ImGuiBackendContract.cpp"))
-            add_includedirs(path.join(component, "Legacy/Backends/Metal4/ImGui/Include"), {public = true})
-            add_includedirs(path.join(component, "Legacy/Backends/Metal4/Source"))
-            add_includedirs(path.join(component, "Legacy/Source"))
-            add_includedirs(path.join(thirdparty, "metal-cpp"))
-            add_frameworks("Metal", "MetalFX", "QuartzCore", "Foundation")
-            add_deps("RojoRHILegacy", imgui_target)
-    end
-
-    -- Frozen v1 interface: contract and GPU tests for the standalone RHI component. They link the
-    -- RojoRHILegacy target alone, so the suite stays runnable once the component leaves this
-    -- repository.
-    target("RojoRHILegacyTests")
-        set_kind("binary")
-        set_default(false)
-        set_targetdir("$(builddir)/$(plat)/$(arch)/$(mode)/rojorhi-legacy-test")
-        add_files(path.join(component, "Legacy/Tests/*.cpp"))
-        add_deps("RojoRHILegacy")
-        add_packages("catch2", "glm")
-        -- GPU cases load shaders relative to the test binary, so this target compiles its own smoke
-        -- shaders out of the component's own tree. Six of them are byte-identical copies of oracles a
-        -- host's own suite may also own: duplicated deliberately, so nothing here reaches outside the
-        -- component. The non-recursive pattern keeps Modules/ off the entry-point list.
-        add_rules("rojorhi_slang2metallib")
-        set_values("slang.moduledir", path.join(component_dir, "Legacy/Shaders/Tests/Modules"))
-        set_values("slang.slangc", path.join(thirdparty_dir, "slang/bin/slangc"))
-        add_files(path.join(component, "Legacy/Shaders/Tests/*.slang"))
-        add_tests("unit", {runargs = {"~[gpu]"}})
-        -- Hidden diagnostics have explicit reproduction commands and are not ordinary regression gates.
-        add_tests("gpu", {runargs = {"[gpu]~[.]"}})
-end
 
 -- The backend compiled into RojoRHI (ADR 0012); one backend per build.
 -- The default is metal4 on a macOS host and null elsewhere. Option scope runs before the platform is
@@ -149,7 +77,7 @@ end
 
 -- MSVC's C4702 (unreachable code) fails hosted Windows CI under /WX, and only an MSVC build sees it. clang's
 -- -Wunreachable-code finds the same pattern, a FAIL or a return followed by more code, on a Mac. It is a warning here,
--- as every warning is off Windows. The v2 targets take it; v1 under Legacy/ is frozen (ADR 0017) and does not.
+-- as every warning is off Windows. The library, the ImGui adapter, the tests and the benchmark harness take it.
 local function warn_unreachable()
     add_cxxflags("-Wunreachable-code", "-Wunreachable-code-return", {tools = "clang"})
 end
@@ -277,13 +205,12 @@ target("RojoRHI")
 
 -- The backend-neutral Dear ImGui renderer, written against the public interface alone, so it builds with whichever
 -- backend RojoRHI was configured for. It is declared only when the host names its ImGui target, whose headers it compiles
--- against, and is not built by default while Legacy/ exists, so a host's plain build keeps building the v1 adapter it links.
+-- against, and a host's plain build then builds it.
 -- Its shader library embeds into its sources through the slang rule; its own target directory keeps its Shaders/ apart
 -- from the test binary's.
 if imgui_target then
     target("RojoRHIImGui")
         set_kind("static")
-        set_default(false)
         warn_unreachable()
         release_lto()
         set_targetdir("$(builddir)/$(plat)/$(arch)/$(mode)/rojorhi-imgui")

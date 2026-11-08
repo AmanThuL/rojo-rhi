@@ -9,7 +9,7 @@ from pathlib import Path
 
 
 COMPONENT = Path(__file__).resolve().parents[1]
-PUBLIC_ROOTS = tuple(COMPONENT / name for name in ("Include", "Legacy/Include"))
+PUBLIC_ROOTS = (COMPONENT / "Include",)
 HEADERS = tuple((root, header) for root in PUBLIC_ROOTS for header in sorted(root.glob("rojoRHI/**/*.h")))
 
 

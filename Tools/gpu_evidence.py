@@ -7,9 +7,9 @@ its combined output as `<label>.txt` in `<root>/<topic>/<date>/`, and rewrites `
 and `SHA256SUMS` for the whole directory. The exit code is the command's, so a failing run still
 leaves its log behind.
 
-    python3 Tools/gpu_evidence.py --topic v1-gpu-conformance --label gpu \\
-        --cwd build/macosx/arm64/debug/rojorhi-legacy-test \\
-        -- env MTL_DEBUG_LAYER=1 ./RojoRHILegacyTests "[gpu]~[.]"
+    python3 Tools/gpu_evidence.py --topic metal4-conformance --label conformance \\
+        --cwd build/macosx/arm64/debug/rojorhi-test \\
+        -- env MTL_DEBUG_LAYER=1 ./RojoRHITests "[conformance]"
 """
 
 from __future__ import annotations

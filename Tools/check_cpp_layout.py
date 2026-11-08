@@ -23,14 +23,14 @@ from typing import Any, BinaryIO
 
 
 ROOT = Path(__file__).resolve().parents[1]
-CPP_ROOTS = ("Source", "Backends", "Benchmarks", "Tests", "Tools", "Legacy", "Adapters")
+CPP_ROOTS = ("Source", "Backends", "Benchmarks", "Tests", "Tools", "Adapters")
 FUNCTION_SYMBOL_KINDS = {6, 9, 12}  # Method, Constructor, Function (LSP SymbolKind)
 RULER = re.compile(r"^\s*//.*(?:={8,}|-{8,})")
 SEPARATOR_BODY = re.compile(r"^//={8,}$")
 FILE_RULER = "//" + "-" * 118
-# The ImGui adapters compile only against an ImGui target, so a compilation database that lacks one
-# never holds them. Each directory is checked whenever the database covers it.
-ADAPTER_DIRS = ("Legacy/Backends/Metal4/ImGui", "Adapters/ImGui")
+# The ImGui adapter compiles only against an ImGui target, so a compilation database that lacks one
+# never holds it. Its directory is checked whenever the database covers it.
+ADAPTER_DIRS = ("Adapters/ImGui",)
 
 
 class LayoutSetupError(RuntimeError):

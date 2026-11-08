@@ -10,11 +10,10 @@ namespace contents. This file covers what a formatter cannot. Names are owned by
 - **C++23.** Prefer `std::expected`, `std::span`, `std::string_view`, `std::format` and ranges. No
   RTTI-dependent design. Exceptions only cross third-party boundaries and never leave the public
   interface.
-- **Files.** The v2 public interface is the single header `Include/rojoRHI/RHI.h`, in labelled
-  sections that follow the API-reference chapters. Private headers (`Source/`, `Backends/`,
-  `Tests/`) keep one primary type per header, and v1 under `Legacy/` keeps its own layout. Every
-  header has `#pragma once`, and every hand-written `.h` and `.cpp` the repository owns has the
-  file envelope below at its first physical line.
+- **Files.** The public interface is the single header `Include/rojoRHI/RHI.h`, in labelled sections
+  that follow the API-reference chapters. Private headers (`Source/`, `Backends/`, `Tests/`) keep
+  one primary type per header. Every header has `#pragma once`, and every hand-written `.h` and
+  `.cpp` the repository owns has the file envelope below at its first physical line.
 - **Includes.** Own header first, then RojoRHI headers, then third-party, then standard library,
   with a blank line between groups. Public headers use `<rojoRHI/...>`; a private header inside the
   library is included by the path its owner uses.
@@ -22,9 +21,8 @@ namespace contents. This file covers what a formatter cannot. Names are owned by
   `std::expected` alias, carrying either the value or an `Error` with a stable `ErrorCode` and a
   diagnostic message. Misuse of the interface is not an error code: it is a fatal check where one
   exists, because a caller violating a precondition has a bug rather than a condition to recover
-  from. In the v2 interface the check is `ROJORHI_VU`, present in non-Release builds only, so
-  Release leaves misuse unchecked; v1 keeps its unconditional `ROJORHI_ASSERT` under `Legacy/`.
-  Never swallow a failure silently.
+  from. The check is `ROJORHI_VU`, present in non-Release builds only, so Release leaves misuse
+  unchecked. Never swallow a failure silently.
 - **Labels.** Every GPU object is created with a debug label, defaulted when the caller gives none,
   so a capture names what it shows.
 - **Public headers are dependency-free.** A public header names no backend, windowing, ImGui or
@@ -37,13 +35,12 @@ namespace contents. This file covers what a formatter cannot. Names are owned by
 
 ## The private base
 
-v1's private base, `Legacy/Source/Base/`, is the only home of its assertions, alignment helpers,
-JSON escaping and logging, as described below. The new interface has its own `Source/Base/`; its
-checks report a valid-usage identifier and run only in non-Release builds
-([01-fundamentals](../spec/01-fundamentals.md)). Either base is private: no public header
-includes it, and no consumer can reach it.
+The private base, `Source/Base/`, is the only home of the library's checks and logging, as described
+below. Its checks report a valid-usage identifier and run only in non-Release builds
+([01-fundamentals](../spec/01-fundamentals.md)). It is private: no public header includes it, and
+no consumer can reach it.
 
-The v2 base provides two checks, both compiled out of Release builds, where they evaluate neither
+The base provides two checks, both compiled out of Release builds, where they evaluate neither
 the condition nor the message arguments:
 
 - `ROJORHI_VU(cond, "VU-rojo-...", format, args...)` checks a valid-usage rule of the reference. A
@@ -60,9 +57,6 @@ the condition nor the message arguments:
   `ROJORHI_LOG_FATAL` where the shared core or a backend logs before an abort, also write
   to stderr when a callback took the message, so those aborts leave their reason there. RojoRHI
   takes no logging dependency and knows nothing about a consumer's log sinks.
-- v1's `ROJORHI_ASSERT(cond, msg)` logs the failed condition, file, line and message at error
-  severity, then aborts. It is unconditional: a release build asserts too, because a violated
-  precondition has no correct continuation.
 - Nothing else joins the base. A helper with one caller stays with that caller.
 
 ## File headers
@@ -115,7 +109,7 @@ compilation database rather than a regular expression guessing at C++ definition
 
 ## Comments
 
-- `RHI.h`, the v2 public header, is a declaration list in the No Graphics API style, because the
+- `RHI.h`, the public header, is a declaration list in the No Graphics API style, because the
   API reference under `docs/spec/` holds its documentation. It opens `namespace rojoRHI` once, and
   a blank line and a one- or two-word label comment such as `// Synchronization` separate its
   sections. No comment sits above a type or member, except a one- or two-line `//` note above a
@@ -123,12 +117,11 @@ compilation database rather than a regular expression guessing at C++ definition
   fatal or error path. A field or enumerator takes a short trailing `///<` note only where its name
   is not enough. No comment names a valid-usage identifier, a document path, an ADR or a link.
   `Tools/check_cpp_comments.py` requires no doc comment there and rejects those references.
-- Public and protected declarations in the v1 public headers under `Legacy/` and in the ImGui
-  adapter use Doxygen `///`. Begin with a concise summary and document ownership, lifetime,
-  threading, valid ranges, units, coordinate and colour spaces, failure behaviour and externally
-  visible side effects when relevant. Use `///<` for a short field or enumerator contract and
-  `@copydoc`/`@inheritdoc` when an override inherits its base contract. Backend and implementation
-  headers are not public API.
+- Public and protected declarations in the ImGui adapter's public header use Doxygen `///`. Begin
+  with a concise summary and document ownership, lifetime, threading, valid ranges, units,
+  coordinate and colour spaces, failure behaviour and externally visible side effects when relevant.
+  Use `///<` for a short field or enumerator contract and `@copydoc`/`@inheritdoc` when an override
+  inherits its base contract. Backend and implementation headers are not public API.
 - Private declarations need no Doxygen and should not carry comments restating their names.
 - Implementation comments are sparse: GPU state and synchronization invariants, cross-frame
   ownership, non-obvious math or space conventions, documented driver workarounds, performance
@@ -145,7 +138,7 @@ compilation database rather than a regular expression guessing at C++ definition
 
 - **No shared Core library.** Luminex's RHI includes `Core/Assert.h`, `Core/Log.h`, `Core/Align.h`
   and `Core/Json.h` from a library shared with the renderer. RojoRHI owns a private base
-  (`Legacy/Source/Base/` for v1) instead, so the library links nothing outside its own tree and a
+  (`Source/Base/`) instead, so the library links nothing outside its own tree and a
   consumer inherits no base library it did not ask for.
 - **Logging.** Luminex logs through spdlog macros. RojoRHI formats with `std::format` and emits
   through one public message callback, defaulting to stderr, because a library must not choose its

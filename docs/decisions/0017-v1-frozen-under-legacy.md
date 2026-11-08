@@ -1,6 +1,6 @@
 # ADR 0017: v1 is frozen under `Legacy/` until the consumer port
 
-**Status**: Accepted (2026-10-13)
+**Status**: Superseded by [ADR 0029](0029-v1-deleted-with-the-consumer-port.md)
 
 ## Context
 

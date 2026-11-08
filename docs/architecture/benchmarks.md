@@ -35,8 +35,8 @@ tree of `Shaders/Tests/`, so `Tools/check_shader_imports.py` keeps one basename 
 There is one executable because the note requires one process to run both arms on one device. It
 links `RojoRHI` of the configured backend and defines `ROJORHI_BENCH_BACKEND_NULL` or
 `ROJORHI_BENCH_BACKEND_METAL4`. It compiles no metal-cpp unit of its own: it links
-`RojoRHIMetalCpp`, the one a `metal4` `RojoRHI` and `RojoRHILegacy` link, on every backend, so the
-link holds one copy of metal-cpp's tables. The target is built with link-time optimization in
+`RojoRHIMetalCpp`, the one a `metal4` `RojoRHI` links, on every backend, so the link holds one copy
+of metal-cpp's tables. The target is built with link-time optimization in
 Release, and `xmake/slang.lua` and the `rojorhi.metal` rule of `xmake/metal.lua` write each target's
 generated headers and metallibs under that target's own directory.
 

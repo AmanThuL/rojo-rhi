@@ -110,7 +110,7 @@ handle, is stated as normative prose in the entry, not as a rule.
   rule reports the identifier and a message through the message callback and then terminates the
   process. Where no enabled tier checks it, the violation is undefined behaviour.
 - **Who checks.** Rules about arguments, handle generations and scope are checked in non-Release
-  (Debug) builds through `ROJORHI_ASSERT`. Rules that need the history of GPU accesses, barriers,
+  (Debug) builds through `ROJORHI_VU`. Rules that need the history of GPU accesses, barriers,
   queues or lifetimes are checked by the validation tracker, which non-Release (Debug) builds
   enable per device through `DeviceDesc::validation`; such a rule says so. The tiers are defined in
   [fundamentals](01-fundamentals.md).

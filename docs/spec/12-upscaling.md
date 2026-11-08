@@ -4,9 +4,9 @@
 **API version**: 0.2.0
 
 An upscaler reconstructs a high-resolution image from a jittered low-resolution frame, its depth,
-its motion and the upscaler's private history. The interface mirrors the v1 temporal scaler and
-fronts several vendor implementations behind one descriptor. Vendor SDKs and their licensing are
-backend business: public headers name no vendor type, and an implementation either is compiled
+its motion and the upscaler's private history. The interface mirrors the former v1 temporal scaler
+and fronts several vendor implementations behind one descriptor. Vendor SDKs and their licensing
+are backend business: public headers name no vendor type, and an implementation either is compiled
 into the backend or is not. `Device::capabilities().upscalers` ([device](02-device.md)) lists the
 kinds the device can create, each with the input scale range it reconstructs within.
 

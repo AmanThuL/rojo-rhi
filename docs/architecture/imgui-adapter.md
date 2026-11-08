@@ -5,8 +5,7 @@
 `RojoRHIImGui` renders Dear ImGui, platform windows included, through the public interface alone.
 It has no Metal, D3D12 or Null code: it builds and runs on whichever backend the library was
 configured for. D3D12 is implemented, verified on WARP only, not on hardware, so the adapter's D3D12
-runs are WARP runs and are not T1 evidence. The v1 adapter under `Legacy/Backends/Metal4/ImGui/` is
-a different, Metal-only target that stays until `Legacy/` is deleted ([overview](overview.md)).
+runs are WARP runs and are not T1 evidence.
 
 ## Purpose and boundary
 
@@ -26,16 +25,11 @@ directory that only the adapter target exports, and `Tools/check_rhi_headers.py`
 A host names its Dear ImGui target in `rojorhi_imgui_target` before it includes
 `xmake/targets.lua`. Where the variable is set, `targets.lua` declares:
 
-- `RojoRHIImGui`, a static target that depends on `RojoRHI` and on the host's ImGui target. It is
-  `set_default(false)` while `Legacy/` exists, so a host's plain build keeps building the v1 adapter
-  it links. It has its own `targetdir` (`rojorhi-imgui`), so its `Shaders/` output stays apart from
-  the test binary's, and it embeds its shader library into `ImGuiShaders.h` through the
-  `rojorhi.slang` rule (`slang.embed`).
+- `RojoRHIImGui`, a static target that depends on `RojoRHI` and on the host's ImGui target. A
+  host's plain build builds it, as it builds `RojoRHI`. It has its own `targetdir`
+  (`rojorhi-imgui`), so its `Shaders/` output stays apart from the test binary's, and it embeds its
+  shader library into `ImGuiShaders.h` through the `rojorhi.slang` rule (`slang.embed`).
 - the `[imgui]` cases in `RojoRHITests` (see Tests below).
-
-While `Legacy/` exists, `RojoRHILegacyMetal4ImGui` is declared only when the ImGui target is not
-`RojoRHIDearImGui`: the v1 adapter needs the host's patched Metal backend header, which an
-unpatched checkout lacks.
 
 ## The host loop
 

@@ -15,17 +15,14 @@ from typing import Any
 
 
 ROOT = Path(__file__).resolve().parents[1]
-SOURCE_ROOTS = (
-    "Include", "Source", "Backends", "Benchmarks", "Legacy/Include", "Legacy/Source", "Legacy/Backends",
-    "Adapters",
-)
+SOURCE_ROOTS = ("Include", "Source", "Backends", "Benchmarks", "Adapters")
 # Test sources carry no file envelope; the Tests root already lies outside SOURCE_ROOTS.
 EXCLUDED_ROOTS = ()
 SOURCE_SUFFIXES = {".h", ".cpp"}
 FILE_RULER = "//" + "-" * 118
-# The ImGui adapters compile only against an ImGui target, so a compilation database that lacks one
-# never holds them. Each directory's public headers are compiled whenever the database covers it.
-ADAPTER_DIRS = ("Legacy/Backends/Metal4/ImGui", "Adapters/ImGui")
+# The ImGui adapter compiles only against an ImGui target, so a compilation database that lacks one
+# never holds it. Its public headers are compiled whenever the database covers it.
+ADAPTER_DIRS = ("Adapters/ImGui",)
 # The v2 public tree is a declaration list whose documentation is the API reference, so its
 # declarations carry no doc comment and its comments carry no reference into that documentation.
 MINIMAL_ROOT = "Include"
@@ -56,11 +53,11 @@ def project_cpp_files(root: Path) -> list[Path]:
 def public_header_files(root: Path) -> list[Path]:
     """Return headers whose declarations form project API.
 
-    The component exports the core interfaces and the optional ImGui adapters' include trees;
+    The component exports the core interface and the optional ImGui adapter's include tree;
     backend and shared implementation headers are excluded.
     """
     public: list[Path] = []
-    for name in ("Include", "Legacy/Include", *(f"{adapter}/Include" for adapter in ADAPTER_DIRS)):
+    for name in ("Include", *(f"{adapter}/Include" for adapter in ADAPTER_DIRS)):
         include_root = root / name
         if include_root.is_dir():
             public.extend(include_root.rglob("*.h"))
@@ -286,15 +283,10 @@ def api_headers(root: Path, entries: list[dict[str, Any]]) -> tuple[list[Path], 
 
 
 def _entry_for_header(header: Path, entries: list[dict[str, Any]], root: Path) -> dict[str, Any]:
-    # The component holds two trees with different include roots, the frozen v1 tree under Legacy and
-    # the new tree; a header compiles only with flags from its own tree.
-    legacy = (root / "Legacy").resolve()
-    in_legacy = header.resolve().is_relative_to(legacy)
-    candidates = [entry for entry in entries if _entry_path(entry).is_relative_to(legacy) == in_legacy]
-    if not candidates:
-        raise RuntimeError(f"compilation database has no entry in the tree of {header.name}")
-    stem_matches = [entry for entry in candidates if Path(entry["file"]).stem == header.stem]
-    return (stem_matches or candidates)[0]
+    if not entries:
+        raise RuntimeError(f"compilation database has no entry to compile {header.name} with")
+    stem_matches = [entry for entry in entries if Path(entry["file"]).stem == header.stem]
+    return (stem_matches or entries)[0]
 
 
 def _ast_for_header(
