@@ -1,7 +1,7 @@
 # 04. Textures and heaps (part 2)
 
 **Status**: Accepted
-**API version**: 0.1.0
+**API version**: 1.0.0
 
 This part specifies samplers and caller-owned index ranges; textures, views and the view heap are
 in [part 1](04-textures-and-heaps.md). On Metal 4 a slot is an entry of the backend's ID table, as

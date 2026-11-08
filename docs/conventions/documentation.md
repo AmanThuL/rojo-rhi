@@ -40,7 +40,8 @@ number and title, in a `**Restates**:` line, and never by a link into another re
 - A tool, check or command that does not exist yet is written as arriving with the work that adds
   it, never in the present tense.
 - The repository is public and licensed under the Apache License, Version 2.0; see `LICENSE`.
-  Nothing here describes a package registry entry or a published release, since neither exists.
+  Nothing here describes a package registry entry, since none exists. A release is described
+  only once its `vX.Y.Z` tag exists (ADR 0022), and its text obeys the backend rule above.
 - `README.md` is the public-facing surface: it never names Vulkan, names D3D12 only in a sentence
   that says "verified on WARP only, not on hardware" and never calls D3D12 supported or accepted,
   and uses no internal milestone or `M<number>` language, a rule

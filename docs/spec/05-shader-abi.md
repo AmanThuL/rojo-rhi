@@ -1,7 +1,7 @@
 # 05. Shader ABI
 
 **Status**: Proposed (until spike 1 of ADR 0014 reports)
-**API version**: 0.1.0
+**API version**: 1.0.0
 
 This chapter defines how a shader reaches data: the root block, the `RojoRHI.slang` module and the
 layout rules shared by C++ and Slang. It continues in [part 2](05-shader-abi-part2.md), which

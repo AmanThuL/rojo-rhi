@@ -1,7 +1,7 @@
 # 13. Sparse resources
 
 **Status**: Accepted
-**API version**: 0.1.0
+**API version**: 1.0.0
 
 A sparse resource reserves address space without backing memory. `BufferUsage::Sparse`
 ([memory and buffers](03-memory-and-buffers.md)) and `TextureUsage::Sparse`

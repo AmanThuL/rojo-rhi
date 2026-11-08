@@ -1,7 +1,7 @@
 # 11. Presentation
 
 **Status**: Accepted
-**API version**: 0.1.0
+**API version**: 1.0.0
 
 A swapchain owns the images one native surface displays. Windowing stays the consumer's business:
 RojoRHI never creates a window or a layer, and the surface arrives as an opaque pointer. While

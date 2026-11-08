@@ -1,10 +1,10 @@
 # B. Reserved: ray tracing
 
 **Status**: Accepted
-**API version**: 0.1.0
+**API version**: 1.0.0
 **Entries**: none
 
-API version 0.1.0 contains no ray-tracing interface: no acceleration-structure type, no build
+API version 1.0.0 contains no ray-tracing interface: no acceleration-structure type, no build
 command, no shader intrinsic and no capability bit. This appendix records what is reserved so a
 later version can add ray tracing without changing any existing entry, enumerator value, structure
 layout or valid-usage identifier (see [conventions](00-conventions.md)).
@@ -26,7 +26,7 @@ Ray tracing, when added, follows the same address-first model as the rest of the
   through a 32-bit index in the resource heap, the same way it reaches a texture view through a
   `ViewIndex` (see [textures and heaps](04-textures-and-heaps.md) and
   [shader ABI](05-shader-abi.md)). The resource heap's index space is therefore not assumed to
-  hold texture views alone, and nothing in 0.1.0 may encode that assumption.
+  hold texture views alone, and nothing in 1.0.0 may encode that assumption.
 - **Builds are ordered by ordinary barriers.** Build writes and ray-query reads become additional
   `Stage` and `Access` values in [synchronization](09-synchronization.md), appended without
   renumbering existing ones.

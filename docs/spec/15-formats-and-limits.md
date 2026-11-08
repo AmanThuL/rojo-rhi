@@ -1,7 +1,7 @@
 # 15. Formats and limits
 
 **Status**: Accepted
-**API version**: 0.1.0
+**API version**: 1.0.0
 
 This chapter defines the texture formats the interface names and how a device reports what it can
 do with each of them; the numeric limits every other chapter checks against are in

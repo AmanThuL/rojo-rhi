@@ -1,7 +1,7 @@
 # 03. Memory and buffers (part 2)
 
 **Status**: Accepted
-**API version**: 0.1.0
+**API version**: 1.0.0
 
 This part specifies placement heaps; memory classes, buffers, addresses, per-frame data and
 residency are in [part 1](03-memory-and-buffers.md). Placement serves transient aliasing, whose

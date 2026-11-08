@@ -1,7 +1,7 @@
 # 08. GPU-driven rendering
 
 **Status**: Accepted
-**API version**: 0.1.0
+**API version**: 1.0.0
 
 GPU-driven work reads its arguments from GPU memory when it executes. A shader, usually a culling
 pass, writes argument records and optionally a draw count; a barrier orders those writes before the

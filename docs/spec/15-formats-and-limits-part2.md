@@ -1,7 +1,7 @@
 # 15. Formats and limits, part 2
 
 **Status**: Accepted
-**API version**: 0.1.0
+**API version**: 1.0.0
 
 This part defines the numeric limits every other chapter checks against; formats and format
 capabilities are in [part 1](15-formats-and-limits.md). Notation, cost classes and valid-usage

@@ -1,7 +1,7 @@
 # 14. Diagnostics
 
 **Status**: Accepted
-**API version**: 0.1.0
+**API version**: 1.0.0
 
 This chapter specifies four diagnostic channels: the validation tracker with its access
 declarations, counters, scope timings and programmatic capture. The others live with the entries

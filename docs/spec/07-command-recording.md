@@ -1,7 +1,7 @@
 # 07. Command recording
 
 **Status**: Accepted
-**API version**: 0.1.0
+**API version**: 1.0.0
 
 A command list comes from a per-frame pool and returns to it when its frame retires. One thread
 records one list at a time; many lists record in parallel and are submitted in order ([queues and
@@ -24,7 +24,7 @@ dispatches, or a dispatch and a copy, without a barrier between them may overlap
 
 **Render passes perform no layout transitions.** Attachments arrive in their attachment layouts
 through explicit barriers recorded before `beginRenderPass`. Barriers inside a render pass are
-invalid in 0.1.0, since D3D12 render passes and Vulkan dynamic rendering both restrict them.
+invalid in 1.0.0, since D3D12 render passes and Vulkan dynamic rendering both restrict them.
 
 The rules in the entries combine into this summary:
 
@@ -163,7 +163,7 @@ struct ColorAttachment {
 One color attachment: a single mip and array layer (a cube face counts as a layer) of `texture`.
 `clear` is used when `load` is `Clear`; integer formats receive the values converted to integers.
 A non-null `resolve` receives the average of the samples at the end of the pass, written to its
-mip 0 and layer 0. 3D textures are not attachments in 0.1.0.
+mip 0 and layer 0. 3D textures are not attachments in 1.0.0.
 
 #### Valid usage
 
@@ -201,7 +201,7 @@ struct DepthAttachment {
 
 The depth and stencil attachment of a render pass; a null `texture` means none. `load`, `store`
 and `clearDepth` govern depth; the stencil fields govern stencil and are ignored for formats
-without one. Depth resolve and read-only depth attachments are not part of 0.1.0.
+without one. Depth resolve and read-only depth attachments are not part of 1.0.0.
 
 #### Valid usage
 

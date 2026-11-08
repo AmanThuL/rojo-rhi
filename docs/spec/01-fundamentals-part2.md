@@ -1,7 +1,7 @@
 # 01. Fundamentals, part 2
 
 **Status**: Accepted
-**API version**: 0.2.0
+**API version**: 1.0.0
 
 This part continues [fundamentals](01-fundamentals.md) with labels, the message callback and the
 version macros. Notation and cost classes follow [conventions](00-conventions.md).
@@ -87,17 +87,17 @@ ends. Free-threaded.
 ### `ROJORHI_VERSION_*`
 ```cpp
 // <rojoRHI/RHI.h>
-#define ROJORHI_VERSION_MAJOR 0
-#define ROJORHI_VERSION_MINOR 1
+#define ROJORHI_VERSION_MAJOR 1
+#define ROJORHI_VERSION_MINOR 0
 #define ROJORHI_VERSION_PATCH 0
 ```
 The version of the interface the headers declare, following Semantic Versioning 2.0 for source
-compatibility; RojoRHI is built from source, so no binary compatibility is promised. Version 2 of
-the interface ships as `0.y.z` until the Metal 4 backend and the D3D12 backend both pass conformance
-on hardware and the driving consumer has moved to it; a breaking change bumps the minor version.
-`1.0.0` follows, after which a break needs a major version and a superseding decision record.
-Releases are to be tagged `vX.Y.Z`, so a consumer can pin a tag rather than a commit, and a
-`CHANGELOG.md` arriving with the first v2 code records breaking changes per minor version.
+compatibility; RojoRHI is built from source, so no binary compatibility is promised. Before `1.0.0`
+the interface shipped as `0.y.z`, and a breaking change bumped the minor version. `1.0.0` is
+released once the Metal 4 backend and the D3D12 backend both pass conformance on hardware and the
+driving consumer has moved to the interface; from then on a break needs a major version and a
+superseding decision record. Releases are tagged `vX.Y.Z`, so a consumer can pin a tag rather than
+a commit, and `CHANGELOG.md` records breaking changes per version.
 
 The shader ABI is versioned separately by `ROJORHI_SHADER_ABI_VERSION`, specified in
 [shader ABI](05-shader-abi.md).

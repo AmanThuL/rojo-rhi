@@ -14,8 +14,8 @@
 #include <vector>
 
 // Version
-#define ROJORHI_VERSION_MAJOR 0
-#define ROJORHI_VERSION_MINOR 2
+#define ROJORHI_VERSION_MAJOR 1
+#define ROJORHI_VERSION_MINOR 0
 #define ROJORHI_VERSION_PATCH 0
 
 namespace rojoRHI {
