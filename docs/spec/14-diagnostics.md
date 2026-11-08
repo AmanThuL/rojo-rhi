@@ -38,10 +38,10 @@ reads, upscaler inputs and outputs, presented images, and the shader accesses de
 declared is untracked. The tracker checks necessity as well as sufficiency: an observable access
 that happens to be ordered on one GPU without a barrier is still reported. Handle generations are
 not the tracker's: a stale or destroyed resource handle is rejected by the Debug tier through
-`ROJORHI_ASSERT`, with or without the tracker ([fundamentals](01-fundamentals.md)).
+`ROJORHI_VU`, with or without the tracker ([fundamentals](01-fundamentals.md)).
 
 A violation is reported through the message callback at error severity, naming its valid-usage
-identifier, and is then fatal like `ROJORHI_ASSERT`; a contract test asserts the identifier.
+identifier, and is then fatal like a failed `ROJORHI_VU`; a contract test asserts the identifier.
 
 ### `ResourceAccess`
 ```cpp
@@ -120,7 +120,8 @@ struct Counters {
 Plain integer counters, always compiled in, each maintained by a single increment. They count from
 device creation and never reset; a caller measures an interval by subtracting two snapshots. They
 are backend-neutral, so the measurement methodology scores them on every backend, and they replace
-the Metal-specific frame-data counter the v1 conformance checkpoint flags as non-portable.
+the Metal-specific frame-data counter the former v1 interface's conformance checkpoint flagged as
+non-portable.
 
 | Field | Counts |
 |---|---|

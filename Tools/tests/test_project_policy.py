@@ -192,7 +192,7 @@ class ProjectPolicyTests(unittest.TestCase):
     def test_process_policy_covers_extracted_build_scripts(self) -> None:
         for path in ("xmake.lua", "xmake/setup.lua", "xmake/targets.lua", "Source/Validate.cpp",
                      "Backends/Metal4/Source/Metal4Device.cpp", "Shaders/Tests/Triangle.slang",
-                     "Tools/ImGuiBufferProbe/run.py"):
+                     "Adapters/ImGui/Source/ImGuiAdapter.cpp"):
             with self.subTest(path=path):
                 errors: list[str] = []
                 with mock.patch.object(policy, "read_text", return_value="-- Close the backlog."):
@@ -237,7 +237,7 @@ class ProjectPolicyTests(unittest.TestCase):
 
     def test_fail_scan_covers_v2_sources_only(self) -> None:
         text = 'void f() {\n  FAIL("x");\n  g();\n}\n'
-        for name, expected in (("Tests/a.cpp", 1), ("Adapters/ImGui/a.cpp", 1), ("Legacy/a.cpp", 0)):
+        for name, expected in (("Tests/a.cpp", 1), ("Adapters/ImGui/a.cpp", 1), ("Tools/a.cpp", 0)):
             errors: list[str] = []
             with mock.patch.object(policy, "read_text", return_value=text):
                 policy.check_code_after_fail([Path(name)], errors)

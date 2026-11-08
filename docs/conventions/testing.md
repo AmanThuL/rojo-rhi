@@ -2,12 +2,11 @@
 
 **Status**: Accepted
 
-Tests are Catch2 cases in one test tree per interface, built as one test target. Names and tags are
-owned by [naming.md](naming.md). Today the v1 suite, including the `[checkpoint-a]` cases, lives
-under `Legacy/Tests/` and builds as `RojoRHILegacyTests`. The top-level `Tests/` holds the v2
-interface's cases and builds as `RojoRHITests`; its T0 (CPU contract) cases run as
-`xmake test RojoRHITests/contract` (ADR 0017), its death tests as `xmake test RojoRHITests/death`
-and its shader ABI cases, tagged `[abi]`, as `xmake test RojoRHITests/abi`. Built with the
+Tests are Catch2 cases in one test tree, built as one test target. Names and tags are owned by
+[naming.md](naming.md). The top-level `Tests/` holds the interface's cases and builds as
+`RojoRHITests`; its T0 (CPU contract) cases run as `xmake test RojoRHITests/contract`, its death
+tests as `xmake test RojoRHITests/death` and its shader ABI cases, tagged `[abi]`, as
+`xmake test RojoRHITests/abi`. Built with the
 default backend on macOS (`metal4`), the same binary also runs the `[conformance]` cases as
 `xmake test RojoRHITests/conformance`.
 
@@ -18,7 +17,7 @@ domain and `Result<T>`, descriptor defaults, size and alignment arithmetic, per-
 bookkeeping and any pure helper the interface exposes. They run anywhere, including a hosted runner
 with no GPU, and a failure here is a contract change rather than a driver difference.
 
-**T0 contract tests** of the v2 interface are backend-neutral and run on Null with no GPU, and on
+**T0 contract tests** are backend-neutral and run on Null with no GPU, and on
 Metal 4 under the validation layer. The test tree is split by backend. `Tests/Contract/` holds the
 backend-neutral reference rules, one file per area, tagged `[contract]`: every expectation there
 must hold for any backend, so it states only what the reference states, and it includes no backend
@@ -105,7 +104,7 @@ work (`resources`, `recording`, `edges` or `tracker`) that will add the test; no
 The tool also fails when a listed identifier has a death test, so the list only shrinks, and when it
 names an unknown identifier or part. A part removes its lines in the change that adds the tests.
 
-**Conformance tests** (`[conformance]`, `Tests/Conformance/`) are the v2 interface's T1 cases (ADR
+**Conformance tests** (`[conformance]`, `Tests/Conformance/`) are the T1 cases (ADR
 0009): cases that observe on a GPU what the API reference promises. They check fence values,
 CPU-visible buffer memory, acquiring and presenting images across image counts, latency limits and
 frame counts, and readback oracles of GPU-written data: `Copy` (every copy path), `InitialData`,
@@ -131,14 +130,6 @@ with `DeviceDesc::scopeTimings` (the test kits take it as an argument) and read 
 through `test::timedCounts` or call `test::requireTimed` (`Tests/Support/Metal4/Metal4Timing.h`)
 first, which fails the case, naming the reason, when a scope the list recorded holds no timestamp
 pair, rather than reporting a count two calls short.
-
-**Validation tests (v1)** pin what the interface rejects. The predicates behind each
-`ROJORHI_ASSERT` precondition are testable functions, so a case asserts that an invalid range, an
-out-of-bounds subresource, a mismatched attachment or an impossible pipeline descriptor is reported
-as invalid, and that the neighbouring valid case is accepted. They need no device: an interface is a
-pure virtual class, so a fake implementation reporting a chosen shape is enough. These cases carry
-the same CPU tag as the contract tier and run in the same places. They describe the v1 suite; the v2
-equivalent is the death test.
 
 **Shader ABI tests** are the hosted half of the T3 tier (ADR 0009). They need no GPU: every
 conformance shader must compile to MSL, SPIR-V and HLSL, and the layout of each shared struct must
@@ -182,14 +173,12 @@ sanitizer runtime and runs `RojoRHITests.exe "[stress]"`; on macOS the same filt
 
 ## The conformance filter
 
-[ADR 0005](../decisions/0005-conformance-checkpoint.md) freezes eight semantic areas behind the
-single tag `[checkpoint-a]`. The frozen set is exactly that tag as one filter, run from the test
-build directory with the validation layer enabled (`Legacy/Tests/` holds the cases today). A future
-backend is accepted only when every listed case passes unchanged — no edited assertion, no relaxed
-tolerance.
-
-Adding the tag to a further case needs no ADR; it adds evidence for an area already frozen.
-Removing a listed case's tag, or retagging it to a different case, requires a superseding ADR.
+The T1 conformance cases of [ADR 0009](../decisions/0009-conformance-and-valid-usage.md) carry the
+tag `[conformance]`, one file under `Tests/Conformance/` for each category. The gate is exactly that
+tag as one filter, `xmake test RojoRHITests/conformance`, run on hardware with the platform
+validation layer enabled (`MTL_DEBUG_LAYER=1` on Metal 4). A backend is accepted only when every
+case passes unchanged — no edited assertion, no relaxed tolerance. The `metal4` CI job lists the
+cases and fails below a floor, so a dropped file fails a pull request; it runs none of them.
 
 ## What belongs in this repository
 
@@ -217,9 +206,8 @@ GPU case is RojoRHI's, while a fixture that builds a consumer's scene is not.
 ## Shaders for tests
 
 - Test oracles and benchmark workloads are the only shaders this repository owns. Oracles live
-  under `Shaders/Tests/` and the benchmark's workloads under `Shaders/Bench/`, prefixed `Bench`;
-  v1's oracles live under `Legacy/Shaders/Tests/`. Each is compiled into its target's own
-  directory.
+  under `Shaders/Tests/` and the benchmark's workloads under `Shaders/Bench/`, prefixed `Bench`.
+  Each is compiled into its target's own directory.
 - A smoke shader that both RojoRHI and a consumer need is copied, not shared. The duplication is
   deliberate: it buys independence, and a later divergence between the two copies is then a
   decision someone makes rather than a break someone suffers.
@@ -273,8 +261,7 @@ running them. The GPU tiers run on Metal 4 Apple Silicon before merge.
   the shaders both sides need are duplication accepted for independence, since the two repositories
   must build without each other.
 - **Split conformance inventory.** Luminex's frozen checkpoint covered cases on both sides of the
-  boundary. RojoRHI owns the execution-substrate half; the transient-resource cases belong to the
-  layer that owns transients and stay with the consumer. The two filters together equal the frozen
-  inventory by case name.
+  boundary. RojoRHI's `[conformance]` gate covers the execution substrate alone; the
+  transient-resource cases belong to the layer that owns transients and stay with the consumer.
 - **No rendered-output tier.** Luminex compares fixed-camera images and temporal sequences. RojoRHI
   renders no scene, so its strongest evidence is an exact-value readback under the validation layer.

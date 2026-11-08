@@ -34,7 +34,7 @@ enum class Format : uint32_t {
 ```
 
 `Format` names the storage layout and transfer function of a texture, a texture view, an attachment
-or a pipeline target. The set is the one the frozen v1 interface names, with v1's `Unknown` renamed
+or a pipeline target. The set is the one the former v1 interface named, with its `Unknown` renamed
 `Undefined`, plus `D32FloatS8` so that the stencil state and operations of the interface have a
 format to act on, and `RGB10A2Unorm` so that the `HDR10` color space of
 [presentation](11-presentation.md) has a format. New formats are appended in later API versions;

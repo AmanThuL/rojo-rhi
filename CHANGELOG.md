@@ -1,7 +1,17 @@
 # Changelog
 
-## 0.2.0 (unreleased)
+## 0.2.0 (2026-11-08)
 
+- **Breaking**: the frozen v1 interface is deleted with `Legacy/`
+  ([ADR 0029](docs/decisions/0029-v1-deleted-with-the-consumer-port.md)): the targets
+  `RojoRHILegacy`, `RojoRHILegacyMetal4ImGui` and `RojoRHILegacyTests`, the v1 shader rule
+  `rojorhi_slang2metallib` of `xmake/shaders.lua`, the v1 adapter's ImGui patch and buffer probe
+  under `Tools/`, and the `glm` package requirement. A v1 build pins `v0.1.0`.
+- A host that sets `rojorhi_imgui_target` builds `RojoRHIImGui` in its plain build, beside
+  `RojoRHI`.
+- The API reference names `ROJORHI_VU` as the Debug-tier check where it named v1's
+  `ROJORHI_ASSERT`.
+- Hosted CI drops its `legacy` job; the `metal4` job runs the plain `xmake` build.
 - The optional `RojoRHIImGui` adapter renders Dear ImGui, including platform windows, on every
   backend through the public interface ([architecture](docs/architecture/imgui-adapter.md)).
 - **Breaking**: `Capabilities::upscalers` is a span of `UpscalerSupport`, each kind with its input
@@ -9,7 +19,7 @@
   reads `.kind`.
 - `Capabilities::capture` reports whether `Device::beginCapture` can start a capture in the process
   ([device](docs/spec/02-device.md)); it gates no entry.
-- `ROJORHI_VERSION_MINOR` is 2: the interface is 0.2.0, unreleased
+- `ROJORHI_VERSION_MINOR` is 2: the interface is 0.2.0
   ([ADR 0022](docs/decisions/0022-versioning-in-the-single-header.md)). Pipeline-cache blobs of
   0.1.0 embed that version and become misses.
 - Chapter 10 states that a submission with no lists is valid with no frame open.

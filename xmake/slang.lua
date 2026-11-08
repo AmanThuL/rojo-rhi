@@ -50,7 +50,7 @@
 --                    header only when its text changes.
 --
 -- Any failed compile fails the build with the compiler's own output, and a successful compile's warnings,
--- `metal`'s included, are printed. This rule is separate from the v1 rule of shaders.lua, which Legacy/ keeps.
+-- `metal`'s included, are printed.
 --
 -- Rule "rojorhi.shader_layout", declared below, checks C++ struct layouts against the reflection of a probe.
 --

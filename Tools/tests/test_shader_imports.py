@@ -65,7 +65,8 @@ class ShaderImportTests(unittest.TestCase):
                 with self.subTest(source=source, target=target):
                     errors, _, _ = self.check({source: f"import {Path(target).stem};", target: ""})
                     self.assertTrue(
-                        any(f"imports may target {SHADER_ROOT}/Tests/Modules only" in error for error in errors)
+                        any(f"imports may target {SHADER_ROOT}/RojoRHI or {SHADER_ROOT}/Tests/Modules only" in error
+                            for error in errors)
                     )
 
     def test_missing_and_wrong_case_modules_fail(self) -> None:

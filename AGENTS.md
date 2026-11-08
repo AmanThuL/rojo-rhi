@@ -3,12 +3,12 @@
 RojoRHI is a dependency-free C++23 rendering hardware interface (RHI) library, thin, explicit and
 honest over the shared conceptual core of Metal 4, D3D12 and Vulkan. Metal 4 through metal-cpp is
 the native backend of macOS; D3D12 is also implemented, verified on WARP only, not on hardware;
-Vulkan is a design oracle with no code (ADR 0008, ADR 0026). The v1 interface is what the code
-implements now and what Luminex uses; v2 is specified in the decisions and the API reference below.
-The test-only Null backend implements it in full, chapters 01 to 15, the C++ entries of 05 included
-(devices, resources, pipelines, command recording, queues and fences, swapchains, upscalers, sparse
-tiles, diagnostics and counters), with the validation tracker (ADR 0021): every valid-usage
-identifier of the API reference is checked and has a death test. The Metal 4 backend of v2 is
+Vulkan is a design oracle with no code (ADR 0008, ADR 0026). The interface is v2, specified in the
+decisions and the API reference below; the frozen v1 interface was deleted with the consumer port
+(ADR 0029). The test-only Null backend implements it in full, chapters 01 to 15, the C++ entries of
+05 included (devices, resources, pipelines, command recording, queues and fences, swapchains,
+upscalers, sparse tiles, diagnostics and counters), with the validation tracker (ADR 0021): every
+valid-usage identifier of the API reference is checked and has a death test. The Metal 4 backend is
 complete and is the default on macOS: it implements the device, capabilities, formats, buffers,
 heaps, textures, views, samplers, queues, fences and frames, shader libraries and pipelines with an
 archive cache, command lists (copies, fills, clears, barriers, scopes, render passes, dynamic state,
@@ -18,9 +18,9 @@ timed on a device created with `DeviceDesc::scopeTimings`. The D3D12 backend imp
 too, refusing with `Unsupported` only what the reference lets it refuse (DLSS and XeSS are not
 compiled in); it has run on WARP only ([the hardware run](docs/guides/d3d12-hardware-run.md)). ADR
 0001 owns the identity spelling every document here applies. Luminex is its required consumer: it
-will mount the library as a submodule at `RojoRHI/` and drive every change through a RojoRHI branch
-and pull request first ([commits](docs/conventions/commits.md) owns that workflow). The repository
-is public and licensed under the Apache License, Version 2.0 ([`LICENSE`](LICENSE)); it holds the
+mounts the library as a submodule at `RojoRHI/` and drives every change through a RojoRHI branch and
+pull request first ([commits](docs/conventions/commits.md) owns that workflow). The repository is
+public and licensed under the Apache License, Version 2.0 ([`LICENSE`](LICENSE)); it holds the
 library itself — public headers, shared implementation, the Metal 4 and D3D12 backends, the
 backend-neutral ImGui adapter (`Adapters/ImGui`, `RojoRHIImGui`), tests and shaders — with its
 founding documents ([architecture](docs/architecture/overview.md) maps the directories).
@@ -41,7 +41,7 @@ founding documents ([architecture](docs/architecture/overview.md) maps the direc
   [0014 overhead is measured against native code](docs/decisions/0014-overhead-measurement.md),
   [0016 C++ format follows the No Graphics API style](docs/decisions/0016-cpp-format.md),
   [0017 v1 is frozen under Legacy/ until the consumer port](
-  docs/decisions/0017-v1-frozen-under-legacy.md),
+  docs/decisions/0017-v1-frozen-under-legacy.md), superseded by 0029,
   [0018 the root block reaches D3D12 as a root SRV, and the module owns the bindings](
   docs/decisions/0018-root-srv-and-reserved-bindings.md),
   [0020 recording takes no locks in Release, except to claim a frame-arena page](
@@ -56,7 +56,9 @@ founding documents ([architecture](docs/architecture/overview.md) maps the direc
   docs/decisions/0025-cpu-budget-per-call-floor.md),
   [0026 D3D12 before hardware](docs/decisions/0026-d3d12-implemented-before-hardware.md),
   [0027 hosted CI compiles D3D12](docs/decisions/0027-hosted-ci-compiles-d3d12.md),
-  [0028 drawId from the bound record](docs/decisions/0028-vertex-drawid-from-the-bound-record.md)
+  [0028 drawId from the bound record](docs/decisions/0028-vertex-drawid-from-the-bound-record.md),
+  [0029 v1 is deleted with the consumer port](
+  docs/decisions/0029-v1-deleted-with-the-consumer-port.md)
 - API reference: [docs/spec/](docs/spec/00-conventions.md), entered through its conventions chapter
 - Research: [docs/research/](docs/research/2026-10-11-rhi-redesign/01-nographicsapi.md), the
   evidence notes behind the decisions, [D3D12 on WARP](
@@ -86,10 +88,9 @@ Standalone:
 
 ```
 xmake setup   # fetches metal-cpp, Slang on macOS; Slang, Agility, WARP, DXC, FidelityFX on Windows
-xmake         # builds the frozen v1 library, RojoRHILegacy
-xmake test RojoRHILegacyTests/unit   # runs the v1 CPU contract cases
-xmake test RojoRHITests/contract     # runs the v2 contract cases on the default backend
-xmake test RojoRHITests/death        # runs the v2 death tests (Debug only)
+xmake         # builds RojoRHI for the configured backend and the ImGui adapter, RojoRHIImGui
+xmake test RojoRHITests/contract     # runs the contract cases on the default backend
+xmake test RojoRHITests/death        # runs the death tests (Debug only)
 xmake test RojoRHITests/imgui        # runs the [imgui] adapter cases
 xmake test RojoRHITests/abi          # compiles ABI shaders, checks layouts, on macOS the packaged Metal library headers
 xmake f -m debug -y                  # the default backend: metal4 on macOS, null elsewhere
@@ -114,13 +115,6 @@ MTL_DEBUG_LAYER=1 ./RojoRHITests "[contract]~[death],[metal4]~[death]"   # the c
 `xmake f -m debug -y --rojorhi_backend=null` selects the Null backend again; `Tests/Core` and
 `Tests/Null` build only with it, and hosted CI names its backend in every configure.
 
-The v1 GPU conformance suite runs from its test directory, after `xmake build RojoRHILegacyTests`:
-
-```
-cd build/macosx/arm64/debug/rojorhi-legacy-test
-MTL_DEBUG_LAYER=1 ./RojoRHILegacyTests "[gpu]~[.]"
-```
-
 Mounted inside a consumer's `RojoRHI/` checkout, the same commands take `-P .`, because xmake
 resolves the project root to the outermost ancestor holding an `xmake.lua` — the consumer's root,
 not this one:
@@ -128,7 +122,6 @@ not this one:
 ```
 xmake setup -P .
 xmake -P .
-xmake test RojoRHILegacyTests/unit -P .
 xmake test RojoRHITests/contract -P .
 xmake test RojoRHITests/death -P .
 xmake test RojoRHITests/imgui -P .
@@ -186,11 +179,10 @@ a death test nor an entry in `Tools/vu_pending.txt`, when an identifier has fewe
 `ROJORHI_VU` sites in `Source/`, and on any `ROJORHI_VU` under `Backends/` or `Adapters/`; the
 policy CI job runs it ([testing](docs/conventions/testing.md)).
 
-v1 GPU conformance is checkpoint A, the cases tagged `[checkpoint-a]`
-([ADR 0005](docs/decisions/0005-conformance-checkpoint.md)). The v2 interface's T1 conformance
-cases of ADR 0009 are the `[conformance]` entry on Metal 4, one file for each category. Both need
-`MTL_DEBUG_LAYER=1` and a real device on Metal 4 Apple Silicon, and there is no CPU-only substitute
-for either. Hosted CI ran `[conformance]` on WARP until 2026-11-04, which is not T1 acceptance.
+The T1 conformance cases of ADR 0009 are the `[conformance]` entry on Metal 4, one file for each
+category. They need `MTL_DEBUG_LAYER=1` and a real device on Metal 4 Apple Silicon, and there is no
+CPU-only substitute. Hosted CI ran `[conformance]` on WARP until 2026-11-04, which is not T1
+acceptance.
 
 The shader ABI module `Shaders/RojoRHI/RojoRHI.slang` and its hosted checks exist: the conformance
 shaders under `Shaders/Tests/` compile to MSL, SPIR-V and HLSL on every host, and the build checks
@@ -205,14 +197,13 @@ recording](docs/architecture/null-backend-recording.md)). `slang.precise_files`:
 
 ## Hard rules
 
-- Creation returns `Result<T>`; misuse of the interface is fatal where it is checked. In the v2
-  interface the check is `ROJORHI_VU`, with a valid-usage identifier, present in Debug builds only
-  (Release leaves misuse unchecked) and tested by a death test or listed as pending; library
-  invariants use `ROJORHI_INTERNAL_ASSERT`. v1 under `Legacy/` keeps its unconditional
-  `ROJORHI_ASSERT` ([C++ style](docs/conventions/cpp-style.md), ADR 0009).
+- Creation returns `Result<T>`; misuse of the interface is fatal where it is checked. The check is
+  `ROJORHI_VU`, with a valid-usage identifier, present in Debug builds only (Release leaves misuse
+  unchecked) and tested by a death test or listed as pending; library invariants use
+  `ROJORHI_INTERNAL_ASSERT` ([C++ style](docs/conventions/cpp-style.md), ADR 0009).
 - Every GPU object is created with a label, defaulted to the `rojorhi.` prefix when the caller
   supplies none.
-- The Metal 4 backend of v2 implements every entry: device, resources, queues, fences and frames,
+- The Metal 4 backend implements every entry: device, resources, queues, fences and frames,
   shader libraries, pipelines, command lists (copies, fills, clears, barriers, scopes, timed on
   request, render passes, dispatches, draws and MetalFX upscales), presentation, sparse resources
   and capture, refusing with `Unsupported` only what the reference lets it refuse. It is the default
@@ -224,13 +215,8 @@ recording](docs/architecture/null-backend-recording.md)). `slang.precise_files`:
   translates, and holds no `ROJORHI_VU`. A Metal 4 entry that calls an autoreleasing factory opens
   an autorelease pool, and so does every retire hook ([Metal 4 backend](
   docs/architecture/metal4-backend.md)).
-- Rules for v2 work: the v2 interface is address-first and has no binding slots (ADR 0007); it is
-  a C++23 subset with one backend per build, chosen by an xmake option, and no virtual interfaces
-  (ADR 0012). The v1 code still has binding slots and virtual interfaces until it is ported to v2.
-- v1 lives frozen under `Legacy/` until the consumer port deletes it (ADR 0017): its code moved
-  unchanged, and a change there is a defect fix only, in a commit that touches nothing outside
-  `Legacy/` except `xmake/targets.lua` and carries a `V1-fix:` trailer. The commit that deletes
-  `Legacy/` is exempt. The project policy check enforces it.
+- The interface is address-first and has no binding slots (ADR 0007); it is a C++23 subset with
+  one backend per build, chosen by an xmake option, and no virtual interfaces (ADR 0012).
 - Shader `uint atomicAdd(Addr,uint,uint)` returns the old word with relaxed atomicity and no fence.
 - The module owns all bindings; consumers declare none (ADR 0018). One `ROJORHI_TARGET_*` per compile;
   binding or built-in value changes bump `ROJORHI_SHADER_ABI_VERSION` (ADR 0024), now 3 (ADR 0028).

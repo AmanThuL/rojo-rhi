@@ -124,7 +124,7 @@ class CppLayoutTests(unittest.TestCase):
     def test_adapter_is_skipped_with_a_notice_when_the_database_lacks_it(self) -> None:
         root = Path("/component")
         validate = root / "Source/Validate.cpp"
-        adapter = root / layout.ADAPTER_DIRS[0] / "Source/Metal4ImGui.cpp"
+        adapter = root / layout.ADAPTER_DIRS[0] / "Source/ImGuiAdapter.cpp"
         files, notices = layout.select_checked_files([validate, adapter], {validate}, root)
         self.assertEqual(files, [validate])
         self.assertEqual(len(notices), 1)
@@ -133,29 +133,12 @@ class CppLayoutTests(unittest.TestCase):
     def test_adapter_is_checked_when_the_database_has_it(self) -> None:
         root = Path("/component")
         validate = root / "Source/Validate.cpp"
-        adapter = root / layout.ADAPTER_DIRS[0] / "Source/Metal4ImGui.cpp"
-        contract = root / layout.ADAPTER_DIRS[0] / "Source/ImGuiBackendContract.cpp"
+        adapter = root / layout.ADAPTER_DIRS[0] / "Source/ImGuiAdapter.cpp"
+        contract = root / layout.ADAPTER_DIRS[0] / "Source/ImGuiViewports.cpp"
         files, notices = layout.select_checked_files(
             [validate, adapter, contract], {validate, adapter}, root
         )
         self.assertEqual(files, [validate, adapter, contract])
-        self.assertEqual(notices, [])
-
-    def test_new_adapter_is_skipped_with_a_notice_when_the_database_lacks_it(self) -> None:
-        root = Path("/component")
-        validate = root / "Source/Validate.cpp"
-        adapter = root / "Adapters/ImGui/Source/ImGuiAdapter.cpp"
-        files, notices = layout.select_checked_files([validate, adapter], {validate}, root)
-        self.assertEqual(files, [validate])
-        self.assertEqual(len(notices), 1)
-        self.assertIn("Adapters/ImGui", notices[0])
-
-    def test_new_adapter_is_checked_when_the_database_has_it(self) -> None:
-        root = Path("/component")
-        validate = root / "Source/Validate.cpp"
-        adapter = root / "Adapters/ImGui/Source/ImGuiAdapter.cpp"
-        files, notices = layout.select_checked_files([validate, adapter], {validate, adapter}, root)
-        self.assertEqual(files, [validate, adapter])
         self.assertEqual(notices, [])
 
     def test_non_adapter_file_missing_from_the_database_still_fails(self) -> None:
@@ -223,7 +206,7 @@ class CppLayoutTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory).resolve()
             core = root / "Source/Core.cpp"
-            adapter = root / layout.ADAPTER_DIRS[0] / "Source/Metal4ImGui.cpp"
+            adapter = root / layout.ADAPTER_DIRS[0] / "Source/ImGuiAdapter.cpp"
             first = self.write_database(root, "null", [core])
             second = self.write_database(root, "metal4", [adapter])
             union = layout.databases_files([first, second])

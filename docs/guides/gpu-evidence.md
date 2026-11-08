@@ -15,8 +15,8 @@ the main checkout, not beside the worktree:
 
 ```
 rojo-rhi-evidence/
-  v1-gpu-conformance/2026-10-18/   gpu.txt  checkpoint-a.txt  unit.txt
-                                   environment.json  SHA256SUMS
+  t1/2026-10-19/   finish-contract-2a8a94e.txt  finish-conformance-2a8a94e.txt  ...
+                   environment.json  SHA256SUMS
   spike-3-multi-draw-indirect/2026-10-12/  ...
 ```
 
@@ -32,10 +32,10 @@ checkout had changes) and `SHA256SUMS` over every file of the directory at any d
 relative path. It exits with the command's code, so a failing run still leaves its log.
 
 ```
-xmake f -m debug -y && xmake build RojoRHILegacyTests
-python3 Tools/gpu_evidence.py --topic v1-gpu-conformance --label gpu \
-    --cwd build/macosx/arm64/debug/rojorhi-legacy-test \
-    -- env MTL_DEBUG_LAYER=1 ./RojoRHILegacyTests "[gpu]~[.]"
+xmake f -m debug -y && xmake build RojoRHITests
+python3 Tools/gpu_evidence.py --topic t1 --label conformance \
+    --cwd build/macosx/arm64/debug/rojorhi-test \
+    -- env MTL_DEBUG_LAYER=1 ./RojoRHITests "[conformance]"
 ```
 
 `--root` names another evidence root and `--date` another date directory. A rerun with the same

@@ -44,8 +44,8 @@ Checks run in three tiers:
 
 | Tier | Selected by | Cost | Checks |
 |---|---|---|---|
-| Release | build configuration | none | none: `ROJORHI_ASSERT` argument checks, the validation tracker and `CommandList::declareAccess` are compiled out |
-| Debug | build configuration | argument checks | argument ranges, handle generations, scope rules, through `ROJORHI_ASSERT` |
+| Release | build configuration | none | none: `ROJORHI_VU` argument checks, the validation tracker and `CommandList::declareAccess` are compiled out |
+| Debug | build configuration | argument checks | argument ranges, handle generations, scope rules, through `ROJORHI_VU` |
 | Validation | `DeviceDesc::validation` at run time, in non-Release (Debug) builds only | tracking | every observable access (attachments, copy and clear endpoints, index and indirect reads, upscaler and presented images, shader accesses declared through `CommandList::declareAccess`) and every barrier, cross-queue handoff, lifetime |
 
 Release builds contain neither the tracker nor `CommandList::declareAccess`, so nothing is tracked
