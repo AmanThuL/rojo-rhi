@@ -1,7 +1,7 @@
 # A. Cost summary
 
 **Status**: Accepted
-**API version**: 0.1.0
+**API version**: 1.0.0
 **Entries**: none
 
 This appendix lists every entry of the reference with the cost class its `Cost` row gives on each

@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.0.0 (unreleased)
+
+- `ROJORHI_VERSION_MAJOR` is 1 and `ROJORHI_VERSION_MINOR` is 0: the interface is 1.0.0
+  ([ADR 0022](docs/decisions/0022-versioning-in-the-single-header.md)). From this version a
+  breaking change needs a major version and a superseding decision record. The source interface is
+  unchanged from 0.2.0; pipeline-cache blobs of 0.2.0 embed that version and become misses.
+- Every API reference chapter states API version 1.0.0, and the features it leaves out are named
+  as not part of 1.0.0.
+- Chapter 01 states the versioning rule in the present tense: releases are tagged `vX.Y.Z` and
+  this changelog records breaking changes per version.
+
 ## 0.2.0 (2026-11-08)
 
 - **Breaking**: the frozen v1 interface is deleted with `Legacy/`

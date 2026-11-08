@@ -1,7 +1,7 @@
 # 06. Pipelines
 
 **Status**: Accepted
-**API version**: 0.1.0
+**API version**: 1.0.0
 
 A pipeline holds only the state that at least one backend must bake at creation. There is no
 vertex-input state, because vertices are always pulled by the shader, and no pipeline layout:
@@ -100,7 +100,7 @@ fragment output is written unchanged. A `Src` factor reads the fragment's color 
 factor the attachment's; `SrcAlphaSaturate` is the smaller of the fragment's alpha and 1 minus the
 attachment's alpha. `Subtract` is source minus destination; `ReverseSubtract` is destination minus
 source; `Min` and `Max` ignore the factors. `Constant` and `OneMinusConstant` read the values of
-`CommandList::setBlendConstants`. Dual-source blending and logic operations are not part of 0.1.0.
+`CommandList::setBlendConstants`. Dual-source blending and logic operations are not part of 1.0.0.
 
 #### Valid usage
 
@@ -221,7 +221,7 @@ Depth test, depth write, compare and stencil operations, baked into the pipeline
 fails, and `pass` when both pass. `Replace` writes the reference set by
 `CommandList::setStencilReference`; `IncrementClamp` and `DecrementClamp` saturate at the maximum
 and at 0, `IncrementWrap` and `DecrementWrap` wrap around, and `Invert` inverts the bits. Depth
-bounds testing is not part of 0.1.0.
+bounds testing is not part of 1.0.0.
 
 #### Valid usage
 

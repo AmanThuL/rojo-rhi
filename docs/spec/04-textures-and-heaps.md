@@ -1,7 +1,7 @@
 # 04. Textures and heaps
 
 **Status**: Accepted
-**API version**: 0.1.0
+**API version**: 1.0.0
 
 This chapter specifies textures, texture views and the global view heap. Samplers, caller-owned
 index ranges and their release continue in [part 2](04-textures-and-heaps-part2.md). Placement is

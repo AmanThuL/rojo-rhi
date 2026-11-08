@@ -1,7 +1,7 @@
 # 00. Conventions
 
 **Status**: Accepted
-**API version**: 0.1.0
+**API version**: 1.0.0
 **Entries**: none
 
 This chapter fixes how the RojoRHI API reference is written and read: the chapter head, the entry
@@ -34,7 +34,7 @@ Every chapter opens with the same head, within its first 30 lines:
 # NN. Title
 
 **Status**: Proposed
-**API version**: 0.1.0
+**API version**: 1.0.0
 ```
 
 - `NN` is the two-digit chapter number, or a capital letter for an appendix.

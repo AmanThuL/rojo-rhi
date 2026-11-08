@@ -1,7 +1,7 @@
 # 10. Queues, fences and frames
 
 **Status**: Accepted
-**API version**: 0.1.0
+**API version**: 1.0.0
 
 A device exposes one queue of each [`QueueType`](07-command-recording.md): `Graphics`, `Compute`
 and `Copy`. Work reaches a queue only through `Queue::submit`. Within one queue, work executes in

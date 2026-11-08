@@ -1,7 +1,7 @@
 # 07. Command recording: draws, dispatches and scopes
 
 **Status**: Accepted
-**API version**: 0.1.0
+**API version**: 1.0.0
 
 This part of the command-recording chapter ([command recording](07-command-recording.md)) defines
 pipeline binding, direct draws and dispatches, and debug scopes. A shader finds its data through
@@ -93,7 +93,7 @@ void CommandList::drawIndexed(Buffer indices, IndexType type, uint32_t count,
 
 Draws `count` indices read from `indices` starting at index `firstIndex`, each added to
 `baseVertex`. The index buffer is a per-draw argument because hardware index fetch and the
-post-transform cache are worth keeping. Primitive restart is not part of 0.1.0, so with a strip
+post-transform cache are worth keeping. Primitive restart is not part of 1.0.0, so with a strip
 topology no index read may equal the largest value of `type`; the indices are GPU data, so no tier
 diagnoses that, and the result of such an index is undefined.
 

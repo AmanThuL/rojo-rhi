@@ -1,7 +1,7 @@
 # 03. Memory and buffers
 
 **Status**: Proposed (until spike 1 of ADR 0014 reports)
-**API version**: 0.1.0
+**API version**: 1.0.0
 
 This chapter specifies memory classes, buffers, buffer addresses, per-frame data and residency;
 placement heaps continue in [part 2](03-memory-and-buffers-part2.md). A buffer is memory with an

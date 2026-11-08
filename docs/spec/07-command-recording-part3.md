@@ -1,7 +1,7 @@
 # 07. Command recording: copies and clears
 
 **Status**: Accepted
-**API version**: 0.1.0
+**API version**: 1.0.0
 
 This part of the command-recording chapter ([command recording](07-command-recording.md)) defines
 copies, fills and clears. All are recorded outside render passes; on Metal 4 copies and fills
@@ -19,7 +19,7 @@ address and the D3D12 form carries the heap index its resource is looked up from
 
 Buffer and texture copy layouts follow the strictest backend: D3D12 places buffer-side texture data
 at 512-byte offsets with 256-byte row pitches, unless an optional cap that RojoRHI does not assume
-relaxes it. Copies of formats with a stencil component are not part of 0.1.0.
+relaxes it. Copies of formats with a stencil component are not part of 1.0.0.
 
 ### `BufferTextureLayout`
 

@@ -1,7 +1,7 @@
 # 06. Pipelines: creation and dynamic state
 
 **Status**: Accepted
-**API version**: 0.1.0
+**API version**: 1.0.0
 
 This part of the pipelines chapter ([pipelines](06-pipelines.md)) defines compute pipelines,
 pipeline creation, the pipeline cache and the dynamic state set on the command list.
@@ -136,7 +136,7 @@ void CommandList::setViewport(const Viewport& viewport);
 ```
 
 Sets the single viewport. The origin is the top-left corner of the attachments and `y` grows
-downwards; clip-space `+y` points up on every backend. Multiple viewports are not part of 0.1.0.
+downwards; clip-space `+y` points up on every backend. Multiple viewports are not part of 1.0.0.
 
 #### Valid usage
 
@@ -179,7 +179,7 @@ void CommandList::setStencilReference(uint8_t reference);
 ```
 
 Sets the stencil reference for both faces, used by stencil compares and by `StencilOp::Replace`.
-Separate front and back references are not part of 0.1.0.
+Separate front and back references are not part of 1.0.0.
 
 #### Valid usage
 
@@ -222,7 +222,7 @@ void CommandList::setPrimitiveTopology(PrimitiveTopology topology);
 
 Sets the exact topology for the following draws of the bound vertex pipeline. `setPipeline` resets
 it to the list form of the pipeline's `PrimitiveClass` (`PointList`, `LineList` or
-`TriangleList`). Primitive restart is not part of 0.1.0 (see `CommandList::drawIndexed`).
+`TriangleList`). Primitive restart is not part of 1.0.0 (see `CommandList::drawIndexed`).
 
 #### Valid usage
 

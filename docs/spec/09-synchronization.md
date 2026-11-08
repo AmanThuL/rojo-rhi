@@ -1,7 +1,7 @@
 # 09. Synchronization
 
 **Status**: Accepted
-**API version**: 0.1.0
+**API version**: 1.0.0
 
 Barriers are explicit and batched. Nothing is tracked in Release builds: the caller, usually a
 render graph, states every dependency, and RojoRHI lowers it without inspecting resource state.
@@ -214,7 +214,7 @@ queue first. A placed or `Sparse` texture is not: a `Graphics` or `Compute` list
 - `ShaderWrite`: shader reads and writes through `Storage` views.
 - `ColorAttachment`: color attachment use, and the target of a render-pass resolve.
 - `DepthStencilWrite`: depth-stencil attachment use with or without writes; a depth-stencil
-  attachment is always in this layout, because read-only depth attachments are not part of 0.1.0
+  attachment is always in this layout, because read-only depth attachments are not part of 1.0.0
   ([`DepthAttachment`](07-command-recording.md#depthattachment)).
 - `DepthStencilRead`: shader reads of a depth-stencil texture through `Sampled` views.
 - `CopySrc`: copy source.

@@ -1,7 +1,7 @@
 # 01. Fundamentals
 
 **Status**: Accepted
-**API version**: 0.1.0
+**API version**: 1.0.0
 
 This chapter defines what every other chapter assumes: the shapes of public type, how failure and
 misuse are reported, the threading contract, handles, and the shared value types. Labels, the
@@ -79,7 +79,7 @@ The reasons: only the caller knows its scheduling priorities; a thread pool insi
 oversubscribe cores beside the caller's job system and the drivers' compiler threads; D3D12
 compiles pipelines on the calling thread and Metal 4 compiles out of process, so RHI-owned threads
 add nothing; and a library without threads has deterministic tests. A caller-provided job callback,
-`TaskSink`, is reserved for a future backend that needs internal parallelism; 0.1.0 has none.
+`TaskSink`, is reserved for a future backend that needs internal parallelism; 1.0.0 has none.
 
 ## Entries
 

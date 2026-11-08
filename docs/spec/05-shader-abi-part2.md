@@ -1,7 +1,7 @@
 # 05. Shader ABI (continued)
 
 **Status**: Proposed (until spike 1 of ADR 0014 reports)
-**API version**: 0.1.0
+**API version**: 1.0.0
 
 This part defines the `RojoRHI.slang` functions that dereference `Addr`, fetch textures and samplers
 by heap index, add atomically to uint buffer words and mark divergent indices. The model, the layout
