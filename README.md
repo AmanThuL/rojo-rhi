@@ -12,9 +12,10 @@ builds as a separate target.
 
 A D3D12 backend is also implemented, verified on WARP only, not on hardware.
 
-Luminex is this library's required consumer: RojoRHI has no standalone application or sample
-beyond its own conformance tests, and every change is driven by a Luminex branch through a RojoRHI
-pull request before it reaches Luminex.
+Luminex is this library's required consumer: every change is driven by a Luminex branch through a
+RojoRHI pull request before it reaches Luminex. [`Examples/`](Examples/README.md) holds small
+standalone programs, from a first compute dispatch to GPU-driven culling, mesh shaders, async
+compute and temporal upscaling, built with `xmake f --rojorhi_examples=y`.
 
 Public and licensed under the Apache License, Version 2.0; see [`LICENSE`](LICENSE). See
 `AGENTS.md` for the golden sources, build commands and hard rules.

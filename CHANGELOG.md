@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+- `Examples/` holds seven standalone programs on the Metal 4 and D3D12 backends, built with
+  `xmake f --rojorhi_examples=y` ([examples](Examples/README.md)); the option is off by default, so
+  neither a plain build nor a host fetches GLFW.
+
 ## 0.2.0 (2026-11-08)
 
 - **Breaking**: the frozen v1 interface is deleted with `Legacy/`

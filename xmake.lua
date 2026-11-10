@@ -20,3 +20,6 @@ add_requires("catch2 3.x")
 rojorhi_imgui_target = "RojoRHIDearImGui"
 includes("xmake/imgui.lua")
 includes("xmake/setup.lua", "xmake/tasks.lua", "xmake/targets.lua")
+
+-- The examples, opted into with --rojorhi_examples=y; a host never includes them.
+includes("Examples/xmake.lua")
