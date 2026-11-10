@@ -22,8 +22,8 @@ mounts the library as a submodule at `RojoRHI/` and drives every change through 
 pull request first ([commits](docs/conventions/commits.md) owns that workflow). The repository is
 public and licensed under the Apache License, Version 2.0 ([`LICENSE`](LICENSE)); it holds the
 library itself — public headers, shared implementation, the Metal 4 and D3D12 backends, the
-backend-neutral ImGui adapter (`Adapters/ImGui`, `RojoRHIImGui`), tests and shaders — with its
-founding documents ([architecture](docs/architecture/overview.md) maps the directories).
+backend-neutral ImGui adapter (`Adapters/ImGui`, `RojoRHIImGui`), tests, shaders and examples —
+with its founding documents ([architecture](docs/architecture/overview.md) maps the directories).
 
 ## Golden sources
 
@@ -147,6 +147,14 @@ The `d3d12-build` CI job compiles D3D12 in Debug and Release and runs nothing (A
 the test build directory. D3D12 is implemented, verified on WARP only, not on hardware ([the
 run](docs/architecture/d3d12-backend-edges.md#the-t1-run-on-warp)), and so is its benchmark harness;
 [the hardware run](docs/guides/d3d12-hardware-run.md) verifies it next (#21).
+
+The examples under `Examples/` (metal4 or d3d12; [examples](Examples/README.md)) are opt-in, because
+they fetch GLFW; each directory is one executable with its own `main.cpp` and Slang shaders:
+
+```
+xmake f -m debug -y --rojorhi_examples=y   # adds the examples to the plain build
+xmake run 04_GpuDrivenCulling              # runs one; Debug builds validate every frame
+```
 
 The benchmark harness (macOS, or Windows on d3d12; [architecture](docs/architecture/benchmarks.md)):
 

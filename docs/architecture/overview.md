@@ -37,6 +37,7 @@ rojo-rhi/
   Benchmarks/                                 the RojoRHIBench harness: both arms, host code, checks
   Benchmarks/HostWindows/  Benchmarks/NativeD3D12/  Benchmarks/ChecksD3D12/
                                               the Windows host; the D3D12 arm and checks
+  Examples/                                   standalone programs, opt-in; Common/ holds their window
   Tools/                                      checks and probes
   Tools/bench.py  Tools/bench_analysis.py     the benchmark driver and its statistics
   Tools/shader_layout.py                      generates the layout checks from Slang reflection
