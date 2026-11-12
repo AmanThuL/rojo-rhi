@@ -152,8 +152,9 @@ owner decides the correction.
   ("per-vendor driver support for that cap is unverified") and 272 (the D3D12 `Cost` cell,
   "per-vendor support unverified").
 - **Item 2, `OPTIONS19` shipping values, and the view heap (issue #22; pull request #86 set the view
-  heap's floor).** Observe: the view heap size printed in section 2. Expected: at least 1,000,000
-  plus the reserved slots, `2 + framesInFlight x 1,024`; WARP 1.0.21 reports 2,097,152. Record the
+  heap's floor; ADR 0030 set it to tier 3's heap).** Observe: the view heap size printed in section
+  2. Expected: at least 1,000,000, so a `maxViews` of at least 996,926 after the reserved slots;
+  WARP 1.0.21 reports 2,097,152 and an RTX 3080 Ti on driver 621.14 reports 1,000,000. Record the
   value for the vendor and driver. Reference lines: the `maxViews`, `maxSamplers` row of
   `docs/spec/02-device.md` (the words "unverified shipping values") and the `maxViews` row of
   `docs/spec/15-formats-and-limits-part2.md`. A smaller maximum is refused with `Unsupported` naming

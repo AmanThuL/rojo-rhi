@@ -131,10 +131,10 @@ allocator, unmaps, releases the resource and frees the payload.
 `rojorhi.samplers`, and one CPU-only heap of twins. The view heap holds
 `D3D12_FEATURE_D3D12_OPTIONS19`'s maximum capped at 2^21 descriptors, or 1,000,000 when the
 device does not report it. The core reserves the leading slots (0 and 1 and the transient ring,
-2 + `framesInFlight` × 1,024), so `maxViews` is the heap size less them. A `maxViews` of
-1,000,000 needs a heap of 1,000,000 plus the reserved slots: a device whose maximum is smaller
-is refused with `Unsupported` naming `maxViews`, and a device that does not report the maximum
-is tried at 1,000,000 and refused too. This is verified on WARP only. The sampler heap
+2 + `framesInFlight` × 1,024), so `maxViews` is the heap size less them, at least 996,926 ([ADR
+0030](../decisions/0030-view-floor-is-tier-3-heap-less-reservation.md)). A maximum below tier 3's
+1,000,000, or an unreported one whose heap of 1,000,000 cannot be created, is refused with
+`Unsupported` naming `maxViews`. WARP 1.0.21 reports 2,097,152, an RTX 3080 Ti 1,000,000. The sampler heap
 always holds 2,048. The core's view and sampler allocators hand out the slots, so a `ViewIndex` or
 `SamplerIndex` is the heap index a shader reads.
 

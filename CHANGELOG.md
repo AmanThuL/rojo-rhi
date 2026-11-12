@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- The portable `maxViews` floor is 996,926, resource binding tier 3's view heap of 1,000,000 less
+  the D3D12 backend's largest reservation
+  ([ADR 0030](docs/decisions/0030-view-floor-is-tier-3-heap-less-reservation.md)). D3D12 admits a
+  device whose `OPTIONS19` maximum is exactly 1,000,000, which it refused before; Metal 4 and Null
+  still report 1,000,000.
 - `Examples/` holds seven standalone programs on the Metal 4 and D3D12 backends, built with
   `xmake f --rojorhi_examples=y` ([examples](Examples/README.md)); the option is off by default, so
   neither a plain build nor a host fetches GLFW.
