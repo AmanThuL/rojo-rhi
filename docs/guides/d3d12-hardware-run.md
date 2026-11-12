@@ -255,8 +255,8 @@ goes to the owner.
 
 The T2 round on D3D12 needs the Windows GPU machine (issue #21) and follows ADR 0014. Its
 pre-registration is [the D3D12 overhead note](../research/2026-10-20-d3d12-overhead.md), accepted
-and frozen on 2026-11-12. Run from a clean checkout of the commit that merged it or its last
-amendment; a later amendment is recorded in its Amendments section before any timed run.
+and frozen on 2026-11-12. Run from a clean checkout of the commit its last amendment names, the
+merge of ADR 0030; a later amendment is recorded in its Amendments section before any timed run.
 
 The harness is verified on WARP only; no hardware result exists yet. From a Developer PowerShell on
 AC power with the High-performance plan and nothing else running:
