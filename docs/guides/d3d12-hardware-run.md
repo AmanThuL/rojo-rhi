@@ -31,6 +31,15 @@ decides" names the person who accepts the decision records of the repository.
   xmake, Python 3 and git. `python3` must resolve: the Windows CI jobs copy `python.exe` to
   `python3.exe` when the Windows installer provides only the former (`.github/workflows/ci.yml`,
   job `interface`).
+- The Windows optional feature Graphics Tools (`dism /online /add-capability
+  /capabilityname:Tools.Graphics.DirectX~~~~0.0.1.0`, elevated). Without it the runtime refuses the
+  debug layer with `DXGI_ERROR_SDK_COMPONENT_MISSING` (`0x887A002D`) although the Agility SDK's
+  `d3d12SDKLayers.dll` sits beside `D3D12Core.dll`, so every Debug run of section 2 and 3 and the
+  spike's correctness run fail at device creation.
+- No overlay that hooks `Present`: quit RivaTuner Statistics Server (with MSI Afterburner),
+  Overwolf and the like before any run. RTSS keeps a reference to each swapchain it hooks, so a
+  released swapchain survives, `destroyDevice` finds the device still referenced and aborts in a
+  Debug build, and a case with two swapchains has its device removed at present.
 - Optional: PIX (capture, section 4) and the vendor command-line tool `nvidia-smi`, which the
   thermal rule of sections 5 and 6 reads.
 - On AC power, with the High performance or Ultimate Performance power scheme, and the state of
