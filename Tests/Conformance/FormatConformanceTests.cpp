@@ -322,27 +322,15 @@ namespace {
         return describe(actual, visibleOf(format, stored), agrees);
     }
 
-    //==================================================================================================================
-    /// The bound a linearly filtered sRGB color channel whose exact value is `mean` is compared within: half an 8-bit step, or
-    /// half the distance from `mean` to the nearest decoded code other than the one it rounds to, when that is smaller.
-    double srgbMeanBound(double mean)
-    {
-        const double code = std::round(encodeSrgb(mean) * 255.0);
-        double bound = 0.5 / 255.0;
-        for (const double neighbour : { code - 1.0, code + 1.0 })
-        {
-            if (neighbour >= 0.0 && neighbour <= 255.0)
-            {
-                bound = std::min(bound, std::fabs(decodeSrgb(static_cast<float>(neighbour / 255.0)) - mean) / 2.0);
-            }
-        }
-        return bound;
-    }
+    /// The bound a linearly filtered sRGB color channel is compared within, in linear space: one 8-bit step. Filtering units
+    /// decode sRGB to linear at a limited precision (an RTX 3080 Ti returns its means on a grid of 1/512), and a step still
+    /// separates the linear mean from a mean taken in encoded space, which misses the values the cases use by over 0.09.
+    constexpr double kSrgbMeanBound = 1.0 / 255.0;
 
     //==================================================================================================================
     /// Describes where `actual`, a linear sample of `format` halfway between texels holding `left` and `right` as stored,
     /// differs from the mean of the two values a shader reads; empty when they agree. A normalized channel's mean is a code
-    /// and agrees within half a step; an sRGB color channel's mean is compared in linear space within `srgbMeanBound`.
+    /// and agrees within half a step; an sRGB color channel's mean is compared in linear space within `kSrgbMeanBound`.
     std::string mismatchMean(Format format, const Float4& actual, const Float4& left, const Float4& right)
     {
         const Traits traits = traitsOf(format);
@@ -353,7 +341,7 @@ namespace {
             if (srgbColor(traits, channel))
             {
                 const double exact = (static_cast<double>(decodeSrgb(left[channel])) + decodeSrgb(right[channel])) / 2.0;
-                agrees = agrees && std::fabs(actual[channel] - exact) <= srgbMeanBound(exact);
+                agrees = agrees && std::fabs(actual[channel] - exact) <= kSrgbMeanBound;
             }
             else if (traits.encoding == Encoding::Unorm || traits.encoding == Encoding::Srgb)
             {
