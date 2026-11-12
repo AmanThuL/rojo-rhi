@@ -339,8 +339,9 @@ target("RojoRHITests")
         -- contract runs the shared and [d3d12] cases without the death ones, death runs every death case, and
         -- conformance runs the [conformance] cases.
         add_tests("contract", {runargs = {"[contract]~[death],[d3d12]~[death]"}, realtime_output = true})
-        -- Each case spawns this executable again, so keep Catch2's summary in the log and bound a hang.
-        add_tests("death", {runargs = {"[death]"}, realtime_output = true, run_timeout = 300000})
+        -- Each case spawns this executable again, so keep Catch2's summary in the log and bound a hang. Each child creates
+        -- a device, and under GPU-based validation on hardware the entry takes about ten minutes, so the bound is thirty.
+        add_tests("death", {runargs = {"[death]"}, realtime_output = true, run_timeout = 1800000})
         add_tests("conformance", {runargs = {"[conformance]"}, realtime_output = true})
         if imgui_target then
             add_tests("imgui", {runargs = {"[imgui]"}, realtime_output = true})
