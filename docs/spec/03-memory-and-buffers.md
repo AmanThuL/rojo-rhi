@@ -1,6 +1,6 @@
 # 03. Memory and buffers
 
-**Status**: Proposed (until spike 1 of ADR 0014 reports)
+**Status**: Accepted
 **API version**: 0.1.0
 
 This chapter specifies memory classes, buffers, buffer addresses, per-frame data and residency;
@@ -148,9 +148,9 @@ offset arithmetic, so a consumer may suballocate inside one large buffer. In sha
 `typealias Addr = uint2;`, never a struct, and every `Addr` field in a root block sits at an
 8-byte-aligned offset (see [shader ABI](05-shader-abi.md)). Because the D3D12 form is not a virtual
 address, structs shared with shaders carry `Addr`, never a raw 64-bit pointer, and only the shader
-module dereferences it. Whether `Addr` chasing is cheap enough on D3D12 to recommend for hot paths
-is spike 1; until it reports, the reference recommends root fields and heap indices for per-draw
-hot data.
+module dereferences it. Spike 1 measured `Addr` chasing on D3D12 as costly ([the
+result](../research/2026-10-20-spike-1-d3d12-addr-dereference.md#results)), so the reference
+recommends root fields and heap indices for per-draw hot data.
 
 A shader never dereferences the null address, and it writes through an address only into a buffer
 created with `BufferUsage::ShaderWrite`. No tier diagnoses either, because shader accesses are
@@ -176,7 +176,7 @@ shader-side access.
 |---|---|---|---|
 | Representation | GPU virtual address | raw-buffer heap index in `lo` (a load uses `index`, a store `index + 1`) and 32-bit byte offset in `hi`; descriptor slot 0 is reserved so the zero `Addr` is null | buffer device address |
 | Dereference | `device T*` load | `ByteAddressBuffer` from `ResourceDescriptorHeap[index]`, then `LoadAligned<T>` at the offset | `PhysicalStorageBuffer` load |
-| Cost | native | costly: one descriptor fetch per base, `NonUniformResourceIndex` when divergent; spike 1 | native |
+| Cost | native | costly: one descriptor fetch per base, `NonUniformResourceIndex` when divergent; on an RTX 3080 Ti, spike 1 measured +19% over a root SRV for a uniform base, +1.6% for a wave-uniform one and 4.8 times for a divergent one | native |
 
 ### `Device::address`
 ```cpp
