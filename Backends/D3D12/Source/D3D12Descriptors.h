@@ -27,7 +27,7 @@ namespace rojoRHI::d3d12 {
         D3D12_CPU_DESCRIPTOR_HANDLE cpuTwin = {}; ///< The CPU handle of its twin in the CPU-only heap.
     };
 
-    /// The least `maxViews` the device accepts, the portable floor and the resource binding tier 3 guarantee.
+    /// The least view heap the device accepts, the resource binding tier 3 guarantee, reserved slots included.
     inline constexpr uint32_t kMinViewHeap = 1'000'000;
 
     /// The largest view heap the device creates, whatever the device reports.
@@ -47,6 +47,11 @@ namespace rojoRHI::d3d12 {
     /// allocator reserves both as its leading block.
     inline constexpr uint32_t kHeldViewSlots = 2;
 
+    /// The portable `maxViews` floor: the least view heap less the largest reservation, the held slots and a ring of
+    /// `kMaxFrameSlots` blocks (ADR 0030).
+    inline constexpr uint32_t kMinViews = kMinViewHeap - kHeldViewSlots - kMaxFrameSlots * kTransientPerSlot;
+    static_assert(kMinViews == 996'926, "the reference states the maxViews floor as 996,926");
+
     /// The shader-visible heaps of a device: the view heap every buffer view, texture view and transient descriptor lives in,
     /// and the sampler heap. The core's view and sampler allocators hand out their slots, so a `ViewIndex` or `SamplerIndex`
     /// is the heap index a shader reads. Each heap holds its own reference, released with the device's other state.
@@ -55,11 +60,11 @@ namespace rojoRHI::d3d12 {
       public:
         /// Creates both heaps, the held slots 0 and 1 and the transient ring on `impl`'s device. The view heap holds the
         /// `D3D12_FEATURE_D3D12_OPTIONS19` maximum, capped at `kMaxViewHeap`, or, when the device does not report it,
-        /// `kMinViewHeap` descriptors more than the reserved block. Slot 0 holds a null raw SRV and slot 1 a null raw UAV for
+        /// `kMinViewHeap` descriptors. Slot 0 holds a null raw SRV and slot 1 a null raw UAV for
         /// the device's life, so the zero `Addr` names no buffer, and the ring is `framesInFlight` blocks of
         /// `kTransientPerSlot` slots right after them, each with a twin in a CPU-only heap. The view allocator reserves those
-        /// slots as its leading block, so `viewSlots`, the heap less the block, is `maxViews`. A reported maximum that leaves
-        /// fewer than `kMinViewHeap`, or an unreported one whose heap cannot be created, is `Unsupported`, naming `maxViews`.
+        /// slots as its leading block, so `viewSlots`, the heap less the block, is `maxViews`, at least `kMinViews`. A reported
+        /// maximum below `kMinViewHeap`, or an unreported one whose heap cannot be created, is `Unsupported`, naming `maxViews`.
         Result<void> create(DeviceImpl& impl);
 
         /// Returns the number of descriptors of the view heap.

@@ -156,9 +156,9 @@ TEST_CASE("every limit is at least the floor of the reference", "[contract]")
     Device device = makeDevice();
     const Capabilities& caps = device.capabilities();
     const Limits& limits = caps.limits;
-    CHECK(caps.maxViews >= 1'000'000);
+    CHECK(caps.maxViews >= 996'926);
     CHECK(caps.maxSamplers >= 996);
-    CHECK(limits.maxViews >= 1'000'000);
+    CHECK(limits.maxViews >= 996'926);
     CHECK(limits.maxSamplers >= 996);
     CHECK(limits.maxRootBlockSize >= 65'536);
     CHECK(limits.rootAlignment >= 256);

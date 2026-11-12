@@ -100,32 +100,31 @@ namespace rojoRHI::d3d12 {
         ROJORHI_INTERNAL_ASSERT(blocks <= m_ringClaims.size(), "more frame slots than transient ring blocks");
         const uint32_t ringSize = blocks * kTransientPerSlot;
         const uint32_t reserved = kHeldViewSlots + ringSize;
-        // The held slots and the ring never reach a caller, so maxViews is the heap less them and the heap needs 1,000,000
-        // descriptors more than the reservation. A device that reports OPTIONS19 gets its maximum, and one whose maximum is
-        // smaller is refused. Binding tier 3 promises 1,000,000 descriptors or more, so a device that does not report it is
-        // asked for exactly what the floor needs, and refused only when it cannot create that heap.
-        const uint32_t needed = kMinViewHeap + reserved;
+        // The held slots and the ring never reach a caller, so maxViews is the heap less them. Binding tier 3 promises a
+        // heap of 1,000,000 descriptors, reservation included, and the largest reservation leaves kMinViews, the floor. A
+        // device that reports OPTIONS19 gets its maximum, and one whose maximum is below the tier's is refused; a device that
+        // does not report it is asked for the tier's heap, and refused only when it cannot create it.
         const std::optional<uint32_t> reported = reportedViewHeap(impl.device());
-        if (reported && *reported < needed)
+        if (reported && *reported < kMinViewHeap)
         {
             return std::unexpected(
                 Error{ ErrorCategory::Unsupported,
                        std::format(
                            "the D3D12 hardware floor is not met: maxViews is below {}: the view heap holds at most {} "
-                           "descriptors and {} of them are reserved",
-                           kMinViewHeap,
+                           "descriptors, fewer than resource binding tier 3's {}",
+                           kMinViews,
                            *reported,
-                           reserved
+                           kMinViewHeap
                        ) }
             );
         }
-        const uint32_t capacity = reported ? *reported : needed;
+        const uint32_t capacity = reported ? *reported : kMinViewHeap;
         Result<Com<ID3D12DescriptorHeap>> views = createHeap(impl, D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, capacity, true, "rojorhi.views");
         if (!views && !reported)
         {
             return std::unexpected(
                 Error{ ErrorCategory::Unsupported,
-                       std::format("the D3D12 hardware floor is not met: maxViews is below {}: {}", kMinViewHeap, views.error().message) }
+                       std::format("the D3D12 hardware floor is not met: maxViews is below {}: {}", kMinViews, views.error().message) }
             );
         }
         if (!views)

@@ -46,7 +46,7 @@ identifier; this entry only defines the values.
 
 | Field | Floor | Metal 4 (Apple7+) | D3D12 (FL 12_2) | Vulkan oracle |
 |---|---|---|---|---|
-| `maxViews` | 1,000,000 | 1,000,000 textures reachable per stage through argument buffers | at least 1,000,000 at resource binding tier 3; `OPTIONS19` may report more (shipping values *unverified*) | descriptor-heap size properties of `VK_EXT_descriptor_heap` |
+| `maxViews` | 996,926 | 1,000,000 textures reachable per stage through argument buffers | the view heap less the reserved slots: at least 1,000,000 descriptors at resource binding tier 3, so at least 996,926; `OPTIONS19` may report more (shipping values *unverified*) | descriptor-heap size properties of `VK_EXT_descriptor_heap` |
 | `maxSamplers` | 996 | 996 on Apple7 and Apple8, 500,000 on Apple9+, from `maxArgumentBufferSamplerCount` (*unverified*) | 2,048 shader-visible samplers; `OPTIONS19` may report more | sampler-heap size properties of `VK_EXT_descriptor_heap` |
 | `maxRootBlockSize` | 65,536 | bounded by `maxBufferLength` | 65,536, the constant buffer limit kept as the portable cap | bounded by the buffer, read through a device address |
 | `rootAlignment` | 256 | 4, raised to 256 | 256, `D3D12_CONSTANT_BUFFER_DATA_PLACEMENT_ALIGNMENT` | `minUniformBufferOffsetAlignment`, at most 256 |
@@ -76,7 +76,8 @@ Notes on the floor:
   [memory and buffers](03-memory-and-buffers.md)), so many small buffers reduce the views
   available; few large buffers with suballocation avoid that. On D3D12 the held slots 0 and 1 and
   the transient ring (`framesInFlight` × 1,024 slots) sit outside `maxViews`, which is the view
-  heap size minus them.
+  heap size minus them. The floor is tier 3's heap of 1,000,000 less the largest reservation,
+  2 + 3 × 1,024 ([ADR 0030](../decisions/0030-view-floor-is-tier-3-heap-less-reservation.md)).
 - `maxSamplers` is the Metal 4 value on Apple7 and Apple8, below D3D12's 2,048; inline samplers in
   Metal shaders count toward it. A device reports its own, larger value where it has one.
 - `rootAlignment` and `frameDataAlignment` are 256 everywhere because a D3D12 root constant

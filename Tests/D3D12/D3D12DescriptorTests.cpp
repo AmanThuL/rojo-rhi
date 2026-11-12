@@ -35,14 +35,14 @@ namespace {
 #endif
 
     //==================================================================================================================
-    /// Returns the view-heap size a device with `framesInFlight` frame slots should have: the `OPTIONS19` maximum capped at
-    /// 2^21, else 1,000,000 more than the held slots and the transient ring.
-    uint32_t expectedViewHeap(ID3D12Device12* device, uint32_t framesInFlight)
+    /// Returns the view-heap size a device should have, whatever its frame slots: the `OPTIONS19` maximum capped at
+    /// 2^21, else resource binding tier 3's 1,000,000.
+    uint32_t expectedViewHeap(ID3D12Device12* device)
     {
         D3D12_FEATURE_DATA_D3D12_OPTIONS19 options = {};
         if (FAILED(device->CheckFeatureSupport(D3D12_FEATURE_D3D12_OPTIONS19, &options, static_cast<UINT>(sizeof(options)))))
         {
-            return 1'000'000 + d3d12::kHeldViewSlots + framesInFlight * d3d12::kTransientPerSlot;
+            return 1'000'000;
         }
         return std::min(options.MaxViewDescriptorHeapSize, 1u << 21);
     }
@@ -143,7 +143,7 @@ TEST_CASE("the view heap is shader-visible and holds H descriptors", "[d3d12]")
     REQUIRE(created.has_value());
     DeviceImpl& impl = DeviceImpl::of(*created);
     const uint32_t capacity = impl.descriptors.viewCapacity();
-    CHECK(capacity == expectedViewHeap(impl.device(), impl.core.framesInFlight()));
+    CHECK(capacity == expectedViewHeap(impl.device()));
     CHECK(capacity >= 1'000'000u);
     if constexpr (kWarpAdapter)
     {
@@ -157,7 +157,7 @@ TEST_CASE("the view heap is shader-visible and holds H descriptors", "[d3d12]")
     const uint32_t reserved = d3d12::kHeldViewSlots + impl.core.framesInFlight() * d3d12::kTransientPerSlot;
     CHECK(impl.descriptors.viewSlots() == capacity - reserved);
     CHECK(created->capabilities().maxViews == capacity - reserved);
-    CHECK(created->capabilities().maxViews >= 1'000'000u);
+    CHECK(created->capabilities().maxViews >= 996'926u);
     destroyDevice(*created);
 }
 

@@ -76,7 +76,7 @@ TEST_CASE("the limits are the D3D12 column of the reference", "[d3d12]")
     REQUIRE(created.has_value());
     const Capabilities& capabilities = created->capabilities();
     const Limits& limits = capabilities.limits;
-    CHECK(limits.maxViews >= 1'000'000u);
+    CHECK(limits.maxViews >= 996'926u);
     CHECK(limits.maxViews == capabilities.maxViews);
     CHECK(limits.maxSamplers == 2'048u);
     CHECK(limits.maxSamplers == capabilities.maxSamplers);

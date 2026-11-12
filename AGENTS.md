@@ -58,7 +58,9 @@ with its founding documents ([architecture](docs/architecture/overview.md) maps 
   [0027 hosted CI compiles D3D12](docs/decisions/0027-hosted-ci-compiles-d3d12.md),
   [0028 drawId from the bound record](docs/decisions/0028-vertex-drawid-from-the-bound-record.md),
   [0029 v1 is deleted with the consumer port](
-  docs/decisions/0029-v1-deleted-with-the-consumer-port.md)
+  docs/decisions/0029-v1-deleted-with-the-consumer-port.md),
+  [0030 the maxViews floor is tier 3's heap less the D3D12 reservation](
+  docs/decisions/0030-view-floor-is-tier-3-heap-less-reservation.md)
 - API reference: [docs/spec/](docs/spec/00-conventions.md), entered through its conventions chapter
 - Research: [docs/research/](docs/research/2026-10-11-rhi-redesign/01-nographicsapi.md), the
   evidence notes behind the decisions, [D3D12 on WARP](
