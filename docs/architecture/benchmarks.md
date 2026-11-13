@@ -290,9 +290,9 @@ dumps omitted) is in `rojo-rhi-evidence/t2-gate-d3d12/2026-10-22/` with a `SHA25
 Since then the `d3d12-build` job compiles the harness and runs nothing ([ADR
 0027](../decisions/0027-hosted-ci-compiles-d3d12.md)); the gate runs on a local Windows build. WARP
 evidence is correctness evidence only, not T1 or T2 acceptance. `bench.py timing` refuses a WARP
-build; D3D12 allocation counts are recorded but no `[d3d12]` case judges them yet. No D3D12 cost is
-measured: the first timed round waits for the Windows GPU machine and follows the procedure of [the
-D3D12 note](../research/2026-10-20-d3d12-overhead.md) (issue #21).
+build; D3D12 allocation counts are recorded but no `[d3d12]` case judges them yet. Its first timed
+round, on an RTX 3080 Ti, missed the CPU budget ([the results](
+../research/2026-11-12-d3d12-overhead-results.md)); the next round is a new note (issue #21).
 
 ## Backend obligations the N arm encodes
 
