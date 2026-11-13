@@ -1,6 +1,6 @@
 # 05. Shader ABI
 
-**Status**: Proposed (until spike 1 of ADR 0014 reports)
+**Status**: Accepted
 **API version**: 0.1.0
 
 This chapter defines how a shader reaches data: the root block, the `RojoRHI.slang` module and the

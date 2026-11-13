@@ -19,9 +19,9 @@ for one interface over three APIs, by emulating, tracking or giving an entry up 
 other cell is the native call or a fixed, small amount of backend work. In this API version no
 entry is `impossible` on any backend.
 
-Spike 1 of [ADR 0014](../decisions/0014-overhead-measurement.md) is pending and may change rows in
-chapters 03 and 05, which stay `Proposed` until it reports: it measures `Addr` dereference on
-D3D12. Spike 2 kept the Metal 4 ID table for texture and sampler indexing, leaving its rows
+Spike 1 of [ADR 0014](../decisions/0014-overhead-measurement.md) measured `Addr` dereference on
+D3D12 as costly on an RTX 3080 Ti, leaving the rows of chapters 03 and 05 `costly` ([the
+result](../research/2026-10-20-spike-1-d3d12-addr-dereference.md#results)). Spike 2 kept the Metal 4 ID table for texture and sampler indexing, leaving its rows
 `cheap`. Spike 3 kept the kernel-encoded indirect command buffer for counted multi-draw on Metal 4,
 leaving its rows `costly`; [ADR 0028](../decisions/0028-vertex-drawid-from-the-bound-record.md)
 moved the vertex stage's `drawId` from the base instance to the bound record, making a lone record

@@ -1,6 +1,6 @@
 # 05. Shader ABI (continued)
 
-**Status**: Proposed (until spike 1 of ADR 0014 reports)
+**Status**: Accepted
 **API version**: 0.1.0
 **Entries**: none
 

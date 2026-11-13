@@ -1,6 +1,6 @@
 # 05. Shader ABI (continued)
 
-**Status**: Proposed (until spike 1 of ADR 0014 reports)
+**Status**: Accepted
 **API version**: 0.1.0
 
 This part defines the `RojoRHI.slang` functions that dereference `Addr`, fetch textures and samplers
@@ -59,9 +59,10 @@ every store's or atomic add's `index + 1`. DXC keeps the qualifier through that 
 the `uint2` pack and unpack, so `load`, texture and sampler fetches carry it from the helper, and
 drops it through the addition, so the store or atomic add marks its own index, which is correct for
 a uniform index too ([ADR 0023](../decisions/0023-d3d12-store-marks-its-index.md)).
-`Tools/check_dxil.py` checks the DXIL handle flag of each fetch kind on hosted Windows CI. Whether
-the fetch is cheap enough for hot paths is spike 1 of [ADR
-0014](../decisions/0014-overhead-measurement.md), still pending. Until it reports, per-draw hot data
+`Tools/check_dxil.py` checks the DXIL handle flag of each fetch kind on hosted Windows CI. Spike 1
+of [ADR 0014](../decisions/0014-overhead-measurement.md) measured the fetch as costly ([the
+result](../research/2026-10-20-spike-1-d3d12-addr-dereference.md#results)): a uniform base is 19%
+over a root SRV, a wave-uniform one 1.6% and a divergent one 4.8 times, so per-draw hot data
 belongs in root fields and heap indices, and an `Addr` hop is for bulk and cold data.
 
 In SPIR-V, with the pinned Slang, a helper that is not inlined and takes a texture parameter loses
@@ -93,7 +94,7 @@ members; and `base` is dynamically uniform across the wave or marked with `rojoR
 | | Metal 4 | D3D12 | Vulkan |
 |---|---|---|---|
 | Lowering | `device T*` load | `ByteAddressBuffer` from `ResourceDescriptorHeap[index]`, then `LoadAligned<T>` at offset: one raw access for a 2- or 4-component vector `T`, or a struct member at a multiple of its size, 4-byte accesses otherwise | `PhysicalStorageBuffer` load |
-| Cost | native | costly: one descriptor fetch per base; spike 1 pending | native |
+| Cost | native | costly: one descriptor fetch per base; on an RTX 3080 Ti, spike 1 measured +19% over a root SRV for a uniform base, +1.6% for a wave-uniform one and 4.8 times for a divergent one | native |
 
 ### `rojoRHI::store`
 
@@ -120,7 +121,7 @@ uniform across the wave or marked with `rojoRHI::nonUniform`.
 | | Metal 4 | D3D12 | Vulkan |
 |---|---|---|---|
 | Lowering | `device T*` store | `RWByteAddressBuffer` from `ResourceDescriptorHeap[NonUniformResourceIndex(index + 1)]`, then `StoreAligned<T>` at offset: one raw access for a 2- or 4-component vector `T`, or a struct member at a multiple of its size, 4-byte accesses otherwise | `PhysicalStorageBuffer` store |
-| Cost | native | costly: one descriptor fetch per base; spike 1 pending | native |
+| Cost | native | costly: one descriptor fetch per base; on an RTX 3080 Ti, spike 1 measured +19% over a root SRV for a uniform base, +1.6% for a wave-uniform one and 4.8 times for a divergent one | native |
 
 ### `rojoRHI::atomicAdd`
 

@@ -66,3 +66,4 @@ its runs under topic `t2`, checksummed the same way
 | `t2-diagnosis` | 2026-10-19 | the report-only diagnosis of that round's misses: ablations, per-pass GPU timelines, CPU profiles and allocation stacks, with the patches measured |
 | `spike-2-texture-indexing` | 2026-10-12 | [spike 2](../research/2026-10-12-spike-2-texture-indexing.md) |
 | `spike-3-multi-draw-indirect` | 2026-10-12 | [spike 3](../research/2026-10-12-spike-3-multi-draw-indirect.md) |
+| `spike-1-d3d12-addr-dereference` | 2026-11-12 | [spike 1](../research/2026-10-20-spike-1-d3d12-addr-dereference.md) on an RTX 3080 Ti: costly, escalated, answered with no superseding decision |

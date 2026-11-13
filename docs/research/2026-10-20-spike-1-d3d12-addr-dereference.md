@@ -1,6 +1,6 @@
 # Spike 1: what an `Addr` dereference costs on D3D12
 
-**Status**: Proposed (until the first timed run on the Windows GPU machine)
+**Status**: Accepted (2026-11-12)
 
 Spike 1 of [ADR 0014](../decisions/0014-overhead-measurement.md) decides what dereferencing an
 [`Addr`](../spec/03-memory-and-buffers.md#addr) costs on D3D12, where it is a raw view's heap index
@@ -234,4 +234,37 @@ None.
 
 ## Results
 
-Not yet measured.
+Measured on 2026-11-12 on an NVIDIA GeForce RTX 3080 Ti, driver 621.14 (32.0.16.2114), Windows
+build 26300, Agility SDK 1.619.6, DXC 1.9.2607, Slang 2026.14.1, at the harness tagged
+`spike-1-d3d12-addr-dereference-2026-11-12`, on AC power with the High performance scheme. The
+correctness gate passed: every kernel at every `N` and variant matched, the debug layer under
+GPU-based validation reported nothing of severity warning or worse, and every kernel of the
+negative check failed as expected. All 200 processes of the 10 configurations were kept on their
+first attempt; none was discarded for power, temperature or clock. Raw logs, per-process results,
+`summary.json` and `analysis.txt` are in
+`rojo-rhi-evidence/spike-1-d3d12-addr-dereference/2026-11-12/`, `SHA256SUMS` SHA-256
+`602f1ef48da37c22d44c8cdd9b2cce3f1fe6950ed290caf00fc29c3b3f544334`.
+
+The judged configuration, `N` 1,048,576, `fetch`, medians of process medians in nanoseconds, paired
+deltas against F with their 95% intervals:
+
+| Mode | F | H1 | H2 | H1m | H1 − F | H2 − F |
+|---|---|---|---|---|---|---|
+| uniform | 96,256 | 114,688 | 118,272 | 115,712 | +18,432 [+18,432, +19,456], +19.1% | +21,504 [+21,504, +22,528], +22.3% |
+| wave-uniform | 131,072 | 133,120 | 133,120 | 147,456 | +2,048 [+2,048, +2,048], +1.6% | +2,048 [+2,048, +2,048], +1.6% |
+| divergent | 2,060,032 | 9,964,544 | 9,974,784 | 9,956,352 | 4.84 times F | 4.84 times F |
+
+- **Verdict: costly.** H1 uniform's slowdown is material, 19.1% against the 5% budget, with an
+  interval that excludes zero. H1 wave-uniform's 1.6% is not material. The `Addr`, `rojoRHI::load`
+  and `rojoRHI::store` cells of the D3D12 column stay `costly` and take these figures, the
+  recommendation stays root fields and heap indices for per-draw hot data, and chapters 03, 05, 05
+  part 2 and 05 part 3 are `Accepted`, with 05 part 4, whose status waited on the same report.
+- **Escalation: fired.** H2's median exceeds twice F's in divergent mode, and H1 divergent's is 4.84
+  times F divergent's, above three. The owner answered on 2026-11-12 that no superseding decision is
+  needed: a divergent base pays one descriptor fetch per thread, which the reference already names
+  as `costly`, and the encoding stays as it is.
+- **Report-only.** H1m, the shipped module, matches H1 within 1% in uniform and divergent modes, so
+  the module's lowering is what was measured there; in wave-uniform mode it is 10.9% over H1. The
+  `alu` variant gives the same verdict (uniform H1 +14.2%, wave-uniform −2.3%, divergent 5.06 times
+  F). At `N` of 64 and 1,024 the uniform arms are within the timer's 1,024 ns step of F, and the
+  divergent ones are 5.7 to 9 times F.
