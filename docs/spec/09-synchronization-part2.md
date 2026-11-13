@@ -6,8 +6,8 @@
 This part defines the three barrier kinds, the one batched call that records them, the cross-queue
 handoff of textures and the first use of aliased memory. The stage, access and layout vocabulary is
 in [part 1](09-synchronization.md). Where no sentence says *unverified*, its D3D12 lowerings are
-implemented, verified on WARP only, not on hardware
-([evidence](../research/2026-10-21-d3d12-warp-evidence.md)).
+verified on WARP ([evidence](../research/2026-10-21-d3d12-warp-evidence.md)) and by T1 on one GPU
+([the hardware run](../research/2026-11-12-d3d12-hardware-run.md)).
 
 Each barrier kind exists for a reason. A global barrier orders memory by stage and access with no
 resource, and any buffer hazard can be expressed with one. A buffer barrier names a buffer and a

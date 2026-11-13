@@ -7,10 +7,10 @@ binding, copies, the fill kernel, clears, barrier batches, timed scopes, and the
 call adds. It covers chapters 07 (copies, fills, clears, scopes), 09 (barriers) and 14 (scope
 timings) of the API reference on this backend; the device, queues, descriptor heaps and the heap
 directory are in [the D3D12 backend](d3d12-backend.md), which this page does not repeat. Draws,
-dispatches, render passes and indirect work do not record yet. Everything below is "implemented,
-verified on WARP only, not on hardware": the backend is not a capability until a hardware run says
-so ([ADR 0009](../decisions/0009-conformance-and-valid-usage.md),
-[documentation](../conventions/documentation.md)).
+dispatches, render passes and indirect work do not record yet. Everything below is implemented and
+conformant (T1) on one GPU, an NVIDIA GeForce RTX 3080 Ti on driver 621.14, with its overhead
+budgets not yet met and other vendors unverified ([ADR
+0031](../decisions/0031-d3d12-passes-t1-on-one-gpu.md)).
 
 Every entry calls the core's check first (`Source/Core`), then translates, and holds no
 `ROJORHI_VU`; [the Null backend's recording](null-backend-recording.md) describes the shared core.
@@ -295,6 +295,6 @@ them and the skips. That includes the copy, initial-data, barrier, fill, clear a
 the contract files for frame joins and queue hazards, `CopyTests` and `ScopeConformanceTests.cpp`;
 [drawing](d3d12-drawing.md#tests) lists the rest.
 
-All of this is WARP evidence under the debug layer and GPU-based validation. It is not hardware
-evidence and not T1 acceptance, which needs a hardware run ([ADR 0009](
-../decisions/0009-conformance-and-valid-usage.md)).
+All of this ran on WARP under the debug layer and GPU-based validation, and then on one GPU in [the
+hardware run](../research/2026-11-12-d3d12-hardware-run.md), D3D12's T1 result ([ADR
+0031](../decisions/0031-d3d12-passes-t1-on-one-gpu.md)).

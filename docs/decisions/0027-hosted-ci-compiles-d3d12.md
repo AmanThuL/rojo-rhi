@@ -1,6 +1,7 @@
 # ADR 0027: Hosted CI compiles D3D12 and executes nothing on it
 
-**Status**: Accepted (2026-11-04)
+**Status**: Accepted (2026-11-04); its sentence "D3D12 stays "implemented, verified on WARP only,
+not on hardware"" superseded by [ADR 0031](0031-d3d12-passes-t1-on-one-gpu.md)
 
 **Supersedes**: the words "on hosted Windows CI" of [ADR 0026](
 0026-d3d12-implemented-before-hardware.md)'s first decision, "The D3D12 backend is implemented in

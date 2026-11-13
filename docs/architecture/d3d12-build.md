@@ -2,10 +2,12 @@
 
 **Status**: Accepted
 
-This page holds the build facts of the [D3D12 backend](d3d12-backend.md): the pinned runtime and
-how it sits beside an executable, the evidence for the Agility loading path, the floor probe and
-the toolchain record. Everything measured here is "implemented, verified on WARP only, not on
-hardware".
+This page holds the build facts of the [D3D12 backend](d3d12-backend.md): the pinned runtime and how
+it sits beside an executable, the evidence for the Agility loading path, the floor probe and the
+toolchain record. Everything measured here was measured on WARP; the backend is implemented and
+conformant (T1) on one GPU, an NVIDIA GeForce RTX 3080 Ti on driver 621.14, with its overhead
+budgets not yet met and other vendors unverified ([ADR
+0031](../decisions/0031-d3d12-passes-t1-on-one-gpu.md)).
 
 ## Pins and the runtime layout
 

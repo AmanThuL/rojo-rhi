@@ -9,8 +9,8 @@ frames](10-queues-and-frames.md)). In Release builds recording takes no locks, e
 claims a new frame-arena page, for `uploadFrameData` or for the label of a debug scope (including
 those of render passes and upscales); a Debug-tier check may take the lock of the pool whose record
 it reads ([ADR 0020](../decisions/0020-recording-locks-scope-labels.md)). Metal 4 columns describe
-the implemented backend; D3D12 columns describe the backend, implemented, verified on WARP only, not
-on hardware; Vulkan columns are the design oracle. This chapter continues in [draws, dispatches and
+the implemented backend, D3D12 columns the backend [conventions](00-conventions.md) describes, and
+Vulkan columns the design oracle. This chapter continues in [draws, dispatches and
 scopes](07-command-recording-part2.md) and [copies and clears](07-command-recording-part3.md).
 
 **Only render passes have scope.** Compute and copy commands are valid anywhere outside a render

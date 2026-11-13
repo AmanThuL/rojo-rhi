@@ -157,13 +157,14 @@ Debug and Release and runs none ([ADR 0027](../decisions/0027-hosted-ci-compiles
 Debug under the debug layer and GPU-based validation, whose error messages abort the run, `contract`
 and `conformance` in Release, and the upscale cases WARP cannot complete under `gbv` in a third
 Debug configure with `layer` alone. A run on WARP shows the lowering functionally right on the D3D
-reference implementation; D3D12 stays "implemented, verified on WARP only, not on hardware" until a
-hardware run, and no WARP run counts as T1 acceptance ([the
-run](../architecture/d3d12-backend-edges.md#the-t1-run-on-warp)). An abort ends the whole Catch2
-process, and every case after it goes unrun, so a case that may abort is a death test. No case is
-limited to hardware: the cases that skip print their reason, and [the hardware
-run](../guides/d3d12-hardware-run.md) is the checklist for the first Windows GPU machine, where
-D3D12 is verified next.
+reference implementation, and no WARP run counts as T1 ([the
+run](../architecture/d3d12-backend-edges.md#the-t1-run-on-warp)); D3D12 is implemented and
+conformant (T1) on one GPU, an NVIDIA GeForce RTX 3080 Ti on driver 621.14, with its overhead
+budgets not yet met and other vendors unverified ([ADR
+0031](../decisions/0031-d3d12-passes-t1-on-one-gpu.md)). An abort ends the whole Catch2 process, and
+every case after it goes unrun, so a case that may abort is a death test. No case is limited to
+hardware: the cases that skip print their reason, and [the hardware
+run](../guides/d3d12-hardware-run.md) is the checklist for a Windows GPU machine.
 
 **Stress cases** are tagged `[stress][.]`, hidden from every default run, and live in
 `Tests/Core/TrackerStressTests.cpp`: a long frame loop and every queue submitting from its own

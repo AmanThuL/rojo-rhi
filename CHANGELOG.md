@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- D3D12 passes T1 on one GPU, an NVIDIA GeForce RTX 3080 Ti on driver 621.14, in Debug under
+  GPU-based validation and in Release
+  ([ADR 0031](docs/decisions/0031-d3d12-passes-t1-on-one-gpu.md),
+  [the run](docs/research/2026-11-12-d3d12-hardware-run.md)). Documents describe it as implemented
+  and conformant (T1) on that GPU, with its overhead budgets not yet met and other vendors
+  unverified, and `Tools/check_project_policy.py` holds `README.md` to that form. `rojorhi_backend`
+  stays `null` by default on Windows.
 - A command list bumps a frame-arena page only up to `Limits::maxAddrOffset` and then claims a new
   page, so frame data on a page larger than the reach of an `Addr`, 512 MiB at the portable floor,
   no longer lands where its address cannot reach it. An upload larger than the reach still lands at

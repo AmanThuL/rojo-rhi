@@ -10,9 +10,9 @@ divergence markers are in [part 2](05-shader-abi-part2.md). Every function lives
 `rojoRHI`. Each entry states its requirements as normative prose, because no tier can diagnose a
 shader's use of them (see [part 1](05-shader-abi.md#model)).
 
-The D3D12 lowerings below are implemented, verified on WARP only, not on hardware: the draw,
-indirect, mesh and graphics ABI conformance cases ran them on WARP
-([evidence](../research/2026-10-21-d3d12-warp-evidence.md)).
+The D3D12 lowerings below are verified on WARP and on one GPU: the draw, indirect, mesh and graphics
+ABI conformance cases ran them on both ([evidence](../research/2026-10-21-d3d12-warp-evidence.md),
+[the hardware run](../research/2026-11-12-d3d12-hardware-run.md)).
 
 ## Built-ins
 
@@ -76,8 +76,8 @@ Requirements: `ids` is the unmodified `VertexIds` parameter of a vertex entry po
 
 | | Metal 4 | D3D12 | Vulkan |
 |---|---|---|---|
-| Lowering | `[[vertex_id]]` minus `[[base_vertex]]` | `SV_VertexID`, which excludes the base vertex; verified on WARP only ([evidence](../research/2026-10-21-d3d12-vertex-index-warp.md)) | the raw `VertexIndex` minus `BaseVertex`, subtracted once |
-| Cost | cheap: one subtract | native: verified on WARP only | cheap: one subtract |
+| Lowering | `[[vertex_id]]` minus `[[base_vertex]]` | `SV_VertexID`, which excludes the base vertex; verified on WARP ([evidence](../research/2026-10-21-d3d12-vertex-index-warp.md)) and on one GPU ([the hardware run](../research/2026-11-12-d3d12-hardware-run.md)) | the raw `VertexIndex` minus `BaseVertex`, subtracted once |
+| Cost | cheap: one subtract | native: verified on WARP and on one GPU | cheap: one subtract |
 
 ### `rojoRHI::instanceIndex`
 

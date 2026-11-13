@@ -141,37 +141,57 @@ class ProjectPolicyTests(unittest.TestCase):
             policy.check_public_copy([Path("README.md")], errors)
         return errors
 
-    def test_public_copy_accepts_d3d12_verified_on_warp_only(self) -> None:
+    CONFORMANT = (
+        "conformant (T1) on one GPU, an NVIDIA GeForce RTX 3080 Ti on driver 621.14, with its "
+        "overhead budgets not yet met and other vendors unverified"
+    )
+
+    def test_public_copy_accepts_d3d12_conformant_on_one_gpu(self) -> None:
         for name in ("Direct3D 12", "D3D12"):
             with self.subTest(name=name):
-                text = f"{name} backend: implemented, verified on WARP only, not on hardware."
+                text = f"{name} backend: implemented and {self.CONFORMANT}."
                 self.assertEqual(self.public_copy_errors(text), [])
 
     def test_public_copy_rejects_unqualified_d3d12(self) -> None:
         self.assertEqual(len(self.public_copy_errors("A D3D12 backend is implemented.")), 1)
 
+    def test_public_copy_rejects_the_former_warp_only_description(self) -> None:
+        text = "D3D12 is implemented, verified on WARP only, not on hardware."
+        self.assertEqual(len(self.public_copy_errors(text)), 1)
+
+    def test_public_copy_rejects_d3d12_missing_one_phrase(self) -> None:
+        for phrase in policy.PUBLIC_D3D12_PHRASES:
+            with self.subTest(phrase=phrase):
+                text = f"D3D12 is implemented and {self.CONFORMANT.replace(phrase, 'checked')}."
+                errors = self.public_copy_errors(text)
+                self.assertEqual(len(errors), 1)
+                self.assertIn(phrase, errors[0])
+
     def test_public_copy_rejects_d3d12_described_as_supported(self) -> None:
-        text = "RojoRHI supports D3D12, verified on WARP only, not on hardware."
+        text = f"RojoRHI supports D3D12, {self.CONFORMANT}."
         self.assertEqual(len(self.public_copy_errors(text)), 1)
 
     def test_public_copy_rejects_the_phrase_in_another_sentence(self) -> None:
-        text = "D3D12 is implemented. It is verified on WARP only, not on hardware."
+        text = f"D3D12 is implemented. It is {self.CONFORMANT}."
         errors = self.public_copy_errors(text)
         self.assertEqual(len(errors), 1)
         self.assertIn("README.md:1:", errors[0])
 
     def test_public_copy_accepts_the_phrase_wrapped_across_lines(self) -> None:
-        text = "D3D12 is implemented, verified on WARP\nonly,  not on\nhardware."
+        text = (
+            "D3D12 is implemented and conformant (T1)\non one GPU, with its overhead budgets not\n"
+            "yet  met and other vendors\nunverified."
+        )
         self.assertEqual(self.public_copy_errors(text), [])
 
     def test_public_copy_rejects_unsupported_and_acceptance_beside_d3d12(self) -> None:
         for word in ("unsupported", "acceptance"):
             with self.subTest(word=word):
-                text = f"D3D12 is {word}, verified on WARP only, not on hardware."
+                text = f"D3D12 is {word}, {self.CONFORMANT}."
                 self.assertEqual(len(self.public_copy_errors(text)), 1)
 
     def test_public_copy_always_rejects_vulkan(self) -> None:
-        text = "Vulkan, verified on WARP only, not on hardware."
+        text = f"Vulkan, {self.CONFORMANT}."
         self.assertEqual(len(self.public_copy_errors(text)), 1)
 
     def test_readme_passes_the_public_copy_check(self) -> None:

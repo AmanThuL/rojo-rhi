@@ -10,7 +10,8 @@ Metal 4, through metal-cpp, is its backend, and requires Apple Silicon macOS wit
 `MTLGPUFamilyMetal4` device family; there is no Metal 3 fallback. A backend-neutral ImGui adapter
 builds as a separate target.
 
-A D3D12 backend is also implemented, verified on WARP only, not on hardware.
+A D3D12 backend is also implemented and conformant (T1) on one GPU, an NVIDIA GeForce RTX 3080 Ti
+on driver 621.14, with its overhead budgets not yet met and other vendors unverified.
 
 Luminex is this library's required consumer: every change is driven by a Luminex branch through a
 RojoRHI pull request before it reaches Luminex. [`Examples/`](Examples/README.md) holds small

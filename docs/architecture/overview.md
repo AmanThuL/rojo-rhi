@@ -104,13 +104,14 @@ the configured backend's libraries into a generated header (`Tools/embed_library
 target and generates `static_assert`s compiled into `RojoRHITests`. The tests tagged `[abi]` run
 both. The header comment of `xmake/slang.lua` states the rule's full consumer interface.
 
-`Benchmarks/` builds the executable `RojoRHIBench` on macOS and, on a `d3d12` build, on Windows.
-It runs a native arm (Metal 4 or D3D12) and a RojoRHI arm of the same workloads in one process and
-takes the measurements of the overhead round. The D3D12 build is verified on WARP only, not on
-hardware. `Shaders/Bench/` holds the workloads' Slang sources beside `Shaders/Tests/`, and the
-hand-written MSL lives with the native arm. Its RojoRHI arm runs on the Null backend until the
-Metal 4 backend implements the entries it calls. [The benchmark harness](benchmarks.md) describes
-the arms, the command line, the Null mode and the driver `Tools/bench.py`.
+`Benchmarks/` builds the executable `RojoRHIBench` on macOS and, on a `d3d12` build, on Windows. It
+runs a native arm (Metal 4 or D3D12) and a RojoRHI arm of the same workloads in one process and
+takes the measurements of the overhead round. Its D3D12 build ran a first timed round on one GPU,
+which misses the CPU budget ([the results](../research/2026-11-12-d3d12-overhead-results.md)).
+`Shaders/Bench/` holds the workloads' Slang sources beside `Shaders/Tests/`, and the hand-written
+MSL lives with the native arm. Its RojoRHI arm runs on the Null backend until the Metal 4 backend
+implements the entries it calls. [The benchmark harness](benchmarks.md) describes the arms, the
+command line, the Null mode and the driver `Tools/bench.py`.
 
 `Adapters/ImGui/` is the backend-neutral ImGui adapter, `RojoRHIImGui`, written against the public
 interface alone, so it runs on the Null, Metal 4 and D3D12 builds. Its header includes `<imgui.h>`
@@ -121,25 +122,24 @@ describes its target, host loop, frame buffers and platform windows.
 `Tools/` holds `check_vu_coverage.py`, which requires a death test or a pending entry for every
 valid-usage identifier of the reference, `check_lto_inline.py` with its probe `LtoProbe/`, which
 shows a Release build inlining a library entry into its caller, the public-header check that rejects
-an include root not spelled exactly `rojoRHI/`.
-`Tools/D3D12Probe/` holds the Windows probe executables that report, as JSON, whether WARP meets the
-hardware floor and how the D3D12 runtime loaded ([the wiring page](d3d12-backend.md)).
-`Tools/Rename/` holds the substitution table that renamed the component inside Luminex before the
-extraction and stays as the record of what that rename did; `Tools/Extract/` holds the scripts that
-ran the extraction itself and the verifier that checked its result, both kept for a future re-run.
+an include root not spelled exactly `rojoRHI/`. `Tools/D3D12Probe/` holds the Windows probe
+executables that report, as JSON, whether an adapter meets the hardware floor and how the D3D12
+runtime loaded ([the wiring page](d3d12-backend.md)). `Tools/Rename/` holds the substitution table
+that renamed the component inside Luminex before the extraction and stays as the record of what that
+rename did; `Tools/Extract/` holds the scripts that ran the extraction itself and the verifier that
+checked its result, both kept for a future re-run.
 
 `.github/workflows/` runs the project policy check on Linux; the metal4, format and interface jobs
 on hosted macOS; and the interface job also on Windows. The metal4 job runs the plain `xmake` build
 of the library and the ImGui adapter, builds the Metal 4 backend's tests in Debug and Release and
-counts their cases per tag. The `d3d12-build` job, on
-hosted Windows, compiles the D3D12 backend, its tests, probes and benchmark harness in Debug and
-Release, checks DXIL and source layout, and executes nothing on D3D12 ([ADR
-0027](../decisions/0027-hosted-ci-compiles-d3d12.md)); D3D12 is implemented, verified on WARP only,
-not on hardware, by hosted runs that ended on 2026-11-04 ([the
-run](d3d12-backend-edges.md#the-t1-run-on-warp)). The `tracker-stress` job,
-also on hosted Windows, runs the tracker's hidden `[stress]` cases on the Null backend under MSVC
-AddressSanitizer. Hosted macOS has no Metal 4
-device, so the GPU cases run on Apple Silicon before merge ([testing](../conventions/testing.md)).
+counts their cases per tag. The `d3d12-build` job, on hosted Windows, compiles the D3D12 backend,
+its tests, probes and benchmark harness in Debug and Release, checks DXIL and source layout, and
+executes nothing on D3D12 ([ADR 0027](../decisions/0027-hosted-ci-compiles-d3d12.md)); its hosted
+runs on WARP ended on 2026-11-04 ([the run](d3d12-backend-edges.md#the-t1-run-on-warp)), and D3D12
+has run on a local GPU machine since. The `tracker-stress` job, also on hosted Windows, runs the
+tracker's hidden `[stress]` cases on the Null backend under MSVC AddressSanitizer. Hosted macOS has
+no Metal 4 device, so the GPU cases run on Apple Silicon before merge
+([testing](../conventions/testing.md)).
 
 `docs/conventions/`, `docs/decisions/`, `docs/architecture/` and `docs/guides/` hold this
 repository's own conventions, ADRs, architecture pages and procedures, standing alone from
@@ -148,12 +148,13 @@ Luminex's. ADRs 0002 to 0006 are the decisions the deleted v1 code was built und
 0017, which froze v1 under `Legacy/`, is superseded by ADR 0029, which deleted it. They stay as
 provenance.
 
-`docs/spec/` is the API reference for the interface: a conventions chapter and one chapter per
-area, each entry giving semantics, valid usage and a mapping to Metal 4, D3D12 and Vulkan. It
-specifies the interface and does not describe code that exists. Metal 4 is the only native backend
-verified on a device, and its backend is complete; D3D12 is implemented, verified on WARP only,
-not on hardware, so its column is a mapping the WARP run has exercised and no hardware has, and
-Vulkan is a design oracle with no code, so its column is designed only (ADR 0008, ADR 0026).
+`docs/spec/` is the API reference for the interface: a conventions chapter and one chapter per area,
+each entry giving semantics, valid usage and a mapping to Metal 4, D3D12 and Vulkan. It specifies
+the interface and does not describe code that exists. Metal 4 is verified on a device, and its
+backend is complete; D3D12 is implemented and conformant (T1) on one GPU, an NVIDIA GeForce RTX 3080
+Ti on driver 621.14, with its overhead budgets not yet met and other vendors unverified, so its
+column is a mapping WARP and that GPU have exercised, and Vulkan is a design oracle with no code, so
+its column is designed only (ADR 0008, ADR 0031).
 
 `docs/research/` holds the dated evidence notes the decisions cite, such as
 `docs/research/2026-10-11-rhi-redesign/`. Notes record what was found and are not binding;

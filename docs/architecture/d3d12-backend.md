@@ -9,13 +9,13 @@ reserved resources, capture, FSR contexts and the debug layer. Command lists rec
 clears, barriers and scopes, timed on a device created with `DeviceDesc::scopeTimings`
 ([recording](d3d12-recording.md)), passes, dispatches and draws ([drawing](d3d12-drawing.md)); [the
 edges page](d3d12-backend-edges.md) describes presentation, sparse resources, capture and FSR.
-Everything below is "implemented, verified on WARP only, not on hardware": the T1 cases ran on WARP
-in [CI run 39641225757](https://github.com/AmanThuL/rojo-rhi/actions/runs/39641225757)
-([edges](d3d12-backend-edges.md#the-t1-run-on-warp)), and no run used hardware, so it is no
-capability until one says so ([ADR 0009](../decisions/0009-conformance-and-valid-usage.md),
-[documentation](../conventions/documentation.md)). `docs/spec/` owns every entry's semantics; [the
-Null backend](null-backend.md) describes the shared core, [the build record](d3d12-build.md) the
-pins, runtime layout, floor probe and toolchain record.
+Everything below is implemented and conformant (T1) on one GPU, an NVIDIA GeForce RTX 3080 Ti on
+driver 621.14, with its overhead budgets not yet met and other vendors unverified: the T1 cases ran
+on WARP ([edges](d3d12-backend-edges.md#the-t1-run-on-warp)) and then on that GPU ([the hardware
+run](../research/2026-11-12-d3d12-hardware-run.md), [ADR
+0031](../decisions/0031-d3d12-passes-t1-on-one-gpu.md)). `docs/spec/` owns every entry's semantics;
+[the Null backend](null-backend.md) describes the shared core, [the build record](d3d12-build.md)
+the pins, runtime layout, floor probe and toolchain record.
 
 | Chapter | State |
 |---|---|
@@ -296,5 +296,5 @@ Benchmarks/ChecksD3D12`, the directories the macOS `format` job excludes. Until 
 job ran the entries on WARP in Debug under GPU-based validation, in Release, and in Debug with the
 debug layer alone for the upscale cases; [CI run
 39641225757](https://github.com/AmanThuL/rojo-rhi/actions/runs/39641225757) is its T1 record. The
-entries run on a local Windows build, and next on hardware ([the hardware
-run](../guides/d3d12-hardware-run.md)).
+entries run on a local Windows build; [the hardware
+run](../research/2026-11-12-d3d12-hardware-run.md) ran them on one GPU.
