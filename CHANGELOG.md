@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- D3D12 scopes and render passes widen the caller's label for their PIX event instead of reading
+  the core's copy back from the frame arena, upload memory the CPU reads uncached; the read cost
+  about 590 ns per scope on an RTX 3080 Ti ([the round's
+  results](docs/research/2026-11-12-d3d12-overhead-results.md#cause-analysis)).
 - The portable `maxViews` floor is 996,926, resource binding tier 3's view heap of 1,000,000 less
   the D3D12 backend's largest reservation
   ([ADR 0030](docs/decisions/0030-view-floor-is-tier-3-heap-less-reservation.md)). D3D12 admits a

@@ -415,7 +415,7 @@ namespace rojoRHI {
         desc.viewSpaceToMetersFactor = kMetresPerViewUnit;
         desc.flags = 0;
         // The upscale's scope, a PIX event and a timestamp pair when timed, brackets FidelityFX's work alone.
-        d3d12::beginNativeScope(list);
+        d3d12::beginNativeScope(list, params.label);
         const ffxReturnCode_t code = impl.fsr.fidelityFx->dispatch(&context, &desc.header);
         core::noteNativeCall(list.core);
         if (code != kOk)

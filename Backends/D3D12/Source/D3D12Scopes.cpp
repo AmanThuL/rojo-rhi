@@ -26,12 +26,14 @@ namespace rojoRHI {
         } // namespace
 
         //==============================================================================================================
-        void beginNativeScope(CommandListImpl& list)
+        void beginNativeScope(CommandListImpl& list, std::string_view label)
         {
             ListState& state = list.state;
             core::ScopeRecord& record = list.core.scopeLog.back();
-            // The scratch is the list's own and grows to the longest label it has held, so a label converts without allocating.
-            widen(record.label, state.scratch);
+            // The record's copy of a caller's label is in the frame arena, upload memory that a CPU read crosses uncached, so the
+            // event widens the caller's label; an empty one takes the core's default, a static string. The scratch is the
+            // list's own and grows to the longest label it has held, so a label converts without allocating.
+            widen(label.empty() ? record.label : label, state.scratch);
             state.list->BeginEvent(kUnicodeEvent, state.scratch.c_str(), static_cast<UINT>((state.scratch.size() + 1) * sizeof(wchar_t)));
             core::noteNativeCall(list.core);
             ListTimestamps& timestamps = state.timestamps;
@@ -72,7 +74,7 @@ namespace rojoRHI {
         CommandListImpl& list = CommandListImpl::of(*this);
         // The core records the scope with its label, or its default label, which the record keeps.
         core::beginScope(list.core, label);
-        d3d12::beginNativeScope(list);
+        d3d12::beginNativeScope(list, label);
     }
 
     //==================================================================================================================

@@ -198,7 +198,7 @@ namespace rojoRHI {
         CommandListImpl& list = CommandListImpl::of(*this);
         // The core checks the pass and records its scope last in the scope log.
         core::beginPass(list.core, desc);
-        d3d12::beginNativeScope(list);
+        d3d12::beginNativeScope(list, desc.label);
         d3d12::ListState& state = list.state;
         // A pass starts with no pipeline bound, as the core records; BeginRenderPass changes no PSO, so the native slot's
         // record stays.
