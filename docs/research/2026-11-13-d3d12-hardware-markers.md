@@ -97,6 +97,26 @@ Numbered as in [the WARP evidence](2026-10-21-d3d12-warp-evidence.md#markers):
   so 1/3 and 1, the range the device lists. Chapter 12 drops the marker; the backend still lists
   the range without querying, and the case fails if a FidelityFX update changes it.
 
+## After the run
+
+Two follow-ups of the same day are recorded here; the run above stands as it was.
+
+- **Item 13.** The probe case is not kept: it observes the driver, not RojoRHI, whose re-issue at
+  each `setPipeline` of a `depthBias` pipeline its existing cases check. Chapter 06 part 2 now
+  states that NVIDIA's driver drops the bias at `SetPipelineState`, also between two `depthBias`
+  pipelines, and keeps other vendors unverified.
+- **Item 17.** The lowering of a texture barrier from `Undefined` now adds, in the same `Barrier`
+  call, a global barrier from the write accesses its source stages perform to the barrier's
+  destination, as the Vulkan lowering widens `srcAccessMask`. Before settling on it, two variants
+  were tried in Release on the same case: an execution-only global barrier in the same call still
+  failed in all five processes (35,648 to 74,784 texels red), and one carrying `ShaderWrite` on
+  both sides passed, in its own call and in the same call. With the change the case passes in all
+  five Release processes and under GPU-based validation, and chapter 09 part 2 states the lowering
+  and why. Evidence: `rojo-rhi-evidence/d3d12-discard-fix/2026-11-13/`, `SHA256SUMS` SHA-256
+  `4bf6c5533c77c909949607da8e941a288e613fe6da37195ee0785b0dbbd1dfb5` (the Release runs at the
+  fix's commit; the Debug runs under GPU-based validation at the same backend code before its
+  rebase onto the cases above).
+
 ## Evidence
 
 `rojo-rhi-evidence/d3d12-markers/2026-11-13/` holds the machine record, the Debug and Release

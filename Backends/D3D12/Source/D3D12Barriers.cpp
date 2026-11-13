@@ -229,6 +229,21 @@ namespace rojoRHI {
             }
 
             //==========================================================================================================
+            /// Returns the write accesses `stages` perform: a shader store, an attachment write, a copy's write or a resolve's.
+            Access stageWrites(Stage stages)
+            {
+                constexpr Stage kShaderStages = Stage::VertexShader | Stage::TaskShader | Stage::MeshShader | Stage::FragmentShader | Stage::ComputeShader;
+                Access writes = Access::None;
+                const auto has = [&](Stage stage) { return (stages & stage) != Stage::None; };
+                writes = has(kShaderStages) ? writes | Access::ShaderWrite : writes;
+                writes = has(Stage::ColorAttachment) ? writes | Access::ColorAttachmentWrite : writes;
+                writes = has(Stage::DepthStencil) ? writes | Access::DepthStencilWrite : writes;
+                writes = has(Stage::Copy) ? writes | Access::CopyWrite : writes;
+                writes = has(Stage::Resolve) ? writes | Access::Resolve : writes;
+                return writes;
+            }
+
+            //==========================================================================================================
             /// Appends to `lowered` the global barriers `global` lowers to on a list of `type`. A barrier whose accesses one
             /// layout admits on both sides lowers to one global barrier. Otherwise a layout-bound access touches only a
             /// texture in its own layout, which a texture barrier takes out of it: the first global barrier names every
@@ -650,6 +665,20 @@ namespace rojoRHI {
             // A barrier from Undefined names LAYOUT_UNDEFINED and discards whatever layout the texture is in, which also
             // initializes the compression metadata of a render-target, depth-stencil or unordered-access texture.
             lowered.Flags = texture.oldLayout == Layout::Undefined ? D3D12_TEXTURE_BARRIER_FLAG_DISCARD : D3D12_TEXTURE_BARRIER_FLAG_NONE;
+            if (texture.oldLayout == Layout::Undefined && texture.srcStage != Stage::None)
+            {
+                // A discard alone does not wait for the writes of its SyncBefore stages on every driver: on NVIDIA 621.14 the
+                // work after it overtakes them. A global barrier in the same call, from the writes those stages perform to the
+                // barrier's destination, orders them, as the Vulkan lowering widens the source access.
+                d3d12::lowerGlobal(
+                    GlobalBarrier{ .srcStage = texture.srcStage,
+                                   .srcAccess = d3d12::stageWrites(texture.srcStage),
+                                   .dstStage = texture.dstStage,
+                                   .dstAccess = texture.dstAccess },
+                    type,
+                    scratch.globals
+                );
+            }
         }
         // A batch of one record keeps it, so a repeat of it sends these arrays again.
         scratch.single = d3d12::SingleBarrier::None;

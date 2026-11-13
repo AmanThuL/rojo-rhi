@@ -172,12 +172,13 @@ owner decides the correction.
   (2026-11-13); on another vendor, run them. Reference line: the D3D12 `Lowering` cell of
   `rojoRHI::nonUniform`, `docs/spec/05-shader-abi-part2.md` ("other vendors unverified").
 - **Item 17, a barrier from `Undefined` waits for the writes of its `SyncBefore` stages.** The
-  `[conformance]` case of pull request #178, "a barrier from Undefined waits for the writes of its
-  source stage before a later write", fails when the barrier does not wait. Observe: it passes in
-  Debug under GPU-based validation and in Release. Expected: the writes before the barrier are
-  complete for the stages after it. On NVIDIA (2026-11-13) it fails in Release, where GPU-based
-  validation does not serialize the dispatches; the owner decides the lowering, and the marker
-  stays. Reference line: `TextureBarrier` in `docs/spec/09-synchronization-part2.md`.
+  `[conformance]` case "a barrier from Undefined waits for the writes of its source stage before a
+  later write" fails when the barrier does not wait. Observe: it passes in Debug under GPU-based
+  validation and in Release, where GPU-based validation does not serialize the dispatches.
+  Expected: the writes before the barrier are complete for the stages after it. On NVIDIA
+  (2026-11-13) the discard alone did not wait; the lowering now adds a global barrier from the
+  source stages' writes, and the case passes. Reference line: `TextureBarrier` in
+  `docs/spec/09-synchronization-part2.md`.
 - **Item 20, DLSS and XeSS identifiers.** The backend integrates FSR only; its `upscalers` lists FSR
   when the FidelityFX runtime is beside the executable. Nothing runs here for DLSS or XeSS: the
   identifiers in `docs/spec/12-upscaling.md` stay `unverified` until a backend integrates each SDK
@@ -215,10 +216,9 @@ owner decides the correction.
 
 Item 18, the FSR markers A and B of the evidence note (the `Inputs` and `Frame values` rows of
 `docs/spec/12-upscaling.md`) and the FSR input scale range of `Capabilities::upscalers` have cases
-that passed on NVIDIA (2026-11-13), and their markers are gone. Item 13's `[d3d12]` case (#178)
-showed that the driver does not keep a dynamic depth bias across `SetPipelineState`; the backend
-re-issues it, and the owner decides the reference's wording ([the markers
-note](../research/2026-11-13-d3d12-hardware-markers.md)).
+that passed on NVIDIA (2026-11-13), and their markers are gone. Item 13's probe showed that the
+driver does not keep a dynamic depth bias across `SetPipelineState`; the backend re-issues it, and
+chapter 06 part 2 says so ([the markers note](../research/2026-11-13-d3d12-hardware-markers.md)).
 
 Evidence: `d3d12-floor-hw/<date>/` for items 1, 2, 3 and 21, `d3d12-t1/<date>/` for the cases,
 `d3d12-markers/<date>/` for the cases items 7, 13, 17, 18, A and B needed.

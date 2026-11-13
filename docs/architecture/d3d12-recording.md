@@ -191,9 +191,9 @@ A `SYNC_ALL` sync is kept, a side with `NO_ACCESS` drops only `CLEAR_UNORDERED_A
   `SHADER_RESOURCE`, since the depth-stencil-read layout admits no shader access; the rest map one
   to one. A barrier from `Undefined` names `LAYOUT_UNDEFINED` and `NO_ACCESS` before, and carries
   the discard flag, which initializes the compression metadata of a render-target, depth-stencil
-  or storage texture; it is legal from any layout. A texture without initial data is created in
-  `LAYOUT_COMMON`, the one layout a copy queue accesses, and one with initial data starts in
-  `COPY_DEST`.
+  or storage texture, from any layout; on NVIDIA it does not wait for its source stages, so a global
+  barrier from their writes rides in the same call. A texture without initial data starts in
+  `LAYOUT_COMMON`, the one layout a copy queue accesses, and one with initial data in `COPY_DEST`.
 - **Ranges.** The mip and layer ranges resolve against the texture's description; a 3D texture is
   one array slice; a format with a stencil plane names planes 0 and 1.
 - **Copy lists.** A copy queue takes no layout barrier and its textures stay in `General`, so a
