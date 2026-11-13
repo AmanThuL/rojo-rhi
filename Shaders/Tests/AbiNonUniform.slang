@@ -1,7 +1,8 @@
 //----------------------------------------------------------------------------------------------------------------------
 /// @file AbiNonUniform.slang
-/// @brief Compile-only kernels, one per heap fetch kind, each fed by a per-thread index marked with `nonUniform`, so
-/// the DXIL of each shows whether the non-uniform flag reaches that kind's descriptor handle (Tools/check_dxil.py).
+/// @brief Conformance kernels, one per heap fetch kind, each fed by a per-thread index marked with `nonUniform`, so
+/// the DXIL of each shows whether the non-uniform flag reaches that kind's descriptor handle (Tools/check_dxil.py), and
+/// a run of each, whose even and odd threads share every wave, shows that each thread reaches its own descriptor.
 //----------------------------------------------------------------------------------------------------------------------
 
 import RojoRHI;

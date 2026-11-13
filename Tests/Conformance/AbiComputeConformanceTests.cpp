@@ -282,6 +282,81 @@ namespace {
         );
         return fetch(kit, entry, FetchRoot{ .view = static_cast<uint32_t>(view) });
     }
+
+    /// AbiNonUniform's root: each thread takes the even or the odd member of each pair by the parity of its index.
+    struct NonUniformRoot
+    {
+        Addr evenBase;        ///< The buffer even threads load, store or add to.
+        Addr oddBase;         ///< The buffer odd threads load, store or add to.
+        Addr output;          ///< Where each thread stores what it read, at its own index.
+        uint32_t evenView;    ///< The view even threads fetch.
+        uint32_t oddView;     ///< The view odd threads fetch.
+        uint32_t evenSampler; ///< The sampler even threads sample with.
+        uint32_t oddSampler;  ///< The sampler odd threads sample with.
+        uint32_t pad0 = 0;    ///< Padding.
+        uint32_t pad1 = 0;    ///< Padding.
+    };
+
+    /// The threads of AbiNonUniform's one group: two waves of 32 or one of 64, each holding even and odd threads, so the
+    /// threads of every wave index different descriptors.
+    constexpr uint32_t kThreads = 64;
+
+    /// Four `uint32` words, one `uint4`.
+    using Uint4 = std::array<uint32_t, 4>;
+
+    //==================================================================================================================
+    /// Runs the AbiNonUniform kernel `entry` as one group of `kThreads` threads with the root `root`.
+    void runNonUniform(test::GpuKit& kit, std::string_view entry, const NonUniformRoot& root)
+    {
+        const ShaderLibrary library = loadLibrary(kit.device, "AbiNonUniform");
+        const Pipeline pipeline = computeOf(kit.device, library, entry);
+        CommandList list = kit.list(QueueType::Graphics, "test.nonUniform");
+        list.setPipeline(pipeline);
+        list.pushRoot(root);
+        list.dispatch(1, 1, 1);
+        kit.run(std::array{ list });
+    }
+
+    //==================================================================================================================
+    /// Returns `count` `uint4` cells from `seed`, distinct between cells and between seeds.
+    std::vector<Uint4> cellsOf(uint32_t count, uint32_t seed)
+    {
+        std::vector<Uint4> cells(count);
+        for (uint32_t i = 0; i < count; ++i)
+        {
+            cells[i] = Uint4{ seed * 1000 + i, seed * 1000 + i + 100, seed, i };
+        }
+        return cells;
+    }
+
+    //==================================================================================================================
+    /// Creates a 2x2 `RGBA16Float` sampled texture whose texels (0, 0), (1, 0), (0, 1) and (1, 1) hold `texels`, each channel
+    /// of a texel the same.
+    Texture quadTexture(Device device, const std::array<float, 4>& texels)
+    {
+        std::vector<uint16_t> halves;
+        for (const float value : texels)
+        {
+            for (size_t channel = 0; channel < 4; ++channel)
+            {
+                halves.push_back(halfOf(value));
+            }
+        }
+        const std::vector<std::byte> bytes = bytesOf<uint16_t>(halves);
+        return *device.createTexture(
+            TextureDesc{ .format = Format::RGBA16Float, .extent = { 2, 2, 1 }, .usage = TextureUsage::Sampled, .label = "test.quad" },
+            std::array{ TextureData{ bytes, 2 * 4 * sizeof(uint16_t), 0 } }
+        );
+    }
+
+    //==================================================================================================================
+    /// Returns the `float4` cells of `bytes`.
+    std::vector<Float4> float4sOf(std::span<const std::byte> bytes)
+    {
+        std::vector<Float4> values(bytes.size() / sizeof(Float4));
+        std::memcpy(values.data(), bytes.data(), values.size() * sizeof(Float4));
+        return values;
+    }
 } // namespace
 
 //======================================================================================================================
@@ -663,4 +738,195 @@ TEST_CASE("AbiTextures rwTexture2DMain reads and writes mip 1 through a storage 
     CHECK(kit.readTexture(texture, TextureRegion{ .mip = 1, .extent = { kEdge, kEdge, 1 } }, Format::RGBA16Float) == expectedMip1);
     // Mip 0 is untouched.
     CHECK(kit.readTexture(texture, TextureRegion{ .mip = 0, .extent = { 2 * kEdge, 2 * kEdge, 1 } }, Format::RGBA16Float) == mipPattern(0));
+}
+
+//======================================================================================================================
+TEST_CASE("AbiNonUniform loadMain loads through a buffer that differs between the threads of a wave", "[conformance]")
+{
+    test::requireGpu();
+    test::GpuKit kit;
+    const std::vector<Uint4> even = cellsOf(kThreads, 1);
+    const std::vector<Uint4> odd = cellsOf(kThreads, 2);
+    const std::vector<Uint4> untouched(kThreads, Uint4{ 0xDEADBEEFu, 0xDEADBEEFu, 0xDEADBEEFu, 0xDEADBEEFu });
+    const Buffer evenBuffer = kit.buffer(kThreads * sizeof(Uint4), Memory::Gpu, BufferUsage::ShaderWrite, bytesOf<Uint4>(even));
+    const Buffer oddBuffer = kit.buffer(kThreads * sizeof(Uint4), Memory::Gpu, BufferUsage::ShaderWrite, bytesOf<Uint4>(odd));
+    const Buffer output = kit.buffer(kThreads * sizeof(Uint4), Memory::Gpu, BufferUsage::ShaderWrite, bytesOf<Uint4>(untouched));
+    runNonUniform(
+        kit,
+        "loadMain",
+        NonUniformRoot{ .evenBase = kit.device.address(evenBuffer), .oddBase = kit.device.address(oddBuffer), .output = kit.device.address(output) }
+    );
+    // Each thread loads its own cell of the buffer its parity names.
+    std::vector<Uint4> expected(kThreads);
+    for (uint32_t thread = 0; thread < kThreads; ++thread)
+    {
+        expected[thread] = (thread & 1) != 0 ? odd[thread] : even[thread];
+    }
+    CHECK(kit.readBuffer(output) == bytesOf<Uint4>(expected));
+}
+
+//======================================================================================================================
+TEST_CASE("AbiNonUniform storeMain stores through a buffer that differs between the threads of a wave", "[conformance]")
+{
+    test::requireGpu();
+    test::GpuKit kit;
+    const Uint4 kUntouched{ 0xDEADBEEFu, 0xDEADBEEFu, 0xDEADBEEFu, 0xDEADBEEFu };
+    const std::vector<Uint4> untouched(kThreads, kUntouched);
+    const Buffer evenBuffer = kit.buffer(kThreads * sizeof(Uint4), Memory::Gpu, BufferUsage::ShaderWrite, bytesOf<Uint4>(untouched));
+    const Buffer oddBuffer = kit.buffer(kThreads * sizeof(Uint4), Memory::Gpu, BufferUsage::ShaderWrite, bytesOf<Uint4>(untouched));
+    runNonUniform(
+        kit,
+        "storeMain",
+        NonUniformRoot{ .evenBase = kit.device.address(evenBuffer), .oddBase = kit.device.address(oddBuffer), .output = kit.device.address(evenBuffer) }
+    );
+    // Each thread stores (index, 0, 0, 1) into its own cell of the buffer its parity names, and only there.
+    std::vector<Uint4> expectedEven(kThreads, kUntouched);
+    std::vector<Uint4> expectedOdd(kThreads, kUntouched);
+    for (uint32_t thread = 0; thread < kThreads; ++thread)
+    {
+        ((thread & 1) != 0 ? expectedOdd : expectedEven)[thread] = Uint4{ thread, 0, 0, 1 };
+    }
+    CHECK(kit.readBuffer(evenBuffer) == bytesOf<Uint4>(expectedEven));
+    CHECK(kit.readBuffer(oddBuffer) == bytesOf<Uint4>(expectedOdd));
+}
+
+//======================================================================================================================
+TEST_CASE("AbiNonUniform atomicMain adds to a buffer that differs between the threads of a wave", "[conformance]")
+{
+    test::requireGpu();
+    test::GpuKit kit;
+    const std::vector<uint32_t> zeros(16, 0);
+    const Buffer evenBuffer = kit.buffer(zeros.size() * sizeof(uint32_t), Memory::Gpu, BufferUsage::ShaderWrite, bytesOf<uint32_t>(zeros));
+    const Buffer oddBuffer = kit.buffer(zeros.size() * sizeof(uint32_t), Memory::Gpu, BufferUsage::ShaderWrite, bytesOf<uint32_t>(zeros));
+    const std::vector<uint32_t> untouched(kThreads, 0xDEADBEEFu);
+    const Buffer output = kit.buffer(kThreads * sizeof(uint32_t), Memory::Gpu, BufferUsage::ShaderWrite, bytesOf<uint32_t>(untouched));
+    runNonUniform(
+        kit,
+        "atomicMain",
+        NonUniformRoot{ .evenBase = kit.device.address(evenBuffer), .oddBase = kit.device.address(oddBuffer), .output = kit.device.address(output) }
+    );
+    // Each thread adds 1 to word 3 of the buffer its parity names, so each buffer's word ends at the count of its threads,
+    // and the old words its threads saw are 0 to that count less one, in some order.
+    std::vector<uint32_t> expectedWords(zeros.size(), 0);
+    expectedWords[3] = kThreads / 2;
+    CHECK(kit.readBuffer(evenBuffer) == bytesOf<uint32_t>(expectedWords));
+    CHECK(kit.readBuffer(oddBuffer) == bytesOf<uint32_t>(expectedWords));
+    const std::vector<std::byte> bytes = kit.readBuffer(output);
+    std::vector<uint32_t> olds(kThreads);
+    std::memcpy(olds.data(), bytes.data(), olds.size() * sizeof(uint32_t));
+    std::vector<bool> evenSeen(kThreads / 2, false);
+    std::vector<bool> oddSeen(kThreads / 2, false);
+    uint32_t wrong = 0;
+    for (uint32_t thread = 0; thread < kThreads; ++thread)
+    {
+        std::vector<bool>& seen = (thread & 1) != 0 ? oddSeen : evenSeen;
+        if (olds[thread] >= seen.size() || seen[olds[thread]])
+        {
+            UNSCOPED_INFO("thread " << thread << " saw the old word " << olds[thread]);
+            ++wrong;
+            continue;
+        }
+        seen[olds[thread]] = true;
+    }
+    CHECK(wrong == 0u);
+}
+
+//======================================================================================================================
+TEST_CASE("AbiNonUniform textureMain loads through a view that differs between the threads of a wave", "[conformance]")
+{
+    test::requireGpu();
+    test::GpuKit kit;
+    const ViewIndex evenView = *kit.device.createView(quadTexture(kit.device, { 0.0f, 0.0f, 0.0f, 4.0f }), TextureViewDesc{});
+    const ViewIndex oddView = *kit.device.createView(quadTexture(kit.device, { 7.0f, 7.0f, 7.0f, 7.0f }), TextureViewDesc{});
+    const std::vector<Float4> untouched(kThreads, Float4{ -1.0f, -1.0f, -1.0f, -1.0f });
+    const Buffer output = kit.buffer(kThreads * sizeof(Float4), Memory::Gpu, BufferUsage::ShaderWrite, bytesOf<Float4>(untouched));
+    runNonUniform(
+        kit,
+        "textureMain",
+        NonUniformRoot{ .output = kit.device.address(output), .evenView = static_cast<uint32_t>(evenView), .oddView = static_cast<uint32_t>(oddView) }
+    );
+    // Each thread loads texel (0, 0) of the view its parity names: 0 from the even texture, 7 from the odd one.
+    std::vector<Float4> expected(kThreads);
+    for (uint32_t thread = 0; thread < kThreads; ++thread)
+    {
+        expected[thread] = (thread & 1) != 0 ? Float4{ 7, 7, 7, 7 } : Float4{ 0, 0, 0, 0 };
+    }
+    CHECK(float4sOf(kit.readBuffer(output)) == expected);
+}
+
+//======================================================================================================================
+TEST_CASE("AbiNonUniform wTextureMain stores through a view that differs between the threads of a wave", "[conformance]")
+{
+    test::requireGpu();
+    test::GpuKit kit;
+    const auto storage = [&] {
+        return *kit.device.createTexture(
+            TextureDesc{ .format = Format::RGBA16Float, .extent = { kThreads, 1, 1 }, .usage = TextureUsage::Storage, .label = "test.nonUniformStorage" }
+        );
+    };
+    const std::array<Texture, 2> textures{ storage(), storage() };
+    CommandList clear = kit.list(QueueType::Graphics, "test.clearStorage");
+    for (const Texture texture : textures)
+    {
+        test::transition(clear, texture, Layout::Undefined, Layout::CopyDst);
+        clear.clearTexture(texture, {}, ClearValue{ .color = { 0.0f, 0.0f, 0.0f, 0.0f } });
+        test::transition(clear, texture, Layout::CopyDst, Layout::ShaderWrite);
+    }
+    kit.run(std::array{ clear });
+    const ViewIndex evenView = *kit.device.createView(textures[0], TextureViewDesc{ .usage = TextureUsage::Storage });
+    const ViewIndex oddView = *kit.device.createView(textures[1], TextureViewDesc{ .usage = TextureUsage::Storage });
+    runNonUniform(kit, "wTextureMain", NonUniformRoot{ .evenView = static_cast<uint32_t>(evenView), .oddView = static_cast<uint32_t>(oddView) });
+    CommandList toCopy = kit.list(QueueType::Graphics, "test.toCopy");
+    for (const Texture texture : textures)
+    {
+        test::transition(toCopy, texture, Layout::ShaderWrite, Layout::CopySrc);
+    }
+    kit.run(std::array{ toCopy });
+    // Each thread stores (1, 0, 0, 1) at its own texel of the view its parity names, and only there.
+    const std::array<uint16_t, 4> written{ halfOf(1.0f), 0, 0, halfOf(1.0f) };
+    for (uint32_t parity = 0; parity < 2; ++parity)
+    {
+        CAPTURE(parity);
+        std::vector<uint16_t> expected(size_t{ kThreads } * 4, 0);
+        for (uint32_t x = parity; x < kThreads; x += 2)
+        {
+            std::memcpy(&expected[size_t{ x } * 4], written.data(), sizeof(written));
+        }
+        CHECK(kit.readTexture(textures[parity], TextureRegion{ .extent = { kThreads, 1, 1 } }, Format::RGBA16Float) == bytesOf<uint16_t>(expected));
+    }
+}
+
+//======================================================================================================================
+TEST_CASE("AbiNonUniform samplerMain samples through a sampler that differs between the threads of a wave", "[conformance]")
+{
+    test::requireGpu();
+    test::GpuKit kit;
+    // At the centre of a 2x2 texture whose texels hold 0, 0, 0 and 4, the linear sampler returns their mean, 1, and the
+    // nearest sampler one of the texels, never 1.
+    const ViewIndex view = *kit.device.createView(quadTexture(kit.device, { 0.0f, 0.0f, 0.0f, 4.0f }), TextureViewDesc{});
+    const SamplerIndex linear = *kit.device.createSampler(
+        SamplerDesc{ .filter = SamplerFilter::Linear, .mipFilter = SamplerFilter::Nearest, .address = SamplerAddress::ClampToEdge, .label = "test.linear" }
+    );
+    const SamplerIndex nearest = *kit.device.createSampler(
+        SamplerDesc{ .filter = SamplerFilter::Nearest, .mipFilter = SamplerFilter::Nearest, .address = SamplerAddress::ClampToEdge, .label = "test.nearest" }
+    );
+    const std::vector<Float4> untouched(kThreads, Float4{ -1.0f, -1.0f, -1.0f, -1.0f });
+    const Buffer output = kit.buffer(kThreads * sizeof(Float4), Memory::Gpu, BufferUsage::ShaderWrite, bytesOf<Float4>(untouched));
+    runNonUniform(
+        kit,
+        "samplerMain",
+        NonUniformRoot{ .output = kit.device.address(output),
+                        .evenView = static_cast<uint32_t>(view),
+                        .evenSampler = static_cast<uint32_t>(linear),
+                        .oddSampler = static_cast<uint32_t>(nearest) }
+    );
+    const std::vector<Float4> values = float4sOf(kit.readBuffer(output));
+    REQUIRE(values.size() == kThreads);
+    const Float4 nearestValue = values[1];
+    CHECK((nearestValue == Float4{ 0, 0, 0, 0 } || nearestValue == Float4{ 4, 4, 4, 4 }));
+    for (uint32_t thread = 0; thread < kThreads; ++thread)
+    {
+        CAPTURE(thread);
+        CHECK(values[thread] == ((thread & 1) != 0 ? nearestValue : Float4{ 1, 1, 1, 1 }));
+    }
 }

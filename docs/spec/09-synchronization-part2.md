@@ -208,7 +208,7 @@ is destroyed.
 
 A texture handed between queues is, at the handoff, in a layout both queues accept
 (`VU-rojo-sync-0025`), unless the acquiring queue discards it from `Undefined` first; a discard
-names no earlier layout on any backend (*unverified* on D3D12), and the copy queue cannot discard,
+names no earlier layout on any backend, D3D12 included, and the copy queue cannot discard,
 since a Copy list keeps a texture barrier in `General` (`VU-rojo-sync-0026`). Between the graphics
 and compute queues that is `General`, `ShaderRead`, `ShaderWrite`, `CopySrc` or `CopyDst`: on D3D12
 they lower to `LAYOUT_COMMON` and the generic `LAYOUT_SHADER_RESOURCE`, `LAYOUT_UNORDERED_ACCESS`,

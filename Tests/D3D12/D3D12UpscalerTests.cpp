@@ -1,6 +1,6 @@
 //----------------------------------------------------------------------------------------------------------------------
 /// @file D3D12UpscalerTests.cpp
-/// @brief Tests the D3D12 FSR upscaler: the runtime's loading, creation, refusals, retirement, and the list state an upscale restores.
+/// @brief Tests the D3D12 FSR upscaler: the runtime's loading, its scale range, creation, refusals, retirement, and the list state an upscale restores.
 //----------------------------------------------------------------------------------------------------------------------
 #include <rojoRHI/RHI.h>
 
@@ -17,7 +17,9 @@
 #include "Support/D3D12/D3D12Readback.h"
 
 #include <catch2/catch_test_macros.hpp>
+#include <upscalers/include/ffx_upscale.h>
 
+#include <algorithm>
 #include <array>
 #include <chrono>
 #include <cstddef>
@@ -502,6 +504,49 @@ TEST_CASE("upscalers lists FSR when the runtime sits beside the executable", "[d
     CHECK(upscalers.front().minInputScale == 1.0f / 3.0f);
     CHECK(upscalers.front().maxInputScale == 1.0f);
     destroyDevice(*created);
+}
+
+//======================================================================================================================
+TEST_CASE("the FSR input scale range the device lists is the one an FSR context reports for its quality modes", "[d3d12]")
+{
+    within(kFidelityFxLimit, "the FSR input scale range the device lists is the one an FSR context reports for its quality modes", [] {
+        Result<Device> created = createDevice(DeviceDesc{ .framesInFlight = 2 });
+        REQUIRE(created.has_value());
+        Device device = *created;
+        DeviceImpl& impl = DeviceImpl::of(device);
+        const std::span<const UpscalerSupport> upscalers = device.capabilities().upscalers;
+        REQUIRE(upscalers.size() == 1u);
+        REQUIRE(impl.fsr.fidelityFx.has_value());
+        device.beginFrame();
+        const Result<Upscaler> upscaler = device.createUpscaler(upscalerOf(UpscalerKind::FSR));
+        REQUIRE(upscaler.has_value());
+        const core::LookupResult<core::UpscalerRecord> found = impl.core.pool<Upscaler>().lookup(*upscaler);
+        REQUIRE(found.record != nullptr);
+        ffxContext context = found.record->native;
+        // The per-dimension upscale ratio of each quality mode, native AA to ultra performance, read from the live context.
+        float smallest = 0.0f;
+        float largest = 0.0f;
+        for (uint32_t mode = FFX_UPSCALE_QUALITY_MODE_NATIVEAA; mode <= FFX_UPSCALE_QUALITY_MODE_ULTRA_PERFORMANCE; ++mode)
+        {
+            CAPTURE(mode);
+            float ratio = 0.0f;
+            ffxQueryDescUpscaleGetUpscaleRatioFromQualityMode query = {};
+            query.header.type = FFX_API_QUERY_DESC_TYPE_UPSCALE_GETUPSCALERATIOFROMQUALITYMODE;
+            query.qualityMode = mode;
+            query.pOutUpscaleRatio = &ratio;
+            REQUIRE(impl.fsr.fidelityFx->query(&context, &query.header) == FFX_API_RETURN_OK);
+            UNSCOPED_INFO("quality mode " << mode << ": upscale ratio " << ratio);
+            REQUIRE(ratio >= 1.0f);
+            smallest = mode == FFX_UPSCALE_QUALITY_MODE_NATIVEAA ? ratio : std::min(smallest, ratio);
+            largest = std::max(largest, ratio);
+        }
+        // An input scale is the input extent over the output's, the inverse of the ratio.
+        CHECK(upscalers.front().minInputScale == 1.0f / largest);
+        CHECK(upscalers.front().maxInputScale == 1.0f / smallest);
+        device.destroy(*upscaler);
+        device.endFrame();
+        destroyDevice(device);
+    });
 }
 
 //======================================================================================================================

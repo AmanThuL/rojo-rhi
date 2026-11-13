@@ -43,7 +43,7 @@ memory or a shader output first.
 
 | | Metal 4 | D3D12 | Vulkan |
 |---|---|---|---|
-| Lowering | none: returns the argument | `NonUniformResourceIndex` on the heap index; DXC carries it into the `load`, texture and sampler fetches and drops it through `+ 1`, so `rojoRHI::store` and `rojoRHI::atomicAdd` mark their own final indices; on a device unverified | none for an `Addr`, a pointer rather than a descriptor index; for a `uint`, `NonUniformResourceIndex`, which Slang decorates only where the index reaches a descriptor |
+| Lowering | none: returns the argument | `NonUniformResourceIndex` on the heap index; DXC carries it into the `load`, texture and sampler fetches and drops it through `+ 1`, so `rojoRHI::store` and `rojoRHI::atomicAdd` mark their own final indices; each thread of a wave reaches its own descriptor on NVIDIA (an RTX 3080 Ti on driver 621.14), other vendors unverified | none for an `Addr`, a pointer rather than a descriptor index; for a `uint`, `NonUniformResourceIndex`, which Slang decorates only where the index reaches a descriptor |
 | Cost | native | native: divergent fetches may serialize in hardware, as in native code | native |
 
 ## Addresses
