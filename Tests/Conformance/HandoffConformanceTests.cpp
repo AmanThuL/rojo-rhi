@@ -22,6 +22,20 @@ namespace {
     /// The edge of the textures, in texels of 4 bytes, so one row is `kRowPitch` bytes once padded.
     constexpr uint32_t kEdge = 8;
     constexpr uint64_t kRowPitch = 256;
+
+    /// BarrierOracle's root.
+    struct DelayRoot
+    {
+        uint32_t view;                ///< The 2D storage view the entry stores into.
+        uint32_t spins;               ///< The steps each thread spins for before its store.
+        uint32_t mask = 0;            ///< Always zero; it keeps the spin loop in the compiled entry.
+        uint32_t pad = 0;             ///< Padding.
+        uint32_t width;               ///< The extent in texels.
+        uint32_t height;              ///< The extent in texels.
+        uint32_t pad0 = 0;            ///< Padding.
+        uint32_t pad1 = 0;            ///< Padding.
+        std::array<float, 4> value{}; ///< The value each thread stores.
+    };
 } // namespace
 
 //======================================================================================================================
@@ -94,6 +108,68 @@ TEST_CASE("a new texture written on the Copy queue is moved from General on the 
     {
         CHECK(std::memcmp(got.data() + row * kRowPitch, rows.data() + row * kRowPitch, kEdge * 4) == 0);
     }
+}
+
+//======================================================================================================================
+TEST_CASE("the Compute queue discards a render target the Graphics queue left in ColorAttachment and writes it", "[conformance]")
+{
+    test::requireGpu();
+#ifndef NDEBUG
+    constexpr bool kValidation = true;
+#else
+    constexpr bool kValidation = false;
+#endif
+    test::GpuKit kit(2, false, kValidation);
+    const ShaderLibrary library = *kit.device.loadShaderLibrary(test::shaderLibraryFile("BarrierOracle"), "BarrierOracle");
+    const Pipeline pipeline = *kit.device.createPipeline(ComputePipelineDesc{ .compute = { library, "delayedFillMain" }, .label = "test.fill" });
+    const Texture texture = *kit.device.createTexture(
+        TextureDesc{
+            .format = Format::RGBA8Unorm, .extent = { kEdge, kEdge, 1 }, .usage = TextureUsage::RenderTarget | TextureUsage::Storage, .label = "test.texture" }
+    );
+    const ViewIndex view = *kit.device.createView(texture, TextureViewDesc{ .usage = TextureUsage::Storage });
+    const Buffer readback = kit.buffer(kRowPitch * kEdge, Memory::Readback);
+    // Graphics clears the texture to red and leaves it in ColorAttachment, a layout the Compute queue does not accept.
+    CommandList graphics = kit.list(QueueType::Graphics, "test.graphics");
+    test::transition(graphics, texture, Layout::Undefined, Layout::ColorAttachment);
+    const std::array<ColorAttachment, 1> colors{ ColorAttachment{
+        .texture = texture, .load = LoadOp::Clear, .store = StoreOp::Store, .clear = ClearColor{ 1.0f, 0.0f, 0.0f, 1.0f } } };
+    graphics.beginRenderPass(RenderPassDesc{ .colors = colors, .area = { 0, 0, kEdge, kEdge }, .label = "test.clear" });
+    graphics.endRenderPass();
+    // Compute takes nothing over: its first barrier discards from Undefined (VU-rojo-sync-0025), so the layout Graphics left
+    // is named nowhere on the Compute queue. It then writes green to every texel and copies the texture out.
+    CommandList compute = kit.list(QueueType::Compute, "test.compute");
+    const std::array<TextureBarrier, 1> discard{ TextureBarrier{ .texture = texture,
+                                                                 .dstStage = Stage::ComputeShader,
+                                                                 .dstAccess = Access::ShaderWrite,
+                                                                 .oldLayout = Layout::Undefined,
+                                                                 .newLayout = Layout::ShaderWrite } };
+    compute.barrier({}, {}, discard);
+    compute.setPipeline(pipeline);
+    compute.pushRoot(DelayRoot{ .view = static_cast<uint32_t>(view), .spins = 0, .width = kEdge, .height = kEdge, .value = { 0.0f, 1.0f, 0.0f, 1.0f } });
+    compute.dispatch(1, 1, 1);
+    const std::array<TextureBarrier, 1> toCopy{ TextureBarrier{ .texture = texture,
+                                                                .srcStage = Stage::ComputeShader,
+                                                                .srcAccess = Access::ShaderWrite,
+                                                                .dstStage = Stage::Copy,
+                                                                .dstAccess = Access::CopyRead,
+                                                                .oldLayout = Layout::ShaderWrite,
+                                                                .newLayout = Layout::CopySrc } };
+    compute.barrier({}, {}, toCopy);
+    const BufferTextureLayout layout{ .offset = 0, .rowPitch = static_cast<uint32_t>(kRowPitch), .rowsPerImage = kEdge };
+    compute.copyTextureToBuffer(texture, TextureRegion{ .extent = { kEdge, kEdge, 1 } }, readback, layout);
+    // run orders the Compute list after the Graphics list by the fence the Graphics submission signals.
+    kit.run(std::array{ graphics, compute });
+    const std::vector<std::byte> got = kit.read(readback);
+    const std::array<std::byte, 4> green{ std::byte{ 0 }, std::byte{ 255 }, std::byte{ 0 }, std::byte{ 255 } };
+    uint32_t wrong = 0;
+    for (uint32_t row = 0; row < kEdge; ++row)
+    {
+        for (uint32_t x = 0; x < kEdge; ++x)
+        {
+            wrong += std::memcmp(got.data() + row * kRowPitch + x * 4, green.data(), green.size()) == 0 ? 0 : 1;
+        }
+    }
+    CHECK(wrong == 0u);
 }
 
 //======================================================================================================================

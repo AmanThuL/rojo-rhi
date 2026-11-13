@@ -217,7 +217,8 @@ GPU case is RojoRHI's, while a fixture that builds a consumer's scene is not.
   identifies the stored code; what a format stores is compared byte for byte. `DrawOracle` (draws,
   state and indirect draws), `MeshOracle` (task and mesh entries), `MeshRootOracle` (a mesh entry
   that reads the root), `PullOracle` (vertex pulling through the root), `DispatchOracle` (the
-  compute grid) and `FormatOracle` (sampling, loading, storing and reading the samples of every
+  compute grid), `BarrierOracle` (a storage-texture fill delayed by a spin, which shows a write left
+  unordered) and `FormatOracle` (sampling, loading, storing and reading the samples of every
   format) hold the entries those cases use. A vertex entry reads no reserved binding unless it must
   pull its vertices: the pinned Slang lowers every reserved binding to a writable `device` pointer,
   and Metal warns "writable resources in non-void vertex function" on such an entry, which

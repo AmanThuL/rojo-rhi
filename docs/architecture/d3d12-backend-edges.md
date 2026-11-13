@@ -295,5 +295,5 @@ tile of a render target and of a depth texture after the discard `VU-rojo-sparse
 A barrier from `General` in its place draws STATE_SETTING 1334 from the layer (layout `COMMON`,
 expected `UNDEFINED`; run 39616320545, scratch branch), so the discard is what it needs.
 
-**Not verified.** A real PIX capture; mip-tail paths; a `D32FloatS8` input or nonzero FSR jitter;
-`DXGI_STATUS_OCCLUDED`; tearing; and anything that needs hardware.
+**Not verified.** A real PIX capture; mip-tail paths; `DXGI_STATUS_OCCLUDED`; tearing; and anything
+that needs hardware. A `D32FloatS8` FSR depth and a nonzero FSR jitter ran on hardware only.

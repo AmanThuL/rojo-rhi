@@ -135,8 +135,9 @@ changes until every case passes; then section 7.
 
 ## 4. The hardware markers (issue #22)
 
-Each item below stays `unverified` in the API reference after the WARP evidence and waits for this
-machine; items 7 and 17 also need a case first. The item numbers are those of [the WARP evidence
+Each item below stayed `unverified` in the API reference after the WARP evidence and waited for
+this machine; [the markers note](../research/2026-11-13-d3d12-hardware-markers.md) records the cases
+that items 7 and 17 needed and what they showed. The item numbers are those of [the WARP evidence
 note](../research/2026-10-21-d3d12-warp-evidence.md), which also records the rules that WARP settled
 and left out of this list. When an observation matches the expected value, the marker is deleted
 from the reference line named, under the identifier stability rule. When it does not match, the
@@ -165,20 +166,18 @@ owner decides the correction.
   Reference line: the `Descriptor` row of `docs/spec/03-memory-and-buffers-part2.md` ("unverified
   against the floor").
 - **Item 7, `NonUniformResourceIndex` on a device.** `Tools/check_dxil.py` settles the compiler's
-  part on every host. Whether a divergent index reads the right descriptor is the driver's, and no
-  case reads through an index that differs between the threads of a wave, so a `[conformance]` case
-  that does is added first; any machine can add it. Observe: that case passes here under GPU-based
-  validation. Expected: each thread reads its own descriptor. Reference line: the D3D12 `Lowering`
-  cell of `rojoRHI::nonUniform`, `docs/spec/05-shader-abi-part2.md` line 45 (the words "on a device
-  unverified").
+  part on every host; the driver's part is the six `AbiNonUniform` `[conformance]` cases, whose
+  even and odd threads share every wave and fetch through different descriptors. Observe: they pass
+  under GPU-based validation. Expected: each thread reads its own descriptor. Settled on NVIDIA
+  (2026-11-13); on another vendor, run them. Reference line: the D3D12 `Lowering` cell of
+  `rojoRHI::nonUniform`, `docs/spec/05-shader-abi-part2.md` ("other vendors unverified").
 - **Item 17, a barrier from `Undefined` waits for the writes of its `SyncBefore` stages.** The
-  `[d3d12]` case "a barrier from Undefined discards and names no earlier access" shows only that the
-  layer accepts the lowering; neither layer checks ordering, and the wait is the driver's. A case
-  that fails when the barrier does not wait is added first; any machine can add it. Observe: that
-  case passes here under GPU-based validation. Expected: the writes before the barrier are complete
-  for the stages after it. Reference line: `TextureBarrier` in
-  `docs/spec/09-synchronization-part2.md` line 149 ("taken to wait for those writes
-  (*unverified*)").
+  `[conformance]` case of pull request #178, "a barrier from Undefined waits for the writes of its
+  source stage before a later write", fails when the barrier does not wait. Observe: it passes in
+  Debug under GPU-based validation and in Release. Expected: the writes before the barrier are
+  complete for the stages after it. On NVIDIA (2026-11-13) it fails in Release, where GPU-based
+  validation does not serialize the dispatches; the owner decides the lowering, and the marker
+  stays. Reference line: `TextureBarrier` in `docs/spec/09-synchronization-part2.md`.
 - **Item 20, DLSS and XeSS identifiers.** The backend integrates FSR only; its `upscalers` lists FSR
   when the FidelityFX runtime is beside the executable. Nothing runs here for DLSS or XeSS: the
   identifiers in `docs/spec/12-upscaling.md` stay `unverified` until a backend integrates each SDK
@@ -214,11 +213,15 @@ owner decides the correction.
 - **Presentation and sparse resources.** The cases of `PresentationConformanceTests.cpp` and
   `SparseConformanceTests.cpp` pass; record `TiledResourcesTier` from section 2.
 
-Items 13 and 18, and the FSR markers A and B of the evidence note (the `Inputs` and `Frame values`
-rows of `docs/spec/12-upscaling.md`, lines 173 and 174), wait for a `[d3d12]` or `[conformance]`
-case, not for this machine: any machine can add one, and a WARP run then settles them.
+Item 18, the FSR markers A and B of the evidence note (the `Inputs` and `Frame values` rows of
+`docs/spec/12-upscaling.md`) and the FSR input scale range of `Capabilities::upscalers` have cases
+that passed on NVIDIA (2026-11-13), and their markers are gone. Item 13's `[d3d12]` case (#178)
+showed that the driver does not keep a dynamic depth bias across `SetPipelineState`; the backend
+re-issues it, and the owner decides the reference's wording ([the markers
+note](../research/2026-11-13-d3d12-hardware-markers.md)).
 
-Evidence: `d3d12-floor-hw/<date>/` for items 1, 2, 3 and 21, `d3d12-t1/<date>/` for the cases.
+Evidence: `d3d12-floor-hw/<date>/` for items 1, 2, 3 and 21, `d3d12-t1/<date>/` for the cases,
+`d3d12-markers/<date>/` for the cases items 7, 13, 17, 18, A and B needed.
 
 ## 5. Spike 1: what an `Addr` dereference costs on D3D12 (issue #20)
 
