@@ -52,27 +52,6 @@ namespace rojoRHI::d3d12 {
         }
 
         //==============================================================================================================
-        /// Returns the full path of the running executable.
-        std::wstring executablePath()
-        {
-            std::wstring path(MAX_PATH, L'\0');
-            for (;;)
-            {
-                const DWORD length = GetModuleFileNameW(nullptr, path.data(), static_cast<DWORD>(path.size()));
-                if (length == 0)
-                {
-                    return {};
-                }
-                if (length < path.size())
-                {
-                    path.resize(length);
-                    return path;
-                }
-                path.resize(path.size() * 2);
-            }
-        }
-
-        //==============================================================================================================
         /// Refuses a Windows build below the Windows 11 kernel line, read with `RtlGetVersion`, which reports the true build
         /// whatever the executable's compatibility manifest says.
         Result<void> checkWindows()
@@ -107,13 +86,12 @@ namespace rojoRHI::d3d12 {
                     )
                 );
             }
-            const std::wstring executable = executablePath();
-            const size_t slash = executable.find_last_of(L"\\/");
-            if (slash == std::wstring::npos)
+            const std::wstring executable = executableDirectory();
+            if (executable.empty())
             {
                 return missing("the Agility SDK runtime is required beside the executable, whose path could not be read");
             }
-            const std::wstring directory = executable.substr(0, slash) + L"\\D3D12\\";
+            const std::wstring directory = executable + L"\\D3D12\\";
             // The runtime reads the path as UTF-8, as it reads the D3D12SDKPath export.
             const std::string path = utf8(directory);
             Com<ID3D12DeviceFactory> factory;

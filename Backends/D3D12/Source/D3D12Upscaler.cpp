@@ -253,33 +253,6 @@ namespace rojoRHI {
 
     namespace d3d12 {
         //==============================================================================================================
-        std::wstring executableDirectory()
-        {
-            std::wstring path(MAX_PATH, L'\0');
-            for (;;)
-            {
-                const DWORD length = GetModuleFileNameW(nullptr, path.data(), static_cast<DWORD>(path.size()));
-                if (length == 0)
-                {
-                    return {};
-                }
-                if (length < path.size())
-                {
-                    path.resize(length);
-                    break;
-                }
-                path.resize(path.size() * 2);
-            }
-            const size_t slash = path.find_last_of(L"\\/");
-            if (slash == std::wstring::npos)
-            {
-                return {};
-            }
-            path.resize(slash);
-            return path;
-        }
-
-        //==============================================================================================================
         std::optional<FidelityFx> loadFidelityFx(std::wstring_view directory)
         {
             if (directory.empty())
