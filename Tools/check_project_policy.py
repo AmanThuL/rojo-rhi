@@ -57,7 +57,10 @@ PUBLIC_COPY = {Path("README.md")}
 PUBLIC_PLANNING_LANGUAGE = re.compile(r"(?i)\bmilestones?\b|\bM\d+(?:\.\d+)?\b")
 PUBLIC_VULKAN = re.compile(r"(?i)\bVulkan\b")
 PUBLIC_D3D12 = re.compile(r"(?i)\b(?:D3D12|Direct3D\s*12)\b")
-PUBLIC_D3D12_PHRASE = "verified on WARP only, not on hardware"
+# ADR 0031: each phrase of the description, in the sentence that names D3D12.
+PUBLIC_D3D12_PHRASES = (
+    "conformant (T1) on one GPU", "overhead budgets not yet met", "other vendors unverified",
+)
 PUBLIC_D3D12_CLAIM = re.compile(r"(?i)support|accept")
 # A sentence ends at . ; ! ? before whitespace or the end of the text, or at a blank line.
 SENTENCE_END = re.compile(r"[.;!?](?=\s|\Z)|\n[ \t]*\n")
@@ -352,8 +355,11 @@ def d3d12_copy_errors(path: Path, text: str) -> list[str]:
         if not match:
             continue
         where = f"{path}:{line_number(text, start + match.start())}"
-        if PUBLIC_D3D12_PHRASE.lower() not in re.sub(r"\s+", " ", sentence).lower():
-            errors.append(f"{where}: D3D12 named without '{PUBLIC_D3D12_PHRASE}' in public copy")
+        flat = re.sub(r"\s+", " ", sentence).lower()
+        missing = [phrase for phrase in PUBLIC_D3D12_PHRASES if phrase.lower() not in flat]
+        if missing:
+            named = ", ".join(f"'{phrase}'" for phrase in missing)
+            errors.append(f"{where}: D3D12 named without {named} in public copy")
         if PUBLIC_D3D12_CLAIM.search(sentence):
             errors.append(f"{where}: D3D12 described as supported or accepted in public copy")
     return errors

@@ -10,10 +10,11 @@ rules and the root block are in [part 1](05-shader-abi.md); the built-ins are in
 1](05-shader-abi.md#model) explains, each entry states its requirements as normative prose, because
 no tier can diagnose a shader's use of them.
 
-Where a cell does not say `unverified`, the D3D12 lowerings below are implemented, verified on WARP
-only, not on hardware: the ABI conformance cases ran them on WARP, and `Tools/check_dxil.py` checks
-the DXIL of each existing heap fetch and of the raw accesses
-([evidence](../research/2026-10-21-d3d12-warp-evidence.md)).
+Where a cell does not say `unverified`, the D3D12 lowerings below are verified on WARP and on one
+GPU: the ABI conformance cases ran them on both
+([evidence](../research/2026-10-21-d3d12-warp-evidence.md), [the hardware
+run](../research/2026-11-12-d3d12-hardware-run.md)), and `Tools/check_dxil.py` checks the DXIL of
+each existing heap fetch and of the raw accesses.
 
 ## Divergence
 

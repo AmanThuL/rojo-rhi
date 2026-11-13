@@ -278,16 +278,16 @@ C3-k100 8.33 ns [7.92, 9.06] against 10, the composed frame's GPU time −2.02%,
 most N (C10m1, reported only, one a frame over), pipelines and native calls. By the 5% rule,
 reported, C3 misses at `K` 100, 10,000 and 100,000.
 
-The d3d12 harness is implemented and verified on WARP only, not on hardware. Until 2026-11-04 the
-hosted `d3d12-bench` CI job built it in Debug (with the debug layer) and Release on WARP, ran
-`RojoRHIBench/host` in both modes, `native` and `d3d12` in Debug, and the correctness gate
-(`bench.py build --backend d3d12 --adapter warp`, then `correctness`, which runs R and N in both
-modes) for every configuration, `frame` included; the gate required each workload's `summary.json`
-entry to have `passed` true and `gate` `compared`. Every configuration passed on WARP 1.0.21 in [run
-39711745231](https://github.com/AmanThuL/rojo-rhi/actions/runs/39711745231) (job `d3d12-bench`, 11
-minutes), with both arms reporting GPU spans; its evidence (run JSON, logs and `summary.json`; raw
-dumps omitted) is in `rojo-rhi-evidence/t2-gate-d3d12/2026-10-22/` with a `SHA256SUMS` manifest.
-Since then the `d3d12-build` job compiles the harness and runs nothing ([ADR
+The d3d12 harness has run on WARP and on one GPU, the RTX 3080 Ti of the first timed round below.
+Until 2026-11-04 the hosted `d3d12-bench` CI job built it in Debug (with the debug layer) and
+Release on WARP, ran `RojoRHIBench/host` in both modes, `native` and `d3d12` in Debug, and the
+correctness gate (`bench.py build --backend d3d12 --adapter warp`, then `correctness`, which runs R
+and N in both modes) for every configuration, `frame` included; the gate required each workload's
+`summary.json` entry to have `passed` true and `gate` `compared`. Every configuration passed on WARP
+1.0.21 in [run 39711745231](https://github.com/AmanThuL/rojo-rhi/actions/runs/39711745231) (job
+`d3d12-bench`, 11 minutes), with both arms reporting GPU spans; its evidence (run JSON, logs and
+`summary.json`; raw dumps omitted) is in `rojo-rhi-evidence/t2-gate-d3d12/2026-10-22/` with a
+`SHA256SUMS` manifest. Since then the `d3d12-build` job compiles the harness and runs nothing ([ADR
 0027](../decisions/0027-hosted-ci-compiles-d3d12.md)); the gate runs on a local Windows build. WARP
 evidence is correctness evidence only, not T1 or T2 acceptance. `bench.py timing` refuses a WARP
 build; D3D12 allocation counts are recorded but no `[d3d12]` case judges them yet. Its first timed

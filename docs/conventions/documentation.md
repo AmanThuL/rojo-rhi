@@ -33,18 +33,19 @@ number and title, in a `**Restates**:` line, and never by a link into another re
 
 ## What documents may not claim
 
-- A backend is a capability only when its T1 conformance suite passes on hardware (ADR 0009). A
-  backend that is implemented and verified only on WARP is described exactly so, "implemented,
-  verified on WARP only, not on hardware", and never as supported or accepted. No document,
-  release text or interface comment describes RojoRHI as having a second backend before then.
+- A backend is a capability only where its T1 conformance suite passes on hardware (ADR 0009). D3D12
+  is described as "implemented and conformant (T1) on one GPU, an NVIDIA GeForce RTX 3080 Ti on
+  driver 621.14, with its overhead budgets not yet met and other vendors unverified" (ADR 0031),
+  never as supported and never as accepted without naming the GPU. No document, release text or
+  interface comment describes a backend beyond what its T1 runs show.
 - A tool, check or command that does not exist yet is written as arriving with the work that adds
   it, never in the present tense.
 - The repository is public and licensed under the Apache License, Version 2.0; see `LICENSE`.
   Nothing here describes a package registry entry or a published release, since neither exists.
 - `README.md` is the public-facing surface: it never names Vulkan, names D3D12 only in a sentence
-  that says "verified on WARP only, not on hardware" and never calls D3D12 supported or accepted,
-  and uses no internal milestone or `M<number>` language, a rule
-  `Tools/check_project_policy.py` enforces mechanically.
+  that holds "conformant (T1) on one GPU", "overhead budgets not yet met" and "other vendors
+  unverified" and neither "support" nor "accept", and uses no internal milestone or `M<number>`
+  language, a rule `Tools/check_project_policy.py` enforces mechanically.
 
 ## Status lifecycle
 

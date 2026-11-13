@@ -61,8 +61,8 @@ of its member bits.
 The queue-type rules below (`VU-rojo-sync-0001`, `VU-rojo-sync-0006` and `VU-rojo-sync-0007`) rest
 on the restrictions D3D12's enhanced barriers place on each queue type, and they stay conservative.
 Every stage and layout they allow records on its queue type without a debug-layer or GPU-based
-validation message, verified on WARP only, not on hardware
-([evidence](../research/2026-10-21-d3d12-warp-evidence.md)).
+validation message, verified on WARP ([evidence](../research/2026-10-21-d3d12-warp-evidence.md)) and
+on one GPU ([the hardware run](../research/2026-11-12-d3d12-hardware-run.md)).
 
 ### `Stage`
 

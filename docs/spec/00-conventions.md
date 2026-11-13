@@ -15,13 +15,15 @@ The reference specifies the public C++ interface of RojoRHI, namespace `rojoRHI`
 usage bind every backend; its mapping table records how each backend lowers it.
 
 Metal 4, through metal-cpp, is the backend RojoRHI implements and verifies on hardware. The D3D12
-column of every mapping table describes the D3D12 backend, which is implemented, verified on WARP
-only, not on hardware ([ADR 0026](../decisions/0026-d3d12-implemented-before-hardware.md)), and the
-Vulkan column describes a design oracle that has no code. Neither column states a capability RojoRHI
-has: a backend becomes one only when its T1 conformance cases pass on hardware
-([ADR 0009](../decisions/0009-conformance-and-valid-usage.md)). Until the Metal 4 backend implements
-the API version a chapter describes, its Metal 4 column is also a designed mapping, checked against
-the native API rather than against shipped code.
+column of every mapping table describes the D3D12 backend, which is implemented and conformant (T1)
+on one GPU, an NVIDIA GeForce RTX 3080 Ti on driver 621.14, with its overhead budgets not yet met
+and other vendors unverified ([ADR 0031](../decisions/0031-d3d12-passes-t1-on-one-gpu.md)), and the
+Vulkan column describes a design oracle that has no code. A backend is a capability only where its
+T1 conformance cases pass on hardware ([ADR
+0009](../decisions/0009-conformance-and-valid-usage.md)): the D3D12 column states one on that GPU
+alone, and the Vulkan column none. Until the Metal 4 backend implements the API version a chapter
+describes, its Metal 4 column is also a designed mapping, checked against the native API rather than
+against shipped code.
 
 The Null recording backend, which arrives with the validation tracker, implements every entry
 without a GPU for contract tests. It is a test backend, never a shipping one, and has no column.
@@ -124,10 +126,11 @@ A mapping table names, per backend, the concrete native calls and types an entry
 metal-cpp names such as `MTL4::CommandQueue`, D3D12 names such as
 `ID3D12Device::CreateCommittedResource`, Vulkan names such as `vkCreateBuffer`. A cell that rests on
 a native behaviour not yet confirmed against the native documentation or a run says `unverified` in
-its note. A D3D12 lowering or rule without the marker is implemented, verified on WARP only, not on
-hardware, by the runs [the WARP evidence](../research/2026-10-21-d3d12-warp-evidence.md) records;
-one that rests on a vendor's or a driver's behaviour keeps the marker until a hardware run. A D3D12
-`Cost` cell stays a design estimate until the T2 round on hardware.
+its note. A D3D12 lowering or rule without the marker is verified by the runs [the WARP
+evidence](../research/2026-10-21-d3d12-warp-evidence.md) records and by T1 on one GPU ([the hardware
+run](../research/2026-11-12-d3d12-hardware-run.md)); one that rests on a vendor's or a driver's
+behaviour keeps the marker until a hardware run settles it. A D3D12 `Cost` cell stays a design
+estimate until the T2 round on hardware.
 
 The `Cost` row gives one cost class per backend. A cell starts with the class, optionally followed
 by a colon and a short note. There are exactly four classes:

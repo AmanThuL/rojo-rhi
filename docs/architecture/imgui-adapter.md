@@ -2,10 +2,11 @@
 
 **Status**: Accepted
 
-`RojoRHIImGui` renders Dear ImGui, platform windows included, through the public interface alone.
-It has no Metal, D3D12 or Null code: it builds and runs on whichever backend the library was
-configured for. D3D12 is implemented, verified on WARP only, not on hardware, so the adapter's D3D12
-runs are WARP runs and are not T1 evidence.
+`RojoRHIImGui` renders Dear ImGui, platform windows included, through the public interface alone. It
+has no Metal, D3D12 or Null code: it builds and runs on whichever backend the library was configured
+for. D3D12 is implemented and conformant (T1) on one GPU, an NVIDIA GeForce RTX 3080 Ti on driver
+621.14, with its overhead budgets not yet met and other vendors unverified, and the adapter's cases
+passed on that GPU ([the hardware run](../research/2026-11-12-d3d12-hardware-run.md)).
 
 ## Purpose and boundary
 
@@ -193,7 +194,7 @@ consecutive resizes) and one pixel case. They build into `RojoRHITests` and run 
 |---|---|
 | Null, macOS and Windows | every case except the pixel case, which skips without a GPU |
 | Metal 4, locally | every case, under `MTL_DEBUG_LAYER=1`; a validation message fails the run |
-| d3d12 | compiled by the `d3d12-build` CI job, run locally; every case passed on WARP in Debug and Release in hosted CI until 2026-11-04, and WARP is not hardware |
+| d3d12 | compiled by the `d3d12-build` CI job, run locally; every case passed on WARP in Debug and Release in hosted CI until 2026-11-04, and on an RTX 3080 Ti in Debug ([the hardware run](../research/2026-11-12-d3d12-hardware-run.md)) |
 
 The `metal4` CI job compiles and inventories the entry without running it.
 

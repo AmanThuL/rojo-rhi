@@ -2,12 +2,13 @@
 
 **Status**: Accepted
 
-Implemented, verified on WARP only, not on hardware: [CI run 39641225757](https://github.com/AmanThuL/rojo-rhi/actions/runs/39641225757) ran these entries on the hosted
-Windows runner's WARP adapter under the debug layer and GPU-based validation, and no run has used a
-hardware adapter. The backend is not a capability until a hardware run says so
-([ADR 0009](../decisions/0009-conformance-and-valid-usage.md),
-[documentation](../conventions/documentation.md)). Under GPU-based validation WARP never completes
-an FSR dispatch; with the debug layer alone it does.
+Implemented and conformant (T1) on one GPU, an NVIDIA GeForce RTX 3080 Ti on driver 621.14, with its
+overhead budgets not yet met and other vendors unverified ([ADR
+0031](../decisions/0031-d3d12-passes-t1-on-one-gpu.md)): [the hardware
+run](../research/2026-11-12-d3d12-hardware-run.md) ran these entries on that GPU under the debug
+layer and GPU-based validation and in Release, as [the T1 run on WARP](#the-t1-run-on-warp) had
+before. Under GPU-based validation WARP never completes an FSR dispatch; with the debug layer alone
+it does.
 
 This page describes swapchains and presentation, reserved (sparse) resources, programmatic capture
 and FSR: upscaler creation and the recording of an upscale.
@@ -265,12 +266,12 @@ the headers, the DLLs and the licence file and checks each against a pinned SHA-
 
 ## The T1 run on WARP
 
-The edge cases are the `[d3d12]` files under `Tests/D3D12/` and the contract and conformance
-files that cover the edges. [CI run 39641225757](https://github.com/AmanThuL/rojo-rhi/actions/runs/39641225757) built Debug (debug layer and GPU-based
-validation, whose messages abort the run) and Release on WARP and ran every contract file, every
-death file in Debug and every T1 conformance file the build does not leave out. It is no T1
-acceptance, which waits for a hardware adapter ([ADR 0009](
-../decisions/0009-conformance-and-valid-usage.md)).
+The edge cases are the `[d3d12]` files under `Tests/D3D12/` and the contract and conformance files
+that cover the edges. [CI run
+39641225757](https://github.com/AmanThuL/rojo-rhi/actions/runs/39641225757) built Debug (debug layer
+and GPU-based validation, whose messages abort the run) and Release on WARP and ran every contract
+file, every death file in Debug and every T1 conformance file the build does not leave out. It is
+not T1 on hardware ([ADR 0031](../decisions/0031-d3d12-passes-t1-on-one-gpu.md)).
 
 Debug: `abi` 10 cases (8 passed, 2 skipped), `contract` 578 (567, 11), `death` 555 (550, 3, and 2
 that fail as expected), `conformance` 147 (136, 11). Release (no validation, no layer): `contract`

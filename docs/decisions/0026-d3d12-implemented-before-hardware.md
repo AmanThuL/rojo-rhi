@@ -1,7 +1,8 @@
 # ADR 0026: D3D12 is implemented before hardware and verified on WARP
 
 **Status**: Accepted (2026-10-21); its words "on hosted Windows CI" superseded by
-[ADR 0027](0027-hosted-ci-compiles-d3d12.md)
+[ADR 0027](0027-hosted-ci-compiles-d3d12.md); its description of the backend and the README form
+superseded by [ADR 0031](0031-d3d12-passes-t1-on-one-gpu.md)
 
 **Supersedes**: the passages of [ADR 0008](0008-backends-and-vulkan-oracle.md) that kept D3D12
 planned, absent and not yet the Windows default, quoted below; the rest of ADR 0008 stands.

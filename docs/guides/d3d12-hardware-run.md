@@ -2,13 +2,15 @@
 
 **Status**: Accepted
 
-The D3D12 backend is implemented, verified on WARP only, not on hardware. WARP is the software
-rasterizer hosted Windows CI ran the backend on until 2026-11-04; hosted CI now compiles it and
-executes nothing on it ([ADR 0027](../decisions/0027-hosted-ci-compiles-d3d12.md)). Its runs are
-correctness evidence under the debug layer and GPU-based validation, never T1 acceptance ([ADR
-0009](../decisions/0009-conformance-and-valid-usage.md)) and never a measurement ([ADR
-0014](../decisions/0014-overhead-measurement.md)). This guide is the ordered checklist for the first
-machine with a Windows GPU, so that T1 acceptance (issue #21), the hardware markers of the API
+The D3D12 backend is implemented and conformant (T1) on one GPU, an NVIDIA GeForce RTX 3080 Ti on
+driver 621.14, with its overhead budgets not yet met and other vendors unverified ([ADR
+0031](../decisions/0031-d3d12-passes-t1-on-one-gpu.md)); [its first
+run](../research/2026-11-12-d3d12-hardware-run.md) followed this guide. WARP, the software
+rasterizer hosted CI ran the backend on until 2026-11-04 ([ADR
+0027](../decisions/0027-hosted-ci-compiles-d3d12.md)), gives correctness evidence, never T1
+acceptance ([ADR 0009](../decisions/0009-conformance-and-valid-usage.md)) and never a measurement
+([ADR 0014](../decisions/0014-overhead-measurement.md)). This guide is the ordered checklist for the
+first machine with a Windows GPU, so that T1 acceptance (issue #21), the hardware markers of the API
 reference (issue #22), spike 1 (issue #20) and the D3D12 overhead round (issue #21) need nothing
 designed on the day. Each step gives its commands, what success looks like, what to record and
 where, and what changes with the result.
@@ -191,7 +193,7 @@ owner decides the correction.
   `FormatConformanceTests.cpp` cases in section 3 pass. Reference lines: the introductions that mark
   values taken from vendor documentation, `docs/spec/15-formats-and-limits.md` lines 9-11 and
   `docs/spec/15-formats-and-limits-part2.md` lines 8-9; the guaranteed-format paragraph of the
-  former (lines 113-118) says the table runs on WARP only, not on hardware.
+  former (lines 113-118) said the table runs on WARP only, not on hardware.
 - **Layer 0 of an array texture, read through a non-array fetch (issue #90).** Observe: the case "a
   single-layer view of layer 0 takes the non-array dimension and a later layer the array one"
   (`Tests/D3D12/D3D12TextureTests.cpp:392`) passes under GPU-based validation with no
@@ -282,12 +284,10 @@ GPU span of each submission through the submission timing seam and N's timestamp
 
 ## 7. After the run
 
-- **The wording.** The sentence "implemented, verified on WARP only, not on hardware" becomes
-  "conformant on <GPU>, driver <version>" in the documents that carry it, and only after every case
-  of section 3 passes. The change is a superseding decision record of [ADR
-  0026](../decisions/0026-d3d12-implemented-before-hardware.md), not an edit of it, together with
-  the README rule of `Tools/check_project_policy.py`, which admits D3D12 in public copy only in a
-  sentence holding the phrase above and neither "support" nor "accept".
+- **The wording.** Only after every case of section 3 passes does a superseding decision record
+  change the backend's description in the documents that carry it, together with the README rule of
+  `Tools/check_project_policy.py`; [ADR 0031](../decisions/0031-d3d12-passes-t1-on-one-gpu.md) did
+  so for the first GPU, and a run on another vendor's GPU changes it the same way.
 - **The API reference.** The markers section 4 settled are deleted under the identifier stability
   rule; the evidence note records the hardware run.
 - **The default backend.** The Windows default stays `null` (`xmake/targets.lua`, option

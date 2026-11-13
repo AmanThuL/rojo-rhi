@@ -3,14 +3,14 @@
 **Status**: Accepted
 
 This page describes how the D3D12 backend loads shader libraries, creates pipelines and caches them,
-and how it binds them, records passes, draws and dispatches. It is implemented, verified on WARP
-only, not on hardware, and the backend is not a capability ([ADR
-0009](../decisions/0009-conformance-and-valid-usage.md),
-[documentation](../conventions/documentation.md)). [The D3D12 backend](d3d12-backend.md) describes
-the device around it and [recording](d3d12-recording.md) lists, copies, barriers and scopes. The API
-reference stays the authority on semantics; every check lives in `Source/Core`, so no `ROJORHI_VU`
-appears under `Backends/D3D12/`. A recording entry reads native objects through `HandlePool::native`
-and the list's own state, never a pool record (ADR 0020).
+and how it binds them, records passes, draws and dispatches. It is implemented and conformant (T1)
+on one GPU, an NVIDIA GeForce RTX 3080 Ti on driver 621.14, with its overhead budgets not yet met
+and other vendors unverified ([ADR 0031](../decisions/0031-d3d12-passes-t1-on-one-gpu.md)). [The
+D3D12 backend](d3d12-backend.md) describes the device around it and [recording](d3d12-recording.md)
+lists, copies, barriers and scopes. The API reference stays the authority on semantics; every check
+lives in `Source/Core`, so no `ROJORHI_VU` appears under `Backends/D3D12/`. A recording entry reads
+native objects through `HandlePool::native` and the list's own state, never a pool record (ADR
+0020).
 
 ## Shader libraries
 
@@ -289,7 +289,8 @@ starting values, pipeline and topology binds, depth bias at every `setPipeline`,
 filter, zero-count draws, `b1` after an indirect draw for vertex and mesh pipelines, `maxCount` 0,
 and counts of 0 or above `maxCount` read back from the target.
 
-Every contract and conformance file runs on WARP, the draw, indirect and graphics ABI conformance
+Every contract and conformance file runs on WARP and on the GPU of [the hardware
+run](../research/2026-11-12-d3d12-hardware-run.md), the draw, indirect and graphics ABI conformance
 files with `vertexIndex` excluding the base vertex, except the two upscale files under GPU-based
 validation ([edges](d3d12-backend-edges.md#the-t1-run-on-warp)). Two multisample cases of the ABI
 compute file expect the value `multisampleReadsSize()` of `Tests/Support/Backend.h` names: Metal 4's
