@@ -1,6 +1,6 @@
 //----------------------------------------------------------------------------------------------------------------------
 /// @file D3D12Common.cpp
-/// @brief Implements the helpers every D3D12 backend file shares: HRESULT errors, names, fence waits and the stub entries.
+/// @brief Implements the helpers every D3D12 backend file shares: HRESULT errors, the executable's directory, names and fence waits.
 //----------------------------------------------------------------------------------------------------------------------
 
 #include "D3D12Common.h"
@@ -92,6 +92,33 @@ namespace rojoRHI::d3d12 {
         std::string result(static_cast<size_t>(size > 0 ? size : 0), '\0');
         WideCharToMultiByte(CP_UTF8, 0, text.data(), wide, result.data(), size, nullptr, nullptr);
         return result;
+    }
+
+    //==================================================================================================================
+    std::wstring executableDirectory()
+    {
+        std::wstring path(MAX_PATH, L'\0');
+        for (;;)
+        {
+            const DWORD length = GetModuleFileNameW(nullptr, path.data(), static_cast<DWORD>(path.size()));
+            if (length == 0)
+            {
+                return {};
+            }
+            if (length < path.size())
+            {
+                path.resize(length);
+                break;
+            }
+            path.resize(path.size() * 2);
+        }
+        const size_t slash = path.find_last_of(L"\\/");
+        if (slash == std::wstring::npos)
+        {
+            return {};
+        }
+        path.resize(slash);
+        return path;
     }
 
     //==================================================================================================================

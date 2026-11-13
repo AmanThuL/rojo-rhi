@@ -1,6 +1,6 @@
 //----------------------------------------------------------------------------------------------------------------------
 /// @file D3D12Common.h
-/// @brief Declares the helpers every D3D12 backend file shares: COM ownership, HRESULT errors, names, fence waits and stubs.
+/// @brief Declares the helpers every D3D12 backend file shares: COM ownership, HRESULT errors, the executable's directory, names and fence waits.
 //----------------------------------------------------------------------------------------------------------------------
 #pragma once
 
@@ -113,6 +113,10 @@ namespace rojoRHI::d3d12 {
 
     /// Returns `text` converted from UTF-16 to UTF-8: for messages, and for the path the Agility device factory reads.
     std::string utf8(std::wstring_view text);
+
+    /// Returns the directory of the running executable, without a trailing separator; empty when its path cannot be read.
+    /// The Agility runtime and the FidelityFX runtime are both found beside it.
+    std::wstring executableDirectory();
 
     /// Returns the error of a failed native call: `OutOfMemory` for `E_OUTOFMEMORY`, `DriverFailure` for any other failure,
     /// with the message "<what> failed with HRESULT 0x<8 hex digits>".

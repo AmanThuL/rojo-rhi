@@ -36,9 +36,6 @@ namespace rojoRHI::d3d12 {
         std::optional<FidelityFx> fidelityFx; ///< The loader and its entry points; empty when FSR is unavailable.
     };
 
-    /// Returns the directory of the running executable, without a trailing separator; empty when its path cannot be read.
-    std::wstring executableDirectory();
-
     /// Loads `amd_fidelityfx_loader_dx12.dll` from `directory`, searching its dependencies there and in the default
     /// directories, and resolves `ffxCreateContext`, `ffxDestroyContext`, `ffxConfigure`, `ffxQuery` and `ffxDispatch`.
     /// Returns nothing, and holds no module, when the file is not there, does not load or misses an entry point.
