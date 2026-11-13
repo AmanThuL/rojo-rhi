@@ -287,9 +287,9 @@ globs the directory, so no build file lists them. The entries on a d3d12 build:
 lists; a name that matches no file fails the configure. Hosted CI executes nothing on D3D12 ([ADR
 0027](../decisions/0027-hosted-ci-compiles-d3d12.md)). The `d3d12-build` job compiles the backend,
 its tests, the floor probes and the benchmark harness in Debug with `--rojorhi_d3d12_debug=layer`
-and in Release with `mode` (warning-free under `/W4 /WX`; the Release executables still turn off
-warnings C4702 and C4722, issue #83), checks that every conformance shader has its DXIL and
-`.d3d12lib`, runs `Tools/check_dxil.py` and checks the layout of the D3D12 sources with
+and in Release with `mode` (warning-free under `/W4 /WX`), checks that every conformance shader has
+its DXIL and `.d3d12lib`, runs `Tools/check_dxil.py`, disassembles the Release `RojoRHILtoProbe`
+with `Tools/check_lto_inline.py`, running nothing, and checks the layout of the D3D12 sources with
 `Tools/check_cpp_layout.py --only Backends/D3D12 --only Tests/D3D12 --only Tests/Support/D3D12
 --only Tools/D3D12Probe --only Benchmarks/HostWindows --only Benchmarks/NativeD3D12 --only
 Benchmarks/ChecksD3D12`, the directories the macOS `format` job excludes. Until 2026-11-04 a `d3d12`

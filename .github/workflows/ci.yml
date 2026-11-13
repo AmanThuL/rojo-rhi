@@ -308,3 +308,6 @@ jobs:
       - run: xmake f -m release -y --rojorhi_backend=d3d12 --rojorhi_d3d12_debug=mode
       - run: xmake build RojoRHITests
       - run: xmake build RojoRHIBench
+      # Release links with LTO (ADR 0012); the check disassembles the probe and runs nothing.
+      - run: xmake build RojoRHILtoProbe
+      - run: python3 Tools/check_lto_inline.py

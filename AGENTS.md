@@ -182,7 +182,8 @@ amends it, C3-k100 8.33 ns against 10; by the 5% rule, reported, C3 misses at th
 
 `python3 Tools/check_lto_inline.py`, after `xmake build RojoRHILtoProbe` in a Release configure,
 fails unless link-time optimization inlined `Device::capabilities` into its caller in the probe
-(ADR 0012); the interface CI job runs it on macOS and Windows.
+(ADR 0012); the interface CI job runs it on macOS and Windows, and the `d3d12-build` job on its
+Release build.
 
 `python3 Tools/check_vu_coverage.py` fails when a valid-usage identifier of `docs/spec/` has neither
 a death test nor an entry in `Tools/vu_pending.txt`, when an identifier has fewer death tests than

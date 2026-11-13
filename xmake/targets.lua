@@ -82,15 +82,6 @@ local function warn_unreachable()
     add_cxxflags("-Wunreachable-code", "-Wunreachable-code-return", {tools = "clang"})
 end
 
--- An executable target calls this to turn off warnings C4702 (unreachable code) and C4722 (a destructor that never returns)
--- on a d3d12 Release build, where link-time code generation raised them across the library's aborting entries and /WX made
--- them errors; every other warning still fails it.
-local function unreachable_after_stubs()
-    if is_config("rojorhi_backend", "d3d12") and is_mode("release") then
-        add_cxflags("/wd4702", "/wd4722")
-    end
-end
-
 -- The adapter and debug features a d3d12 build selects, as private defines of the calling target: the
 -- library acts on them, and the D3D12 cases check the device against them.
 local function d3d12_selection()
@@ -324,7 +315,6 @@ target("RojoRHITests")
     if is_plat("windows") then
         add_defines("_CRT_SECURE_NO_WARNINGS")
     end
-    unreachable_after_stubs()
     if is_config("rojorhi_backend", "metal4") then
         -- Every Metal 4 entry runs under the Metal validation layer, from the test directory.
         local layer = {MTL_DEBUG_LAYER = "1"}
@@ -399,7 +389,6 @@ target("RojoRHILtoProbe")
         add_rules("rojorhi.d3d12_runtime")
         set_values("rojorhi.thirdparty", thirdparty_dir)
     end
-    unreachable_after_stubs()
 
 -- The D3D12 floor probe: two standalone executables from one source that report, as JSON, whether
 -- the WARP adapter meets the hardware floor of ADR 0010 and how the D3D12 runtime loaded. The
@@ -501,7 +490,6 @@ if is_plat("macosx") or is_config("rojorhi_backend", "d3d12") then
             add_rules("rojorhi.metal")
             add_files(path.join(component, "Benchmarks/Native/Kernels/*.metal"))
         end
-        unreachable_after_stubs()
         if is_config("rojorhi_backend", "d3d12") then
             -- The D3D12 debug features are built in, as the build's rojorhi_d3d12_debug selects them; no variable enables them.
             add_tests("host", {runargs = {"check", "[host]"}, realtime_output = true})
