@@ -68,7 +68,7 @@ namespace rojoRHI::core {
         size_t passScopeBase = 0;               ///< The number of open scopes when the open pass began.
         ArenaPage page;                         ///< The arena page the list uploads into; null until its first upload.
         std::byte* cursor = nullptr;            ///< The next free byte of `page`: its bump cursor, which takes no lock.
-        std::byte* limit = nullptr;             ///< One past the last byte of `page`; null until the list has a page.
+        std::byte* limit = nullptr;             ///< One past the last byte of `page` an `Addr` reaches; null until the list has a page.
         RecordCounts counts;                    ///< What the list recorded for `Device::counters`; folded into the device at submission.
     };
 
@@ -138,8 +138,9 @@ namespace rojoRHI::core {
     };
 
     /// Claims a page of at least `size` bytes from the arena slot of `list`'s frame, through `source`, stamps its record with
-    /// the list's frame for VU-rojo-buffer-0020 in a Debug build and makes it the list's page, with its cursor at zero. The
-    /// claim is the one place Release recording takes a lock (ADR 0020), so it stays out of line.
+    /// the list's frame for VU-rojo-buffer-0020 in a Debug build and makes it the list's page, with its cursor at zero and its
+    /// limit at the page's size or `Limits::maxAddrOffset`, whichever is smaller. The claim is the one place Release recording
+    /// takes a lock (ADR 0020), so it stays out of line.
     void claimArenaPage(DeviceCore& core, CommandListCore& list, uint64_t size, ArenaPageSource source, void* context);
 
     /// The alignment every arena page's host memory has, so rounding the cursor up to an alignment up to this one rounds
@@ -152,8 +153,9 @@ namespace rojoRHI::core {
         return static_cast<uint64_t>(list.cursor - list.page.host);
     }
 
-    /// Reserves `size` bytes at `alignment` in `list`'s own page, claiming a page when it has none or the bytes do not fit,
-    /// through `source`; the slow path of `bumpArenaPage`, out of line.
+    /// Reserves `size` bytes at `alignment` in `list`'s own page, claiming a page when it has none or the bytes do not fit
+    /// below its limit, through `source`; the slow path of `bumpArenaPage`, out of line. An upload larger than the limit
+    /// allows lands at offset zero of a new page, past that page's limit, so the next upload claims again.
     ArenaAllocation bumpArenaPageSlow(DeviceCore& core, CommandListCore& list, uint64_t size, uint32_t alignment, ArenaPageSource source, void* context);
 
     /// Reserves `size` bytes at `alignment` in `list`'s own page, claiming a page when it has none or the bytes do not fit,
