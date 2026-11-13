@@ -46,7 +46,7 @@ identifier; this entry only defines the values.
 
 | Field | Floor | Metal 4 (Apple7+) | D3D12 (FL 12_2) | Vulkan oracle |
 |---|---|---|---|---|
-| `maxViews` | 996,926 | 1,000,000 textures reachable per stage through argument buffers | the view heap less the reserved slots: at least 1,000,000 descriptors at resource binding tier 3, so at least 996,926; `OPTIONS19` may report more (shipping values *unverified*) | descriptor-heap size properties of `VK_EXT_descriptor_heap` |
+| `maxViews` | 996,926 | 1,000,000 textures reachable per stage through argument buffers | the view heap less the reserved slots: at least 1,000,000 descriptors at resource binding tier 3, so at least 996,926; `OPTIONS19` may report more (an RTX 3080 Ti on driver 621.14 reports exactly 1,000,000; other shipping values *unverified*) | descriptor-heap size properties of `VK_EXT_descriptor_heap` |
 | `maxSamplers` | 996 | 996 on Apple7 and Apple8, 500,000 on Apple9+, from `maxArgumentBufferSamplerCount` (*unverified*) | 2,048 shader-visible samplers; `OPTIONS19` may report more | sampler-heap size properties of `VK_EXT_descriptor_heap` |
 | `maxRootBlockSize` | 65,536 | bounded by `maxBufferLength` | 65,536, the constant buffer limit kept as the portable cap | bounded by the buffer, read through a device address |
 | `rootAlignment` | 256 | 4, raised to 256 | 256, `D3D12_CONSTANT_BUFFER_DATA_PLACEMENT_ALIGNMENT` | `minUniformBufferOffsetAlignment`, at most 256 |

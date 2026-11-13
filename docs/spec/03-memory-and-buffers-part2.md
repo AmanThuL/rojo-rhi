@@ -26,7 +26,7 @@ A backend may round `size` up to its allocation granularity; the usable size is 
 #### Mapping
 | | Metal 4 | D3D12 | Vulkan |
 |---|---|---|---|
-| Descriptor | `MTL::HeapDescriptor` with `MTL::HeapDescriptor::setType(MTL::HeapTypePlacement)`, `setSize`, `setStorageMode`, `setCpuCacheMode` | `D3D12_HEAP_DESC` with the heap type of `memory` and `D3D12_HEAP_FLAG_ALLOW_ALL_BUFFERS_AND_TEXTURES` (resource heap tier 2, unverified against the floor) | `VkMemoryAllocateInfo` with the memory type of `memory` |
+| Descriptor | `MTL::HeapDescriptor` with `MTL::HeapDescriptor::setType(MTL::HeapTypePlacement)`, `setSize`, `setStorageMode`, `setCpuCacheMode` | `D3D12_HEAP_DESC` with the heap type of `memory` and `D3D12_HEAP_FLAG_ALLOW_ALL_BUFFERS_AND_TEXTURES` (resource heap tier 2, which the floor requires and an RTX 3080 Ti on driver 621.14 reports) | `VkMemoryAllocateInfo` with the memory type of `memory` |
 | Cost | native | native | native |
 
 ### `Device::createHeap`

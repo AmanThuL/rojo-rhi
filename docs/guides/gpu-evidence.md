@@ -66,4 +66,6 @@ its runs under topic `t2`, checksummed the same way
 | `t2-diagnosis` | 2026-10-19 | the report-only diagnosis of that round's misses: ablations, per-pass GPU timelines, CPU profiles and allocation stacks, with the patches measured |
 | `spike-2-texture-indexing` | 2026-10-12 | [spike 2](../research/2026-10-12-spike-2-texture-indexing.md) |
 | `spike-3-multi-draw-indirect` | 2026-10-12 | [spike 3](../research/2026-10-12-spike-3-multi-draw-indirect.md) |
+| `d3d12-floor-hw` | 2026-11-12 | the D3D12 floor on an RTX 3080 Ti, driver 621.14: the machine, the device's capabilities, the `[d3d12]` cases under GPU-based validation and the native swapchain probes; [the hardware run](../research/2026-11-12-d3d12-hardware-run.md) |
+| `d3d12-t1` | 2026-11-12 | D3D12 T1 on that GPU in Debug with GPU-based validation and in Release, with the runs before each fix; [the hardware run](../research/2026-11-12-d3d12-hardware-run.md) |
 | `spike-1-d3d12-addr-dereference` | 2026-11-12 | [spike 1](../research/2026-10-20-spike-1-d3d12-addr-dereference.md) on an RTX 3080 Ti: costly, escalated, answered with no superseding decision |

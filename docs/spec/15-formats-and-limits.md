@@ -115,9 +115,10 @@ following; anything outside it is reported by `Device::formatCapabilities`. The 
 the Apple7 pixel-format capability tables and the D3D12 required format support at feature level
 12_2 (the floor of [ADR 0010](../decisions/0010-hardware-floor.md)). Every row is checked on Metal 4
 hardware by `Tests/Conformance/FormatConformanceTests.cpp`, which exercises each capability a device
-reports for each format; on D3D12 it runs on WARP only, not on hardware
-([evidence](../research/2026-10-21-d3d12-warp-evidence.md)). A "no" is unsupported on every backend
-in this version; "reported" varies by device.
+reports for each format; on D3D12 it runs on WARP
+([evidence](../research/2026-10-21-d3d12-warp-evidence.md)) and on an RTX 3080 Ti ([the hardware
+run](../research/2026-11-12-d3d12-hardware-run.md)). A "no" is unsupported on every backend in this
+version; "reported" varies by device.
 
 | `Format` | Sampled | Linear filter | Storage read | Storage write | Color attachment and blend | Depth attachment |
 |---|---|---|---|---|---|---|
