@@ -146,6 +146,9 @@ through the write-only accessors (`rojoRHI::wTexture*`, [shader ABI](05-shader-a
 Metal 4 reports exactly that for `BGRA8Unorm`, `RGB10A2Unorm` and `RG16Float`. On Vulkan
 `R16Float`, `RG16Float` and `R8Unorm` storage needs `shaderStorageImageExtendedFormats`.
 Multisampling, resolve and sparse residency are reported per device and are not part of the floor.
+Linear filtering of an sRGB format decodes each texel to linear before it filters, and the result is
+within one 8-bit step, 1/255, of the exact linear mean: filtering units decode at a limited
+precision, and an RTX 3080 Ti returns its means on a grid of 1/512.
 
 #### Valid usage
 - `VU-rojo-format-0001` Every `Format` value passed to RojoRHI is one of the enumerators above.
