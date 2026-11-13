@@ -82,7 +82,7 @@ that frame's `Device::endFrame`, as `VU-rojo-device-0005` of
 
 | | Metal 4 | D3D12 | Vulkan |
 |---|---|---|---|
-| Call | pooled `MTL4::CommandBuffer`, `MTL4::CommandBuffer::beginCommandBuffer` with the list's own `MTL4::CommandAllocator` of its frame slot, reset when the slot is reused | `Reset` with the list's own `ID3D12CommandAllocator` of its frame slot, reset when the slot is reused; a `Graphics` list then sets both descriptor heaps and the global root signature for graphics and compute, a `Compute` list the heaps and the compute root signature | `vkBeginCommandBuffer` from a per-frame pool; for `Graphics` and `Compute` lists, then the descriptor heaps |
+| Call | pooled `MTL4::CommandBuffer`, `MTL4::CommandBuffer::beginCommandBuffer` with the list's own `MTL4::CommandAllocator` of its frame slot, reset when the slot is reused | `Reset` with the list's own `ID3D12CommandAllocator` of its frame slot, reset when the slot is reused; a `Graphics` list then sets both descriptor heaps and the graphics global root signature, a `Compute` list the heaps; the compute root signature waits for the list's first dispatch | `vkBeginCommandBuffer` from a per-frame pool; for `Graphics` and `Compute` lists, then the descriptor heaps |
 | Cost | native | native | native |
 
 ### `CommandList::end`
@@ -275,7 +275,7 @@ opens at the pass's first draw that needs no kernel, at a scope boundary inside 
 
 | | Metal 4 | D3D12 | Vulkan |
 |---|---|---|---|
-| Call | `MTL4::CommandBuffer::pushDebugGroup` for the pass's scope, whose timestamp pair its encoders write with `scopeTimings` ([diagnostics](14-diagnostics.md)): the begin timestamp first on the pass's first render encoder, after the compute encoder of any counted draws' kernels ahead of it; `MTL4::CommandBuffer::renderCommandEncoder` deferred to the pass's first draw that needs no kernel, scope boundary inside it, or `endRenderPass`, with the caller's load actions, and `Load` when a split resumes the pass | `BeginEvent`, and `EndQuery` with `scopeTimings`, for the pass's scope; one `Barrier` moving each resolve target to `LAYOUT_RESOLVE_DEST`; `BeginRenderPass` (`ID3D12GraphicsCommandList4`) with `ALLOW_UAV_WRITES`, since any stage may store through an address; `OMSetStencilRef(0)` and `OMSetBlendFactor` of zeros where the list holds another or an unknown value | `vkCmdBeginRendering` |
+| Call | `MTL4::CommandBuffer::pushDebugGroup` for the pass's scope, whose timestamp pair its encoders write with `scopeTimings` ([diagnostics](14-diagnostics.md)): the begin timestamp first on the pass's first render encoder, after the compute encoder of any counted draws' kernels ahead of it; `MTL4::CommandBuffer::renderCommandEncoder` deferred to the pass's first draw that needs no kernel, scope boundary inside it, or `endRenderPass`, with the caller's load actions, and `Load` when a split resumes the pass | `BeginEvent`, and `EndQuery` with `scopeTimings`, for the pass's scope; one `Barrier` moving each resolve target to `LAYOUT_RESOLVE_DEST`; `BeginRenderPass` (`ID3D12GraphicsCommandList4`) with `ALLOW_UAV_WRITES`, since any stage may store through an address; `OMSetStencilRef(0)` and `OMSetBlendFactor` of zeros where the list holds another or an unknown value, sent with the pass's first draw whose pipeline reads the value | `vkCmdBeginRendering` |
 | Cost | native | cheap: the scope, the resolve barrier and the starting values the list does not hold | native |
 
 ### `CommandList::endRenderPass`

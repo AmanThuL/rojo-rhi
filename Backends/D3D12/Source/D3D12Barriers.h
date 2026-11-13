@@ -14,13 +14,27 @@
 namespace rojoRHI::d3d12 {
     struct TexturePayload;
 
+    /// The kind of the one record of a list's last barrier batch, when it held one.
+    enum class SingleBarrier : uint8_t
+    {
+        None,    ///< The last batch held more than one record, or the list has recorded none since acquisition.
+        Global,  ///< One global barrier, `BarrierScratch::lastGlobal`.
+        Buffer,  ///< One buffer barrier, `BarrierScratch::lastBuffer`.
+        Texture, ///< One texture barrier, `BarrierScratch::lastTexture`.
+    };
+
     /// The arrays a command list lowers one barrier batch into before its native `Barrier` call; the list's own, so
-    /// recording takes no lock, and grown, never shrunk. They hold the last batch until the next one clears them.
+    /// recording takes no lock, and grown, never shrunk. They hold the last batch until the next one clears them, and with
+    /// it, when the batch was one record, that record: a batch that repeats it sends the arrays again without lowering.
     struct BarrierScratch
     {
         std::vector<D3D12_GLOBAL_BARRIER> globals;   ///< The batch's global barriers.
         std::vector<D3D12_BUFFER_BARRIER> buffers;   ///< The batch's buffer barriers.
         std::vector<D3D12_TEXTURE_BARRIER> textures; ///< The batch's texture barriers.
+        SingleBarrier single = SingleBarrier::None;  ///< The kind of the last batch's one record; reset at each acquisition.
+        GlobalBarrier lastGlobal;                    ///< The last batch's record when `single` is `Global`.
+        BufferBarrier lastBuffer;                    ///< The last batch's record when `single` is `Buffer`.
+        TextureBarrier lastTexture;                  ///< The last batch's record when `single` is `Texture`.
     };
 
     /// What one side of a barrier names, which decides how its accesses lower.

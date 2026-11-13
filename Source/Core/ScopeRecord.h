@@ -15,10 +15,11 @@ namespace rojoRHI::core {
     inline constexpr uint32_t kNoTimestamp = UINT32_MAX;
 
     /// One scope as a command list recorded it: the label, a view into the frame arena or a static default, the depth, and
-    /// the backend's timestamp pair.
+    /// the backend's timestamp pair. On a device without scope timings the label may be the caller's own text instead,
+    /// valid only inside the recording entry; such a record is never submitted.
     struct ScopeRecord
     {
-        std::string_view label; ///< The scope's label, valid until the frame slot of its list is rewound.
+        std::string_view label; ///< The scope's label, valid until the frame slot of its list is rewound (see above).
         uint32_t depth = 0;     ///< Nesting depth; zero for an outermost scope.
         /// The index of the scope's begin timestamp in the backend's storage for the frame slot; the end timestamp is the
         /// next index. A backend that times scopes sets it on the record right after the core entry that recorded the scope;

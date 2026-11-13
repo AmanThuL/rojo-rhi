@@ -284,8 +284,9 @@ TEST_CASE("setPipeline with a compute pipeline sets it at once and a dispatch af
     CHECK(binding.graphicsPipeline == nullptr);
     before = recordCalls(list);
     list.dispatch(1, 1, 1);
-    // The first dispatch also binds the root: SetComputeRootShaderResourceView and Dispatch.
-    CHECK(recordCalls(list) - before == 2u);
+    // The first dispatch also sets the global root signature and binds the root: SetComputeRootSignature,
+    // SetComputeRootShaderResourceView and Dispatch.
+    CHECK(recordCalls(list) - before == 3u);
     before = recordCalls(list);
     list.setPipeline(pipeline);
     // The native list holds the pipeline already.
@@ -315,6 +316,7 @@ TEST_CASE("setRoot then dispatch writes the compute root once; a second dispatch
     CommandList list = device.acquireCommandList(QueueType::Graphics, "test.root");
     list.setPipeline(pipeline);
     const d3d12::Binding& binding = stateOf(list).binding;
+    bool first = true;
     for (const Buffer output : outputs)
     {
         uint64_t before = recordCalls(list);
@@ -324,8 +326,9 @@ TEST_CASE("setRoot then dispatch writes the compute root once; a second dispatch
         CHECK(binding.computeRootDirty);
         before = recordCalls(list);
         list.dispatch(1, 1, 1);
-        // SetComputeRootShaderResourceView and Dispatch.
-        CHECK(recordCalls(list) - before == 2u);
+        // SetComputeRootShaderResourceView and Dispatch, after SetComputeRootSignature at the list's first dispatch.
+        CHECK(recordCalls(list) - before == (first ? 3u : 2u));
+        first = false;
         CHECK_FALSE(binding.computeRootDirty);
         // The graphics side still owes the root to the next draw.
         CHECK(binding.graphicsRootDirty);
@@ -424,8 +427,8 @@ TEST_CASE("dispatchIndirect is one ExecuteIndirect after the flush", "[d3d12]")
     (void)list.pushRoot(rootOf(device, output, 2, 3));
     uint64_t before = recordCalls(list);
     list.dispatchIndirect(device.address(args, kRecordOffset));
-    // SetComputeRootShaderResourceView and ExecuteIndirect.
-    CHECK(recordCalls(list) - before == 2u);
+    // SetComputeRootSignature at the list's first dispatch, SetComputeRootShaderResourceView and ExecuteIndirect.
+    CHECK(recordCalls(list) - before == 3u);
     before = recordCalls(list);
     list.dispatchIndirect(device.address(args, kRecordOffset));
     // ExecuteIndirect alone.

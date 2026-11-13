@@ -25,15 +25,15 @@ since it was reused and grows by one list when it runs out. A list the pool grow
 - an `ID3D12CommandAllocator` and an `ID3D12GraphicsCommandList9` of its type (direct, compute or
   copy), the list made closed by `CreateCommandList1`; both are named
   `rojorhi.list.<slot>.<graphics|compute|copy>.<ordinal>`, and each is one `nativeCreateCalls`;
-- its `ListState`: the root binding, the barrier scratch, the timestamp heaps and a UTF-16 scratch
-  string for labels.
+- its `ListState`: the root binding, the barrier scratch, the timestamp heaps, its last upload and
+  UTF-16 strings for its name and its last event label.
 
 No two lists share an allocator, so recording takes no lock and lists record on any thread.
 
 Acquisition runs the core's `beginList`, then `Reset(allocator)`, and clears the binding and the
-timestamp claims. A Graphics list then sets both shader-visible heaps and both the graphics and
-compute global root signatures (4 native calls); a Compute list sets the heaps and the compute
-global root signature (3); a Copy list records nothing more (1). The native list carries its name
+timestamp claims. A Graphics list then sets both shader-visible heaps and the graphics global root
+signature (3 native calls); a Compute list sets the heaps (2); a Copy list records nothing more (1).
+The compute root signature waits for the first dispatch. The native list carries its name
 across recordings and `SetName` runs only when the new label differs from the one it carries, so a
 list acquired again under the same label sends none.
 
@@ -56,13 +56,15 @@ there, so the backend keeps no per-list fallback.
 `setRoot` runs the core's check, resolves the address with `rootAddress` (the directory entry of
 `addr.lo`, whose GPU base plus `addr.hi`; 0 when none, which the core rejects in Debug), stores it
 in the list's `Binding` and sets both `graphicsRootDirty` and `computeRootDirty`. It makes no
-native call. `pushRoot` is the public template over `uploadFrameData` and `setRoot`.
+native call. `pushRoot` is the public template over `uploadFrameData` and `setRoot`: the list keeps
+its last upload's address and GPU address, so a root it just uploaded skips the directory, and an
+upload of 16 to 256 bytes is copied inline in 16-byte moves, not through a `memcpy` call.
 
 `Binding` also holds `drawIdDirty` (true after acquisition), which root signature the compute side
-holds (`Global` or `Kernel`) and the pipeline each side holds. A draw or dispatch will bind the root
-address on its side when that side's flag is set; those entries do not record yet. The native list
-has one pipeline-state slot for both sides, so setting a pipeline clears the other side's
-recorded pipeline.
+holds (none yet, `Global`, `Kernel` or `Foreign`) and the pipeline each side holds. A draw or
+dispatch binds the root address on its side when that side's flag is set. The native list has one
+pipeline-state slot for both sides, so setting a pipeline clears the other side's recorded
+pipeline.
 
 The fill kernel leaves the compute side in `Kernel` with its pipeline and sets
 `computeRootDirty`, and clears the recorded graphics pipeline. The next dispatch therefore sets the
@@ -151,8 +153,9 @@ is valid usage: the caller states there the dependencies its later lists rely on
 
 `CommandList::barrier` records one `Barrier` call per batch with one group per non-empty kind
 (globals, buffers, textures), because the layer warns on an empty group; an empty batch records
-nothing. Buffer barriers cover the whole buffer: the range is widened, ordering more than asked and
-never less. RojoRHI never calls `ResourceBarrier`. The tables of chapter 09 apply, refined as
+nothing; a batch of one record equal to the list's last batch of one sends the scratch again,
+unlowered. Buffer barriers cover the whole buffer: the range is widened, ordering more than asked
+and never less. RojoRHI never calls `ResourceBarrier`. The tables of chapter 09 apply, refined as
 follows. The syncs below are the lowering before narrowing: each side's sync is then narrowed to
 the bits compatible with that side's access, as masked for the queue and the layout (`narrowSync`).
 A `SYNC_ALL` sync is kept, a side with `NO_ACCESS` drops only `CLEAR_UNORDERED_ACCESS_VIEW`
@@ -204,8 +207,9 @@ in the backend page) and, with render passes, a pass's own resolve transitions.
 
 ## Scopes and timestamps
 
-`beginScope` calls the core, then `BeginEvent` (legacy Unicode metadata: the label as NUL-terminated
-UTF-16 in the list's scratch) and `EndQuery` of a timestamp at the even index of a claimed pair;
+`beginScope` calls the core, then `BeginEvent` (legacy Unicode metadata: the caller's label as
+NUL-terminated UTF-16, widened only when it differs from the list's last event label) and `EndQuery`
+of a timestamp at the even index of a claimed pair;
 `endScope` writes the odd index, then `EndEvent`. Each list owns its `ListTimestamps`: query heaps
 of 256 queries (`TIMESTAMP`; `COPY_QUEUE_TIMESTAMP` on a Copy list), each with a committed
 `READBACK` buffer of 2,048 bytes that is mapped once. The next heap and buffer are made when a pair

@@ -174,6 +174,15 @@ namespace rojoRHI {
         state->kind = mesh ? d3d12::PipelineKind::Mesh : d3d12::PipelineKind::Graphics;
         state->listTopology = mesh ? D3D_PRIMITIVE_TOPOLOGY_UNDEFINED : d3d12::listTopology(desc.primitive);
         state->depthBias = desc.raster.depthBias;
+        state->readsStencilReference = desc.depthStencil.stencilTest;
+        for (const ColorTarget& color : desc.colors)
+        {
+            const auto constant = [](BlendFactor factor) { return factor == BlendFactor::Constant || factor == BlendFactor::OneMinusConstant; };
+            const BlendState& blend = color.blend;
+            state->readsBlendFactor =
+                state->readsBlendFactor ||
+                (blend.enable && (constant(blend.srcColor) || constant(blend.dstColor) || constant(blend.srcAlpha) || constant(blend.dstAlpha)));
+        }
         const std::vector<std::byte> key = d3d12::canonicalKey(
             desc,
             d3d12::StageDxil{

@@ -614,10 +614,10 @@ TEST_CASE("a non-ASCII label reaches the event intact and an empty label uses th
     CommandList list = device.acquireCommandList(QueueType::Graphics, "test.list");
     const d3d12::ListState& state = stateOf(list);
     list.beginScope(kLabel);
-    CHECK(state.scratch == expected);
+    CHECK(state.eventLabel == expected);
     list.endScope();
     list.beginScope("");
-    CHECK(state.scratch == L"rojorhi.scope.unnamed");
+    CHECK(state.eventLabel == L"rojorhi.scope.unnamed");
     CHECK(lastScope(list).label == "rojorhi.scope.unnamed");
     list.endScope();
     list.end();

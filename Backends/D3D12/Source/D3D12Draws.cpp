@@ -37,10 +37,19 @@ namespace rojoRHI {
         } // namespace
 
         //==============================================================================================================
-        void applyIndexBuffer(CommandListImpl& list, const BufferPayload& buffer, IndexType type)
+        void applyIndexBuffer(CommandListImpl& list, Buffer indices, IndexType type)
         {
+            DynamicState& dynamic = list.state.dynamic;
+            if (indices == dynamic.indexHandle && type == dynamic.indexType)
+            {
+                return;
+            }
+            // A record's payload is fixed from creation to retirement, so it is read with one load and no lock (ADR 0020).
+            const auto& buffer = *static_cast<const BufferPayload*>(list.core.device->pool<Buffer>().native(indices));
             const D3D12_INDEX_BUFFER_VIEW view = indexView(buffer, type);
-            D3D12_INDEX_BUFFER_VIEW& held = list.state.dynamic.indexBuffer;
+            dynamic.indexHandle = indices;
+            dynamic.indexType = type;
+            D3D12_INDEX_BUFFER_VIEW& held = dynamic.indexBuffer;
             if (held.BufferLocation == view.BufferLocation && held.SizeInBytes == view.SizeInBytes && held.Format == view.Format)
             {
                 return;
@@ -96,10 +105,8 @@ namespace rojoRHI {
             return;
         }
         prepareDirect(list);
-        // A record's payload is fixed from creation to retirement, so it is read with one load and no lock (ADR 0020).
-        const auto& buffer = *static_cast<const d3d12::BufferPayload*>(list.core.device->pool<Buffer>().native(indices));
         // The view covers the whole buffer, so draws of one buffer share it and firstIndex is the draw's start index.
-        d3d12::applyIndexBuffer(list, buffer, type);
+        d3d12::applyIndexBuffer(list, indices, type);
         list.state.list->DrawIndexedInstanced(count, instances, firstIndex, baseVertex, firstInstance);
         core::noteNativeCall(list.core);
     }

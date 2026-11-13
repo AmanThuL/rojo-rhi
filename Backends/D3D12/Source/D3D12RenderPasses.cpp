@@ -190,6 +190,41 @@ namespace rojoRHI {
                 depth.StencilEndingAccess.Type = D3D12_RENDER_PASS_ENDING_ACCESS_TYPE_NO_ACCESS;
             }
         }
+
+        //==============================================================================================================
+        bool sameClear(const ClearColor& a, const ClearColor& b)
+        {
+            return a.r == b.r && a.g == b.g && a.b == b.b && a.a == b.a;
+        }
+
+        //==============================================================================================================
+        /// Returns true when `desc` names the attachments `pass` was last described from, so its description stands. A NaN
+        /// clear value never compares equal, so such a pass is described again.
+        bool repeatsPass(const d3d12::PassStorage& pass, const RenderPassDesc& desc)
+        {
+            if (!pass.reusable || desc.colors.size() != pass.targetCount || (desc.depth.texture.bits != 0) != pass.hasDepth)
+            {
+                return false;
+            }
+            for (uint32_t i = 0; i < pass.targetCount; ++i)
+            {
+                const ColorAttachment& a = desc.colors[i];
+                const ColorAttachment& b = pass.colors[i];
+                if (a.texture != b.texture || a.mip != b.mip || a.layer != b.layer || a.load != b.load || a.store != b.store || !sameClear(a.clear, b.clear) ||
+                    a.resolve != b.resolve)
+                {
+                    return false;
+                }
+            }
+            if (!pass.hasDepth)
+            {
+                return true;
+            }
+            const DepthAttachment& a = desc.depth;
+            const DepthAttachment& b = pass.depthAttachment;
+            return a.texture == b.texture && a.mip == b.mip && a.layer == b.layer && a.load == b.load && a.store == b.store && a.clearDepth == b.clearDepth &&
+                   a.stencilLoad == b.stencilLoad && a.stencilStore == b.stencilStore && a.clearStencil == b.clearStencil;
+        }
     } // namespace
 
     //==================================================================================================================
@@ -204,46 +239,44 @@ namespace rojoRHI {
         // record stays.
         state.binding.pipeline = nullptr;
         d3d12::PassStorage& pass = state.pass;
-        // Payloads are fixed while their textures live, so each is read with one acquire load and no lock (ADR 0020).
-        const auto& texturePool = list.core.device->pool<Texture>();
-        pass.targetCount = static_cast<uint32_t>(desc.colors.size());
-        pass.resolveCount = 0;
-        for (uint32_t i = 0; i < pass.targetCount; ++i)
+        // A pass with the attachments of the list's last pass, which had no resolve, keeps its description.
+        if (!repeatsPass(pass, desc))
         {
-            const ColorAttachment& color = desc.colors[i];
-            const auto& payload = *static_cast<const d3d12::TexturePayload*>(texturePool.native(color.texture));
-            const auto* resolve = color.resolve.bits == 0 ? nullptr : static_cast<const d3d12::TexturePayload*>(texturePool.native(color.resolve));
-            describeTarget(pass.targets[i], color, payload, resolve, pass);
-        }
-        // Every resolve target moves to the resolve's layout in one call; EndRenderPass moves it back.
-        if (pass.resolveCount > 0)
-        {
-            recordResolveBarriers(list, pass.resolveBarriers.data(), pass.resolveCount);
-        }
-        pass.hasDepth = desc.depth.texture.bits != 0;
-        if (pass.hasDepth)
-        {
-            describeDepth(pass.depth, desc.depth, *static_cast<const d3d12::TexturePayload*>(texturePool.native(desc.depth.texture)));
+            // Payloads are fixed while their textures live, so each is read with one acquire load and no lock (ADR 0020).
+            const auto& texturePool = list.core.device->pool<Texture>();
+            pass.targetCount = static_cast<uint32_t>(desc.colors.size());
+            pass.resolveCount = 0;
+            for (uint32_t i = 0; i < pass.targetCount; ++i)
+            {
+                const ColorAttachment& color = desc.colors[i];
+                const auto& payload = *static_cast<const d3d12::TexturePayload*>(texturePool.native(color.texture));
+                const auto* resolve = color.resolve.bits == 0 ? nullptr : static_cast<const d3d12::TexturePayload*>(texturePool.native(color.resolve));
+                describeTarget(pass.targets[i], color, payload, resolve, pass);
+                pass.colors[i] = color;
+            }
+            // Every resolve target moves to the resolve's layout in one call; EndRenderPass moves it back.
+            if (pass.resolveCount > 0)
+            {
+                recordResolveBarriers(list, pass.resolveBarriers.data(), pass.resolveCount);
+            }
+            pass.hasDepth = desc.depth.texture.bits != 0;
+            if (pass.hasDepth)
+            {
+                describeDepth(pass.depth, desc.depth, *static_cast<const d3d12::TexturePayload*>(texturePool.native(desc.depth.texture)));
+                pass.depthAttachment = desc.depth;
+            }
+            pass.reusable = pass.resolveCount == 0;
         }
         // Any stage may store through an address, and the backend cannot tell which pipelines do, so every pass allows UAV writes.
         state.list->BeginRenderPass(pass.targetCount, pass.targets.data(), pass.hasDepth ? &pass.depth : nullptr, D3D12_RENDER_PASS_FLAG_ALLOW_UAV_WRITES);
         core::noteNativeCall(list.core);
         ++list.core.counts.encodersOpened;
-        // The native list keeps its dynamic state across passes, so the starting values go out only where it holds another or
-        // an unknown value; the depth bias is recorded, and sent by the pipeline that enables it.
+        // The native list keeps its dynamic state across passes, so a starting value is owed only where it holds another or an
+        // unknown value, and goes out with the first draw that reads it; the depth bias is recorded, and sent by the pipeline
+        // that enables it.
         d3d12::DynamicState& dynamic = state.dynamic;
-        if (dynamic.stencilReference != uint8_t{ 0 })
-        {
-            state.list->OMSetStencilRef(0);
-            core::noteNativeCall(list.core);
-            dynamic.stencilReference = uint8_t{ 0 };
-        }
-        if (dynamic.blendFactor != kStartingBlendFactor)
-        {
-            state.list->OMSetBlendFactor(kStartingBlendFactor.data());
-            core::noteNativeCall(list.core);
-            dynamic.blendFactor = kStartingBlendFactor;
-        }
+        dynamic.stencilReferenceOwed = dynamic.stencilReference != uint8_t{ 0 };
+        dynamic.blendFactorOwed = dynamic.blendFactor != kStartingBlendFactor;
         dynamic.depthBias = {};
     }
 

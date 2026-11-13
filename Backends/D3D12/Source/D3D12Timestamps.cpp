@@ -166,10 +166,15 @@ namespace rojoRHI::d3d12 {
     uint32_t ListTimestamps::claimPair(CommandListImpl& list)
     {
         const ListState& state = list.state;
-        // A device created without scope timings claims nothing, so its lists make no query heap or readback buffer and
-        // resolve nothing at `end`.
-        const DeviceImpl& device = deviceOf(list);
-        if (!device.core.timesScopes() || next + 2 > kMaxQueries || state.ordinal > kMaxOrdinal || !writesTimestamps(device, state.type))
+        if (gate == Gate::Unknown) [[unlikely]]
+        {
+            // A device created without scope timings claims nothing, so its lists make no query heap or readback buffer and
+            // resolve nothing at `end`.
+            const DeviceImpl& device = deviceOf(list);
+            const bool times = device.core.timesScopes() && state.ordinal <= kMaxOrdinal && writesTimestamps(device, state.type);
+            gate = times ? Gate::Open : Gate::Closed;
+        }
+        if (gate == Gate::Closed || next + 2 > kMaxQueries)
         {
             return core::kNoTimestamp;
         }
@@ -187,6 +192,7 @@ namespace rojoRHI::d3d12 {
     void ListTimestamps::reset()
     {
         next = 0;
+        gate = Gate::Unknown;
         open.clear();
     }
 
