@@ -249,8 +249,9 @@ magnitude by `clamp` when `clamp` is not zero. The values apply only while the b
 `RasterState::depthBias` set, and they persist across `setPipeline` until the render pass ends.
 The backend re-issues them after a pipeline change where native state does not carry them: Metal 4
 has no enable bit, so its backend sets a zero bias for pipelines without `depthBias` and restores
-the values afterwards; whether D3D12 keeps them across `SetPipelineState` is unverified, so its
-backend re-issues them at each `setPipeline` of a `depthBias` pipeline.
+the values afterwards; D3D12 does not keep them across `SetPipelineState` on NVIDIA's driver (an
+RTX 3080 Ti on driver 621.14 drops them, also between two `depthBias` pipelines; other vendors are
+unverified), so its backend re-issues them at each `setPipeline` of a `depthBias` pipeline.
 
 On D3D12, dynamic depth-bias values need the pipeline flag
 `D3D12_PIPELINE_STATE_FLAG_DYNAMIC_DEPTH_BIAS` and the `DynamicDepthBiasSupported` cap, which

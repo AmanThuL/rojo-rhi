@@ -139,14 +139,16 @@ A memory dependency and layout transition for a range of one texture.
 #### Mapping
 | | Metal 4 | D3D12 | Vulkan |
 |---|---|---|---|
-| Lowering | folded into the batch's stage barrier; layouts ignored | `D3D12_TEXTURE_BARRIER` with `LayoutBefore` and `LayoutAfter`; `Undefined` adds `D3D12_TEXTURE_BARRIER_FLAG_DISCARD` | `VkImageMemoryBarrier2` with `oldLayout` and `newLayout` |
+| Lowering | folded into the batch's stage barrier; layouts ignored | `D3D12_TEXTURE_BARRIER` with `LayoutBefore` and `LayoutAfter`; `Undefined` adds `D3D12_TEXTURE_BARRIER_FLAG_DISCARD` and, in the same call, a global barrier from the writes of the source stages | `VkImageMemoryBarrier2` with `oldLayout` and `newLayout` |
 | Cost | native | native | native |
 
 A barrier from `Undefined` names no source access (`VU-rojo-sync-0016`), yet it still orders the
 writes before it (`VU-rojo-sync-0024`). On Vulkan it lowers with `srcAccessMask` widened to the
 write accesses its source stages perform, so those writes are made available before the layout
-changes. On D3D12 it lowers with `AccessBefore` `D3D12_BARRIER_ACCESS_NO_ACCESS` paired with its
-`SyncBefore` stages, taken to wait for those writes (*unverified*).
+changes. On D3D12 the texture barrier has `AccessBefore` `D3D12_BARRIER_ACCESS_NO_ACCESS` with its
+`SyncBefore` stages, which does not wait for those writes on NVIDIA's driver (an RTX 3080 Ti on
+driver 621.14 let the work after the discard overtake them), so the same `Barrier` call carries a
+global barrier from the write accesses the source stages perform to the barrier's destination.
 
 ### `CommandList::barrier`
 
