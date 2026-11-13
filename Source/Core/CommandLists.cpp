@@ -127,14 +127,18 @@ namespace rojoRHI::core {
             reinterpret_cast<uintptr_t>(list.page.host) % kArenaPageAlignment == 0, "an arena page's host memory is not aligned to kArenaPageAlignment"
         );
         list.cursor = list.page.host;
-        list.limit = list.page.host + list.page.size;
+        // The list bumps only within the bytes an Addr reaches (VU-rojo-buffer-0011): on a page larger than the reach, which
+        // an upload above it created and a later claim may reuse, the list claims a new page there. An upload larger than the
+        // reach still lands at offset zero of a page of its own. Capping the limit here keeps the bump at the compare it had.
+        const uint64_t maxAddrOffset = core.capabilities().limits.maxAddrOffset;
+        list.limit = list.page.host + (list.page.size < maxAddrOffset ? list.page.size : maxAddrOffset);
     }
 
     //==================================================================================================================
     ArenaAllocation bumpArenaPageSlow(DeviceCore& core, CommandListCore& list, uint64_t size, uint32_t alignment, ArenaPageSource source, void* context)
     {
         uint64_t offset = list.page.host == nullptr ? 0 : (pageUsedBytes(list) + alignment - 1) & ~(uint64_t{ alignment } - 1);
-        if (list.page.host == nullptr || offset + size > list.page.size)
+        if (list.page.host == nullptr || offset + size > static_cast<uint64_t>(list.limit - list.page.host))
         {
             // A new page's offset zero satisfies every alignment.
             claimArenaPage(core, list, size, source, context);

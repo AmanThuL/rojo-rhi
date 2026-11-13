@@ -79,7 +79,10 @@ A list claims a whole page and bumps its own cursor (`CommandListCore::cursor`, 
 with no lock. Claiming takes the arena's mutex, and creating a page, when no unclaimed page of the slot fits, is
 a growth event. A new page has max(1 MiB, request) bytes, falling back to exactly the request only
 when that maximum exceeds `Limits::maxBufferSize`. A request above `maxBufferSize`, or a page the
-backend cannot create, is fatal in every build, as the reference says. `rewind(slot)`, called from
+backend cannot create, is fatal in every build, as the reference says. A claim sets the list's
+`limit` at the page's size or `Limits::maxAddrOffset`, whichever is smaller, so an upload that
+would end past the reach of an `Addr` claims a new page, and the bump keeps its one compare; an
+upload larger than the reach lands at offset zero of a page of its own. `rewind(slot)`, called from
 `beginFrame` when the slot is reused, makes every page claimable again; pages keep their memory.
 Claiming is the one place Release recording takes locks (ADR 0020): the arena's mutex and the
 buffer pool's inside it when a page is created. A Debug build then takes the buffer pool's lock

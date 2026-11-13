@@ -230,6 +230,50 @@ TEST_CASE("the frame arena counts its pages", "[core]")
 }
 
 //======================================================================================================================
+TEST_CASE("a list bumps an arena page only as far as maxAddrOffset and claims a new page beyond it", "[core]")
+{
+    // The reach is lowered below the standard 1 MiB page, so every page is larger than the reach, as a page made for an
+    // upload above 512 MiB is at the portable floor, and the test allocates no such page.
+    constexpr uint64_t kReach = 64 * 1024;
+    constexpr size_t kChunk = 4 * 1024;
+    Device device = *createDevice();
+    core::DeviceCore& core = core::coreOf(device);
+    core.capabilities().limits.maxAddrOffset = kReach;
+    device.beginFrame();
+    CommandList list = device.acquireCommandList(QueueType::Graphics, "test.list");
+    const std::vector<std::byte> chunk(kChunk);
+    std::vector<Addr> addrs;
+    for (uint64_t i = 0; i < 2 * kReach / kChunk + 1; ++i)
+    {
+        addrs.push_back(list.uploadFrameData(chunk));
+    }
+    for (const Addr& addr : addrs)
+    {
+        // Every byte of every upload lies below maxAddrOffset (VU-rojo-buffer-0011).
+        CHECK(addr.hi + kChunk <= kReach);
+    }
+    // The page holds exactly the uploads that end at the reach; the next one starts a page at offset zero.
+    constexpr size_t kPerPage = kReach / kChunk;
+    CHECK(addrs[kPerPage - 1].lo == addrs[0].lo);
+    CHECK(addrs[kPerPage - 1].hi == kReach - kChunk);
+    CHECK(addrs[kPerPage].lo != addrs[0].lo);
+    CHECK(addrs[kPerPage].hi == 0);
+    CHECK(addrs[2 * kPerPage].hi == 0);
+    CHECK(core.arena().growths() == 3);
+
+    // An upload above the reach still lands at offset zero of a page of its own, and the next upload claims another page.
+    const std::vector<std::byte> large(kReach + kChunk);
+    const Addr above = list.uploadFrameData(large);
+    const Addr after = list.uploadFrameData(chunk);
+    CHECK(above.hi == 0);
+    CHECK(after.lo != above.lo);
+    CHECK(after.hi == 0);
+    submit(device, list);
+    device.endFrame();
+    destroyDevice(device);
+}
+
+//======================================================================================================================
 TEST_CASE("a render pass records its attachments, a pipeline its fields in Debug, and both clear when the pass ends", "[core]")
 {
     test::PassKit kit;

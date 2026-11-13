@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- A command list bumps a frame-arena page only up to `Limits::maxAddrOffset` and then claims a new
+  page, so frame data on a page larger than the reach of an `Addr`, 512 MiB at the portable floor,
+  no longer lands where its address cannot reach it. An upload larger than the reach still lands at
+  offset zero of a page of its own.
 - D3D12 scopes and render passes widen the caller's label for their PIX event instead of reading
   the core's copy back from the frame arena, upload memory the CPU reads uncached; the read cost
   about 590 ns per scope on an RTX 3080 Ti ([the round's
