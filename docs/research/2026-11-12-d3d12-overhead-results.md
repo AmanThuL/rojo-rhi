@@ -27,8 +27,8 @@ drop (an end SM clock of 210 to 1,245 MHz, below 95% of the round's median start
 MHz, with a temperature rise of at most 4.3 °C against the rule's 10): 9 of C4 at `K` 100,000, 11
 of C8 at `K` 10,000 and 2 of C7 at `K` 100,000. C7's reruns were nominal; C4 at `K` 100,000 and C8
 at `K` 10,000 each had a process discarded four times and are reported not run. These are the
-longest processes of the round, 14 to 24 s each. Nothing else was built, tested or timed on the machine during the round; Wallpaper Engine and
-Dropbox were stopped, and no overlay was running. Raw results, logs, `summary.json`, `analysis.txt`
+longest processes of the round, 14 to 24 s each. Nothing else was built, tested or timed on the
+machine during the round; Wallpaper Engine and Dropbox were stopped, and no overlay was running. Raw results, logs, `summary.json`, `analysis.txt`
 and a SHA-256 manifest are kept outside the published tree, under
 `rojo-rhi-evidence/t2-d3d12/2026-11-12/` (`SHA256SUMS` SHA-256
 `50461b5485172a0f60ced820c170de934d6dc8f19051da8802983fd74ac9f0c0`).
