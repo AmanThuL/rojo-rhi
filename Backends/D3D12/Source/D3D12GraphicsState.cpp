@@ -126,6 +126,22 @@ namespace rojoRHI {
                 }
                 binding.graphicsRootDirty = false;
             }
+            DynamicState& dynamic = list.state.dynamic;
+            if (dynamic.stencilReferenceOwed && pipeline.readsStencilReference) [[unlikely]]
+            {
+                list.state.list->OMSetStencilRef(0);
+                core::noteNativeCall(list.core);
+                dynamic.stencilReference = uint8_t{ 0 };
+                dynamic.stencilReferenceOwed = false;
+            }
+            if (dynamic.blendFactorOwed && pipeline.readsBlendFactor) [[unlikely]]
+            {
+                const std::array<float, 4> zeros = {};
+                list.state.list->OMSetBlendFactor(zeros.data());
+                core::noteNativeCall(list.core);
+                dynamic.blendFactor = zeros;
+                dynamic.blendFactorOwed = false;
+            }
         }
     } // namespace d3d12
 
@@ -206,7 +222,15 @@ namespace rojoRHI {
     {
         CommandListImpl& list = CommandListImpl::of(*this);
         core::setStencilReference(list.core);
-        std::optional<uint8_t>& held = list.state.dynamic.stencilReference;
+        d3d12::DynamicState& dynamic = list.state.dynamic;
+        if (dynamic.stencilReferenceOwed && reference == 0)
+        {
+            // The pass's starting value, still owed: the first draw that reads it sends it.
+            return;
+        }
+        // Any other value replaces the starting one.
+        dynamic.stencilReferenceOwed = false;
+        std::optional<uint8_t>& held = dynamic.stencilReference;
         if (held == reference)
         {
             return;
@@ -222,7 +246,14 @@ namespace rojoRHI {
         CommandListImpl& list = CommandListImpl::of(*this);
         core::setBlendConstants(list.core);
         const std::array<float, 4> factor{ r, g, b, a };
-        std::optional<std::array<float, 4>>& held = list.state.dynamic.blendFactor;
+        d3d12::DynamicState& dynamic = list.state.dynamic;
+        if (dynamic.blendFactorOwed && factor == std::array<float, 4>{})
+        {
+            // The pass's starting value, still owed: the first draw that reads it sends it.
+            return;
+        }
+        dynamic.blendFactorOwed = false;
+        std::optional<std::array<float, 4>>& held = dynamic.blendFactor;
         if (held == factor)
         {
             return;

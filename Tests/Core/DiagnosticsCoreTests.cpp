@@ -179,9 +179,9 @@ TEST_CASE("a declaration no longer waits once the list is acquired again", "[cor
 }
 
 //======================================================================================================================
-TEST_CASE("a scope's label is copied while recording", "[core]")
+TEST_CASE("a scope's label is copied while recording on a device with scope timings", "[core]")
 {
-    Device device = *createDevice();
+    Device device = *createDevice(DeviceDesc{ .scopeTimings = true });
     device.beginFrame();
     CommandList list = device.acquireCommandList(QueueType::Graphics, "core.list");
     std::string label = "temporary.label";
@@ -192,6 +192,51 @@ TEST_CASE("a scope's label is copied while recording", "[core]")
     REQUIRE(state.scopeLog.size() == 1);
     CHECK(state.scopeLog[0].label == "temporary.label");
     CHECK(state.scopeLog[0].depth == 0);
+    submit(device, list);
+    device.endFrame();
+    destroyDevice(device);
+}
+
+//======================================================================================================================
+TEST_CASE("a scope that repeats the list's last label shares its copy", "[core]")
+{
+    Device device = *createDevice(DeviceDesc{ .scopeTimings = true });
+    device.beginFrame();
+    CommandList list = device.acquireCommandList(QueueType::Graphics, "core.list");
+    const std::string first = "repeated.label";
+    const std::string second = "repeated.label";
+    list.beginScope(first);
+    list.endScope();
+    list.beginScope(second);
+    list.endScope();
+    list.beginScope("other.label");
+    list.endScope();
+    const core::CommandListCore& state = core::coreOf(list);
+    REQUIRE(state.scopeLog.size() == 3);
+    CHECK(state.scopeLog[0].label.data() != first.data());
+    CHECK(state.scopeLog[1].label.data() == state.scopeLog[0].label.data());
+    CHECK(state.scopeLog[1].label == "repeated.label");
+    CHECK(state.scopeLog[2].label == "other.label");
+    CHECK(state.scopeLog[2].label.data() != state.scopeLog[0].label.data());
+    submit(device, list);
+    device.endFrame();
+    destroyDevice(device);
+}
+
+//======================================================================================================================
+TEST_CASE("a device without scope timings keeps the caller's label and copies none", "[core]")
+{
+    Device device = *createDevice();
+    device.beginFrame();
+    CommandList list = device.acquireCommandList(QueueType::Graphics, "core.list");
+    const std::string label = "untimed.label";
+    list.beginScope(label);
+    const core::CommandListCore& state = core::coreOf(list);
+    REQUIRE(state.scopeLog.size() == 1);
+    // No record of the device is submitted, so the backend reads the label only inside the entry.
+    CHECK(state.scopeLog[0].label.data() == label.data());
+    CHECK(state.page.host == nullptr);
+    list.endScope();
     submit(device, list);
     device.endFrame();
     destroyDevice(device);

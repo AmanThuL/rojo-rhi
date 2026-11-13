@@ -153,8 +153,8 @@ binding](d3d12-recording.md#root-binding)); the next dispatch or draw flushes wh
 
 The compute flush, in this order, each call only where the list holds something else:
 
-- The global root signature, when a backend kernel left its own there. The switch drops the root
-  arguments, so the root becomes dirty again.
+- The global root signature, at the list's first dispatch or when a backend kernel left its own
+  there. The switch drops the root arguments, so the root becomes dirty again.
 - The pipeline state.
 - `SetComputeRootShaderResourceView(0, root)` when the side is dirty and a root was set; a list
   that never set one binds none.
@@ -202,9 +202,10 @@ viewport, scissor, draw, end) costs 14 calls in a list's first pass and 8 in eac
 `endRenderPass` calls `EndRenderPass`, then one `Barrier` that returns each resolve target to
 `RENDER_TARGET`, then ends the scope. The descriptions, the resolve parameters and the barriers
 live in a fixed `PassStorage` on the list, which the runtime reads until `EndRenderPass`, so a
-pass allocates nothing. Each `Barrier` adds one to `nativeBarriers`, each pass one to
+pass allocates nothing; a pass with the attachments of the list's last pass, which had no resolve,
+keeps that description. Each `Barrier` adds one to `nativeBarriers`, each pass one to
 `encodersOpened`. A pass with no resolve costs `BeginRenderPass`, `EndRenderPass`, its scope's four
-calls and at most the two starting values.
+calls and, at a draw that reads them, at most the two starting values.
 
 ## Dynamic state
 
@@ -213,10 +214,10 @@ viewport, the scissor, the topology and the index buffer view. All are unknown a
 acquisition, since the state a native list keeps across `Reset` is not relied on. Passes leave
 them as they are, and a setter sends a native call only when the value differs from the held one.
 
-- A pass writes `OMSetStencilRef(0)` and `OMSetBlendFactor(0, 0, 0, 0)` only where the held value
-  differs, so a list's first pass writes both and a second pass writes neither. It resets the
-  depth-bias triple to zero without a call. It sets no viewport or scissor: the reference leaves
-  them unset at a pass's start and requires them before a draw.
+- A pass owes `OMSetStencilRef(0)` and `OMSetBlendFactor(0, 0, 0, 0)` where the held value
+  differs; the first draw whose pipeline has a stencil test, or blends with a constant, sends the
+  owed value, and a setter of another value settles it. It resets the depth bias without a call.
+  It sets no viewport or scissor: the reference leaves them unset at a pass's start.
 - A pipeline created with depth bias uses `DYNAMIC_DEPTH_BIAS`. `setPipeline` of one issues
   `RSSetDepthBias` with the recorded triple every time, unfiltered, because whether the runtime
   keeps the value across `SetPipelineState` is not established. `setDepthBias` records the triple,

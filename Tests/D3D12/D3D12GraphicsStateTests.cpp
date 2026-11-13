@@ -547,12 +547,14 @@ TEST_CASE("equal dynamic state sends no call; a changed value sends one", "[d3d1
     list.setPrimitiveTopology(PrimitiveTopology::TriangleStrip);
     CHECK(recordCalls(list) - before == 1u);
     list.endRenderPass();
-    // The native list keeps its viewport and scissor across passes; the pass writes its stencil reference and blend
-    // constants back to 0, two calls.
+    // The native list keeps its viewport and scissor across passes; the pass owes its stencil reference and blend
+    // constants of 0 to the first draw whose pipeline reads them, so it sends neither.
     list.barrier({}, {}, std::array{ betweenPasses(target) });
     before = recordCalls(list);
     list.beginRenderPass(passOver(colors));
-    CHECK(recordCalls(list) - before == 5u);
+    CHECK(recordCalls(list) - before == 3u);
+    CHECK(stateOf(list).dynamic.stencilReferenceOwed);
+    CHECK(stateOf(list).dynamic.blendFactorOwed);
     list.setPipeline(pipeline);
     before = recordCalls(list);
     list.setViewport(Viewport{ .x = 1.0f, .y = 1.0f, .width = 2.0f, .height = 2.0f, .minDepth = 0.25f, .maxDepth = 0.75f });
@@ -560,6 +562,71 @@ TEST_CASE("equal dynamic state sends no call; a changed value sends one", "[d3d1
     list.setStencilReference(0);
     CHECK(recordCalls(list) - before == 0u);
     list.draw(3);
+    list.endRenderPass();
+    run(device, list, done);
+    CHECK(messages.count() == 0u);
+    device.destroy(target);
+    device.destroy(done);
+    destroyDevice(device);
+}
+
+//======================================================================================================================
+TEST_CASE("a pass's starting blend factor goes out with its first draw whose pipeline blends with the constant", "[d3d12]")
+{
+    REQUIRE(kD3D12LibrariesBuilt);
+    Device device = makeDevice();
+    const MessageCollection messages;
+    const ShaderLibrary library = loadStandard(device);
+    const Pipeline plain = standardPipeline(device, library);
+    constexpr BlendState kConstant{
+        .enable = true, .srcColor = BlendFactor::Constant, .dstColor = BlendFactor::Zero, .srcAlpha = BlendFactor::Constant, .dstAlpha = BlendFactor::Zero
+    };
+    const std::array blending{ ColorTarget{ .format = Format::RGBA8Unorm, .blend = kConstant } };
+    const Result<Pipeline> created = device.createPipeline(
+        GraphicsPipelineDesc{ .vertex = { library, "vsMain" }, .fragment = { library, "fsMain" }, .colors = blending, .label = "test.constant" }
+    );
+    REQUIRE(created.has_value());
+    const Pipeline constant = *created;
+    CHECK(payloadOf(device, constant).readsBlendFactor);
+    CHECK_FALSE(payloadOf(device, constant).readsStencilReference);
+    CHECK_FALSE(payloadOf(device, plain).readsBlendFactor);
+    const Texture target = makeTarget(device);
+    const Fence done = makeFence(device, "test.done");
+    device.beginFrame();
+    CommandList list = device.acquireCommandList(QueueType::Graphics, "test.owed");
+    const d3d12::DynamicState& dynamic = stateOf(list).dynamic;
+    toColorAttachment(list, target);
+    const std::array colors{ ColorAttachment{ .texture = target, .load = LoadOp::Clear } };
+    list.beginRenderPass(passOver(colors));
+    CHECK(dynamic.blendFactorOwed);
+    list.setPipeline(plain);
+    list.setViewport(kFull);
+    list.setScissor(kFullRect);
+    // A pipeline that reads no constant leaves the starting value owed.
+    list.draw(3);
+    CHECK(dynamic.blendFactorOwed);
+    CHECK_FALSE(dynamic.blendFactor.has_value());
+    list.setPipeline(constant);
+    uint64_t before = recordCalls(list);
+    list.draw(3);
+    // OMSetBlendFactor of zeros, then DrawInstanced.
+    CHECK(recordCalls(list) - before == 2u);
+    CHECK_FALSE(dynamic.blendFactorOwed);
+    CHECK(dynamic.blendFactor == std::array<float, 4>{});
+    // The caller's constants go out at once; the next pass owes zeros again and its constant draw sends them.
+    list.setBlendConstants(0.5f, 0.5f, 0.5f, 0.5f);
+    list.draw(3);
+    list.endRenderPass();
+    list.barrier({}, {}, std::array{ betweenPasses(target) });
+    list.beginRenderPass(passOver(colors));
+    CHECK(dynamic.blendFactorOwed);
+    list.setPipeline(constant);
+    list.setViewport(kFull);
+    list.setScissor(kFullRect);
+    before = recordCalls(list);
+    list.draw(3);
+    CHECK(recordCalls(list) - before == 2u);
+    CHECK(dynamic.blendFactor == std::array<float, 4>{});
     list.endRenderPass();
     run(device, list, done);
     CHECK(messages.count() == 0u);
@@ -830,9 +897,10 @@ TEST_CASE("C8's sequence costs the native minimum + 1", "[d3d12]")
         list.endRenderPass();
         counts[6] = recordCalls(list) - before;
     }
-    // The first pass: BeginEvent, EndQuery, BeginRenderPass and the two starting values; SetPipelineState and
-    // IASetPrimitiveTopology; RSSetViewports; RSSetScissorRects; b1 and DrawInstanced; EndRenderPass, EndQuery, EndEvent.
-    CHECK(repetitions[0] == Counts{ 0, 5, 2, 1, 1, 2, 3 });
+    // The first pass: BeginEvent, EndQuery and BeginRenderPass, its starting values owed to a draw that reads them;
+    // SetPipelineState and IASetPrimitiveTopology; RSSetViewports; RSSetScissorRects; b1 and DrawInstanced; EndRenderPass,
+    // EndQuery, EndEvent.
+    CHECK(repetitions[0] == Counts{ 0, 3, 2, 1, 1, 2, 3 });
     // Every later pass: Barrier; BeginEvent, EndQuery, BeginRenderPass; the pipeline, viewport and scissor held; DrawInstanced;
     // EndRenderPass, EndQuery, EndEvent. Eight calls, each entry at its native minimum.
     CHECK(repetitions[1] == Counts{ 1, 3, 0, 0, 0, 1, 3 });

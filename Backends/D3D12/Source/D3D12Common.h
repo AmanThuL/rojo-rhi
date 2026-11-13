@@ -14,7 +14,13 @@
 
 #include <d3d12.h>
 
+#if defined(_M_X64)
+#include <emmintrin.h>
+#endif
+
+#include <cstddef>
 #include <cstdint>
+#include <cstring>
 #include <expected>
 #include <string>
 #include <string_view>
@@ -25,6 +31,27 @@ namespace rojoRHI {
 }
 
 namespace rojoRHI::d3d12 {
+    /// Copies `size` bytes from `source` to `destination`, which do not overlap. A block of 16 to 256 bytes, as a root block
+    /// or other frame data is, moves inline in 16-byte steps, the last one ending at the block's end; `memcpy` of a size the
+    /// compiler cannot see is a call into the C runtime, which costs more than such a copy itself. Any other size calls
+    /// `memcpy`.
+    inline void copySmall(std::byte* destination, const std::byte* source, size_t size)
+    {
+#if defined(_M_X64)
+        if (size >= 16 && size <= 256)
+        {
+            for (size_t offset = 0; offset + 16 < size; offset += 16)
+            {
+                _mm_storeu_si128(reinterpret_cast<__m128i*>(destination + offset), _mm_loadu_si128(reinterpret_cast<const __m128i*>(source + offset)));
+            }
+            // The last step may cover bytes the loop already wrote, with the same values.
+            _mm_storeu_si128(reinterpret_cast<__m128i*>(destination + size - 16), _mm_loadu_si128(reinterpret_cast<const __m128i*>(source + size - 16)));
+            return;
+        }
+#endif
+        std::memcpy(destination, source, size);
+    }
+
     /// An owning pointer to a COM interface: it holds one reference, which it releases when it is reset, reassigned or
     /// destroyed. A copy takes a reference of its own.
     template<class T> class Com

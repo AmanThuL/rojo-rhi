@@ -486,6 +486,79 @@ namespace rojoRHI {
             lowered.NumPlanes = core::hasStencilPlane(payload.format) ? 2u : 1u;
             return lowered;
         }
+
+        namespace {
+            //==========================================================================================================
+            /// Returns true when two records name the same stages and accesses on each side.
+            template<class Record> bool sameSides(const Record& a, const Record& b)
+            {
+                return a.srcStage == b.srcStage && a.srcAccess == b.srcAccess && a.dstStage == b.dstStage && a.dstAccess == b.dstAccess;
+            }
+
+            //==========================================================================================================
+            /// Returns true when the batch is one record equal to the one whose lowering `scratch` holds.
+            bool repeatsSingle(
+                const BarrierScratch& scratch,
+                std::span<const GlobalBarrier> globals,
+                std::span<const BufferBarrier> buffers,
+                std::span<const TextureBarrier> textures
+            )
+            {
+                if (scratch.single == SingleBarrier::None || globals.size() + buffers.size() + textures.size() != 1)
+                {
+                    return false;
+                }
+                if (!globals.empty())
+                {
+                    return scratch.single == SingleBarrier::Global && sameSides(globals[0], scratch.lastGlobal);
+                }
+                if (!buffers.empty())
+                {
+                    const BufferBarrier& a = buffers[0];
+                    const BufferBarrier& b = scratch.lastBuffer;
+                    return scratch.single == SingleBarrier::Buffer && a.buffer == b.buffer && a.offset == b.offset && a.size == b.size && sameSides(a, b);
+                }
+                const TextureBarrier& a = textures[0];
+                const TextureBarrier& b = scratch.lastTexture;
+                return scratch.single == SingleBarrier::Texture && a.texture == b.texture && a.range.baseMip == b.range.baseMip &&
+                       a.range.mipCount == b.range.mipCount && a.range.baseLayer == b.range.baseLayer && a.range.layerCount == b.range.layerCount &&
+                       a.oldLayout == b.oldLayout && a.newLayout == b.newLayout && sameSides(a, b);
+            }
+
+            //==========================================================================================================
+            /// Records the batch `state` holds lowered as one native `Barrier`, one group per non-empty kind: the debug layer
+            /// warns on an empty group.
+            void sendScratch(ListState& state, core::CommandListCore& list)
+            {
+                const BarrierScratch& scratch = state.barriers;
+                std::array<D3D12_BARRIER_GROUP, 3> groups = {};
+                UINT32 count = 0;
+                if (!scratch.globals.empty())
+                {
+                    groups[count].Type = D3D12_BARRIER_TYPE_GLOBAL;
+                    groups[count].NumBarriers = static_cast<UINT32>(scratch.globals.size());
+                    groups[count].pGlobalBarriers = scratch.globals.data();
+                    ++count;
+                }
+                if (!scratch.buffers.empty())
+                {
+                    groups[count].Type = D3D12_BARRIER_TYPE_BUFFER;
+                    groups[count].NumBarriers = static_cast<UINT32>(scratch.buffers.size());
+                    groups[count].pBufferBarriers = scratch.buffers.data();
+                    ++count;
+                }
+                if (!scratch.textures.empty())
+                {
+                    groups[count].Type = D3D12_BARRIER_TYPE_TEXTURE;
+                    groups[count].NumBarriers = static_cast<UINT32>(scratch.textures.size());
+                    groups[count].pTextureBarriers = scratch.textures.data();
+                    ++count;
+                }
+                state.list->Barrier(count, groups.data());
+                core::noteNativeCall(list);
+                ++list.counts.nativeBarriers;
+            }
+        } // namespace
     } // namespace d3d12
 
     //==================================================================================================================
@@ -500,6 +573,12 @@ namespace rojoRHI {
         }
         d3d12::ListState& state = impl.state;
         d3d12::BarrierScratch& scratch = state.barriers;
+        if (d3d12::repeatsSingle(scratch, globals, buffers, textures))
+        {
+            // The arrays still hold this record's lowering.
+            d3d12::sendScratch(state, list);
+            return;
+        }
         scratch.globals.clear();
         scratch.buffers.clear();
         scratch.textures.clear();
@@ -572,32 +651,26 @@ namespace rojoRHI {
             // initializes the compression metadata of a render-target, depth-stencil or unordered-access texture.
             lowered.Flags = texture.oldLayout == Layout::Undefined ? D3D12_TEXTURE_BARRIER_FLAG_DISCARD : D3D12_TEXTURE_BARRIER_FLAG_NONE;
         }
-        // One group per non-empty kind: the debug layer warns on an empty group.
-        std::array<D3D12_BARRIER_GROUP, 3> groups = {};
-        UINT32 count = 0;
-        if (!scratch.globals.empty())
+        // A batch of one record keeps it, so a repeat of it sends these arrays again.
+        scratch.single = d3d12::SingleBarrier::None;
+        if (globals.size() + buffers.size() + textures.size() == 1)
         {
-            groups[count].Type = D3D12_BARRIER_TYPE_GLOBAL;
-            groups[count].NumBarriers = static_cast<UINT32>(scratch.globals.size());
-            groups[count].pGlobalBarriers = scratch.globals.data();
-            ++count;
+            if (!globals.empty())
+            {
+                scratch.single = d3d12::SingleBarrier::Global;
+                scratch.lastGlobal = globals[0];
+            }
+            else if (!buffers.empty())
+            {
+                scratch.single = d3d12::SingleBarrier::Buffer;
+                scratch.lastBuffer = buffers[0];
+            }
+            else
+            {
+                scratch.single = d3d12::SingleBarrier::Texture;
+                scratch.lastTexture = textures[0];
+            }
         }
-        if (!scratch.buffers.empty())
-        {
-            groups[count].Type = D3D12_BARRIER_TYPE_BUFFER;
-            groups[count].NumBarriers = static_cast<UINT32>(scratch.buffers.size());
-            groups[count].pBufferBarriers = scratch.buffers.data();
-            ++count;
-        }
-        if (!scratch.textures.empty())
-        {
-            groups[count].Type = D3D12_BARRIER_TYPE_TEXTURE;
-            groups[count].NumBarriers = static_cast<UINT32>(scratch.textures.size());
-            groups[count].pTextureBarriers = scratch.textures.data();
-            ++count;
-        }
-        state.list->Barrier(count, groups.data());
-        core::noteNativeCall(list);
-        ++list.counts.nativeBarriers;
+        d3d12::sendScratch(state, list);
     }
 } // namespace rojoRHI

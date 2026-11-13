@@ -33,6 +33,8 @@ namespace rojoRHI::d3d12 {
         PipelineKind kind = PipelineKind::Graphics;                             ///< The stages the pipeline has.
         D3D_PRIMITIVE_TOPOLOGY listTopology = D3D_PRIMITIVE_TOPOLOGY_UNDEFINED; ///< The list form of a vertex pipeline's class; undefined otherwise.
         bool depthBias = false;                                                 ///< `RasterState::depthBias`: the recorded bias applies.
+        bool readsStencilReference = false;                                     ///< The stencil test is on, so it reads the reference.
+        bool readsBlendFactor = false;                                          ///< A blending target takes a constant factor, so it reads the blend factor.
     };
 
     /// Returns the D3D12 blend factor of `factor` in a colour slot.

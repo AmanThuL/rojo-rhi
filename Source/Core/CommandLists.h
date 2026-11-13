@@ -67,9 +67,12 @@ namespace rojoRHI::core {
         BoundPipeline pipeline;                 ///< The bound pipeline; cleared by `beginRenderPass` and `endRenderPass`.
         size_t passScopeBase = 0;               ///< The number of open scopes when the open pass began.
         ArenaPage page;                         ///< The arena page the list uploads into; null until its first upload.
-        std::byte* cursor = nullptr;            ///< The next free byte of `page`: its bump cursor, which takes no lock.
-        std::byte* limit = nullptr;             ///< One past the last byte of `page` an `Addr` reaches; null until the list has a page.
-        RecordCounts counts;                    ///< What the list recorded for `Device::counters`; folded into the device at submission.
+        /// The list's last scope label copied into the frame arena this frame, which a scope of the same text shares; empty
+        /// until the list copies one.
+        std::string_view scopeCopy;
+        std::byte* cursor = nullptr; ///< The next free byte of `page`: its bump cursor, which takes no lock.
+        std::byte* limit = nullptr;  ///< One past the last byte of `page` an `Addr` reaches; null until the list has a page.
+        RecordCounts counts;         ///< What the list recorded for `Device::counters`; folded into the device at submission.
     };
 
     /// What the core keeps about one command list: the state machine the recording rules read. A backend's `CommandListImpl`
@@ -81,6 +84,7 @@ namespace rojoRHI::core {
         std::vector<bool> scopes;                    ///< One entry per open scope, innermost last: true when it began inside a render pass.
         std::string label;                           ///< The label the list was acquired with.
         std::vector<ScopeRecord> scopeLog;           ///< The scopes recorded on the list in the order they began, for `Device::scopeTimings`.
+        std::string scopeCopySource;                 ///< The text of `scopeCopy`, in ordinary memory, to compare against.
         std::vector<ResourceAccess> pendingAccesses; ///< Declared accesses no draw or dispatch has consumed; kept only on a validating device.
         TrackerLog trackerLog;                       ///< The uses and barriers the list recorded; kept only on a validating device, in Debug.
     };

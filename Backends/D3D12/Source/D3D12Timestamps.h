@@ -64,8 +64,18 @@ namespace rojoRHI::d3d12 {
             const uint64_t* mapped = nullptr; ///< The readback buffer, mapped while the list lives.
         };
 
+        /// Whether the recording writes timestamps, decided at its first claim: the device, the list's ordinal and its queue
+        /// type do not change while it records.
+        enum class Gate : uint8_t
+        {
+            Unknown, ///< No claim since the last `reset`.
+            Open,    ///< Scopes are timed until `kMaxQueries`.
+            Closed,  ///< Every scope is untimed.
+        };
+
         std::vector<Heap> heaps;    ///< The list's heaps, in query order.
         uint32_t next = 0;          ///< The queries the recording has claimed.
+        Gate gate = Gate::Unknown;  ///< Whether the recording writes timestamps; reset at each acquisition.
         std::vector<uint32_t> open; ///< The first query of each open scope, innermost last; `core::kNoTimestamp` when untimed.
 
         /// Claims the next pair of queries for a scope of `list`, which owns these timestamps, and returns its first index.

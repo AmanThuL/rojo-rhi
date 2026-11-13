@@ -34,6 +34,7 @@ namespace rojoRHI::core {
         list.scopes.clear();
         list.label.assign(label.empty() ? std::string_view{ "rojorhi.commandlist.unnamed" } : label);
         list.scopeLog.clear();
+        list.scopeCopySource.clear();
         list.pendingAccesses.clear();
         list.trackerLog.events.clear();
         list.trackerLog.commands.clear();

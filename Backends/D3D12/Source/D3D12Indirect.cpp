@@ -27,12 +27,23 @@ namespace rojoRHI {
         /// direct draw can rely on, and the next direct draw writes 0 again.
         void execute(CommandListImpl& list, ID3D12CommandSignature* signature, Addr args, uint32_t maxCount, Addr count)
         {
-            // A buffer's payload is published before its handle is returned, so the directory finds it with one acquire load.
-            // The null address names the reserved view-heap slot 0, where the directory finds no buffer.
-            const d3d12::HeapDirectory& directory = d3d12::deviceOf(list).directory;
-            const d3d12::BufferPayload* records = directory.find(args.lo);
+            // A buffer's payload is published before its handle is returned, so the directory finds it with one acquire load,
+            // and the list keeps what it found for the next command of the same buffers. The null address names the reserved
+            // view-heap slot 0, where the directory finds no buffer.
+            d3d12::IndirectBuffers& last = list.state.indirect;
+            if (args.lo != last.recordsIndex || last.records == nullptr)
+            {
+                last.records = d3d12::deviceOf(list).directory.find(args.lo);
+                last.recordsIndex = args.lo;
+            }
+            if (count.lo != last.countIndex)
+            {
+                last.count = d3d12::deviceOf(list).directory.find(count.lo);
+                last.countIndex = count.lo;
+            }
+            const d3d12::BufferPayload* records = last.records;
             ROJORHI_INTERNAL_ASSERT(records != nullptr, "the records of an indirect draw name no live buffer");
-            const d3d12::BufferPayload* counted = directory.find(count.lo);
+            const d3d12::BufferPayload* counted = last.count;
             ID3D12Resource* const countResource = counted == nullptr ? nullptr : counted->resource;
             const uint64_t countOffset = counted == nullptr ? 0u : count.hi;
             list.state.list->ExecuteIndirect(signature, maxCount, records->resource, args.hi, countResource, countOffset);
@@ -65,10 +76,8 @@ namespace rojoRHI {
             return;
         }
         d3d12::flushGraphics(list);
-        // A record's payload is fixed from creation to retirement, so it is read with one load and no lock (ADR 0020).
-        const auto& buffer = *static_cast<const d3d12::BufferPayload*>(list.core.device->pool<Buffer>().native(indices));
         // The records choose their first index and base vertex, so they read the same whole-buffer view a direct draw sets.
-        d3d12::applyIndexBuffer(list, buffer, type);
+        d3d12::applyIndexBuffer(list, indices, type);
         execute(list, d3d12::deviceOf(list).roots.drawIndexed(), args, maxCount, count);
     }
 

@@ -227,15 +227,15 @@ namespace {
 } // namespace
 
 //======================================================================================================================
-TEST_CASE("a Graphics list's acquisition resets it, sets both heaps and both root signatures", "[d3d12]")
+TEST_CASE("a Graphics list's acquisition resets it, sets both heaps and the graphics root signature", "[d3d12]")
 {
     Device device = makeDevice();
     const MessageCollection messages;
     device.beginFrame();
     const uint32_t slot = openSlot(device);
     CommandList list = device.acquireCommandList(QueueType::Graphics, "test.graphics");
-    // Reset, SetDescriptorHeaps, SetGraphicsRootSignature and SetComputeRootSignature.
-    CHECK(recordCalls(list) == 4u);
+    // Reset, SetDescriptorHeaps and SetGraphicsRootSignature; the compute side waits for the first dispatch.
+    CHECK(recordCalls(list) == 3u);
     const d3d12::ListState& state = stateOf(list);
     REQUIRE(state.list);
     REQUIRE(state.allocator);
@@ -246,7 +246,7 @@ TEST_CASE("a Graphics list's acquisition resets it, sets both heaps and both roo
     CHECK(objectName(state.allocator.get()) == poolName(slot, L"graphics", 0));
     CHECK(objectName(state.list.get()) == L"test.graphics");
     CHECK(state.binding.root == 0u);
-    CHECK(state.binding.computeRoot == d3d12::ComputeRoot::Global);
+    CHECK(state.binding.computeRoot == d3d12::ComputeRoot::None);
     CHECK(state.binding.drawIdDirty);
     list.end();
     device.queue(QueueType::Graphics).submit(std::span(&list, 1), {}, {});
@@ -256,7 +256,7 @@ TEST_CASE("a Graphics list's acquisition resets it, sets both heaps and both roo
 }
 
 //======================================================================================================================
-TEST_CASE("a Compute list sets the heaps and the compute root signature, a Copy list only resets", "[d3d12]")
+TEST_CASE("a Compute list sets the heaps, a Copy list only resets", "[d3d12]")
 {
     Device device = makeDevice();
     const MessageCollection messages;
@@ -267,8 +267,9 @@ TEST_CASE("a Compute list sets the heaps and the compute root signature, a Copy 
     CommandList graphics = device.acquireCommandList(QueueType::Graphics, "test.graphics");
     CommandList compute = device.acquireCommandList(QueueType::Compute, "test.compute");
     CommandList copy = device.acquireCommandList(QueueType::Copy, "test.copy");
-    // Reset, SetDescriptorHeaps and SetComputeRootSignature; Reset alone.
-    CHECK(recordCalls(compute) == 3u);
+    // Reset and SetDescriptorHeaps; Reset alone. The compute root signature waits for the first dispatch.
+    CHECK(recordCalls(compute) == 2u);
+    CHECK(stateOf(compute).binding.computeRoot == d3d12::ComputeRoot::None);
     CHECK(recordCalls(copy) == 1u);
     CHECK(stateOf(compute).list->GetType() == D3D12_COMMAND_LIST_TYPE_COMPUTE);
     CHECK(stateOf(copy).list->GetType() == D3D12_COMMAND_LIST_TYPE_COPY);

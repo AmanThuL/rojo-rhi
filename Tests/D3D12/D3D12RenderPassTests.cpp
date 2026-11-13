@@ -261,11 +261,7 @@ namespace {
 } // namespace
 
 //======================================================================================================================
-TEST_CASE(
-    "a pass without a resolve costs BeginRenderPass, EndRenderPass, the scope and the first pass's two starting values; a second pass on the list sends no "
-    "starting value",
-    "[d3d12]"
-)
+TEST_CASE("a pass without a resolve costs BeginRenderPass, EndRenderPass and the scope; its starting values wait for a draw that reads them", "[d3d12]")
 {
     Device device = makeDevice();
     const MessageCollection messages;
@@ -281,11 +277,14 @@ TEST_CASE(
     const std::array colors{ ColorAttachment{ .texture = color, .load = LoadOp::Clear, .clear = { 0.0f, 1.0f, 0.0f, 1.0f } } };
     uint64_t before = recordCalls(list);
     const uint64_t barriers = nativeBarriers(list);
-    // BeginEvent and EndQuery for the pass's scope, BeginRenderPass, OMSetStencilRef and OMSetBlendFactor.
+    // BeginEvent and EndQuery for the pass's scope, and BeginRenderPass. The starting stencil reference and blend factor are
+    // owed to the first draw whose pipeline reads them; no draw here does.
     list.beginRenderPass(passOf(colors));
-    CHECK(recordCalls(list) - before == 5u);
-    CHECK(state.dynamic.stencilReference == uint8_t{ 0 });
-    CHECK(state.dynamic.blendFactor == std::array<float, 4>{});
+    CHECK(recordCalls(list) - before == 3u);
+    CHECK(!state.dynamic.stencilReference.has_value());
+    CHECK(!state.dynamic.blendFactor.has_value());
+    CHECK(state.dynamic.stencilReferenceOwed);
+    CHECK(state.dynamic.blendFactorOwed);
     const core::ScopeRecord& scope = core::coreOf(list).scopeLog.back();
     CHECK(scope.label == "test.pass");
     CHECK(scope.timestamp == ((state.ordinal << 16) | 0u));
@@ -303,12 +302,13 @@ TEST_CASE(
     list.endRenderPass();
     CHECK(recordCalls(list) - before == 3u);
     CHECK(state.timestamps.open.empty());
-    // The second pass finds the starting values held; its recorded depth bias returns to zero without a native call.
+    // The second pass owes the starting values again; its recorded depth bias returns to zero without a native call.
     state.dynamic.depthBias = { 1.0f, 2.0f, 3.0f };
     const std::array again{ ColorAttachment{ .texture = color, .load = LoadOp::Load, .store = StoreOp::DontCare } };
     before = recordCalls(list);
     list.beginRenderPass(passOf(again));
     CHECK(recordCalls(list) - before == 3u);
+    CHECK(state.dynamic.stencilReferenceOwed);
     CHECK(state.dynamic.depthBias == std::array<float, 3>{});
     CHECK(state.pass.targets[0].BeginningAccess.Type == D3D12_RENDER_PASS_BEGINNING_ACCESS_TYPE_PRESERVE);
     CHECK(state.pass.targets[0].EndingAccess.Type == D3D12_RENDER_PASS_ENDING_ACCESS_TYPE_DISCARD);
@@ -338,9 +338,9 @@ TEST_CASE("a pass with a resolve target adds one barrier before and one after, a
     const std::array colors{ ColorAttachment{ .texture = multisample, .load = LoadOp::Clear, .resolve = resolve } };
     uint64_t before = recordCalls(list);
     uint64_t barriers = nativeBarriers(list);
-    // BeginEvent, EndQuery, the resolve barrier, BeginRenderPass and the two starting values.
+    // BeginEvent, EndQuery, the resolve barrier and BeginRenderPass; the starting values wait for a draw that reads them.
     list.beginRenderPass(passOf(colors));
-    CHECK(recordCalls(list) - before == 6u);
+    CHECK(recordCalls(list) - before == 4u);
     CHECK(nativeBarriers(list) - barriers == 1u);
     REQUIRE(state.pass.resolveCount == 1u);
     const D3D12_TEXTURE_BARRIER& barrier = state.pass.resolveBarriers[0];

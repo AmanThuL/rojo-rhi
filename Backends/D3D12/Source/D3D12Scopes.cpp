@@ -31,10 +31,16 @@ namespace rojoRHI {
             ListState& state = list.state;
             core::ScopeRecord& record = list.core.scopeLog.back();
             // The record's copy of a caller's label is in the frame arena, upload memory that a CPU read crosses uncached, so the
-            // event widens the caller's label; an empty one takes the core's default, a static string. The scratch is the
-            // list's own and grows to the longest label it has held, so a label converts without allocating.
-            widen(label.empty() ? record.label : label, state.scratch);
-            state.list->BeginEvent(kUnicodeEvent, state.scratch.c_str(), static_cast<UINT>((state.scratch.size() + 1) * sizeof(wchar_t)));
+            // event widens the caller's label; an empty one takes the core's default, a static string. The list keeps its last
+            // event's label, so a scope of the same text, as each pass of a loop has, widens nothing; the strings grow to the
+            // longest label the list has held, so a label converts without allocating once they have.
+            const std::string_view text = label.empty() ? record.label : label;
+            if (text != state.eventSource)
+            {
+                widen(text, state.eventLabel);
+                state.eventSource.assign(text);
+            }
+            state.list->BeginEvent(kUnicodeEvent, state.eventLabel.c_str(), static_cast<UINT>((state.eventLabel.size() + 1) * sizeof(wchar_t)));
             core::noteNativeCall(list.core);
             ListTimestamps& timestamps = state.timestamps;
             const uint32_t pair = timestamps.claimPair(list);
