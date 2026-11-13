@@ -155,10 +155,16 @@ recommends root fields and heap indices for per-draw hot data.
 A shader never dereferences the null address, and it writes through an address only into a buffer
 created with `BufferUsage::ShaderWrite`. No tier diagnoses either, because shader accesses are
 invisible to the CPU; the shader-side requirements are stated with
-[`rojoRHI::load` and `rojoRHI::store`](05-shader-abi-part2.md#addresses). Likewise, a shader that
-chases an address, including one stored in buffer memory, finishes before the buffer it names is
-destroyed; the submission of that work precedes the destruction, and no tier diagnoses the
-shader-side access.
+[`rojoRHI::load` and `rojoRHI::store`](05-shader-abi-part2.md#addresses). A store or atomic add
+through an address into a buffer created without `ShaderWrite` is therefore undefined behaviour that
+no layer reports: the validation tracker sees no shader store, and neither does the D3D12 debug
+layer. On Metal 4, which has no such flag, the store reaches the buffer. On D3D12 such a buffer has
+a raw SRV and no raw UAV, and the store goes through the view-heap slot after the SRV, which holds
+whatever the view allocator placed there, if anything: another buffer's raw SRV, a texture view, or
+a free or released slot, never a view of the buffer itself. On WARP such stores were lost, and in
+Release the device was removed. Likewise, a shader that chases an address, including one stored in
+buffer memory, finishes before the buffer it names is destroyed; the submission of that work
+precedes the destruction, and no tier diagnoses the shader-side access.
 #### Valid usage
 - `VU-rojo-buffer-0009` The byte position named by `base + offset` lies inside the buffer `base`
   names.

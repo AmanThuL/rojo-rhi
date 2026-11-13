@@ -52,8 +52,11 @@ memory or a shader output first.
 pointers: an `Addr` there carries a raw shader-resource heap index and a byte offset, and each
 distinct base costs a descriptor fetch. A `ShaderWrite` buffer's raw unordered-access descriptor
 sits in the heap slot immediately after its raw shader-resource descriptor, so `rojoRHI::store` and
-`rojoRHI::atomicAdd` use the index plus one. The D3D12 `Addr` is the heap index in `lo` and the
-32-bit byte offset in `hi` ([memory and buffers](03-memory-and-buffers.md)). The emitted HLSL has
+`rojoRHI::atomicAdd` use the index plus one. A buffer created without `ShaderWrite` has no raw UAV,
+so that slot holds another descriptor or none, and a store or atomic add into such a buffer is
+undefined behaviour no layer reports ([`Addr`](03-memory-and-buffers.md#addr)). The D3D12 `Addr`
+is the heap index in `lo` and the 32-bit byte offset in `hi`
+([memory and buffers](03-memory-and-buffers.md)). The emitted HLSL has
 `NonUniformResourceIndex` in two places: the return of the helper behind `nonUniform`, and around
 every store's or atomic add's `index + 1`. DXC keeps the qualifier through that function return and
 the `uint2` pack and unpack, so `load`, texture and sampler fetches carry it from the helper, and
@@ -209,7 +212,7 @@ or marked with `rojoRHI::nonUniform`.
 
 | | Metal 4 | D3D12 | Vulkan |
 |---|---|---|---|
-| Lowering | 8-byte resource ID read from the ID table at `buffer(1)`, through a Slang `__intrinsic_asm` over an argument-buffer table; `texture2DMS` and `texture2DMSArray` compile, but reading them miscompiles under the pinned Slang, which emits invalid MSL for `Load` and `GetDimensions`, and stays unverified until compile-and-run; the conformance multisample kernels read only the dimensions on Metal, through an `__intrinsic_asm` helper, so `Load` on a multisample texture is not exercised there | `ResourceDescriptorHeap[view]` | resource descriptor heap, Slang's `__slang_resource_heap` runtime arrays, each fetch marked `NonUniform` |
+| Lowering | 8-byte resource ID read from the ID table at `buffer(1)`, through a Slang `__intrinsic_asm` over an argument-buffer table; `texture2DMS` and `texture2DMSArray` compile, but reading them miscompiles under the pinned Slang, which emits invalid MSL for `Load` and `GetDimensions`, and stays unverified until compile-and-run; the conformance multisample kernels read only the dimensions on Metal, through an `__intrinsic_asm` helper, so `Load` on a multisample texture is not exercised there | `ResourceDescriptorHeap[view]`; a `Tex1D` or `Tex2D` view of a layer other than 0, and a `Cube` view of a cube other than the first, is a native array view there, read only through the array function ([`TextureViewDesc`](04-textures-and-heaps.md#textureviewdesc)) | resource descriptor heap, Slang's `__slang_resource_heap` runtime arrays, each fetch marked `NonUniform` |
 | Cost | cheap: one extra 8-byte load, measured at about 3% for `read` and 7.5% for `sample` in a fetch-only kernel | native | cheap: every fetch is marked `NonUniform`, since the `uint` marker cannot reach the handle; correct for a uniform index too |
 
 ### `rojoRHI::wTexture`
