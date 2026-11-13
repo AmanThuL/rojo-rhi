@@ -76,6 +76,63 @@ namespace {
         std::memcpy(pointer, bytes.data(), bytes.size());
         return tailOf(bytes);
     }
+
+    /// BarrierOracle's root.
+    struct DelayRoot
+    {
+        uint32_t view;                ///< The 2D storage view the entry stores into.
+        uint32_t spins;               ///< The steps each thread spins for before its store.
+        uint32_t mask = 0;            ///< Always zero; it keeps the spin loop in the compiled entry.
+        uint32_t pad = 0;             ///< Padding.
+        uint32_t width;               ///< The extent in texels.
+        uint32_t height;              ///< The extent in texels.
+        uint32_t pad0 = 0;            ///< Padding.
+        uint32_t pad1 = 0;            ///< Padding.
+        std::array<float, 4> value{}; ///< The value each thread stores.
+    };
+
+    /// The edge of the delayed-fill target, in texels: 4,096 groups of 64 threads.
+    constexpr uint32_t kDelayEdge = 512;
+
+    /// The steps each thread of the slow fill spins for: long enough that the slow fill's last groups still run when a fill
+    /// recorded after it, left unordered, has stored every texel.
+    constexpr uint32_t kSlowSpins = 1u << 20;
+
+    /// The `RGBA8Unorm` texel bytes the fast fill stores, green.
+    constexpr std::array<std::byte, 4> kFastTexel{ std::byte{ 0 }, std::byte{ 255 }, std::byte{ 0 }, std::byte{ 255 } };
+
+    //==================================================================================================================
+    /// Records on `list` a dispatch of BarrierOracle's `pipeline` that stores `value` into every texel of `view` after
+    /// `spins` steps per thread.
+    void delayedFill(CommandList list, Pipeline pipeline, ViewIndex view, uint32_t spins, const std::array<float, 4>& value)
+    {
+        list.setPipeline(pipeline);
+        list.pushRoot(DelayRoot{ .view = static_cast<uint32_t>(view), .spins = spins, .width = kDelayEdge, .height = kDelayEdge, .value = value });
+        list.dispatch(kDelayEdge / 8, kDelayEdge / 8, 1);
+    }
+
+    //==================================================================================================================
+    /// Returns how many of the `RGBA8Unorm` texels in `bytes` differ from `expected`, and reports the first of them.
+    uint32_t texelsOtherThan(std::span<const std::byte> bytes, const std::array<std::byte, 4>& expected)
+    {
+        uint32_t wrong = 0;
+        for (size_t texel = 0; texel < bytes.size() / 4; ++texel)
+        {
+            if (std::memcmp(bytes.data() + texel * 4, expected.data(), 4) != 0)
+            {
+                if (wrong == 0)
+                {
+                    UNSCOPED_INFO(
+                        "texel " << texel << " holds " << static_cast<int>(bytes[texel * 4]) << " " << static_cast<int>(bytes[texel * 4 + 1]) << " "
+                                 << static_cast<int>(bytes[texel * 4 + 2]) << " " << static_cast<int>(bytes[texel * 4 + 3])
+                    );
+                }
+                ++wrong;
+            }
+        }
+        UNSCOPED_INFO(wrong << " texels differ");
+        return wrong;
+    }
 } // namespace
 
 //======================================================================================================================
@@ -371,4 +428,54 @@ TEST_CASE("a barrier holds back every later encoder on the queue, not only the f
         }
     }
     CHECK(readRange(kit, aside, 0, kTail) == unrelated);
+}
+
+//======================================================================================================================
+TEST_CASE("a barrier from Undefined waits for the writes of its source stage before a later write", "[conformance]")
+{
+    test::requireGpu();
+    test::GpuKit kit;
+    const ShaderLibrary library = *kit.device.loadShaderLibrary(test::shaderLibraryFile("BarrierOracle"), "BarrierOracle");
+    const Pipeline pipeline = *kit.device.createPipeline(ComputePipelineDesc{ .compute = { library, "delayedFillMain" }, .label = "test.delayedFill" });
+    const Texture texture = *kit.device.createTexture(
+        TextureDesc{ .format = Format::RGBA8Unorm, .extent = { kDelayEdge, kDelayEdge, 1 }, .usage = TextureUsage::Storage, .label = "test.delayed" }
+    );
+    const ViewIndex view = *kit.device.createView(texture, TextureViewDesc{ .usage = TextureUsage::Storage });
+    // A slow fill, then a discard from Undefined whose source is the compute stage and names no access (VU-rojo-sync-0016),
+    // then a fast fill of the same texels. The discard must still wait for the slow fill's stores (VU-rojo-sync-0024): a
+    // barrier that did not would let the slow fill's last groups store red over the fast fill's green.
+    constexpr uint32_t kRounds = 4;
+    for (uint32_t round = 0; round < kRounds; ++round)
+    {
+        CAPTURE(round);
+        CommandList list = kit.list(QueueType::Graphics, "test.delayed");
+        const std::array<TextureBarrier, 1> toWrite{ TextureBarrier{ .texture = texture,
+                                                                     .dstStage = Stage::ComputeShader,
+                                                                     .dstAccess = Access::ShaderWrite,
+                                                                     .oldLayout = Layout::Undefined,
+                                                                     .newLayout = Layout::ShaderWrite } };
+        list.barrier({}, {}, toWrite);
+        delayedFill(list, pipeline, view, kSlowSpins, { 1.0f, 0.0f, 0.0f, 1.0f });
+        const std::array<TextureBarrier, 1> discard{ TextureBarrier{ .texture = texture,
+                                                                     .srcStage = Stage::ComputeShader,
+                                                                     .srcAccess = Access::None,
+                                                                     .dstStage = Stage::ComputeShader,
+                                                                     .dstAccess = Access::ShaderWrite,
+                                                                     .oldLayout = Layout::Undefined,
+                                                                     .newLayout = Layout::ShaderWrite } };
+        list.barrier({}, {}, discard);
+        delayedFill(list, pipeline, view, 0, { 0.0f, 1.0f, 0.0f, 1.0f });
+        const std::array<TextureBarrier, 1> toCopy{ TextureBarrier{ .texture = texture,
+                                                                    .srcStage = Stage::ComputeShader,
+                                                                    .srcAccess = Access::ShaderWrite,
+                                                                    .dstStage = Stage::Copy,
+                                                                    .dstAccess = Access::CopyRead,
+                                                                    .oldLayout = Layout::ShaderWrite,
+                                                                    .newLayout = Layout::CopySrc } };
+        list.barrier({}, {}, toCopy);
+        kit.run(std::array{ list });
+        const std::vector<std::byte> texels = kit.readTexture(texture, TextureRegion{ .extent = { kDelayEdge, kDelayEdge, 1 } }, Format::RGBA8Unorm);
+        REQUIRE(texels.size() == size_t{ kDelayEdge } * kDelayEdge * 4);
+        CHECK(texelsOtherThan(texels, kFastTexel) == 0u);
+    }
 }

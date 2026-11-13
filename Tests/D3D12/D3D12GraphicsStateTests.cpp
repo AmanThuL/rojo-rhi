@@ -15,6 +15,8 @@
 #include "ShaderList.h"
 #include "Support/Backend.h"
 #include "Support/D3D12/D3D12Readback.h"
+#include "Support/GpuKit.h"
+#include "Support/PassKit.h"
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -842,4 +844,94 @@ TEST_CASE("C8's sequence costs the native minimum + 1", "[d3d12]")
     device.destroy(target);
     device.destroy(done);
     destroyDevice(device);
+}
+
+//======================================================================================================================
+TEST_CASE("the native list keeps a dynamic depth bias across SetPipelineState when nothing re-issues it", "[d3d12]")
+{
+    REQUIRE(kD3D12LibrariesBuilt);
+    const MessageCollection messages;
+    {
+        test::GpuKit kit;
+        constexpr uint32_t kEdge = 64;
+        const ShaderLibrary library = loadLibrary(kit.device, "DrawOracle");
+        // Three depthBias pipelines whose PSOs differ in their depth test alone, each passing over a depth cleared to 0, and a
+        // fourth without depthBias. Each depthBias PSO is created with a zero bias (D3D12PipelineState.cpp), so a draw shows
+        // the dynamic bias only if the list still holds it.
+        const auto depthPipeline = [&](CompareOp compare, bool depthBias) {
+            GraphicsPipelineDesc desc{ .vertex = { library, "fullscreenVertexMain" },
+                                       .raster = { .depthBias = depthBias },
+                                       .depthStencil = { .depthTest = true, .depthWrite = true, .depthCompare = compare },
+                                       .depthFormat = Format::D32Float,
+                                       .label = "test.depthBias" };
+            const Result<Pipeline> pipeline = kit.device.createPipeline(desc);
+            INFO((pipeline ? std::string() : pipeline.error().message));
+            REQUIRE(pipeline.has_value());
+            return *pipeline;
+        };
+        const Pipeline first = depthPipeline(CompareOp::Always, true);
+        const Pipeline second = depthPipeline(CompareOp::Greater, true);
+        const Pipeline third = depthPipeline(CompareOp::GreaterOrEqual, true);
+        const Pipeline plain = depthPipeline(CompareOp::Always, false);
+        REQUIRE(payloadOf(kit.device, second).pso != payloadOf(kit.device, first).pso);
+        const Texture depth = *kit.device.createTexture(
+            TextureDesc{ .format = Format::D32Float, .extent = { kEdge, kEdge, 1 }, .usage = TextureUsage::DepthStencil, .label = "test.depth" }
+        );
+        CommandList list = kit.list(QueueType::Graphics, "test.bias");
+        test::transition(list, depth, Layout::Undefined, Layout::DepthStencilWrite);
+        list.beginRenderPass(
+            RenderPassDesc{
+                .depth = DepthAttachment{ .texture = depth, .load = LoadOp::Clear, .clearDepth = 0.0f }, .area = { 0, 0, kEdge, kEdge }, .label = "test.pass" }
+        );
+        list.setViewport(Viewport{ .width = static_cast<float>(kEdge), .height = static_cast<float>(kEdge) });
+        // The first third through the library: the pipeline and its bias, then a draw.
+        list.setPipeline(first);
+        list.setDepthBias(4.0f, 0.0f, 0.0f);
+        list.setScissor(Rect2D{ 0, 0, kEdge / 4, kEdge });
+        list.draw(3);
+        // The second through a SetPipelineState the backend does not know of, so it re-issues no bias; the library still holds
+        // the first pipeline, so its draw sends no pipeline state either.
+        ID3D12GraphicsCommandList9& native = *stateOf(list).list.get();
+        native.SetPipelineState(payloadOf(kit.device, second).pso);
+        list.setScissor(Rect2D{ kEdge / 4, 0, kEdge / 4, kEdge });
+        list.draw(3);
+        // The third through a PSO without the dynamic depth-bias flag and then a depthBias PSO, natively too.
+        native.SetPipelineState(payloadOf(kit.device, plain).pso);
+        native.SetPipelineState(payloadOf(kit.device, third).pso);
+        list.setScissor(Rect2D{ kEdge / 2, 0, kEdge / 4, kEdge });
+        list.draw(3);
+        // The last quarter through the library's pipeline without depthBias, which takes no bias.
+        list.setPipeline(plain);
+        list.setScissor(Rect2D{ 3 * kEdge / 4, 0, kEdge / 4, kEdge });
+        list.draw(3);
+        list.endRenderPass();
+        test::transition(list, depth, Layout::DepthStencilWrite, Layout::CopySrc);
+        kit.run(std::array{ list });
+        const std::vector<std::byte> bytes = kit.readTexture(depth, TextureRegion{ .extent = { kEdge, kEdge, 1 } }, Format::D32Float);
+        REQUIRE(bytes.size() == size_t{ kEdge } * kEdge * sizeof(float));
+        std::vector<float> depths(size_t{ kEdge } * kEdge);
+        std::memcpy(depths.data(), bytes.data(), bytes.size());
+        // Chapter 06: 4 units of 2^-24 for a 32-bit float depth in [0.5, 1).
+        const float biased = 0.5f + 4.0f * 0x1p-24f;
+        std::array<uint32_t, 4> wrong{};
+        for (uint32_t y = 0; y < kEdge; ++y)
+        {
+            for (uint32_t x = 0; x < kEdge; ++x)
+            {
+                const uint32_t quarter = x / (kEdge / 4);
+                const float expected = quarter < 3 ? biased : 0.5f;
+                const float value = depths[size_t{ y } * kEdge + x];
+                if (value != expected)
+                {
+                    if (wrong[quarter] == 0)
+                    {
+                        UNSCOPED_INFO("quarter " << quarter << " at (" << x << ", " << y << ") holds " << value << ", expected " << expected);
+                    }
+                    ++wrong[quarter];
+                }
+            }
+        }
+        CHECK(wrong == std::array<uint32_t, 4>{});
+    }
+    CHECK(messages.count() == 0u);
 }
