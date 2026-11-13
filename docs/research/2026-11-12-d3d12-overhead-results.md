@@ -155,8 +155,7 @@ the commit the second names.
 
 ## What the rows show
 
-The round was not followed by a diagnosis; this section reads the rows alone and attributes
-nothing to code.
+This section reads the rows alone; the cause analysis below attributes them to code.
 
 - **A fixed cost per list.** At `K` 1 R's span exceeds N's by 2.1 to 2.5 µs in the workloads that
   open a render pass (C1, C2, C3, C8 and C10) and by 0.9 µs in the compute and copy workloads (C4,
@@ -176,12 +175,38 @@ nothing to code.
   [spike 1](2026-10-20-spike-1-d3d12-addr-dereference.md#results)'s costly verdict seen at the
   module level; G1 divergent, G2 and both arms of F are within 6.2%.
 
+## Cause analysis
+
+A report-only diagnosis followed the round, in a Release scratch build of 9baf3a1, whose backend
+is the round's, with section timers (`rdtsc` serialized by `lfence`, warm-up frames discarded)
+around R's and N's calls and ablations of the backend. Its processes were not pre-registered, and
+only its paired deltas within one batch are compared; its outputs, the patch it measured and a
+SHA-256 manifest are kept under `rojo-rhi-evidence/t2-d3d12-diagnosis/2026-11-12/`.
+
+- **C8's pass.** About 590 ns of R's 730 are the pass's PIX event reading its label back from the
+  frame arena. The core copies a scope's label into the arena for `Device::scopeTimings`, the D3D12
+  scope widened that copy for `BeginEvent`, and the arena is upload memory, which the CPU reads
+  uncached: widening the 8-byte label took about 2,100 cycles, and as many with an ASCII loop in
+  place of `MultiByteToWideChar`. With the event widening the caller's label instead, C8 at `K`
+  1,000 measured 177 ns against N (four processes, 175 to 189). Of the rest, about 70 ns is the
+  texture barrier's lowering and about 55 ns the scope's conversion and timestamp claim;
+  `D3D12_RENDER_PASS_FLAG_NONE` in place of `ALLOW_UAV_WRITES` changed C8 by less than its noise.
+- **The fixed cost per list.** In C1 at `K` 1, after that fix, R's acquisition through its first
+  pass costs about 6,400 cycles more than N's reset through its `BeginRenderPass`, at equal cost of
+  `BeginRenderPass` and `Close`. The pass's PIX event, which N's C1 does not write, is about 1,450
+  of them and its end more; the first arena claim of the list, for the pass label, about 1,100; the
+  starting stencil reference and blend factor, which N does not set, about 720. The rest, at
+  acquisition, is not attributed further.
+- **Per operation.** The deltas of C1, C2, C4, C6 and C10 did not change with the fix; their draw,
+  dispatch and barrier paths are not attributed further.
+
 ## Decisions
 
 - The CPU budget is missed. Under the note's rules the miss is a defect in the D3D12 backend: it
-  is fixed and the round runs again as a new note. The fix starts from a diagnosis of R's fixed cost
-  per list, its render-pass begin and end, and its per-operation path for draws, dispatches and
-  global barriers, measured by the next round, not by this one.
+  is fixed and the round runs again as a new note. The first fix is the scope label above; the
+  candidates the diagnosis leaves are a cheaper barrier lowering, no arena copy or PIX event where
+  nothing reads it, and the per-list work at acquisition and at a list's first pass. Each is
+  measured by the next round, not by this one.
 - Heap indexing and `Addr` dereference are not reopened: the composed frame meets its GPU budget, so
   the condition for reopening chapter 05's D3D12 rows and spike 1 does not hold.
 - No pipeline variant is hidden, every hot path stays within its native-call budget, and R
