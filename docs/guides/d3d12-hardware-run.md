@@ -258,7 +258,9 @@ pre-registration is [the D3D12 overhead note](../research/2026-10-20-d3d12-overh
 and frozen on 2026-11-12. Run from a clean checkout of the commit its last amendment names, the
 merge of ADR 0030; a later amendment is recorded in its Amendments section before any timed run.
 
-The harness is verified on WARP only; no hardware result exists yet. From a Developer PowerShell on
+The first round ran on 2026-11-12 and missed the CPU budget ([the
+results](../research/2026-11-12-d3d12-overhead-results.md)); a later round runs from a new note of
+its own, by the same steps. From a Developer PowerShell on
 AC power with the High-performance plan and nothing else running:
 
 ```
