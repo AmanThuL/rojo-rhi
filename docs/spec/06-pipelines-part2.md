@@ -254,9 +254,10 @@ backend re-issues them at each `setPipeline` of a `depthBias` pipeline.
 
 On D3D12, dynamic depth-bias values need the pipeline flag
 `D3D12_PIPELINE_STATE_FLAG_DYNAMIC_DEPTH_BIAS` and the `DynamicDepthBiasSupported` cap, which
-`createDevice` checks as part of the floor ([device](02-device.md#createdevice)); per-vendor driver
-support for that cap is unverified. Without it, dynamic values would mean
-hidden pipeline variants, which the zero-variant budget forbids.
+`createDevice` checks as part of the floor ([device](02-device.md#createdevice)); NVIDIA's driver
+reports and honours it (an RTX 3080 Ti on driver 621.14), and other vendors' support for that cap is
+unverified. Without it, dynamic values would mean hidden pipeline variants, which the zero-variant
+budget forbids.
 
 #### Valid usage
 
@@ -269,4 +270,4 @@ hidden pipeline variants, which the zero-variant budget forbids.
 | | Metal 4 | D3D12 | Vulkan |
 |---|---|---|---|
 | Call | `MTL4::RenderCommandEncoder::setDepthBias` | `RSSetDepthBias` (`ID3D12GraphicsCommandList9`) | `vkCmdSetDepthBias` |
-| Cost | cheap: values re-issued at a pipeline change | cheap: values re-issued at each `setPipeline` of a `depthBias` pipeline; needs `DynamicDepthBiasSupported`; per-vendor support unverified | native |
+| Cost | cheap: values re-issued at a pipeline change | cheap: values re-issued at each `setPipeline` of a `depthBias` pipeline; needs `DynamicDepthBiasSupported`; verified on NVIDIA, other vendors unverified | native |

@@ -87,7 +87,8 @@ in the message:
 - D3D12: Windows 11, Agility SDK 1.619 or later, feature level 12_2, Shader Model 6.6
   with resource binding tier 3, `TypedUAVLoadAdditionalFormats`, enhanced barriers, and
   `DynamicDepthBiasSupported` for dynamic depth bias ([pipelines](06-pipelines-part2.md)).
-  Per-vendor driver support for the last is unverified.
+  NVIDIA's driver reports and honours the last (an RTX 3080 Ti on driver 621.14); other vendors'
+  support is unverified.
 
 A device is not tied to a thread. Free-threaded; several devices may coexist.
 
@@ -173,7 +174,7 @@ the owning chapter.
 | | Metal 4 | D3D12 | Vulkan |
 |---|---|---|---|
 | `adapterName` | `MTL::Device::name` | `IDXGIAdapter1::GetDesc1` | `VkPhysicalDeviceProperties::deviceName` |
-| `maxViews`, `maxSamplers` | views from the Metal feature set tables by GPU family; samplers from `MTL::Device::maxArgumentBufferSamplerCount`. Research figures of 1,000,000 textures and 996 (Apple7, Apple8) or 500,000 (Apple9 and later) samplers are unverified | resource binding tier 3: 1,000,000 views and 2,048 samplers; `D3D12_FEATURE_D3D12_OPTIONS19` where reported (unverified shipping values) | `VkPhysicalDeviceDescriptorHeapPropertiesEXT` (unverified structure name) |
+| `maxViews`, `maxSamplers` | views from the Metal feature set tables by GPU family; samplers from `MTL::Device::maxArgumentBufferSamplerCount`. Research figures of 1,000,000 textures and 996 (Apple7, Apple8) or 500,000 (Apple9 and later) samplers are unverified | resource binding tier 3: 1,000,000 views and 2,048 samplers; `D3D12_FEATURE_D3D12_OPTIONS19` where reported (an RTX 3080 Ti on driver 621.14 reports 1,000,000 views and 4,080 samplers; other shipping values unverified) | `VkPhysicalDeviceDescriptorHeapPropertiesEXT` (unverified structure name) |
 | `uploadInDeviceMemory` | always true: unified memory | `D3D12_FEATURE_D3D12_OPTIONS16::GPUUploadHeapSupported` | a memory type with `DEVICE_LOCAL` and `HOST_VISIBLE` from `vkGetPhysicalDeviceMemoryProperties` |
 | `placementSparse` | `MTL::Device::supportsPlacementSparse` | `D3D12_FEATURE_D3D12_OPTIONS::TiledResourcesTier`: tier 2 or higher; 3D textures at tier 3 | `VkPhysicalDeviceFeatures::sparseBinding` and the sparse residency features |
 | `meshTasksIndirect` | `MTL::Device::supportsFamily` with `MTL::GPUFamilyApple9`, the family the feature tables list for indirect mesh draws (*unverified*) | always true at the floor: `ExecuteIndirect` with `D3D12_INDIRECT_ARGUMENT_TYPE_DISPATCH_MESH` | `VkPhysicalDeviceMeshShaderFeaturesEXT::meshShader` |
