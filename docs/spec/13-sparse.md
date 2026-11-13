@@ -24,6 +24,13 @@ holds that memory's contents, so its first use follows the aliasing rule of
 [synchronization](09-synchronization.md): a barrier from `Layout::Undefined` for a texture, a global
 barrier for a buffer (`VU-rojo-sparse-0014`).
 
+That texture barrier discards the whole subresource, not only the new tile. A partially resident
+texture that maps a new tile therefore loses the contents of every other tile of that mip level and
+layer, and the caller re-uploads them after the barrier, together with the new tile. The native
+APIs can order the new tile alone, so the rule is coarser than any backend needs; a barrier that
+discards only newly mapped tiles is a possible future extension of this chapter and of
+[synchronization](09-synchronization.md), not part of this version.
+
 ### `TileShape`
 ```cpp
 struct TileShape {
@@ -135,6 +142,12 @@ serialized with submission on the queue. Any queue type may map tiles. A heap st
 any tile remains mapped from it (`VU-rojo-device-0009`, [device](02-device.md)). Destroying a
 sparse texture or buffer unmaps all its tiles at the call, as if each had been unmapped, so a heap
 that only it kept alive may then be destroyed.
+
+`VU-rojo-sparse-0013` orders work that accesses a tile against a mapping, not two mappings against
+each other. Mappings of one resource on different queues should still be ordered by a fence, as
+work on it is: the D3D12 debug layer counts `UpdateTileMappings` as a write of the resource and
+reports two such calls on different queues with no fence between them, as EXECUTION 1047 for a
+buffer on WARP (see Mapping). No tier checks this ordering.
 
 #### Valid usage
 - `VU-rojo-sparse-0011` Retired in 0.1.0: Every element of `mappings` satisfies the `TileMapping`

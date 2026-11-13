@@ -216,6 +216,17 @@ stencil plane of a depth-stencil format, so the stencil of `D32FloatS8` can be s
 may reinterpret only between the sRGB and linear members of one format family; the backend sets the
 castable or mutable-format flags at creation whenever a native API needs them for a texture's
 format family, so `TextureDesc` carries no view-format list.
+
+D3D12 has no non-array view of a layer other than 0, so the D3D12 backend writes a `Tex1D` or
+`Tex2D` view of a later layer, and a `Cube` view of a cube other than the first, in the array form
+with one layer or one cube (see Mapping).
+[`rojoRHI::texture`](05-shader-abi-part2.md#rojorhitexture) requires the fetch function to match
+the view's array form, and the native view there is an array view, so on D3D12 a shader reads such
+a view only through the array function; reading it through the non-array one is undefined there.
+Metal 4 and Vulkan view any layer in the non-array form. A portable caller views a layer other than
+0 through a one-layer `Tex1DArray` or `Tex2DArray` view, or a one-cube `CubeArray` view, and reads
+it through the array function. No tier diagnoses the mismatch: the core sees the view but not the
+function a shader fetches it with.
 #### Valid usage
 - `VU-rojo-texture-0022` `usage` is exactly `Sampled` or exactly `Storage`, and the texture was
   created with that usage.
@@ -236,7 +247,8 @@ format family, so `TextureDesc` carries no view-format list.
 | | Metal 4 | D3D12 | Vulkan |
 |---|---|---|---|
 | Descriptor | `MTL::TextureViewDescriptor`; an sRGB or linear partner view needs no flag, and the stencil plane of a `Sampled` `D32FloatS8` texture needs `MTL::TextureUsagePixelFormatView` at creation | `D3D12_SHADER_RESOURCE_VIEW_DESC` or `D3D12_UNORDERED_ACCESS_VIEW_DESC`; reinterpretation through castable formats at creation | `VkImageViewCreateInfo`; reinterpretation through `VK_IMAGE_CREATE_MUTABLE_FORMAT_BIT` and a format list |
-| Aspect | stencil through an `MTL::PixelFormatX32_Stencil8` view | plane slice 1 with `DXGI_FORMAT_X32_TYPELESS_G8X24_UINT` | `VK_IMAGE_ASPECT_DEPTH_BIT` or `VK_IMAGE_ASPECT_STENCIL_BIT` |
+| Layers | `levels` and `slices` of the view, in any view type | layer 0 of a `Tex1D` or `Tex2D` view, multisample or not, and faces 0 to 5 of a `Cube` view take the non-array dimension (`TEXTURE1D`, `TEXTURE2D`, `TEXTURE2DMS`, `TEXTURECUBE`), which names no layer and views slice 0; a later layer of a texture with more layers takes the array dimension with `ArraySize` 1, and a later cube `TEXTURECUBEARRAY` with `First2DArrayFace` at it and `NumCubes` 1; the layer-0 form reads through the non-array function with no dimension-mismatch message under GPU-based validation on an RTX 3080 Ti ([the run](../research/2026-11-12-d3d12-hardware-run.md)) | `baseArrayLayer` of `VkImageSubresourceRange`, in any view type |
+| Aspect | stencil through an `MTL::PixelFormatX32_Stencil8` view | `DXGI_FORMAT_X32_TYPELESS_G8X24_UINT`, with plane slice 1 for a `TEXTURE2D` or `TEXTURE2DARRAY` view; a `TEXTURECUBE`, `TEXTURECUBEARRAY`, `TEXTURE2DMS` or `TEXTURE2DMSARRAY` view has no plane slice, and the format alone selects the stencil plane, which the debug layer accepts on WARP; a shader read through such a view is unverified | `VK_IMAGE_ASPECT_DEPTH_BIT` or `VK_IMAGE_ASPECT_STENCIL_BIT` |
 | Cost | native | native | native |
 
 ### `Device::createView`
