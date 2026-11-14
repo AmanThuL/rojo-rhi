@@ -73,4 +73,5 @@ its runs under topic `t2`, checksummed the same way
 | `t2-d3d12-diagnosis` | 2026-11-12 | the report-only diagnosis of that round's CPU misses: section timers around R's and N's calls, ablations, and the patch measured |
 | `d3d12-markers` | 2026-11-13 | the cases for the D3D12 hardware markers on an RTX 3080 Ti, driver 621.14, in Debug with GPU-based validation and in Release, with the failing cases of items 13 and 17 and their controls; [the markers note](../research/2026-11-13-d3d12-hardware-markers.md) |
 | `d3d12-discard-fix` | 2026-11-13 | item 17's case in five Release processes and the T1 entries with the discard's global barrier; [the markers note](../research/2026-11-13-d3d12-hardware-markers.md#after-the-run) |
+| `d3d12-capture` | 2026-11-13 | the `[d3d12][capture]` cases with PIX 2610.28 on the RTX 3080 Ti, in Debug with GPU-based validation and in Release, and one `.wpix` file the case wrote |
 | `d3d12-cache-xfer` | 2026-11-13 | the pipeline cache loaded across WARP and the RTX 3080 Ti, both ways (issue #94): a hidden probe case's patch, its output and both blobs |

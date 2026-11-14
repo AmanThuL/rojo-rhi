@@ -9,7 +9,10 @@
 
 #include <catch2/catch_test_macros.hpp>
 
+#include <array>
 #include <cstddef>
+#include <cstdint>
+#include <filesystem>
 #include <optional>
 #include <string>
 #include <vector>
@@ -128,6 +131,40 @@ TEST_CASE("without PIX, beginCapture returns Unsupported and starts nothing", "[
         CHECK(started.error().category == ErrorCategory::Unsupported);
         CHECK(started.error().message.find("PIX") != std::string::npos);
     }
+}
+
+//======================================================================================================================
+TEST_CASE("with PIX, a capture around a submitted list writes its wpix file", "[d3d12][capture]")
+{
+    DeviceDesc desc;
+    desc.enableCapture = true;
+    const OwnedDevice device(desc);
+    Device created = device.get();
+    if (!capturerLoaded())
+    {
+        SKIP("this machine has no PIX installed");
+    }
+    REQUIRE(created.capabilities().capture);
+    const std::filesystem::path path = std::filesystem::absolute("rojorhi-capture-file.wpix");
+    std::filesystem::remove(path);
+    const Buffer buffer = *created.createBuffer(BufferDesc{ .size = 4096, .memory = Memory::Gpu, .usage = BufferUsage::ShaderWrite, .label = "test.buffer" });
+    const Fence fence = *created.createFence(0, "test.fence");
+    REQUIRE(created.beginCapture(path.string()).has_value());
+    created.beginFrame();
+    CommandList list = created.acquireCommandList(QueueType::Graphics, "test.capture");
+    list.fillBuffer(buffer, 0, 4096, 0x5A5A5A5Au);
+    list.end();
+    const std::array<FenceValue, 1> signal{ FenceValue{ fence, 1 } };
+    created.queue(QueueType::Graphics).submit(std::array{ list }, {}, signal);
+    REQUIRE(created.wait(signal[0], UINT64_MAX));
+    created.endFrame();
+    created.endCapture();
+    // The capturer has finished writing the file when EndProgrammaticGpuCapture returns.
+    REQUIRE(std::filesystem::exists(path));
+    CHECK(std::filesystem::file_size(path) > 0);
+    created.destroy(buffer);
+    created.destroy(fence);
+    std::filesystem::remove(path);
 }
 
 //======================================================================================================================
