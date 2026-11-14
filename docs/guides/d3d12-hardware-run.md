@@ -208,11 +208,11 @@ owner decides the correction.
   failure other than `E_INVALIDARG`. No case or tool covers them; the owner decides whether to check
   the first two by hand (a blob from a `warp` build loaded by a `hardware` build; count warnings and
   misses).
-- **Capture.** With PIX installed, run `.\RojoRHITests.exe "[d3d12][capture]"` (the case "without
-  PIX, beginCapture returns Unsupported and starts nothing" SKIPs there) and the contract case
-  "beginCapture with a path either starts a capture or returns an error, and endCapture ends one"; a
-  `.wpix` file must result. Without PIX, `beginCapture` returns the reference's error
-  ([diagnostics](../spec/14-diagnostics.md)).
+- **Capture.** With PIX installed, `.\RojoRHITests.exe "[d3d12][capture]"` runs the case "with
+  PIX, a capture around a submitted list writes its wpix file" and SKIPs the one without PIX, where
+  `beginCapture` returns the reference's error ([diagnostics](../spec/14-diagnostics.md)). Passed on
+  NVIDIA (2026-11-13, PIX 2610.28) in Debug under GPU-based validation and in Release; opening the
+  file was not checked: PIX's tools need the Media Feature Pack, which Windows N editions lack.
 - **Presentation and sparse resources.** The cases of `PresentationConformanceTests.cpp` and
   `SparseConformanceTests.cpp` pass; record `TiledResourcesTier` from section 2.
 
