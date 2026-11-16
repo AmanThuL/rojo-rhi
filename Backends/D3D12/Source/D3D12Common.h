@@ -1,0 +1,186 @@
+//----------------------------------------------------------------------------------------------------------------------
+/// @file D3D12Common.h
+/// @brief Declares the helpers every D3D12 backend file shares: COM ownership, HRESULT errors, the executable's directory, names and fence waits.
+//----------------------------------------------------------------------------------------------------------------------
+#pragma once
+
+#include <rojoRHI/RHI.h>
+
+#include <windows.h>
+
+// Defines, rather than declares, every GUID the headers below name (each definition is selectany), so a CLSID the Agility
+// headers add links without the Windows SDK's dxguid.lib carrying it.
+#include <initguid.h>
+
+#include <d3d12.h>
+
+#if defined(_M_X64)
+#include <emmintrin.h>
+#endif
+
+#include <cstddef>
+#include <cstdint>
+#include <cstring>
+#include <expected>
+#include <string>
+#include <string_view>
+#include <utility>
+
+namespace rojoRHI {
+    struct DeviceImpl;
+}
+
+namespace rojoRHI::d3d12 {
+    /// Copies `size` bytes from `source` to `destination`, which do not overlap. A block of 16 to 256 bytes, as a root block
+    /// or other frame data is, moves inline in 16-byte steps, the last one ending at the block's end; `memcpy` of a size the
+    /// compiler cannot see is a call into the C runtime, which costs more than such a copy itself. Any other size calls
+    /// `memcpy`.
+    inline void copySmall(std::byte* destination, const std::byte* source, size_t size)
+    {
+#if defined(_M_X64)
+        if (size >= 16 && size <= 256)
+        {
+            for (size_t offset = 0; offset + 16 < size; offset += 16)
+            {
+                _mm_storeu_si128(reinterpret_cast<__m128i*>(destination + offset), _mm_loadu_si128(reinterpret_cast<const __m128i*>(source + offset)));
+            }
+            // The last step may cover bytes the loop already wrote, with the same values.
+            _mm_storeu_si128(reinterpret_cast<__m128i*>(destination + size - 16), _mm_loadu_si128(reinterpret_cast<const __m128i*>(source + size - 16)));
+            return;
+        }
+#endif
+        std::memcpy(destination, source, size);
+    }
+
+    /// An owning pointer to a COM interface: it holds one reference, which it releases when it is reset, reassigned or
+    /// destroyed. A copy takes a reference of its own.
+    template<class T> class Com
+    {
+      public:
+        Com() = default;
+
+        /// Takes over the one reference `owned` carries.
+        explicit Com(T* owned) : m_pointer(owned)
+        {
+        }
+
+        Com(const Com& other) : m_pointer(other.m_pointer)
+        {
+            if (m_pointer != nullptr)
+            {
+                m_pointer->AddRef();
+            }
+        }
+
+        Com(Com&& other) noexcept : m_pointer(std::exchange(other.m_pointer, nullptr))
+        {
+        }
+
+        Com& operator=(Com other) noexcept
+        {
+            std::swap(m_pointer, other.m_pointer);
+            return *this;
+        }
+
+        ~Com()
+        {
+            reset();
+        }
+
+        /// Returns the interface, still owned.
+        T* get() const
+        {
+            return m_pointer;
+        }
+
+        T* operator->() const
+        {
+            return m_pointer;
+        }
+
+        /// Returns the interface held, which must not be null.
+        T& operator*() const
+        {
+            return *m_pointer;
+        }
+
+        explicit operator bool() const
+        {
+            return m_pointer != nullptr;
+        }
+
+        /// Releases the interface held, if any, and returns the address a creating call writes its new reference to.
+        T** put()
+        {
+            reset();
+            return &m_pointer;
+        }
+
+        /// Releases the interface held, if any.
+        void reset()
+        {
+            if (T* held = std::exchange(m_pointer, nullptr); held != nullptr)
+            {
+                held->Release();
+            }
+        }
+
+        /// Gives up the reference held without releasing it and returns the interface; the caller now owns that reference.
+        T* detach()
+        {
+            return std::exchange(m_pointer, nullptr);
+        }
+
+      private:
+        T* m_pointer = nullptr;
+    };
+
+    /// Returns the 32 bits of `result`, which a message prints as eight hexadecimal digits.
+    uint32_t hresultBits(HRESULT result);
+
+    /// Returns `text` converted from UTF-16 to UTF-8: for messages, and for the path the Agility device factory reads.
+    std::string utf8(std::wstring_view text);
+
+    /// Returns the directory of the running executable, without a trailing separator; empty when its path cannot be read.
+    /// The Agility runtime and the FidelityFX runtime are both found beside it.
+    std::wstring executableDirectory();
+
+    /// Returns the error of a failed native call: `OutOfMemory` for `E_OUTOFMEMORY`, `DriverFailure` for any other failure,
+    /// with the message "<what> failed with HRESULT 0x<8 hex digits>".
+    Error hresultError(HRESULT result, std::string_view what);
+
+    /// Converts `label` from UTF-8 to UTF-16 into `out`, which it resizes: once `out`'s capacity holds as many code units as
+    /// `label` has bytes, it allocates nothing. Logs and aborts, in every build, when a non-empty label converts to nothing.
+    void widen(std::string_view label, std::wstring& out);
+
+    /// Names `object` with `label`, converted from UTF-8 to UTF-16 once by `widen`, so the debug layer, DRED and captures
+    /// show it. The label is never empty: the core defaults every label. Logs and aborts, in every build, when the runtime
+    /// refuses the name.
+    void setName(ID3D12Object* object, std::string_view label);
+
+    /// What `waitForFence` saw of a fence.
+    struct FenceWait
+    {
+        bool reached = false;   ///< Whether the fence reached the value waited for.
+        uint64_t completed = 0; ///< The last completed value read: `UINT64_MAX` on a removed device.
+        uint32_t hostCalls = 0; ///< The `GetCompletedValue` and `SetEventOnCompletion` calls made, one `nativeHostCalls` each.
+    };
+
+    /// Blocks until `fence` reaches `value` or `timeoutNs` nanoseconds pass. It reads the completed value first and returns
+    /// at once when the value is reached or `timeoutNs` is 0. Otherwise it arms the calling thread's wait event and waits in
+    /// slices of at most ten seconds, the timeout rounded up to whole milliseconds, reading the completed value again after
+    /// every wake; with `UINT64_MAX` it waits without end and logs a warning naming `what` and the value after each full
+    /// slice. When the timeout runs out it reads the completed value once more, so a value reached at the last moment counts.
+    /// The event is auto-reset, made on the thread's first wait and reused by its later ones. A wait that times out leaves
+    /// it armed, since D3D12 cannot disarm an event: a later wake from that arming finds the value unreached and waits
+    /// on, and the thread's exit leaves such an event open, so no handle that reuses its value is ever signalled. On a
+    /// removed device `GetCompletedValue` returns `UINT64_MAX`, so the wait ends at once with that value: a caller checks
+    /// `completed` before it passes a value to `core::completeFence`. Logs and aborts, in every build, when no event can be
+    /// made or armed or the wait itself fails. The caller counts `hostCalls`.
+    FenceWait waitForFence(ID3D12Fence* fence, uint64_t value, uint64_t timeoutNs, std::string_view what);
+
+    /// Does nothing when `result`, returned by the native call `what` of an entry that returns no `Result`, succeeded;
+    /// otherwise reports the removal of `impl`'s device when it was removed, then logs the call and `result` and aborts, in
+    /// every build.
+    void requireSucceeded(DeviceImpl& impl, HRESULT result, std::string_view what);
+} // namespace rojoRHI::d3d12

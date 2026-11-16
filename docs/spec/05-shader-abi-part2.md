@@ -1,0 +1,277 @@
+# 05. Shader ABI (continued)
+
+**Status**: Accepted
+**API version**: 1.0.0
+
+This part defines the `RojoRHI.slang` functions that dereference `Addr`, fetch textures and samplers
+by heap index, add atomically to uint buffer words and mark divergent indices. The model, the layout
+rules and the root block are in [part 1](05-shader-abi.md); the built-ins are in [part
+3](05-shader-abi-part3.md). Every function lives in namespace `rojoRHI`. As [part
+1](05-shader-abi.md#model) explains, each entry states its requirements as normative prose, because
+no tier can diagnose a shader's use of them.
+
+Where a cell does not say `unverified`, the D3D12 lowerings below are verified on WARP and on one
+GPU: the ABI conformance cases ran them on both
+(evidence, the hardware
+run), and `Tools/check_dxil.py` checks the DXIL of
+each existing heap fetch and of the raw accesses.
+
+## Divergence
+
+An index or `Addr` base that may differ between the threads of a wave is marked by the caller with
+`rojoRHI::nonUniform`. An unmarked index or base is dynamically uniform, so uniform fetches keep
+their native cost on every backend.
+
+### `rojoRHI::nonUniform`
+
+```slang
+uint nonUniform(uint index);   // a ViewIndex or SamplerIndex
+Addr nonUniform(Addr base);
+```
+
+Returns its argument unchanged, marked as possibly different between the threads of a wave, for
+passing to `rojoRHI::load`, `rojoRHI::store`, `rojoRHI::atomicAdd`, `rojoRHI::texture`,
+`rojoRHI::wTexture` and `rojoRHI::sampler`.
+
+Requirements: the result is passed directly to a `rojoRHI` fetch or dereference, not stored in
+memory or a shader output first.
+
+#### Valid usage
+
+- None.
+
+#### Mapping
+
+| | Metal 4 | D3D12 | Vulkan |
+|---|---|---|---|
+| Lowering | none: returns the argument | `NonUniformResourceIndex` on the heap index; DXC carries it into the `load`, texture and sampler fetches and drops it through `+ 1`, so `rojoRHI::store` and `rojoRHI::atomicAdd` mark their own final indices; each thread of a wave reaches its own descriptor on NVIDIA (an RTX 3080 Ti on driver 621.14), other vendors unverified | none for an `Addr`, a pointer rather than a descriptor index; for a `uint`, `NonUniformResourceIndex`, which Slang decorates only where the index reaches a descriptor |
+| Cost | native | native: divergent fetches may serialize in hardware, as in native code | native |
+
+## Addresses
+
+`Addr` dereference is native on Metal 4 and Vulkan and costly on D3D12, where HLSL and DXIL have no
+pointers: an `Addr` there carries a raw shader-resource heap index and a byte offset, and each
+distinct base costs a descriptor fetch. A `ShaderWrite` buffer's raw unordered-access descriptor
+sits in the heap slot immediately after its raw shader-resource descriptor, so `rojoRHI::store` and
+`rojoRHI::atomicAdd` use the index plus one. A buffer created without `ShaderWrite` has no raw UAV,
+so that slot holds another descriptor or none, and a store or atomic add into such a buffer is
+undefined behaviour no layer reports ([`Addr`](03-memory-and-buffers.md#addr)). The D3D12 `Addr`
+is the heap index in `lo` and the 32-bit byte offset in `hi`
+([memory and buffers](03-memory-and-buffers.md)). The emitted HLSL has
+`NonUniformResourceIndex` in two places: the return of the helper behind `nonUniform`, and around
+every store's or atomic add's `index + 1`. DXC keeps the qualifier through that function return and
+the `uint2` pack and unpack, so `load`, texture and sampler fetches carry it from the helper, and
+drops it through the addition, so the store or atomic add marks its own index, which is correct for
+a uniform index too (ADR 0023).
+`Tools/check_dxil.py` checks the DXIL handle flag of each fetch kind on hosted Windows CI. Spike 1
+of ADR 0014 measured the fetch as costly (the
+result): a uniform base is 19%
+over a root SRV, a wave-uniform one 1.6% and a divergent one 4.8 times, so per-draw hot data
+belongs in root fields and heap indices, and an `Addr` hop is for bulk and cold data.
+
+In SPIR-V, with the pinned Slang, a helper that is not inlined and takes a texture parameter loses
+the `NonUniform` decoration on its fetch; the conformance shaders mark such helpers `[ForceInline]`.
+
+### `rojoRHI::load`
+
+```slang
+T load<T>(Addr base, uint index);
+```
+
+Returns the `T` at byte address `base + index * sizeof(T)`, where `sizeof(T)` and every member
+offset follow natural layout, equal to the C++ `sizeof` and `offsetof` of the shared struct.
+Writes by earlier GPU work are visible only when ordered by a barrier (see
+[synchronization](09-synchronization.md)).
+
+Requirements: `base` is not the null address and names a buffer that is alive when the read
+executes, or frame data produced in the frame that executes it; the `sizeof(T)` bytes read lie
+inside that buffer; the byte address read is a multiple of 4 and of the natural alignment of `T`;
+`T` contains no texture, sampler or handle type and no pointer, buffer memory being named by `Addr`
+members; and `base` is dynamically uniform across the wave or marked with `rojoRHI::nonUniform`.
+
+#### Valid usage
+
+- None.
+
+#### Mapping
+
+| | Metal 4 | D3D12 | Vulkan |
+|---|---|---|---|
+| Lowering | `device T*` load | `ByteAddressBuffer` from `ResourceDescriptorHeap[index]`, then `LoadAligned<T>` at offset: one raw access for a 2- or 4-component vector `T`, or a struct member at a multiple of its size, 4-byte accesses otherwise | `PhysicalStorageBuffer` load |
+| Cost | native | costly: one descriptor fetch per base; on an RTX 3080 Ti, spike 1 measured +19% over a root SRV for a uniform base, +1.6% for a wave-uniform one and 4.8 times for a divergent one | native |
+
+### `rojoRHI::store`
+
+```slang
+void store<T>(Addr base, uint index, T value);
+```
+
+Writes `value` to byte address `base + index * sizeof(T)` under the same natural layout as
+`rojoRHI::load`. The write is visible to later GPU work only when ordered by a barrier (see
+[synchronization](09-synchronization.md)).
+
+Requirements: `base` is not the null address and names a buffer created with
+`BufferUsage::ShaderWrite` that is alive when the write executes; the `sizeof(T)` bytes written lie
+inside that buffer; the byte address written is a multiple of 4 and of the natural alignment of
+`T`; `T` contains no texture, sampler or handle type and no pointer; and `base` is dynamically
+uniform across the wave or marked with `rojoRHI::nonUniform`.
+
+#### Valid usage
+
+- None.
+
+#### Mapping
+
+| | Metal 4 | D3D12 | Vulkan |
+|---|---|---|---|
+| Lowering | `device T*` store | `RWByteAddressBuffer` from `ResourceDescriptorHeap[NonUniformResourceIndex(index + 1)]`, then `StoreAligned<T>` at offset: one raw access for a 2- or 4-component vector `T`, or a struct member at a multiple of its size, 4-byte accesses otherwise | `PhysicalStorageBuffer` store |
+| Cost | native | costly: one descriptor fetch per base; on an RTX 3080 Ti, spike 1 measured +19% over a root SRV for a uniform base, +1.6% for a wave-uniform one and 4.8 times for a divergent one | native |
+
+### `rojoRHI::atomicAdd`
+
+```slang
+uint atomicAdd(Addr base, uint index, uint value);
+```
+
+Atomically adds `value` to the unsigned 32-bit word at byte address `base + index * 4` and returns
+its original value. Addition wraps modulo 2^32. Concurrent atomic additions to the same word form
+indivisible read-modify-write operations; each returns the word immediately before its own addition.
+
+Memory semantics are relaxed: this provides atomicity only at that location, with no implicit fence,
+ordering or publication of other locations, or synchronization between workgroups. The caller retains
+barriers from initialization to the atomic dispatch and from that dispatch to a read, copy or later
+dispatch (see [synchronization](09-synchronization.md)). Declare the atomic target at its shader stage
+with `Access::ShaderWrite`, which includes atomics; no additional `ShaderRead` access is required.
+
+Requirements: `base` is not the null address and names a buffer created with
+`BufferUsage::ShaderWrite` that is alive when the operation executes; the four target bytes lie
+inside that buffer; their byte address is a multiple of 4; and `base` is dynamically uniform across
+the wave or passed directly through `rojoRHI::nonUniform`. Ordinary reads or writes to the word do
+not race with atomic additions.
+
+The helper adds no binding and changes neither the `Addr` encoding nor any existing built-in's
+bytes or value, so it does not bump `ROJORHI_SHADER_ABI_VERSION`.
+
+#### Valid usage
+
+- None.
+
+#### Mapping
+
+| | Metal 4 | D3D12 | Vulkan |
+|---|---|---|---|
+| Lowering | `atomic_fetch_add_explicit` through `atomic_uint device*`, `memory_order_relaxed` | `RWByteAddressBuffer` from `ResourceDescriptorHeap[NonUniformResourceIndex(index + 1)]`, then `InterlockedAdd` at the byte offset, returning the original uint | `OpAtomicIAdd` through a `PhysicalStorageBuffer` uint pointer, Device scope and relaxed memory semantics; compile-checked oracle |
+| Cost | native | costly: one raw-UAV descriptor fetch per base, as for store | native |
+
+## Heap indices
+
+On Metal 4 a heap index reads an 8-byte resource ID from a hidden table the backend binds at a
+reserved slot: one extra load. Spike 2 of ADR 0014
+kept this documented table over the consecutive `base + i` IDs of a texture view pool, which skip
+the load but rest on undocumented ID arithmetic and a handle pun MSL does not define
+(spike 2). The interface would be the same
+either way.
+
+### `rojoRHI::texture`
+
+```slang
+// T : ITexelElement, defaulting to float4; `view` is a ViewIndex.
+Texture1D<T>          texture1D<T = float4>(uint view);
+Texture1DArray<T>     texture1DArray<T = float4>(uint view);
+Texture2D<T>          texture2D<T = float4>(uint view);
+Texture2DArray<T>     texture2DArray<T = float4>(uint view);
+Texture2DMS<T>        texture2DMS<T = float4>(uint view);
+Texture2DMSArray<T>   texture2DMSArray<T = float4>(uint view);
+Texture3D<T>          texture3D<T = float4>(uint view);
+TextureCube<T>        textureCube<T = float4>(uint view);
+TextureCubeArray<T>   textureCubeArray<T = float4>(uint view);
+RWTexture1D<T>        rwTexture1D<T = float4>(uint view);
+RWTexture1DArray<T>   rwTexture1DArray<T = float4>(uint view);
+RWTexture2D<T>        rwTexture2D<T = float4>(uint view);
+RWTexture2DArray<T>   rwTexture2DArray<T = float4>(uint view);
+RWTexture3D<T>        rwTexture3D<T = float4>(uint view);
+```
+
+Returns the texture view stored in slot `view` of the global view heap, typed by the function. The
+`texture*` forms read sampled views and the `rwTexture*` forms read storage views; a cube is
+written through a two-dimensional array storage view. Textures and samplers are always separate
+objects: combined texture-sampler types are not part of the ABI.
+
+Requirements: `view` is a slot filled by `Device::createView` or `Device::writeView` that is not
+destroyed or released before the access executes; the view in the slot is a sampled view for a
+`texture*` form and a storage view for an `rwTexture*` form, whose format reports both
+`storageRead` and `storageWrite`; the view's texture type, array form and sample count match the
+function; `T` matches the numeric class of the view's format (see
+[formats and limits](15-formats-and-limits.md)); and `view` is dynamically uniform across the wave
+or marked with `rojoRHI::nonUniform`.
+
+#### Valid usage
+
+- None.
+
+#### Mapping
+
+| | Metal 4 | D3D12 | Vulkan |
+|---|---|---|---|
+| Lowering | 8-byte resource ID read from the ID table at `buffer(1)`, through a Slang `__intrinsic_asm` over an argument-buffer table; `texture2DMS` and `texture2DMSArray` compile, but reading them miscompiles under the pinned Slang, which emits invalid MSL for `Load` and `GetDimensions`, and stays unverified until compile-and-run; the conformance multisample kernels read only the dimensions on Metal, through an `__intrinsic_asm` helper, so `Load` on a multisample texture is not exercised there | `ResourceDescriptorHeap[view]`; a `Tex1D` or `Tex2D` view of a layer other than 0, and a `Cube` view of a cube other than the first, is a native array view there, read only through the array function ([`TextureViewDesc`](04-textures-and-heaps.md#textureviewdesc)) | resource descriptor heap, Slang's `__slang_resource_heap` runtime arrays, each fetch marked `NonUniform` |
+| Cost | cheap: one extra 8-byte load, measured at about 3% for `read` and 7.5% for `sample` in a fetch-only kernel | native | cheap: every fetch is marked `NonUniform`, since the `uint` marker cannot reach the handle; correct for a uniform index too |
+
+### `rojoRHI::wTexture`
+
+```slang
+// T : ITexelElement, defaulting to float4; `view` is a ViewIndex.
+WTexture1D<T>         wTexture1D<T = float4>(uint view);
+WTexture1DArray<T>    wTexture1DArray<T = float4>(uint view);
+WTexture2D<T>         wTexture2D<T = float4>(uint view);
+WTexture2DArray<T>    wTexture2DArray<T = float4>(uint view);
+WTexture3D<T>         wTexture3D<T = float4>(uint view);
+```
+
+Returns the storage view stored in slot `view` of the global view heap as a write-only texture,
+one form beside each `rwTexture*` form. A write-only texture is written with `Store(coord, value)`
+and cannot be read: a subscript, `Load` or any other read of it is a compile error. Use it for a
+format whose `FormatCapabilities` report `storageWrite` without `storageRead`, such as `RG16Float`
+on the hardware floor (see [formats and limits](15-formats-and-limits.md)); a format with both may
+use either form.
+
+Requirements: as for `rojoRHI::texture`, with the view in the slot a storage view whose texture
+type and array form match the function, and whose format reports `storageWrite`.
+
+#### Valid usage
+
+- None.
+
+#### Mapping
+
+| | Metal 4 | D3D12 | Vulkan |
+|---|---|---|---|
+| Lowering | an `access::write` texture of the matching shape, read from the ID table at `buffer(1)` as for `rojoRHI::texture`; `Store` is `write` | `RWTexture*` of the matching shape from `ResourceDescriptorHeap[view]`, written by subscript and never read | storage image of `Unknown` format from `__slang_resource_heap`, `NonUniform` on every fetch, written with `OpImageWrite`; it needs `StorageImageWriteWithoutFormat` alone, and Slang emits no `NonReadable` decoration |
+| Cost | cheap: one extra 8-byte load, as for `rojoRHI::texture` | native | cheap: `NonUniform` on every fetch, as for `rojoRHI::texture` |
+
+### `rojoRHI::sampler`
+
+```slang
+SamplerState           sampler(uint index);             // `index` is a SamplerIndex
+SamplerComparisonState comparisonSampler(uint index);
+```
+
+Returns the sampler stored in slot `index` of the global sampler heap: `sampler` for filtering
+samplers and `comparisonSampler` for samplers with a comparison function, used by depth
+comparisons such as `SampleCmp`.
+
+Requirements: `index` is a slot filled by `Device::createSampler` or `Device::writeSampler` that is
+not destroyed or released before the access executes; the sampler in the slot has a comparison
+function exactly when it is read through `comparisonSampler`, which is used only for depth
+comparisons; and `index` is dynamically uniform across the wave or marked with
+`rojoRHI::nonUniform`.
+
+#### Valid usage
+
+- None.
+
+#### Mapping
+
+| | Metal 4 | D3D12 | Vulkan |
+|---|---|---|---|
+| Lowering | sampler ID read from the ID table at `buffer(2)`, as for textures | `SamplerDescriptorHeap[index]` | sampler descriptor heap, `NonUniform` on every fetch as for textures |
+| Cost | cheap: one extra 8-byte load, measured under 0.4% against a `constexpr` sampler in a fetch-only kernel | native | cheap: `NonUniform` on every fetch |

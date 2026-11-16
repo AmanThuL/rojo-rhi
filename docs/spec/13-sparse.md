@@ -1,0 +1,169 @@
+# 13. Sparse resources
+
+**Status**: Accepted
+**API version**: 1.0.0
+
+A sparse resource reserves address space without backing memory. `BufferUsage::Sparse`
+([memory and buffers](03-memory-and-buffers.md)) and `TextureUsage::Sparse`
+([textures and heaps](04-textures-and-heaps.md)) create one; its tiles are then mapped onto, and
+unmapped from, ranges of a `Heap` ([memory and buffers](03-memory-and-buffers.md)) by a queue
+operation, when `Capabilities::placementSparse` ([device](02-device.md)) reports support. Sparse
+resources are native on all three APIs: placement sparse resources on Metal 4, reserved resources on
+D3D12, and sparse buffers and images on Vulkan. On Metal 4 they need
+`MTL::Device::supportsPlacementSparse`, which every Apple7 Mac and every Apple8 or newer GPU
+reports.
+
+Tiles are 64 KiB on Metal 4 and D3D12. The Metal 4 backend creates sparse resources with a 64 KiB
+sparse page size (`MTL::SparsePageSize64`) and creates every `Memory::Gpu` heap able to back pages
+of that size, matching D3D12's fixed 64 KiB tile. On Vulkan the tile size is the resource's
+`VkMemoryRequirements::alignment`, which the implementation chooses; `TileShape::bytes` reports it.
+
+Tile shapes come from the backend per format and sample count. Accessing an unmapped tile does not
+fault: reads return undefined values and writes are discarded. A tile newly mapped onto heap memory
+holds that memory's contents, so its first use follows the aliasing rule of
+[synchronization](09-synchronization.md): a barrier from `Layout::Undefined` for a texture, a global
+barrier for a buffer (`VU-rojo-sparse-0014`).
+
+That texture barrier discards the whole subresource, not only the new tile. A partially resident
+texture that maps a new tile therefore loses the contents of every other tile of that mip level and
+layer, and the caller re-uploads them after the barrier, together with the new tile. The native
+APIs can order the new tile alone, so the rule is coarser than any backend needs; a barrier that
+discards only newly mapped tiles is a possible future extension of this chapter and of
+[synchronization](09-synchronization.md), not part of this version.
+
+### `TileShape`
+```cpp
+struct TileShape {
+    uint32_t width = 0, height = 0, depth = 0;
+    uint32_t bytes = 0;
+    uint32_t mipTailFirst = 0;
+    uint64_t mipTailBytes = 0;
+};
+```
+
+| Field | Meaning |
+|---|---|
+| `width`, `height`, `depth` | Texels one tile covers in each axis; for a buffer, `width` is the tile size in bytes and `height` and `depth` are 1 |
+| `bytes` | Heap bytes one tile maps; every heap offset and buffer range in a mapping is a multiple of it |
+| `mipTailFirst` | First mip level packed into the mip tail; equals the texture's mip count when it has no tail; zero for a buffer |
+| `mipTailBytes` | Heap bytes the mip tail of one layer needs; zero when there is no tail |
+
+Mip levels below `mipTailFirst` are mapped tile by tile; the levels from `mipTailFirst` up are
+packed into one tail per layer and mapped as a unit.
+
+#### Valid usage
+- None.
+#### Mapping
+| | Metal 4 | D3D12 | Vulkan |
+|---|---|---|---|
+| Tile extent | `MTL::Device::sparseTileSize` with the texture type, pixel format, sample count and `MTL::SparsePageSize64`, read when the texture is created; a type the device has no tile for fails creation with `ErrorCategory::Unsupported` | `D3D12_TILE_SHAPE` of `ID3D12Device::GetResourceTiling`, read when the texture is created: the standard tile shape of the format; a one-dimensional texture, or a 3D texture below `D3D12_TILED_RESOURCES_TIER_3`, fails creation with `ErrorCategory::Unsupported` | `VkSparseImageFormatProperties::imageGranularity` |
+| Tile bytes | 64 KiB, `MTL::SparsePageSize64` | 64 KiB, `D3D12_TILED_RESOURCE_TILE_SIZE_IN_BYTES` | `VkMemoryRequirements::alignment` |
+| Mip tail | `MTL::Texture::firstMipmapInTail`, `MTL::Texture::tailSizeInBytes`; a first tail level at or past the mip count is no tail | `D3D12_PACKED_MIP_INFO`: `NumStandardMips` is the first tail level and `NumTilesForPackedMips` tiles are the tail of one layer; no packed mip is no tail | `imageMipTailFirstLod`, `imageMipTailSize`; a format with `VK_SPARSE_IMAGE_FORMAT_SINGLE_MIPTAIL_BIT` has one tail shared by all layers, mapped once through layer 0 |
+| Cost | native | native | native |
+
+### `Device::tileShape`
+```cpp
+TileShape Device::tileShape(Texture texture);
+TileShape Device::tileShape(Buffer buffer);
+```
+Returns the tile shape of a sparse texture or buffer. The shape is fixed at creation, so the call
+records no GPU work and is free-threaded.
+
+#### Valid usage
+- `VU-rojo-sparse-0001` The texture or buffer was created with `TextureUsage::Sparse` or
+  `BufferUsage::Sparse`.
+#### Mapping
+| | Metal 4 | D3D12 | Vulkan |
+|---|---|---|---|
+| Call | `MTL::Device::sparseTileSize` and the texture's tail properties, cached at creation | `ID3D12Device::GetResourceTiling`, cached at creation, of the reserved resource `ID3D12Device10::CreateReservedResource2` makes in `D3D12_BARRIER_LAYOUT_UNDEFINED`: a texture in `D3D12_TEXTURE_LAYOUT_64KB_UNDEFINED_SWIZZLE`, a buffer rounded up to whole tiles | `vkGetImageSparseMemoryRequirements2` or `vkGetBufferMemoryRequirements2`, cached at creation |
+| Cost | native | native | native |
+
+### `TileMapping`
+```cpp
+struct TileMapping {
+    Texture texture = {}; TextureRegion region; bool mipTail = false;
+    Buffer buffer = {}; uint64_t bufferOffset = 0, bufferSize = 0;
+    Heap heap = {}; uint64_t heapOffset = 0; bool unmap = false;
+};
+```
+One change to the mapping of a texture region, a texture's mip tail, or a buffer byte range.
+
+| Field | Meaning |
+|---|---|
+| `texture` | Sparse texture to map, or null when `buffer` is set |
+| `region` | Texels of one mip level, over a range of layers, to map ([`TextureRegion`](07-command-recording-part3.md)); with `mipTail`, only its layer range is read |
+| `mipTail` | Maps the mip tail of each of `region`'s layers instead of a region |
+| `buffer` | Sparse buffer to map, or null when `texture` is set |
+| `bufferOffset`, `bufferSize` | Byte range of `buffer` to map |
+| `heap` | Heap supplying the memory; null with `unmap` |
+| `heapOffset` | Byte offset of the first tile in `heap` |
+| `unmap` | Removes the mapping of the named tiles instead of adding one |
+
+The tiles of a region map onto consecutive heap tiles from `heapOffset`, in order of x, then y,
+then z, then layer; mip tails map one after another, one per layer, each `mipTailBytes` long. A
+buffer range maps onto consecutive heap bytes from `heapOffset`.
+
+#### Valid usage
+- `VU-rojo-sparse-0002` Exactly one of `texture` and `buffer` is not null.
+- `VU-rojo-sparse-0003` The texture or buffer was created with `TextureUsage::Sparse` or
+  `BufferUsage::Sparse`.
+- `VU-rojo-sparse-0004` Without `mipTail`, `region` lies in one mip level below `mipTailFirst`, has
+  a nonzero extent and a layer range inside the texture, its origin is a multiple of the tile
+  shape, and its extent is a multiple of the tile shape or reaches the edge of the level.
+- `VU-rojo-sparse-0005` With `mipTail`, the texture has a mip tail and `region`'s layer range is
+  not empty and lies inside the texture.
+- `VU-rojo-sparse-0006` `mipTail` is false when `buffer` is set.
+- `VU-rojo-sparse-0007` For a buffer, `bufferOffset` is a multiple of `bytes`, `bufferSize` is
+  greater than zero and a multiple of `bytes` or reaches the end of the buffer, and the range lies
+  inside the buffer.
+- `VU-rojo-sparse-0008` Without `unmap`, `heap` is not null, `heapOffset` is a multiple of `bytes`,
+  and every mapped tile lies inside the heap.
+- `VU-rojo-sparse-0009` Without `unmap`, `heap` was created with `Memory::Gpu`, the only memory
+  class that backs sparse tiles.
+- `VU-rojo-sparse-0010` With `unmap`, `heap` is null and `heapOffset` is zero.
+#### Mapping
+| | Metal 4 | D3D12 | Vulkan |
+|---|---|---|---|
+| Texture region | `MTL4::UpdateSparseTextureMappingOperation` with `textureRegion`, `textureLevel`, `textureSlice`, `heapOffset`, one per layer, region and heap offset counted in tiles | per layer, a `D3D12_TILED_RESOURCE_COORDINATE` at the region's first tile of subresource `mip + layer × mips` and a `D3D12_TILE_REGION_SIZE` box (`UseBox`) of its tiles, walked x, then y, then z; its heap range starts at `heapOffset` in tiles plus the earlier layers' tiles | `VkSparseImageMemoryBind` |
+| Mip tail | the same operation naming the first tail level, one per layer, with a region of the tail's tiles along x | per layer, a coordinate at x 0 of the layer's first packed mip and `NumTilesForPackedMips` tiles without `UseBox` | `VkSparseMemoryBind` at `imageMipTailOffset` |
+| Buffer range | `MTL4::UpdateSparseBufferMappingOperation`, range and heap offset counted in tiles | a coordinate at tile `bufferOffset / 64 KiB` of subresource 0 and the range's tiles, a partial last tile included | `VkSparseBufferMemoryBindInfo` |
+| Unmap | `MTL::SparseTextureMappingModeUnmap` with a null heap | `D3D12_TILE_RANGE_FLAG_NULL` with a null heap | `VK_NULL_HANDLE` memory |
+| Cost | native | native | native |
+
+### `Queue::mapTiles`
+```cpp
+void Queue::mapTiles(std::span<const TileMapping> mappings);
+```
+Applies `mappings` in order, as a queue operation: after all work submitted earlier to this queue
+and before any work submitted to it later. Work on other queues is ordered against the mapping by
+fences, by submitting a batch that waits on or signals a `FenceValue`
+([queues and frames](10-queues-and-frames.md)) around the call. The call does not wait, and is
+serialized with submission on the queue. Any queue type may map tiles. A heap stays alive while
+any tile remains mapped from it (`VU-rojo-device-0009`, [device](02-device.md)). Destroying a
+sparse texture or buffer unmaps all its tiles at the call, as if each had been unmapped, so a heap
+that only it kept alive may then be destroyed.
+
+`VU-rojo-sparse-0013` orders work that accesses a tile against a mapping, not two mappings against
+each other. Mappings of one resource on different queues should still be ordered by a fence, as
+work on it is: the D3D12 debug layer counts `UpdateTileMappings` as a write of the resource and
+reports two such calls on different queues with no fence between them, as EXECUTION 1047 for a
+buffer on WARP (see Mapping). No tier checks this ordering.
+
+#### Valid usage
+- `VU-rojo-sparse-0011` Retired in 0.1.0: Every element of `mappings` satisfies the `TileMapping`
+  rules.
+- `VU-rojo-sparse-0012` No two elements of `mappings` name the same tile.
+- `VU-rojo-sparse-0013` Work on another queue that accesses a tile whose mapping changes is
+  complete, or ordered against the mapping by fences, before the mapping executes. Ordering through
+  an earlier submission on the same queue, and completion the CPU observed through a fence, count
+  as orderings by a fence. Checked by the validation tracker.
+- `VU-rojo-sparse-0014` The first use of a tile that `Queue::mapTiles` newly mapped onto heap
+  memory is, for a texture, a texture barrier from `Layout::Undefined` over the subresource that
+  holds it, and, for a buffer, ordered after the mapping by a global barrier, recorded on the use's
+  queue, whose destination covers that use. Checked by the validation tracker.
+#### Mapping
+| | Metal 4 | D3D12 | Vulkan |
+|---|---|---|---|
+| Call | `MTL4::CommandQueue::updateTextureMappings` and `MTL4::CommandQueue::updateBufferMappings`, one per resource, heap and mode, textures first, between two signals of the queue's own event, each with its next value and followed by a wait on the queue for it; Metal orders no mapping update against the queue's command buffers, so the first pair holds the updates until earlier work completes and the second holds later work until they complete, and keeps a later texture mapping from faulting in the driver. Destroying a sparse resource issues no unmap: its tiles leave with the native object when its frame retires | `ID3D12CommandQueue::UpdateTileMappings` with `D3D12_TILE_MAPPING_FLAG_NONE`, one per resource and heap, a null heap for an unmap, in the order of their first element. Destroying a reserved resource issues no unmap: its tiles leave with the native object when its frame retires | `vkQueueBindSparse` |
+| Ordering | queue order, through the queue's own event | queue order; the debug layer counts a mapping as a write of the resource, so mappings of one resource on two queues are ordered by a fence, as other work on it is (under the debug layer's synchronized queue validation the earlier queue's fence may also need a CPU wait, or the layer raises a false EXECUTION 1047; fence ordering stays the contract) | timeline semaphores against the queue's submissions; the queue's family needs `VK_QUEUE_SPARSE_BINDING_BIT` |
+| Cost | cheap: two signals and two waits of the queue's own event per call; the GPU waits for the queue's earlier work before the updates, as native code that orders them must, and the wait after the updates also holds later work that does not touch the tiles, where native code could hold back only the dependent stages with a `MTL::StageResourceState` barrier | native | native |

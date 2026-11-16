@@ -1,0 +1,69 @@
+//----------------------------------------------------------------------------------------------------------------------
+/// @file Formats.h
+/// @brief Declares the per-class capability rules of chapter 15 and the table a device keeps.
+//----------------------------------------------------------------------------------------------------------------------
+#pragma once
+
+#include <rojoRHI/RHI.h>
+
+#include <array>
+#include <cstdint>
+
+namespace rojoRHI::core {
+    /// The number of `Format` enumerators, `Undefined` included; the length of a device's capability table.
+    inline constexpr uint32_t kFormatCount = static_cast<uint32_t>(Format::RGB10A2Unorm) + 1;
+
+    /// One entry per `Format`, indexed by its value.
+    using FormatTable = std::array<FormatCapabilities, kFormatCount>;
+
+    /// Returns the most a device can report for `format`: every capability the reference allows the format's class. A backend
+    /// reports the intersection of this with what its hardware supports, never more. `Format::Undefined` has none.
+    FormatCapabilities formatCeiling(Format format);
+
+    /// Returns `formatCeiling` for every format: the table the Null backend reports.
+    FormatTable formatCeilings();
+
+    /// How a format packs texels: a block of `blockWidth` by `blockHeight` texels occupies `blockBytes` bytes. An uncompressed
+    /// format has a 1 by 1 block; `Format::Undefined` and `D32FloatS8` have no block bytes (0).
+    struct FormatLayout
+    {
+        uint32_t blockWidth = 1;  ///< Texels of one block along x.
+        uint32_t blockHeight = 1; ///< Texels of one block along y.
+        uint32_t blockBytes = 0;  ///< Bytes of one block; `D32FloatS8` has none, because the reference gives it no packed size.
+    };
+
+    /// Returns how `format` packs texels.
+    FormatLayout formatLayout(Format format);
+
+    /// Returns true for a block-compressed format.
+    bool isBlockCompressed(Format format);
+
+    /// Returns true for a format with a depth plane, with or without stencil.
+    bool isDepthFormat(Format format);
+
+    /// Returns true when `samples` is 1, 2, 4 or 8 and bit log2(`samples`) of `capabilities.sampleCounts` is set.
+    bool samplesSupported(uint32_t samples, const FormatCapabilities& capabilities);
+
+    /// Returns true for a format with a stencil plane.
+    bool hasStencilPlane(Format format);
+
+    /// Returns the format that differs from `format` only in sRGB transfer, or `Format::Undefined` when it has no such partner.
+    Format srgbCounterpart(Format format);
+
+    /// The texels one tile of a sparse texture covers along each axis.
+    struct TileExtent
+    {
+        uint32_t width = 0;  ///< Texels along x.
+        uint32_t height = 0; ///< Texels along y.
+        uint32_t depth = 0;  ///< Texels along z; 1 for every type but `Tex3D`.
+    };
+
+    /// Returns the tile extent of a single-sample texture of `type` and `format`; a backend without tile shapes of its own
+    /// registers it with `DeviceCore::setTileExtents`. It is the D3D12 standard tile shapes of
+    /// `D3D12_TILED_RESOURCES_TIER` standard swizzle: 64 KiB per tile, and the extent follows the bits per texel, or per block
+    /// of a block-compressed format, counted in texels. A one-dimensional type tiles as a row of 64 KiB.
+    TileExtent standardTileExtent(Format format, TextureType type);
+
+    /// Issues VU-rojo-format-0001 when `format` is not an enumerator and VU-rojo-format-0005 when it is `Format::Undefined`.
+    void checkQueryFormat(Format format);
+} // namespace rojoRHI::core

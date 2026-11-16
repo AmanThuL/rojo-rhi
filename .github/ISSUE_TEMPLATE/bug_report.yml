@@ -1,0 +1,72 @@
+name: Bug report
+description: Report a defect in RojoRHI or a disagreement between the library and its API reference.
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Pull requests are not accepted here; see CONTRIBUTING.md. For a security vulnerability, use the Security tab instead.
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: The release tag you build.
+      placeholder: v1.0.0
+    validations:
+      required: true
+  - type: dropdown
+    id: backend
+    attributes:
+      label: Backend
+      options:
+        - Metal 4
+        - D3D12
+        - Null
+    validations:
+      required: true
+  - type: dropdown
+    id: build
+    attributes:
+      label: Build mode
+      options:
+        - Debug
+        - Release
+    validations:
+      required: true
+  - type: input
+    id: gpu
+    attributes:
+      label: GPU and driver
+      description: The GPU model, and the driver version where the platform has one.
+      placeholder: Apple M3 Max / NVIDIA GeForce RTX 3080 Ti, driver 621.14
+    validations:
+      required: true
+  - type: input
+    id: os
+    attributes:
+      label: Operating system
+      placeholder: macOS 27.2.1 / Windows 11 build 26300
+    validations:
+      required: true
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened, and what you expected
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: Minimal reproduction
+      description: The smallest program, or the smallest change to an example under Examples/, that shows the problem.
+      render: cpp
+    validations:
+      required: true
+  - type: textarea
+    id: messages
+    attributes:
+      label: Messages
+      description: The validation tracker's output (Debug, DeviceDesc::validation set) and the platform layer's (MTL_DEBUG_LAYER=1, or the D3D12 debug layer).
+      render: text
+    validations:
+      required: false

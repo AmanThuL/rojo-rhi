@@ -1,0 +1,435 @@
+# Changelog
+
+## 1.0.0 (2026-11-16)
+
+- `ROJORHI_VERSION_*` is 1.0.0 (ADR 0022):
+  from this release a breaking change needs a major version and a superseding decision record.
+  Pipeline-cache blobs of 0.2.0 embed that version and become misses. Metal 4 passes T1 on an Apple
+  M4 Pro, and D3D12 is implemented and conformant (T1) on one GPU, an NVIDIA GeForce RTX 3080 Ti on
+  driver 621.14, with its overhead budgets not yet met and other vendors unverified (ADR
+  0031).
+- **Breaking**: new `Limits::maxStorageClearsPerFrame` and `VU-rojo-cmd-0073`: the mips
+  `clearTexture` clears on textures with neither `RenderTarget` nor `DepthStencil` usage, over every
+  list of a frame, are at most the limit, 1,024 on D3D12 (one frame slot's block of its transient
+  descriptor ring), `UINT32_MAX` on Metal 4 and the floor of 1,024 on Null. D3D12's fill kernel
+  writes through a root unordered-access view, one dispatch per 2 GiB window, so a fill takes no
+  descriptor and no longer shares the ring with clears.
+- **Breaking**: D3D12 reports `Capabilities::conservativeRaster` at conservative-rasterization tier
+  1 or higher (tier 3 on an RTX 3080 Ti on driver 621.14), and a pipeline with
+  `RasterState::conservative` covers every pixel a triangle touches; chapter 02 states the
+  overestimation each tier allows, and a `[conformance]` case checks it. New
+  `VU-rojo-pipeline-0026`: `conservative` only with `PrimitiveClass::Triangle`, since D3D12 rejects
+  a conservative line or point pipeline.
+- **Breaking**: D3D12 reports `Limits::maxDrawIndirectCount` as 16,777,216 (2^24), the largest count
+  verified on an RTX 3080 Ti on driver 621.14, instead of `UINT32_MAX`; a counted draw at the limit
+  is a `[conformance]` case. Each indirect draw checks its `maxCount` rule before its buffer-size
+  rule (`VU-rojo-indirect-0003` before `0002`, `0009` before `0008`, `0015` before `0014`), so a
+  count above the limit is reported as such whatever buffer it names.
+- Behaviour change: debug markers are opt-in (ADR
+  0034): a device emits debug groups (PIX events
+  on D3D12) for its scopes, render passes and upscales, and on Metal 4 encoder labels, only when
+  created with the new `DeviceDesc::debugMarkers` or with `enableCapture`. Scopes are still checked,
+  timed with `scopeTimings` and reported with their labels. A scope with neither markers nor timings
+  sends the driver nothing, and on Metal 4 no longer ends the open encoder, so
+  `Counters::encodersOpened` and `nativeRecordCalls` of the same recording differ with and without
+  markers. To keep groups in captures, set `debugMarkers`, or `enableCapture`.
+- D3D12 orders the writes of a texture barrier's source stages before a discard from `Undefined`:
+  the lowering adds, in the same `Barrier` call, a global barrier from those stages' writes to the
+  barrier's destination. Without it an NVIDIA GeForce RTX 3080 Ti on driver 621.14 in Release let a
+  later write race the earlier one.
+- D3D12 recording is cheaper on the timed paths. `uploadFrameData` copies a small block inline and
+  keeps its last address for `setRoot`; a repeated one-record barrier batch reuses its lowering; a
+  list widens a scope's event label only when it changes, and acquires no compute root signature
+  before its first dispatch; a pass sends its starting stencil reference and blend factor with the
+  first draw whose pipeline reads them; an indexed or indirect draw of the list's last buffers skips
+  their lookup. Without `scopeTimings` the core no longer copies scope labels into the frame arena,
+  on every backend.
+- Metal 4 removes the pipeline cache's archive files a crashed process left in the per-user
+  temporary directory. A device holds `flock(LOCK_SH)` on each of its files, now named
+  `rojorhi-pipelines-locked-<pid>-*.metallib`, and every `createDevice` removes the files of that
+  prefix at least a minute old that no process holds. Files of earlier versions, named
+  `rojorhi-pipelines-<pid>-*`, are not removed.
+- D3D12 passes T1 on one GPU, an NVIDIA GeForce RTX 3080 Ti on driver 621.14, in Debug under
+  GPU-based validation and in Release (ADR
+  0031). `rojorhi_backend` stays `null` by
+  default on Windows.
+- A command list bumps a frame-arena page only up to `Limits::maxAddrOffset` and then claims a new
+  page, so frame data on a page larger than the reach of an `Addr`, 512 MiB at the portable floor,
+  no longer lands where its address cannot reach it. An upload larger than the reach still lands at
+  offset zero of a page of its own.
+- D3D12 scopes and render passes widen the caller's label for their PIX event instead of reading the
+  core's copy back from the frame arena, upload memory the CPU reads uncached; the read cost about
+  590 ns per scope on an RTX 3080 Ti.
+- **Breaking**: the portable `maxViews` floor is 996,926, resource binding tier 3's view heap of
+  1,000,000 less the D3D12 backend's largest reservation (ADR
+  0030). D3D12 admits a device
+  whose `OPTIONS19` maximum is exactly 1,000,000, which it refused before; Metal 4 still reports
+  1,000,000, and the Null backend reports the floor, as it does for every numeric limit (ADR
+  0033).
+- `Examples/` holds seven standalone programs on the Metal 4 and D3D12 backends, built with `xmake f
+  --rojorhi_examples=y` ([examples](Examples/README.md)); the option is off by default, so neither a
+  plain build nor a host fetches GLFW.
+
+## 0.2.0 (2026-11-08)
+
+- **Breaking**: the frozen v1 interface is deleted with `Legacy/`
+  (ADR 0029): the targets
+  `RojoRHILegacy`, `RojoRHILegacyMetal4ImGui` and `RojoRHILegacyTests`, the v1 shader rule
+  `rojorhi_slang2metallib` of `xmake/shaders.lua`, the v1 adapter's ImGui patch and buffer probe
+  under `Tools/`, and the `glm` package requirement. A v1 build pins `v0.1.0`.
+- A host that sets `rojorhi_imgui_target` builds `RojoRHIImGui` in its plain build, beside
+  `RojoRHI`.
+- The API reference names `ROJORHI_VU` as the Debug-tier check where it named v1's
+  `ROJORHI_ASSERT`.
+- The optional `RojoRHIImGui` adapter renders Dear ImGui, including platform windows, on every
+  backend through the public interface (architecture).
+- **Breaking**: `Capabilities::upscalers` is a span of `UpscalerSupport`, each kind with its input
+  scale range ([upscaling](docs/spec/12-upscaling.md)); code that read `UpscalerKind` elements
+  reads `.kind`.
+- `Capabilities::capture` reports whether `Device::beginCapture` can start a capture in the process
+  ([device](docs/spec/02-device.md)); it gates no entry.
+- `ROJORHI_VERSION_MINOR` is 2: the interface is 0.2.0
+  (ADR 0022). Pipeline-cache blobs of
+  0.1.0 embed that version and become misses.
+- Chapter 10 states that a submission with no lists is valid with no frame open.
+- The shader ABI module has `uint atomicAdd(Addr base, uint index, uint value)`
+  ([shader ABI](docs/spec/05-shader-abi-part2.md)): it adds modulo 2^32 to the word at `index` and
+  returns the original word, atomic per location with relaxed ordering and no memory fence.
+- The Metal 4 backend writes a message it aborts after to stderr as well when a message callback
+  took it.
+- The Metal 4 backend's per-frame scope warning counts claimed timestamp pairs the GPU never wrote
+  apart from untimed scopes.
+- The Metal 4 backend times a render pass or scope that records nothing, about zero, without the
+  warning for timestamp pairs never written; chapter 14 states what such a scope reports.
+- The ImGui adapter sizes a platform window's swapchain from the platform's current window size,
+  not the viewport's, which lags an OS resize by a frame.
+- The ImGui adapter copies a texture update of several rectangles as one bounding rectangle, which
+  a validating device accepts.
+- The shader rule's `slang.precise_files` compiles the entry files it names with precise floating
+  point on every target ([shader ABI](docs/spec/05-shader-abi-part4.md#precise-floating-point)).
+- D3D12 stays implemented, verified on WARP only, not on hardware; a run on a Windows GPU verifies
+  it next.
+- **Breaking**: `ROJORHI_SHADER_ABI_VERSION` is 3. On Metal 4 a vertex shader's `rojoRHI::drawId`
+  reads the record bound at `buffer(3)`, as task and mesh shaders do, instead of the base instance
+  (ADR 0028); shader libraries are
+  rebuilt, and one stamped 2 is refused with `ErrorCategory::ShaderAbiMismatch`.
+- The Metal 4 backend draws a `drawIndirect` or `drawIndexedIndirect` of one record with a null
+  count as one native indirect draw on the render encoder, with no kernel, compute encoder or pass
+  split ([GPU-driven rendering](docs/spec/08-gpu-driven.md)). The commands its kernel encodes for a
+  count or several records bind their own buffers, and a direct draw binds the device's zero record
+  only after an indirect draw bound another.
+- The Metal 4 backend writes a render pass's begin timestamp on its first render encoder, so the
+  pass's time no longer takes in the kernels of counted draws ahead of it, whose compute encoder may
+  overlap earlier work ([diagnostics](docs/spec/14-diagnostics.md)).
+
+## 0.1.0 (2026-10-22)
+
+- The v2 interface begins beside the frozen v1 interface
+  (ADR 0017).
+- The shader ABI module `Shaders/RojoRHI/RojoRHI.slang`, with compile-only conformance shaders for
+  MSL, SPIR-V and HLSL (ADR 0018).
+- The public types `Addr` and `IndirectArgs`, shared with the shader ABI module.
+- A build-time check of shared struct layouts against Slang reflection on every target.
+- The Null backend: devices with frame slots and deferred destruction, generation-checked handles,
+  capabilities, format capabilities, limits and the message callback, over a backend-neutral core
+  (architecture).
+- The Debug-tier `ROJORHI_VU` check, and death tests for the valid-usage rules of those entries.
+- Buffers and addresses on the Null backend: `Device::createBuffer`, `address` and `cpuPointer`,
+  with `Addr` arithmetic checked against `maxAddrOffset`.
+- Heaps and placement: `Device::createHeap`, `placementRequirements` and placed buffers and
+  textures, checked against the heap's size, alignment and memory class.
+- Textures and views: `Device::createTexture` with initial data, `createView` and `ViewIndex`.
+- Samplers and slot ranges: `Device::createSampler`, `reserveViews`, `reserveSamplers`,
+  `writeView`, `writeSampler` and release of slots, with reuse deferred until the releasing frame
+  retires.
+- Queues and fences: `Device::queue`, `createFence`, `Queue::submit`, `completedValue` and `wait`;
+  a Null submission completes inside the call.
+- API reference changes in those chapters: `VU-rojo-buffer-0010` is retired in favour of
+  `VU-rojo-buffer-0019`, which is limited to work recorded with an address and is checked by the
+  validation tracker; `VU-rojo-texture-0039` (layer limit), `VU-rojo-texture-0040` (no initial data
+  for `D32FloatS8`) and `VU-rojo-texture-0041` (a range starts inside the texture) are added, and
+  the stride rules of `TextureData` state the size `bytes` must hold; `VU-rojo-queue-0004` and
+  `VU-rojo-queue-0006` are retired in favour of `VU-rojo-queue-0007` and `VU-rojo-queue-0008`, which
+  compare against the greatest value submitted; `VU-rojo-texture-0031` is a Debug-tier rule, and a
+  released `IndexRange` equal to a later reservation of the same slots cannot be told apart.
+- Command lists and frame data on the Null backend: `Device::acquireCommandList`,
+  `CommandList::end`, `uploadFrameData` and the list rules of `Queue::submit`, with per-slot list
+  pools and a frame arena whose pages a list claims whole
+  (recording).
+- Shader libraries and pipelines: `Device::loadShaderLibrary` over a text format with an ABI
+  version, `createPipeline` for graphics, mesh and compute, and `PipelineCache` with
+  `pipelineCacheData`, which round-trips through `DeviceDesc::pipelineCache`.
+- Passes and dynamic state: `beginRenderPass`, `endRenderPass`, scopes, `setPipeline`, viewport,
+  scissor, stencil reference, blend constants, topology and depth bias.
+- Draws, dispatches and indirect commands: `setRoot`, `pushRoot`, `draw`, `drawIndexed`,
+  `drawMeshTasks`, `dispatch` and the four indirect forms, with one address resolution site.
+- Copies and clears: buffer, buffer-texture and texture copies, `fillBuffer` and `clearTexture`.
+- Barriers: the Debug-tier rules of `CommandList::barrier`; the rules that follow resource state
+  belong to the validation tracker.
+- Recording takes no locks in Release builds except when a list claims a new frame-arena page, and
+  a Debug-tier check may take the lock of the pool it reads
+  (ADR 0019, which supersedes that clause of ADR 0013);
+  chapters 01 and 07 state the rule.
+- API reference changes in those chapters: `VU-rojo-cmd-0063` is added (a command is recorded on a
+  list that has not ended), and `acquireCommandList` says a list handle is valid until its frame
+  retires; `VU-rojo-buffer-0018` is retired in favour of `VU-rojo-buffer-0020`, the recording-time
+  form, whose limits chapter 03 states; frame data may serve as indirect arguments;
+  `VU-rojo-pipeline-0014` is retired and becomes a requirement of `DeviceDesc::pipelineCache`;
+  `VU-rojo-pipeline-0004`, `0005` and `0012` are retired in favour of `VU-rojo-format-0003`, and
+  `VU-rojo-cmd-0006` is retired and re-issued as `VU-rojo-cmd-0071` without the resolve capability,
+  which `VU-rojo-format-0003` owns; `VU-rojo-cmd-0017` is retired, since each command it named has
+  its own outside-pass rule; `VU-rojo-indirect-0021` to `0023` require a viewport and scissor for
+  the indirect draws; `VU-rojo-cmd-0045` is retired in favour of `VU-rojo-buffer-0001` and `0002`,
+  and `VU-rojo-cmd-0047` and `0050` are retired and split into `VU-rojo-cmd-0064` and `0065`
+  (bounds) and the buffer rules; `VU-rojo-cmd-0048` and `0051` are retired and split into
+  `VU-rojo-cmd-0066` and `0068` (one sample, Debug tier) and `VU-rojo-cmd-0067` and `0069`
+  (layouts, validation tracker); `VU-rojo-cmd-0062` is retired and re-issued as `VU-rojo-cmd-0070`,
+  its layout half; `VU-rojo-sync-0012` is retired in favour of `VU-rojo-texture-0016`, `0017` and
+  `0041`; chapter 07 counts color bytes per sample as the sum of each format's bytes per texel.
+- Swapchains and presentation on the Null backend: `Device::createSwapchain`, `Swapchain::acquire`
+  and `resize`, and `Queue::present`, with a fresh image record for each acquire
+  (edges).
+- Upscalers: `Device::createUpscaler` for every kind the device reports and `CommandList::upscale`.
+- Sparse resources: `Device::tileShape` over the D3D12 standard tile shapes and `Queue::mapTiles`,
+  with the mapping kept per resource and checked by `VU-rojo-device-0009` at heap destruction.
+- Diagnostics: `CommandList::declareAccess`, `Device::scopeTimings` (labels of scopes, render
+  passes and upscales, with zero durations on Null), `beginCapture` and `endCapture` (Null has no
+  capture tool and reports `Unsupported`) and `Device::counters`.
+- Scope labels are copied into the frame arena while recording, so a list may claim a frame-arena
+  page for a label as well as for `uploadFrameData`
+  (ADR 0020, which supersedes ADR 0019);
+  chapters 01 and 07 state both causes.
+- API reference changes in chapters 11 to 14 and 02: `VU-rojo-sparse-0011` is retired, since each
+  element of a `mapTiles` call reports its own rule; `VU-rojo-sparse-0004` states a nonzero extent
+  and a layer range inside the texture, and `VU-rojo-sparse-0005` a non-empty layer range inside
+  the texture; `VU-rojo-present-0012` counts the resolve target of a color attachment as an
+  allowed use; destroying a sparse texture or buffer unmaps all its tiles, which chapters 13 and
+  02 state.
+- The validation tracker, layout part: on a device created with `DeviceDesc::validation`, Debug
+  builds log each recording entry's uses and barriers and replay them at `Queue::submit` under one
+  device mutex, with one layout per texture subresource. It checks `VU-rojo-cmd-0007`, `0010`,
+  `0054`, `0067`, `0069` and `0070`, `VU-rojo-sync-0004`, `0006` and `0013`,
+  `VU-rojo-present-0014` and `0018` and `VU-rojo-upscale-0016`, each reported under the most
+  specific identifier it breaks
+  (ADR 0021,
+  architecture); Release
+  recording is unchanged.
+- API reference changes for the tracker: `VU-rojo-sync-0022` is retired, since read literally it
+  rejected a chain of transitions that `VU-rojo-sync-0013` permits; the claim that the tracker
+  checks heap-slot typing is removed from chapters 01, 02, 04 and 14, since no rule states it and a
+  shader's reads through a heap index are invisible to the CPU; chapter 12 states that `upscale`
+  reads and writes mip level 0 of array layer 0 of each texture.
+- The validation tracker, hazard, aliasing and lifetime part: on a validating Debug device the
+  Null backend checks same-queue hazards and barrier coverage (`VU-rojo-sync-0021` and
+  `VU-rojo-sync-0024`), indirect reads of argument and count bytes (`VU-rojo-indirect-0005`,
+  `0011`, `0017` and `0020`), placed resources that alias memory (`VU-rojo-sync-0009` and `0017`)
+  and the references of unsubmitted lists (`VU-rojo-abi-0003`, `buffer-0019`, `device-0007` and
+  `present-0019`)
+  (architecture).
+- `VU-rojo-sync-0023` is retired for `VU-rojo-sync-0024`: a source covers a use by its stages and
+  the use's write accesses, so reads and a barrier from `Undefined` need no source access, a
+  destination covers a use by its stages and, after a write, its accesses, a layout transition is
+  a write, and a later barrier whose source stage shares a stage with the destination stage of an
+  earlier barrier that orders a use extends that execution chain, for barriers and transitions
+  alike.
+- Chapter 09 states how a barrier from `Undefined` lowers: Vulkan widens `srcAccessMask` to the
+  write accesses of its source stages, and D3D12 pairs `D3D12_BARRIER_ACCESS_NO_ACCESS` with the
+  source stages, which is unverified.
+- The validation tracker, cross-queue part: on a validating Debug device the Null backend orders
+  the queues with vector clocks over fences, the host clock and `beginFrame`, so a fence wait is a
+  full dependency and a pair the later use's clock covers needs no barrier. It checks hazards
+  between queues (`VU-rojo-queue-0005`, transitions and aliased heap bytes included), the layout
+  each queue sees and its handoff (`VU-rojo-sync-0025`), `VU-rojo-present-0018` from the graphics
+  queue's view, placed-texture transitions and discards as heap writes, frame joins
+  (`VU-rojo-device-0006`) and tile-mapping order (`VU-rojo-sparse-0013`)
+  (architecture).
+- `VU-rojo-sync-0018` is retired for `VU-rojo-sync-0025`: a discard from `Undefined` on the
+  acquiring queue needs no accepted layout.
+- API reference clarifications that keep their identifiers: ordering through an earlier submission
+  on the same queue, and completion the CPU observed through a fence, count as orderings by a
+  fence for `VU-rojo-queue-0005` and `VU-rojo-sparse-0013`, and uses of the same heap bytes by two
+  placed resources are uses of the same memory; `VU-rojo-device-0006` counts the graphics-queue
+  submissions of a frame together.
+- Every valid-usage rule of the API reference now has a death test.
+- The v2 public interface is the single header `<rojoRHI/RHI.h>`, in sections by API-reference
+  chapter; the 77 per-type headers it used to include, `<rojoRHI/Addr.h>` and
+  `<rojoRHI/IndirectArgs.h>` among them, are gone, and an include of one of them becomes an include
+  of `<rojoRHI/RHI.h>`. The declarations are unchanged; the header keeps only short notes, and the
+  API reference holds the documentation. The v1 headers under `Legacy/` keep their own layout.
+- ADR 0022 supersedes ADR 0015: the version macros are defined in `<rojoRHI/RHI.h>`, and the
+  rest of the versioning decision is unchanged.
+- The Metal 4 backend begins (`xmake f --rojorhi_backend=metal4`, macOS only): `createDevice` with
+  its floor check, capabilities and limits, format capabilities, the three queues, `beginFrame` and
+  `endFrame`; buffers, heaps, placement, `address` and `Addr` arithmetic; textures, views, samplers
+  and the view and sampler ID tables; fences, `Queue::submit` with fence waits and signals,
+  `completedValue` and `Device::wait`; and command lists as far as `acquireCommandList`, `end` and
+  `uploadFrameData` over real frame-arena pages. The recording, pipeline, presentation, upscaling
+  and sparse entries are not implemented yet (architecture).
+- The native table and slot payloads in the core: `HandlePool::native` reads a record's backend
+  payload with one lock-free load, a pool clears the entry before the retire hook runs, the slot
+  allocators carry a view or sampler payload through `replace`, `retire` and `drain`, and a
+  `waitFrame` hook lets a native backend wait for a frame's work before its slot is reused. The
+  entries that create views and samplers are split into a check and a placement.
+- Counting is the backend's: `nativeRecordCalls`, `nativeBarriers` and `encodersOpened` are
+  noted on the list by the backend at each recording site and folded in by the core at submission,
+  and `nativeSubmitCalls` counts native queue
+  calls only, so Metal 4 counts its own commits and the Null backend its one per submission. The
+  `Counters` table of chapter 14 changes its `Source` row to say so.
+- API reference changes for the Metal 4 backend: `VU-rojo-texture-0042` is added (`Tex1D` and
+  `Tex1DArray` take exactly one mip level, because Metal has no mipmapped 1D textures); the Metal 4
+  format capabilities narrow what the class ceiling allows (`BGRA8Unorm` and `RGB10A2Unorm` report
+  no storage read or write, `R32Float` filtering and resolve follow 32-bit float filtering, and
+  depth formats filter linearly from Apple9); the Metal 4 floor check in chapter 02 names the
+  argument-buffer sampler count, `maxBufferLength`, the threadgroup size and memory limits and BC
+  texture compression, every floor item of chapters 02 and 15 that Metal reports; chapter 15's
+  Metal 4 `maxAddrOffset` is `maxBufferLength` − 1, the furthest byte of the largest buffer, not
+  2^64 − 1.
+- The first conformance cases: `[conformance]` cases in `Tests/Conformance/` that check fence values
+  and CPU-visible buffer memory on a GPU, compiled on every backend and skipped where no GPU runs, and `[metal4]` cases for what only the Metal 4
+  backend makes (testing).
+- Metal 4 command recording: command lists record into their own `MTL4::CommandAllocator`, command
+  buffer and argument tables, committed in one `commit` per submission; a lazily opened compute
+  encoder records every copy path, equal-byte fills and the backend's kernels; unequal fills and
+  `Storage`-only clears run backend kernels written in MSL under `Backends/Metal4/Kernels/`,
+  compiled by the build (`xmake/kernels.lua`) into a library embedded in the binary, so a `metal4`
+  build needs the Metal toolchain; render targets and depth-stencil textures clear through load
+  actions; barrier batches lower to Metal 4 stage barriers, with the trailing barrier at `end` and
+  the queue masks of chapter 09; scopes are debug groups; native calls, barriers and encoders are
+  counted at every site; a private, test-only seam reports each commit's GPU time. Passes,
+  pipelines, dispatches, draws, timestamps and presentation are not implemented
+  (architecture). The `acquireCommandList`, `end`,
+  `beginScope`, `endScope`, `clearTexture`, fill and copy rows of chapter 07, the Batch, Cost and
+  `Copy` stage rows of chapter 09 and the `Counters` row of chapter 14 describe the mapping. The
+  conformance cases read copies, initial data, barriers, fills, clears and queue handoff back from
+  the GPU.
+- `RojoRHILegacy` and the Metal 4 backend link one metal-cpp implementation unit,
+  `RojoRHIMetalCpp`, so a host that links both has one definition of metal-cpp's tables.
+- Metal shader libraries (`.metal4lib`) with the ABI stamp and each entry's stage and threadgroup
+  size, built for macOS 26; conformance shaders for the fragment stage, readback-ready vertex and
+  per-type texture kernels.
+- API reference changes in chapters 05 and 06: `Device::loadShaderLibrary` returns
+  `ErrorCategory::ShaderAbiMismatch` for another ABI version and `ErrorCategory::DriverFailure` for
+  a blob built for another backend or carrying no stamp.
+- The Metal 4 backend implements swapchains and presentation on a `CAMetalLayer` (acquire with a
+  one-second deadline and a latency limit kept by presented handlers, present, resize, deferred
+  destruction, the layer's residency set on the graphics queue), placement sparse resources
+  (formats and tile shapes measured from the device, `Queue::mapTiles` over the native mapping
+  updates, with a work-around for a driver fault) and programmatic capture through the capture
+  manager. Chapters 11, 13 and 15 gain their Metal 4 mapping rows, chapter 03's `Sparse` row names
+  the page size and length of a sparse buffer, and `Swapchain::acquire` returns a null texture for
+  a zero-extent swapchain. On Metal 4, `Queue::mapTiles` and `Swapchain::acquire` move from `native`
+  to `cheap` in chapters 11 and 13 and in appendix A
+  (architecture).
+- Metal 4 drawing: `Device::loadShaderLibrary` reads the RojoRHI shader library container and
+  checks the ABI stamp and each entry's stage; `createPipeline` makes render, mesh and compute
+  pipelines with shared depth-stencil states; `pipelineCacheData` and `DeviceDesc::pipelineCache`
+  round-trip a Metal 4 archive, and `Counters` reports `pipelineCacheHits`; render passes open
+  their encoder at the first draw that needs one; dynamic state is set only where it differs; and
+  the direct draws, dispatches, indirect dispatch and counted indirect draws (kernels that encode
+  indirect command buffers, at `maxCount` 1 a native record) and mesh tasks record on Metal 4.
+  The `[conformance]` cases run the ABI shaders, render passes, draws, dispatches, mesh tasks,
+  indirect and counted draws and the graphics barrier kinds on the GPU under API validation, and
+  the contract files of passes, pipelines, draws and dispatches now run on Metal 4
+  (architecture).
+- API reference changes for Metal 4 drawing: the Metal 4 mapping rows of chapters 02, 05, 06, 07
+  and 08 say that no render encoder opens until a draw, that a counted draw's kernel runs ahead of
+  the encoder and a split pays a store and a load, that a graphics pipeline with neither a fragment
+  entry nor a depth format is created with rasterization off, that a mesh pipeline with color
+  targets, a depth format and no fragment entry is `DriverFailure`, that the pipeline cache blob is
+  a RojoRHI header around a Metal 4 archive, and that a direct mesh draw reads a zero `drawId`
+  record; chapter 08's mesh indirect row names `buffer(3)` and 1,536 bytes per command; chapter
+  14's `Counters` row lists pipeline-cache hits.
+- Test support: `Tests/Support/Backend.h` supplies a standard library, a re-stamped one and a
+  foreign one for every backend, so the pipeline contract cases run on Metal 4; the Null library
+  builder moved to `Tests/Support/Null/`.
+- Metal 4 scope timings: every scope, render pass and upscale is timed with per-slot counter heaps,
+  claimed without a lock while recording and resolved at the frame wait, so `scopeTimings` reports
+  durations (architecture).
+- The Metal 4 upscaler: `createUpscaler` and `upscale` through MetalFX, with a cleared reactive
+  mask and a fence owed to the encoder kind that follows
+  (architecture).
+- Write-only storage accessors in the shader ABI module, so a Metal 4 shader writes a storage
+  texture without a read access.
+- The Metal 4 backend implements every entry of chapters 01 to 15; it refuses with `Unsupported`
+  only what the reference lets it refuse. New conformance files cover sparse tiles, scope timings,
+  upscaling, formats and write-only accessors, and every contract file runs on Metal 4. Oracles
+  for formats, sparse tiles, scopes and upscales compare exact values or reference bounds on the
+  GPU.
+- The default backend is `metal4` on macOS and `null` elsewhere (`xmake/targets.lua`). A consumer's
+  hosted macOS CI, which has no GPU, passes `--rojorhi_backend=null`. The chapter 05, 07, 12, 14
+  and 15 mapping text describes the Metal 4 upscaler, timings, write-only accessors and formats.
+- Metal 4 fixes found by the new cases: `pipelineCacheData` holds the pipeline cache's lock
+  exclusively while pipeline compiles and MetalFX scaler creation hold it shared, which ends a
+  crash in the serializer; scalers are created one at a time under a process-wide mutex, because
+  MetalFX fills an unsynchronized table of Metal's; `Queue::mapTiles` orders its updates against
+  the queue's earlier and later work (chapter 13 states the order); and `Swapchain::resize` runs
+  inside an autorelease pool.
+- API reference change for the planned D3D12 backend: the floor of `maxAddrOffset` is
+  2^29 − 1, down from 2^32 − 1, because a D3D12 raw view holds at most 2^27 four-byte
+  elements, so one `Addr` base reaches 512 MiB. `VU-rojo-buffer-0011` keeps its identifier
+  and rule and states the new value. The Null device reports 2^29 − 1; Metal 4 still reports
+  `maxBufferLength` − 1. Portable code that reaches past the first 512 MiB of a buffer through
+  one `Addr` places that data in another buffer.
+- API reference change for the planned D3D12 backend: `VU-rojo-cmd-0070` is retired and
+  re-issued as `VU-rojo-cmd-0072`, so `clearTexture` takes its subresources in
+  `Layout::CopyDst` only, no longer in `Layout::General`. A D3D12 clear is bracketed by
+  barriers that name the exact layout before and after it, and a backend tracks no layouts. A
+  caller holding a `General` texture records one barrier to `CopyDst` first. Chapter 09's
+  table of accesses, its `General` layout and its `Copy` stage row say so; the Null and Metal 4
+  backends are unchanged.
+- The HLSL lowering of `rojoRHI::load` and `rojoRHI::store` emits one raw access for a 2- or
+  4-component vector, alone or as a struct member at a multiple of its size, and `store` marks its
+  heap index non-uniform itself, because DXC drops the qualifier through the `+ 1`
+  (ADR 0023).
+- API reference change for the planned D3D12 backend: `VU-rojo-sync-0026` is added, so a texture
+  barrier recorded on a `Copy` list has `General` as both its old and new layout and discards
+  nothing from `Undefined`. A D3D12 copy queue takes no layout barrier, and such a barrier lowers to
+  a global one. A caller moves a texture another queue used, or a placed or `Sparse` one, to
+  `General` on the graphics or compute queue before the copy queue uses it; `VU-rojo-sync-0006`
+  still reports a use on a Copy list in another layout.
+- API reference change for the planned D3D12 backend: `VU-rojo-sync-0027` is added, so a texture
+  moves to `DepthStencilRead` only when it was created with `Sampled` as well as `DepthStencil`.
+  D3D12 lowers the layout to `LAYOUT_SHADER_RESOURCE`, which a texture created without
+  shader-resource access cannot take; the layout permits only `Sampled` view reads, so a texture
+  without `Sampled` could not use it.
+- API reference change for the planned D3D12 backend: a texture created without initial data that
+  is neither placed nor `Sparse` is in `General` for its first use or barrier on a `Copy` list, so
+  the copy queue uploads into a new texture with no graphics or compute barrier first. A placed or
+  `Sparse` texture is still discarded from `Undefined` on the graphics or compute queue first, and
+  `VU-rojo-sync-0006` reports one a Copy list uses before that.
+- Interface change: GPU scope timing is opt-in through the new `DeviceDesc::scopeTimings`, false by
+  default. A device created without it keeps the debug group and label of every scope, render pass
+  and upscale but writes no timestamp, makes no counter heap, query heap or readback buffer,
+  resolves nothing at the frame wait, and returns an empty `Device::scopeTimings`; with it, scopes
+  are timed as before. No valid-usage rule is added. The version stays 0.1.0, unreleased
+  (ADR 0022).
+- The D3D12 backend presents through DXGI flip-model swapchains, maps tiles of reserved
+  resources on any queue, captures through the PIX GPU capturer and creates FSR upscalers through
+  the FidelityFX runtime that sits beside the executable. Implemented, verified on WARP only, not
+  on hardware (architecture).
+- The D3D12 backend records FSR upscales on graphics lists, and its test run on WARP covers every
+  contract, death and `abi` entry and every conformance file except three,
+  in Debug under the debug layer and GPU-based validation, and the contract and conformance
+  entries in Release, with a third Debug configure for the upscale cases WARP cannot complete under
+  validation. Implemented, verified on WARP only, not on hardware
+  (the run).
+  `createUpscaler` refuses an FSR input under 2 texels in an axis with `Unsupported`.
+- API reference changes: `VU-rojo-sparse-0014` is added (chapter 13), so the first use of a tile
+  that `Queue::mapTiles` newly mapped is, for a texture, a barrier from `Undefined` that discards
+  it, and, for a buffer, ordered after the mapping by a global barrier; the tracker now checks the
+  rule. On Metal 4 a discard of a `Sparse` texture is lowered with alias visibility, which
+  chapter 09's Visibility row states.
+- `rojoRHI::vertexIndex` excludes the first vertex and base vertex on every target, as D3D12's
+  `SV_VertexID` does, and the shader ABI version is 2
+  (ADR 0024).
+- The D3D12 backend implements every entry of chapters 01 to 15, refusing with `Unsupported` only
+  what the reference lets it refuse; DLSS and XeSS are not compiled in. Implemented, verified on
+  WARP only, not on hardware: the T1 conformance cases pass on WARP in Debug under the debug layer
+  and GPU-based validation, except the upscale files, which run in a third Debug configure with the
+  layer alone (`conformance` 173 cases, `contract` 578, `death` 555, `abi` 10), and WARP is not T1
+  acceptance. `rojorhi_backend` stays `null` by default on Windows until a hardware run
+  (ADR 0026).
+- The Metal 4 backend's CPU, GPU, allocation, pipeline and native-call overhead against hand-written
+  native Metal 4 code is within its budgets on an Apple M3 Max in its fourth measured round, CPU
+  time judged against the larger of 5% of native time and 5 ns per RojoRHI call
+  (ADR 0025).

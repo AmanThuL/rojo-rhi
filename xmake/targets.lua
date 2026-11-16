@@ -1,0 +1,386 @@
+-- Every target of the RHI component, includable from this component's own root and from a host
+-- project that mounts the component. The file is the component's build interface: a host includes
+-- it and nothing else, so project settings, language level and package requires stay declared once
+-- per root rather than once per include.
+--
+-- The shader rules the test targets opt into, and the rule that compiles the Metal 4 backend's own
+-- kernels, are part of that interface, so this file includes them rather than leaving a host to
+-- remember more includes.
+includes("slang.lua", "metal.lua", "hlsl.lua", "kernels.lua")
+
+-- Two values a host may set as plain globals before the include, because xmake evaluates an
+-- included description script in the same interpreter as the including one:
+--
+--   rojorhi_thirdparty    directory holding metal-cpp; defaults to <component>/ThirdParty
+--   rojorhi_imgui_target  name of the host's Dear ImGui target; absent means no ImGui adapter
+--
+-- A configure option would be the obvious home for the first, but get_config() still reads nil on
+-- the description pass that resolves options, so an option cannot feed add_includedirs without the
+-- include directory differing between passes. A global is read the same way on every pass.
+--
+-- xmake resolves add_files and add_includedirs against the directory of the script that declares
+-- them, so every path inside the component is written relative to this file and reads the same
+-- under either root. A host's third-party directory is outside the component and arrives absolute,
+-- so it is made relative to this script for the same reason.
+--
+-- The shader rule runs in script scope, where this script's directory is no longer the anchor, so
+-- the two values it reads off the target are absolute instead.
+local component = ".."
+local component_dir = path.directory(os.scriptdir())
+local thirdparty_dir = rojorhi_thirdparty and path.absolute(rojorhi_thirdparty)
+                       or path.join(component_dir, "ThirdParty")
+local thirdparty = path.relative(thirdparty_dir, os.scriptdir())
+local imgui_target = rojorhi_imgui_target
+
+-- The backend compiled into RojoRHI (ADR 0012); one backend per build.
+-- The default is metal4 on a macOS host and null elsewhere. Option scope runs before the platform is
+-- resolved, so is_plat answers nothing there; is_host does.
+option("rojorhi_backend")
+    if is_host("macosx") then
+        set_default("metal4")
+    else
+        set_default("null")
+    end
+    set_values("null", "metal4", "d3d12")
+    set_showmenu(true)
+    set_description("Backend for RojoRHI: metal4 (builds on macOS only, the default there), d3d12 (builds on Windows only) or null (the GPU-free test backend, the default elsewhere; pass it on a Mac host for another platform)")
+option_end()
+
+-- The adapter a d3d12 build creates its device on, and the D3D12 debug features it enables. Both are
+-- build configuration, compiled into the backend as defines: the library reads no environment variable.
+option("rojorhi_d3d12_adapter")
+    set_default("hardware")
+    set_values("hardware", "warp")
+    set_showmenu(true)
+    set_description("Adapter a d3d12 build creates its device on: hardware (the default) or warp (the software rasterizer, for a machine with no GPU)")
+option_end()
+
+option("rojorhi_d3d12_debug")
+    set_default("mode")
+    set_values("mode", "off", "layer", "gbv")
+    set_showmenu(true)
+    set_description("D3D12 debug features of a d3d12 build: mode (the debug layer and DRED in Debug builds, nothing in Release; the default), off, layer (the debug layer and DRED) or gbv (the debug layer, GPU-based validation and DRED)")
+option_end()
+
+-- Release builds use link-time optimization, so a call into the library inlines into its caller
+-- (ADR 0012): ThinLTO with clang, /GL with /LTCG on MSVC. A host compiles its own Release targets
+-- with the same policy for the call to inline into its code; its linker accepts the library's
+-- objects either way.
+local function release_lto()
+    if is_mode("release") then
+        set_policy("build.optimization.lto", true)
+        if is_plat("windows") then
+            add_arflags("/LTCG")
+        end
+    end
+end
+
+-- MSVC's C4702 (unreachable code) fails hosted Windows CI under /WX, and only an MSVC build sees it. clang's
+-- -Wunreachable-code finds the same pattern, a FAIL or a return followed by more code, on a Mac. It is a warning here,
+-- as every warning is off Windows. The library, the ImGui adapter, the tests and the benchmark harness take it.
+local function warn_unreachable()
+    add_cxxflags("-Wunreachable-code", "-Wunreachable-code-return", {tools = "clang"})
+end
+
+-- The adapter and debug features a d3d12 build selects, as private defines of the calling target: the
+-- library acts on them, and the D3D12 cases check the device against them.
+local function d3d12_selection()
+    add_options("rojorhi_d3d12_adapter", "rojorhi_d3d12_debug")
+    if is_config("rojorhi_d3d12_adapter", "warp") then
+        add_defines("ROJORHI_D3D12_ADAPTER_WARP")
+    else
+        add_defines("ROJORHI_D3D12_ADAPTER_HARDWARE")
+    end
+    if is_config("rojorhi_d3d12_debug", "off") then
+        add_defines("ROJORHI_D3D12_DEBUG_OFF")
+    elseif is_config("rojorhi_d3d12_debug", "layer") then
+        add_defines("ROJORHI_D3D12_DEBUG_LAYER")
+    elseif is_config("rojorhi_d3d12_debug", "gbv") then
+        add_defines("ROJORHI_D3D12_DEBUG_GBV")
+    else
+        add_defines("ROJORHI_D3D12_DEBUG_MODE")
+    end
+end
+
+-- The D3D12 runtime an executable loads from its own directory, copied there after each build:
+-- the Agility SDK's D3D12Core.dll and d3d12SDKLayers.dll into D3D12/, and WARP's d3d10warp.dll
+-- beside the executable. The FidelityFX loader and upscaler DLLs are copied only when the
+-- third-party directory holds them: the backend lists FSR only when its loader loads, so their
+-- absence is a supported state. An executable adds the rule and sets the value rojorhi.thirdparty
+-- to the absolute third-party directory setup fills; a host does the same for its own executable.
+rule("rojorhi.d3d12_runtime")
+    after_build(function (target)
+        local thirdparty = target:values("rojorhi.thirdparty")
+        if type(thirdparty) == "table" then
+            thirdparty = thirdparty[1]
+        end
+        assert(thirdparty, format("%s adds rojorhi.d3d12_runtime without setting rojorhi.thirdparty", target:name()))
+        local function copy(source, destination_dir, required)
+            if not os.isfile(source) then
+                if required then
+                    raise("%s is missing; run xmake setup", source)
+                end
+                return
+            end
+            -- Compared by content, not time, so a pin moved to an older version is copied too.
+            os.mkdir(destination_dir)
+            os.cp(source, path.join(destination_dir, path.filename(source)), {copy_if_different = true})
+        end
+        local targetdir = target:targetdir()
+        copy(path.join(thirdparty, "agility", "bin", "D3D12Core.dll"), path.join(targetdir, "D3D12"), true)
+        copy(path.join(thirdparty, "agility", "bin", "d3d12SDKLayers.dll"), path.join(targetdir, "D3D12"), true)
+        copy(path.join(thirdparty, "warp", "bin", "d3d10warp.dll"), targetdir, true)
+        copy(path.join(thirdparty, "fidelityfx", "bin", "amd_fidelityfx_loader_dx12.dll"), targetdir, false)
+        copy(path.join(thirdparty, "fidelityfx", "bin", "amd_fidelityfx_upscaler_dx12.dll"), targetdir, false)
+    end)
+rule_end()
+
+-- The one metal-cpp implementation unit: it emits the Objective-C class and selector tables every
+-- metal-cpp caller links against, so a binary links exactly one copy. The frameworks are public so a
+-- binary linking the backend gets them.
+if is_plat("macosx") then
+    target("RojoRHIMetalCpp")
+        set_kind("static")
+        set_default(false)
+        release_lto()
+        add_files(path.join(component, "Backends/Metal4/MetalCpp/MetalCppImpl.cpp"))
+        add_includedirs(path.join(thirdparty, "metal-cpp"))
+        add_frameworks("Metal", "MetalFX", "QuartzCore", "Foundation", {public = true})
+end
+
+target("RojoRHI")
+    set_kind("static")
+    warn_unreachable()
+    add_options("rojorhi_backend")
+    release_lto()
+    add_files(path.join(component, "Source/**.cpp"))
+    if is_config("rojorhi_backend", "metal4") then
+        add_files(path.join(component, "Backends/Metal4/Source/*.cpp"))
+        -- The backend's kernels, compiled into a library its sources embed; only this backend needs the Metal toolchain.
+        add_rules("rojorhi.metal4_kernels")
+        add_files(path.join(component, "Backends/Metal4/Kernels/*.metal"))
+        add_includedirs(path.join(thirdparty, "metal-cpp"))
+        if is_plat("macosx") then
+            add_deps("RojoRHIMetalCpp")
+            add_frameworks("CoreGraphics", {public = true})
+        end
+    elseif is_config("rojorhi_backend", "d3d12") then
+        add_files(path.join(component, "Backends/D3D12/Source/*.cpp"))
+        -- The backend's kernels, compiled into DXIL its sources embed by the DXC `xmake setup` fetches.
+        add_rules("rojorhi.d3d12_kernels")
+        add_files(path.join(component, "Backends/D3D12/Kernels/*.hlsl"))
+        set_values("rojorhi.dxc", path.join(thirdparty_dir, "dxc/bin/x64/dxc.exe"))
+        -- System includes, so the Agility headers shadow the Windows SDK's older d3d12.h and /external:W0 covers them and
+        -- the FidelityFX headers the upscaler compiles against; its runtime is loaded beside the executable.
+        add_sysincludedirs(path.join(thirdparty, "agility/include"), path.join(thirdparty, "fidelityfx/include"))
+        add_defines("WIN32_LEAN_AND_MEAN", "NOMINMAX")
+        d3d12_selection()
+        -- user32 for IsWindow, the surface check; shell32 and ole32 for the Program Files folder the PIX capturer is found under.
+        add_syslinks("d3d12", "dxgi", "dxguid", "user32", "shell32", "ole32", {public = true})
+    -- The Null backend directory holds no source until a part adds one, and xmake warns on an empty glob.
+    elseif #os.files(path.join(component_dir, "Backends/Null/Source/*.cpp")) > 0 then
+        add_files(path.join(component, "Backends/Null/Source/*.cpp"))
+    end
+    add_includedirs(path.join(component, "Include"), {public = true})
+    add_includedirs(path.join(component, "Source"))
+    on_config(function (target)
+        local backend = get_config("rojorhi_backend")
+        if backend == "metal4" then
+            assert(target:is_plat("macosx"), format("rojorhi_backend=metal4 builds on macOS only; this platform is %s, so use null", target:plat()))
+        elseif backend == "d3d12" then
+            assert(target:is_plat("windows"), format("rojorhi_backend=d3d12 builds on Windows only; this platform is %s, so use null", target:plat()))
+        else
+            assert(backend == "null", format("rojorhi_backend=%s is not a backend; the values are null, metal4 and d3d12", tostring(backend)))
+        end
+    end)
+
+-- The backend-neutral Dear ImGui renderer, written against the public interface alone, so it builds with whichever
+-- backend RojoRHI was configured for. It is declared only when the host names its ImGui target, whose headers it compiles
+-- against, and a host's plain build then builds it.
+-- Its shader library embeds into its sources through the slang rule; its own target directory keeps its Shaders/ apart
+-- from the test binary's.
+if imgui_target then
+    target("RojoRHIImGui")
+        set_kind("static")
+        warn_unreachable()
+        release_lto()
+        set_targetdir("$(builddir)/$(plat)/$(arch)/$(mode)/rojorhi-imgui")
+        add_files(path.join(component, "Adapters/ImGui/Source/*.cpp"))
+        add_includedirs(path.join(component, "Adapters/ImGui/Include"), {public = true})
+        add_includedirs(path.join(component, "Adapters/ImGui/Source"))
+        add_deps("RojoRHI", imgui_target)
+        add_rules("rojorhi.slang")
+        set_values("slang.moduledir", path.join(component_dir, "Shaders/RojoRHI"))
+        set_values("slang.slangc", path.join(thirdparty_dir, is_host("windows") and "slang/bin/slangc.exe"
+                                                             or "slang/bin/slangc"))
+        set_values("slang.embed", "ImGuiShaders.h")
+        add_files(path.join(component, "Adapters/ImGui/Shaders/ImGui.slang"))
+end
+
+target("RojoRHITests")
+    set_kind("binary")
+    warn_unreachable()
+    set_default(false)
+    set_targetdir("$(builddir)/$(plat)/$(arch)/$(mode)/rojorhi-test")
+    add_files(path.join(component, "Tests/*.cpp"))
+    local contract_left_out = {}
+    local conformance_left_out = {}
+    if is_config("rojorhi_backend", "d3d12") then
+        -- WARP+GBV: WARP never completes a FidelityFX upscale dispatch under GPU-based validation, while the debug layer alone
+        -- runs it, so the two files whose cases submit upscales are left out of that configuration and every other one runs
+        -- them; evidence: the floor probe's fsr section, CI run 39463099719.
+        if is_config("rojorhi_d3d12_adapter", "warp") and is_config("rojorhi_d3d12_debug", "gbv") then
+            table.insert(contract_left_out, "UpscalerTests.cpp")
+            table.insert(conformance_left_out, "UpscaleConformanceTests.cpp")
+        end
+        -- A renamed or deleted file must leave the lists too, so on_config fails on a name that matches no file. The check
+        -- runs in script scope, the only scope that can fail a configuration, so the values travel absolute.
+        local left_out = {}
+        for _, name in ipairs(contract_left_out) do
+            table.insert(left_out, path.join(component_dir, "Tests/Contract", name))
+        end
+        for _, name in ipairs(conformance_left_out) do
+            table.insert(left_out, path.join(component_dir, "Tests/Conformance", name))
+        end
+        set_values("rojorhi.d3d12_left_out", left_out)
+        on_config(function (target)
+            for _, file in ipairs(table.wrap(target:values("rojorhi.d3d12_left_out"))) do
+                assert(os.isfile(file), format("the d3d12 build leaves out %s, which does not exist; remove or rename the entry", file))
+            end
+        end)
+    end
+    for _, file in ipairs(os.files(path.join(component_dir, "Tests/Contract/*.cpp"))) do
+        if not table.contains(contract_left_out, path.filename(file)) then
+            add_files(path.join(component, "Tests/Contract", path.filename(file)))
+        end
+    end
+    add_files(path.join(component, "Tests/Support/*.cpp"))
+    -- The conformance directory may hold no source, and a glob that matches nothing makes xmake warn, so each file is added.
+    for _, file in ipairs(os.files(path.join(component_dir, "Tests/Conformance/*.cpp"))) do
+        if not table.contains(conformance_left_out, path.filename(file)) then
+            add_files(path.join(component, "Tests/Conformance", path.filename(file)))
+        end
+    end
+    -- The shader library cases name the configured backend's container, which EmbeddedShaders.h holds.
+    if is_config("rojorhi_backend", "metal4") then
+        add_defines("ROJORHI_TEST_BACKEND_METAL4")
+    elseif is_config("rojorhi_backend", "d3d12") then
+        add_defines("ROJORHI_TEST_BACKEND_D3D12")
+    else
+        add_defines("ROJORHI_TEST_BACKEND_NULL")
+    end
+    -- Core and Null cases test the core through the Null backend, which never ships, so they build only with it.
+    if is_config("rojorhi_backend", "null") then
+        add_files(path.join(component, "Tests/Core/*.cpp"))
+        add_files(path.join(component, "Tests/Null/*.cpp"))
+        add_files(path.join(component, "Tests/Support/Null/*.cpp"))
+    end
+    -- Metal 4 cases may reach the backend's private headers and metal-cpp.
+    if is_config("rojorhi_backend", "metal4") then
+        if #os.files(path.join(component_dir, "Tests/Metal4/*.cpp")) > 0 then
+            add_files(path.join(component, "Tests/Metal4/*.cpp"))
+        end
+        add_files(path.join(component, "Tests/Support/Metal4/*.cpp"))
+        add_includedirs(path.join(component, "Backends/Metal4/Source"))
+        add_includedirs(path.join(thirdparty, "metal-cpp"))
+    end
+    -- D3D12 cases may reach the backend's private headers and the Agility headers; the executable loads the runtime
+    -- the rule copies beside it.
+    if is_config("rojorhi_backend", "d3d12") then
+        if #os.files(path.join(component_dir, "Tests/D3D12/*.cpp")) > 0 then
+            add_files(path.join(component, "Tests/D3D12/*.cpp"))
+        end
+        add_files(path.join(component, "Tests/Support/D3D12/*.cpp"))
+        add_includedirs(path.join(component, "Backends/D3D12/Source"))
+        add_defines("WIN32_LEAN_AND_MEAN", "NOMINMAX")
+        d3d12_selection()
+        add_sysincludedirs(path.join(thirdparty, "agility/include"), path.join(thirdparty, "fidelityfx/include"))
+        add_rules("rojorhi.d3d12_runtime")
+        set_values("rojorhi.thirdparty", thirdparty_dir)
+    end
+    -- The ImGui adapter's cases, with its private headers for the frame-buffer cases, exist when a host ImGui target does.
+    if imgui_target then
+        if #os.files(path.join(component_dir, "Tests/ImGui/*.cpp")) > 0 then
+            add_files(path.join(component, "Tests/ImGui/*.cpp"))
+        end
+        add_includedirs(path.join(component, "Adapters/ImGui/Source"))
+        add_deps("RojoRHIImGui")
+    end
+    add_includedirs(path.join(component, "Source"))
+    add_includedirs(path.join(component, "Tests"))
+    add_deps("RojoRHI")
+    add_packages("catch2")
+    release_lto()
+    -- The tests use the standard tmpfile and getenv, which the MSVC runtime marks as deprecated.
+    if is_plat("windows") then
+        add_defines("_CRT_SECURE_NO_WARNINGS")
+    end
+    if is_config("rojorhi_backend", "metal4") then
+        -- Every Metal 4 entry runs under the Metal validation layer, from the test directory. The [capture] cases arm the
+        -- capture manager, so they run in their own entry, with MTL_CAPTURE_ENABLED set.
+        local layer = {MTL_DEBUG_LAYER = "1"}
+        add_tests("contract", {runargs = {"[contract]~[death]~[capture],[metal4]~[death]~[capture]"}, runenvs = layer, realtime_output = true})
+        add_tests("capture", {runargs = {"[capture]"}, runenvs = {MTL_DEBUG_LAYER = "1", MTL_CAPTURE_ENABLED = "1"}, realtime_output = true})
+        -- Each case spawns this executable again, so keep Catch2's summary in the log and bound a hang.
+        add_tests("death", {runargs = {"[death]"}, runenvs = layer, realtime_output = true, run_timeout = 300000})
+        add_tests("conformance", {runargs = {"[conformance]"}, runenvs = layer, realtime_output = true})
+        if imgui_target then
+            add_tests("imgui", {runargs = {"[imgui]"}, runenvs = layer, realtime_output = true})
+        end
+    elseif is_config("rojorhi_backend", "d3d12") then
+        -- contract runs the shared and [d3d12] cases without the death and capture ones, death runs every death case,
+        -- and conformance runs the [conformance] cases. The [capture] cases load the PIX GPU capturer where it is
+        -- installed, after which every device of the process reports the capturer's debug-layer messages, so they run
+        -- in their own entry.
+        add_tests("contract", {runargs = {"[contract]~[death]~[capture],[d3d12]~[death]~[capture]"}, realtime_output = true})
+        add_tests("capture", {runargs = {"[capture]"}, realtime_output = true})
+        -- Each case spawns this executable again, so keep Catch2's summary in the log and bound a hang. Each child creates
+        -- a device, and under GPU-based validation on hardware the entry takes about ten minutes, so the bound is thirty.
+        add_tests("death", {runargs = {"[death]"}, realtime_output = true, run_timeout = 1800000})
+        add_tests("conformance", {runargs = {"[conformance]"}, realtime_output = true})
+        if imgui_target then
+            add_tests("imgui", {runargs = {"[imgui]"}, realtime_output = true})
+        end
+    else
+        add_tests("contract", {runargs = {"[contract]~[death],[core]~[death],[null]~[death]"}, realtime_output = true})
+        -- Each case spawns this executable again, so keep Catch2's summary in the log and bound a hang.
+        add_tests("death", {runargs = {"[death]"}, realtime_output = true, run_timeout = 300000})
+        if imgui_target then
+            add_tests("imgui", {runargs = {"[imgui]"}, realtime_output = true})
+        end
+    end
+    -- Conformance shaders compile for every target on any host; the rule needs only the Slang
+    -- compiler, which setup fetches. Windows names it slangc.exe.
+    add_rules("rojorhi.slang")
+    set_values("slang.moduledir", path.join(component_dir, "Shaders/RojoRHI"))
+    set_values("slang.slangc", path.join(thirdparty_dir, is_host("windows") and "slang/bin/slangc.exe"
+                                                         or "slang/bin/slangc"))
+    add_files(path.join(component, "Shaders/Tests/*.slang"))
+    -- SharedImport.slang reaches the test module through an include directory, which the non-recursive glob above
+    -- keeps out of the entry files; EmbeddedShaders.h holds the configured backend's library of Standard.slang.
+    set_values("slang.includedirs", path.join(component_dir, "Shaders/Tests/Modules"))
+    set_values("slang.embed", "EmbeddedShaders.h")
+    set_values("slang.embed_files", "Standard")
+    -- AbiPrecise checks that its multiply and add stay two rounded operations; the other files keep the defaults.
+    set_values("slang.precise_files", "AbiPrecise")
+    -- The probe is among those files, and the layout rule keeps it out of the conformance list: it
+    -- compares the shared structs with what each target reflects.
+    add_rules("rojorhi.shader_layout")
+    set_values("slang.layout_probe", path.join(component_dir, "Shaders/Tests/LayoutProbe.slang"))
+    set_values("slang.layout_map", "DrawRoot=rojoRHI::test::DrawRoot", "AtomicRoot=rojoRHI::test::AtomicRoot",
+               "PreciseRoot=rojoRHI::test::PreciseRoot")
+    set_values("slang.layout_include", "rojoRHI/RHI.h", "AbiExamples.h")
+    if is_config("rojorhi_backend", "metal4") then
+        add_tests("abi", {runargs = {"[abi]"}, runenvs = {MTL_DEBUG_LAYER = "1"}, realtime_output = true})
+    else
+        add_tests("abi", {runargs = {"[abi]"}, realtime_output = true})
+    end
+
+-- The development-only targets, the benchmark harness and the probes, live in dev.lua, which a public
+-- export of the component omits; they take the helpers above through the rojorhi_dev table.
+if os.isfile(path.join(os.scriptdir(), "dev.lua")) then
+    rojorhi_dev = {component = component, component_dir = component_dir, thirdparty = thirdparty,
+                   thirdparty_dir = thirdparty_dir, release_lto = release_lto, warn_unreachable = warn_unreachable,
+                   d3d12_selection = d3d12_selection}
+    includes("dev.lua")
+end
