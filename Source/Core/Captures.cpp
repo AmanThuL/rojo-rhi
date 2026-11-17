@@ -10,7 +10,6 @@
 #include <string>
 
 namespace rojoRHI::core {
-    //==================================================================================================================
     Result<void> beginCapture(DeviceCore& core, [[maybe_unused]] std::string_view path)
     {
         ROJORHI_VU(!path.empty(), "VU-rojo-diag-0009", "beginCapture was given an empty path");
@@ -29,7 +28,6 @@ namespace rojoRHI::core {
         return started;
     }
 
-    //==================================================================================================================
     void endCapture(DeviceCore& core)
     {
         [[maybe_unused]] const bool wasCapturing = core.exchangeCapturing(false);

@@ -33,47 +33,37 @@ using namespace rojoRHI;
 using rojoRHI::test::UpscaleKit;
 
 namespace {
-    //==================================================================================================================
-    /// The native calls an upscale sends with no encoder open and no barrier pending: `pushDebugGroup` with debug markers and
-    /// the begin timestamp; the carrier's `computeCommandEncoder`, `setLabel` when `list`'s encoders carry labels, its queue barrier after every stage,
-    /// `updateFence` and `endEncoding`; the scaler's six textures, content width and height, two jitter offsets, two motion scales, pre-exposure and reset;
-    /// `encodeToCommandBuffer`; the end timestamp and `popDebugGroup` with debug markers.
+    // With no encoder open and no barrier pending: `pushDebugGroup` with debug markers and the begin timestamp; the
+    // carrier's `computeCommandEncoder`, `setLabel` when the encoders carry labels, its queue barrier, `updateFence` and
+    // `endEncoding`; the scaler's fourteen setters (six textures, content width and height, two jitter offsets, two motion
+    // scales, pre-exposure, reset); `encodeToCommandBuffer`; the end timestamp and `popDebugGroup` with debug markers.
     uint64_t upscaleCalls(CommandList list)
     {
         return test::debugGroup(list) + 1 + 4 + test::encoderLabel(list) + 14 + 1 + 1 + test::debugGroup(list);
     }
 
-    //==================================================================================================================
-    /// What `list` has counted so far; fails the case when a scope it recorded holds no timestamp pair, since the pinned
-    /// counts include both timestamp writes.
+    // Fails the case when a scope the list recorded holds no timestamp pair, since the pinned counts include both
+    // timestamp writes.
     const core::RecordCounts& countsOf(CommandList list)
     {
         return test::timedCounts(list);
     }
 
-    //==================================================================================================================
-    /// The barrier state of `list`.
     const metal4::BarrierState& barriersOf(CommandList list)
     {
         return CommandListImpl::of(list).encoders.barriers();
     }
 
-    //==================================================================================================================
-    /// The backend state of `upscaler`.
     metal4::UpscalerState& stateOf(Device device, Upscaler upscaler)
     {
         return *static_cast<metal4::UpscalerState*>(DeviceImpl::of(device).core.pool<Upscaler>().native(upscaler));
     }
 
-    //==================================================================================================================
-    /// The native texture `texture` wraps.
     MTL::Texture* nativeOf(Device device, Texture texture)
     {
         return static_cast<MTL::Texture*>(DeviceImpl::of(device).core.pool<Texture>().native(texture));
     }
 
-    //==================================================================================================================
-    /// Ends the kit's list, submits it, waits for it on the host and ends the frame.
     void submitAndWait(UpscaleKit& kit)
     {
         Device device = kit.kit.device;
@@ -85,8 +75,6 @@ namespace {
         device.endFrame();
     }
 
-    //==================================================================================================================
-    /// Runs `count` empty frames.
     void runFrames(Device device, uint32_t count)
     {
         for (uint32_t i = 0; i < count; ++i)
@@ -96,8 +84,6 @@ namespace {
         }
     }
 
-    //==================================================================================================================
-    /// A global barrier from copy writes to copy reads and writes.
     GlobalBarrier copyToCopy()
     {
         return GlobalBarrier{
@@ -106,7 +92,6 @@ namespace {
     }
 } // namespace
 
-//======================================================================================================================
 TEST_CASE("the device lists MetalFX when MetalFX supports it", "[metal4]")
 {
     Device device = *createDevice({ .scopeTimings = true });
@@ -123,7 +108,6 @@ TEST_CASE("the device lists MetalFX when MetalFX supports it", "[metal4]")
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("MetalFX reports the device's content scale range as input over output", "[metal4]")
 {
     Device device = *createDevice();
@@ -140,7 +124,6 @@ TEST_CASE("MetalFX reports the device's content scale range as input over output
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("Auto creates a MetalFX upscaler", "[metal4]")
 {
     Device device = *createDevice({ .scopeTimings = true });
@@ -182,7 +165,6 @@ TEST_CASE("Auto creates a MetalFX upscaler", "[metal4]")
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("ReversedDepth sets the scaler's depthReversed", "[metal4]")
 {
     Device device = *createDevice({ .scopeTimings = true });
@@ -196,7 +178,6 @@ TEST_CASE("ReversedDepth sets the scaler's depthReversed", "[metal4]")
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("createUpscaler runs on several threads at once", "[metal4]")
 {
     // MetalFX fills a process-wide table of Metal's at a scaler's creation without a lock of its own; two creations at once
@@ -232,7 +213,6 @@ TEST_CASE("createUpscaler runs on several threads at once", "[metal4]")
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("an extent ratio beyond the device's scale range is Unsupported and allocates nothing", "[metal4]")
 {
     Device device = *createDevice({ .scopeTimings = true });
@@ -251,7 +231,6 @@ TEST_CASE("an extent ratio beyond the device's scale range is Unsupported and al
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("a kind Metal cannot create is Unsupported and allocates nothing", "[metal4]")
 {
     Device device = *createDevice({ .scopeTimings = true });
@@ -266,7 +245,6 @@ TEST_CASE("a kind Metal cannot create is Unsupported and allocates nothing", "[m
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("an upscale sends its debug group, a carrier encoder with the fence update, the scaler's setters and one encode", "[metal4]")
 {
     UpscaleKit kit(QueueType::Graphics, UpscaleKit::defaultDesc(), false, true);
@@ -296,7 +274,6 @@ TEST_CASE("an upscale sends its debug group, a carrier encoder with the fence up
     destroyDevice(kit.kit.device);
 }
 
-//======================================================================================================================
 TEST_CASE("the encoder after an upscale waits on its fence, once", "[metal4]")
 {
     SECTION("a copy")
@@ -395,7 +372,6 @@ TEST_CASE("the encoder after an upscale waits on its fence, once", "[metal4]")
     }
 }
 
-//======================================================================================================================
 TEST_CASE("the first compute and the first render encoder after an upscale each wait on its fence", "[metal4]")
 {
     UpscaleKit kit(QueueType::Graphics, UpscaleKit::defaultDesc(), false, true);
@@ -426,7 +402,6 @@ TEST_CASE("the first compute and the first render encoder after an upscale each 
     destroyDevice(kit.kit.device);
 }
 
-//======================================================================================================================
 TEST_CASE("a render pass after an upscale waits on its fence on the render encoder, once", "[metal4]")
 {
     UpscaleKit kit(QueueType::Graphics, UpscaleKit::defaultDesc(), false, true);
@@ -451,7 +426,6 @@ TEST_CASE("a render pass after an upscale waits on its fence on the render encod
     destroyDevice(kit.kit.device);
 }
 
-//======================================================================================================================
 TEST_CASE(
     "a barrier pending before an upscale is covered by the carrier's barrier for its stages and stays pending for later encoders' other stages", "[metal4]"
 )
@@ -475,7 +449,6 @@ TEST_CASE(
     destroyDevice(kit.kit.device);
 }
 
-//======================================================================================================================
 TEST_CASE("a null reactive binds the cleared mask, a given one binds itself", "[metal4]")
 {
     UpscaleKit kit(QueueType::Graphics, UpscaleKit::defaultDesc(), false, true);
@@ -508,7 +481,6 @@ TEST_CASE("a null reactive binds the cleared mask, a given one binds itself", "[
     destroyDevice(kit.kit.device);
 }
 
-//======================================================================================================================
 TEST_CASE("a destroyed upscaler releases its objects when its frame slot retires", "[metal4]")
 {
     Device device = *createDevice({ .scopeTimings = true, .framesInFlight = 2 });
@@ -546,7 +518,6 @@ TEST_CASE("a destroyed upscaler releases its objects when its frame slot retires
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("a content extent below the scaler's range is raised to the smallest it takes", "[metal4]")
 {
     UpscaleKit kit(QueueType::Graphics, UpscaleKit::defaultDesc(), false, true);

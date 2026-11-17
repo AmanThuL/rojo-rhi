@@ -19,24 +19,18 @@
 
 namespace rojoRHI::core {
     namespace {
-        //==============================================================================================================
-        /// Returns the number of mips or layers from `base` that `count` names in a run of `total`; `count` is `kAllMips`
-        /// (equal to `kAllLayers`) for the rest of the run. The recording checks keep the run inside the texture.
+        // `kAllMips` (equal to `kAllLayers`) runs to the end; the recording checks keep the run inside the texture.
         uint32_t resolvedCount(uint32_t base, uint32_t count, uint32_t total)
         {
             return count == kAllMips ? total - base : count;
         }
 
-        //==============================================================================================================
-        /// Returns the byte past the range of `size` bytes from `offset` in a buffer of `total` bytes; `kWholeSize` runs to the
-        /// end. The recording checks keep the range inside the buffer.
+        // The recording checks keep the range inside the buffer.
         uint64_t rangeEnd(uint64_t offset, uint64_t size, uint64_t total)
         {
             return size == kWholeSize ? total : offset + size;
         }
 
-        //==============================================================================================================
-        /// Returns the name of `queue` for reports.
         [[maybe_unused]] std::string_view queueName(QueueType queue)
         {
             switch (queue)
@@ -47,8 +41,6 @@ namespace rojoRHI::core {
             }
         }
 
-        //==============================================================================================================
-        /// Returns the earlier use of `hazard` for reports: a use, or a transition.
         [[maybe_unused]] std::string earlierUse(const Hazard& hazard)
         {
             return std::format(
@@ -59,10 +51,6 @@ namespace rojoRHI::core {
             );
         }
 
-        //==============================================================================================================
-        /// Reports `hazard`, found between an earlier use and `later`, made by the list `list` on `queue` to `memory`, a
-        /// description of the memory that names its resource by label: VU-rojo-sync-0021 when no barrier lies between the two,
-        /// otherwise VU-rojo-sync-0024.
         void reportHazard(
             [[maybe_unused]] const Hazard& hazard,
             [[maybe_unused]] Scope later,
@@ -96,10 +84,6 @@ namespace rojoRHI::core {
             );
         }
 
-        //==============================================================================================================
-        /// Reports `race`, a change on another queue to the mapping of tiles of `memory`, a description of a subresource or
-        /// byte range that names its resource by label, that no fence orders before the use the list `list` makes of them on
-        /// `queue` and that the CPU has not seen complete (VU-rojo-sparse-0013).
         void reportMappingRace(
             [[maybe_unused]] const std::optional<TileRace>& race,
             [[maybe_unused]] std::string_view memory,
@@ -120,10 +104,6 @@ namespace rojoRHI::core {
             );
         }
 
-        //==============================================================================================================
-        /// Reports `race`, a use on another queue of tiles of `memory`, a description of a subresource or byte range that names
-        /// its resource by label, whose mapping `Queue::mapTiles` on `queue` changes, when no fence orders the use before the
-        /// change and the CPU has not seen it complete (VU-rojo-sparse-0013).
         void reportUseRace([[maybe_unused]] const std::optional<TileRace>& race, [[maybe_unused]] std::string_view memory, [[maybe_unused]] QueueType queue)
         {
             ROJORHI_VU(
@@ -138,18 +118,13 @@ namespace rojoRHI::core {
             );
         }
 
-        //==============================================================================================================
-        /// Returns the scope of `use`.
         Scope scopeOf(const UseEvent& use)
         {
             return Scope{ .stage = use.stage, .access = use.access };
         }
 
-        //==============================================================================================================
-        /// Returns the first mark of `marks`, a subresource's on one queue, that an event there must still follow: with no
-        /// `source`, any mark, since only a discard follows one; with `source`, a discard's, a mark it does not cover and that
-        /// is not at or below `fenced`, which a fence wait or the CPU's observation orders before the discard. Returns null
-        /// when there is none.
+        // The first mark an event must still follow. Without `source` any mark, since only a discard follows one; with a
+        // discard's `source`, a mark it does not cover that no fence wait or CPU observation (`fenced`) orders before it.
         const AliasMark* uncovered(const AliasMarks& marks, uint64_t fenced, std::optional<Scope> source)
         {
             for (const AliasMarks::Range& range : marks.ranges())
@@ -163,10 +138,6 @@ namespace rojoRHI::core {
             return nullptr;
         }
 
-        //==============================================================================================================
-        /// Reports `hazard`, found between a use on another queue and `later`, made by the list `list` on `queue` to `memory`,
-        /// a description of the memory that names its resource by label, when it holds a pair no fence orders
-        /// (VU-rojo-queue-0005).
         void reportQueueHazard(
             [[maybe_unused]] const std::optional<QueueHazard>& hazard,
             [[maybe_unused]] Scope later,
@@ -190,18 +161,12 @@ namespace rojoRHI::core {
             );
         }
 
-        //==============================================================================================================
-        /// Returns the stage and access of `scope` for reports.
         [[maybe_unused]] std::string scopeText(Scope scope)
         {
             return std::format("stage {:#x} access {:#x}", static_cast<uint32_t>(scope.stage), static_cast<uint32_t>(scope.access));
         }
 
-        //==============================================================================================================
-        /// Reports an indirect read, made under `rule` by the list `list` on `queue` of `memory`, a description of the bytes
-        /// that names their buffer, when `missing`: no barrier since the last write of those bytes on the queue has a
-        /// destination stage and access that include `IndirectArgs`. Each entry's identifier, and each of its arms, has its
-        /// own site.
+        // Each identifier, and each of its arms, has its own `ROJORHI_VU` site.
         void reportIndirect(
             UseRule rule,
             [[maybe_unused]] bool missing,
@@ -295,20 +260,13 @@ namespace rojoRHI::core {
             }
         }
 
-        //==============================================================================================================
-        /// Returns true when a subresource held by `from` (none before its first use since a creation or an acquire) in
-        /// `layout` is handed over to `queue` (VU-rojo-sync-0025): `from` is another queue and the layout keeps contents. An
-        /// `Undefined` event, another resource's use of the memory, hands over nothing, and the layout rules judge the next
-        /// event as they would on the queue.
+        // An `Undefined` event, another resource's use of the memory, hands nothing over (VU-rojo-sync-0025).
         [[maybe_unused]] bool handedOver(std::optional<QueueType> from, Layout layout, QueueType queue)
         {
             return from.has_value() && *from != queue && layout != Layout::Undefined;
         }
 
-        //==============================================================================================================
-        /// Returns true when `layout` is one the queues `a` and `b` both accept at a handoff (VU-rojo-sync-0025): `General`
-        /// when either is the Copy queue; `General`, `ShaderRead`, `ShaderWrite`, `CopySrc` or `CopyDst` between the Graphics
-        /// and Compute queues.
+        // The layouts both queues accept at a handoff (VU-rojo-sync-0025).
         [[maybe_unused]] bool sharedLayout(Layout layout, QueueType a, QueueType b)
         {
             if (a == QueueType::Copy || b == QueueType::Copy)
@@ -328,12 +286,12 @@ namespace rojoRHI::core {
     } // namespace
 
     //==================================================================================================================
+    // Resources
     TrackerLock Tracker::lock()
     {
         return TrackerLock(m_mutex);
     }
 
-    //==================================================================================================================
     void Tracker::addTexture(
         Texture texture,
         std::string_view label,
@@ -388,7 +346,6 @@ namespace rojoRHI::core {
         m_textures.insert_or_assign(texture.bits, std::move(state));
     }
 
-    //==================================================================================================================
     void Tracker::removeTexture(Texture texture)
     {
         const std::lock_guard held(m_mutex);
@@ -405,7 +362,6 @@ namespace rojoRHI::core {
         m_textures.erase(found);
     }
 
-    //==================================================================================================================
     std::optional<Layout> Tracker::layoutOf(Texture texture, uint32_t mip, uint32_t layer)
     {
         const std::lock_guard held(m_mutex);
@@ -417,7 +373,6 @@ namespace rojoRHI::core {
         return found->second.layouts[static_cast<size_t>(mip) * found->second.layers + layer].layout;
     }
 
-    //==================================================================================================================
     void Tracker::addBuffer(Buffer buffer, std::string_view label, uint64_t size, Heap heap, uint64_t heapOffset, bool sparse)
     {
         BufferState state{
@@ -431,21 +386,18 @@ namespace rojoRHI::core {
         m_buffers.insert_or_assign(buffer.bits, std::move(state));
     }
 
-    //==================================================================================================================
     void Tracker::removeBuffer(Buffer buffer)
     {
         const std::lock_guard held(m_mutex);
         m_buffers.erase(buffer.bits);
     }
 
-    //==================================================================================================================
     void Tracker::removeHeap(Heap heap)
     {
         const std::lock_guard held(m_mutex);
         m_heaps.erase(heap.bits);
     }
 
-    //==================================================================================================================
     std::optional<size_t> Tracker::segmentCount(Buffer buffer)
     {
         const std::lock_guard held(m_mutex);
@@ -457,7 +409,6 @@ namespace rojoRHI::core {
         return found->second.segments.segments().size();
     }
 
-    //==================================================================================================================
     std::optional<size_t> Tracker::fenceValueCount(Fence fence)
     {
         const std::lock_guard held(m_mutex);
@@ -469,7 +420,6 @@ namespace rojoRHI::core {
         return found->second.size();
     }
 
-    //==================================================================================================================
     std::optional<uint64_t> Tracker::lastMapping(Texture texture, uint32_t mip, uint32_t layer, QueueType queue)
     {
         const std::lock_guard held(m_mutex);
@@ -481,7 +431,6 @@ namespace rojoRHI::core {
         return found->second.tileMaps[static_cast<size_t>(mip) * found->second.layers + layer][static_cast<size_t>(queue)].latest(std::nullopt);
     }
 
-    //==================================================================================================================
     std::optional<size_t> Tracker::aliasMarkCount(Texture texture)
     {
         const std::lock_guard held(m_mutex);
@@ -501,7 +450,6 @@ namespace rojoRHI::core {
         return count;
     }
 
-    //==================================================================================================================
     std::optional<size_t> Tracker::heapSegmentCount(Heap heap)
     {
         const std::lock_guard held(m_mutex);
@@ -513,7 +461,6 @@ namespace rojoRHI::core {
         return found->second.segments.ranges().size();
     }
 
-    //==================================================================================================================
     WriteOrder Tracker::lastWriteOrder(const TrackerLock& held, QueueType queue, Buffer buffer, uint64_t offset, uint64_t size, Scope use)
     {
         const BufferState* state = locate(held, buffer);
@@ -536,12 +483,13 @@ namespace rojoRHI::core {
     }
 
     //==================================================================================================================
+    // Submissions and clocks
     void Tracker::replay([[maybe_unused]] const TrackerLock& held, const TrackerLog& log, QueueType queue, std::string_view list)
     {
         ROJORHI_INTERNAL_ASSERT(held.owns_lock() && held.mutex() == &m_mutex, "a list was replayed without the tracker's lock");
         ROJORHI_INTERNAL_ASSERT(log.commands.size() == log.events.size(), "a tracker event was logged without its command");
-        // An image the list noted that the tracker no longer follows was presented since the list recorded it. Judging it first keeps the
-        // events that name it from reaching a texture that is gone.
+        // An image presented since the list recorded it is no longer followed. Judging the images first keeps the events that
+        // name it from reaching a texture that is gone.
         for ([[maybe_unused]] const Texture image : log.images)
         {
             ROJORHI_VU(
@@ -587,7 +535,6 @@ namespace rojoRHI::core {
         }
     }
 
-    //==================================================================================================================
     void Tracker::wait([[maybe_unused]] const TrackerLock& held, QueueType queue, Fence fence, uint64_t value)
     {
         ROJORHI_INTERNAL_ASSERT(held.owns_lock() && held.mutex() == &m_mutex, "a fence wait was ordered without the tracker's lock");
@@ -605,7 +552,6 @@ namespace rojoRHI::core {
         }
     }
 
-    //==================================================================================================================
     void Tracker::submitted([[maybe_unused]] const TrackerLock& held, QueueType queue)
     {
         ROJORHI_INTERNAL_ASSERT(held.owns_lock() && held.mutex() == &m_mutex, "a submission was noted without the tracker's lock");
@@ -613,11 +559,9 @@ namespace rojoRHI::core {
         m_submitted[index] = ++m_positions[index];
     }
 
-    //==================================================================================================================
     void Tracker::mapTiles(const TrackerLock& held, QueueType queue, std::span<const TileChange> changes)
     {
-        // The change is a queue operation after every earlier submission to the queue: the waits of those submissions, and what
-        // the CPU observed, order the work of other queues before it.
+        // The waits of earlier submissions to the queue, and what the CPU observed, order other queues' work before the change.
         const Clock ordered = orderedBefore(queue);
         for (const TileChange& change : changes)
         {
@@ -702,7 +646,6 @@ namespace rojoRHI::core {
         }
     }
 
-    //==================================================================================================================
     void Tracker::signal(const TrackerLock& held, QueueType queue, Fence fence, uint64_t initial, uint64_t value)
     {
         FenceClocks& clocks = m_fences.try_emplace(fence.bits, initial).first->second;
@@ -711,7 +654,6 @@ namespace rojoRHI::core {
         clocks.prune(m_host);
     }
 
-    //==================================================================================================================
     void Tracker::observe([[maybe_unused]] const TrackerLock& held, Fence fence, uint64_t value)
     {
         ROJORHI_INTERNAL_ASSERT(held.owns_lock() && held.mutex() == &m_mutex, "a fence was observed without the tracker's lock");
@@ -727,7 +669,6 @@ namespace rojoRHI::core {
         }
     }
 
-    //==================================================================================================================
     void Tracker::endFrame(const TrackerLock& held, uint64_t frame)
     {
         [[maybe_unused]] const std::optional<QueueType> open = unjoined(held);
@@ -743,7 +684,6 @@ namespace rojoRHI::core {
         m_frames.insert_or_assign(frame, runningClock(held, QueueType::Graphics));
     }
 
-    //==================================================================================================================
     void Tracker::beginFrame([[maybe_unused]] const TrackerLock& held, uint64_t retired)
     {
         ROJORHI_INTERNAL_ASSERT(held.owns_lock() && held.mutex() == &m_mutex, "a frame was begun without the tracker's lock");
@@ -757,7 +697,6 @@ namespace rojoRHI::core {
         m_frames.erase(m_frames.begin(), std::next(found));
     }
 
-    //==================================================================================================================
     std::optional<QueueType> Tracker::unjoined(const TrackerLock& held) const
     {
         // The graphics submissions of the frame join a compute or copy submission through the values they waited on, which the
@@ -774,21 +713,18 @@ namespace rojoRHI::core {
         return std::nullopt;
     }
 
-    //==================================================================================================================
     std::optional<QueueType> Tracker::unjoined()
     {
         const TrackerLock held = lock();
         return unjoined(held);
     }
 
-    //==================================================================================================================
     void Tracker::removeFence(Fence fence)
     {
         const std::lock_guard held(m_mutex);
         m_fences.erase(fence.bits);
     }
 
-    //==================================================================================================================
     Clock Tracker::runningClock([[maybe_unused]] const TrackerLock& held, QueueType queue) const
     {
         ROJORHI_INTERNAL_ASSERT(held.owns_lock() && held.mutex() == &m_mutex, "a running clock was read without the tracker's lock");
@@ -799,21 +735,18 @@ namespace rojoRHI::core {
         return running;
     }
 
-    //==================================================================================================================
     Clock Tracker::runningClock(QueueType queue)
     {
         const TrackerLock held = lock();
         return runningClock(held, queue);
     }
 
-    //==================================================================================================================
     Clock Tracker::hostClock([[maybe_unused]] const TrackerLock& held) const
     {
         ROJORHI_INTERNAL_ASSERT(held.owns_lock() && held.mutex() == &m_mutex, "the host clock was read without the tracker's lock");
         return m_host;
     }
 
-    //==================================================================================================================
     Clock Tracker::hostClock()
     {
         const TrackerLock held = lock();
@@ -821,6 +754,7 @@ namespace rojoRHI::core {
     }
 
     //==================================================================================================================
+    // Replay
     Tracker::TextureState* Tracker::locate([[maybe_unused]] const TrackerLock& held, Texture texture)
     {
         ROJORHI_INTERNAL_ASSERT(held.owns_lock() && held.mutex() == &m_mutex, "a texture was looked up without the tracker's lock");
@@ -828,7 +762,6 @@ namespace rojoRHI::core {
         return found == m_textures.end() ? nullptr : &found->second;
     }
 
-    //==================================================================================================================
     std::array<uint64_t, 3> Tracker::mergeFloor(QueueType queue) const
     {
         // Every later command on another queue takes a position above that queue's last; on `queue` the current command's
@@ -841,7 +774,6 @@ namespace rojoRHI::core {
         return floor;
     }
 
-    //==================================================================================================================
     Tracker::BufferState* Tracker::locate([[maybe_unused]] const TrackerLock& held, Buffer buffer)
     {
         ROJORHI_INTERNAL_ASSERT(held.owns_lock() && held.mutex() == &m_mutex, "a buffer was looked up without the tracker's lock");
@@ -849,7 +781,6 @@ namespace rojoRHI::core {
         return found == m_buffers.end() ? nullptr : &found->second;
     }
 
-    //==================================================================================================================
     Tracker::HeapState* Tracker::locate([[maybe_unused]] const TrackerLock& held, Heap heap)
     {
         ROJORHI_INTERNAL_ASSERT(held.owns_lock() && held.mutex() == &m_mutex, "a heap was looked up without the tracker's lock");
@@ -857,7 +788,6 @@ namespace rojoRHI::core {
         return found == m_heaps.end() ? nullptr : &found->second;
     }
 
-    //==================================================================================================================
     std::string Tracker::describe(const TrackerLock& held, HeapOwner owner)
     {
         if (owner.texture)
@@ -869,7 +799,6 @@ namespace rojoRHI::core {
         return buffer == nullptr ? std::string("a destroyed buffer") : std::format("the buffer \"{}\"", buffer->label);
     }
 
-    //==================================================================================================================
     std::optional<Layout> Tracker::layoutOn(const LayoutEvent& event, QueueType queue, const Clock& ordered)
     {
         if (event.queue.has_value() && *event.queue != queue && !covers(ordered, *event.queue, event.position))
@@ -879,13 +808,11 @@ namespace rojoRHI::core {
         return event.layout;
     }
 
-    //==================================================================================================================
     std::optional<QueueType> Tracker::holderOf(const LayoutEvent& event)
     {
         return event.queue.has_value() ? event.queue : event.lastUse;
     }
 
-    //==================================================================================================================
     bool Tracker::newOnCopy(const TextureState& texture, const LayoutEvent& event)
     {
         // An aliasing event has a queue and initial data leaves ShaderRead, so this is a creation nothing has reached since.
@@ -893,13 +820,11 @@ namespace rojoRHI::core {
                texture.tileUses.empty() && !texture.acquired;
     }
 
-    //==================================================================================================================
     Clock Tracker::orderedBefore(QueueType queue) const
     {
         return join(m_waited[static_cast<size_t>(queue)], m_host);
     }
 
-    //==================================================================================================================
     void Tracker::noteHeapUse(
         const TrackerLock& held,
         HeapState& heap,
@@ -931,7 +856,7 @@ namespace rojoRHI::core {
                 {
                     markAlias(marks[static_cast<size_t>(queue)], from, to, owner, position, scope);
                 }
-                // The use is a layout event of every subresource: a queue it is ordered before sees them Undefined (T6).
+                // The use is a layout event of every subresource: a queue it is ordered before sees them Undefined.
                 for (LayoutEvent& event : texture->layouts)
                 {
                     event = LayoutEvent{ .layout = Layout::Undefined, .queue = queue, .position = position };
@@ -940,7 +865,6 @@ namespace rojoRHI::core {
         }
     }
 
-    //==================================================================================================================
     void Tracker::checkHeapQueues(
         [[maybe_unused]] const TrackerLock& held,
         const HeapState& heap,
@@ -989,7 +913,6 @@ namespace rojoRHI::core {
         }
     }
 
-    //==================================================================================================================
     void Tracker::checkPresent(const TrackerLock& held, Texture image)
     {
         const TextureState* texture = locate(held, image);
@@ -997,7 +920,6 @@ namespace rojoRHI::core {
         {
             return;
         }
-        // The image is presented on the graphics queue, which sees the layout its own work or a fence-ordered event set.
         [[maybe_unused]] const Clock ordered = orderedBefore(QueueType::Graphics);
         for (size_t index = 0; index < texture->layouts.size(); ++index)
         {
@@ -1014,7 +936,6 @@ namespace rojoRHI::core {
         }
     }
 
-    //==================================================================================================================
     void Tracker::replayUse(const TrackerLock& held, const UseEvent& use, QueueType queue, std::string_view list, uint64_t position)
     {
         // A buffer has no layout, only hazards.
@@ -1075,9 +996,8 @@ namespace rojoRHI::core {
                     continue;
                 }
                 const Layout current = *visible;
-                // A layout held by another queue reaches this one only in a layout both queues accept; that rule reports first,
-                // then the Copy queue's rule, then the entry's own rule, then the general one. A creation or an acquire is held
-                // by the queue of the latest use since.
+                // A layout held by another queue reaches this one only in a layout both queues accept. Report order: that rule, the
+                // Copy queue's, the entry's own, then the general one.
                 [[maybe_unused]] const std::optional<QueueType> holder = holderOf(event);
                 if (!event.queue.has_value())
                 {
@@ -1298,7 +1218,6 @@ namespace rojoRHI::core {
         }
     }
 
-    //==================================================================================================================
     void Tracker::followMarks(TextureState& texture, size_t index, QueueType queue, const Clock& ordered)
     {
         std::array<AliasMarks, 3>& marks = texture.aliases[index];
@@ -1312,7 +1231,6 @@ namespace rojoRHI::core {
         }
     }
 
-    //==================================================================================================================
     void Tracker::replayTextureHazards(TextureState& texture, const UseEvent& use, QueueType queue, std::string_view list, uint64_t position)
     {
         const Scope later{ .stage = use.stage, .access = use.access };
@@ -1339,7 +1257,6 @@ namespace rojoRHI::core {
         }
     }
 
-    //==================================================================================================================
     void Tracker::replayBufferUse(const TrackerLock& held, const UseEvent& use, QueueType queue, std::string_view list, uint64_t position)
     {
         BufferState* buffer = locate(held, use.buffer);
@@ -1405,7 +1322,6 @@ namespace rojoRHI::core {
         }
     }
 
-    //==================================================================================================================
     void Tracker::replayBufferAlias(
         const TrackerLock& held, BufferState& buffer, const UseEvent& use, QueueType queue, [[maybe_unused]] std::string_view list, uint64_t position
     )
@@ -1457,7 +1373,6 @@ namespace rojoRHI::core {
         noteHeapUse(held, *heap, self, begin, end, queue, position, later);
     }
 
-    //==================================================================================================================
     void Tracker::replayTileUse(
         TextureState& texture,
         size_t index,
@@ -1483,7 +1398,6 @@ namespace rojoRHI::core {
         texture.tileUses[index][static_cast<size_t>(queue)].note(box, position, m_host[static_cast<size_t>(queue)]);
     }
 
-    //==================================================================================================================
     void Tracker::replayIndirect(const TrackerLock& held, const BufferState& buffer, const UseEvent& use, QueueType queue, std::string_view list)
     {
         const uint64_t end = rangeEnd(use.offset, use.size, buffer.size);
@@ -1491,7 +1405,6 @@ namespace rojoRHI::core {
         reportIndirect(use.rule, order == WriteOrder::Missing, std::format("bytes {} to {} of the buffer \"{}\"", use.offset, end, buffer.label), queue, list);
     }
 
-    //==================================================================================================================
     void Tracker::replayGlobal(const GlobalBarrier& barrier, QueueType queue, uint64_t position)
     {
         const Scope source{ .stage = barrier.srcStage, .access = barrier.srcAccess };
@@ -1529,7 +1442,6 @@ namespace rojoRHI::core {
         }
     }
 
-    //==================================================================================================================
     void Tracker::replayBuffer(const TrackerLock& held, const BufferBarrier& barrier, QueueType queue, uint64_t position)
     {
         BufferState* buffer = locate(held, barrier.buffer);
@@ -1548,7 +1460,6 @@ namespace rojoRHI::core {
         buffer->segments.merge(barrier.offset, end, mergeFloor(queue));
     }
 
-    //==================================================================================================================
     void Tracker::replayTexture(
         const TrackerLock& held, const TextureBarrier& barrier, QueueType queue, [[maybe_unused]] std::string_view list, uint64_t position
     )
@@ -1628,14 +1539,12 @@ namespace rojoRHI::core {
                 LayoutEvent& event = texture.layouts[index];
                 if (queue == QueueType::Copy && newOnCopy(texture, event))
                 {
-                    // A Copy list finds a new texture in General, and its first barrier, which keeps General
-                    // (VU-rojo-sync-0026), leaves it there. An acquired image no longer counts as acquired here, but on a Copy
-                    // list its first barrier starts from General and VU-rojo-present-0014 has reported it above.
+                    // A Copy list finds a new texture in General, and its first barrier, which keeps General (VU-rojo-sync-0026), leaves
+                    // it there. An acquired image's first barrier on a Copy list starts from General, which VU-rojo-present-0014 reported.
                     event.layout = Layout::General;
                 }
                 // With no fence ordering the latest layout event before the barrier, the race is reported below, not a layout.
                 const std::optional<Layout> visible = layoutOn(event, queue, ordered);
-                // A creation or an acquire is held by the queue of the latest use or barrier since, which hands it over.
                 const std::optional<QueueType> holder = holderOf(event);
                 if (!event.queue.has_value())
                 {
@@ -1645,8 +1554,8 @@ namespace rojoRHI::core {
                 {
                     if (handedOver(holder, *visible, queue))
                     {
-                        // The first barrier of the queue the subresource is handed to reports the handoff rule before sync-0013;
-                        // a discard takes nothing over, so the layout need not be one the two queues share.
+                        // The handoff rule reports before VU-rojo-sync-0013. A discard takes nothing over, so its layout need not be one the
+                        // two queues share.
                         ROJORHI_VU(
                             barrier.oldLayout == Layout::Undefined || sharedLayout(*visible, queue, *holder),
                             "VU-rojo-sync-0025",
@@ -1778,12 +1687,12 @@ namespace rojoRHI::core {
     }
 
     //==================================================================================================================
+    // Device hooks
     TrackerLock lockTrackerChecked(DeviceCore& core)
     {
         return core.validation() ? core.tracker().lock() : TrackerLock{};
     }
 
-    //==================================================================================================================
     void replayListsChecked(
         DeviceCore& core,
         QueueType type,
@@ -1817,7 +1726,6 @@ namespace rojoRHI::core {
         }
     }
 
-    //==================================================================================================================
     void observeFenceChecked(DeviceCore& core, Fence fence, uint64_t value)
     {
         if (core.validation())
@@ -1827,7 +1735,6 @@ namespace rojoRHI::core {
         }
     }
 
-    //==================================================================================================================
     void endFrameClockChecked(DeviceCore& core, uint64_t frame)
     {
         if (core.validation())
@@ -1837,7 +1744,6 @@ namespace rojoRHI::core {
         }
     }
 
-    //==================================================================================================================
     void beginFrameClockChecked(DeviceCore& core, uint64_t retired)
     {
         if (core.validation())
@@ -1847,7 +1753,6 @@ namespace rojoRHI::core {
         }
     }
 
-    //==================================================================================================================
     void mapTileChangesChecked(DeviceCore& core, QueueType queue, std::span<const TileChange> changes)
     {
         if (core.validation())
@@ -1857,7 +1762,6 @@ namespace rojoRHI::core {
         }
     }
 
-    //==================================================================================================================
     void forgetFenceChecked(DeviceCore& core, Fence fence)
     {
         if (core.validation())
@@ -1866,7 +1770,6 @@ namespace rojoRHI::core {
         }
     }
 
-    //==================================================================================================================
     void checkPresentLayoutChecked(DeviceCore& core, Texture image)
     {
         if (core.validation())
@@ -1876,7 +1779,6 @@ namespace rojoRHI::core {
         }
     }
 
-    //==================================================================================================================
     void trackTextureChecked(
         DeviceCore& core,
         Texture texture,
@@ -1897,7 +1799,6 @@ namespace rojoRHI::core {
         }
     }
 
-    //==================================================================================================================
     void forgetTextureChecked(DeviceCore& core, Texture texture)
     {
         if (core.validation())
@@ -1906,7 +1807,6 @@ namespace rojoRHI::core {
         }
     }
 
-    //==================================================================================================================
     void trackBufferChecked(DeviceCore& core, Buffer buffer, std::string_view label, uint64_t size, Heap heap, uint64_t heapOffset, bool sparse)
     {
         if (core.validation())
@@ -1915,7 +1815,6 @@ namespace rojoRHI::core {
         }
     }
 
-    //==================================================================================================================
     void forgetBufferChecked(DeviceCore& core, Buffer buffer)
     {
         if (core.validation())
@@ -1924,7 +1823,6 @@ namespace rojoRHI::core {
         }
     }
 
-    //==================================================================================================================
     void forgetHeapChecked(DeviceCore& core, Heap heap)
     {
         if (core.validation())

@@ -12,7 +12,6 @@
 using namespace rojoRHI;
 
 namespace {
-    //==================================================================================================================
     Device makeDevice()
     {
         Result<Device> created = createDevice();
@@ -20,7 +19,6 @@ namespace {
         return *created;
     }
 
-    //==================================================================================================================
     Heap makeHeap(Device device, HeapDesc desc)
     {
         Result<Heap> created = device.createHeap(desc);
@@ -28,14 +26,12 @@ namespace {
         return *created;
     }
 
-    //==================================================================================================================
     bool isPowerOfTwo(uint64_t value)
     {
         return value != 0 && (value & (value - 1)) == 0;
     }
 } // namespace
 
-//======================================================================================================================
 TEST_CASE("a heap is created in every memory class", "[contract]")
 {
     Device device = makeDevice();
@@ -46,7 +42,6 @@ TEST_CASE("a heap is created in every memory class", "[contract]")
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("placement requirements have a power-of-two alignment and cover the buffer", "[contract]")
 {
     Device device = makeDevice();
@@ -59,7 +54,6 @@ TEST_CASE("placement requirements have a power-of-two alignment and cover the bu
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("placement requirements of equal descriptors are equal", "[contract]")
 {
     Device device = makeDevice();
@@ -71,7 +65,6 @@ TEST_CASE("placement requirements of equal descriptors are equal", "[contract]")
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("a buffer is placed at an aligned offset inside a heap", "[contract]")
 {
     Device device = makeDevice();
@@ -85,7 +78,6 @@ TEST_CASE("a buffer is placed at an aligned offset inside a heap", "[contract]")
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("buffers placed over the same bytes alias without a diagnostic", "[contract]")
 {
     Device device = makeDevice();
@@ -96,7 +88,6 @@ TEST_CASE("buffers placed over the same bytes alias without a diagnostic", "[con
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("a buffer fills a heap exactly", "[contract]")
 {
     Device device = makeDevice();
@@ -106,7 +97,6 @@ TEST_CASE("a buffer fills a heap exactly", "[contract]")
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("an Upload buffer placed in an Upload heap has a CPU pointer", "[contract]")
 {
     Device device = makeDevice();
@@ -118,7 +108,6 @@ TEST_CASE("an Upload buffer placed in an Upload heap has a CPU pointer", "[contr
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("a heap is destroyed after the buffers placed in it", "[contract]")
 {
     Device device = makeDevice();
@@ -130,7 +119,6 @@ TEST_CASE("a heap is destroyed after the buffers placed in it", "[contract]")
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("a heap is destroyed once its resources were destroyed and recreated", "[contract]")
 {
     Device device = makeDevice();
@@ -142,7 +130,6 @@ TEST_CASE("a heap is destroyed once its resources were destroyed and recreated",
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("destroyDevice releases a heap that still holds placed buffers", "[contract]")
 {
     Device device = makeDevice();

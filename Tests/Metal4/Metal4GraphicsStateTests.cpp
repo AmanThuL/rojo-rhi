@@ -29,75 +29,57 @@
 using namespace rojoRHI;
 
 namespace {
-    /// The viewport and scissor that cover the 16-texel square targets of these cases.
     constexpr Viewport kViewport{ .width = 16.0f, .height = 16.0f };
     constexpr Rect2D kScissor{ 0, 0, 16, 16 };
 
-    //==================================================================================================================
-    /// The calls a pass's render encoder makes when it opens with no barrier owed: the factory, the label when `list`'s
-    /// encoders carry one, and the table.
+    // What a pass's render encoder calls when it opens with no barrier owed: the factory, the label when `list`'s
+    // encoders carry one, and the table.
     uint64_t openCalls(CommandList list)
     {
         return 2 + test::encoderLabel(list);
     }
 
-    /// The call of the begin timestamp a pass's first render encoder writes right after it opens.
+    // The begin timestamp a pass's first render encoder writes right after it opens.
     constexpr uint64_t kPassBegin = 1;
 
-    //==================================================================================================================
-    /// The encoders of `list`.
     const metal4::Encoders& encodersOf(CommandList list)
     {
         return CommandListImpl::of(list).encoders;
     }
 
-    //==================================================================================================================
-    /// The graphics state of `list`.
     const metal4::DrawState& drawOf(CommandList list)
     {
         return CommandListImpl::of(list).draw;
     }
 
-    //==================================================================================================================
-    /// What `list` has counted so far; fails the case when a scope it recorded holds no timestamp pair, since the pinned
-    /// counts include both timestamp writes.
+    // Fails the case when a scope `list` recorded holds no timestamp pair, since the pinned counts include both
+    // timestamp writes.
     const core::RecordCounts& countsOf(CommandList list)
     {
         return test::timedCounts(list);
     }
 
-    //==================================================================================================================
-    /// The native calls `list` has recorded so far.
     uint64_t callsOf(CommandList list)
     {
         return countsOf(list).nativeRecordCalls;
     }
 
-    //==================================================================================================================
-    /// The payload of `pipeline` on the device of `list`.
     const metal4::PipelineState* stateOf(CommandList list, Pipeline pipeline)
     {
         return static_cast<const metal4::PipelineState*>(core::coreOf(list).device->pool<Pipeline>().native(pipeline));
     }
 
-    //==================================================================================================================
-    /// The GPU address `address` names.
     uint64_t gpuAddressOf(Addr address)
     {
         return uint64_t{ address.lo } | uint64_t{ address.hi } << 32;
     }
 
-    //==================================================================================================================
-    /// Loads the standard library on `device`.
     ShaderLibrary standard(Device device)
     {
         const std::vector<std::byte> blob = test::standardLibrary();
         return *device.loadShaderLibrary(blob, "test.library");
     }
 
-    //==================================================================================================================
-    /// Creates a vertex pipeline of the standard library over one `RGBA8Unorm` target and `depth`, with `raster` and
-    /// `depthStencil`.
     Pipeline vertexPipeline(
         Device device, ShaderLibrary library, const RasterState& raster = {}, const DepthStencilState& depthStencil = {}, Format depth = Format::Undefined
     )
@@ -114,8 +96,6 @@ namespace {
         );
     }
 
-    //==================================================================================================================
-    /// Creates a 16-texel square 2D texture of `format` with `usage`.
     Texture makeTexture(Device device, Format format, TextureUsage usage = TextureUsage::RenderTarget)
     {
         return *device.createTexture(
@@ -123,15 +103,11 @@ namespace {
         );
     }
 
-    //==================================================================================================================
-    /// A pass over `colors` and `depth` that renders to the whole 16-texel square.
     RenderPassDesc passOf(std::span<const ColorAttachment> colors, const DepthAttachment& depth = {})
     {
         return RenderPassDesc{ .colors = colors, .depth = depth, .area = { 0, 0, 16, 16 }, .label = "test.pass" };
     }
 
-    //==================================================================================================================
-    /// Ends `list`, submits it to the graphics queue, waits for it on the host and ends the frame.
     void finish(Device device, CommandList list)
     {
         list.end();
@@ -142,16 +118,12 @@ namespace {
         device.endFrame();
     }
 
-    //==================================================================================================================
-    /// Uploads a 256-byte root of zeroes into the frame and returns its address.
     Addr uploadRoot(CommandList list)
     {
         const std::array<std::byte, 256> zeroes{};
         return list.uploadFrameData(zeroes, 256);
     }
 
-    //==================================================================================================================
-    /// The kinds of `list`'s prefix, in order.
     std::vector<metal4::PrefixKind> prefixKinds(CommandList list)
     {
         std::vector<metal4::PrefixKind> kinds;
@@ -163,7 +135,6 @@ namespace {
     }
 } // namespace
 
-//======================================================================================================================
 TEST_CASE("state recorded before the first draw waits in the prefix and replays in order at the open", "[metal4]")
 {
     Device device = *createDevice({ .scopeTimings = true, .debugMarkers = true });
@@ -220,7 +191,6 @@ TEST_CASE("state recorded before the first draw waits in the prefix and replays 
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("setPipeline sets only the state that differs from the encoder's", "[metal4]")
 {
     Device device = *createDevice({ .scopeTimings = true });
@@ -272,7 +242,6 @@ TEST_CASE("setPipeline sets only the state that differs from the encoder's", "[m
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("setPipeline reads a pipeline bound again in the recording from the list, and a reused slot's new pipeline from the pool", "[metal4]")
 {
     Device device = *createDevice({ .scopeTimings = true, .framesInFlight = 2 });
@@ -354,7 +323,6 @@ TEST_CASE("setPipeline reads a pipeline bound again in the recording from the li
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("dynamic state equal to the encoder's sends no call; a new encoder after a split replays the held state", "[metal4]")
 {
     Device device = *createDevice({ .scopeTimings = true });
@@ -417,7 +385,6 @@ TEST_CASE("dynamic state equal to the encoder's sends no call; a new encoder aft
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("a pipeline without depthBias applies zero bias and the next depthBias pipeline restores the recorded values", "[metal4]")
 {
     Device device = *createDevice({ .scopeTimings = true });
@@ -467,7 +434,6 @@ TEST_CASE("a pipeline without depthBias applies zero bias and the next depthBias
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("a depth bias recorded before a pipeline in the prefix reaches the encoder through the pipeline's replay", "[metal4]")
 {
     Device device = *createDevice({ .scopeTimings = true });
@@ -514,7 +480,6 @@ TEST_CASE("a depth bias recorded before a pipeline in the prefix reaches the enc
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("a stencil-only pipeline with no fragment entry sets the winding and a depth-only one does not", "[metal4]")
 {
     Device device = *createDevice({ .scopeTimings = true });
@@ -554,7 +519,6 @@ TEST_CASE("a stencil-only pipeline with no fragment entry sets the winding and a
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("setRoot outside a pass writes the table at once and an unchanged root sends nothing", "[metal4]")
 {
     Device device = *createDevice({ .scopeTimings = true, .debugMarkers = true });
@@ -588,7 +552,6 @@ TEST_CASE("setRoot outside a pass writes the table at once and an unchanged root
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("a compute pipeline bound before an unequal fill, or before a scope boundary, is set again on the dispatch path, once", "[metal4]")
 {
     Device device = *createDevice({ .scopeTimings = true });
@@ -638,7 +601,6 @@ TEST_CASE("a compute pipeline bound before an unequal fill, or before a scope bo
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("setPipeline with a compute pipeline, then a barrier, emits the barrier on the open encoder before the next dispatch", "[metal4]")
 {
     Device device = *createDevice({ .scopeTimings = true });
@@ -670,7 +632,6 @@ TEST_CASE("setPipeline with a compute pipeline, then a barrier, emits the barrie
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("direct draws read drawId 0 from the device's zero record, which every list's table holds when acquired", "[metal4]")
 {
     Device device = *createDevice({ .scopeTimings = true });
@@ -718,7 +679,6 @@ TEST_CASE("direct draws read drawId 0 from the device's zero record, which every
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("a render encoder binds the list's table to the object and mesh stages at its first mesh pipeline only", "[metal4]")
 {
     Device device = *createDevice({ .scopeTimings = true });
@@ -761,7 +721,6 @@ TEST_CASE("a render encoder binds the list's table to the object and mesh stages
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("a zero-count draw opens no encoder", "[metal4]")
 {
     Device device = *createDevice({ .scopeTimings = true });
@@ -796,7 +755,6 @@ TEST_CASE("a zero-count draw opens no encoder", "[metal4]")
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("C8's sequence makes the calls the overhead note registers", "[metal4]")
 {
     Device device = *createDevice({ .scopeTimings = true, .debugMarkers = true });

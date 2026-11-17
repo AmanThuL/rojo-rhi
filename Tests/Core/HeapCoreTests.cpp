@@ -11,14 +11,12 @@
 using namespace rojoRHI;
 
 namespace {
-    //==================================================================================================================
     uint64_t placedIn(Device device, Heap heap)
     {
         return core::coreOf(device).pool<Heap>().lookup(heap).record->placedResources;
     }
 } // namespace
 
-//======================================================================================================================
 TEST_CASE("a heap's record keeps its label, size and memory class", "[core]")
 {
     Device device = *createDevice();
@@ -31,7 +29,6 @@ TEST_CASE("a heap's record keeps its label, size and memory class", "[core]")
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("a heap without a label is recorded as rojorhi.heap.unnamed", "[core]")
 {
     Device device = *createDevice();
@@ -40,7 +37,6 @@ TEST_CASE("a heap without a label is recorded as rojorhi.heap.unnamed", "[core]"
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("a heap counts the live buffers placed in it", "[core]")
 {
     Device device = *createDevice();
@@ -56,7 +52,6 @@ TEST_CASE("a heap counts the live buffers placed in it", "[core]")
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("a dedicated buffer is counted by no heap", "[core]")
 {
     Device device = *createDevice();
@@ -67,7 +62,6 @@ TEST_CASE("a dedicated buffer is counted by no heap", "[core]")
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("a placed buffer's record names its heap", "[core]")
 {
     Device device = *createDevice();

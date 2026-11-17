@@ -23,6 +23,8 @@ struct SceneRoot
     float time;
     float previousTime;
     float inputSize[2];
+    // C++ rounds the struct to 160 bytes through Mat4's 16-byte alignment; Slang's natural layout ends it at 152
+    // without the pads, so the pads make both 160.
     uint32_t pad0;
     uint32_t pad1;
 };
@@ -101,8 +103,10 @@ Targets createTargets(Device device, Extent2D output, float scale)
     targets.color = texture(Format::RGBA16Float, input, TextureUsage::RenderTarget | TextureUsage::Sampled, "color");
     targets.motion = texture(Format::RG16Float, input, TextureUsage::RenderTarget | TextureUsage::Sampled, "motion");
     targets.depth = texture(Format::D32Float, input, TextureUsage::DepthStencil | TextureUsage::Sampled, "depth");
+    // MetalFX can require render-target usage of its output, so it takes RenderTarget beside Storage.
     targets.upscaled = texture(Format::RGBA16Float, output, TextureUsage::Storage | TextureUsage::RenderTarget | TextureUsage::Sampled, "upscaled");
     targets.upscaledView = check(device.createView(targets.upscaled, {}), "createView");
+    // ReversedDepth matches the reverse-Z projection and its 0 depth clear; HDR, because the color input is scene-linear.
     targets.upscaler = check(
         device.createUpscaler({ .input = input, .output = output, .flags = UpscalerFlags::HDR | UpscalerFlags::ReversedDepth, .label = "upscaler" }),
         "createUpscaler"
@@ -176,6 +180,7 @@ int main()
         if (size.width != targets.output.width || size.height != targets.output.height)
         {
             swapchain.resize(size);
+            // Deferred like every destroy. The new upscaler has no history, hence the reset.
             destroyTargets(device, targets);
             targets = createTargets(device, size, scale);
             reset = true;
@@ -201,8 +206,10 @@ int main()
         const float time = float(window.time());
         const float eye[3] = { 16.0f * std::cos(0.1f * time), 7.0f, 16.0f * std::sin(0.1f * time) };
         const Mat4 viewProj = viewProjection(eye, float(targets.output.width) / float(targets.output.height));
+        // An 8-frame Halton(2, 3) sequence in input texels, within (-0.5, 0.5) and positive down, as UpscaleParams takes it.
         const float jitterX = halton(uint32_t(frame % 8) + 1, 2) - 0.5f;
         const float jitterY = halton(uint32_t(frame % 8) + 1, 3) - 0.5f;
+        // With no history, the previous matrix and time are this frame's, so the first motion is zero.
         if (reset)
         {
             previousViewProj = viewProj;
@@ -210,6 +217,7 @@ int main()
         }
 
         CommandList list = device.acquireCommandList(QueueType::Graphics, "frame");
+        // The last frame's upscale read these in the compute stage; the pass must not overwrite them before it has.
         const std::array toScene{ TextureBarrier{ .texture = targets.color,
                                                   .srcStage = Stage::ComputeShader,
                                                   .dstStage = Stage::ColorAttachment,
@@ -241,6 +249,7 @@ int main()
         list.setPipeline(scene);
         list.setViewport({ .width = float(targets.input.width), .height = float(targets.input.height) });
         list.setScissor({ 0, 0, targets.input.width, targets.input.height });
+        // The jitter again as an NDC offset: 2/size per texel, y negated because texels count down and NDC up.
         list.pushRoot(
             SceneRoot{ .viewProj = viewProj,
                        .previousViewProj = previousViewProj,
@@ -252,6 +261,8 @@ int main()
         list.draw(36, kCubeCount);
         list.endRenderPass();
 
+        // The upscaler runs as compute work, reading its inputs in ShaderRead and writing its output in ShaderWrite;
+        // the output's srcStage orders it after the last frame's tonemap pass read it.
         const std::array toUpscale{ TextureBarrier{ .texture = targets.color,
                                                     .srcStage = Stage::ColorAttachment,
                                                     .srcAccess = Access::ColorAttachmentWrite,
@@ -307,12 +318,14 @@ int main()
                                                         .newLayout = Layout::ColorAttachment } };
         list.barrier({}, {}, toPresentPass);
 
+        // DontCare: the full-screen triangle writes every pixel.
         const std::array presentAttachments{ ColorAttachment{ .texture = image, .load = LoadOp::DontCare } };
         list.beginRenderPass({ .colors = presentAttachments, .area = { 0, 0, targets.output.width, targets.output.height }, .label = "tonemap" });
         list.setPipeline(present);
         list.setViewport({ .width = float(targets.output.width), .height = float(targets.output.height) });
         list.setScissor({ 0, 0, targets.output.width, targets.output.height });
         list.pushRoot(PresentRoot{ .image = uint32_t(targets.upscaledView), .sampler = uint32_t(sampler) });
+        // The pass samples `upscaled` by heap index, which the tracker sees only as a declared access.
         const std::array presentAccesses{ ResourceAccess{ .texture = targets.upscaled, .stage = Stage::FragmentShader, .access = Access::ShaderRead } };
         list.declareAccess(presentAccesses);
         list.draw(3);

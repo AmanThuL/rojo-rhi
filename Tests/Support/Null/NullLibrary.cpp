@@ -8,7 +8,6 @@
 #include <format>
 
 namespace rojoRHI::test {
-    //==================================================================================================================
     std::vector<std::byte> nullLibrary(const std::vector<LibraryEntry>& entries, uint32_t abi, std::string_view magic)
     {
         std::string text = std::format("{}\nabi {}\n", magic, abi);

@@ -27,16 +27,14 @@
 using namespace rojoRHI;
 
 namespace {
-    /// True when the build selects the WARP adapter, whose view-heap maximum is known.
+    // WARP's view-heap maximum is known.
 #if defined(ROJORHI_D3D12_ADAPTER_WARP)
     constexpr bool kWarpAdapter = true;
 #else
     constexpr bool kWarpAdapter = false;
 #endif
 
-    //==================================================================================================================
-    /// Returns the view-heap size a device should have, whatever its frame slots: the `OPTIONS19` maximum capped at
-    /// 2^21, else resource binding tier 3's 1,000,000.
+    // Whatever its frame slots: the `OPTIONS19` maximum capped at 2^21, else resource binding tier 3's 1,000,000.
     uint32_t expectedViewHeap(ID3D12Device12* device)
     {
         D3D12_FEATURE_DATA_D3D12_OPTIONS19 options = {};
@@ -47,8 +45,7 @@ namespace {
         return std::min(options.MaxViewDescriptorHeapSize, 1u << 21);
     }
 
-    //==================================================================================================================
-    /// Creates a committed `DEFAULT` buffer of `width` bytes that allows unordered access, as a buffer with raw views has.
+    // `DEFAULT` with unordered access, as a buffer with raw views has.
     d3d12::Com<ID3D12Resource> nativeBuffer(ID3D12Device12* device, uint64_t width)
     {
         D3D12_HEAP_PROPERTIES heap = {};
@@ -71,14 +68,11 @@ namespace {
         return resource;
     }
 
-    /// Counts the debug layer's messages at warning severity or above stored on a device after it is made. With the layer
-    /// off the device has no info queue and the count is always zero. Reset it before the device is destroyed: the queue
-    /// holds a reference to the device.
+    // Counts the debug layer's messages at warning severity or above. With the layer off the device has no info queue and
+    // the count is zero. Reset it before the device is destroyed: the queue holds a reference to the device.
     class MessageWatch
     {
       public:
-        //==============================================================================================================
-        /// Starts counting the messages `device` stores from now on.
         explicit MessageWatch(ID3D12Device12* device)
         {
             if (SUCCEEDED(device->QueryInterface(IID_PPV_ARGS(m_queue.put()))))
@@ -87,8 +81,7 @@ namespace {
             }
         }
 
-        //==============================================================================================================
-        /// Returns the messages at warning severity or above stored since the watch started, and lists them for the log.
+        // Also lists them for the log.
         uint64_t warnings()
         {
             if (!m_queue)
@@ -115,8 +108,6 @@ namespace {
             return count;
         }
 
-        //==============================================================================================================
-        /// Releases the info queue, and with it the queue's reference to the device.
         void reset()
         {
             m_queue.reset();
@@ -127,8 +118,6 @@ namespace {
         uint64_t m_first = 0;
     };
 
-    //==================================================================================================================
-    /// Runs one frame on `device`, with no work in it.
     void emptyFrame(Device device)
     {
         device.beginFrame();
@@ -136,7 +125,6 @@ namespace {
     }
 } // namespace
 
-//======================================================================================================================
 TEST_CASE("the view heap is shader-visible and holds H descriptors", "[d3d12]")
 {
     Result<Device> created = createDevice();
@@ -161,7 +149,6 @@ TEST_CASE("the view heap is shader-visible and holds H descriptors", "[d3d12]")
     destroyDevice(*created);
 }
 
-//======================================================================================================================
 TEST_CASE("the sampler heap is shader-visible and holds 2,048 samplers", "[d3d12]")
 {
     Result<Device> created = createDevice();
@@ -176,7 +163,6 @@ TEST_CASE("the sampler heap is shader-visible and holds 2,048 samplers", "[d3d12
     destroyDevice(*created);
 }
 
-//======================================================================================================================
 TEST_CASE("slots 0 and 1 are held for the device's life and count as no caller's view", "[d3d12]")
 {
     Result<Device> created = createDevice();
@@ -200,7 +186,6 @@ TEST_CASE("slots 0 and 1 are held for the device's life and count as no caller's
     destroyDevice(*created);
 }
 
-//======================================================================================================================
 TEST_CASE("the ring is the framesInFlight x 1,024 reserved slots after slot 1", "[d3d12]")
 {
     const uint32_t framesInFlight = GENERATE(2u, 3u);
@@ -221,7 +206,6 @@ TEST_CASE("the ring is the framesInFlight x 1,024 reserved slots after slot 1", 
     destroyDevice(*created);
 }
 
-//======================================================================================================================
 TEST_CASE("transient claims are contiguous within a frame slot and restart after reset", "[d3d12]")
 {
     Result<Device> created = createDevice();
@@ -243,7 +227,6 @@ TEST_CASE("transient claims are contiguous within a frame slot and restart after
     destroyDevice(*created);
 }
 
-//======================================================================================================================
 TEST_CASE("a writable raw view pair is adjacent and a read-only one takes one slot", "[d3d12]")
 {
     Result<Device> created = createDevice();
@@ -270,7 +253,6 @@ TEST_CASE("a writable raw view pair is adjacent and a read-only one takes one sl
     destroyDevice(*created);
 }
 
-//======================================================================================================================
 TEST_CASE("a raw view of a buffer above 512 MiB stops at 2^27 elements", "[d3d12]")
 {
     CHECK(d3d12::rawViewElements((1ull << 29) + 4) == (1ull << 27));
@@ -292,7 +274,6 @@ TEST_CASE("a raw view of a buffer above 512 MiB stops at 2^27 elements", "[d3d12
     destroyDevice(*created);
 }
 
-//======================================================================================================================
 TEST_CASE("released raw views are not reused before their frame retires", "[d3d12]")
 {
     Result<Device> created = createDevice();

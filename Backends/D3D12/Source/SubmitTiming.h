@@ -14,7 +14,7 @@ namespace rojoRHI::d3d12 {
     struct SubmitTime
     {
         QueueType queue;
-        uint64_t serial; ///< Per queue, counted from 1 from the first submission with lists after setSubmitTiming.
+        uint64_t serial; // Per queue, counted from 1 from the first submission with lists after setSubmitTiming.
         double gpuStartSeconds;
         double gpuEndSeconds;
         bool failed;
@@ -22,23 +22,17 @@ namespace rojoRHI::d3d12 {
 
     using SubmitTimingCallback = void (*)(void* user, const SubmitTime& time);
 
-    // Attaches `callback` to `queue`; a null callback detaches. While attached, every list of the queue's type acquired
-    // afterwards writes a timestamp first and another last, after its last command and before its own resolves, and
-    // resolves both into a buffer the seam allocated at attach; every Queue::submit that names lists then makes exactly
-    // one report, whose start is its first list's first timestamp and whose end its last list's last, in seconds of the
-    // CPU's QueryPerformanceCounter, through the calibration pair GetClockCalibration and GetTimestampFrequency gave at
-    // attach, so the queues share one time base. A submission without lists makes no report and takes no serial.
-    // Submitting makes no native call for the seam: reports are made only inside drainSubmitTiming, on its calling
-    // thread, which signals a fence of the seam's own once on the queue, after every submission made so far, and waits
-    // for it. Detaching never blocks: it discards the submissions not yet reported, and what the seam allocated stays
-    // until destroyDevice, since a list acquired while it was attached may still write into it. A report is `failed`,
-    // with zero times, when its first or last list was acquired while the queue was detached or attached by an earlier
-    // call, when the queue writes no timestamps (a Copy queue on a device without copy-queue timestamps), when more
-    // submissions or lists were made between two drains than the seam holds, or when the drain's signal was refused,
-    // its wait timed out or the device was removed: a removed device fails the reports and aborts nothing. None of the
-    // seam's native calls counts in Device::counters. Calls on one queue, Queue::submit, setSubmitTiming and
-    // drainSubmitTiming, are serialized by the caller, as submissions on one queue already are; list acquisition may run
-    // on any thread meanwhile.
+    // Attaches `callback` to `queue`; a null callback detaches. While attached, each Queue::submit with lists makes one
+    // report, from its first list's first timestamp to its last list's last, in seconds of QueryPerformanceCounter, so
+    // every queue shares one time base; only lists acquired after this call are timed. A submission without lists makes
+    // no report and takes no serial. Reports are made only inside drainSubmitTiming, on its thread; submitting makes no
+    // native call for the seam. Detaching never blocks and discards unreported submissions; each attachment's memory
+    // stays until destroyDevice. A report is `failed`, with zero times, when its first or last list was acquired
+    // outside this attachment, the queue writes no timestamps (Copy without copy-queue timestamps), more submissions
+    // were made or lists acquired between two drains than the seam holds, or the drain's signal failed, its wait timed
+    // out or the device was removed; nothing aborts. No native call of the seam counts in Device::counters. The caller
+    // serializes submit, setSubmitTiming and drainSubmitTiming on one queue; lists may be acquired on any thread
+    // meanwhile.
     void setSubmitTiming(Queue queue, SubmitTimingCallback callback, void* user);
 
     // Signals the seam's fence on `queue` once and waits for it, so every submission that is to report and has not has

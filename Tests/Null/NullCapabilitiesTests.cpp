@@ -8,7 +8,6 @@
 
 using namespace rojoRHI;
 
-//======================================================================================================================
 TEST_CASE("the Null device reports every optional feature and the floor name Null", "[null]")
 {
     Device device = *createDevice();
@@ -32,7 +31,6 @@ TEST_CASE("the Null device reports every optional feature and the floor name Nul
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("the Null limits are the Floor column of the reference", "[null]")
 {
     Device device = *createDevice();
@@ -68,7 +66,6 @@ TEST_CASE("the Null limits are the Floor column of the reference", "[null]")
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("a Null device with validation selected is created in Debug and unsupported in Release", "[null]")
 {
     Result<Device> created = createDevice({ .validation = true });

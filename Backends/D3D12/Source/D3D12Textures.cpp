@@ -33,22 +33,17 @@
 
 namespace rojoRHI {
     namespace {
-        //==============================================================================================================
-        /// Returns true when `usage` has every bit of `bit`.
         bool hasUsage(TextureUsage usage, TextureUsage bit)
         {
             return (usage & bit) == bit;
         }
 
-        //==============================================================================================================
-        /// Returns the depth slices of mip `mip` of a texture whose mip 0 has `depth` slices, never below one.
         uint32_t slicesOf(uint32_t depth, uint32_t mip)
         {
             return std::max(depth >> mip, 1u);
         }
 
-        //==============================================================================================================
-        /// Returns the resource dimension of a texture of `type`: a cube is a 2D array of six faces per cube.
+        // A cube is a 2D array of six faces per cube.
         D3D12_RESOURCE_DIMENSION dimensionOf(TextureType type)
         {
             switch (type)
@@ -64,8 +59,6 @@ namespace rojoRHI {
             return D3D12_RESOURCE_DIMENSION_TEXTURE2D;
         }
 
-        //==============================================================================================================
-        /// Returns the description of the resource of a texture of `desc`, which the core accepted, on `impl`'s device.
         D3D12_RESOURCE_DESC1 resourceDesc(const DeviceImpl& impl, const TextureDesc& desc)
         {
             D3D12_RESOURCE_DESC1 native = {};
@@ -101,9 +94,8 @@ namespace rojoRHI {
             return native;
         }
 
-        //==============================================================================================================
-        /// Returns the formats a texture of `desc` is created castable to on `impl`'s device: its format family when the
-        /// device casts formats, else none, the resource then being typeless where a view may reinterpret it.
+        // Its format family when the device casts formats; otherwise none, and the resource is typeless where a view
+        // may reinterpret it.
         std::span<const DXGI_FORMAT> castablesOf(const DeviceImpl& impl, const TextureDesc& desc)
         {
             if (!impl.features.relaxedFormatCasting)
@@ -113,9 +105,7 @@ namespace rojoRHI {
             return d3d12::castableFormats(desc.format);
         }
 
-        //==============================================================================================================
-        /// Returns the bytes and alignment the resource `native`, castable to `castable`, occupies in a heap on `impl`'s device.
-        /// A description the runtime refuses is logged and aborts, in every build: the core accepted it.
+        // A description the runtime refuses is logged and aborts, in every build: the core accepted it.
         PlacementRequirements allocationOf(DeviceImpl& impl, const D3D12_RESOURCE_DESC1& native, std::span<const DXGI_FORMAT> castable)
         {
             const auto count = static_cast<UINT32>(castable.size());
@@ -130,8 +120,6 @@ namespace rojoRHI {
             return PlacementRequirements{ info.SizeInBytes, info.Alignment };
         }
 
-        //==============================================================================================================
-        /// Returns the render-target view of `texture`'s subresource at `mip` and `slice`, an array layer or a depth slice.
         D3D12_RENDER_TARGET_VIEW_DESC renderTargetDesc(const core::TextureRecord& texture, uint32_t mip, uint32_t slice)
         {
             D3D12_RENDER_TARGET_VIEW_DESC desc = {};
@@ -197,8 +185,6 @@ namespace rojoRHI {
             return desc;
         }
 
-        //==============================================================================================================
-        /// Returns the depth-stencil view of `texture`'s subresource at `mip` and array layer `layer`.
         D3D12_DEPTH_STENCIL_VIEW_DESC depthStencilDesc(const core::TextureRecord& texture, uint32_t mip, uint32_t layer)
         {
             D3D12_DEPTH_STENCIL_VIEW_DESC desc = {};
@@ -243,11 +229,8 @@ namespace rojoRHI {
             return desc;
         }
 
-        //==============================================================================================================
-        /// Creates the CPU-only heap of `texture`'s render-target views, or depth-stencil views when `depth`, one per mip and
-        /// layer, per mip and depth slice for a 3D texture, named `<label>.rtv` or `<label>.dsv`, writes every view of
-        /// `resource` into it and records them in `payload`. The heap counts one `nativeCreateCalls` and each view one
-        /// `descriptorWrites`.
+        // One view per mip and layer, or per mip and depth slice for a 3D texture. The heap counts one
+        // `nativeCreateCalls` and each view one `descriptorWrites`.
         Result<void> createTargets(DeviceImpl& impl, ID3D12Resource* resource, const core::TextureRecord& texture, bool depth, d3d12::TexturePayload& payload)
         {
             const bool volume = texture.type == TextureType::Tex3D;
@@ -303,9 +286,7 @@ namespace rojoRHI {
             return {};
         }
 
-        //==============================================================================================================
-        /// Copies `initial`, one entry per subresource in the reference's order, into `resource`, created in
-        /// `D3D12_BARRIER_LAYOUT_COPY_DEST`, and leaves every subresource in `D3D12_BARRIER_LAYOUT_SHADER_RESOURCE`.
+        // `resource` was created in LAYOUT_COPY_DEST; every subresource is left in LAYOUT_SHADER_RESOURCE.
         Result<void> uploadInitial(DeviceImpl& impl, ID3D12Resource* resource, std::span<const TextureData> initial)
         {
             // The reference orders entries by layer, then by mip within a layer (index mip + layer * mips), which is the D3D12
@@ -322,7 +303,6 @@ namespace rojoRHI {
     } // namespace
 
     namespace d3d12 {
-        //==============================================================================================================
         D3D12_CPU_DESCRIPTOR_HANDLE targetView(const TexturePayload& payload, uint32_t mip, uint32_t layer)
         {
             ROJORHI_INTERNAL_ASSERT(
@@ -338,7 +318,6 @@ namespace rojoRHI {
             return D3D12_CPU_DESCRIPTOR_HANDLE{ payload.targetStart.ptr + SIZE_T{ index } * payload.targetIncrement };
         }
 
-        //==============================================================================================================
         void retireTexture(void* context, core::TextureRecord& record)
         {
             auto* payload = static_cast<TexturePayload*>(record.native);
@@ -360,7 +339,6 @@ namespace rojoRHI {
         }
     } // namespace d3d12
 
-    //==================================================================================================================
     PlacementRequirements Device::placementRequirements(const TextureDesc& desc)
     {
         DeviceImpl& impl = DeviceImpl::of(*this);
@@ -368,7 +346,6 @@ namespace rojoRHI {
         return allocationOf(impl, resourceDesc(impl, desc), castablesOf(impl, desc));
     }
 
-    //==================================================================================================================
     Result<Texture> Device::createTexture(const TextureDesc& desc, std::span<const TextureData> initial, Placement placement)
     {
         DeviceImpl& impl = DeviceImpl::of(*this);
@@ -467,7 +444,6 @@ namespace rojoRHI {
         return handle;
     }
 
-    //==================================================================================================================
     void Device::destroy(Texture texture)
     {
         core::destroyTexture(DeviceImpl::of(*this).core, texture);

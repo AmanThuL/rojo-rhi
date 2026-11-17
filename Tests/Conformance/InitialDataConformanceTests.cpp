@@ -20,19 +20,18 @@
 using namespace rojoRHI;
 
 namespace {
-    /// The initial data of one subresource: the bytes `TextureData` views, padding included, and the texels without it.
+    // `padded` is what `TextureData::bytes` views; `tight` holds the same texels in tight rows, slice after slice, as a
+    // readback returns them. `bytesPerImage` is nonzero for Tex3D only.
     struct Subresource
     {
-        std::vector<std::byte> padded; ///< What `TextureData::bytes` views.
-        std::vector<std::byte> tight;  ///< The texels in tight rows, slice after slice: what a readback returns.
-        uint64_t bytesPerRow = 0;      ///< The stride between rows.
-        uint64_t bytesPerImage = 0;    ///< The stride between slices; nonzero for Tex3D only.
+        std::vector<std::byte> padded;
+        std::vector<std::byte> tight;
+        uint64_t bytesPerRow = 0;
+        uint64_t bytesPerImage = 0;
     };
 
-    //==================================================================================================================
-    /// Builds the initial data of every subresource of `desc`, whose texels are `texelBytes` bytes, with rows 16 bytes apart
-    /// beyond their texels and, for Tex3D, slices 64 bytes apart beyond their rows, seeded by subresource from `seed`. It
-    /// creates the texture with it into `texture`.
+    // Rows are padded 16 bytes beyond their texels and Tex3D slices 64 bytes beyond their rows, so the upload honours both
+    // strides rather than tight packing.
     std::vector<Subresource> createWithData(Device device, const TextureDesc& desc, uint32_t texelBytes, uint32_t seed, Texture& texture)
     {
         const bool volume = desc.type == TextureType::Tex3D;
@@ -72,8 +71,6 @@ namespace {
         return subresources;
     }
 
-    //==================================================================================================================
-    /// Checks that every subresource of `texture`, created from `desc` with `subresources`, reads back its initial texels.
     void checkEverySubresource(test::GpuKit& kit, Texture texture, const TextureDesc& desc, const std::vector<Subresource>& subresources)
     {
         // A texture created with initial data is in ShaderRead; the readback copies from CopySrc.
@@ -103,7 +100,6 @@ namespace {
     }
 } // namespace
 
-//======================================================================================================================
 TEST_CASE("a Gpu buffer's initial data, dedicated and placed, reads back through a copy", "[conformance]")
 {
     test::requireGpu();
@@ -121,7 +117,6 @@ TEST_CASE("a Gpu buffer's initial data, dedicated and placed, reads back through
     CHECK(kit.readBuffer(placed, QueueType::Copy) == placedBytes);
 }
 
-//======================================================================================================================
 TEST_CASE("a texture's initial data reads back from every mip and layer", "[conformance]")
 {
     test::requireGpu();
@@ -141,7 +136,6 @@ TEST_CASE("a texture's initial data reads back from every mip and layer", "[conf
     checkEverySubresource(kit, texture, desc, subresources);
 }
 
-//======================================================================================================================
 TEST_CASE("a cube's faces and a volume's slices read back their initial data", "[conformance]")
 {
     test::requireGpu();

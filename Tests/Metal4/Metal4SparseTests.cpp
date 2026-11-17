@@ -29,32 +29,24 @@ using namespace rojoRHI;
 using rojoRHI::test::SparseKit;
 
 namespace {
-    /// Heap bytes of one tile.
+    // Heap bytes of one tile.
     constexpr uint64_t kTile = 65536;
 
-    //==================================================================================================================
-    /// The native texture `texture` wraps.
     MTL::Texture* nativeOf(Device device, Texture texture)
     {
         return static_cast<MTL::Texture*>(DeviceImpl::of(device).core.pool<Texture>().native(texture));
     }
 
-    //==================================================================================================================
-    /// The native buffer `buffer` wraps.
     MTL::Buffer* nativeOf(Device device, Buffer buffer)
     {
         return metal4::bufferPayload(DeviceImpl::of(device).core, buffer)->buffer;
     }
 
-    //==================================================================================================================
-    /// The native heap `heap` wraps.
     MTL::Heap* nativeOf(Device device, Heap heap)
     {
         return static_cast<MTL::Heap*>(DeviceImpl::of(device).core.pool<Heap>().native(heap));
     }
 
-    //==================================================================================================================
-    /// Runs `count` empty frames on `device`.
     void runFrames(Device device, uint32_t count)
     {
         for (uint32_t i = 0; i < count; ++i)
@@ -64,17 +56,12 @@ namespace {
         }
     }
 
-    //==================================================================================================================
-    /// Returns the groups the Metal 4 backend issues for `mappings` on `device`.
     std::vector<metal4::MappingGroup> groupsOf(Device device, std::span<const TileMapping> mappings)
     {
         const std::vector<metal4::MappingTarget> targets = metal4::resolveMappings(DeviceImpl::of(device).core, mappings);
         return metal4::groupMappings(mappings, targets);
     }
 
-    //==================================================================================================================
-    /// Checks that `operation` is a texture operation of `mode` on `level` and `slice`, covering the tiles from (`x`, `y`, `z`)
-    /// of `width` by `height` by `depth` tiles, from heap tile `heapTile`.
     void checkOperation(
         const MTL4::UpdateSparseTextureMappingOperation& operation,
         MTL::SparseTextureMappingMode mode,
@@ -97,8 +84,6 @@ namespace {
         CHECK(operation.heapOffset == heapTile);
     }
 
-    //==================================================================================================================
-    /// Creates a sparse texture of `type` in RGBA8Unorm with `extent`, `mips` and `layers`, labelled `label`.
     Texture sparseTexture(Device device, TextureType type, Extent3D extent, uint32_t mips, uint32_t layers, const char* label)
     {
         return *device.createTexture(
@@ -113,7 +98,6 @@ namespace {
     }
 } // namespace
 
-//======================================================================================================================
 TEST_CASE("the device reports placement sparse and every format it reports sparse creates a sparse 2D texture", "[metal4]")
 {
     Device device = *createDevice();
@@ -146,7 +130,6 @@ TEST_CASE("the device reports placement sparse and every format it reports spars
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("every texture type creates a sparse texture whose tile shape is measured from its native texture", "[metal4]")
 {
     struct Case
@@ -182,7 +165,6 @@ TEST_CASE("every texture type creates a sparse texture whose tile shape is measu
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("the kit texture's tile shape is sparseTileSize with the native tail properties", "[metal4]")
 {
     SparseKit kit;
@@ -198,7 +180,6 @@ TEST_CASE("the kit texture's tile shape is sparseTileSize with the native tail p
     destroyDevice(kit.device);
 }
 
-//======================================================================================================================
 TEST_CASE("a 3D texture's tail bytes come from Metal and may exceed one tile", "[metal4]")
 {
     Device device = *createDevice();
@@ -211,7 +192,6 @@ TEST_CASE("a 3D texture's tail bytes come from Metal and may exceed one tile", "
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("a first tail level past the last mip reports no tail", "[metal4]")
 {
     Device device = *createDevice();
@@ -225,7 +205,6 @@ TEST_CASE("a first tail level past the last mip reports no tail", "[metal4]")
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("a sparse buffer is created at its own length with 64 KiB pages and joins the residency set", "[metal4]")
 {
     Device device = *createDevice();
@@ -242,7 +221,6 @@ TEST_CASE("a sparse buffer is created at its own length with 64 KiB pages and jo
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("a texture region maps per layer, in tiles, with each layer's heap offset after the previous layer's tiles", "[metal4]")
 {
     SparseKit kit;
@@ -263,7 +241,6 @@ TEST_CASE("a texture region maps per layer, in tiles, with each layer's heap off
     destroyDevice(kit.device);
 }
 
-//======================================================================================================================
 TEST_CASE("a region reaching the edge of a level rounds its tiles up, and a 3D region counts slices in z", "[metal4]")
 {
     Device device = *createDevice();
@@ -291,7 +268,6 @@ TEST_CASE("a region reaching the edge of a level rounds its tiles up, and a 3D r
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("a mip tail maps per layer at the first tail level, each layer's tail after the previous one", "[metal4]")
 {
     Device device = *createDevice();
@@ -325,7 +301,6 @@ TEST_CASE("a mip tail maps per layer at the first tail level, each layer's tail 
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("a buffer range maps in tiles, and an unmap names no heap", "[metal4]")
 {
     SparseKit kit;
@@ -357,7 +332,6 @@ TEST_CASE("a buffer range maps in tiles, and an unmap names no heap", "[metal4]"
     destroyDevice(kit.device);
 }
 
-//======================================================================================================================
 TEST_CASE("elements group by resource, heap and mode, texture groups first, each in order of first appearance", "[metal4]")
 {
     SparseKit kit;
@@ -394,7 +368,6 @@ TEST_CASE("elements group by resource, heap and mode, texture groups first, each
     destroyDevice(kit.device);
 }
 
-//======================================================================================================================
 TEST_CASE("mapTiles counts each native update and the signals and waits around them, and nothing for an empty span", "[metal4]")
 {
     SparseKit kit;
@@ -418,7 +391,6 @@ TEST_CASE("mapTiles counts each native update and the signals and waits around t
     destroyDevice(kit.device);
 }
 
-//======================================================================================================================
 TEST_CASE("a texture mapping that follows a buffer mapping on the same queue runs", "[metal4]")
 {
     SparseKit kit;
@@ -433,7 +405,6 @@ TEST_CASE("a texture mapping that follows a buffer mapping on the same queue run
     destroyDevice(kit.device);
 }
 
-//======================================================================================================================
 TEST_CASE("texture and buffer mappings that alternate across queues run", "[metal4]")
 {
     SparseKit kit;
@@ -453,7 +424,6 @@ TEST_CASE("texture and buffer mappings that alternate across queues run", "[meta
     destroyDevice(kit.device);
 }
 
-//======================================================================================================================
 TEST_CASE("mapping, remapping, unmapping and destroying mapped resources run clean on every queue type", "[metal4]")
 {
     const QueueType type = GENERATE(QueueType::Graphics, QueueType::Compute, QueueType::Copy);

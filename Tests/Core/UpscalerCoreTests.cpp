@@ -16,17 +16,14 @@ using namespace rojoRHI;
 using rojoRHI::test::UpscaleKit;
 
 namespace {
-    /// The kinds a device with a short list offers.
     constexpr std::array<UpscalerSupport, 2> kShortList = { { { UpscalerKind::FSR, 0.5f, 1.0f }, { UpscalerKind::XeSS, 0.5f, 1.0f } } };
 
-    //==================================================================================================================
     const core::UpscalerRecord& recordOf(Device device, Upscaler upscaler)
     {
         return *core::coreOf(device).pool<Upscaler>().lookup(upscaler).record;
     }
 } // namespace
 
-//======================================================================================================================
 TEST_CASE("an upscaler's record keeps its description", "[core]")
 {
     Device device = *createDevice();
@@ -57,7 +54,6 @@ TEST_CASE("an upscaler's record keeps its description", "[core]")
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("an unlabelled upscaler takes the default label", "[core]")
 {
     Device device = *createDevice();
@@ -66,7 +62,6 @@ TEST_CASE("an unlabelled upscaler takes the default label", "[core]")
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("Auto resolves to the first kind the device lists", "[core]")
 {
     Device device = *createDevice();
@@ -76,7 +71,6 @@ TEST_CASE("Auto resolves to the first kind the device lists", "[core]")
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("a kind missing from a shorter list is an error and a listed one still works", "[core]")
 {
     Device device = *createDevice();
@@ -89,7 +83,6 @@ TEST_CASE("a kind missing from a shorter list is an error and a listed one still
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("Auto on a device that lists no kind is an error", "[core]")
 {
     Device device = *createDevice();
@@ -100,7 +93,6 @@ TEST_CASE("Auto on a device that lists no kind is an error", "[core]")
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("prepareUpscaler resolves Auto and rejects an unlisted kind without allocating", "[core]")
 {
     Device device = *createDevice();
@@ -122,7 +114,6 @@ TEST_CASE("prepareUpscaler resolves Auto and rejects an unlisted kind without al
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("an upscale stores the frame it was recorded in", "[core]")
 {
 #ifdef NDEBUG
@@ -134,7 +125,6 @@ TEST_CASE("an upscale stores the frame it was recorded in", "[core]")
     kit.kit.finish();
 }
 
-//======================================================================================================================
 TEST_CASE("an upscaler created in a reused slot starts with no frame stamp", "[core]")
 {
     UpscaleKit kit;

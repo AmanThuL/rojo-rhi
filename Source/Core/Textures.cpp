@@ -20,13 +20,11 @@
 
 namespace rojoRHI::core {
     namespace {
-        //==============================================================================================================
         [[maybe_unused]] bool hasUsage(TextureUsage usage, TextureUsage flag)
         {
             return (usage & flag) != TextureUsage::None;
         }
 
-        //==============================================================================================================
         [[maybe_unused]] uint32_t dimensionLimit(const Limits& limits, TextureType type)
         {
             switch (type)
@@ -42,13 +40,11 @@ namespace rojoRHI::core {
             return 0;
         }
 
-        //==============================================================================================================
         [[maybe_unused]] bool isCube(TextureType type)
         {
             return type == TextureType::Cube || type == TextureType::CubeArray;
         }
 
-        //==============================================================================================================
         [[maybe_unused]] bool layersMatchType(const TextureDesc& desc)
         {
             switch (desc.type)
@@ -64,8 +60,6 @@ namespace rojoRHI::core {
             return false;
         }
 
-        //==============================================================================================================
-        /// Stores `a * b` in `product` and returns true, or returns false when it does not fit 64 bits.
         [[maybe_unused]] bool multiply(uint64_t a, uint64_t b, uint64_t& product)
         {
             if (a != 0 && b > UINT64_MAX / a)
@@ -76,8 +70,6 @@ namespace rojoRHI::core {
             return true;
         }
 
-        //==============================================================================================================
-        /// Checks the strides and size of the initial data of the subresource at mip level `mip`.
         void checkTextureData(const TextureRecord& texture, const TextureData& data, uint32_t mip)
         {
             if (data.bytes.empty())
@@ -124,21 +116,16 @@ namespace rojoRHI::core {
             );
         }
 
-        //==============================================================================================================
-        /// The layers a view of `range` covers once `kAllLayers` is resolved against `texture`.
         [[maybe_unused]] uint64_t resolvedLayers(const TextureRecord& texture, const SubresourceRange& range)
         {
             return range.layerCount == kAllLayers ? uint64_t{ texture.layers } - std::min(range.baseLayer, texture.layers) : range.layerCount;
         }
 
-        //==============================================================================================================
-        /// The mips a view of `range` covers once `kAllMips` is resolved against `texture`.
         [[maybe_unused]] uint64_t resolvedMips(const TextureRecord& texture, const SubresourceRange& range)
         {
             return range.mipCount == kAllMips ? uint64_t{ texture.mips } - std::min(range.baseMip, texture.mips) : range.mipCount;
         }
 
-        //==============================================================================================================
         [[maybe_unused]] bool viewTypeFits(TextureType view, TextureType texture)
         {
             switch (view)
@@ -154,7 +141,6 @@ namespace rojoRHI::core {
             return false;
         }
 
-        //==============================================================================================================
         [[maybe_unused]] bool viewLayersFitType(TextureType view, uint64_t layers)
         {
             switch (view)
@@ -170,7 +156,6 @@ namespace rojoRHI::core {
             return false;
         }
 
-        //==============================================================================================================
         [[maybe_unused]] bool aspectFits(const TextureRecord& texture, const TextureViewDesc& desc)
         {
             if (!isDepthFormat(texture.format))
@@ -183,45 +168,38 @@ namespace rojoRHI::core {
             return formatKept && (depth || stencil);
         }
 
-        //==============================================================================================================
         [[maybe_unused]] bool rangeNonEmpty(const SubresourceRange& range)
         {
             return range.mipCount != 0 && range.layerCount != 0;
         }
 
-        //==============================================================================================================
         [[maybe_unused]] bool rangeStartsInside(const TextureRecord& texture, const SubresourceRange& range)
         {
             return range.baseMip < texture.mips && range.baseLayer < texture.layers;
         }
 
-        //==============================================================================================================
         [[maybe_unused]] bool rangeInside(const TextureRecord& texture, const SubresourceRange& range)
         {
             return (range.mipCount == kAllMips || uint64_t{ range.baseMip } + range.mipCount <= texture.mips) &&
                    (range.layerCount == kAllLayers || uint64_t{ range.baseLayer } + range.layerCount <= texture.layers);
         }
 
-        //==============================================================================================================
         [[maybe_unused]] bool usageFits(const TextureRecord& texture, const TextureViewDesc& desc)
         {
             return (desc.usage == TextureUsage::Sampled || desc.usage == TextureUsage::Storage) && hasUsage(texture.usage, desc.usage);
         }
 
-        //==============================================================================================================
         [[maybe_unused]] bool formatFits(const TextureRecord& texture, const TextureViewDesc& desc)
         {
             const Format counterpart = srgbCounterpart(texture.format);
             return desc.format == Format::Undefined || desc.format == texture.format || (counterpart != Format::Undefined && desc.format == counterpart);
         }
 
-        //==============================================================================================================
         [[maybe_unused]] bool storageFits(const TextureRecord& texture, const TextureViewDesc& desc)
         {
             return desc.usage != TextureUsage::Storage || (resolvedMips(texture, desc.range) == 1 && texture.samples == 1);
         }
 
-        //==============================================================================================================
         [[maybe_unused]] bool capabilityFits(const DeviceCore& core, const TextureRecord& texture, const TextureViewDesc& desc)
         {
             const FormatCapabilities capabilities = core.formatCapabilities(desc.format == Format::Undefined ? texture.format : desc.format);
@@ -229,9 +207,7 @@ namespace rojoRHI::core {
             return desc.usage == TextureUsage::Sampled ? capabilities.sampled : (capabilities.storageRead || capabilities.storageWrite);
         }
 
-        //==============================================================================================================
-        /// Returns true when `desc` obeys every rule of a `TextureViewDesc` for `texture`; the same rules `checkViewDesc`
-        /// reports one by one, asked as one question by `checkViewWrite`.
+        // The rules `checkViewDesc` reports one by one, asked as one question for `checkViewWrite` (VU-rojo-texture-0034).
         [[maybe_unused]] bool viewDescFits(const DeviceCore& core, const TextureRecord& texture, const TextureViewDesc& desc)
         {
             return rangeNonEmpty(desc.range) && rangeInside(texture, desc.range) && rangeStartsInside(texture, desc.range) && usageFits(texture, desc) &&
@@ -239,7 +215,6 @@ namespace rojoRHI::core {
                    storageFits(texture, desc) && aspectFits(texture, desc) && capabilityFits(core, texture, desc);
         }
 
-        //==============================================================================================================
         void checkViewDesc([[maybe_unused]] const DeviceCore& core, const TextureRecord& texture, const TextureViewDesc& desc)
         {
             checkSubresourceRange(texture, desc.range);
@@ -284,13 +259,11 @@ namespace rojoRHI::core {
         }
     } // namespace
 
-    //==================================================================================================================
     Extent3D mipExtent(const Extent3D& extent, uint32_t mip)
     {
         return Extent3D{ std::max(extent.width >> mip, 1u), std::max(extent.height >> mip, 1u), std::max(extent.depth >> mip, 1u) };
     }
 
-    //==================================================================================================================
     void checkTextureDesc([[maybe_unused]] const DeviceCore& core, [[maybe_unused]] const TextureDesc& desc)
     {
         [[maybe_unused]] const Capabilities& capabilities = core.capabilities();
@@ -386,14 +359,12 @@ namespace rojoRHI::core {
         );
     }
 
-    //==================================================================================================================
     void checkTextureRequirementsQuery(const DeviceCore& core, const TextureDesc& desc)
     {
         checkTextureDesc(core, desc);
         ROJORHI_VU(!hasUsage(desc.usage, TextureUsage::Sparse), "VU-rojo-heap-0002", "placement requirements are requested for a Sparse texture");
     }
 
-    //==================================================================================================================
     TextureRecord prepareTexture(
         DeviceCore& core, const TextureDesc& desc, std::span<const TextureData> initial, const Placement& placement, const PlacementRequirements& requirements
     )
@@ -442,7 +413,6 @@ namespace rojoRHI::core {
         return record;
     }
 
-    //==================================================================================================================
     Result<Texture> addTexture(DeviceCore& core, TextureRecord record)
     {
         const Heap heap = record.heap;
@@ -483,7 +453,6 @@ namespace rojoRHI::core {
         return texture;
     }
 
-    //==================================================================================================================
     void destroyTexture(DeviceCore& core, Texture texture)
     {
         // A bad handle is left to the destroy below, which reports VU-rojo-core-0001 to 0003 and releases nothing. The view
@@ -525,7 +494,6 @@ namespace rojoRHI::core {
         }
     }
 
-    //==================================================================================================================
     void checkNotSwapchainImage([[maybe_unused]] const TextureRecord& texture, [[maybe_unused]] std::string_view use)
     {
         ROJORHI_VU(
@@ -537,7 +505,6 @@ namespace rojoRHI::core {
         );
     }
 
-    //==================================================================================================================
     void checkSubresourceRange([[maybe_unused]] const TextureRecord& texture, [[maybe_unused]] const SubresourceRange& range)
     {
         ROJORHI_VU(rangeNonEmpty(range), "VU-rojo-texture-0016", "a subresource range has {} mips and {} layers", range.mipCount, range.layerCount);
@@ -565,7 +532,6 @@ namespace rojoRHI::core {
         );
     }
 
-    //==================================================================================================================
     const TextureRecord& checkView(DeviceCore& core, Texture texture, const TextureViewDesc& desc)
     {
         TextureRecord* record = core.pool<Texture>().checked(texture, false);
@@ -576,7 +542,6 @@ namespace rojoRHI::core {
         return *record;
     }
 
-    //==================================================================================================================
     Result<ViewIndex> addView(DeviceCore& core, Texture texture, void* native)
     {
         const std::optional<uint32_t> slot = core.views().allocate(core.capabilities().maxViews, texture.bits, native);
@@ -590,7 +555,6 @@ namespace rojoRHI::core {
         return static_cast<ViewIndex>(*slot);
     }
 
-    //==================================================================================================================
     const TextureRecord& checkViewWrite(
         DeviceCore& core, [[maybe_unused]] IndexRange range, [[maybe_unused]] uint32_t index, Texture texture, [[maybe_unused]] const TextureViewDesc& desc
     )
@@ -622,7 +586,6 @@ namespace rojoRHI::core {
         return *record;
     }
 
-    //==================================================================================================================
     bool placeView(DeviceCore& core, IndexRange range, uint32_t index, Texture texture, void* native)
     {
         // Count the new view first, so the texture never reads as unviewed while a slot is about to hold it. A range released
@@ -645,7 +608,6 @@ namespace rojoRHI::core {
         return true;
     }
 
-    //==================================================================================================================
     void destroyView(DeviceCore& core, ViewIndex view)
     {
         const std::optional<uint64_t> owner = core.views().release(std::to_underlying(view), [&core] { return core.releaseFrame(); });

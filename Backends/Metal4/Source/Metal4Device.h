@@ -39,110 +39,94 @@
 namespace rojoRHI {
     struct DeviceImpl;
 
-    /// The Metal 4 backend's queue: its type, the device that owns it, which is how a queue used with another device is told
-    /// apart, the native queue it submits to, and a progress event only it signals: on the compute and copy queues after each
-    /// submission that names a fence and has no lists or more than one signal, and on every queue before and after the native
-    /// updates of each tile mapping call. A native queue does not retain the events it waits on or signals. A fence's event
-    /// lives until its frame slot retires, which covers every graphics submission and every submission with lists and at most
-    /// one signal made before the fence's destruction; a destroyed fence's event is kept beyond that until every queue's
-    /// progress passes the value it had at the destruction (`metal4::releasePassedFences`), which covers the rest.
+    // A native queue does not retain the events it waits on or signals. A fence's event lives until its frame slot
+    // retires, which covers every graphics submission and every submission with lists and at most one signal; a
+    // destroyed fence's event is kept beyond that until every queue's progress passes its value at the destruction
+    // (`metal4::releasePassedFences`).
     struct QueueImpl
     {
-        DeviceImpl* device = nullptr;         ///< The device that owns the queue.
-        QueueType type = QueueType::Graphics; ///< The queue's type.
-        MTL4::CommandQueue* native = nullptr; ///< The native queue, owned by the device.
-        /// Signalled by this queue alone, each time with the next progress value: on the compute and copy queues after each
-        /// submission that names a fence and has no lists or more than one signal, and before and after the native updates of
-        /// each `mapTiles` call, each of those two signals followed by a wait on the queue for it, which orders the updates
-        /// against the queue's other work.
+        DeviceImpl* device = nullptr; // Tells apart a queue used with another device.
+        QueueType type = QueueType::Graphics;
+        MTL4::CommandQueue* native = nullptr; // Owned by the device.
+        // Signalled by this queue alone with the next progress value: on the compute and copy queues after each
+        // submission that names a fence and has no lists or more than one signal, and around the native updates of each
+        // `mapTiles` call, each followed by a wait on the queue for it.
         MTL::SharedEvent* progress = nullptr;
-        /// On the graphics queue only, the fence a list's last encoder updates after the work a barrier it still owes at its end
-        /// names, for that barrier's dispatch stage, and each later encoder that dispatches waits on before its first dispatch,
-        /// except a counted draw's kernels, which a barrier to the dispatch stage would hold back. Only lists acquired while
-        /// `carryFenced` is set use it. Null on the compute and copy queues, which run no such kernels.
+        // Graphics queue only: a list's last encoder updates it after the work its owed barrier names, for that
+        // barrier's dispatch stage, and each later encoder that dispatches waits on it, except a counted draw's
+        // kernels, which a barrier to the dispatch stage would hold back. Only lists acquired while `carryFenced` is
+        // set use it.
         MTL::Fence* carry = nullptr;
-        /// On the graphics queue only: set when a list opens the kernels-only encoder of a counted draw's kernels. Recording sets
-        /// it, at most once; `Device::beginFrame` reads it.
+        // Graphics queue only: set, at most once, when a list opens the kernels-only encoder of a counted draw's
+        // kernels; `Device::beginFrame` reads it.
         std::atomic<bool> kernelsRan = false;
-        /// On the graphics queue only: set by the first `Device::beginFrame` after `kernelsRan`, and never cleared. A list
-        /// acquired before it is set carries a barrier's dispatch stage in the barrier and waits on no fence. `beginFrame` is of
-        /// thread class frame, so it happens before every acquisition in its frame and each of them reads the value it set;
-        /// and every list acquired in an earlier frame was submitted before that frame ended (VU-rojo-device-0005). So every
-        /// list that waits on no fence precedes, on the queue, every list that updates `carry`, and none misses an update.
+        // Graphics queue only: set by the first `Device::beginFrame` after `kernelsRan`, never cleared. `beginFrame` is
+        // of thread class frame, and every list of an earlier frame was submitted before that frame ended
+        // (VU-rojo-device-0005), so every list that waits on no fence precedes, on the queue, every list that updates
+        // `carry`.
         std::atomic<bool> carryFenced = false;
-        /// The last value submitted for signal on `progress`. Only `submit` and `mapTiles`, which the caller serialises per
-        /// queue, write it; a fence's destruction reads it, after the submissions that named the fence.
+        // Only `submit` and `mapTiles`, which the caller serialises per queue, write it; a fence's destruction reads
+        // it, after the submissions that named the fence.
         std::atomic<uint64_t> progressValue = 0;
-        /// The command buffers of the submission being committed, kept for its capacity. Only `submit` touches it.
+        // Kept for its capacity. Only `submit` touches it.
         std::vector<MTL4::CommandBuffer*> commitBuffers;
-        /// The commit timing callback `metal4::setCommitTiming` set, or null; with it set, every commit carries feedback. Only
-        /// a queue-class call writes it, so no submission runs while it changes; `submit` reads it.
+        // Only a queue-class call writes it, so no submission runs while it changes.
         metal4::CommitTimingCallback commitCallback = nullptr;
-        void* commitUser = nullptr; ///< The user pointer `commitCallback` is called with.
-        uint64_t commitSerial = 0;  ///< The commits of this queue since the callback was set; `submit` writes it and `setCommitTiming` resets it.
+        void* commitUser = nullptr;
+        uint64_t commitSerial = 0; // `submit` writes it and `setCommitTiming` resets it.
 
-        /// Returns the state `queue` wraps; checks VU-rojo-core-0004.
+        // Checks VU-rojo-core-0004.
         static QueueImpl& of(Queue queue);
 
-        /// Returns the queue handle that wraps `impl`.
         static Queue wrap(QueueImpl* impl);
     };
 
-    /// The Metal 4 backend's command list: the core's recording state and the device that acquired it, the native objects the
-    /// list records into, and what it keeps of its open render pass.
     struct CommandListImpl
     {
-        core::CommandListCore core; ///< The state machine the recording rules read, and the device that acquired the list.
-        metal4::ListState state;    ///< The list's allocator, command buffer and argument table, and its debug-group labels.
-        metal4::Encoders encoders;  ///< The encoder the list has open, if any.
-        metal4::DrawState draw;     ///< The open render pass's attachments and the list's render pass descriptor.
+        core::CommandListCore core;
+        metal4::ListState state;
+        metal4::Encoders encoders;
+        metal4::DrawState draw;
 
-        /// Returns the state `list` wraps; checks VU-rojo-core-0004.
+        // Checks VU-rojo-core-0004.
         static CommandListImpl& of(CommandList list);
 
-        /// Returns the list handle that wraps `impl`.
         static CommandList wrap(CommandListImpl* impl);
     };
 
-    /// The Metal 4 backend's swapchain: the core's record of the images and their state.
     struct SwapchainImpl
     {
-        core::SwapchainCore core; ///< The description, extent and image state the presentation rules read.
-        /// The layer and its residency set, retained until the swapchain is freed, the drawable of the acquired image and the
-        /// pending presents shared with the presented handlers.
+        core::SwapchainCore core;
         metal4::SwapchainNative native;
 
-        /// Returns the state `swapchain` wraps; checks VU-rojo-core-0004.
+        // Checks VU-rojo-core-0004.
         static SwapchainImpl& of(Swapchain swapchain);
 
-        /// Returns the swapchain handle that wraps `impl`.
         static Swapchain wrap(SwapchainImpl* impl);
     };
 
     namespace metal4 {
-        /// The event of a destroyed fence, with one reference kept until each queue's progress event reaches the value
-        /// `progress` holds for it: the queue's progress value when the fence was destroyed.
+        // One reference is kept until each queue's progress event reaches `progress`, the queue's progress value when
+        // the fence was destroyed.
         struct RetiringEvent
         {
-            MTL::SharedEvent* event = nullptr;     ///< The retained event.
-            std::array<uint64_t, 3> progress = {}; ///< Per `QueueType`, the progress value the queue must reach.
+            MTL::SharedEvent* event = nullptr;
+            std::array<uint64_t, 3> progress = {};
         };
     } // namespace metal4
 
-    /// The command lists of one frame slot: those taken since the slot was reused come first and the rest wait to be reused.
+    // Those taken since the slot was reused come first; the rest wait to be reused.
     struct ListPool
     {
-        std::mutex mutex;                                    ///< Guards the pool, because acquisition is free-threaded.
-        std::vector<std::unique_ptr<CommandListImpl>> lists; ///< Every list the slot ever needed.
-        size_t used = 0;                                     ///< How many of `lists` the open frame has taken.
+        std::mutex mutex; // Acquisition is free-threaded.
+        std::vector<std::unique_ptr<CommandListImpl>> lists;
+        size_t used = 0;
     };
 
-    /// The Metal 4 backend's device: the shared core, which also keeps the capabilities it reports, its queues, the command lists
-    /// of each frame slot and the native objects every resource shares. Each native pointer is one retained reference, released
-    /// by `destroyDevice` in reverse order of creation.
+    // Each native pointer is one retained reference, released by `destroyDevice` in reverse order of creation.
     struct DeviceImpl
     {
-        /// Creates the state of a device from a description `core::validateDeviceDesc` accepted.
+        // From a description `core::validateDeviceDesc` accepted.
         explicit DeviceImpl(const DeviceDesc& desc) : core(desc)
         {
             for (size_t i = 0; i < queues.size(); ++i)
@@ -152,53 +136,48 @@ namespace rojoRHI {
             }
         }
 
-        core::DeviceCore core;                ///< Frame bookkeeping, pools, labels, capabilities and the format table.
-        std::array<QueueImpl, 3> queues = {}; ///< One queue per `QueueType`, indexed by its value.
-        std::array<ListPool, 3> listPools;    ///< One list pool per frame slot; a device uses its first `framesInFlight`.
-        MTL::Device* device = nullptr;        ///< The system default device.
-        /// False only when `device` is positively a bare driver class, found once at creation (`commandsMayAutorelease`); any other
-        /// device, the validation layer's included, makes each native draw, dispatch, copy, fill and encoder end open a pool.
+        core::DeviceCore core;
+        std::array<QueueImpl, 3> queues = {}; // Indexed by `QueueType`.
+        std::array<ListPool, 3> listPools;    // A device uses its first `framesInFlight`.
+        MTL::Device* device = nullptr;
+        // False only when `device` is positively a bare driver class (`commandsMayAutorelease`); otherwise each native
+        // draw, dispatch, copy, fill and encoder end opens a pool.
         bool commandPools = false;
-        /// True when the device emits debug markers (ADR 0034): a debug group for each scope, render pass and upscale, and on
-        /// each encoder a list opens the innermost scope's label, else the list's. Set on a device created with
-        /// `DeviceDesc::debugMarkers` or `DeviceDesc::enableCapture`, so a capture names the work. Elsewhere a group costs two
-        /// native calls and a label a converted copy and an allocation, so neither is sent; the command buffer's label still
-        /// names each list.
+        // Set by `DeviceDesc::debugMarkers` or `DeviceDesc::enableCapture` (ADR 0034). Elsewhere a group costs two
+        // native calls and a label a converted copy and an allocation, so neither is sent; the command buffer's label
+        // still names each list.
         bool markers = false;
-        /// The serializer `compiler` records every pipeline into, and the archive of `DeviceDesc::pipelineCache`.
         metal4::PipelineCache pipelineCache;
-        MTL4::Compiler* compiler = nullptr;      ///< The device's one compiler.
-        metal4::Kernels kernels;                 ///< The backend's own kernels, made with `compiler`.
-        metal4::DepthStencilCache depthStencils; ///< The depth-stencil states pipelines share, one per distinct state.
-        metal4::Residency residency;             ///< The residency set every queue of the device keeps attached.
-        /// Copies initial data into Private memory on the internal upload queue, which also keeps `residency` attached.
+        MTL4::Compiler* compiler = nullptr;
+        metal4::Kernels kernels; // Made with `compiler`.
+        metal4::DepthStencilCache depthStencils;
+        metal4::Residency residency; // Every queue keeps it attached.
+        // Its upload queue also keeps `residency` attached.
         metal4::Stager stager;
-        bool residencyAttached = false; ///< True while every queue, the upload queue included, holds `residency`.
-        metal4::AddressMap addresses;   ///< Buffers by GPU address for `core::decodeAddr`; Debug builds only.
-        metal4::Timestamps timestamps;  ///< The counter heaps of each frame slot, which time the scopes.
-        /// Signalled on the graphics queue with each frame's number when the frame ends; `beginFrame` waits on it.
+        bool residencyAttached = false; // While every queue, the upload queue included, holds `residency`.
+        metal4::AddressMap addresses;   // Debug builds only.
+        metal4::Timestamps timestamps;
+        // `beginFrame` waits on it.
         MTL::SharedEvent* frameEvent = nullptr;
-        std::mutex retiringMutex;                          ///< Guards `retiringEvents` and `progressSeen`.
-        std::vector<metal4::RetiringEvent> retiringEvents; ///< Events of destroyed fences a queue may still use.
-        std::array<uint64_t, 3> progressSeen = {};         ///< Per `QueueType`, the greatest progress value read so far.
-        MTL::Buffer* viewTable = nullptr;                  ///< The `MTL::ResourceID` of each view slot, `maxViews` entries, Shared.
-        MTL::Buffer* samplerTable = nullptr;               ///< The `MTL::ResourceID` of each sampler slot, `maxSamplers` entries, Shared.
-        MTL::Buffer* zeroRecord = nullptr;                 ///< `kZeroRecordBytes` zeroes, Shared: the record a direct draw binds for drawId 0.
-        std::string adapterName;                           ///< The storage `Capabilities::adapterName` views.
-        std::string floorName;                             ///< The storage `Capabilities::floorName` views.
-        std::array<UpscalerSupport, 1> upscalerSupport{};  ///< The storage `Capabilities::upscalers` views.
-        metal4::Presentation presentation;                 ///< The swapchains and what they leave to the graphics queue.
+        std::mutex retiringMutex;                          // Guards `retiringEvents` and `progressSeen`.
+        std::vector<metal4::RetiringEvent> retiringEvents; // A queue may still use them.
+        std::array<uint64_t, 3> progressSeen = {};         // Per `QueueType`, the greatest progress value read so far.
+        MTL::Buffer* viewTable = nullptr;                  // `maxViews` entries, Shared.
+        MTL::Buffer* samplerTable = nullptr;               // `maxSamplers` entries, Shared.
+        MTL::Buffer* zeroRecord = nullptr;                 // Zeroes, Shared: the record a direct draw binds for drawId 0.
+        std::string adapterName;                           // The storage `Capabilities::adapterName` views.
+        std::string floorName;                             // The storage `Capabilities::floorName` views.
+        std::array<UpscalerSupport, 1> upscalerSupport{};  // The storage `Capabilities::upscalers` views.
+        metal4::Presentation presentation;
 
-        /// Returns the state `device` wraps; checks VU-rojo-core-0004.
+        // Checks VU-rojo-core-0004.
         static DeviceImpl& of(Device device);
 
-        /// Returns the device handle that wraps `impl`.
         static Device wrap(DeviceImpl* impl);
     };
 
     namespace metal4 {
-        /// Returns the open pass's render encoder, opening it through `openRender` when none is open. The test is inline, so a
-        /// command recorded into an open render encoder makes no call to reach it.
+        // The test is inline, so a command recorded into an open render encoder makes no call to reach it.
         inline MTL4::RenderCommandEncoder* ensureRender(CommandListImpl& list)
         {
             if (MTL4::RenderCommandEncoder* open = list.encoders.renderEncoder(); open != nullptr) [[likely]]
@@ -208,9 +187,7 @@ namespace rojoRHI {
             return openRender(list);
         }
 
-        /// Creates one frame-arena page of `size` bytes: an Upload buffer of the device's pool, resident in the device set, whose
-        /// `contents()` the page maps. `context` is the `DeviceCore`; its retire hooks' context is the `DeviceImpl`. The arena
-        /// calls it while it claims a page, under its lock.
+        // `context` is the `DeviceCore`. The arena calls it under its lock while it claims a page.
         Result<core::ArenaPage> createArenaPage(void* context, uint64_t size);
     } // namespace metal4
 } // namespace rojoRHI

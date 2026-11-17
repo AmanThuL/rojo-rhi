@@ -10,6 +10,7 @@
 using namespace rojoRHI;
 using example::check;
 
+// `texture` is a ViewIndex: each instance names its texture by heap index, so one draw reaches all 256.
 struct Instance
 {
     float offset[2];
@@ -23,6 +24,8 @@ struct BindlessRoot
     uint32_t sampler;
     float time;
     float aspect;
+    // Pads to 24 bytes, the size C++ gives the struct through Addr's 8-byte alignment; Slang aligns Addr to 4
+    // and would end its struct at 20.
     uint32_t pad;
 };
 
@@ -80,12 +83,14 @@ int main()
     {
         const std::vector<uint32_t> texels = pattern(i);
         const std::array initial{ TextureData{ .bytes = std::as_bytes(std::span(texels)), .bytesPerRow = kTextureSize * 4 } };
+        // A texture created with initial data starts in Layout::ShaderRead, so the draw samples it with no barrier.
         const Texture texture = check(
             device.createTexture(
                 { .format = Format::RGBA8Unorm, .extent = { kTextureSize, kTextureSize, 1 }, .usage = TextureUsage::Sampled, .label = "pattern" }, initial
             ),
             "createTexture"
         );
+        // The heap slot the shader indexes. Destroying the view frees it only once the frames that may read it retire.
         const ViewIndex view = check(device.createView(texture, {}), "createView");
         textures.push_back(texture);
         views.push_back(view);
@@ -137,6 +142,7 @@ int main()
         list.setPipeline(pipeline);
         list.setViewport({ .width = float(extent.width), .height = float(extent.height) });
         list.setScissor({ 0, 0, extent.width, extent.height });
+        // The instance buffer is static, so its address holds across frames; only the root is uploaded each frame.
         list.pushRoot(
             BindlessRoot{ .instances = device.address(instanceBuffer),
                           .sampler = uint32_t(sampler),

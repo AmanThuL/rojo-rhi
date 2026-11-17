@@ -27,20 +27,16 @@
 using namespace rojoRHI;
 
 namespace {
-    /// A root block a case pushes: one 16-byte row.
     struct TestRoot
     {
         uint32_t values[4] = {};
     };
 
-    /// Guards `g_messages`, which the message callback may fill from any thread.
+    // The message callback may fill `g_messages` from any thread.
     std::mutex g_messagesMutex;
 
-    /// The messages at `Warning` or above the library reported while a case collected them.
     std::vector<std::string> g_messages;
 
-    //==================================================================================================================
-    /// Keeps `message` when it is a warning or an error. It may run on any thread.
     void collectMessage(MessageSeverity severity, std::string_view message, void*)
     {
         if (severity == MessageSeverity::Info)
@@ -51,25 +47,22 @@ namespace {
         g_messages.emplace_back(message);
     }
 
-    /// Collects the library's warnings and errors, the debug layer's included, into `g_messages`, emptied first, while it
-    /// lives, and removes the callback when it goes, however the case ends.
+    // Collects the library's warnings and errors, the debug layer's included, into `g_messages` (emptied first) while it
+    // lives, and removes the callback however the case ends.
     class MessageCollection
     {
       public:
         MessageCollection();
         ~MessageCollection();
 
-        //==============================================================================================================
         MessageCollection(const MessageCollection&) = delete;
 
-        //==============================================================================================================
         MessageCollection& operator=(const MessageCollection&) = delete;
 
-        /// Returns the messages collected so far, and lists them for the log.
+        // Also lists the messages for the log.
         size_t count() const;
     };
 
-    //==================================================================================================================
     MessageCollection::MessageCollection()
     {
         {
@@ -79,13 +72,11 @@ namespace {
         setMessageCallback(collectMessage, nullptr);
     }
 
-    //==================================================================================================================
     MessageCollection::~MessageCollection()
     {
         setMessageCallback(nullptr, nullptr);
     }
 
-    //==================================================================================================================
     size_t MessageCollection::count() const
     {
         const std::lock_guard lock(g_messagesMutex);
@@ -96,8 +87,6 @@ namespace {
         return g_messages.size();
     }
 
-    //==================================================================================================================
-    /// Returns a new device with the default frames in flight.
     Device makeDevice()
     {
         Result<Device> created = createDevice({});
@@ -105,8 +94,6 @@ namespace {
         return *created;
     }
 
-    //==================================================================================================================
-    /// Returns a new fence at zero on `device`, labelled `label`.
     Fence makeFence(Device device, std::string_view label)
     {
         Result<Fence> created = device.createFence(0, label);
@@ -114,8 +101,6 @@ namespace {
         return *created;
     }
 
-    //==================================================================================================================
-    /// Returns a new `Gpu` buffer of `size` bytes with `ShaderWrite` on `device`, labelled `label`.
     Buffer makeWritable(Device device, uint64_t size, std::string_view label)
     {
         Result<Buffer> created = device.createBuffer({ .size = size, .usage = BufferUsage::ShaderWrite, .label = label });
@@ -123,8 +108,6 @@ namespace {
         return *created;
     }
 
-    //==================================================================================================================
-    /// Returns the native buffer of `buffer`, a live buffer of `device`.
     ID3D12Resource* resourceOf(Device device, Buffer buffer)
     {
         const auto* payload = static_cast<const d3d12::BufferPayload*>(DeviceImpl::of(device).core.pool<Buffer>().native(buffer));
@@ -132,22 +115,16 @@ namespace {
         return payload->resource;
     }
 
-    //==================================================================================================================
-    /// Returns the native state of `list`.
     d3d12::ListState& stateOf(CommandList list)
     {
         return CommandListImpl::of(list).state;
     }
 
-    //==================================================================================================================
-    /// Returns the native calls `list` has recorded since its acquisition.
     uint64_t recordCalls(CommandList list)
     {
         return core::coreOf(list).counts.nativeRecordCalls;
     }
 
-    //==================================================================================================================
-    /// Returns the name `object` carries, without a terminating null.
     std::wstring objectName(ID3D12Object* object)
     {
         wchar_t name[128] = {};
@@ -165,9 +142,7 @@ namespace {
         return read;
     }
 
-    //==================================================================================================================
-    /// Ends `list`, a Graphics list of `device`'s open frame, submits it signalling `value` of `done`, ends the frame and
-    /// waits for the signal, so no queue uses what the list wrote.
+    // Ends the frame and waits, so no queue uses what the list wrote.
     void submitAndWait(Device device, CommandList list, Fence done, uint64_t value)
     {
         list.end();
@@ -177,8 +152,7 @@ namespace {
         REQUIRE(device.wait({ done, value }, UINT64_MAX));
     }
 
-    //==================================================================================================================
-    /// Writes `word` in little-endian byte order over the bytes of `bytes` from `offset`, `size` bytes, both multiples of 4.
+    // Little-endian; `offset` and `size` are multiples of 4.
     void writeWords(std::vector<std::byte>& bytes, uint64_t offset, uint64_t size, uint32_t word)
     {
         for (uint64_t at = offset; at < offset + size; ++at)
@@ -187,8 +161,7 @@ namespace {
         }
     }
 
-    //==================================================================================================================
-    /// Returns the index of the first byte where `read` and `expected` differ, or their size when they are equal.
+    // Their size when they are equal.
     size_t firstDifference(const std::vector<std::byte>& read, const std::vector<std::byte>& expected)
     {
         REQUIRE(read.size() == expected.size());
@@ -203,7 +176,6 @@ namespace {
     }
 } // namespace
 
-//======================================================================================================================
 TEST_CASE("the device creates the fill pipeline", "[d3d12]")
 {
     Device device = makeDevice();
@@ -213,7 +185,6 @@ TEST_CASE("the device creates the fill pipeline", "[d3d12]")
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("a fill records the kernel's root signature, pipeline, root view, constants and dispatch", "[d3d12]")
 {
     constexpr uint64_t kSize = 256;
@@ -240,7 +211,6 @@ TEST_CASE("a fill records the kernel's root signature, pipeline, root view, cons
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("a fill right after a fill records only its root view, constants and dispatch", "[d3d12]")
 {
     constexpr uint64_t kHalf = 256;
@@ -266,7 +236,6 @@ TEST_CASE("a fill right after a fill records only its root view, constants and d
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("a fill marks the compute root dirty and leaves the graphics side alone", "[d3d12]")
 {
     constexpr uint64_t kSize = 64;
@@ -310,7 +279,6 @@ TEST_CASE("a fill marks the compute root dirty and leaves the graphics side alon
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("fills record on Compute lists as on Graphics lists", "[d3d12]")
 {
     constexpr uint64_t kSize = 1024;
@@ -361,7 +329,6 @@ TEST_CASE("fills record on Compute lists as on Graphics lists", "[d3d12]")
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("a fill past 2 GiB dispatches once per window, writes no descriptor and nothing past its end", "[d3d12]")
 {
     constexpr uint64_t kWindow = d3d12::kFillWindowBytes;
@@ -423,7 +390,6 @@ TEST_CASE("a fill past 2 GiB dispatches once per window, writes no descriptor an
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("fills of one word and of 2^22 + 3 words dispatch the group counts the kernel loops over", "[d3d12]")
 {
     constexpr uint64_t kLongWords = (uint64_t{ 1 } << 22) + 3;
@@ -471,7 +437,6 @@ TEST_CASE("fills of one word and of 2^22 + 3 words dispatch the group counts the
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("an unequal pattern lands in little-endian order over exactly the range", "[d3d12]")
 {
     constexpr uint64_t kSize = 64;

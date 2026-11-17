@@ -15,7 +15,6 @@
 
 using namespace rojoRHI;
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-pipeline-0001 a stage names an empty entry point", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-pipeline-0001", [] {
@@ -26,7 +25,6 @@ TEST_CASE("VU-rojo-pipeline-0001 a stage names an empty entry point", "[contract
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-pipeline-0002 a stage names an entry point of another stage", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-pipeline-0002", [] {
@@ -37,7 +35,6 @@ TEST_CASE("VU-rojo-pipeline-0002 a stage names an entry point of another stage",
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-pipeline-0003 loadShaderLibrary is given an empty blob", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-pipeline-0003", [] {
@@ -46,7 +43,6 @@ TEST_CASE("VU-rojo-pipeline-0003 loadShaderLibrary is given an empty blob", "[co
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-format-0003 a color target format cannot be an attachment", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-format-0003", [] {
@@ -61,7 +57,6 @@ TEST_CASE("VU-rojo-format-0003 a color target format cannot be an attachment", "
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-format-0003 blending is enabled for a format that cannot blend", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-format-0003", [] {
@@ -76,7 +71,6 @@ TEST_CASE("VU-rojo-format-0003 blending is enabled for a format that cannot blen
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-pipeline-0006 conservative rasterization is requested without the capability", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-pipeline-0006", [] {
@@ -90,7 +84,6 @@ TEST_CASE("VU-rojo-pipeline-0006 conservative rasterization is requested without
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-pipeline-0026 conservative rasterization is requested for lines", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-pipeline-0026", [] {
@@ -105,7 +98,6 @@ TEST_CASE("VU-rojo-pipeline-0026 conservative rasterization is requested for lin
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-pipeline-0007 depthWrite is set without depthTest", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-pipeline-0007", [] {
@@ -118,7 +110,6 @@ TEST_CASE("VU-rojo-pipeline-0007 depthWrite is set without depthTest", "[contrac
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-pipeline-0008 a graphics pipeline has neither vertex nor mesh", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-pipeline-0008", [] {
@@ -129,7 +120,6 @@ TEST_CASE("VU-rojo-pipeline-0008 a graphics pipeline has neither vertex nor mesh
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-pipeline-0008 a graphics pipeline has both vertex and mesh", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-pipeline-0008", [] {
@@ -140,7 +130,6 @@ TEST_CASE("VU-rojo-pipeline-0008 a graphics pipeline has both vertex and mesh", 
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-pipeline-0009 a task entry is present without a mesh entry", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-pipeline-0009", [] {
@@ -151,7 +140,6 @@ TEST_CASE("VU-rojo-pipeline-0009 a task entry is present without a mesh entry", 
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-pipeline-0010 a pipeline has more color targets than the limit", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-pipeline-0010", [] {
@@ -163,7 +151,6 @@ TEST_CASE("VU-rojo-pipeline-0010 a pipeline has more color targets than the limi
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-pipeline-0011 the depth format is a color format", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-pipeline-0011", [] {
@@ -174,7 +161,6 @@ TEST_CASE("VU-rojo-pipeline-0011 the depth format is a color format", "[contract
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-pipeline-0011 depthTest is set without a depth format", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-pipeline-0011", [] {
@@ -187,7 +173,6 @@ TEST_CASE("VU-rojo-pipeline-0011 depthTest is set without a depth format", "[con
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-pipeline-0011 stencilTest is set for a depth format without stencil", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-pipeline-0011", [] {
@@ -200,7 +185,6 @@ TEST_CASE("VU-rojo-pipeline-0011 stencilTest is set for a depth format without s
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-format-0003 a color format does not support the pipeline's sample count", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-format-0003", [] {
@@ -215,7 +199,6 @@ TEST_CASE("VU-rojo-format-0003 a color format does not support the pipeline's sa
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-format-0003 the depth format does not support the pipeline's sample count", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-format-0003", [] {
@@ -229,7 +212,6 @@ TEST_CASE("VU-rojo-format-0003 the depth format does not support the pipeline's 
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-pipeline-0013 a compute pipeline has no compute entry", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-pipeline-0013", [] {
@@ -238,7 +220,6 @@ TEST_CASE("VU-rojo-pipeline-0013 a compute pipeline has no compute entry", "[con
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-format-0002 a color target has Format::Undefined", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-format-0002", [] {
@@ -250,7 +231,6 @@ TEST_CASE("VU-rojo-format-0002 a color target has Format::Undefined", "[contract
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-format-0003 a pipeline uses a depth format the device cannot attach", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-format-0003", [] {

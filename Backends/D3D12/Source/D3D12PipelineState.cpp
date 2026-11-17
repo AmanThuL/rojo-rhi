@@ -21,22 +21,16 @@
 
 namespace rojoRHI::d3d12 {
     namespace {
-        //==============================================================================================================
-        /// Returns `value` rounded up to a multiple of `alignment`, a power of two.
         size_t alignUp(size_t value, size_t alignment)
         {
             return (value + alignment - 1) & ~(alignment - 1);
         }
 
-        //==============================================================================================================
-        /// Returns the number of `colors` a pipeline streams: all of them, at most the render targets D3D12 has.
         size_t targetCount(std::span<const ColorTarget> colors)
         {
             return std::min<size_t>(colors.size(), D3D12_SIMULTANEOUS_RENDER_TARGET_COUNT);
         }
 
-        //==============================================================================================================
-        /// Returns the stencil operations of one face, with the masks both faces share.
         D3D12_DEPTH_STENCILOP_DESC1 stencilFace(const StencilFaceState& face, uint8_t readBits, uint8_t writeBits)
         {
             D3D12_DEPTH_STENCILOP_DESC1 native = {};
@@ -50,7 +44,6 @@ namespace rojoRHI::d3d12 {
         }
     } // namespace
 
-    //==================================================================================================================
     D3D12_BLEND colorBlend(BlendFactor factor)
     {
         switch (factor)
@@ -72,7 +65,6 @@ namespace rojoRHI::d3d12 {
         return D3D12_BLEND_ZERO;
     }
 
-    //==================================================================================================================
     D3D12_BLEND alphaBlend(BlendFactor factor)
     {
         switch (factor)
@@ -94,7 +86,6 @@ namespace rojoRHI::d3d12 {
         return D3D12_BLEND_ZERO;
     }
 
-    //==================================================================================================================
     D3D12_BLEND_OP blendOp(BlendOp op)
     {
         switch (op)
@@ -108,7 +99,6 @@ namespace rojoRHI::d3d12 {
         return D3D12_BLEND_OP_ADD;
     }
 
-    //==================================================================================================================
     UINT8 writeMask(ColorWriteMask mask)
     {
         UINT bits = 0;
@@ -131,7 +121,6 @@ namespace rojoRHI::d3d12 {
         return static_cast<UINT8>(bits);
     }
 
-    //==================================================================================================================
     D3D12_CULL_MODE cullMode(CullMode cull)
     {
         switch (cull)
@@ -143,7 +132,6 @@ namespace rojoRHI::d3d12 {
         return D3D12_CULL_MODE_NONE;
     }
 
-    //==================================================================================================================
     D3D12_FILL_MODE fillMode(FillMode fill)
     {
         switch (fill)
@@ -154,7 +142,6 @@ namespace rojoRHI::d3d12 {
         return D3D12_FILL_MODE_SOLID;
     }
 
-    //==================================================================================================================
     D3D12_COMPARISON_FUNC comparisonFunc(CompareOp compare)
     {
         switch (compare)
@@ -171,7 +158,6 @@ namespace rojoRHI::d3d12 {
         return D3D12_COMPARISON_FUNC_ALWAYS;
     }
 
-    //==================================================================================================================
     D3D12_STENCIL_OP stencilOp(StencilOp op)
     {
         switch (op)
@@ -188,7 +174,6 @@ namespace rojoRHI::d3d12 {
         return D3D12_STENCIL_OP_KEEP;
     }
 
-    //==================================================================================================================
     D3D12_PRIMITIVE_TOPOLOGY_TYPE topologyType(PrimitiveClass primitive)
     {
         switch (primitive)
@@ -200,7 +185,6 @@ namespace rojoRHI::d3d12 {
         return D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE;
     }
 
-    //==================================================================================================================
     D3D_PRIMITIVE_TOPOLOGY listTopology(PrimitiveClass primitive)
     {
         switch (primitive)
@@ -212,7 +196,6 @@ namespace rojoRHI::d3d12 {
         return D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST;
     }
 
-    //==================================================================================================================
     D3D12_BLEND_DESC blendDesc(std::span<const ColorTarget> colors)
     {
         D3D12_BLEND_DESC native = {};
@@ -247,7 +230,6 @@ namespace rojoRHI::d3d12 {
         return native;
     }
 
-    //==================================================================================================================
     D3D12_RASTERIZER_DESC2 rasterizerDesc(const RasterState& raster)
     {
         D3D12_RASTERIZER_DESC2 native = {};
@@ -264,7 +246,6 @@ namespace rojoRHI::d3d12 {
         return native;
     }
 
-    //==================================================================================================================
     D3D12_DEPTH_STENCIL_DESC2 depthStencilDesc(const DepthStencilState& state)
     {
         D3D12_DEPTH_STENCIL_DESC2 native = {};
@@ -278,7 +259,6 @@ namespace rojoRHI::d3d12 {
         return native;
     }
 
-    //==================================================================================================================
     D3D12_RT_FORMAT_ARRAY renderTargetFormats(std::span<const ColorTarget> colors)
     {
         D3D12_RT_FORMAT_ARRAY native = {};
@@ -291,13 +271,11 @@ namespace rojoRHI::d3d12 {
         return native;
     }
 
-    //==================================================================================================================
     bool PipelineStream::has(D3D12_PIPELINE_STATE_SUBOBJECT_TYPE type) const
     {
         return locate(type) != nullptr;
     }
 
-    //==================================================================================================================
     D3D12_PIPELINE_STATE_STREAM_DESC PipelineStream::desc() const
     {
         D3D12_PIPELINE_STATE_STREAM_DESC native = {};
@@ -307,7 +285,6 @@ namespace rojoRHI::d3d12 {
         return native;
     }
 
-    //==================================================================================================================
     std::byte* PipelineStream::place(D3D12_PIPELINE_STATE_SUBOBJECT_TYPE type, size_t alignment, size_t size)
     {
         // `m_size` is a multiple of the pointer size, so the type starts a subobject where the runtime looks for one.
@@ -322,7 +299,6 @@ namespace rojoRHI::d3d12 {
         return bytes + valueAt;
     }
 
-    //==================================================================================================================
     const std::byte* PipelineStream::locate(D3D12_PIPELINE_STATE_SUBOBJECT_TYPE type) const
     {
         const auto* bytes = reinterpret_cast<const std::byte*>(m_words.data());
@@ -336,7 +312,6 @@ namespace rojoRHI::d3d12 {
         return nullptr;
     }
 
-    //==================================================================================================================
     PipelineStream graphicsStream(ID3D12RootSignature* root, const GraphicsPipelineDesc& desc, const PipelineShaders& shaders)
     {
         PipelineStream stream;
@@ -391,7 +366,6 @@ namespace rojoRHI::d3d12 {
         return stream;
     }
 
-    //==================================================================================================================
     PipelineStream computeStream(ID3D12RootSignature* root, D3D12_SHADER_BYTECODE bytecode)
     {
         PipelineStream stream;
@@ -400,7 +374,6 @@ namespace rojoRHI::d3d12 {
         return stream;
     }
 
-    //==================================================================================================================
     void retirePipeline(void*, core::PipelineRecord& record)
     {
         auto* state = static_cast<PipelineState*>(record.native);

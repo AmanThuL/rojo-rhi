@@ -15,19 +15,16 @@
 using namespace rojoRHI;
 
 namespace {
-    //==================================================================================================================
     SwapchainDesc described(uint32_t surface = 0)
     {
         return SwapchainDesc{ .nativeSurface = test::surface(surface), .label = "test.swapchain" };
     }
 
-    //==================================================================================================================
     Swapchain makeSwapchain(Device device, uint32_t surface = 0)
     {
         return *device.createSwapchain(described(surface));
     }
 
-    //==================================================================================================================
     TextureBarrier barrierOf(Texture texture, Layout oldLayout, Layout newLayout)
     {
         return TextureBarrier{ .texture = texture,
@@ -38,7 +35,6 @@ namespace {
                                .newLayout = newLayout };
     }
 
-    /// An open frame, an acquired image and a graphics list, for the tests of the entries that refuse the image.
     struct Acquired
     {
         Device device;
@@ -49,8 +45,6 @@ namespace {
         Texture texture;
     };
 
-    //==================================================================================================================
-    /// Opens a frame and acquires the image, the list, a buffer and an ordinary texture.
     Acquired acquireKit()
     {
         Acquired kit;
@@ -67,7 +61,6 @@ namespace {
     }
 } // namespace
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-present-0001 a swapchain is created on a null surface", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-present-0001", [] {
@@ -78,7 +71,6 @@ TEST_CASE("VU-rojo-present-0001 a swapchain is created on a null surface", "[con
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-present-0003 a swapchain pairs a color space with another one's format", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-present-0003", [] {
@@ -89,7 +81,6 @@ TEST_CASE("VU-rojo-present-0003 a swapchain pairs a color space with another one
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-present-0004 a swapchain has one image", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-present-0004", [] {
@@ -101,7 +92,6 @@ TEST_CASE("VU-rojo-present-0004 a swapchain has one image", "[contract][death]")
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-present-0004 a swapchain has four images", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-present-0004", [] {
@@ -112,7 +102,6 @@ TEST_CASE("VU-rojo-present-0004 a swapchain has four images", "[contract][death]
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-present-0005 a swapchain has a maximum latency of zero", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-present-0005", [] {
@@ -123,7 +112,6 @@ TEST_CASE("VU-rojo-present-0005 a swapchain has a maximum latency of zero", "[co
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-present-0005 a swapchain has a maximum latency above its image count", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-present-0005", [] {
@@ -135,7 +123,6 @@ TEST_CASE("VU-rojo-present-0005 a swapchain has a maximum latency above its imag
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-core-0006 a swapchain label is not valid UTF-8", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-core-0006", [] {
@@ -146,7 +133,6 @@ TEST_CASE("VU-rojo-core-0006 a swapchain label is not valid UTF-8", "[contract][
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-core-0007 a swapchain label holds a NUL", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-core-0007", [] {
@@ -157,7 +143,6 @@ TEST_CASE("VU-rojo-core-0007 a swapchain label holds a NUL", "[contract][death]"
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-present-0006 a surface of a live swapchain takes a second swapchain", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-present-0006", [] {
@@ -167,7 +152,6 @@ TEST_CASE("VU-rojo-present-0006 a surface of a live swapchain takes a second swa
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-present-0007 a swapchain is resized in an open frame", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-present-0007", [] {
@@ -178,7 +162,6 @@ TEST_CASE("VU-rojo-present-0007 a swapchain is resized in an open frame", "[cont
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-present-0008 a swapchain is resized with an image acquired", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-present-0008", [] {
@@ -191,7 +174,6 @@ TEST_CASE("VU-rojo-present-0008 a swapchain is resized with an image acquired", 
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-present-0009 a swapchain is resized to a zero width", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-present-0009", [] {
@@ -201,7 +183,6 @@ TEST_CASE("VU-rojo-present-0009 a swapchain is resized to a zero width", "[contr
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-present-0009 a swapchain is resized to a zero height", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-present-0009", [] {
@@ -211,7 +192,6 @@ TEST_CASE("VU-rojo-present-0009 a swapchain is resized to a zero height", "[cont
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-present-0010 an image is acquired with no frame open", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-present-0010", [] {
@@ -221,7 +201,6 @@ TEST_CASE("VU-rojo-present-0010 an image is acquired with no frame open", "[cont
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-present-0011 a second image is acquired before the first is presented", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-present-0011", [] {
@@ -233,7 +212,6 @@ TEST_CASE("VU-rojo-present-0011 a second image is acquired before the first is p
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-present-0012 an acquired image gets a view", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-present-0012", [] {
@@ -245,7 +223,6 @@ TEST_CASE("VU-rojo-present-0012 an acquired image gets a view", "[contract][deat
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-present-0012 an acquired image is written into a view range", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-present-0012", [] {
@@ -255,7 +232,6 @@ TEST_CASE("VU-rojo-present-0012 an acquired image is written into a view range",
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-present-0012 an acquired image is the destination of copyBufferToTexture", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-present-0012", [] {
@@ -264,7 +240,6 @@ TEST_CASE("VU-rojo-present-0012 an acquired image is the destination of copyBuff
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-present-0012 an acquired image is the source of copyTextureToBuffer", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-present-0012", [] {
@@ -273,7 +248,6 @@ TEST_CASE("VU-rojo-present-0012 an acquired image is the source of copyTextureTo
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-present-0012 an acquired image is the source of copyTexture", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-present-0012", [] {
@@ -282,7 +256,6 @@ TEST_CASE("VU-rojo-present-0012 an acquired image is the source of copyTexture",
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-present-0012 an acquired image is the destination of copyTexture", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-present-0012", [] {
@@ -291,7 +264,6 @@ TEST_CASE("VU-rojo-present-0012 an acquired image is the destination of copyText
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-present-0012 an acquired image is cleared by clearTexture", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-present-0012", [] {
@@ -300,7 +272,6 @@ TEST_CASE("VU-rojo-present-0012 an acquired image is cleared by clearTexture", "
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-present-0013 an acquired image is destroyed", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-present-0013", [] {
@@ -311,7 +282,6 @@ TEST_CASE("VU-rojo-present-0013 an acquired image is destroyed", "[contract][dea
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-present-0015 an image is presented on the compute queue", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-present-0015", [] {
@@ -323,7 +293,6 @@ TEST_CASE("VU-rojo-present-0015 an image is presented on the compute queue", "[c
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-present-0016 an image is presented without an acquire", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-present-0016", [] {
@@ -334,7 +303,6 @@ TEST_CASE("VU-rojo-present-0016 an image is presented without an acquire", "[con
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-present-0016 an image is presented twice", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-present-0016", [] {
@@ -348,7 +316,6 @@ TEST_CASE("VU-rojo-present-0016 an image is presented twice", "[contract][death]
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-present-0017 an image is presented after the frame of its acquire ended", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-present-0017", [] {
@@ -361,7 +328,6 @@ TEST_CASE("VU-rojo-present-0017 an image is presented after the frame of its acq
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-sync-0005 a barrier moves an ordinary texture to Present", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-sync-0005", [] {
@@ -376,7 +342,6 @@ TEST_CASE("VU-rojo-sync-0005 a barrier moves an ordinary texture to Present", "[
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-sync-0005 a barrier moves an ordinary texture from Present", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-sync-0005", [] {
@@ -391,7 +356,6 @@ TEST_CASE("VU-rojo-sync-0005 a barrier moves an ordinary texture from Present", 
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-core-0004 a default-constructed Swapchain acquires", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-core-0004", [] {
@@ -400,7 +364,6 @@ TEST_CASE("VU-rojo-core-0004 a default-constructed Swapchain acquires", "[contra
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-core-0005 a swapchain of another device is presented", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-core-0005", [] {

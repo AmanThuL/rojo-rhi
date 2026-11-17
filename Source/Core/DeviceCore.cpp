@@ -18,23 +18,18 @@
 
 namespace rojoRHI::core {
     namespace {
-        //==============================================================================================================
-        /// Returns whether releasing `record` releases a native object. A swapchain image's record stands for a drawable the
-        /// backend never created, so its retirement is a deferred destruction but no native release.
         template<typename Record> bool releasesNative(const Record&)
         {
             return true;
         }
 
-        //==============================================================================================================
-        /// Returns whether releasing the texture `record` releases a native object.
+        // A swapchain image's record stands for a drawable the backend never created: its retirement is a deferred
+        // destruction but no native release.
         bool releasesNative(const TextureRecord& record)
         {
             return !record.swapchainImage;
         }
 
-        //==============================================================================================================
-        /// Passes a view or sampler slot's payload to `hook`, which may be null.
         void releaseSlotPayload(void (*hook)(void* context, void* native), void* context, void* native)
         {
             if (hook != nullptr)
@@ -44,7 +39,6 @@ namespace rojoRHI::core {
         }
     } // namespace
 
-    //==================================================================================================================
     Result<void> validateDeviceDesc([[maybe_unused]] const DeviceDesc& desc)
     {
 #ifdef NDEBUG
@@ -57,13 +51,11 @@ namespace rojoRHI::core {
         return {};
     }
 
-    //==================================================================================================================
     void checkObject([[maybe_unused]] const void* impl, [[maybe_unused]] std::string_view kind)
     {
         ROJORHI_VU(impl != nullptr, "VU-rojo-core-0004", "a default-constructed {} was used", kind);
     }
 
-    //==================================================================================================================
     DeviceCore::DeviceCore(const DeviceDesc& desc, uint32_t poolCapacity)
         : m_pools(
               PoolCapacity{ poolCapacity },
@@ -87,13 +79,11 @@ namespace rojoRHI::core {
         std::get<HandlePool<Upscaler, UpscalerRecord>>(m_pools).countInto(&m_counts.nativeCreateCalls);
     }
 
-    //==================================================================================================================
     uint32_t DeviceCore::addStorageClears(uint32_t mips)
     {
         return m_storageClears.fetch_add(mips, std::memory_order_relaxed);
     }
 
-    //==================================================================================================================
     void DeviceCore::beginFrame()
     {
         const uint64_t state = m_state.load();
@@ -108,9 +98,8 @@ namespace rojoRHI::core {
 #ifndef NDEBUG
         m_storageClears.store(0, std::memory_order_relaxed);
 #endif
-        // A backend's wait for the reused slot's frame has returned by now, and a backend with no wait completed the work at
-        // submission, so the retired slot's work is complete when the host clock records it. The submissions from here on
-        // are the new frame's. No pool lock is held here.
+        // The reused slot's work is complete when the clock records it: a backend's wait for it has returned, or a backend
+        // with no wait completed it at submission. The submissions from here on are the new frame's. No pool lock is held.
         beginFrameClock(*this, frame > m_framesInFlight ? frame - m_framesInFlight : 0);
         if (frame > m_framesInFlight)
         {
@@ -129,15 +118,15 @@ namespace rojoRHI::core {
                     }
                 });
             });
-            // A destroyed view or sampler is a native object released now and counted; the payloads a released range or a
-            // replaced write leaves go to the hooks uncounted.
+            // A destroyed view or sampler is a native object released now and counted; the payloads a released range or
+            // a replaced write leaves go to the hooks uncounted.
             const uint64_t heapReleases = m_views.retire(retired, [&](void* native) { releaseSlotPayload(m_hooks.view, m_hooks.context, native); }) +
                                           m_samplers.retire(retired, [&](void* native) { releaseSlotPayload(m_hooks.sampler, m_hooks.context, native); });
             DeviceCounts::add(m_counts.deferredRetired, heapReleases);
             DeviceCounts::add(m_counts.nativeCreateCalls, heapReleases);
             const uint32_t slot = static_cast<uint32_t>(frame % m_framesInFlight);
-            // The slot's scopes leave the arena pages their labels live in before the rewind makes the pages claimable, and the
-            // backend reads their timestamps while the labels are still valid.
+            // The slot's scopes leave the arena pages their labels live in before the rewind makes the pages claimable,
+            // and the backend reads their timestamps while the labels are still valid.
             m_scopes.retire(slot, retired, m_hooks.scopeTimes, m_hooks.context);
             m_arena.rewind(slot);
             if (m_hooks.frameSlot != nullptr)
@@ -147,7 +136,6 @@ namespace rojoRHI::core {
         }
     }
 
-    //==================================================================================================================
     void DeviceCore::endFrame()
     {
         const uint64_t state = m_state.load();
@@ -159,13 +147,12 @@ namespace rojoRHI::core {
             m_unsubmittedLists.load(),
             state >> 1
         );
-        // The slot's internal fence is signalled on the graphics queue after the frame's graphics submissions, which must have
-        // joined the frame's compute and copy work (VU-rojo-device-0006).
+        // The slot's internal fence is signalled on the graphics queue after the frame's graphics submissions, which
+        // must have joined the frame's compute and copy work (VU-rojo-device-0006).
         endFrameClock(*this, state >> 1);
         m_state.store(state & ~uint64_t{ 1 });
     }
 
-    //==================================================================================================================
     void DeviceCore::beginDestroy()
     {
         ROJORHI_VU(!frameOpen(), "VU-rojo-device-0002", "destroyDevice was called while frame {} is open", frameNumber());
@@ -179,7 +166,8 @@ namespace rojoRHI::core {
             std::apply(
                 [](auto&... pools) {
                     (pools.forEachLive([](const auto& record) {
-                        // An acquired swapchain image is the swapchain's: the caller cannot destroy it, and the swapchain warns.
+                        // An acquired swapchain image is the swapchain's: the caller cannot destroy it, and the
+                        // swapchain warns.
                         if constexpr (requires { record.swapchainImage; })
                         {
                             if (record.swapchainImage)
@@ -210,7 +198,6 @@ namespace rojoRHI::core {
         m_samplers.drain([&](void* native) { releaseSlotPayload(m_hooks.sampler, m_hooks.context, native); });
     }
 
-    //==================================================================================================================
     void DeviceCore::drain()
     {
         forEachPool([&](auto& pool) {
@@ -224,7 +211,6 @@ namespace rojoRHI::core {
         });
     }
 
-    //==================================================================================================================
     bool DeviceCore::drained()
     {
         bool empty = true;
@@ -232,7 +218,6 @@ namespace rojoRHI::core {
         return empty && m_views.empty() && m_samplers.empty();
     }
 
-    //==================================================================================================================
     DeviceCore::~DeviceCore()
     {
         ROJORHI_INTERNAL_ASSERT(drained(), "a device core was destroyed with live or pending records; its backend must call beginDestroy first");
@@ -240,68 +225,57 @@ namespace rojoRHI::core {
         forEachPool([](auto& pool) { pool.drain([](auto&) {}); });
     }
 
-    //==================================================================================================================
     void DeviceCore::setRetireHooks(const RetireHooks& hooks)
     {
         m_hooks = hooks;
     }
 
-    //==================================================================================================================
     const RetireHooks& DeviceCore::retireHooks() const
     {
         return m_hooks;
     }
 
-    //==================================================================================================================
     void DeviceCore::setSurfaceCheck(bool (*check)(const void* surface))
     {
         m_surfaceCheck = check;
     }
 
-    //==================================================================================================================
     bool (*DeviceCore::surfaceCheck() const)(const void* surface)
     {
         return m_surfaceCheck;
     }
 
-    //==================================================================================================================
     void DeviceCore::setArenaSource(ArenaPageSource source)
     {
         m_arenaSource = source;
     }
 
-    //==================================================================================================================
     ArenaPageSource DeviceCore::arenaSource() const
     {
         ROJORHI_INTERNAL_ASSERT(m_arenaSource != nullptr, "the backend registered no frame-arena page source");
         return m_arenaSource;
     }
 
-    //==================================================================================================================
     void DeviceCore::setCaptureAvailable(Result<void> (*available)(std::string_view path))
     {
         m_captureAvailable = available;
     }
 
-    //==================================================================================================================
     Result<void> (*DeviceCore::captureAvailable() const)(std::string_view path)
     {
         return m_captureAvailable;
     }
 
-    //==================================================================================================================
     bool DeviceCore::capturing() const
     {
         return m_capturing.load();
     }
 
-    //==================================================================================================================
     bool DeviceCore::exchangeCapturing(bool capturing)
     {
         return m_capturing.exchange(capturing);
     }
 
-    //==================================================================================================================
     void DeviceCore::submitScopes(const CommandListCore& list)
     {
         if (!m_timesScopes)
@@ -311,19 +285,16 @@ namespace rojoRHI::core {
         m_scopes.submit(static_cast<uint32_t>(list.frame % m_framesInFlight), list.type, list.scopeLog);
     }
 
-    //==================================================================================================================
     std::span<const ScopeTiming> DeviceCore::scopeTimings() const
     {
         return m_scopes.report();
     }
 
-    //==================================================================================================================
     DeviceCounts& DeviceCore::counts() const
     {
         return m_counts;
     }
 
-    //==================================================================================================================
     Counters DeviceCore::counters() const
     {
         Counters counters;
@@ -345,10 +316,9 @@ namespace rojoRHI::core {
         counters.textureBarriers = DeviceCounts::read(m_counts.textureBarriers);
         counters.nativeBarriers = DeviceCounts::read(m_counts.nativeBarriers);
         counters.pipelinesCreated = DeviceCounts::read(m_counts.pipelinesCreated);
-        // A creation the backend's cache did not serve is a miss; the Null backend never counts a hit. The two counts are read
-        // apart: a hit whose creation lands after the creations are read but before the hits are shows, in that one
-        // snapshot, as an earlier miss turned into a hit (or, with no earlier miss, would wrap, hence the clamp at zero).
-        // The next snapshot after the creation returns is exact.
+        // A miss is a creation the backend's cache did not serve; the Null backend never counts a hit. The two counts
+        // are read apart, so a hit landing between the reads shows, in that snapshot, as an earlier miss turned hit, or
+        // would wrap without the clamp at zero. The next snapshot is exact.
         counters.pipelineCacheHits = DeviceCounts::read(m_counts.pipelineCacheHits);
         counters.pipelineCacheMisses = counters.pipelinesCreated - std::min(counters.pipelineCacheHits, counters.pipelinesCreated);
         counters.pipelineCompileNanoseconds = DeviceCounts::read(m_counts.pipelineCompileNanoseconds);
@@ -357,7 +327,6 @@ namespace rojoRHI::core {
         return counters;
     }
 
-    //==================================================================================================================
     void DeviceCore::addSwapchain(SwapchainCore& swapchain)
     {
         std::lock_guard lock(m_swapchainMutex);
@@ -370,150 +339,126 @@ namespace rojoRHI::core {
         m_swapchains.push_back(&swapchain);
     }
 
-    //==================================================================================================================
     void DeviceCore::removeSwapchain(SwapchainCore& swapchain)
     {
         std::lock_guard lock(m_swapchainMutex);
         std::erase(m_swapchains, &swapchain);
     }
 
-    //==================================================================================================================
     Capabilities& DeviceCore::capabilities()
     {
         return m_capabilities;
     }
 
-    //==================================================================================================================
     const Capabilities& DeviceCore::capabilities() const
     {
         return m_capabilities;
     }
 
-    //==================================================================================================================
     void DeviceCore::setFormatCapabilities(Format format, const FormatCapabilities& capabilities)
     {
         ROJORHI_INTERNAL_ASSERT(static_cast<uint32_t>(format) < kFormatCount, "a backend set capabilities for a value that is not a Format");
         m_formats[static_cast<uint32_t>(format)] = capabilities;
     }
 
-    //==================================================================================================================
     void DeviceCore::setFormatTable(const FormatTable& table)
     {
         m_formats = table;
     }
 
-    //==================================================================================================================
     void DeviceCore::setTileExtents(TileExtent (*extents)(Format format, TextureType type))
     {
         m_tileExtents = extents;
     }
 
-    //==================================================================================================================
     TileExtent DeviceCore::tileExtent(Format format, TextureType type) const
     {
         ROJORHI_INTERNAL_ASSERT(m_tileExtents != nullptr, "the backend registered no tile extents");
         return m_tileExtents(format, type);
     }
 
-    //==================================================================================================================
     FormatCapabilities DeviceCore::formatCapabilities(Format format) const
     {
         checkQueryFormat(format);
         return m_formats[static_cast<uint32_t>(format)];
     }
 
-    //==================================================================================================================
     bool DeviceCore::frameOpen() const
     {
         return (m_state.load() & 1) != 0;
     }
 
-    //==================================================================================================================
     uint64_t DeviceCore::frameNumber() const
     {
         return m_state.load() >> 1;
     }
 
-    //==================================================================================================================
     uint64_t DeviceCore::releaseFrame() const
     {
         const uint64_t state = m_state.load();
         return (state & 1) != 0 ? (state >> 1) : (state >> 1) + 1;
     }
 
-    //==================================================================================================================
     SlotAllocator& DeviceCore::views()
     {
         return m_views;
     }
 
-    //==================================================================================================================
     SlotAllocator& DeviceCore::samplers()
     {
         return m_samplers;
     }
 
-    //==================================================================================================================
     FrameArena& DeviceCore::arena()
     {
         return m_arena;
     }
 
-    //==================================================================================================================
     void DeviceCore::noteListAcquired()
     {
         ++m_unsubmittedLists;
     }
 
-    //==================================================================================================================
     void DeviceCore::noteListSubmitted()
     {
         --m_unsubmittedLists;
     }
 
-    //==================================================================================================================
     uint32_t DeviceCore::framesInFlight() const
     {
         return m_framesInFlight;
     }
 
-    //==================================================================================================================
     bool DeviceCore::validation() const
     {
         return m_validation;
     }
 
-    //==================================================================================================================
     bool DeviceCore::timesScopes() const
     {
         return m_timesScopes;
     }
 
-    //==================================================================================================================
     bool DeviceCore::marksScopes() const
     {
         return m_marksScopes;
     }
 
-    //==================================================================================================================
     Tracker& DeviceCore::tracker()
     {
         return m_tracker;
     }
 
-    //==================================================================================================================
     AliasTracker& DeviceCore::aliasing()
     {
         return m_aliasing;
     }
 
-    //==================================================================================================================
     const AliasTracker& DeviceCore::aliasing() const
     {
         return m_aliasing;
     }
 
-    //==================================================================================================================
     std::string_view DeviceCore::label() const
     {
         return m_label;

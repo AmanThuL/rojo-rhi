@@ -17,9 +17,6 @@
 using namespace rojoRHI;
 
 namespace {
-    //==================================================================================================================
-    /// Runs `frames` frames on `device`, each acquiring an image of `swapchain`, submitting an empty graphics submission when
-    /// `submit` is set, and presenting it. Every acquire returns an image.
     void presentFrames(Device device, Swapchain swapchain, uint32_t frames, bool submit)
     {
         Queue graphics = device.queue(QueueType::Graphics);
@@ -39,7 +36,6 @@ namespace {
     }
 } // namespace
 
-//======================================================================================================================
 TEST_CASE("every acquire returns an image within its deadline, for each image count, latency and framesInFlight", "[conformance]")
 {
     test::requireGpu();
@@ -57,7 +53,6 @@ TEST_CASE("every acquire returns an image within its deadline, for each image co
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("a swapchain resized between frames goes on acquiring and presenting", "[conformance]")
 {
     test::requireGpu();
@@ -73,7 +68,6 @@ TEST_CASE("a swapchain resized between frames goes on acquiring and presenting",
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("two swapchains acquire and present in the same frames", "[conformance]")
 {
     test::requireGpu();
@@ -99,7 +93,6 @@ TEST_CASE("two swapchains acquire and present in the same frames", "[conformance
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("an image cleared by a pass and moved to Present by a barrier presents in every frame", "[conformance]")
 {
     test::requireGpu();

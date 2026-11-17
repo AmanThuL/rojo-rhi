@@ -10,13 +10,11 @@
 #include <array>
 
 namespace rojoRHI::test {
-    //==================================================================================================================
     UpscalerDesc UpscaleKit::defaultDesc()
     {
         return UpscalerDesc{ .input = { kInput, kInput }, .output = { kOutput, kOutput }, .label = "kit.upscaler" };
     }
 
-    //==================================================================================================================
     UpscaleKit::UpscaleKit(QueueType type, const UpscalerDesc& description, bool validation, bool scopeTimings, bool debugMarkers)
         : kit(type, validation, scopeTimings, debugMarkers), desc(description), m_moveTextures(!validation && type == QueueType::Graphics && layoutsAreNative())
     {
@@ -29,7 +27,6 @@ namespace rojoRHI::test {
         params.output = moved(make(desc.outputFormat, desc.output, TextureUsage::Storage | TextureUsage::RenderTarget), Layout::ShaderWrite);
     }
 
-    //==================================================================================================================
     Texture UpscaleKit::moved(Texture texture, Layout layout)
     {
         if (m_moveTextures)
@@ -39,38 +36,32 @@ namespace rojoRHI::test {
         return texture;
     }
 
-    //==================================================================================================================
     Texture UpscaleKit::make(Format format, Extent2D extent, TextureUsage usage)
     {
         return *kit.device.createTexture(TextureDesc{ .format = format, .extent = { extent.width, extent.height, 1 }, .usage = usage, .label = "kit.upscale" });
     }
 
-    //==================================================================================================================
     Texture UpscaleKit::exposureTexture()
     {
         return moved(make(Format::R16Float, { 1, 1 }, TextureUsage::Sampled), Layout::ShaderRead);
     }
 
-    //==================================================================================================================
     Texture UpscaleKit::reactiveTexture()
     {
         return moved(make(Format::R8Unorm, desc.input, TextureUsage::Sampled), Layout::ShaderRead);
     }
 
-    //==================================================================================================================
     Texture UpscaleKit::swapchainImage()
     {
         Swapchain swapchain = *kit.device.createSwapchain(SwapchainDesc{ .nativeSurface = surface(), .label = "kit.swapchain" });
         return swapchain.acquire();
     }
 
-    //==================================================================================================================
     void UpscaleKit::upscale()
     {
         kit.list.upscale(upscaler, params);
     }
 
-    //==================================================================================================================
     void UpscaleKit::nextFrame()
     {
         kit.list.end();

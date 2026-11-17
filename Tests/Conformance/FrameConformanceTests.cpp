@@ -20,20 +20,18 @@
 using namespace rojoRHI;
 
 namespace {
-    /// The copy kernel's root, as `PullOracle.slang` declares it.
+    // As `PullOracle.slang` declares it.
     struct CopyRoot
     {
-        Addr source;      ///< Where the kernel reads.
-        Addr destination; ///< Where it writes.
-        uint32_t count;   ///< The `uint4` elements it copies.
-        uint32_t pad;     ///< Padding.
+        Addr source;
+        Addr destination;
+        uint32_t count;
+        uint32_t pad;
     };
 
-    /// The threads of one copy kernel group, as `PullOracle.slang` declares them.
+    // As `PullOracle.slang` declares it.
     constexpr uint32_t kCopyGroup = 256;
 
-    //==================================================================================================================
-    /// Records on `list` the copy kernel `copy` moving `count` `uint4` elements from `source` to `destination`.
     void copyOn(CommandList list, Pipeline copy, Addr source, Addr destination, uint32_t count)
     {
         list.setPipeline(copy);
@@ -42,7 +40,6 @@ namespace {
     }
 } // namespace
 
-//======================================================================================================================
 TEST_CASE("beginFrame returns only after the graphics work of the frame framesInFlight earlier has completed, with framesInFlight 2 and 3", "[conformance]")
 {
     test::requireGpu();
@@ -69,7 +66,6 @@ TEST_CASE("beginFrame returns only after the graphics work of the frame framesIn
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("an object destroyed in frame N retires when frame N + framesInFlight begins and not before", "[conformance]")
 {
     test::requireGpu();
@@ -106,7 +102,6 @@ TEST_CASE("an object destroyed in frame N retires when frame N + framesInFlight 
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("frame data of a frame still in flight keeps its bytes while later frames upload theirs, with framesInFlight 2 and 3", "[conformance]")
 {
     test::requireGpu();

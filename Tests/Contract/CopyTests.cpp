@@ -18,15 +18,12 @@ using test::transition;
 namespace {
     constexpr uint64_t kBig = 1 << 20;
 
-    //==================================================================================================================
     TextureRegion box(uint32_t width, uint32_t height, uint32_t depth = 1)
     {
         return TextureRegion{ .extent = { width, height, depth } };
     }
 
-    //==================================================================================================================
-    /// Moves every subresource of the new `texture` from `Undefined` to `CopyDst`, where a clear needs it (VU-rojo-cmd-0072),
-    /// and returns it.
+    // A clear needs every subresource in CopyDst (VU-rojo-cmd-0072).
     Texture inCopyDst(PassKit& kit, Texture texture)
     {
         transition(kit.list, texture, Layout::Undefined, Layout::CopyDst);
@@ -34,7 +31,6 @@ namespace {
     }
 } // namespace
 
-//======================================================================================================================
 TEST_CASE("copyBuffer copies between every pair of buffers the copy roles allow", "[contract]")
 {
     PassKit kit;
@@ -49,7 +45,6 @@ TEST_CASE("copyBuffer copies between every pair of buffers the copy roles allow"
     kit.finish();
 }
 
-//======================================================================================================================
 TEST_CASE("copyBuffer within one buffer accepts ranges that touch but do not overlap", "[contract]")
 {
     PassKit kit;
@@ -60,7 +55,6 @@ TEST_CASE("copyBuffer within one buffer accepts ranges that touch but do not ove
     kit.finish();
 }
 
-//======================================================================================================================
 TEST_CASE("copies are recorded on every queue type's list", "[contract]")
 {
     for (const QueueType type : { QueueType::Graphics, QueueType::Compute, QueueType::Copy })
@@ -77,7 +71,6 @@ TEST_CASE("copies are recorded on every queue type's list", "[contract]")
     }
 }
 
-//======================================================================================================================
 TEST_CASE("copyBufferToTexture and copyTextureToBuffer take regions of mips, layers and depth slices", "[contract]")
 {
     PassKit kit;
@@ -94,7 +87,6 @@ TEST_CASE("copyBufferToTexture and copyTextureToBuffer take regions of mips, lay
     kit.finish();
 }
 
-//======================================================================================================================
 TEST_CASE("a layout reaching exactly the end of the buffer is accepted", "[contract]")
 {
     PassKit kit;
@@ -104,7 +96,6 @@ TEST_CASE("a layout reaching exactly the end of the buffer is accepted", "[contr
     kit.finish();
 }
 
-//======================================================================================================================
 TEST_CASE("a block-compressed region follows blocks and may end at the mip's edge", "[contract]")
 {
     PassKit kit;
@@ -116,7 +107,6 @@ TEST_CASE("a block-compressed region follows blocks and may end at the mip's edg
     kit.finish();
 }
 
-//======================================================================================================================
 TEST_CASE("copyTexture copies between textures of one format or of sRGB partners", "[contract]")
 {
     PassKit kit;
@@ -137,7 +127,6 @@ TEST_CASE("copyTexture copies between textures of one format or of sRGB partners
     kit.finish();
 }
 
-//======================================================================================================================
 TEST_CASE("copyTexture accepts regions of different mips of one texture", "[contract]")
 {
     PassKit kit;
@@ -146,7 +135,6 @@ TEST_CASE("copyTexture accepts regions of different mips of one texture", "[cont
     kit.finish();
 }
 
-//======================================================================================================================
 TEST_CASE("fillBuffer fills a ShaderWrite buffer on a Graphics and a Compute list", "[contract]")
 {
     for (const QueueType type : { QueueType::Graphics, QueueType::Compute })
@@ -159,7 +147,6 @@ TEST_CASE("fillBuffer fills a ShaderWrite buffer on a Graphics and a Compute lis
     }
 }
 
-//======================================================================================================================
 TEST_CASE("clearTexture clears color, depth-stencil and storage textures", "[contract]")
 {
     PassKit kit;
@@ -175,7 +162,6 @@ TEST_CASE("clearTexture clears color, depth-stencil and storage textures", "[con
     kit.finish();
 }
 
-//======================================================================================================================
 TEST_CASE("clearTexture on a Compute list clears a Storage texture", "[contract]")
 {
     PassKit kit(QueueType::Compute);
@@ -183,7 +169,6 @@ TEST_CASE("clearTexture on a Compute list clears a Storage texture", "[contract]
     kit.finish();
 }
 
-//======================================================================================================================
 TEST_CASE("copies, fills and clears record again after a render pass", "[contract]")
 {
     PassKit kit;
@@ -195,7 +180,6 @@ TEST_CASE("copies, fills and clears record again after a render pass", "[contrac
     kit.finish();
 }
 
-//======================================================================================================================
 TEST_CASE("clearTexture accepts maxStorageClearsPerFrame storage mips in each of two frames", "[contract]")
 {
     Device device = *createDevice();

@@ -16,15 +16,14 @@
 
 namespace rojoRHI::test {
     namespace {
-        /// How one format packs texels, read from chapter 15's table: the block edge in texels and the bytes of one block.
+        // From chapter 15's table.
         struct Packing
         {
-            uint32_t blockEdge = 1;  ///< Texels of one block along x and y.
-            uint32_t blockBytes = 4; ///< Bytes of one block.
+            uint32_t blockEdge = 1;
+            uint32_t blockBytes = 4;
         };
 
-        //==============================================================================================================
-        /// Returns the packing of `format`; fails the case for a format without a packed texel or block size.
+        // Fails the case for a format without a packed texel or block size.
         Packing packingOf(Format format)
         {
             switch (format)
@@ -49,22 +48,18 @@ namespace rojoRHI::test {
             return {};
         }
 
-        //==============================================================================================================
-        /// Rounds `value` up to a multiple of `alignment`.
         uint64_t alignUp(uint64_t value, uint64_t alignment)
         {
             return (value + alignment - 1) / alignment * alignment;
         }
 
-        //==============================================================================================================
-        /// A list handle has no comparison of its own; two handles name one list when their bits are equal.
+        // A list handle has no comparison of its own; two handles name one list when their bits are equal.
         bool sameList(CommandList a, CommandList b)
         {
             return std::memcmp(&a, &b, sizeof(CommandList)) == 0;
         }
     } // namespace
 
-    //==================================================================================================================
     GpuKit::GpuKit(uint32_t framesInFlight, bool scopeTimings, bool validation, bool debugMarkers)
     {
         device = *createDevice(
@@ -75,7 +70,6 @@ namespace rojoRHI::test {
         device.beginFrame();
     }
 
-    //==================================================================================================================
     void GpuKit::nextFrame()
     {
         device.endFrame();
@@ -83,14 +77,12 @@ namespace rojoRHI::test {
         m_lists.clear();
     }
 
-    //==================================================================================================================
     GpuKit::~GpuKit()
     {
         device.endFrame();
         destroyDevice(device);
     }
 
-    //==================================================================================================================
     CommandList GpuKit::list(QueueType type, std::string_view label)
     {
         const CommandList list = device.acquireCommandList(type, label);
@@ -98,7 +90,6 @@ namespace rojoRHI::test {
         return list;
     }
 
-    //==================================================================================================================
     void GpuKit::run(std::span<const CommandList> lists, std::span<const FenceValue> wait)
     {
         for (CommandList list : lists)
@@ -136,7 +127,6 @@ namespace rojoRHI::test {
         }
     }
 
-    //==================================================================================================================
     Buffer GpuKit::buffer(uint64_t size, Memory memory, BufferUsage usage, std::span<const std::byte> initial, Placement placement)
     {
         const Buffer buffer = *device.createBuffer(BufferDesc{ .size = size, .memory = memory, .usage = usage, .label = "kit.buffer" }, initial, placement);
@@ -144,7 +134,6 @@ namespace rojoRHI::test {
         return buffer;
     }
 
-    //==================================================================================================================
     std::vector<std::byte> GpuKit::read(Buffer readback)
     {
         const uint64_t size = sizeOf(readback);
@@ -153,7 +142,6 @@ namespace rojoRHI::test {
         return std::vector<std::byte>(pointer, pointer + size);
     }
 
-    //==================================================================================================================
     std::vector<std::byte> GpuKit::readBuffer(Buffer source, QueueType type)
     {
         const uint64_t size = sizeOf(source);
@@ -165,7 +153,6 @@ namespace rojoRHI::test {
         return bytes;
     }
 
-    //==================================================================================================================
     std::vector<std::byte> GpuKit::readTexture(Texture texture, const TextureRegion& region, Format format)
     {
         const Packing packing = packingOf(format);
@@ -199,7 +186,6 @@ namespace rojoRHI::test {
         return tight;
     }
 
-    //==================================================================================================================
     QueueType GpuKit::typeOf(CommandList list) const
     {
         const auto found = std::ranges::find_if(m_lists, [&](const Acquired& acquired) { return sameList(acquired.list, list); });
@@ -210,7 +196,6 @@ namespace rojoRHI::test {
         return found->type;
     }
 
-    //==================================================================================================================
     uint64_t GpuKit::sizeOf(Buffer buffer) const
     {
         const auto found = std::ranges::find_if(m_buffers, [&](const Sized& sized) { return sized.buffer.bits == buffer.bits; });
@@ -221,7 +206,6 @@ namespace rojoRHI::test {
         return found->size;
     }
 
-    //==================================================================================================================
     std::vector<std::byte> pattern(size_t count, uint32_t seed)
     {
         std::vector<std::byte> bytes(count);

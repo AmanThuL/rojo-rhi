@@ -25,11 +25,9 @@
 
 namespace rojoRHI {
     namespace {
-        /// The blend factors every pass starts with (chapter 06).
+        // Every pass starts with these (chapter 06).
         constexpr std::array<float, 4> kStartingBlendFactor = {};
 
-        //==============================================================================================================
-        /// Returns the beginning access `load` lowers to.
         D3D12_RENDER_PASS_BEGINNING_ACCESS_TYPE beginningOf(LoadOp load)
         {
             switch (load)
@@ -40,16 +38,11 @@ namespace rojoRHI {
             }
         }
 
-        //==============================================================================================================
-        /// Returns the ending access `store` lowers to when nothing resolves.
         D3D12_RENDER_PASS_ENDING_ACCESS_TYPE endingOf(StoreOp store)
         {
             return store == StoreOp::Store ? D3D12_RENDER_PASS_ENDING_ACCESS_TYPE_PRESERVE : D3D12_RENDER_PASS_ENDING_ACCESS_TYPE_DISCARD;
         }
 
-        //==============================================================================================================
-        /// Returns the beginning access of a depth or stencil plane loaded with `load`, which clears to `depth` and `stencil`
-        /// in the depth-stencil view's `format`.
         D3D12_RENDER_PASS_BEGINNING_ACCESS depthBeginning(LoadOp load, DXGI_FORMAT format, float depth, uint8_t stencil)
         {
             D3D12_RENDER_PASS_BEGINNING_ACCESS access = {};
@@ -63,8 +56,6 @@ namespace rojoRHI {
             return access;
         }
 
-        //==============================================================================================================
-        /// Returns the ending access of a depth or stencil plane stored with `store`.
         D3D12_RENDER_PASS_ENDING_ACCESS depthEnding(StoreOp store)
         {
             D3D12_RENDER_PASS_ENDING_ACCESS access = {};
@@ -72,10 +63,8 @@ namespace rojoRHI {
             return access;
         }
 
-        //==============================================================================================================
-        /// Returns the barrier that moves mip 0 and layer 0 of `target`, a resolve target in `ColorAttachment`, which the
-        /// caller's barriers left in `LAYOUT_RENDER_TARGET` (VU-rojo-cmd-0007), to `LAYOUT_RESOLVE_DEST`, where the pass's
-        /// resolve writes it.
+        // The caller's barriers left mip 0 and layer 0 of the resolve target in LAYOUT_RENDER_TARGET
+        // (VU-rojo-cmd-0007); the pass's resolve writes it in LAYOUT_RESOLVE_DEST.
         D3D12_TEXTURE_BARRIER toResolveDest(const d3d12::TexturePayload& target)
         {
             D3D12_TEXTURE_BARRIER barrier = {};
@@ -91,9 +80,7 @@ namespace rojoRHI {
             return barrier;
         }
 
-        //==============================================================================================================
-        /// Turns `barrier`, made by `toResolveDest`, into the barrier that returns its subresource to `LAYOUT_RENDER_TARGET`
-        /// once the resolve has written it, so the caller's next barrier finds the layout it named.
+        // Once the resolve has written it, so the caller's next barrier finds the layout it named.
         void reverseToRenderTarget(D3D12_TEXTURE_BARRIER& barrier)
         {
             barrier.SyncBefore = D3D12_BARRIER_SYNC_RESOLVE;
@@ -104,8 +91,6 @@ namespace rojoRHI {
             barrier.LayoutAfter = D3D12_BARRIER_LAYOUT_RENDER_TARGET;
         }
 
-        //==============================================================================================================
-        /// Records the first `count` barriers of `barriers` on `list` as one texture group of one native `Barrier` call.
         void recordResolveBarriers(CommandListImpl& list, const D3D12_TEXTURE_BARRIER* barriers, uint32_t count)
         {
             D3D12_BARRIER_GROUP group = {};
@@ -117,9 +102,7 @@ namespace rojoRHI {
             ++list.core.counts.nativeBarriers;
         }
 
-        //==============================================================================================================
-        /// Fills `target` with the render target of `color`, whose texture's payload is `payload` and whose resolve target's,
-        /// when it names one, is `resolve`; a resolve takes the next of `pass`'s resolve parameters and barriers.
+        // A resolve takes the next of `pass`'s resolve parameters and barriers.
         void describeTarget(
             D3D12_RENDER_PASS_RENDER_TARGET_DESC& target,
             const ColorAttachment& color,
@@ -169,9 +152,7 @@ namespace rojoRHI {
             ++pass.resolveCount;
         }
 
-        //==============================================================================================================
-        /// Fills `depth` with the depth-stencil attachment `attachment`, whose texture's payload is `payload`. A format without
-        /// a stencil plane leaves stencil untouched, whatever the stencil operations say.
+        // A format without a stencil plane leaves stencil untouched, whatever the stencil operations say.
         void describeDepth(D3D12_RENDER_PASS_DEPTH_STENCIL_DESC& depth, const DepthAttachment& attachment, const d3d12::TexturePayload& payload)
         {
             const DXGI_FORMAT format = d3d12::dsvFormat(payload.format);
@@ -191,15 +172,12 @@ namespace rojoRHI {
             }
         }
 
-        //==============================================================================================================
         bool sameClear(const ClearColor& a, const ClearColor& b)
         {
             return a.r == b.r && a.g == b.g && a.b == b.b && a.a == b.a;
         }
 
-        //==============================================================================================================
-        /// Returns true when `desc` names the attachments `pass` was last described from, so its description stands. A NaN
-        /// clear value never compares equal, so such a pass is described again.
+        // A NaN clear value never compares equal, so such a pass is described again.
         bool repeatsPass(const d3d12::PassStorage& pass, const RenderPassDesc& desc)
         {
             if (!pass.reusable || desc.colors.size() != pass.targetCount || (desc.depth.texture.bits != 0) != pass.hasDepth)
@@ -227,7 +205,6 @@ namespace rojoRHI {
         }
     } // namespace
 
-    //==================================================================================================================
     void CommandList::beginRenderPass(const RenderPassDesc& desc)
     {
         CommandListImpl& list = CommandListImpl::of(*this);
@@ -280,7 +257,6 @@ namespace rojoRHI {
         dynamic.depthBias = {};
     }
 
-    //==================================================================================================================
     void CommandList::endRenderPass()
     {
         CommandListImpl& list = CommandListImpl::of(*this);

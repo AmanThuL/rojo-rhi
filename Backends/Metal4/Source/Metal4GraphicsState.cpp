@@ -25,8 +25,6 @@
 
 namespace rojoRHI {
     namespace {
-        //==============================================================================================================
-        /// Returns the open render encoder of `list`; one must be open.
         MTL4::RenderCommandEncoder* openEncoder(CommandListImpl& list)
         {
             MTL4::RenderCommandEncoder* encoder = list.encoders.renderEncoder();
@@ -34,11 +32,9 @@ namespace rojoRHI {
             return encoder;
         }
 
-        //==============================================================================================================
-        /// Sets the render pipeline state of `pipeline` on `encoder`, the open render encoder, unless it holds it. A mesh
-        /// pipeline's object and mesh entries read the reserved bindings through the list's table, which the encoder binds to
-        /// those stages at its first mesh pipeline: a stage the table is bound to costs every draw that follows a table write,
-        /// so an encoder that draws no mesh binds only the vertex and fragment stages.
+        // A mesh pipeline's object and mesh entries read the reserved bindings through the list's table, which the
+        // encoder binds to those stages at its first mesh pipeline: a bound stage costs every draw that follows a table
+        // write, so an encoder that draws no mesh binds only the vertex and fragment stages.
         void setRenderState(CommandListImpl& list, MTL4::RenderCommandEncoder* encoder, const metal4::PipelineState* pipeline)
         {
             metal4::RenderHeld& held = list.draw.held;
@@ -58,9 +54,8 @@ namespace rojoRHI {
             held.pipeline = pipeline;
         }
 
-        //==============================================================================================================
-        /// Sets `state` on `encoder` unless it holds it; equal states share one object, so a pointer compares them. It sends
-        /// `bound`, which is `state` or, for a null `state`, the device's untested state that equals Metal's default.
+        // Equal states share one object, so a pointer compares them. `bound` is `state` or, for a null `state`, the
+        // device's untested state that equals Metal's default.
         void setDepthStencil(
             CommandListImpl& list, MTL4::RenderCommandEncoder* encoder, const MTL::DepthStencilState* state, const MTL::DepthStencilState* bound
         )
@@ -75,8 +70,6 @@ namespace rojoRHI {
             held.depthStencil = state;
         }
 
-        //==============================================================================================================
-        /// Sets `cull` on `encoder` unless it holds it.
         void setCull(CommandListImpl& list, MTL4::RenderCommandEncoder* encoder, MTL::CullMode cull)
         {
             metal4::RenderHeld& held = list.draw.held;
@@ -89,8 +82,6 @@ namespace rojoRHI {
             held.cull = cull;
         }
 
-        //==============================================================================================================
-        /// Sets `winding` on `encoder` unless it holds it.
         void setWinding(CommandListImpl& list, MTL4::RenderCommandEncoder* encoder, MTL::Winding winding)
         {
             metal4::RenderHeld& held = list.draw.held;
@@ -103,8 +94,6 @@ namespace rojoRHI {
             held.winding = winding;
         }
 
-        //==============================================================================================================
-        /// Sets `fill` on `encoder` unless it holds it.
         void setFill(CommandListImpl& list, MTL4::RenderCommandEncoder* encoder, MTL::TriangleFillMode fill)
         {
             metal4::RenderHeld& held = list.draw.held;
@@ -117,8 +106,6 @@ namespace rojoRHI {
             held.fill = fill;
         }
 
-        //==============================================================================================================
-        /// Sets `clip` on `encoder` unless it holds it.
         void setDepthClip(CommandListImpl& list, MTL4::RenderCommandEncoder* encoder, MTL::DepthClipMode clip)
         {
             metal4::RenderHeld& held = list.draw.held;
@@ -131,15 +118,11 @@ namespace rojoRHI {
             held.depthClip = clip;
         }
 
-        //==============================================================================================================
-        /// True when `a` and `b` are the same viewport.
         bool sameViewport(const MTL::Viewport& a, const MTL::Viewport& b)
         {
             return a.originX == b.originX && a.originY == b.originY && a.width == b.width && a.height == b.height && a.znear == b.znear && a.zfar == b.zfar;
         }
 
-        //==============================================================================================================
-        /// Sets `viewport` unless the encoder holds it.
         void applyViewport(CommandListImpl& list, const MTL::Viewport& viewport)
         {
             metal4::RenderHeld& held = list.draw.held;
@@ -153,8 +136,6 @@ namespace rojoRHI {
             held.viewport = viewport;
         }
 
-        //==============================================================================================================
-        /// Sets `scissor` unless the encoder holds it.
         void applyScissor(CommandListImpl& list, const MTL::ScissorRect& scissor)
         {
             metal4::RenderHeld& held = list.draw.held;
@@ -169,8 +150,6 @@ namespace rojoRHI {
             held.scissor = scissor;
         }
 
-        //==============================================================================================================
-        /// Sets `reference` for both faces unless the encoder holds it.
         void applyStencilReference(CommandListImpl& list, uint32_t reference)
         {
             metal4::RenderHeld& held = list.draw.held;
@@ -183,8 +162,6 @@ namespace rojoRHI {
             held.stencilReference = reference;
         }
 
-        //==============================================================================================================
-        /// Sets the blend color `color` unless the encoder holds it.
         void applyBlendColor(CommandListImpl& list, const std::array<float, 4>& color)
         {
             metal4::RenderHeld& held = list.draw.held;
@@ -197,9 +174,7 @@ namespace rojoRHI {
             held.blendColor = color;
         }
 
-        //==============================================================================================================
-        /// Records the depth-bias values `bias`, as the encoder sees them now, and applies them when the pipeline it holds
-        /// has `RasterState::depthBias`.
+        // Applies them only when the encoder's pipeline has `RasterState::depthBias`.
         void applyBiasValues(CommandListImpl& list, const metal4::DepthBias& bias)
         {
             list.draw.bias = bias;
@@ -210,8 +185,7 @@ namespace rojoRHI {
             }
         }
 
-        //==============================================================================================================
-        /// `metal4::applyPipeline`, inlined into `setPipeline` so a bind on the open render encoder makes no call to reach it.
+        // Inlined into `setPipeline` so a bind on the open render encoder makes no call to reach it.
         [[gnu::always_inline]] inline void applyPipelineNow(CommandListImpl& list, const metal4::PipelineState& pipeline)
         {
             // The encoder is read once: the setters below leave it open.
@@ -236,11 +210,9 @@ namespace rojoRHI {
             }
         }
 
-        //==============================================================================================================
-        /// Returns the payload of `pipeline`: from the list's resolved pair when it holds the handle, else read with the pool's
-        /// acquire load, one entry replacing the older one. A hit selects its entry without a branch on which entry holds the
-        /// handle: a recording that alternates two pipelines flips that branch at every bind, and the predictor misses it once
-        /// the driver's work between two binds grows.
+        // A hit selects its entry without a branch on which entry holds the handle: a recording that alternates two
+        // pipelines flips that branch at every bind, and the predictor misses it once the driver's work between two
+        // binds grows.
         const metal4::PipelineState* resolvePipeline(CommandListImpl& list, Pipeline pipeline)
         {
             metal4::ResolvedPipelines& resolved = list.draw.resolved;
@@ -258,9 +230,7 @@ namespace rojoRHI {
             return state;
         }
 
-        //==============================================================================================================
-        /// True when the render encoder of the open pass is open, so a state command applies now; otherwise it joins the
-        /// prefix.
+        // Otherwise a state command joins the prefix.
         bool appliesNow(const CommandListImpl& list)
         {
             return list.encoders.renderEncoder() != nullptr;
@@ -268,13 +238,11 @@ namespace rojoRHI {
     } // namespace
 
     namespace metal4 {
-        //==============================================================================================================
         void applyPipeline(CommandListImpl& list, const PipelineState& pipeline)
         {
             applyPipelineNow(list, pipeline);
         }
 
-        //==============================================================================================================
         void applyDepthBias(CommandListImpl& list, const DepthBias& bias)
         {
             RenderHeld& held = list.draw.held;
@@ -287,7 +255,6 @@ namespace rojoRHI {
             held.bias = bias;
         }
 
-        //==============================================================================================================
         void applyRoot(CommandListImpl& list, uint64_t address)
         {
             if (list.draw.tableRoot == address)
@@ -300,7 +267,6 @@ namespace rojoRHI {
             list.draw.tableRoot = address;
         }
 
-        //==============================================================================================================
         void restoreHeld(CommandListImpl& list, const RenderHeld& previous)
         {
             MTL4::RenderCommandEncoder* encoder = openEncoder(list);
@@ -327,7 +293,6 @@ namespace rojoRHI {
             applyBlendColor(list, previous.blendColor);
         }
 
-        //==============================================================================================================
         void replayPrefix(CommandListImpl& list)
         {
             for (const PrefixCommand& command : list.draw.prefix)
@@ -351,7 +316,6 @@ namespace rojoRHI {
             list.draw.clearPrefix();
         }
 
-        //==============================================================================================================
         MTL4::ComputeCommandEncoder* applyComputePipeline(CommandListImpl& list)
         {
             ROJORHI_INTERNAL_ASSERT(list.draw.compute != nullptr, "a dispatch is recorded with no compute pipeline bound");
@@ -368,7 +332,6 @@ namespace rojoRHI {
         }
     } // namespace metal4
 
-    //==================================================================================================================
     void CommandList::setPipeline(Pipeline pipeline)
     {
         CommandListImpl& list = CommandListImpl::of(*this);
@@ -401,7 +364,6 @@ namespace rojoRHI {
         draw.record(command);
     }
 
-    //==================================================================================================================
     void CommandList::setViewport(const Viewport& viewport)
     {
         CommandListImpl& list = CommandListImpl::of(*this);
@@ -417,7 +379,6 @@ namespace rojoRHI {
         list.draw.record(command);
     }
 
-    //==================================================================================================================
     void CommandList::setScissor(const Rect2D& rect)
     {
         CommandListImpl& list = CommandListImpl::of(*this);
@@ -433,7 +394,6 @@ namespace rojoRHI {
         list.draw.record(command);
     }
 
-    //==================================================================================================================
     void CommandList::setStencilReference(uint8_t reference)
     {
         CommandListImpl& list = CommandListImpl::of(*this);
@@ -448,7 +408,6 @@ namespace rojoRHI {
         list.draw.record(command);
     }
 
-    //==================================================================================================================
     void CommandList::setBlendConstants(float r, float g, float b, float a)
     {
         CommandListImpl& list = CommandListImpl::of(*this);
@@ -464,7 +423,6 @@ namespace rojoRHI {
         list.draw.record(command);
     }
 
-    //==================================================================================================================
     void CommandList::setPrimitiveTopology(PrimitiveTopology topology)
     {
         CommandListImpl& list = CommandListImpl::of(*this);
@@ -473,7 +431,6 @@ namespace rojoRHI {
         list.draw.topology = metal4::primitiveType(topology);
     }
 
-    //==================================================================================================================
     void CommandList::setDepthBias(float constant, float slopeScaled, float clamp)
     {
         CommandListImpl& list = CommandListImpl::of(*this);

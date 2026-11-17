@@ -32,17 +32,14 @@
 using namespace rojoRHI;
 
 namespace {
-    /// The one color target the render and mesh pipelines draw to.
     constexpr std::array<ColorTarget, 1> kColor = { ColorTarget{ .format = Format::RGBA8Unorm } };
 
-    /// The number of lines of a blob's header.
     constexpr size_t kHeaderLines = 6;
 
-    std::mutex gMessageMutex;           ///< Guards `gWarnings`; the callback may run on any thread.
-    std::vector<std::string> gWarnings; ///< The warnings `deviceWarnings` collected.
+    // Guards `gWarnings`; the message callback may run on any thread.
+    std::mutex gMessageMutex;
+    std::vector<std::string> gWarnings;
 
-    //==================================================================================================================
-    /// Collects the warnings delivered to the message callback.
     void collectWarning(MessageSeverity severity, std::string_view message, void*)
     {
         if (severity == MessageSeverity::Warning)
@@ -52,8 +49,6 @@ namespace {
         }
     }
 
-    //==================================================================================================================
-    /// Loads the standard library on `device`.
     ShaderLibrary loadStandard(Device& device)
     {
         const Result<ShaderLibrary> library = device.loadShaderLibrary(test::standardLibrary(), "test.standard");
@@ -61,8 +56,6 @@ namespace {
         return *library;
     }
 
-    //==================================================================================================================
-    /// Creates the standard vertex and fragment pipeline, failing the case when creation fails.
     Pipeline createRender(Device& device, ShaderLibrary library)
     {
         const Result<Pipeline> pipeline = device.createPipeline(
@@ -73,8 +66,6 @@ namespace {
         return *pipeline;
     }
 
-    //==================================================================================================================
-    /// Creates the standard task, mesh and fragment pipeline, failing the case when creation fails.
     Pipeline createMesh(Device& device, ShaderLibrary library)
     {
         const Result<Pipeline> pipeline = device.createPipeline(
@@ -86,8 +77,6 @@ namespace {
         return *pipeline;
     }
 
-    //==================================================================================================================
-    /// Creates the standard compute pipeline, failing the case when creation fails.
     Pipeline createCompute(Device& device, ShaderLibrary library)
     {
         const Result<Pipeline> pipeline = device.createPipeline(ComputePipelineDesc{ .compute = { library, "csMain" }, .label = "test.compute" });
@@ -96,8 +85,6 @@ namespace {
         return *pipeline;
     }
 
-    //==================================================================================================================
-    /// Returns the cache blob of `device`, failing the case when it cannot be serialized.
     std::vector<std::byte> harvest(Device& device)
     {
         Result<std::vector<std::byte>> data = device.pipelineCacheData();
@@ -106,8 +93,6 @@ namespace {
         return std::move(*data);
     }
 
-    //==================================================================================================================
-    /// Creates a device with `blob` as its pipeline cache, failing the case when creation fails.
     Device deviceWith(std::span<const std::byte> blob)
     {
         Result<Device> device = createDevice(DeviceDesc{ .pipelineCache = blob });
@@ -115,9 +100,6 @@ namespace {
         return *device;
     }
 
-    //==================================================================================================================
-    /// Creates a device with `blob` as its pipeline cache, failing the case when creation fails, and writes the warnings
-    /// its creation delivered to `warnings`.
     Device deviceWarnings(std::span<const std::byte> blob, std::vector<std::string>& warnings)
     {
         {
@@ -133,8 +115,6 @@ namespace {
         return *device;
     }
 
-    //==================================================================================================================
-    /// A blob of a device that created the standard render pipeline.
     std::vector<std::byte> renderBlob()
     {
         Device device = *createDevice();
@@ -144,8 +124,6 @@ namespace {
         return blob;
     }
 
-    //==================================================================================================================
-    /// The header lines of `blob`, without their line feeds, and the offset of the bytes after them.
     std::pair<std::vector<std::string>, size_t> headerOf(const std::vector<std::byte>& blob)
     {
         const std::string_view text(reinterpret_cast<const char*>(blob.data()), blob.size());
@@ -161,8 +139,6 @@ namespace {
         return { lines, at };
     }
 
-    //==================================================================================================================
-    /// Returns `lines`, each followed by a line feed, and then `payload`.
     std::vector<std::byte> joined(const std::vector<std::string>& lines, std::span<const std::byte> payload)
     {
         std::string header;
@@ -177,8 +153,6 @@ namespace {
         return blob;
     }
 
-    //==================================================================================================================
-    /// Returns `blob` with header line `index` replaced by `line`.
     std::vector<std::byte> withLine(const std::vector<std::byte>& blob, size_t index, std::string line)
     {
         auto [lines, at] = headerOf(blob);
@@ -186,8 +160,6 @@ namespace {
         return joined(lines, std::span(blob).subspan(at));
     }
 
-    //==================================================================================================================
-    /// The number of `archive <bytes>` sections in `blob`, found by walking the byte counts after the header.
     size_t archiveLines(const std::vector<std::byte>& blob)
     {
         const std::string_view text(reinterpret_cast<const char*>(blob.data()), blob.size());
@@ -204,8 +176,6 @@ namespace {
         return count;
     }
 
-    //==================================================================================================================
-    /// Returns `blob` followed by the text `tail` and then `payload`.
     std::vector<std::byte> withTail(std::vector<std::byte> blob, std::string_view tail, std::span<const std::byte> payload = {})
     {
         const auto* bytes = reinterpret_cast<const std::byte*>(tail.data());
@@ -214,8 +184,6 @@ namespace {
         return blob;
     }
 
-    //==================================================================================================================
-    /// The per-user temporary directory of the process, which the backend's temporary files live in.
     std::filesystem::path userTemporaryDirectory()
     {
         std::array<char, 1024> path = {};
@@ -225,8 +193,7 @@ namespace {
         return std::filesystem::path(path.data());
     }
 
-    //==================================================================================================================
-    /// The entries of the temporary directory this process made, named `rojorhi-pipelines-locked-<pid>-*`.
+    // The temporary files this process made, named `rojorhi-pipelines-locked-<pid>-*`.
     std::vector<std::string> temporaryFiles()
     {
         const std::string prefix = std::format("rojorhi-pipelines-locked-{}-", getpid());
@@ -244,40 +211,32 @@ namespace {
         return files;
     }
 
-    //==================================================================================================================
-    /// Sets the modification time of `path` two minutes back, past the age at which an unlocked file counts as abandoned.
+    // Two minutes back is past the age at which an unlocked file counts as abandoned.
     void backdate(const std::filesystem::path& path)
     {
         std::filesystem::last_write_time(path, std::filesystem::file_time_type::clock::now() - std::chrono::minutes(2));
     }
 
-    /// A file of the temporary directory named as the backend names its archives, made by the case and removed with it.
     class StrayFile
     {
       public:
-        //==============================================================================================================
-        /// Creates the file `rojorhi-pipelines-locked-<pid>-stray<n>.metallib`, holding `flock(LOCK_SH)` on it when `locked`,
-        /// as a live device does, and otherwise closing it, as a crashed process leaves it; backdated when `old`.
+        // Named as the backend names its archives. Holds `flock(LOCK_SH)` when `locked`, as a live device does, and
+        // otherwise closes the file, as a crashed process leaves it.
         StrayFile(bool locked, bool old);
 
-        //==============================================================================================================
         StrayFile(const StrayFile&) = delete;
 
-        //==============================================================================================================
         StrayFile& operator=(const StrayFile&) = delete;
 
-        /// Removes the file if it still exists, then closes it.
         ~StrayFile();
 
-        /// The file's path.
         const std::filesystem::path& path() const;
 
       private:
-        std::filesystem::path m_path; ///< The file.
-        int m_descriptor = -1;        ///< The descriptor holding the lock, or -1 when unlocked.
+        std::filesystem::path m_path;
+        int m_descriptor = -1;
     };
 
-    //==================================================================================================================
     StrayFile::StrayFile(bool locked, bool old)
     {
         static std::atomic<int> next = 0;
@@ -298,7 +257,6 @@ namespace {
         }
     }
 
-    //==================================================================================================================
     StrayFile::~StrayFile()
     {
         unlink(m_path.c_str());
@@ -308,14 +266,12 @@ namespace {
         }
     }
 
-    //==================================================================================================================
     const std::filesystem::path& StrayFile::path() const
     {
         return m_path;
     }
 } // namespace
 
-//======================================================================================================================
 TEST_CASE("a second device created with the first's blob counts a hit for each pipeline", "[metal4]")
 {
     Device first = *createDevice();
@@ -343,7 +299,6 @@ TEST_CASE("a second device created with the first's blob counts a hit for each p
     destroyDevice(second);
 }
 
-//======================================================================================================================
 TEST_CASE("a blob covers the pipelines it served as hits", "[metal4]")
 {
     const std::vector<std::byte> first = renderBlob();
@@ -363,7 +318,6 @@ TEST_CASE("a blob covers the pipelines it served as hits", "[metal4]")
     destroyDevice(third);
 }
 
-//======================================================================================================================
 TEST_CASE("a second pipelineCacheData on one device still covers the pipelines the first covered", "[metal4]")
 {
     Device first = *createDevice();
@@ -405,7 +359,6 @@ TEST_CASE("a second pipelineCacheData on one device still covers the pipelines t
     }
 }
 
-//======================================================================================================================
 TEST_CASE("a pipeline the blob lacks is a miss", "[metal4]")
 {
     Device device = deviceWith(renderBlob());
@@ -419,7 +372,6 @@ TEST_CASE("a pipeline the blob lacks is a miss", "[metal4]")
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("a blob of another RojoRHI version, OS, device or format is one warning and every pipeline a miss", "[metal4]")
 {
     const std::vector<std::byte> blob = renderBlob();
@@ -465,7 +417,6 @@ TEST_CASE("a blob of another RojoRHI version, OS, device or format is one warnin
     }
 }
 
-//======================================================================================================================
 TEST_CASE("a malformed second section is one warning and every pipeline a miss", "[metal4]")
 {
     const std::vector<std::byte> good = renderBlob();
@@ -493,7 +444,6 @@ TEST_CASE("a malformed second section is one warning and every pipeline a miss",
     }
 }
 
-//======================================================================================================================
 TEST_CASE("each malformed form of a blob has its own warning", "[metal4]")
 {
     const std::vector<std::byte> good = renderBlob();
@@ -517,7 +467,6 @@ TEST_CASE("each malformed form of a blob has its own warning", "[metal4]")
     CHECK(std::ranges::adjacent_find(seen) == seen.end());
 }
 
-//======================================================================================================================
 TEST_CASE("pipelineCacheData runs beside createPipeline on other threads", "[metal4]")
 {
     Device device = deviceWith(renderBlob());
@@ -575,7 +524,6 @@ TEST_CASE("pipelineCacheData runs beside createPipeline on other threads", "[met
     destroyDevice(later);
 }
 
-//======================================================================================================================
 TEST_CASE("pipelineCacheData beside the compilation of distinct pipelines loses none of them", "[metal4]")
 {
     // Distinct pipelines, so each creation compiles and records into the serializer while the harvests flush it; with
@@ -629,7 +577,6 @@ TEST_CASE("pipelineCacheData beside the compilation of distinct pipelines loses 
     destroyDevice(later);
 }
 
-//======================================================================================================================
 TEST_CASE("a device that created no pipeline returns a blob a later device accepts", "[metal4]")
 {
     Device first = *createDevice();
@@ -645,7 +592,6 @@ TEST_CASE("a device that created no pipeline returns a blob a later device accep
     destroyDevice(second);
 }
 
-//======================================================================================================================
 TEST_CASE("two devices alive at once keep their own caches", "[metal4]")
 {
     const std::vector<std::byte> blob = renderBlob();
@@ -668,7 +614,6 @@ TEST_CASE("two devices alive at once keep their own caches", "[metal4]")
     }
 }
 
-//======================================================================================================================
 TEST_CASE("no temporary file is left behind", "[metal4]")
 {
     const std::vector<std::string> before = temporaryFiles();
@@ -694,7 +639,6 @@ TEST_CASE("no temporary file is left behind", "[metal4]")
     CHECK(temporaryFiles() == before);
 }
 
-//======================================================================================================================
 TEST_CASE("counters report hits and misses as creations served or not", "[metal4]")
 {
     Device device = deviceWith(renderBlob());
@@ -709,7 +653,6 @@ TEST_CASE("counters report hits and misses as creations served or not", "[metal4
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("a pipeline compiled again with rasterization the other way is a hit", "[metal4]")
 {
     // A vertex entry that returns a position with nothing to rasterize is refused without rasterization and compiled again
@@ -733,7 +676,6 @@ TEST_CASE("a pipeline compiled again with rasterization the other way is a hit",
     destroyDevice(second);
 }
 
-//======================================================================================================================
 TEST_CASE("an archive whose file disappeared is one warning and every later pipeline a miss", "[metal4]")
 {
     const std::vector<std::byte> blob = renderBlob();
@@ -769,7 +711,6 @@ TEST_CASE("an archive whose file disappeared is one warning and every later pipe
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("createDevice removes an unlocked archive file older than a minute", "[metal4]")
 {
     const StrayFile stray(false, true);
@@ -780,7 +721,6 @@ TEST_CASE("createDevice removes an unlocked archive file older than a minute", "
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("createDevice keeps an archive file older than a minute while a lock is held on it", "[metal4]")
 {
     // The case's own descriptor holds the lock in the process that sweeps: flock locks belong to the open file description,
@@ -793,7 +733,6 @@ TEST_CASE("createDevice keeps an archive file older than a minute while a lock i
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("createDevice keeps an unlocked archive file younger than a minute", "[metal4]")
 {
     const StrayFile stray(false, false);
@@ -802,7 +741,6 @@ TEST_CASE("createDevice keeps an unlocked archive file younger than a minute", "
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("a second device's createDevice keeps the first device's archive file", "[metal4]")
 {
     const std::vector<std::byte> blob = renderBlob();

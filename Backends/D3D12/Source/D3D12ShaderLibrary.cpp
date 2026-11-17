@@ -22,15 +22,12 @@
 
 namespace rojoRHI::d3d12 {
     namespace {
-        //==============================================================================================================
-        /// Builds the error of a malformed library.
         std::unexpected<Error> malformed(size_t line, std::string_view why)
         {
             return std::unexpected(Error{ ErrorCategory::DriverFailure, std::format("malformed D3D12 shader library: line {}: {}", line, why) });
         }
 
-        //==============================================================================================================
-        /// Reads a canonical unsigned decimal: digits only, no leading zero except for 0 itself.
+        // Digits only, no leading zero except for 0 itself.
         std::optional<uint64_t> canonicalNumber(std::string_view text)
         {
             if (text.empty() || (text.size() > 1 && text.front() == '0'))
@@ -46,8 +43,7 @@ namespace rojoRHI::d3d12 {
             return value;
         }
 
-        //==============================================================================================================
-        /// Whether `name` is `[A-Za-z_][A-Za-z0-9_]*`.
+        // `[A-Za-z_][A-Za-z0-9_]*`.
         bool validName(std::string_view name)
         {
             const auto letter = [](char c) { return (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || c == '_'; };
@@ -55,8 +51,6 @@ namespace rojoRHI::d3d12 {
             return !name.empty() && letter(name.front()) && std::ranges::all_of(name, [&](char c) { return letter(c) || digit(c); });
         }
 
-        //==============================================================================================================
-        /// Maps a stage word to its stage.
         std::optional<core::ShaderStage> stageOf(std::string_view word)
         {
             for (core::ShaderStage stage :
@@ -70,8 +64,7 @@ namespace rojoRHI::d3d12 {
             return std::nullopt;
         }
 
-        //==============================================================================================================
-        /// Splits `line` at single spaces; empty tokens are kept.
+        // Empty tokens are kept.
         std::vector<std::string_view> splitSpaces(std::string_view line)
         {
             std::vector<std::string_view> tokens;
@@ -87,16 +80,14 @@ namespace rojoRHI::d3d12 {
             }
         }
 
-        /// A blob read one line at a time; nothing past the line last asked for is looked at.
+        // Nothing past the line last asked for is looked at.
         struct LineReader
         {
-            std::span<const std::byte> blob; ///< The whole blob.
-            size_t offset = 0;               ///< The first byte not yet returned.
-            size_t line = 0;                 ///< The 1-based number of the line returned last.
+            std::span<const std::byte> blob;
+            size_t offset = 0;
+            size_t line = 0; // 1-based, of the line returned last.
         };
 
-        //==============================================================================================================
-        /// Returns the next line of `reader` without its newline, or nothing at the end of the blob.
         std::optional<std::string_view> nextLine(LineReader& reader)
         {
             if (reader.offset >= reader.blob.size())
@@ -112,15 +103,13 @@ namespace rojoRHI::d3d12 {
             return std::string_view(begin, length);
         }
 
-        /// An entry line as read: the entry and the byte count of its DXIL.
         struct EntryLine
         {
-            LibraryEntry entry; ///< The entry, without its DXIL slice.
-            uint64_t bytes = 0; ///< The `<bytes>` token.
+            LibraryEntry entry; // Without its DXIL slice.
+            uint64_t bytes = 0;
         };
 
-        //==============================================================================================================
-        /// Reads an `entry <name> <stage> <x> <y> <z> <bytes>` line, or returns why it is a breach.
+        // `entry <name> <stage> <x> <y> <z> <bytes>`; returns why a line breaches it.
         std::expected<EntryLine, std::string> readEntry(std::string_view line)
         {
             const std::vector<std::string_view> tokens = splitSpaces(line);
@@ -174,15 +163,12 @@ namespace rojoRHI::d3d12 {
             return result;
         }
 
-        //==============================================================================================================
-        /// Whether `bytes` begins with the DXIL container magic `DXBC`.
         bool startsDxbc(std::span<const std::byte> bytes)
         {
             return bytes.size() >= 4 && std::memcmp(bytes.data(), "DXBC", 4) == 0;
         }
     } // namespace
 
-    //==================================================================================================================
     Result<LibraryHeader> parseShaderLibrary(std::span<const std::byte> blob)
     {
         LineReader reader{ blob };
@@ -269,7 +255,6 @@ namespace rojoRHI::d3d12 {
         }
     }
 
-    //==================================================================================================================
     MeshTopology meshOutputTopology(std::span<const std::byte> dxil)
     {
         // The container: "DXBC", a 16-byte digest, a 4-byte version, the container size, the part count and one offset per
@@ -329,14 +314,12 @@ namespace rojoRHI::d3d12 {
         return MeshTopology::Unknown;
     }
 
-    //==================================================================================================================
     std::span<const std::byte> LibraryPayload::bytecode(size_t entry) const
     {
         const auto [offset, size] = ranges[entry];
         return std::span<const std::byte>(dxil).subspan(offset, size);
     }
 
-    //==================================================================================================================
     void retireShaderLibrary([[maybe_unused]] void* context, core::ShaderLibraryRecord& record)
     {
         delete static_cast<LibraryPayload*>(record.native);

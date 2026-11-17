@@ -21,8 +21,7 @@
 using namespace rojoRHI;
 
 namespace {
-    //==================================================================================================================
-    /// Returns the full path of `module`, the running executable for null.
+    // Null names the running executable.
     std::wstring modulePath(HMODULE module)
     {
         std::wstring path(MAX_PATH, L'\0');
@@ -42,21 +41,19 @@ namespace {
         }
     }
 
-    //==================================================================================================================
-    /// Returns true when `a` and `b` name the same path, ignoring case, as Windows compares file names.
+    // Ignores case, as Windows compares file names.
     bool samePath(std::wstring_view a, std::wstring_view b)
     {
         return CompareStringOrdinal(a.data(), static_cast<int>(a.size()), b.data(), static_cast<int>(b.size()), TRUE) == CSTR_EQUAL;
     }
 
-    /// True when the build selects the debug layer: `layer` and `gbv` always, `mode` in Debug builds only.
+    // `layer` and `gbv` always select the debug layer, `mode` in Debug builds only.
 #if defined(ROJORHI_D3D12_DEBUG_LAYER) || defined(ROJORHI_D3D12_DEBUG_GBV) || (defined(ROJORHI_D3D12_DEBUG_MODE) && !defined(NDEBUG))
     constexpr bool kDebugLayer = true;
 #else
     constexpr bool kDebugLayer = false;
 #endif
 
-    /// True when the build selects the WARP adapter.
 #if defined(ROJORHI_D3D12_ADAPTER_WARP)
     constexpr bool kWarpAdapter = true;
 #else
@@ -64,7 +61,6 @@ namespace {
 #endif
 } // namespace
 
-//======================================================================================================================
 TEST_CASE("a device is created on the configured adapter at feature level 12_2", "[d3d12]")
 {
     Result<Device> created = createDevice();
@@ -84,7 +80,6 @@ TEST_CASE("a device is created on the configured adapter at feature level 12_2",
     destroyDevice(*created);
 }
 
-//======================================================================================================================
 TEST_CASE("the Agility runtime loads from the D3D12 directory beside the executable", "[d3d12]")
 {
     Result<Device> created = createDevice();
@@ -101,7 +96,6 @@ TEST_CASE("the Agility runtime loads from the D3D12 directory beside the executa
     destroyDevice(*created);
 }
 
-//======================================================================================================================
 TEST_CASE("the debug layer is on exactly when the build selects it", "[d3d12]")
 {
     Result<Device> created = createDevice();
@@ -118,7 +112,6 @@ TEST_CASE("the debug layer is on exactly when the build selects it", "[d3d12]")
     destroyDevice(*created);
 }
 
-//======================================================================================================================
 TEST_CASE("the device carries its label", "[d3d12]")
 {
     DeviceDesc desc;
@@ -140,7 +133,6 @@ TEST_CASE("the device carries its label", "[d3d12]")
     destroyDevice(*created);
 }
 
-//======================================================================================================================
 TEST_CASE("two devices coexist and a third is created after both are destroyed", "[d3d12]")
 {
     Result<Device> first = createDevice();
@@ -155,7 +147,6 @@ TEST_CASE("two devices coexist and a third is created after both are destroyed",
     destroyDevice(*third);
 }
 
-//======================================================================================================================
 TEST_CASE("the floor check accepts the device it created", "[d3d12]")
 {
     Result<Device> created = createDevice();
@@ -166,7 +157,6 @@ TEST_CASE("the floor check accepts the device it created", "[d3d12]")
     destroyDevice(*created);
 }
 
-//======================================================================================================================
 TEST_CASE("the surface check accepts a test surface and rejects another pointer", "[d3d12]")
 {
     Result<Device> created = createDevice();
@@ -179,7 +169,6 @@ TEST_CASE("the surface check accepts a test surface and rejects another pointer"
     destroyDevice(*created);
 }
 
-//======================================================================================================================
 TEST_CASE("capture is unsupported without a capture tool", "[d3d12]")
 {
     Result<Device> created = createDevice();

@@ -28,7 +28,6 @@ namespace {
     constexpr uint32_t kWidth = 96;
     constexpr uint32_t kHeight = 64;
 
-    /// One RGBA8 texel.
     struct Texel
     {
         uint8_t r = 0;
@@ -37,15 +36,14 @@ namespace {
         uint8_t a = 0;
     };
 
-    /// A rectangle covering `[x0, x1) x [y0, y1)` in one color.
+    // Covers `[x0, x1) x [y0, y1)`.
     struct Rect
     {
         uint32_t x0, y0, x1, y1;
         Texel color;
     };
 
-    /// Returns the expected image: transparent black, then each rectangle in order.
-    //==================================================================================================================
+    // Transparent black, then each rectangle in order.
     std::vector<Texel> expectation(std::span<const Rect> rects)
     {
         std::vector<Texel> image(size_t{ kWidth } * kHeight);
@@ -62,8 +60,7 @@ namespace {
         return image;
     }
 
-    /// Fills every texel of a 4x4 RGBA32 `texture` with `color`.
-    //==================================================================================================================
+    // `texture` is 4x4 RGBA32.
     void fill(ImTextureData& texture, Texel color)
     {
         for (int i = 0; i < texture.Width * texture.Height; ++i)
@@ -72,8 +69,7 @@ namespace {
         }
     }
 
-    /// Records one frame of the fixed draw list into `target` and runs it; `beforePrepare` runs on the finished draw data.
-    //==================================================================================================================
+    // `beforePrepare` runs on the finished draw data.
     template<class Before> void drawFrame(test::GpuKit& kit, Texture target, ImTextureID blue, ImTextureData& green, Before beforePrepare)
     {
         // No platform window exists, so newFrame resizes nothing and may run with the kit's frame already open.
@@ -102,8 +98,7 @@ namespace {
         kit.nextFrame();
     }
 
-    //==================================================================================================================
-    /// Reads `target` back and requires every pixel to equal the expectation with the managed texture's image in `managed`.
+    // `managed` is the color the managed texture's image is expected in.
     void checkPixels(test::GpuKit& kit, Texture target, Texel managed)
     {
         const std::vector<std::byte> bytes = kit.readTexture(target, TextureRegion{ .extent = { kWidth, kHeight, 1 } }, Format::RGBA8Unorm);
@@ -146,7 +141,6 @@ namespace {
     }
 } // namespace
 
-//======================================================================================================================
 TEST_CASE("the adapter draws a fixed draw list exactly", "[imgui]")
 {
     test::requireGpu();

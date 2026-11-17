@@ -20,52 +20,43 @@
 using namespace rojoRHI;
 
 namespace {
-    /// The repetition counts of the pairs: the low and high count of the K differences.
     constexpr uint32_t kLow = 100;
     constexpr uint32_t kHigh = 1000;
 
-    /// The edge of the targets, in texels.
     constexpr uint32_t kEdge = 256;
 
-    /// The records a counted draw of these cases reads at most.
     constexpr uint32_t kRecords = 256;
 
-    /// A 64-byte root block.
     struct Root
     {
         std::array<uint32_t, 16> words{};
     };
 
-    /// What the native calls of one operation add up to, per repetition.
     struct PerOperation
     {
-        uint64_t calls = 0;    ///< `nativeRecordCalls`.
-        uint64_t barriers = 0; ///< `nativeBarriers`.
-        uint64_t encoders = 0; ///< `encodersOpened`.
+        uint64_t calls = 0;
+        uint64_t barriers = 0;
+        uint64_t encoders = 0;
     };
 
-    /// The commands of a list that a measure records around its repetitions.
     using Record = std::function<void(CommandList)>;
 
-    /// What every case draws with: the standard library's pipelines, a target, a depth texture and the buffers of the
-    /// operations, all on one device.
     struct Fixture
     {
         Device device = *createDevice({ .scopeTimings = true, .debugMarkers = true });
-        uint32_t measures = 0; ///< The measures run so far, which name each measure's list.
+        uint32_t measures = 0;
         ShaderLibrary library;
-        Pipeline pipeline;     ///< A vertex and fragment pipeline over the target.
-        Pipeline culled;       ///< The same with back-face culling and a depth test, for C3.
-        Pipeline depthPlain;   ///< The same as `pipeline` over the target and the depth format, for C3.
-        Pipeline computeEntry; ///< The standard compute pipeline.
-        Texture target;        ///< An `RGBA8Unorm` render target.
-        Texture depth;         ///< A `D32Float` depth texture.
-        Buffer indices;        ///< Three `UInt16` indices.
-        Buffer records;        ///< `kRecords` draw records of three vertices.
-        Buffer counts;         ///< A count of `kRecords`.
-        Buffer onePerCount;    ///< A count of one.
+        Pipeline pipeline;
+        Pipeline culled;
+        Pipeline depthPlain;
+        Pipeline computeEntry;
+        Texture target;
+        Texture depth;
+        Buffer indices;
+        Buffer records;
+        Buffer counts;
+        Buffer onePerCount;
 
-        //==============================================================================================================
         Fixture()
         {
             const std::vector<std::byte> blob = test::standardLibrary();
@@ -111,20 +102,15 @@ namespace {
             );
         }
 
-        //==============================================================================================================
         ~Fixture()
         {
             destroyDevice(device);
         }
 
-        //==============================================================================================================
         Fixture(const Fixture&) = delete;
 
-        //==============================================================================================================
         Fixture& operator=(const Fixture&) = delete;
 
-        //==============================================================================================================
-        /// Begins a pass over the target (and the depth texture when `withDepth`), cleared, and sets the viewport and scissor.
         void beginPass(CommandList list, bool withDepth = false) const
         {
             const std::array colors{ ColorAttachment{ .texture = target, .load = LoadOp::Clear } };
@@ -138,9 +124,7 @@ namespace {
             list.setScissor(Rect2D{ 0, 0, kEdge, kEdge });
         }
 
-        //==============================================================================================================
-        /// Runs a frame in which one list of the Graphics queue runs `open`, then `count` repetitions of `each`, then `close`,
-        /// submits it and waits for it. Returns the counters' growth from before the list is acquired to after the wait.
+        // Returns the counters' growth from before the list is acquired to after the wait.
         Counters measure(uint32_t count, const Record& open, const std::function<void(CommandList, uint32_t)>& each, const Record& close)
         {
             device.beginFrame();
@@ -167,8 +151,7 @@ namespace {
                              .encodersOpened = after.encodersOpened - before.encodersOpened };
         }
 
-        //==============================================================================================================
-        /// The per-repetition growth between `kLow` and `kHigh` repetitions of `each` run between `open` and `close`.
+        // The growth per repetition, from the difference between `kLow` and `kHigh` repetitions of `each`.
         PerOperation perOperation(const Record& open, const std::function<void(CommandList, uint32_t)>& each, const Record& close)
         {
             const Counters low = measure(kLow, open, each, close);
@@ -184,8 +167,6 @@ namespace {
         }
     };
 
-    //==================================================================================================================
-    /// The barrier that orders one pass's writes to the target before the next pass's.
     TextureBarrier betweenPasses(Texture target)
     {
         return TextureBarrier{ .texture = target,
@@ -197,14 +178,11 @@ namespace {
                                .newLayout = Layout::ColorAttachment };
     }
 
-    //==================================================================================================================
-    /// The commands of a list that do nothing.
     void nothing(CommandList)
     {
     }
 } // namespace
 
-//======================================================================================================================
 TEST_CASE("C1: pushRoot of 64 bytes then draw of 3 vertices is two native calls", "[metal4]")
 {
     Fixture fixture;
@@ -227,7 +205,6 @@ TEST_CASE("C1: pushRoot of 64 bytes then draw of 3 vertices is two native calls"
     CHECK(per.encoders == 0);
 }
 
-//======================================================================================================================
 TEST_CASE("C2: pushRoot then drawIndexed of 3 UInt16 indices is two native calls", "[metal4]")
 {
     Fixture fixture;
@@ -249,7 +226,6 @@ TEST_CASE("C2: pushRoot then drawIndexed of 3 UInt16 indices is two native calls
     CHECK(per.encoders == 0);
 }
 
-//======================================================================================================================
 TEST_CASE("C3: setPipeline alternating between two pipelines then draw is four native calls", "[metal4]")
 {
     Fixture fixture;
@@ -268,7 +244,6 @@ TEST_CASE("C3: setPipeline alternating between two pipelines then draw is four n
     CHECK(per.encoders == 0);
 }
 
-//======================================================================================================================
 TEST_CASE("C4: pushRoot then dispatch of one group is two native calls", "[metal4]")
 {
     Fixture fixture;
@@ -287,7 +262,6 @@ TEST_CASE("C4: pushRoot then dispatch of one group is two native calls", "[metal
     CHECK(per.encoders == 0);
 }
 
-//======================================================================================================================
 TEST_CASE("C8: a pass from barrier to endRenderPass costs the registered native calls", "[metal4]")
 {
     Fixture fixture;
@@ -316,7 +290,6 @@ TEST_CASE("C8: a pass from barrier to endRenderPass costs the registered native 
     CHECK(per.barriers == 1);
 }
 
-//======================================================================================================================
 TEST_CASE("C10: a counted drawIndirect of 256 records is three native calls per draw and eighteen per pass", "[metal4]")
 {
     Fixture fixture;
@@ -358,7 +331,6 @@ TEST_CASE("C10: a counted drawIndirect of 256 records is three native calls per 
     CHECK(pass.encoders == 2);
 }
 
-//======================================================================================================================
 TEST_CASE("C10 at maxCount 1 with a null count is one native indirect draw per draw, with no kernel", "[metal4]")
 {
     Fixture fixture;

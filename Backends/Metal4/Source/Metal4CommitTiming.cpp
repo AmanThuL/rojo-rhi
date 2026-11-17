@@ -10,7 +10,6 @@
 #include "Metal4Device.h"
 
 namespace rojoRHI::metal4 {
-    //==================================================================================================================
     void setCommitTiming(Queue queue, CommitTimingCallback callback, void* user)
     {
         QueueImpl& impl = QueueImpl::of(queue);

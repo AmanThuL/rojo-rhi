@@ -15,14 +15,12 @@
 using namespace rojoRHI;
 
 namespace {
-    //==================================================================================================================
     const core::TextureRecord& recordOf(Device device, Texture texture)
     {
         return *core::coreOf(device).pool<Texture>().lookup(texture).record;
     }
 } // namespace
 
-//======================================================================================================================
 TEST_CASE("a texture's record keeps its description, label and initial byte count", "[core]")
 {
     Device device = *createDevice();
@@ -47,7 +45,6 @@ TEST_CASE("a texture's record keeps its description, label and initial byte coun
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("a texture without a label is recorded as rojorhi.texture.unnamed, and a placed one as placed", "[core]")
 {
     Device device = *createDevice();
@@ -58,7 +55,6 @@ TEST_CASE("a texture without a label is recorded as rojorhi.texture.unnamed, and
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("a placed texture counts against its heap until it is destroyed", "[core]")
 {
     Device device = *createDevice();
@@ -70,7 +66,6 @@ TEST_CASE("a placed texture counts against its heap until it is destroyed", "[co
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("a texture counts its live views and stops counting a destroyed one at once", "[core]")
 {
     Device device = *createDevice();
@@ -85,7 +80,6 @@ TEST_CASE("a texture counts its live views and stops counting a destroyed one at
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("a format with storage writes alone takes Storage usage and a Storage view", "[core]")
 {
     Device device = *createDevice();
@@ -98,7 +92,6 @@ TEST_CASE("a format with storage writes alone takes Storage usage and a Storage 
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("a full view heap is an out-of-memory error result and a retired slot frees room", "[core]")
 {
     Device device = *createDevice();
@@ -123,7 +116,6 @@ TEST_CASE("a full view heap is an out-of-memory error result and a retired slot 
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("a retired view slot is reused", "[core]")
 {
     Device device = *createDevice();
@@ -143,7 +135,6 @@ TEST_CASE("a retired view slot is reused", "[core]")
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("every format has a layout whose block bytes are non-zero except Undefined and D32FloatS8", "[core]")
 {
     CHECK(core::formatLayout(Format::Undefined).blockBytes == 0);
@@ -159,7 +150,6 @@ TEST_CASE("every format has a layout whose block bytes are non-zero except Undef
     CHECK(core::formatLayout(Format::RGBA16Float).blockBytes == 8);
 }
 
-//======================================================================================================================
 TEST_CASE("sRGB counterparts pair up and other formats have none", "[core]")
 {
     CHECK(core::srgbCounterpart(Format::RGBA8Unorm) == Format::RGBA8Unorm_sRGB);

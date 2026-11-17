@@ -29,8 +29,6 @@
 
 namespace rojoRHI {
     namespace {
-        //==============================================================================================================
-        /// Returns the load action of `load`.
         MTL::LoadAction loadAction(LoadOp load)
         {
             switch (load)
@@ -42,33 +40,27 @@ namespace rojoRHI {
             return MTL::LoadActionDontCare;
         }
 
-        //==============================================================================================================
-        /// Returns true when an attachment stored by `store`, resolving when `resolves`, is created with
-        /// `MTL::StoreActionUnknown`: its store action depends on whether the pass splits, so the encoder sets it before it ends.
-        /// `Store` without a resolve is the same either way, and costs no call.
+        // Such an attachment is created with `MTL::StoreActionUnknown`: its store action depends on whether the pass
+        // splits, so the encoder sets it before it ends. `Store` without a resolve is the same either way and costs no
+        // call.
         bool storeDeferred(StoreOp store, bool resolves)
         {
             return store != StoreOp::Store || resolves;
         }
 
-        //==============================================================================================================
-        /// Returns the store action an attachment stored by `store`, resolving when `resolves`, is created with.
         MTL::StoreAction createdStore(StoreOp store, bool resolves)
         {
             return storeDeferred(store, resolves) ? MTL::StoreActionUnknown : MTL::StoreActionStore;
         }
 
-        //==============================================================================================================
-        /// Returns the store action at a split of an attachment resolving when `resolves`: `Store`, so the resuming encoder loads
-        /// what this one rendered. Metal requires a resolve form of a deferred store action on an attachment with a resolve
-        /// texture, so one with a resolve target also resolves into it, which the resolve at the pass's end overwrites.
+        // `Store`, so the resuming encoder loads what this one rendered. Metal requires a resolve form of a deferred
+        // store action on an attachment with a resolve texture, so one with a resolve target also resolves into it,
+        // which the resolve at the pass's end overwrites.
         MTL::StoreAction splitStore(bool resolves)
         {
             return resolves ? MTL::StoreActionStoreAndMultisampleResolve : MTL::StoreActionStore;
         }
 
-        //==============================================================================================================
-        /// Returns the store action at the end of a pass of an attachment stored by `store`, resolving when `resolves`.
         MTL::StoreAction finalStore(StoreOp store, bool resolves)
         {
             if (resolves)
@@ -78,9 +70,7 @@ namespace rojoRHI {
             return store == StoreOp::Store ? MTL::StoreActionStore : MTL::StoreActionDontCare;
         }
 
-        //==============================================================================================================
-        /// Sets on `attachment` the texture, level and slice among `texture`, `mip` and `layer` that `held` does not hold, and
-        /// records them in `held`.
+        // Sets only what `held` does not hold, and records it.
         void setPlace(MTL::RenderPassAttachmentDescriptor* attachment, metal4::HeldAttachment& held, const MTL::Texture* texture, uint32_t mip, uint32_t layer)
         {
             if (held.texture != texture)
@@ -101,9 +91,7 @@ namespace rojoRHI {
             }
         }
 
-        //==============================================================================================================
-        /// Sets on `attachment` the load action `load` and the store action `store` unless `held` holds them, and records them
-        /// in `held`; the caller sets the clear value next and then marks the actions known.
+        // The caller sets the clear value next and then marks the actions known.
         void setActions(MTL::RenderPassAttachmentDescriptor* attachment, metal4::HeldAttachment& held, MTL::LoadAction load, MTL::StoreAction store)
         {
             if (!held.actionsKnown || held.load != load)
@@ -118,23 +106,17 @@ namespace rojoRHI {
             }
         }
 
-        //==============================================================================================================
-        /// True when `a` and `b` hold the same bits, so a negative zero or a NaN payload is a value of its own, as the texel a
-        /// clear writes is.
+        // Bitwise, so a negative zero or a NaN payload is a value of its own, as the texel a clear writes is.
         bool sameBits(double a, double b)
         {
             return std::bit_cast<uint64_t>(a) == std::bit_cast<uint64_t>(b);
         }
 
-        //==============================================================================================================
-        /// True when `a` and `b` are the same clear color, bit for bit.
         bool sameClear(const MTL::ClearColor& a, const MTL::ClearColor& b)
         {
             return sameBits(a.red, b.red) && sameBits(a.green, b.green) && sameBits(a.blue, b.blue) && sameBits(a.alpha, b.alpha);
         }
 
-        //==============================================================================================================
-        /// Sets null on the texture of `attachment` unless `held` holds none.
         void emptyTexture(MTL::RenderPassAttachmentDescriptor* attachment, metal4::HeldAttachment& held)
         {
             if (held.texture != nullptr)
@@ -144,13 +126,9 @@ namespace rojoRHI {
             }
         }
 
-        //==============================================================================================================
-        /// Points the list's render pass descriptor at the open pass's attachments: the caller's load actions on the pass's
-        /// first encoder, `Load` on one resuming it, and the store actions they are created with; it empties the attachments the
-        /// previous pass named that this one does not. A value the attachment descriptor already holds is not set again
-        /// (`DrawState::colorHeld`, `depthHeld`, `stencilHeld`), so a pass like the list's last sets only its textures. It sets
-        /// them through the attachment descriptors the list keeps, taking an index's from the descriptor the first time a pass
-        /// uses it, so the caller holds an autorelease pool, because the getters may autorelease.
+        // The caller's load actions on the pass's first encoder, `Load` on one resuming it. A value the attachment
+        // descriptor already holds is not set again, so a pass like the list's last sets only its textures. The caller
+        // holds an autorelease pool, because the attachment getters may autorelease.
         void configure(metal4::DrawState& draw)
         {
             MTL4::RenderPassDescriptor* descriptor = draw.descriptor;
@@ -233,7 +211,6 @@ namespace rojoRHI {
     } // namespace
 
     namespace metal4 {
-        //==============================================================================================================
         MTL4::RenderCommandEncoder* openRender(CommandListImpl& list)
         {
             DrawState& draw = list.draw;
@@ -278,7 +255,6 @@ namespace rojoRHI {
             return encoder;
         }
 
-        //==============================================================================================================
         void finishPass(CommandListImpl& list, bool split)
         {
             MTL4::RenderCommandEncoder* encoder = list.encoders.renderEncoder();
@@ -307,7 +283,6 @@ namespace rojoRHI {
             }
         }
 
-        //==============================================================================================================
         void splitPass(CommandListImpl& list)
         {
             MTL4::RenderCommandEncoder* encoder = list.encoders.renderEncoder();
@@ -330,7 +305,6 @@ namespace rojoRHI {
             list.encoders.close(list.core);
         }
 
-        //==============================================================================================================
         void applyDrawRecord(CommandListImpl& list, uint64_t address)
         {
             DrawState& draw = list.draw;
@@ -344,7 +318,6 @@ namespace rojoRHI {
             draw.tableDrawRecord = address;
         }
 
-        //==============================================================================================================
         void replayCounted(CommandListImpl& list, const PrefixCommand& command)
         {
             MTL4::RenderCommandEncoder* encoder = list.encoders.renderEncoder();
@@ -389,7 +362,6 @@ namespace rojoRHI {
         }
     } // namespace metal4
 
-    //==================================================================================================================
     void CommandList::beginRenderPass(const RenderPassDesc& desc)
     {
         CommandListImpl& list = CommandListImpl::of(*this);
@@ -454,7 +426,6 @@ namespace rojoRHI {
         draw.passBegin = pair;
     }
 
-    //==================================================================================================================
     void CommandList::endRenderPass()
     {
         CommandListImpl& list = CommandListImpl::of(*this);

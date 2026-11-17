@@ -27,17 +27,14 @@
 using namespace rojoRHI;
 
 namespace {
-    /// The edge of the oracle targets, in pixels.
     constexpr uint32_t kEdge = 256;
 
-    /// The most records whose oracle values an `RGBA16Float` target holds exactly: every drawId plus one is at most 2048.
+    // An RGBA16Float target holds every oracle value exactly while each drawId plus one is at most 2048.
     constexpr uint32_t kHalfExact = 2047;
 
-    /// The viewport and scissor of the whole target.
     constexpr Viewport kFull{ .width = static_cast<float>(kEdge), .height = static_cast<float>(kEdge) };
     constexpr Rect2D kFullRect{ 0, 0, kEdge, kEdge };
 
-    /// The cases' count variants: a null count, a count equal to `maxCount`, a quarter of it, zero, and one above it.
     enum class CountKind : uint8_t
     {
         Null,
@@ -47,8 +44,6 @@ namespace {
         Above,
     };
 
-    //==================================================================================================================
-    /// The name of `kind`, for the case's capture.
     std::string_view nameOf(CountKind kind)
     {
         switch (kind)
@@ -62,8 +57,6 @@ namespace {
         return "";
     }
 
-    //==================================================================================================================
-    /// The count `kind` names for `maxCount` records.
     uint32_t countOf(CountKind kind, uint32_t maxCount)
     {
         switch (kind)
@@ -77,15 +70,13 @@ namespace {
         return 0;
     }
 
-    //==================================================================================================================
-    /// The drawId of record `i` of `maxCount`, a power of two: a permutation of the records that no record keeps in place.
+    // For `maxCount` a power of two, a permutation of the records that no record keeps in place.
     uint32_t drawIdOf(uint32_t i, uint32_t maxCount)
     {
         return static_cast<uint32_t>((uint64_t{ 7919 } * i + 13) % maxCount);
     }
 
-    //==================================================================================================================
-    /// The half-precision bits of `value`, which is zero or a normal half-precision value held exactly.
+    // `value` must be zero or a normal half-precision value held exactly.
     uint16_t halfOf(float value)
     {
         if (value == 0.0f)
@@ -98,24 +89,19 @@ namespace {
         return static_cast<uint16_t>(sign | (exponent << 10) | ((bits >> 13) & 0x3FFu));
     }
 
-    /// An oracle target's image: four channels per texel as floats, of which an `R32Float` target keeps the first.
+    // Four float channels per texel; an `R32Float` target keeps only the first.
     struct Image
     {
-        //==============================================================================================================
-        /// Creates a zero image of a target of `format`.
         explicit Image(Format targetFormat) : format(targetFormat)
         {
         }
 
-        //==============================================================================================================
-        /// Sets the texel at cell `cell`, the oracle's pixel of a drawId plus 16,384 times the instance, to `value`.
+        // `cell` is the oracle's pixel of a drawId plus 16,384 times the instance.
         void set(uint32_t cell, const std::array<float, 4>& value)
         {
             texels[cell] = value;
         }
 
-        //==============================================================================================================
-        /// The bytes a target of `format` holds for this image.
         std::vector<std::byte> bytes() const
         {
             std::vector<std::byte> out;
@@ -137,13 +123,10 @@ namespace {
             return out;
         }
 
-        Format format;                                                                                         ///< The target's format.
-        std::vector<std::array<float, 4>> texels = std::vector<std::array<float, 4>>(size_t{ kEdge } * kEdge); ///< In texel order.
+        Format format;
+        std::vector<std::array<float, 4>> texels = std::vector<std::array<float, 4>>(size_t{ kEdge } * kEdge);
     };
 
-    //==================================================================================================================
-    /// Describes where `actual`, the bytes of an oracle target of `format`, differs from `expected`, the first eight texels;
-    /// empty when they are equal.
     std::string differences(const std::vector<std::byte>& actual, const Image& expected)
     {
         const std::vector<std::byte> want = expected.bytes();
@@ -177,40 +160,29 @@ namespace {
         return text;
     }
 
-    //==================================================================================================================
-    /// Loads the conformance library `name` on `device`.
     ShaderLibrary loadLibrary(Device device, std::string_view name)
     {
         const std::vector<std::byte> blob = test::shaderLibraryFile(name);
         return *device.loadShaderLibrary(blob, name);
     }
 
-    //==================================================================================================================
-    /// The oracle's value for a triangle of `drawId`, instance 0 and first vertex `base`.
     std::array<float, 4> oracleValue(uint32_t drawId, uint32_t base = 0)
     {
         return { static_cast<float>(drawId + 1), 1.0f, static_cast<float>(base + 1), 1.0f };
     }
 
-    //==================================================================================================================
-    /// Returns the bytes of `values`.
     template<class T> std::vector<std::byte> bytesOf(std::span<T> values)
     {
         const std::span<const std::byte> bytes = std::as_bytes(values);
         return { bytes.begin(), bytes.end() };
     }
 
-    /// The draw oracle on one kit: its library, pipelines over a target of a format, and the passes the cases record.
     struct Oracle
     {
-        //==============================================================================================================
-        /// Loads the draw oracle library on `kit`'s device.
         explicit Oracle(test::GpuKit& created) : kit(created), library(loadLibrary(created.device, "DrawOracle"))
         {
         }
 
-        //==============================================================================================================
-        /// The oracle's vertex pipeline over one target of `format` with `blend`, whose fragment entry is `fragment`.
         Pipeline pipeline(Format format, const BlendState& blend = {}, std::string_view fragment = "oracleFragmentMain") const
         {
             const std::array targets{ ColorTarget{ .format = format, .blend = blend } };
@@ -224,8 +196,6 @@ namespace {
             return *made;
         }
 
-        //==============================================================================================================
-        /// Creates a `kEdge` square render target of `format`.
         Texture target(Format format) const
         {
             return *kit.device.createTexture(
@@ -234,8 +204,6 @@ namespace {
             );
         }
 
-        //==============================================================================================================
-        /// Begins a pass on `list` that clears `texture` to zero, then binds `bound`, the full viewport and the full scissor.
         static void begin(CommandList list, Texture texture, Pipeline bound)
         {
             test::transition(list, texture, Layout::Undefined, Layout::ColorAttachment);
@@ -246,27 +214,22 @@ namespace {
             list.setScissor(kFullRect);
         }
 
-        //==============================================================================================================
-        /// Reads `texture`, an oracle target of `format`, back.
         std::vector<std::byte> read(Texture texture, Format format) const
         {
             return kit.readTexture(texture, TextureRegion{ .extent = { kEdge, kEdge, 1 } }, format);
         }
 
-        //==============================================================================================================
-        /// Creates an `IndirectArgs` buffer holding the `uint32` count `value`.
         Buffer count(uint32_t value) const
         {
             return kit.buffer(sizeof(value), Memory::Gpu, BufferUsage::IndirectArgs, std::as_bytes(std::span(&value, 1)));
         }
 
-        test::GpuKit& kit;     ///< The kit.
-        ShaderLibrary library; ///< The draw oracle library.
+        test::GpuKit& kit;
+        ShaderLibrary library;
     };
 
-    //==================================================================================================================
-    /// `maxCount` records of three vertices and one instance from first vertex 0, record `i` with `drawIdOf(i, maxCount)`
-    /// plus `firstDrawId` and first instance 1000 plus `i`.
+    // Record i draws three vertices and one instance from first vertex 0, with drawId `drawIdOf(i, maxCount)` plus
+    // `firstDrawId` and first instance 1000 plus i.
     std::vector<DrawIndirectArgs> drawRecords(uint32_t maxCount, uint32_t firstDrawId = 0)
     {
         std::vector<DrawIndirectArgs> records;
@@ -280,8 +243,6 @@ namespace {
         return records;
     }
 
-    //==================================================================================================================
-    /// `image` with what `records` draw when the first `drawn` of them run.
     Image drawnImage(std::span<const DrawIndirectArgs> records, uint32_t drawn, Image image)
     {
         for (uint32_t i = 0; i < drawn; ++i)
@@ -291,16 +252,14 @@ namespace {
         return image;
     }
 
-    //==================================================================================================================
-    /// The format of an oracle target for drawIds below `maxCount`: `RGBA16Float`, which also shows the instance and the
-    /// first vertex, while it holds every value exactly, else `R32Float`, which holds the drawId alone.
+    // `RGBA16Float` also shows the instance and the first vertex while it holds every value exactly; past that, `R32Float`
+    // holds the drawId alone.
     Format formatFor(uint32_t maxCount)
     {
         return maxCount <= kHalfExact ? Format::RGBA16Float : Format::R32Float;
     }
 } // namespace
 
-//======================================================================================================================
 TEST_CASE("drawIndirect draws min(count, maxCount) records", "[conformance]")
 {
     test::requireGpu();
@@ -327,7 +286,6 @@ TEST_CASE("drawIndirect draws min(count, maxCount) records", "[conformance]")
     CHECK(difference.empty());
 }
 
-//======================================================================================================================
 TEST_CASE("drawIndirect at the maxDrawIndirectCount limit draws the records its count names", "[conformance]")
 {
     test::requireGpu();
@@ -366,7 +324,6 @@ TEST_CASE("drawIndirect at the maxDrawIndirectCount limit draws the records its 
     CHECK(difference.empty());
 }
 
-//======================================================================================================================
 TEST_CASE("drawIndexedIndirect draws min(count, maxCount) records with firstIndex, baseVertex invisible", "[conformance]")
 {
     test::requireGpu();
@@ -428,7 +385,6 @@ TEST_CASE("drawIndexedIndirect draws min(count, maxCount) records with firstInde
     CHECK(difference.empty());
 }
 
-//======================================================================================================================
 TEST_CASE("records and a count written by the GPU earlier in the list are read after the barrier", "[conformance]")
 {
     test::requireGpu();
@@ -470,7 +426,6 @@ TEST_CASE("records and a count written by the GPU earlier in the list are read a
     CHECK(difference.empty());
 }
 
-//======================================================================================================================
 TEST_CASE("a pass draws counted draws recorded before and after a direct draw and keeps its attachments and state", "[conformance]")
 {
     test::requireGpu();
@@ -537,7 +492,6 @@ TEST_CASE("a pass draws counted draws recorded before and after a direct draw an
     CHECK(difference.empty());
 }
 
-//======================================================================================================================
 TEST_CASE("direct, lone, written and counted draws interleaved in one pass each read their own drawId", "[conformance]")
 {
     test::requireGpu();
@@ -594,7 +548,6 @@ TEST_CASE("direct, lone, written and counted draws interleaved in one pass each 
     CHECK(difference.empty());
 }
 
-//======================================================================================================================
 TEST_CASE("counted draws recorded before the render encoder opens use the pipeline bound before each", "[conformance]")
 {
     test::requireGpu();
@@ -637,7 +590,6 @@ TEST_CASE("counted draws recorded before the render encoder opens use the pipeli
     CHECK(difference.empty());
 }
 
-//======================================================================================================================
 TEST_CASE("a record with no vertices, indices or instances draws nothing where the list drew one before", "[conformance]")
 {
     test::requireGpu();
@@ -718,7 +670,6 @@ TEST_CASE("a record with no vertices, indices or instances draws nothing where t
     CHECK(difference.empty());
 }
 
-//======================================================================================================================
 TEST_CASE("each counted draw sees the root recorded before it", "[conformance]")
 {
     test::requireGpu();
@@ -753,13 +704,13 @@ TEST_CASE("each counted draw sees the root recorded before it", "[conformance]")
     const Buffer firstArgs = kit.buffer(sizeof(DrawIndirectArgs) * 4, Memory::Gpu, BufferUsage::IndirectArgs, bytesOf(std::span(first)));
     const Buffer secondArgs = kit.buffer(sizeof(DrawIndirectArgs) * 4, Memory::Gpu, BufferUsage::IndirectArgs, bytesOf(std::span(second)));
     const Buffer thirdArgs = kit.buffer(sizeof(DrawIndirectArgs), Memory::Gpu, BufferUsage::IndirectArgs, bytesOf(std::span(third)));
-    /// AbiFragment's root.
+    // The root of the AbiFragment entry.
     struct FragmentRoot
     {
-        uint32_t view;    ///< The sampled view.
-        uint32_t sampler; ///< The sampler.
-        uint32_t pad0;    ///< Padding.
-        uint32_t pad1;    ///< Padding.
+        uint32_t view;
+        uint32_t sampler;
+        uint32_t pad0;
+        uint32_t pad1;
     };
     CommandList list = kit.list(QueueType::Graphics, "test.indirect");
     const std::array colors{ ColorAttachment{ .texture = target, .load = LoadOp::Clear } };
@@ -792,7 +743,6 @@ TEST_CASE("each counted draw sees the root recorded before it", "[conformance]")
     CHECK(difference.empty());
 }
 
-//======================================================================================================================
 TEST_CASE("counted draws in two passes of one list and in lists recorded on two threads", "[conformance]")
 {
     test::requireGpu();

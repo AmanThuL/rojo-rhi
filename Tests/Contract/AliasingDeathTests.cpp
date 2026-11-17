@@ -16,26 +16,19 @@ using namespace rojoRHI;
 using test::PassKit;
 
 namespace {
-    /// The bytes of every placed buffer.
     constexpr uint64_t kBytes = 256;
 
-    //==================================================================================================================
-    /// Creates a `Memory::Gpu` heap of one mebibyte.
     Heap makeHeap(PassKit& kit)
     {
         return *kit.device.createHeap(HeapDesc{ .size = 1u << 20, .label = "test.heap" });
     }
 
-    //==================================================================================================================
-    /// Creates a buffer of `kBytes` bytes that a fill may write, placed at `offset` in `heap`.
     Buffer placedBuffer(PassKit& kit, Heap heap, uint64_t offset)
     {
         const BufferDesc desc{ .size = kBytes, .usage = BufferUsage::ShaderWrite, .label = "test.placed.buffer" };
         return *kit.device.createBuffer(desc, {}, Placement{ .heap = heap, .offset = offset });
     }
 
-    //==================================================================================================================
-    /// Creates a `PassKit::kSize` square render target placed at `offset` in `heap`.
     Texture placedTexture(PassKit& kit, Heap heap, uint64_t offset)
     {
         const TextureDesc desc{
@@ -44,8 +37,6 @@ namespace {
         return *kit.device.createTexture(desc, {}, Placement{ .heap = heap, .offset = offset });
     }
 
-    //==================================================================================================================
-    /// Records one global barrier from `srcStage` and `srcAccess` to `dstStage` and `dstAccess`.
     void global(CommandList list, Stage srcStage, Access srcAccess, Stage dstStage, Access dstAccess)
     {
         const std::array<GlobalBarrier, 1> globals{ GlobalBarrier{
@@ -53,9 +44,6 @@ namespace {
         list.barrier(globals);
     }
 
-    //==================================================================================================================
-    /// Records one barrier of every subresource of `texture` from `oldLayout` at `srcStage` to `newLayout` for a copy's
-    /// accesses `dstAccess`; the source names the copy's write unless the barrier discards.
     void textureBarrier(CommandList list, Texture texture, Layout oldLayout, Layout newLayout, Stage srcStage, Access dstAccess)
     {
         const std::array<TextureBarrier, 1> barriers{ TextureBarrier{ .texture = texture,
@@ -68,8 +56,6 @@ namespace {
         list.barrier({}, {}, barriers);
     }
 
-    //==================================================================================================================
-    /// Ends `list` and submits it alone to the queue of `type` of `device`, waiting on `wait` and signalling `signal`.
     void submitWith(Device device, CommandList list, QueueType type, std::span<const FenceValue> wait, std::span<const FenceValue> signal)
     {
         list.end();
@@ -78,7 +64,6 @@ namespace {
     }
 } // namespace
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-sync-0009 a placed buffer is used after another buffer used its memory with no barrier", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-sync-0009", [] {
@@ -92,7 +77,6 @@ TEST_CASE("VU-rojo-sync-0009 a placed buffer is used after another buffer used i
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-sync-0009 a placed buffer follows a global barrier whose source misses the texture's use", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-sync-0009", [] {
@@ -108,7 +92,6 @@ TEST_CASE("VU-rojo-sync-0009 a placed buffer follows a global barrier whose sour
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-sync-0009 a placed buffer follows a global barrier whose destination misses its use", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-sync-0009", [] {
@@ -124,7 +107,6 @@ TEST_CASE("VU-rojo-sync-0009 a placed buffer follows a global barrier whose dest
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-sync-0017 a placed texture is used first after a buffer used its memory", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-sync-0017", [] {
@@ -142,7 +124,6 @@ TEST_CASE("VU-rojo-sync-0017 a placed texture is used first after a buffer used 
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-sync-0017 a placed texture's first barrier after a buffer used its memory does not discard", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-sync-0017", [] {
@@ -159,7 +140,6 @@ TEST_CASE("VU-rojo-sync-0017 a placed texture's first barrier after a buffer use
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-sync-0017 a placed texture's discard after a buffer used its memory has a source that misses the use", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-sync-0017", [] {
@@ -173,7 +153,6 @@ TEST_CASE("VU-rojo-sync-0017 a placed texture's discard after a buffer used its 
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-sync-0017 a texture placed after a submitted fill of its bytes discards with a source that misses the fill", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-sync-0017", [] {
@@ -192,16 +171,12 @@ TEST_CASE("VU-rojo-sync-0017 a texture placed after a submitted fill of its byte
 }
 
 namespace {
-    //==================================================================================================================
-    /// Creates a square render target of `size` texels placed at `offset` in `heap`.
     Texture placedTarget(PassKit& kit, Heap heap, uint64_t offset, uint32_t size)
     {
         const TextureDesc desc{ .format = Format::RGBA8Unorm, .extent = { size, size, 1 }, .usage = TextureUsage::RenderTarget, .label = "test.placed.target" };
         return *kit.device.createTexture(desc, {}, Placement{ .heap = heap, .offset = offset });
     }
 
-    //==================================================================================================================
-    /// Records the discard of `texture` to `ColorAttachment` waiting for `srcStage`, then a pass that clears its `size` square.
     void discardAndClear(CommandList list, Texture texture, Stage srcStage, uint32_t size)
     {
         const std::array<TextureBarrier, 1> barriers{ TextureBarrier{ .texture = texture,
@@ -216,14 +191,10 @@ namespace {
         list.endRenderPass();
     }
 
-    /// The edge of a small render target, placed after the first buffer's bytes in the heap.
     constexpr uint32_t kSmall = 64;
-    /// The edge of a large render target that covers the bytes of both.
+    // Covers the bytes of the first buffer and of the small target.
     constexpr uint32_t kLarge = 256;
 
-    //==================================================================================================================
-    /// Returns the heap offset of the small render target: the first offset past the first buffer's bytes that the device
-    /// places a texture at.
     uint64_t smallOffset(PassKit& kit)
     {
         const TextureDesc desc{ .format = Format::RGBA8Unorm, .extent = { kSmall, kSmall, 1 }, .usage = TextureUsage::RenderTarget };
@@ -232,7 +203,6 @@ namespace {
     }
 } // namespace
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-sync-0017 a discard waits for the newest use of some bytes but not an older use of other bytes", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-sync-0017", [] {
@@ -249,7 +219,6 @@ TEST_CASE("VU-rojo-sync-0017 a discard waits for the newest use of some bytes bu
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-sync-0017 a texture placed after uses of disjoint bytes discards waiting for only the newest", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-sync-0017", [] {
@@ -270,8 +239,6 @@ TEST_CASE("VU-rojo-sync-0017 a texture placed after uses of disjoint bytes disca
 }
 
 namespace {
-    //==================================================================================================================
-    /// Records a pass over mip `mip` of `texture`, a `PassKit::kSize` square at mip 0, that loads or clears it as `load` says.
     void renderMip(CommandList list, Texture texture, uint32_t mip, LoadOp load)
     {
         const uint32_t size = PassKit::kSize >> mip;
@@ -280,8 +247,6 @@ namespace {
         list.endRenderPass();
     }
 
-    //==================================================================================================================
-    /// Records the discard of the mips `range` of `texture` to `ColorAttachment`, waiting for `srcStage`.
     void discardMips(CommandList list, Texture texture, const SubresourceRange& range, Stage srcStage)
     {
         const std::array<TextureBarrier, 1> barriers{ TextureBarrier{ .texture = texture,
@@ -295,7 +260,6 @@ namespace {
     }
 } // namespace
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-sync-0017 a placed texture's use of one mip does not exempt another mip from discarding", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-sync-0017", [] {
@@ -324,7 +288,6 @@ TEST_CASE("VU-rojo-sync-0017 a placed texture's use of one mip does not exempt a
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-cmd-0072 a placed texture is cleared on Graphics, with no discard, after a buffer used its memory on Compute", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-cmd-0072", [] {
@@ -355,7 +318,6 @@ TEST_CASE("VU-rojo-cmd-0072 a placed texture is cleared on Graphics, with no dis
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-cmd-0007 a placed render target is drawn to on Graphics, with no discard, after a buffer used its memory on Compute", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-cmd-0007", [] {
@@ -383,7 +345,6 @@ TEST_CASE("VU-rojo-cmd-0007 a placed render target is drawn to on Graphics, with
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-sync-0009 a placed buffer is filled right after a placed texture over its bytes is discarded", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-sync-0009", [] {

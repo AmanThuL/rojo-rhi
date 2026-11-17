@@ -19,10 +19,9 @@
 using namespace rojoRHI;
 
 namespace {
-    /// Three slots: slot zero and two objects per type.
+    // Slot zero and two objects per type.
     constexpr uint32_t kSmallPool = 3;
 
-    /// The counters a creation moves.
     struct CreationCounts
     {
         uint64_t nativeCreateCalls = 0;
@@ -30,21 +29,18 @@ namespace {
         friend bool operator==(const CreationCounts&, const CreationCounts&) = default;
     };
 
-    //==================================================================================================================
     CreationCounts creationCounts(const core::DeviceCore& core)
     {
         const Counters counters = core.counters();
         return { counters.nativeCreateCalls, counters.gpuAllocations };
     }
 
-    //==================================================================================================================
     uint64_t placedIn(core::DeviceCore& core, Heap heap)
     {
         return core.pool<Heap>().lookup(heap).record->placedResources;
     }
 
-    //==================================================================================================================
-    /// Creates an upscaler as a backend with no native object does: prepares the record, then allocates it.
+    // As a backend with no native object does: prepares the record, then allocates it.
     Result<Upscaler> createUpscaler(core::DeviceCore& core, const UpscalerDesc& desc)
     {
         Result<core::UpscalerRecord> record = core::prepareUpscaler(core, desc);
@@ -60,13 +56,11 @@ namespace {
         return upscaler;
     }
 
-    //==================================================================================================================
     core::BufferRecord bufferRecord(Heap heap = {})
     {
         return core::BufferRecord{ .label = "full.buffer", .size = 256, .heap = heap };
     }
 
-    //==================================================================================================================
     core::TextureRecord textureRecord(Heap heap = {})
     {
         return core::TextureRecord{
@@ -75,7 +69,6 @@ namespace {
     }
 } // namespace
 
-//======================================================================================================================
 TEST_CASE("a buffer that finds its table full is OutOfMemory and leaves no record, placement, tracking or count", "[core]")
 {
     core::DeviceCore core{ DeviceDesc{ .validation = true }, kSmallPool };
@@ -101,7 +94,6 @@ TEST_CASE("a buffer that finds its table full is OutOfMemory and leaves no recor
     core.beginDestroy();
 }
 
-//======================================================================================================================
 TEST_CASE("a texture that finds its table full is OutOfMemory and leaves no record, placement, tracking or count", "[core]")
 {
     core::DeviceCore core{ DeviceDesc{ .validation = true }, kSmallPool };
@@ -127,7 +119,6 @@ TEST_CASE("a texture that finds its table full is OutOfMemory and leaves no reco
     core.beginDestroy();
 }
 
-//======================================================================================================================
 TEST_CASE("a frame-arena page that finds the buffer table full is OutOfMemory and counts nothing", "[core]")
 {
     core::DeviceCore core{ DeviceDesc{}, kSmallPool };
@@ -143,7 +134,6 @@ TEST_CASE("a frame-arena page that finds the buffer table full is OutOfMemory an
     core.beginDestroy();
 }
 
-//======================================================================================================================
 TEST_CASE("an upscaler that finds its table full is OutOfMemory and counts nothing", "[core]")
 {
     static constexpr std::array<UpscalerSupport, 1> kOffered = { { { UpscalerKind::FSR, 0.5f, 1.0f } } };

@@ -32,15 +32,13 @@
 
 namespace rojoRHI {
     namespace {
-        //==============================================================================================================
-        /// Returns true when `surface` is a window, the native surface of the D3D12 backend (VU-rojo-present-0002).
+        // A window is the D3D12 backend's native surface (VU-rojo-present-0002).
         bool isWindow(const void* surface)
         {
             return IsWindow(static_cast<HWND>(const_cast<void*>(surface))) != FALSE;
         }
 
-        //==============================================================================================================
-        /// Creates the device-wide native state of `impl` in declaration order, the order `teardown` destroys it in reverse.
+        // In declaration order, the reverse of the order `teardown` destroys it in.
         Result<void> createState(DeviceImpl& impl)
         {
             impl.messages.attach(impl.device(), impl.loaded.layer);
@@ -76,11 +74,9 @@ namespace rojoRHI {
             return impl.stager.create(impl);
         }
 
-        //==============================================================================================================
-        /// Tears down `impl`, made by `createDevice` whether or not all of its state was created: the queues finish their work,
-        /// the core passes every remaining record to the retire hooks, the pipeline library and the kept fences go, and then
-        /// every native object is released in reverse order of creation, the device last. A Debug build checks that no
-        /// reference to the device outlives it.
+        // Runs whether or not all of the state was created: the queues finish, the core retires every record, the
+        // pipeline library and the kept fences go, then every native object is released in reverse order of creation,
+        // the device last. A Debug build checks that no reference to the device outlives it.
         void teardown(DeviceImpl* impl)
         {
             d3d12::idleQueues(*impl);
@@ -101,14 +97,12 @@ namespace rojoRHI {
         }
     } // namespace
 
-    //==================================================================================================================
     DeviceImpl& DeviceImpl::of(Device device)
     {
         core::checkObject(device.m_impl, "Device");
         return *device.m_impl;
     }
 
-    //==================================================================================================================
     Device DeviceImpl::wrap(DeviceImpl* impl)
     {
         Device device;
@@ -116,14 +110,12 @@ namespace rojoRHI {
         return device;
     }
 
-    //==================================================================================================================
     QueueImpl& QueueImpl::of(Queue queue)
     {
         core::checkObject(queue.m_impl, "Queue");
         return *queue.m_impl;
     }
 
-    //==================================================================================================================
     Queue QueueImpl::wrap(QueueImpl* impl)
     {
         Queue queue;
@@ -131,14 +123,12 @@ namespace rojoRHI {
         return queue;
     }
 
-    //==================================================================================================================
     CommandListImpl& CommandListImpl::of(CommandList list)
     {
         core::checkObject(list.m_impl, "CommandList");
         return *list.m_impl;
     }
 
-    //==================================================================================================================
     CommandList CommandListImpl::wrap(CommandListImpl* impl)
     {
         CommandList list;
@@ -146,14 +136,12 @@ namespace rojoRHI {
         return list;
     }
 
-    //==================================================================================================================
     SwapchainImpl& SwapchainImpl::of(Swapchain swapchain)
     {
         core::checkObject(swapchain.m_impl, "Swapchain");
         return *swapchain.m_impl;
     }
 
-    //==================================================================================================================
     Swapchain SwapchainImpl::wrap(SwapchainImpl* impl)
     {
         Swapchain swapchain;
@@ -162,14 +150,12 @@ namespace rojoRHI {
     }
 
     namespace core {
-        //==============================================================================================================
         DeviceCore& coreOf(Device device)
         {
             return DeviceImpl::of(device).core;
         }
     } // namespace core
 
-    //==================================================================================================================
     Result<Device> createDevice(const DeviceDesc& desc)
     {
         if (Result<void> valid = core::validateDeviceDesc(desc); !valid)
@@ -223,25 +209,21 @@ namespace rojoRHI {
         return DeviceImpl::wrap(impl.release());
     }
 
-    //==================================================================================================================
     void destroyDevice(Device device)
     {
         teardown(&DeviceImpl::of(device));
     }
 
-    //==================================================================================================================
     const Capabilities& Device::capabilities() const
     {
         return DeviceImpl::of(*this).core.capabilities();
     }
 
-    //==================================================================================================================
     FormatCapabilities Device::formatCapabilities(Format format) const
     {
         return DeviceImpl::of(*this).core.formatCapabilities(format);
     }
 
-    //==================================================================================================================
     Queue Device::queue(QueueType type)
     {
         DeviceImpl& impl = DeviceImpl::of(*this);
@@ -250,31 +232,26 @@ namespace rojoRHI {
         return QueueImpl::wrap(&impl.queues[index]);
     }
 
-    //==================================================================================================================
     Counters Device::counters() const
     {
         return DeviceImpl::of(*this).core.counters();
     }
 
-    //==================================================================================================================
     std::span<const ScopeTiming> Device::scopeTimings()
     {
         return DeviceImpl::of(*this).core.scopeTimings();
     }
 
-    //==================================================================================================================
     void Device::destroy(Pipeline pipeline)
     {
         DeviceImpl::of(*this).core.destroy(pipeline);
     }
 
-    //==================================================================================================================
     void Device::destroy(ShaderLibrary library)
     {
         DeviceImpl::of(*this).core.destroy(library);
     }
 
-    //==================================================================================================================
     void Device::destroy(Upscaler upscaler)
     {
         DeviceImpl::of(*this).core.destroy(upscaler);

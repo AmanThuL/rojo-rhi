@@ -30,23 +30,18 @@
 using namespace rojoRHI;
 
 namespace {
-    /// The longest a case waits on a native fence before it fails: thirty seconds, in nanoseconds.
     constexpr uint64_t kNativeWaitNs = 30'000'000'000;
 
-    /// A root block a case pushes: one 16-byte row.
     struct TestRoot
     {
         uint32_t values[4] = {};
     };
 
-    /// Guards `g_messages`, which the message callback may fill from any thread.
+    // The message callback may fill `g_messages` from any thread.
     std::mutex g_messagesMutex;
 
-    /// The messages at `Warning` or above the library reported while a case collected them.
     std::vector<std::string> g_messages;
 
-    //==================================================================================================================
-    /// Keeps `message` when it is a warning or an error. It may run on any thread.
     void collectMessage(MessageSeverity severity, std::string_view message, void*)
     {
         if (severity == MessageSeverity::Info)
@@ -57,25 +52,22 @@ namespace {
         g_messages.emplace_back(message);
     }
 
-    /// Collects the library's warnings and errors, the debug layer's included, into `g_messages`, emptied first, while it
-    /// lives, and removes the callback when it goes, however the case ends.
+    // Collects the library's warnings and errors, the debug layer's included, into `g_messages` (emptied first) while it
+    // lives, and removes the callback however the case ends.
     class MessageCollection
     {
       public:
         MessageCollection();
         ~MessageCollection();
 
-        //==============================================================================================================
         MessageCollection(const MessageCollection&) = delete;
 
-        //==============================================================================================================
         MessageCollection& operator=(const MessageCollection&) = delete;
 
-        /// Returns the messages collected so far, and lists them for the log.
+        // Also lists the messages for the log.
         size_t count() const;
     };
 
-    //==================================================================================================================
     MessageCollection::MessageCollection()
     {
         {
@@ -85,13 +77,11 @@ namespace {
         setMessageCallback(collectMessage, nullptr);
     }
 
-    //==================================================================================================================
     MessageCollection::~MessageCollection()
     {
         setMessageCallback(nullptr, nullptr);
     }
 
-    //==================================================================================================================
     size_t MessageCollection::count() const
     {
         const std::lock_guard lock(g_messagesMutex);
@@ -102,8 +92,6 @@ namespace {
         return g_messages.size();
     }
 
-    //==================================================================================================================
-    /// Returns a new device that keeps `framesInFlight` frames in flight.
     Device makeDevice(uint32_t framesInFlight = 3)
     {
         DeviceDesc desc;
@@ -113,8 +101,6 @@ namespace {
         return *created;
     }
 
-    //==================================================================================================================
-    /// Returns a new fence at zero on `device`, labelled `label`.
     Fence makeFence(Device device, std::string_view label)
     {
         Result<Fence> created = device.createFence(0, label);
@@ -122,8 +108,6 @@ namespace {
         return *created;
     }
 
-    //==================================================================================================================
-    /// Returns a new buffer of `desc` on `device`, holding `initial` when it is not empty.
     Buffer makeBuffer(Device device, const BufferDesc& desc, std::span<const std::byte> initial = {})
     {
         Result<Buffer> created = device.createBuffer(desc, initial);
@@ -131,8 +115,6 @@ namespace {
         return *created;
     }
 
-    //==================================================================================================================
-    /// Returns the native buffer of `buffer`, a live buffer of `device`.
     ID3D12Resource* resourceOf(Device device, Buffer buffer)
     {
         const auto* payload = static_cast<const d3d12::BufferPayload*>(DeviceImpl::of(device).core.pool<Buffer>().native(buffer));
@@ -140,22 +122,16 @@ namespace {
         return payload->resource;
     }
 
-    //==================================================================================================================
-    /// Returns the native state of `list`.
     d3d12::ListState& stateOf(CommandList list)
     {
         return CommandListImpl::of(list).state;
     }
 
-    //==================================================================================================================
-    /// Returns the native calls `list` has recorded since its acquisition.
     uint64_t recordCalls(CommandList list)
     {
         return core::coreOf(list).counts.nativeRecordCalls;
     }
 
-    //==================================================================================================================
-    /// Returns the name `object` carries, without a terminating null.
     std::wstring objectName(ID3D12Object* object)
     {
         wchar_t name[128] = {};
@@ -173,8 +149,7 @@ namespace {
         return read;
     }
 
-    //==================================================================================================================
-    /// Returns `ascii`, a label of ASCII characters, as the UTF-16 name a native object carries.
+    // `ascii` holds ASCII characters only.
     std::wstring wide(std::string_view ascii)
     {
         std::wstring name;
@@ -185,23 +160,17 @@ namespace {
         return name;
     }
 
-    //==================================================================================================================
-    /// Returns the native name of list `ordinal` of frame slot `slot`'s pool of `type`.
     std::wstring poolName(uint32_t slot, std::wstring_view type, uint32_t ordinal)
     {
         return L"rojorhi.list." + std::to_wstring(slot) + L"." + std::wstring(type) + L"." + std::to_wstring(ordinal);
     }
 
-    //==================================================================================================================
-    /// Returns the frame slot of `device`'s open frame.
     uint32_t openSlot(Device device)
     {
         const core::DeviceCore& core = DeviceImpl::of(device).core;
         return static_cast<uint32_t>(core.frameNumber() % core.framesInFlight());
     }
 
-    //==================================================================================================================
-    /// Returns `size` bytes counting up from `seed`, wrapping at 256.
     std::vector<std::byte> pattern(size_t size, uint32_t seed)
     {
         std::vector<std::byte> bytes(size);
@@ -212,9 +181,8 @@ namespace {
         return bytes;
     }
 
-    //==================================================================================================================
-    /// Submits `graphics` and `compute` on their queues and `copy` on its queue, the compute and copy lists each signalling
-    /// value `value` of their fence, which the graphics submission waits for, so the frame joins them.
+    // The compute and copy lists each signal `value` on their fence, which the graphics submission waits for, so the frame
+    // joins them.
     void submitJoined(Device device, CommandList graphics, CommandList compute, CommandList copy, Fence computeDone, Fence copyDone, uint64_t value)
     {
         const std::array<FenceValue, 1> computeSignal{ FenceValue{ computeDone, value } };
@@ -226,7 +194,6 @@ namespace {
     }
 } // namespace
 
-//======================================================================================================================
 TEST_CASE("a Graphics list's acquisition resets it, sets both heaps and the graphics root signature", "[d3d12]")
 {
     Device device = makeDevice();
@@ -255,7 +222,6 @@ TEST_CASE("a Graphics list's acquisition resets it, sets both heaps and the grap
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("a Compute list sets the heaps, a Copy list only resets", "[d3d12]")
 {
     Device device = makeDevice();
@@ -288,7 +254,6 @@ TEST_CASE("a Compute list sets the heaps, a Copy list only resets", "[d3d12]")
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("end closes the list with one native call", "[d3d12]")
 {
     Device device = makeDevice();
@@ -305,7 +270,6 @@ TEST_CASE("end closes the list with one native call", "[d3d12]")
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("a submission of three lists executes them in one call", "[d3d12]")
 {
     constexpr uint64_t kSlice = 256;
@@ -375,7 +339,6 @@ TEST_CASE("a submission of three lists executes them in one call", "[d3d12]")
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("a submission with no lists executes nothing", "[d3d12]")
 {
     Device device = makeDevice();
@@ -397,7 +360,6 @@ TEST_CASE("a submission with no lists executes nothing", "[d3d12]")
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("the reuse of a frame slot resets the allocator of every list it handed out", "[d3d12]")
 {
     for (const uint32_t framesInFlight : { 2u, 3u })
@@ -443,7 +405,6 @@ TEST_CASE("the reuse of a frame slot resets the allocator of every list it hande
     }
 }
 
-//======================================================================================================================
 TEST_CASE("a list carries its label and sets it again only when it changes", "[d3d12]")
 {
     Device device = makeDevice(2);
@@ -471,7 +432,6 @@ TEST_CASE("a list carries its label and sets it again only when it changes", "[d
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("lists acquired on four threads in one frame record into distinct native lists", "[d3d12]")
 {
     constexpr std::array<std::string_view, 4> kLabels = { "test.thread0", "test.thread1", "test.thread2", "test.thread3" };
@@ -517,7 +477,6 @@ TEST_CASE("lists acquired on four threads in one frame record into distinct nati
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("setRoot stores the buffer's GPU address plus the offset, marks both roots dirty and records nothing", "[d3d12]")
 {
     Device device = makeDevice();
@@ -556,7 +515,6 @@ TEST_CASE("setRoot stores the buffer's GPU address plus the offset, marks both r
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("pushRoot binds the arena page's address plus its offset", "[d3d12]")
 {
     Device device = makeDevice();
@@ -583,7 +541,6 @@ TEST_CASE("pushRoot binds the arena page's address plus its offset", "[d3d12]")
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("empty lists of every queue type submit clean across six frames", "[d3d12]")
 {
     for (const uint32_t framesInFlight : { 2u, 3u })
@@ -607,7 +564,7 @@ TEST_CASE("empty lists of every queue type submit clean across six frames", "[d3
             submitJoined(device, graphics, compute, copy, computeDone, copyDone, frame);
             device.endFrame();
         }
-        // A slot's reuse hands out the list, and the allocator, it made in its first frame.
+        // A slot's reuse hands out the list it made in its first frame.
         for (size_t frame = framesInFlight; frame < natives.size(); ++frame)
         {
             CHECK(natives[frame] == natives[frame - framesInFlight]);
@@ -621,7 +578,6 @@ TEST_CASE("empty lists of every queue type submit clean across six frames", "[d3
     }
 }
 
-//======================================================================================================================
 TEST_CASE("a texture's payload carries its description and copy format", "[d3d12]")
 {
     Device device = makeDevice();

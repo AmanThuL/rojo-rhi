@@ -13,12 +13,10 @@
 #include <format>
 
 namespace rojoRHI::core {
-    //==================================================================================================================
     FrameArena::FrameArena(uint32_t slots) : m_slots(slots)
     {
     }
 
-    //==================================================================================================================
     ArenaPage FrameArena::claim(uint32_t slot, uint64_t minSize, uint64_t maxPageBytes, ArenaPageSource source, void* context)
     {
         std::lock_guard lock(m_mutex);
@@ -53,7 +51,6 @@ namespace rojoRHI::core {
         return *created;
     }
 
-    //==================================================================================================================
     void FrameArena::rewind(uint32_t slot)
     {
         std::lock_guard lock(m_mutex);
@@ -64,7 +61,6 @@ namespace rojoRHI::core {
         }
     }
 
-    //==================================================================================================================
     std::vector<Buffer> FrameArena::takePages()
     {
         std::lock_guard lock(m_mutex);
@@ -80,7 +76,6 @@ namespace rojoRHI::core {
         return taken;
     }
 
-    //==================================================================================================================
     std::vector<Buffer> FrameArena::pageBuffers() const
     {
         std::lock_guard lock(m_mutex);
@@ -95,7 +90,6 @@ namespace rojoRHI::core {
         return buffers;
     }
 
-    //==================================================================================================================
     uint64_t FrameArena::growths() const
     {
         return m_growths.load(std::memory_order_relaxed);

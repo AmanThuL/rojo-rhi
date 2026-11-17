@@ -20,29 +20,23 @@
 
 namespace rojoRHI::core {
     namespace {
-        /// The layouts that permit a copy source: chapter 09's table.
+        // Chapter 09's layout table.
         [[maybe_unused]] constexpr LayoutSet kCopySource = layoutSet({ Layout::CopySrc, Layout::General });
 
-        /// The layouts that permit a copy destination: chapter 09's table.
         [[maybe_unused]] constexpr LayoutSet kCopyDestination = layoutSet({ Layout::CopyDst, Layout::General });
 
-        /// The layouts that permit a clear destination: chapter 09's table.
         [[maybe_unused]] constexpr LayoutSet kClearDestination = layoutSet({ Layout::CopyDst });
 
-        //==============================================================================================================
         [[maybe_unused]] bool hasUsage(BufferUsage usage, BufferUsage flag)
         {
             return (usage & flag) != BufferUsage::None;
         }
 
-        //==============================================================================================================
         [[maybe_unused]] bool hasUsage(TextureUsage usage, TextureUsage flag)
         {
             return (usage & flag) != TextureUsage::None;
         }
 
-        //==============================================================================================================
-        /// Returns `a + b`, or nothing when the sum wraps.
         [[maybe_unused]] std::optional<uint64_t> checkedAdd(uint64_t a, uint64_t b)
         {
             if (b > std::numeric_limits<uint64_t>::max() - a)
@@ -52,8 +46,6 @@ namespace rojoRHI::core {
             return a + b;
         }
 
-        //==============================================================================================================
-        /// Returns `a * b`, or nothing when the product wraps.
         [[maybe_unused]] std::optional<uint64_t> checkedMul(uint64_t a, uint64_t b)
         {
             if (a != 0 && b > std::numeric_limits<uint64_t>::max() / a)
@@ -63,22 +55,18 @@ namespace rojoRHI::core {
             return a * b;
         }
 
-        //==============================================================================================================
-        /// Returns true when `size` bytes from `offset` lie inside a buffer of `bufferSize` bytes; a wrapping end is outside.
         [[maybe_unused]] bool rangeInside(uint64_t offset, uint64_t size, uint64_t bufferSize)
         {
             return size <= bufferSize && offset <= bufferSize - size;
         }
 
-        //==============================================================================================================
         [[maybe_unused]] uint64_t divCeil(uint64_t value, uint64_t divisor)
         {
             return (value + divisor - 1) / divisor;
         }
 
-        //==============================================================================================================
-        /// Returns the half-open end of the bytes `layout` addresses for `region` of a texture of `format`, or nothing when the
-        /// end wraps: the first block at `offset`, rows `rowPitch` apart, images `rowPitch * rowsPerImage` apart.
+        // The half-open end of the bytes `layout` addresses, or nothing when it wraps: the first block at `offset`, rows
+        // `rowPitch` apart, images `rowPitch * rowsPerImage` apart.
         [[maybe_unused]] std::optional<uint64_t> layoutEnd(Format format, const BufferTextureLayout& layout, const TextureRegion& region)
         {
             const FormatLayout block = formatLayout(format);
@@ -98,9 +86,6 @@ namespace rojoRHI::core {
             return lastBlock ? checkedAdd(*lastBlock, layout.offset) : std::nullopt;
         }
 
-        //==============================================================================================================
-        /// Says what keeps `list` from fill or clear (outside a pass, on a Graphics or Compute list), or returns an empty
-        /// string.
         [[maybe_unused]] std::string computeCopyProblem(const CommandListCore& list)
         {
             if (list.passOpen)
@@ -114,9 +99,6 @@ namespace rojoRHI::core {
             return {};
         }
 
-        //==============================================================================================================
-        /// Says why `size` bytes from `offset` are not a non-empty, 4-byte aligned range of a buffer of `bufferSize` bytes, or
-        /// returns an empty string.
         [[maybe_unused]] std::string bufferRangeProblem(uint64_t offset, uint64_t size, uint64_t bufferSize)
         {
             if (size == 0)
@@ -134,9 +116,6 @@ namespace rojoRHI::core {
             return {};
         }
 
-        //==============================================================================================================
-        /// Checks that `region` is a box of `texture` a copy may name (VU-rojo-cmd-0038 to 0041); the one site of the rules,
-        /// shared by every copy that names a texture.
         [[maybe_unused]] void checkTextureRegion([[maybe_unused]] const TextureRecord& texture, [[maybe_unused]] const TextureRegion& region)
         {
             ROJORHI_VU(
@@ -189,8 +168,6 @@ namespace rojoRHI::core {
             );
         }
 
-        //==============================================================================================================
-        /// Checks `layout` against `region` of `texture` (VU-rojo-cmd-0034 to 0037); the one site of the rules.
         [[maybe_unused]] void checkLayout(
             [[maybe_unused]] const TextureRecord& texture, [[maybe_unused]] const BufferTextureLayout& layout, [[maybe_unused]] const TextureRegion& region
         )
@@ -223,7 +200,6 @@ namespace rojoRHI::core {
         }
     } // namespace
 
-    //==================================================================================================================
     void copyBuffer(
         CommandListCore& list,
         [[maybe_unused]] Buffer src,
@@ -262,7 +238,6 @@ namespace rojoRHI::core {
 #endif
     }
 
-    //==================================================================================================================
     void copyBufferToTexture(
         CommandListCore& list,
         [[maybe_unused]] Buffer src,
@@ -298,7 +273,6 @@ namespace rojoRHI::core {
 #endif
     }
 
-    //==================================================================================================================
     void copyTextureToBuffer(
         CommandListCore& list,
         [[maybe_unused]] Texture src,
@@ -334,7 +308,6 @@ namespace rojoRHI::core {
 #endif
     }
 
-    //==================================================================================================================
     void copyTexture(
         CommandListCore& list,
         [[maybe_unused]] Texture src,
@@ -379,7 +352,6 @@ namespace rojoRHI::core {
 #endif
     }
 
-    //==================================================================================================================
     void fillBuffer(CommandListCore& list, [[maybe_unused]] Buffer dst, [[maybe_unused]] uint64_t offset, [[maybe_unused]] uint64_t size)
     {
         checkRecording(list);
@@ -396,7 +368,6 @@ namespace rojoRHI::core {
 #endif
     }
 
-    //==================================================================================================================
     void clearTexture(
         CommandListCore& list, [[maybe_unused]] Texture texture, [[maybe_unused]] const SubresourceRange& range, [[maybe_unused]] const ClearValue& value
     )

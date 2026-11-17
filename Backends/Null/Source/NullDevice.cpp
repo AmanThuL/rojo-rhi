@@ -40,56 +40,50 @@ namespace rojoRHI {
                                                                   { UpscalerKind::FSR, 0.25f, 1.0f },
                                                                   { UpscalerKind::XeSS, 0.25f, 1.0f } } };
 
-        //==============================================================================================================
-        /// Each field takes the Floor column of the limits table in the reference where that column gives a number, and
-        /// otherwise the smaller of the Metal 4 and D3D12 values, so a program that fits the Null device fits both production
-        /// backends. The comment names the source of each value.
+        // Each value is the reference's Floor column unless its comment says otherwise, so a program that fits the Null
+        // device fits both production backends.
         Limits nullLimits()
         {
             Limits limits;
-            limits.maxViews = 996'926;        // Floor: tier 3's view heap less the D3D12 reservation (ADR 0030).
-            limits.maxSamplers = 996;         // Floor.
-            limits.maxRootBlockSize = 65'536; // Floor.
-            limits.rootAlignment = 256;       // Floor.
-            limits.frameDataAlignment = 256;  // Floor.
+            limits.maxViews = 996'926; // Floor: tier 3's view heap less the D3D12 reservation (ADR 0030).
+            limits.maxSamplers = 996;
+            limits.maxRootBlockSize = 65'536;
+            limits.rootAlignment = 256;
+            limits.frameDataAlignment = 256;
             limits.maxBufferSize =
                 1ull << 32; // Unverified: the Floor column names no number ("device"); 4 GiB, an arbitrary value above the 2^29 - 1 Addr reach.
-            limits.maxAddrOffset = kNullMaxAddrOffset; // Floor, 2^29 - 1.
-            limits.maxTextureDimension1D = 16'384;     // Floor.
-            limits.maxTextureDimension2D = 16'384;     // Floor.
-            limits.maxTextureDimension3D = 2'048;      // Floor.
-            limits.maxTextureDimensionCube = 16'384;   // Floor.
-            limits.maxTextureLayers = 2'048;           // Floor.
-            limits.maxColorAttachments = 8;            // Floor.
-            limits.maxColorBytesPerSample = 64;        // Floor.
-            limits.maxSamplerAnisotropy = 16;          // Floor.
-            limits.maxDrawIndirectCount = 65'535;      // Floor.
-            limits.maxStorageClearsPerFrame = 1'024;   // Floor.
-            limits.maxDispatchGroups = 65'535;         // Floor.
-            limits.maxThreadsPerGroup = 1'024;         // Floor.
-            limits.maxGroupSize[0] = 1'024;            // Floor.
-            limits.maxGroupSize[1] = 1'024;            // Floor.
-            limits.maxGroupSize[2] = 64;               // Floor.
-            limits.maxGroupSharedMemory = 32'768;      // Floor.
-            limits.maxMeshTaskGroups = 65'535;         // Floor.
-            limits.maxMeshTaskGroupsTotal = 4'194'304; // Floor.
+            limits.maxAddrOffset = kNullMaxAddrOffset;
+            limits.maxTextureDimension1D = 16'384;
+            limits.maxTextureDimension2D = 16'384;
+            limits.maxTextureDimension3D = 2'048;
+            limits.maxTextureDimensionCube = 16'384;
+            limits.maxTextureLayers = 2'048;
+            limits.maxColorAttachments = 8;
+            limits.maxColorBytesPerSample = 64;
+            limits.maxSamplerAnisotropy = 16;
+            limits.maxDrawIndirectCount = 65'535;
+            limits.maxStorageClearsPerFrame = 1'024;
+            limits.maxDispatchGroups = 65'535;
+            limits.maxThreadsPerGroup = 1'024;
+            limits.maxGroupSize[0] = 1'024;
+            limits.maxGroupSize[1] = 1'024;
+            limits.maxGroupSize[2] = 64;
+            limits.maxGroupSharedMemory = 32'768;
+            limits.maxMeshTaskGroups = 65'535;
+            limits.maxMeshTaskGroupsTotal = 4'194'304;
             return limits;
         }
 
-        //==============================================================================================================
-        /// The Null device's placement answer for a buffer: the size rounded up to 256 bytes, at an alignment of 256 bytes. The
-        /// values are the Null backend's own choice, a round number that is neither Metal's nor D3D12's, so a caller that
-        /// hard-codes either finds out here.
+        // 256 is the Null backend's own round number, neither Metal's nor D3D12's, so a caller that hard-codes either finds
+        // out here.
         PlacementRequirements nullBufferRequirements(const BufferDesc& desc)
         {
             constexpr uint64_t kAlignment = 256;
             return PlacementRequirements{ (desc.size + kAlignment - 1) / kAlignment * kAlignment, kAlignment };
         }
 
-        //==============================================================================================================
-        /// The Null device's placement answer for a texture: the packed bytes of every mip, layer and sample rounded up to 1024
-        /// bytes, at an alignment of 1024 bytes. Like the buffer answer it is the Null backend's own round number, neither
-        /// Metal's nor D3D12's. Written to be safe for a descriptor the core has not checked yet.
+        // 1024 is the Null backend's own round number, like the buffer's 256. Safe for a descriptor the core has not checked
+        // yet.
         PlacementRequirements nullTextureRequirements(const TextureDesc& desc)
         {
             constexpr uint64_t kAlignment = 1024;
@@ -111,16 +105,13 @@ namespace rojoRHI {
             return PlacementRequirements{ (std::max(bytes, uint64_t{ 1 }) + kAlignment - 1) & ~(kAlignment - 1), kAlignment };
         }
 
-        //==============================================================================================================
-        /// Frees the host memory of a retiring buffer; a Device buffer holds none.
+        // A Gpu buffer's `native` is null: it has no host memory.
         void retireBuffer(void*, core::BufferRecord& record)
         {
             freeHostMemory(record.native);
             record.native = nullptr;
         }
 
-        //==============================================================================================================
-        /// Returns the command lists of a reused frame slot to its pool.
         void returnSlotLists(void* context, uint32_t slot)
         {
             ListPool& pool = static_cast<DeviceImpl*>(context)->listPools[slot];
@@ -128,21 +119,17 @@ namespace rojoRHI {
             pool.used = 0;
         }
 
-        //==============================================================================================================
-        /// Frees the swapchains destroyed in the frames the reused slot held.
         void freeSlotSwapchains(void* context, uint32_t slot)
         {
             DeviceImpl& device = *static_cast<DeviceImpl*>(context);
             std::lock_guard lock(device.swapchainMutex);
-            // A swapchain is no pool record, so the core's retire loop cannot see it: this is the one place that does.
+            // A swapchain is no pool record, so the core's retire loop cannot see it.
             const uint64_t freed = device.retiredSwapchains[slot].size();
             core::DeviceCounts::add(device.core.counts().deferredRetired, freed);
             core::DeviceCounts::add(device.core.counts().nativeCreateCalls, freed);
             device.retiredSwapchains[slot].clear();
         }
 
-        //==============================================================================================================
-        /// Returns the command lists of a reused frame slot to its pool and frees its destroyed swapchains.
         void reuseSlot(void* context, uint32_t slot)
         {
             returnSlotLists(context, slot);
@@ -150,14 +137,12 @@ namespace rojoRHI {
         }
     } // namespace
 
-    //==================================================================================================================
     DeviceImpl& DeviceImpl::of(Device device)
     {
         core::checkObject(device.m_impl, "Device");
         return *device.m_impl;
     }
 
-    //==================================================================================================================
     Device DeviceImpl::wrap(DeviceImpl* impl)
     {
         Device device;
@@ -165,14 +150,12 @@ namespace rojoRHI {
         return device;
     }
 
-    //==================================================================================================================
     SwapchainImpl& SwapchainImpl::of(Swapchain swapchain)
     {
         core::checkObject(swapchain.m_impl, "Swapchain");
         return *swapchain.m_impl;
     }
 
-    //==================================================================================================================
     Swapchain SwapchainImpl::wrap(SwapchainImpl* impl)
     {
         Swapchain swapchain;
@@ -181,20 +164,17 @@ namespace rojoRHI {
     }
 
     namespace core {
-        //==============================================================================================================
         DeviceCore& coreOf(Device device)
         {
             return DeviceImpl::of(device).core;
         }
 
-        //==============================================================================================================
         SwapchainCore& coreOf(Swapchain swapchain)
         {
             return SwapchainImpl::of(swapchain).core;
         }
     } // namespace core
 
-    //==================================================================================================================
     Result<Device> createDevice(const DeviceDesc& desc)
     {
         if (Result<void> valid = core::validateDeviceDesc(desc); !valid)
@@ -237,7 +217,6 @@ namespace rojoRHI {
         return DeviceImpl::wrap(impl.release());
     }
 
-    //==================================================================================================================
     void destroyDevice(Device device)
     {
         DeviceImpl& impl = DeviceImpl::of(device);
@@ -245,62 +224,53 @@ namespace rojoRHI {
         delete &impl;
     }
 
-    //==================================================================================================================
     const Capabilities& Device::capabilities() const
     {
         return DeviceImpl::of(*this).core.capabilities();
     }
 
-    //==================================================================================================================
     FormatCapabilities Device::formatCapabilities(Format format) const
     {
         return DeviceImpl::of(*this).core.formatCapabilities(format);
     }
 
-    //==================================================================================================================
     void Device::beginFrame()
     {
         DeviceImpl::of(*this).core.beginFrame();
     }
 
-    //==================================================================================================================
     Counters Device::counters() const
     {
         return DeviceImpl::of(*this).core.counters();
     }
 
-    //==================================================================================================================
     std::span<const ScopeTiming> Device::scopeTimings()
     {
         core::DeviceCore& core = DeviceImpl::of(*this).core;
         const std::span<const ScopeTiming> report = core.scopeTimings();
         if (!report.empty())
         {
-            // Null keeps no timestamps; it counts the one native read of the retired frame's timestamps a native backend makes.
+            // Null keeps no timestamps; this counts the one read of the retired frame's timestamps a native backend makes.
             core::DeviceCounts::add(core.counts().nativeHostCalls);
         }
         return report;
     }
 
-    //==================================================================================================================
     Result<void> Device::beginCapture(std::string_view path)
     {
         return core::beginCapture(DeviceImpl::of(*this).core, path);
     }
 
-    //==================================================================================================================
     void Device::endCapture()
     {
         core::endCapture(DeviceImpl::of(*this).core);
     }
 
-    //==================================================================================================================
     void Device::endFrame()
     {
         DeviceImpl::of(*this).core.endFrame();
     }
 
-    //==================================================================================================================
     Result<Buffer> Device::createBuffer(const BufferDesc& desc, std::span<const std::byte> initial, Placement placement)
     {
         DeviceImpl& impl = DeviceImpl::of(*this);
@@ -336,11 +306,9 @@ namespace rojoRHI {
         return buffer;
     }
 
-    //==================================================================================================================
     Result<Heap> Device::createHeap(const HeapDesc& desc)
     {
         DeviceImpl& impl = DeviceImpl::of(*this);
-        // A Null heap owns no memory beyond its record.
         const Heap heap = impl.core.pool<Heap>().allocate(core::prepareHeap(desc));
         if (heap.bits == 0)
         {
@@ -349,7 +317,6 @@ namespace rojoRHI {
         return heap;
     }
 
-    //==================================================================================================================
     PlacementRequirements Device::placementRequirements(const BufferDesc& desc)
     {
         DeviceImpl& impl = DeviceImpl::of(*this);
@@ -357,7 +324,6 @@ namespace rojoRHI {
         return nullBufferRequirements(desc);
     }
 
-    //==================================================================================================================
     PlacementRequirements Device::placementRequirements(const TextureDesc& desc)
     {
         DeviceImpl& impl = DeviceImpl::of(*this);
@@ -365,7 +331,6 @@ namespace rojoRHI {
         return nullTextureRequirements(desc);
     }
 
-    //==================================================================================================================
     Result<Texture> Device::createTexture(const TextureDesc& desc, std::span<const TextureData> initial, Placement placement)
     {
         DeviceImpl& impl = DeviceImpl::of(*this);
@@ -374,31 +339,27 @@ namespace rojoRHI {
         return core::addTexture(impl.core, core::prepareTexture(impl.core, desc, initial, placement, requirements));
     }
 
-    //==================================================================================================================
     Result<ViewIndex> Device::createView(Texture texture, const TextureViewDesc& desc)
     {
         DeviceImpl& impl = DeviceImpl::of(*this);
-        // A Null view has no native object, so its slot holds a null payload.
+        // No native object: the slot's payload is null.
         (void)core::checkView(impl.core, texture, desc);
         return core::addView(impl.core, texture, nullptr);
     }
 
-    //==================================================================================================================
     Result<SamplerIndex> Device::createSampler(const SamplerDesc& desc)
     {
         DeviceImpl& impl = DeviceImpl::of(*this);
-        // A Null sampler has no native object, so its slot holds a null payload.
+        // No native object: the slot's payload is null.
         core::checkSampler(impl.core, desc);
         return core::addSampler(impl.core, nullptr);
     }
 
-    //==================================================================================================================
     Result<IndexRange> Device::reserveViews(uint32_t count)
     {
         return core::reserveViews(DeviceImpl::of(*this).core, count);
     }
 
-    //==================================================================================================================
     void Device::writeView(IndexRange range, uint32_t index, Texture texture, const TextureViewDesc& desc)
     {
         DeviceImpl& impl = DeviceImpl::of(*this);
@@ -407,13 +368,11 @@ namespace rojoRHI {
         (void)core::placeView(impl.core, range, index, texture, nullptr);
     }
 
-    //==================================================================================================================
     Result<IndexRange> Device::reserveSamplers(uint32_t count)
     {
         return core::reserveSamplers(DeviceImpl::of(*this).core, count);
     }
 
-    //==================================================================================================================
     void Device::writeSampler(IndexRange range, uint32_t index, const SamplerDesc& desc)
     {
         DeviceImpl& impl = DeviceImpl::of(*this);
@@ -422,13 +381,11 @@ namespace rojoRHI {
         (void)core::placeSampler(impl.core, range, index, nullptr);
     }
 
-    //==================================================================================================================
     void Device::release(IndexRange range)
     {
         core::releaseRange(DeviceImpl::of(*this).core, range);
     }
 
-    //==================================================================================================================
     Addr Device::address(Buffer buffer, uint64_t offset)
     {
         DeviceImpl& impl = DeviceImpl::of(*this);
@@ -437,7 +394,6 @@ namespace rojoRHI {
         return Addr{ core::HandlePool<Buffer, core::BufferRecord>::slotIndex(buffer), static_cast<uint32_t>(offset) };
     }
 
-    //==================================================================================================================
     std::byte* Device::cpuPointer(Buffer buffer)
     {
         DeviceImpl& impl = DeviceImpl::of(*this);
@@ -446,49 +402,41 @@ namespace rojoRHI {
         return static_cast<std::byte*>(record.native);
     }
 
-    //==================================================================================================================
     TileShape Device::tileShape(Texture texture)
     {
         return core::tileShape(DeviceImpl::of(*this).core, texture);
     }
 
-    //==================================================================================================================
     TileShape Device::tileShape(Buffer buffer)
     {
         return core::tileShape(DeviceImpl::of(*this).core, buffer);
     }
 
-    //==================================================================================================================
     void Device::destroy(Buffer buffer)
     {
         core::destroyBuffer(DeviceImpl::of(*this).core, buffer);
     }
 
-    //==================================================================================================================
     void Device::destroy(Texture texture)
     {
         core::destroyTexture(DeviceImpl::of(*this).core, texture);
     }
 
-    //==================================================================================================================
     void Device::destroy(Pipeline pipeline)
     {
         DeviceImpl::of(*this).core.destroy(pipeline);
     }
 
-    //==================================================================================================================
     void Device::destroy(ShaderLibrary library)
     {
         DeviceImpl::of(*this).core.destroy(library);
     }
 
-    //==================================================================================================================
     void Device::destroy(Heap heap)
     {
         core::destroyHeap(DeviceImpl::of(*this).core, heap);
     }
 
-    //==================================================================================================================
     Queue Device::queue(QueueType type)
     {
         DeviceImpl& impl = DeviceImpl::of(*this);
@@ -497,7 +445,6 @@ namespace rojoRHI {
         return QueueImpl::wrap(&impl.queues[index]);
     }
 
-    //==================================================================================================================
     Result<ShaderLibrary> Device::loadShaderLibrary(std::span<const std::byte> blob, std::string_view label)
     {
         DeviceImpl& impl = DeviceImpl::of(*this);
@@ -516,11 +463,9 @@ namespace rojoRHI {
         return library;
     }
 
-    //==================================================================================================================
     Result<Pipeline> Device::createPipeline(const GraphicsPipelineDesc& desc)
     {
         DeviceImpl& impl = DeviceImpl::of(*this);
-        // A Null pipeline owns no native object beyond its record.
         const Pipeline pipeline = impl.core.pool<Pipeline>().allocate(core::prepareGraphicsPipeline(impl.core, desc));
         if (pipeline.bits == 0)
         {
@@ -530,7 +475,6 @@ namespace rojoRHI {
         return pipeline;
     }
 
-    //==================================================================================================================
     Result<Pipeline> Device::createPipeline(const ComputePipelineDesc& desc)
     {
         DeviceImpl& impl = DeviceImpl::of(*this);
@@ -543,17 +487,14 @@ namespace rojoRHI {
         return pipeline;
     }
 
-    //==================================================================================================================
     Result<std::vector<std::byte>> Device::pipelineCacheData()
     {
         return serializeNullPipelineCache(DeviceImpl::of(*this).cachedPipelines);
     }
 
-    //==================================================================================================================
     Result<Fence> Device::createFence(uint64_t initial, std::string_view label)
     {
         DeviceImpl& impl = DeviceImpl::of(*this);
-        // A Null fence owns no native object beyond its record.
         const Fence fence = impl.core.pool<Fence>().allocate(core::prepareFence(initial, label));
         if (fence.bits == 0)
         {
@@ -562,7 +503,6 @@ namespace rojoRHI {
         return fence;
     }
 
-    //==================================================================================================================
     Result<Upscaler> Device::createUpscaler(const UpscalerDesc& desc)
     {
         DeviceImpl& impl = DeviceImpl::of(*this);
@@ -571,7 +511,6 @@ namespace rojoRHI {
         {
             return std::unexpected(std::move(record.error()));
         }
-        // A Null upscaler owns no native object beyond its record.
         const Upscaler upscaler = impl.core.pool<Upscaler>().allocate(std::move(*record));
         if (upscaler.bits == 0)
         {
@@ -580,44 +519,37 @@ namespace rojoRHI {
         return upscaler;
     }
 
-    //==================================================================================================================
     uint64_t Device::completedValue(Fence fence)
     {
         return core::completedValue(DeviceImpl::of(*this).core, fence);
     }
 
-    //==================================================================================================================
     bool Device::wait(FenceValue value, uint64_t timeoutNs)
     {
         // Work completes during Queue::submit, so a value not reached now is never reached by waiting.
         return core::checkWait(DeviceImpl::of(*this).core, value, timeoutNs);
     }
 
-    //==================================================================================================================
     void Device::destroy(Fence fence)
     {
         core::destroyFence(DeviceImpl::of(*this).core, fence);
     }
 
-    //==================================================================================================================
     void Device::destroy(Upscaler upscaler)
     {
         DeviceImpl::of(*this).core.destroy(upscaler);
     }
 
-    //==================================================================================================================
     void Device::destroy(ViewIndex view)
     {
         core::destroyView(DeviceImpl::of(*this).core, view);
     }
 
-    //==================================================================================================================
     void Device::destroy(SamplerIndex sampler)
     {
         core::destroySampler(DeviceImpl::of(*this).core, sampler);
     }
 
-    //==================================================================================================================
     Result<Swapchain> Device::createSwapchain(const SwapchainDesc& desc)
     {
         DeviceImpl& impl = DeviceImpl::of(*this);
@@ -632,27 +564,24 @@ namespace rojoRHI {
         return SwapchainImpl::wrap(raw);
     }
 
-    //==================================================================================================================
     void Swapchain::resize(Extent2D extent)
     {
         core::resizeSwapchain(SwapchainImpl::of(*this).core, extent);
     }
 
-    //==================================================================================================================
     Texture Swapchain::acquire()
     {
-        // A Null image has no native object, so its texture holds a null payload.
+        // No native object: the texture's payload is null.
         return core::acquireImage(SwapchainImpl::of(*this).core, nullptr);
     }
 
-    //==================================================================================================================
     void Device::destroy(Swapchain swapchain)
     {
         DeviceImpl& impl = DeviceImpl::of(*this);
         SwapchainImpl& target = SwapchainImpl::of(swapchain);
         core::destroySwapchain(impl.core, target.core);
-        // The swapchain's memory outlives the call until its frame slot is reused, as the native objects of a deferred
-        // resource do. The frame is read under the lock so a slot reuse cannot slip between reading it and filing the entry.
+        // The memory lives until the frame slot is reused, as a deferred resource's does. The frame is read under the lock
+        // so a slot reuse cannot slip between reading it and filing the entry.
         std::lock_guard lock(impl.swapchainMutex);
         const auto found = std::find_if(impl.swapchains.begin(), impl.swapchains.end(), [&](const auto& live) { return live.get() == &target; });
         ROJORHI_INTERNAL_ASSERT(found != impl.swapchains.end(), "a swapchain that passed the device check is not in the device's list");

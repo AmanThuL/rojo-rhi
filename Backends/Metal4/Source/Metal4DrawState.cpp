@@ -14,7 +14,6 @@
 #include <cstdint>
 
 namespace rojoRHI::metal4 {
-    //==================================================================================================================
     void DrawState::reset()
     {
         endPass();
@@ -24,7 +23,6 @@ namespace rojoRHI::metal4 {
         icbs.reset();
     }
 
-    //==================================================================================================================
     void DrawState::endPass()
     {
         colors.clear();
@@ -41,7 +39,6 @@ namespace rojoRHI::metal4 {
         compute = nullptr;
     }
 
-    //==================================================================================================================
     void DrawState::record(const PrefixCommand& command)
     {
         uint32_t& latest = prefixLatest[static_cast<size_t>(command.kind)];
@@ -54,21 +51,18 @@ namespace rojoRHI::metal4 {
         latest = static_cast<uint32_t>(prefix.size());
     }
 
-    //==================================================================================================================
     void DrawState::appendBarrierEntry(const PrefixCommand& command)
     {
         prefix.push_back(command);
         prefixLatest = {};
     }
 
-    //==================================================================================================================
     void DrawState::clearPrefix()
     {
         prefix.clear();
         prefixLatest = {};
     }
 
-    //==================================================================================================================
     void DrawState::release(Residency& residency)
     {
         reset();
@@ -99,7 +93,6 @@ namespace rojoRHI::metal4 {
         icbs.release(residency);
     }
 
-    //==================================================================================================================
     void DrawState::forgetTextures()
     {
         // Every attachment the descriptor held a texture in was configured through a kept attachment descriptor. The setters

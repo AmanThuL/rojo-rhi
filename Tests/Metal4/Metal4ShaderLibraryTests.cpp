@@ -29,8 +29,6 @@
 using namespace rojoRHI;
 
 namespace {
-    //==================================================================================================================
-    /// Reads `file` whole.
     std::vector<std::byte> readFile(const std::filesystem::path& file)
     {
         std::ifstream stream(file, std::ios::binary);
@@ -39,8 +37,6 @@ namespace {
         return { bytes, bytes + chars.size() };
     }
 
-    //==================================================================================================================
-    /// The bytes of the metallib inside `Shaders/AbiCompute.metal4lib`.
     std::vector<std::byte> computePayload()
     {
         const std::filesystem::path file = std::filesystem::path("Shaders") / "AbiCompute.metal4lib";
@@ -52,8 +48,6 @@ namespace {
         return { blob.begin() + static_cast<std::ptrdiff_t>(at), blob.end() };
     }
 
-    //==================================================================================================================
-    /// Returns `header` followed by `payload` as one blob.
     std::vector<std::byte> blobOf(std::string_view header, const std::vector<std::byte>& payload)
     {
         const auto* bytes = reinterpret_cast<const std::byte*>(header.data());
@@ -62,21 +56,16 @@ namespace {
         return blob;
     }
 
-    //==================================================================================================================
-    /// Returns a header with the ABI stamp `abi`, the entry lines `entries` and the declared byte count `metallib`.
     std::string header(std::string_view abi, std::string_view entries, std::string_view metallib)
     {
         return std::format("rojorhi.metal4.shaderlibrary\nabi {}\n{}metallib {}\n", abi, entries, metallib);
     }
 
-    //==================================================================================================================
     std::string goodAbi()
     {
         return std::to_string(core::kShaderAbiVersion);
     }
 
-    //==================================================================================================================
-    /// Checks that loading `blob` fails with `category` and a message containing `text`.
     void checkRefused(Device& device, const std::vector<std::byte>& blob, ErrorCategory category, std::string_view text)
     {
         const Result<ShaderLibrary> result = device.loadShaderLibrary(blob, "test.library");
@@ -85,8 +74,6 @@ namespace {
         CHECK_THAT(result.error().message, Catch::Matchers::ContainsSubstring(std::string(text)));
     }
 
-    //==================================================================================================================
-    /// Checks that a header with `entries` and the payload's real byte count is refused with `text` in the message.
     void checkEntries(Device& device, std::string_view entries, std::string_view text)
     {
         const std::vector<std::byte> payload = computePayload();
@@ -95,7 +82,6 @@ namespace {
 
     const char* kCompute = "entry computeMain compute 1 1 1\n";
 
-    //==================================================================================================================
     std::vector<std::byte> bytesOf(std::string_view text)
     {
         const auto* bytes = reinterpret_cast<const std::byte*>(text.data());
@@ -103,7 +89,6 @@ namespace {
     }
 } // namespace
 
-//======================================================================================================================
 TEST_CASE("every conformance shader library loads with the entries, stages and sizes of its header", "[metal4]")
 {
     REQUIRE(kMetalLibrariesBuilt);
@@ -147,7 +132,6 @@ TEST_CASE("every conformance shader library loads with the entries, stages and s
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("a library stamped with another ABI version is ShaderAbiMismatch, even with a malformed entry after the stamp", "[metal4]")
 {
     REQUIRE(kMetalLibrariesBuilt);
@@ -172,7 +156,6 @@ TEST_CASE("a library stamped with another ABI version is ShaderAbiMismatch, even
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("a library stamped with ABI version 2, whose vertex drawId read the base instance, is ShaderAbiMismatch", "[metal4]")
 {
     // Version 3 moved the vertex stage's drawId to the bound record (ADR 0028); a library built against 2 would read the
@@ -185,7 +168,6 @@ TEST_CASE("a library stamped with ABI version 2, whose vertex drawId read the ba
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("a bare metallib and another backend's blob are DriverFailure, not built for Metal 4", "[metal4]")
 {
     REQUIRE(kMetalLibrariesBuilt);
@@ -195,7 +177,6 @@ TEST_CASE("a bare metallib and another backend's blob are DriverFailure, not bui
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("a header that breaks a reading rule is DriverFailure naming its line", "[metal4]")
 {
     REQUIRE(kMetalLibrariesBuilt);
@@ -227,7 +208,6 @@ TEST_CASE("a header that breaks a reading rule is DriverFailure naming its line"
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("an empty or foreign metallib passes the header and is refused by Metal", "[metal4]")
 {
     REQUIRE(kMetalLibrariesBuilt);
@@ -238,7 +218,6 @@ TEST_CASE("an empty or foreign metallib passes the header and is refused by Meta
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("an entry the metallib does not hold, or holds as another stage, is DriverFailure naming it", "[metal4]")
 {
     REQUIRE(kMetalLibrariesBuilt);
@@ -260,7 +239,6 @@ TEST_CASE("an entry the metallib does not hold, or holds as another stage, is Dr
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("a failed load creates nothing to destroy", "[metal4]")
 {
     REQUIRE(kMetalLibrariesBuilt);
@@ -274,7 +252,6 @@ TEST_CASE("a failed load creates nothing to destroy", "[metal4]")
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("a destroyed library is released when its frame retires", "[metal4]")
 {
     REQUIRE(kMetalLibrariesBuilt);
@@ -300,7 +277,6 @@ TEST_CASE("a destroyed library is released when its frame retires", "[metal4]")
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("four threads load libraries at once", "[metal4]")
 {
     REQUIRE(kMetalLibrariesBuilt);

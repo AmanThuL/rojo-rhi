@@ -23,319 +23,276 @@ namespace rojoRHI {
 namespace rojoRHI::metal4 {
     struct PipelineState;
 
-    /// The three values of a depth bias, as `setDepthBias` takes them.
     struct DepthBias
     {
-        float constant = 0.0f;    ///< In units of the format's minimum resolvable depth difference.
-        float slopeScaled = 0.0f; ///< Times the polygon's maximum depth slope.
-        float clamp = 0.0f;       ///< The largest magnitude of the bias; zero for none.
+        float constant = 0.0f;    // In units of the format's minimum resolvable depth difference.
+        float slopeScaled = 0.0f; // Times the polygon's maximum depth slope.
+        float clamp = 0.0f;       // Zero for none.
 
         bool operator==(const DepthBias&) const = default;
     };
 
-    /// What the open render encoder holds, as the list last set it; a new encoder holds Metal's defaults, which are these
-    /// starting values. A setter sends Metal only a value that differs from the one held.
+    // As the list last set it; a new encoder holds Metal's defaults, which are these starting values. A setter sends
+    // Metal only a value that differs.
     struct RenderHeld
     {
-        const PipelineState* pipeline = nullptr;                ///< The pipeline whose render state is set; null for none.
-        const MTL::DepthStencilState* depthStencil = nullptr;   ///< The depth-stencil state; null is Metal's default.
-        MTL::CullMode cull = MTL::CullModeNone;                 ///< The cull mode.
-        MTL::Winding winding = MTL::WindingClockwise;           ///< The front-facing winding.
-        MTL::TriangleFillMode fill = MTL::TriangleFillModeFill; ///< The triangle fill mode.
-        MTL::DepthClipMode depthClip = MTL::DepthClipModeClip;  ///< The depth clip mode.
-        DepthBias bias;                                         ///< The depth bias applied.
-        uint32_t stencilReference = 0;                          ///< The stencil reference of both faces.
-        std::array<float, 4> blendColor = {};                   ///< The blend color.
-        bool viewportKnown = false;                             ///< A viewport is set; Metal's default is unknown here.
-        MTL::Viewport viewport = {};                            ///< The viewport, when `viewportKnown`.
-        bool scissorKnown = false;                              ///< A scissor rectangle is set.
-        MTL::ScissorRect scissor = {};                          ///< The scissor rectangle, when `scissorKnown`.
-        /// The list's argument table is bound to the object and mesh stages too: a new encoder binds it to the vertex and
-        /// fragment stages only, and the first mesh pipeline set on it adds the other two.
+        const PipelineState* pipeline = nullptr;
+        const MTL::DepthStencilState* depthStencil = nullptr; // Null is Metal's default.
+        MTL::CullMode cull = MTL::CullModeNone;
+        MTL::Winding winding = MTL::WindingClockwise;
+        MTL::TriangleFillMode fill = MTL::TriangleFillModeFill;
+        MTL::DepthClipMode depthClip = MTL::DepthClipModeClip;
+        DepthBias bias;
+        uint32_t stencilReference = 0;
+        std::array<float, 4> blendColor = {};
+        bool viewportKnown = false; // Metal's default viewport is unknown here.
+        MTL::Viewport viewport = {};
+        bool scissorKnown = false;
+        MTL::ScissorRect scissor = {};
+        // A new encoder binds the table to the vertex and fragment stages only; the first mesh pipeline set on it adds
+        // the object and mesh stages.
         bool meshStages = false;
     };
 
-    /// The payloads of the last two pipeline handles `setPipeline` resolved in a recording, newest first, so binding either
-    /// again reads no handle table. A handle's bits name one allocation for the pool's whole life: a release advances the
-    /// slot's generation, a slot at the last generation is never reused, and a payload is fixed from creation to retirement.
-    /// A handle that is live when it is bound therefore names the payload cached for its bits, which retires only after the
-    /// list's frame does, since a destroyed pipeline retires only when the frame it was destroyed in retires and the list
-    /// belongs to its own. A hit reads no table, so a list still recording after its frame retired, which breaks
-    /// VU-rojo-device-0005 and goes unchecked in Release, can read a retired payload. Emptied at each acquisition.
+    // A handle's bits name one allocation for the pool's whole life and a payload is fixed from creation to retirement,
+    // so a handle live when bound names the payload cached for its bits. A hit reads no table, so a list still
+    // recording after its frame retired, which breaks VU-rojo-device-0005 and goes unchecked in Release, can read a
+    // retired payload. Emptied at each acquisition.
     struct ResolvedPipelines
     {
-        std::array<uint64_t, 2> handles = {};            ///< The handles' bits, newest first; 0 for an empty entry.
-        std::array<const PipelineState*, 2> states = {}; ///< The payload of each handle.
+        std::array<uint64_t, 2> handles = {}; // Newest first; 0 for an empty entry.
+        std::array<const PipelineState*, 2> states = {};
     };
 
-    /// The kinds of command a list records into its prefix while its pass's render encoder is closed.
+    // Recorded while the pass's render encoder is closed.
     enum class PrefixKind : uint8_t
     {
-        Pipeline,         ///< `setPipeline` with a graphics pipeline.
-        Viewport,         ///< `setViewport`.
-        Scissor,          ///< `setScissor`.
-        StencilReference, ///< `setStencilReference`.
-        BlendColor,       ///< `setBlendConstants`.
-        DepthBias,        ///< `setDepthBias`.
-        Root,             ///< `setRoot`, which writes the table's `buffer(0)`.
-        Execute,          ///< A counted draw's indirect command buffer, run over the range its kernel wrote.
-        DrawIndirect,     ///< A counted draw of one record: its record bound at `buffer(3)`, one native indirect draw.
-        IndexedIndirect,  ///< A counted indexed draw of one record: its record bound at `buffer(3)`, one native indexed draw.
-        MeshExecute,      ///< A counted mesh draw's indirect command buffer, run over the range its kernel wrote.
-        MeshIndirect,     ///< A counted mesh draw of one record: its record bound at `buffer(3)`, one native indirect mesh draw.
+        Pipeline,
+        Viewport,
+        Scissor,
+        StencilReference,
+        BlendColor,
+        DepthBias,
+        Root,
+        Execute,         // A counted draw's indirect command buffer, run over the range its kernel wrote.
+        DrawIndirect,    // A counted draw of one record: its record bound at `buffer(3)`, one native indirect draw.
+        IndexedIndirect, // A counted indexed draw of one record: its record bound at `buffer(3)`, one native indexed draw.
+        MeshExecute,     // A counted mesh draw's indirect command buffer, run over the range its kernel wrote.
+        MeshIndirect,    // A counted mesh draw of one record: its record bound at `buffer(3)`, one native indirect mesh draw.
     };
 
-    /// How many kinds of prefix command there are.
     inline constexpr size_t kPrefixKinds = 12;
 
-    /// The bytes of the device's zero record: the leading `uint32` a vertex, task or mesh entry reads as `drawId`.
+    // The leading `uint32` a vertex, task or mesh entry reads as `drawId`.
     inline constexpr uint64_t kZeroRecordBytes = 4;
 
-    /// What an `Execute` or `MeshExecute` entry runs: an indirect command buffer and the address of the range a kernel writes for it.
     struct PrefixExecute
     {
-        const MTL::IndirectCommandBuffer* buffer; ///< The indirect command buffer.
-        uint64_t range;                           ///< The GPU address of its `MTL::IndirectCommandBufferExecutionRange`.
+        const MTL::IndirectCommandBuffer* buffer;
+        uint64_t range; // The GPU address of its `MTL::IndirectCommandBufferExecutionRange`.
     };
 
-    /// What a `DrawIndirect` or `IndexedIndirect` entry draws: the caller's record, which the draw binds at `buffer(3)`, the
-    /// native record a kernel writes, the primitive type in force when the draw was recorded and, for an indexed draw, the
-    /// index buffer.
+    // The draw binds the caller's record at `buffer(3)`; the primitive type is the one in force when the draw was
+    // recorded.
     struct PrefixIndirect
     {
-        uint64_t drawRecord;          ///< The GPU address of the caller's `DrawIndirectArgs` or `DrawIndexedIndirectArgs` record.
-        uint64_t record;              ///< The GPU address of the `MTL::Draw*IndirectArguments` record.
-        MTL::PrimitiveType primitive; ///< The primitive type.
-        MTL::IndexType indexType;     ///< `IndexedIndirect`: the index type.
-        uint64_t indices;             ///< `IndexedIndirect`: the GPU address of the index buffer.
-        uint64_t indexLength;         ///< `IndexedIndirect`: the bytes of the index buffer.
+        uint64_t drawRecord; // The GPU address of the caller's `DrawIndirectArgs` or `DrawIndexedIndirectArgs` record.
+        uint64_t record;     // The GPU address of the `MTL::Draw*IndirectArguments` record.
+        MTL::PrimitiveType primitive;
+        MTL::IndexType indexType; // IndexedIndirect only, as are indices and indexLength.
+        uint64_t indices;
+        uint64_t indexLength; // In bytes.
     };
 
-    /// What a `MeshIndirect` entry draws: the caller's record, which the draw binds at `buffer(3)`, the native record a
-    /// kernel writes, and the pipeline bound when the draw was recorded, whose threadgroup sizes the draw takes.
+    // The draw binds the caller's record at `buffer(3)` and takes the threadgroup sizes of the pipeline bound when it
+    // was recorded.
     struct PrefixMesh
     {
-        uint64_t record;               ///< The GPU address of the `DrawMeshTasksIndirectArgs` record.
-        uint64_t native;               ///< The GPU address of the `MTL::DispatchThreadgroupsIndirectArguments` record.
-        const PipelineState* pipeline; ///< The mesh pipeline.
+        uint64_t record; // The GPU address of the `DrawMeshTasksIndirectArgs` record.
+        uint64_t native; // The GPU address of the `MTL::DispatchThreadgroupsIndirectArguments` record.
+        const PipelineState* pipeline;
     };
 
-    /// One command of the prefix: its kind and the value the kind names.
     struct PrefixCommand
     {
-        PrefixKind kind = PrefixKind::Root; ///< Which member of the union holds the value.
+        PrefixKind kind = PrefixKind::Root; // Which member of the union holds the value.
         union {
-            const PipelineState* pipeline; ///< `Pipeline`: the graphics pipeline's payload.
-            MTL::Viewport viewport;        ///< `Viewport`.
-            MTL::ScissorRect scissor;      ///< `Scissor`.
-            uint32_t stencilReference;     ///< `StencilReference`.
-            std::array<float, 4> color;    ///< `BlendColor`.
-            std::array<float, 3> bias;     ///< `DepthBias`: constant, slope-scaled and clamp.
-            uint64_t root;                 ///< `Root`: the GPU address.
-            PrefixExecute execute;         ///< `Execute` and `MeshExecute`.
-            PrefixIndirect indirect;       ///< `DrawIndirect` and `IndexedIndirect`.
-            PrefixMesh mesh;               ///< `MeshIndirect`.
+            const PipelineState* pipeline;
+            MTL::Viewport viewport;
+            MTL::ScissorRect scissor;
+            uint32_t stencilReference;
+            std::array<float, 4> color;
+            std::array<float, 3> bias; // Constant, slope-scaled and clamp.
+            uint64_t root;
+            PrefixExecute execute;
+            PrefixIndirect indirect;
+            PrefixMesh mesh;
         };
     };
 
-    /// One color attachment of the open pass, copied at `beginRenderPass` with its native textures.
+    // Copied at `beginRenderPass` with its native textures.
     struct PassColor
     {
-        const MTL::Texture* texture = nullptr;       ///< The attachment's native texture.
-        uint32_t mip = 0;                            ///< The mip it renders to.
-        uint32_t layer = 0;                          ///< The layer it renders to; a cube face is a layer.
-        LoadOp load = LoadOp::Load;                  ///< The caller's load operation.
-        StoreOp store = StoreOp::Store;              ///< The caller's store operation.
-        MTL::ClearColor clear{ 0.0, 0.0, 0.0, 0.0 }; ///< The clear color, used when `load` is `Clear`.
-        const MTL::Texture* resolve = nullptr;       ///< The native resolve target, or null.
+        const MTL::Texture* texture = nullptr;
+        uint32_t mip = 0;
+        uint32_t layer = 0; // A cube face is a layer.
+        LoadOp load = LoadOp::Load;
+        StoreOp store = StoreOp::Store;
+        MTL::ClearColor clear{ 0.0, 0.0, 0.0, 0.0 }; // Used when `load` is `Clear`.
+        const MTL::Texture* resolve = nullptr;
     };
 
-    /// The depth attachment of the open pass, copied at `beginRenderPass` with its native texture; null when the pass has none.
+    // Copied at `beginRenderPass`; `texture` is null when the pass has no depth attachment.
     struct PassDepth
     {
-        const MTL::Texture* texture = nullptr;    ///< The attachment's native texture, or null.
-        uint32_t mip = 0;                         ///< The mip it renders to.
-        uint32_t layer = 0;                       ///< The layer it renders to.
-        LoadOp load = LoadOp::Load;               ///< The depth load operation.
-        StoreOp store = StoreOp::Store;           ///< The depth store operation.
-        double clearDepth = 0.0;                  ///< The clear depth.
-        bool stencil = false;                     ///< The format has a stencil plane, which the stencil fields govern.
-        LoadOp stencilLoad = LoadOp::DontCare;    ///< The stencil load operation.
-        StoreOp stencilStore = StoreOp::DontCare; ///< The stencil store operation.
-        uint32_t clearStencil = 0;                ///< The clear stencil value.
+        const MTL::Texture* texture = nullptr;
+        uint32_t mip = 0;
+        uint32_t layer = 0;
+        LoadOp load = LoadOp::Load;
+        StoreOp store = StoreOp::Store;
+        double clearDepth = 0.0;
+        bool stencil = false; // The format has a stencil plane, which the stencil fields govern.
+        LoadOp stencilLoad = LoadOp::DontCare;
+        StoreOp stencilStore = StoreOp::DontCare;
+        uint32_t clearStencil = 0;
     };
 
-    /// The values one attachment descriptor of a list's render pass descriptor holds, as the list last set them, so a pass
-    /// sets only those that differ. A new attachment descriptor holds no texture, no resolve texture, mip 0 and slice 0; its
-    /// load action, store action and clear value are not assumed, so the list sets them all the first time (`actionsKnown`).
-    /// A color attachment uses `clearColor` and `resolve`, a depth attachment `clearDepth` and a stencil one `clearStencil`.
+    // As the list last set them, so a pass sets only those that differ. A new attachment descriptor holds no texture,
+    // no resolve texture, mip 0 and slice 0; its actions and clear value are not assumed, so the list sets them all the
+    // first time (`actionsKnown`).
     struct HeldAttachment
     {
-        const MTL::Texture* texture = nullptr;            ///< The texture.
-        uint32_t mip = 0;                                 ///< The level.
-        uint32_t layer = 0;                               ///< The slice.
-        bool actionsKnown = false;                        ///< The list has set the load action, store action and clear value.
-        MTL::LoadAction load = MTL::LoadActionDontCare;   ///< The load action, when `actionsKnown`.
-        MTL::StoreAction store = MTL::StoreActionStore;   ///< The store action, when `actionsKnown`.
-        MTL::ClearColor clearColor{ 0.0, 0.0, 0.0, 0.0 }; ///< A color attachment's clear color, when `actionsKnown`.
-        double clearDepth = 0.0;                          ///< A depth attachment's clear depth, when `actionsKnown`.
-        uint32_t clearStencil = 0;                        ///< A stencil attachment's clear value, when `actionsKnown`.
-        const MTL::Texture* resolve = nullptr;            ///< A color attachment's resolve texture.
+        const MTL::Texture* texture = nullptr;
+        uint32_t mip = 0;
+        uint32_t layer = 0;
+        bool actionsKnown = false; // The list has set the load action, store action and clear value.
+        MTL::LoadAction load = MTL::LoadActionDontCare;
+        MTL::StoreAction store = MTL::StoreActionStore;
+        MTL::ClearColor clearColor{ 0.0, 0.0, 0.0, 0.0 };
+        double clearDepth = 0.0;
+        uint32_t clearStencil = 0;
+        const MTL::Texture* resolve = nullptr;
     };
 
-    /// What a command list keeps of its open render pass and of the state its draws and dispatches read. `beginRenderPass`
-    /// copies the attachments and opens no encoder; the render encoder opens at the first command that needs it
-    /// (`ensureRender`), from the list's one render pass descriptor. Until then the pass's state commands wait in the prefix,
-    /// which the open replays in order through the same filtered setters. The containers keep their capacity and the
-    /// descriptor lives as long as the list, so a pass allocates nothing once a list has recorded one as large. Only the
-    /// list's recording thread touches it.
+    // `beginRenderPass` copies the attachments and opens no encoder; the render encoder opens at the first command that
+    // needs it (`ensureRender`). Until then the pass's state commands wait in the prefix, which the open replays in
+    // order through the same filtered setters. Containers keep their capacity, so a pass allocates nothing once a list
+    // has recorded one as large. Only the list's recording thread touches it.
     struct DrawState
     {
-        std::vector<PassColor> colors; ///< The color attachments of the open pass, in order.
-        PassDepth depth;               ///< The depth attachment of the open pass.
-        bool passOpen = false;         ///< A render pass is open.
-        /// The pass's render encoder has opened once, so the next one resumes it: every attachment loads what the last stored.
+        std::vector<PassColor> colors;
+        PassDepth depth;
+        bool passOpen = false;
+        // Every attachment then loads what the last encoder stored.
         bool resuming = false;
-        /// The debug groups of the scopes open inside the pass, whose labels are the last entries of `ListState::scopeLabels`;
-        /// they live on the render encoder, so a split pops them and the resuming encoder pushes them again.
+        // Their labels are the last entries of `ListState::scopeLabels`. They live on the render encoder, so a split
+        // pops them and the resuming encoder pushes them again.
         size_t passGroups = 0;
-        /// The begin entry of the open pass's timestamp pair, until the pass's first render encoder writes it at its start;
-        /// `core::kNoTimestamp` once written, and for a pass that claimed no pair.
+        // Until the pass's first render encoder writes it; `core::kNoTimestamp` once written, and for a pass that
+        // claimed no pair.
         uint32_t passBegin = core::kNoTimestamp;
-        /// The list's render pass descriptor: made at its first pass with alloc and init, kept for the list's life.
+        // Made at the list's first pass with alloc and init, kept for the list's life.
         MTL4::RenderPassDescriptor* descriptor = nullptr;
-        uint32_t descriptorColors = 0; ///< The color attachments `descriptor` last held a texture for.
-        /// The color attachment descriptors of `descriptor`, each retained, by index, as passes first used them: configuring and
-        /// emptying them then calls none of the descriptor's getters, which may autorelease.
+        uint32_t descriptorColors = 0;
+        // Each retained, by index, as passes first used them, so configuring and emptying them calls none of the
+        // descriptor's getters, which may autorelease.
         std::vector<MTL::RenderPassColorAttachmentDescriptor*> colorAttachments;
-        MTL::RenderPassDepthAttachmentDescriptor* depthAttachment = nullptr;     ///< Its depth attachment descriptor, retained.
-        MTL::RenderPassStencilAttachmentDescriptor* stencilAttachment = nullptr; ///< Its stencil attachment descriptor, retained.
-        std::vector<HeldAttachment> colorHeld;                                   ///< What each of `colorAttachments` holds, at the same index.
-        HeldAttachment depthHeld;                                                ///< What `depthAttachment` holds.
-        HeldAttachment stencilHeld;                                              ///< What `stencilAttachment` holds.
+        MTL::RenderPassDepthAttachmentDescriptor* depthAttachment = nullptr;     // Retained.
+        MTL::RenderPassStencilAttachmentDescriptor* stencilAttachment = nullptr; // Retained.
+        std::vector<HeldAttachment> colorHeld;                                   // At the same index as `colorAttachments`.
+        HeldAttachment depthHeld;
+        HeldAttachment stencilHeld;
 
-        /// The graphics pipeline bound last, as recorded; null when none is bound.
         const PipelineState* pipeline = nullptr;
-        /// The payloads `setPipeline` resolved last in this recording; kept across passes.
+        // Kept across passes.
         ResolvedPipelines resolved;
-        /// The primitive type of the next draw: the bound pipeline's list form, or what `setPrimitiveTopology` set since.
+        // The bound pipeline's list form, or what `setPrimitiveTopology` set since.
         MTL::PrimitiveType topology = MTL::PrimitiveTypeTriangle;
-        /// The values of the last `setDepthBias` the render encoder has seen: set at once while it is open, and by the replay
-        /// of its prefix entry otherwise, so a pipeline replayed before that entry applies the values in force there. Zero
-        /// when the pass begins.
+        // Set at once while the encoder is open, and by the replay of its prefix entry otherwise, so a pipeline
+        // replayed before that entry applies the values in force there. Zero when the pass begins.
         DepthBias bias;
-        RenderHeld held;                   ///< What the open render encoder holds; Metal's defaults at each open.
-        std::vector<PrefixCommand> prefix; ///< The state commands recorded since the render encoder closed, in order.
-        /// Per kind, one plus the index of that kind's entry in `prefix`, or 0 for none: a later command of the kind replaces
-        /// it, since no draw lies between them that could observe the first. `appendBarrierEntry` clears it after an entry that
-        /// observes the state, such as an execute.
+        RenderHeld held;                   // Metal's defaults at each open.
+        std::vector<PrefixCommand> prefix; // Recorded since the render encoder closed, in order.
+        // Per kind, one plus the index of that kind's entry in `prefix`, or 0: a later command of the kind replaces it,
+        // since no draw between them could observe the first.
         std::array<uint32_t, kPrefixKinds> prefixLatest = {};
 
-        uint64_t root = 0;      ///< The root recorded last, whether the table holds it yet or it waits in the prefix; 0 for none.
-        uint64_t tableRoot = 0; ///< The address the list's table holds at `buffer(0)`, as this recording wrote it; 0 for none.
-        /// The address the list's table holds at `buffer(3)`, as the list wrote it: only the list writes its table, so it holds
-        /// across recordings. The zero record when the list is acquired.
+        uint64_t root = 0;      // The root recorded last, which may still wait in the prefix; 0 for none.
+        uint64_t tableRoot = 0; // What the list's table holds at `buffer(0)`, as this recording wrote it; 0 for none.
+        // Only the list writes its table, so this holds across recordings. The zero record when the list is acquired.
         uint64_t tableDrawRecord = 0;
-        /// The GPU address of the device's zero record, which a direct draw binds at `buffer(3)`; fixed from the device's
-        /// creation, set when the list is created.
+        // Fixed from the device's creation.
         uint64_t zeroRecord = 0;
-        /// The compute pipeline the caller bound, which a dispatch sets again when the open compute encoder holds another;
-        /// null when none is bound.
+        // A dispatch sets it again when the open compute encoder holds another; null when none is bound.
         const PipelineState* compute = nullptr;
-        /// The indirect command buffers of the list's counted draws.
         IcbPool icbs;
-        /// The GPU addresses of the device's view and sampler tables, which a counted mesh draw's commands bind themselves:
-        /// fixed from the device's creation, so read once per list and kept across recordings; 0 before the first.
+        // A counted mesh draw's commands bind them themselves. Fixed from the device's creation, so read once per list;
+        // 0 before the first.
         uint64_t viewTableAddress = 0;
-        uint64_t samplerTableAddress = 0; ///< See `viewTableAddress`.
+        uint64_t samplerTableAddress = 0;
 
-        /// Forgets everything the list recorded, as when the list is acquired again: the pass, the graphics state, the resolved
-        /// pipelines, the root and the root address the list's table holds, and the compute pipeline, and frees every indirect
-        /// command buffer slot for the new recording. Keeps the containers' capacity, the descriptor, the indirect command
-        /// buffers, the record address the table holds, the zero record and the view and sampler table addresses.
+        // Keeps the containers' capacity, the descriptor, the indirect command buffers, the record address the table
+        // holds, the zero record and the table addresses.
         void reset();
 
-        /// Forgets the pass and the graphics state recorded in it, as `endRenderPass` does, which also unbinds the pipeline.
+        // `endRenderPass` also unbinds the pipeline.
         void endPass();
 
-        /// Appends `command` to the prefix, merging it with the entry of its kind recorded since the last open or the last
-        /// barrier entry, if any: that entry is replaced in place, since nothing between them observes it.
+        // Merges with the entry of its kind recorded since the last open or barrier entry: that entry is replaced in
+        // place, since nothing between them observes it.
         void record(const PrefixCommand& command);
 
-        /// Appends `command`, an entry that observes the state recorded before it, such as a counted draw's execute, and
-        /// clears `prefixLatest`, so no later entry merges across it.
+        // For an entry that observes the state recorded before it, such as a counted draw's execute; no later entry
+        // merges across it.
         void appendBarrierEntry(const PrefixCommand& command);
 
-        /// Empties the prefix after its replay, keeping its capacity.
         void clearPrefix();
 
-        /// Releases the descriptor and the indirect command buffers, removing those that joined `residency` from it. The caller
-        /// holds an autorelease pool.
+        // The caller holds an autorelease pool.
         void release(Residency& residency);
 
-        /// Empties the descriptor's attachments, which hold strong references to the last pass's textures, so a list waiting
-        /// in its pool keeps no destroyed texture's memory alive: it sets null on each texture and resolve texture an
-        /// attachment holds (`colorHeld`, `depthHeld`, `stencilHeld`) and on no other. It sets them through the attachment
-        /// descriptors the list keeps, so it calls no getter and opens no autorelease pool. The setters are no message to a
-        /// command buffer, encoder or argument table, so they are not counted.
+        // The descriptor's attachments hold strong references to the last pass's textures, so a list waiting in its
+        // pool would keep a destroyed texture's memory alive. The setters go through the kept attachment descriptors,
+        // so no getter runs and no pool opens; they are no message to a command buffer, encoder or argument table, so
+        // they are not counted.
         void forgetTextures();
     };
 
-    /// Opens the open pass's render encoder and returns it; `ensureRender` calls it when no render encoder is open. The
-    /// descriptor takes the copied attachments, with the caller's load operations on the pass's first encoder and `Load` on
-    /// one resuming it, and the caller's store operation when it is `Store` without a resolve, else
-    /// `MTL::StoreActionUnknown` for `finishPass` to set. An open compute encoder closes first. The new encoder takes the
-    /// innermost open scope's label, binds the list's argument table to the four render stages and emits the pending
-    /// barrier's render part; a resuming encoder sets again the state the encoder the split ended held and pushes the open
-    /// in-pass debug groups again, outermost first. The prefix then replays in order. A pass must be open.
+    // Load operations are the caller's on the pass's first encoder and `Load` on one resuming it; a store other than
+    // `Store` without a resolve is created as `MTL::StoreActionUnknown` for `finishPass` to set. A resuming encoder
+    // restores the state the split encoder held and pushes the in-pass debug groups again, outermost first; the prefix
+    // then replays in order.
     MTL4::RenderCommandEncoder* openRender(CommandListImpl& list);
 
-    /// Sets the store action of every attachment the open render encoder was created with `MTL::StoreActionUnknown` for: at a
-    /// split (`split`) `Store`, so the resuming encoder loads it, with a resolve for an attachment that has a resolve target,
-    /// as Metal requires there; else the caller's operation with its resolve.
+    // At a split, `Store`, so the resuming encoder loads it, with a resolve for an attachment that has a resolve
+    // target, as Metal requires there; else the caller's operation with its resolve.
     void finishPass(CommandListImpl& list, bool split);
 
-    /// Splits the open pass when its render encoder is open: pops the in-pass debug groups from the encoder, innermost first,
-    /// stores every attachment (`finishPass` with `split`) and ends the encoder, so the next `ensureRender` resumes the pass.
-    /// Does nothing when the render encoder is not open. It orders nothing: Metal 4 tracks no hazard between render encoders,
-    /// so a caller that split merges a barrier from `StageFragment` to `StageFragment` before the pass resumes, after any
-    /// compute work it records in between, so that work's opening barrier does not wait on the ended encoder's fragments.
+    // It orders nothing: Metal 4 tracks no hazard between render encoders, so a caller that split merges a barrier from
+    // `StageFragment` to `StageFragment` before the pass resumes, after any compute work it records in between, so that
+    // work's opening barrier does not wait on the ended encoder's fragments.
     void splitPass(CommandListImpl& list);
 
-    /// Sets `pipeline`'s render state on the open render encoder where it differs from what the encoder holds: the pipeline
-    /// state, first binding the list's argument table to the object and mesh stages for a mesh pipeline when the encoder has
-    /// not, its depth-stencil state, its cull mode, its front-facing winding when the winding decides something (the
-    /// pipeline culls, tests stencil or has a fragment entry; a depth-only or rasterization-off pipeline skips it), its fill
-    /// and depth clip modes, then the depth bias, `DrawState::bias` when the pipeline has `RasterState::depthBias` and zero
-    /// otherwise. Counts each call.
+    // The winding is set only when it decides something: the pipeline culls, tests stencil or has a fragment entry. The
+    // depth bias is `DrawState::bias` when the pipeline has `RasterState::depthBias`, zero otherwise.
     void applyPipeline(CommandListImpl& list, const PipelineState& pipeline);
 
-    /// Sets the depth bias `bias` on the open render encoder unless it holds it; counts the call.
     void applyDepthBias(CommandListImpl& list, const DepthBias& bias);
 
-    /// Writes `address` to the list's table at `buffer(0)` unless the table holds it; counts the call.
     void applyRoot(CommandListImpl& list, uint64_t address);
 
-    /// Writes `address`, a draw record or the zero record, to the list's table at `buffer(3)` unless the table holds it, for
-    /// the vertex, task and mesh entries of the next draw; counts the call.
+    // For the drawId of the next draw's vertex, task and mesh entries.
     void applyDrawRecord(CommandListImpl& list, uint64_t address);
 
-    /// Sets on a render encoder that has just opened the state `previous`, which the encoder a split ended held, where it
-    /// differs from Metal's defaults; counts each call.
+    // Only where it differs from Metal's defaults.
     void restoreHeld(CommandListImpl& list, const RenderHeld& previous);
 
-    /// Replays the prefix in order on the render encoder that has just opened, through the filtered setters, then empties it.
     void replayPrefix(CommandListImpl& list);
 
-    /// Runs on the open render encoder the counted draw `command`, an `Execute`, `DrawIndirect`, `IndexedIndirect`,
-    /// `MeshExecute` or `MeshIndirect` entry of the prefix, inside an autorelease pool, because the validation layer
-    /// autoreleases in a draw it checks; a `DrawIndirect`, `IndexedIndirect` or `MeshIndirect` entry binds the caller's record
-    /// at `buffer(3)` first. Counts each call and marks the encoder's work in the stages the draw runs in: vertex and
-    /// fragment, or object, mesh and fragment.
+    // Inside an autorelease pool, because the validation layer autoreleases in a draw it checks. A one-record entry
+    // binds the caller's record at `buffer(3)` first.
     void replayCounted(CommandListImpl& list, const PrefixCommand& command);
 
-    /// Returns the compute encoder for a dispatch, opening it when none is open and emitting a barrier owed to the dispatch
-    /// stage, with the caller's compute pipeline set: a pipeline is set only when the encoder holds another, as after a
-    /// backend kernel or a new encoder. A compute pipeline must be bound.
+    // A pipeline is set only when the encoder holds another, as after a backend kernel or a new encoder.
     MTL4::ComputeCommandEncoder* applyComputePipeline(CommandListImpl& list);
 } // namespace rojoRHI::metal4

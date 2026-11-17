@@ -12,14 +12,14 @@
 #include <cstdint>
 
 namespace rojoRHI::imgui::detail {
-    /// The root block of one ImGui draw command, flat and 32 bytes, read by both entries of `ImGui.slang`.
+    // Read by both entries of `ImGui.slang`.
     struct Root
     {
-        Addr vertices;      ///< The command's first vertex: the list's vertex allocation plus `VtxOffset` vertices.
-        float scale[2];     ///< ImGui pixels to clip space, per axis.
-        float translate[2]; ///< Added after the scale.
-        uint32_t texture;   ///< The view index of the command's texture.
-        uint32_t sampler;   ///< The sampler index.
+        Addr vertices; // The command's first vertex: the list's vertex allocation plus `VtxOffset` vertices.
+        float scale[2];
+        float translate[2];
+        uint32_t texture;
+        uint32_t sampler;
     };
 
     // The shader side declares the same members at the same offsets; a drift shows in the GPU pixel case.

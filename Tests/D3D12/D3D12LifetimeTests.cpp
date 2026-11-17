@@ -21,15 +21,12 @@
 using namespace rojoRHI;
 
 namespace {
-    //==================================================================================================================
-    /// Returns `value` rounded up to a multiple of `alignment`.
     uint64_t alignUp(uint64_t value, uint64_t alignment)
     {
         return (value + alignment - 1) / alignment * alignment;
     }
 } // namespace
 
-//======================================================================================================================
 TEST_CASE("completedValue on a removed device reports removal and aborts", "[d3d12][death]")
 {
     ROJORHI_EXPECT_ABORT("Device::completedValue found the D3D12 device removed", [] {
@@ -45,7 +42,6 @@ TEST_CASE("completedValue on a removed device reports removal and aborts", "[d3d
     });
 }
 
-//======================================================================================================================
 TEST_CASE("a device with every resource type releases every native object at destruction", "[d3d12]")
 {
     Result<Device> created = createDevice();
@@ -67,7 +63,6 @@ TEST_CASE("a device with every resource type releases every native object at des
     const Buffer placedInHeap = *device.createBuffer(placedBuffer, {}, { heap, 0 });
     const Texture textureInHeap = *device.createTexture(placedTexture, {}, { heap, textureOffset });
 
-    // A texture with initial data, and a render target.
     const std::array<std::byte, 64> texels{};
     const TextureData level{ .bytes = texels, .bytesPerRow = 16 };
     const Texture textured = *device.createTexture(
@@ -83,7 +78,6 @@ TEST_CASE("a device with every resource type releases every native object at des
     device.writeView(range, 1, textured, {});
     const Fence fence = *device.createFence(0, "test.fence");
 
-    // One frame uploads frame data in a list and submits it.
     device.beginFrame();
     CommandList list = device.acquireCommandList(QueueType::Graphics, "test.list");
     (void)list.uploadFrameData(bytes);

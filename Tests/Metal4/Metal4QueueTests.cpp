@@ -27,30 +27,24 @@
 using namespace rojoRHI;
 
 namespace {
-    //==================================================================================================================
-    /// The native event `fence` wraps.
     MTL::SharedEvent* eventOf(Device device, Fence fence)
     {
         return static_cast<MTL::SharedEvent*>(DeviceImpl::of(device).core.pool<Fence>().native(fence));
     }
 
-    //==================================================================================================================
-    /// The label of `event`, read inside a pool because the getter autoreleases.
+    // Read inside a pool because the getter autoreleases.
     std::string labelOf(MTL::SharedEvent* event)
     {
         const metal4::AutoreleasePool pool;
         return metal4::toStdString(event->label());
     }
 
-    //==================================================================================================================
-    /// Submits no list to the queue of `type` on `device`, only the signals of `signal`.
     void signalOn(Device device, QueueType type, std::span<const FenceValue> signal)
     {
         device.queue(type).submit({}, {}, signal);
     }
 } // namespace
 
-//======================================================================================================================
 TEST_CASE("a fence's event starts at the fence's initial value and carries its label", "[metal4]")
 {
     Device device = *createDevice();
@@ -66,7 +60,6 @@ TEST_CASE("a fence's event starts at the fence's initial value and carries its l
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("completedValue reports what the event has reached once the GPU signals it", "[metal4]")
 {
     Device device = *createDevice();
@@ -84,7 +77,6 @@ TEST_CASE("completedValue reports what the event has reached once the GPU signal
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("a Release build records no submitted fence value, which only the checks read", "[metal4]")
 {
     Device device = *createDevice();
@@ -105,7 +97,6 @@ TEST_CASE("a Release build records no submitted fence value, which only the chec
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("submit commits the residency set only when an allocation joined or left it", "[metal4]")
 {
     Device device = *createDevice({ .framesInFlight = 2 });
@@ -137,7 +128,6 @@ TEST_CASE("submit commits the residency set only when an allocation joined or le
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("Device::wait with a finite timeout returns false for a value nothing will signal", "[metal4]")
 {
     Device device = *createDevice();
@@ -153,7 +143,6 @@ TEST_CASE("Device::wait with a finite timeout returns false for a value nothing 
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("a submission's waits and signals each count one native call", "[metal4]")
 {
     Device device = *createDevice();
@@ -180,7 +169,6 @@ TEST_CASE("a submission's waits and signals each count one native call", "[metal
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("a queue wait on a fence's initial value passes at once on the GPU", "[metal4]")
 {
     Device device = *createDevice();
@@ -194,7 +182,6 @@ TEST_CASE("a queue wait on a fence's initial value passes at once on the GPU", "
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("a queue waits on the GPU for a value another queue signals", "[metal4]")
 {
     Device device = *createDevice();
@@ -211,7 +198,6 @@ TEST_CASE("a queue waits on the GPU for a value another queue signals", "[metal4
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("lists of a frame submitted on three queues from three threads join the graphics queue", "[metal4]")
 {
     Device device = *createDevice();
@@ -251,7 +237,6 @@ TEST_CASE("lists of a frame submitted on three queues from three threads join th
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("destroyDevice straight after submissions drains every signal first", "[metal4]")
 {
     for (int round = 0; round < 20; ++round)
@@ -273,7 +258,6 @@ TEST_CASE("destroyDevice straight after submissions drains every signal first", 
     }
 }
 
-//======================================================================================================================
 TEST_CASE("a queue's native wait holds back its signal until another queue signals the value", "[metal4]")
 {
     Device device = *createDevice();
@@ -299,7 +283,6 @@ TEST_CASE("a queue's native wait holds back its signal until another queue signa
     raw->release();
 }
 
-//======================================================================================================================
 TEST_CASE("a fence destroyed while a fence-only submission outside a frame uses it keeps its event until the queue passes it", "[metal4]")
 {
     Device device = *createDevice({ .framesInFlight = 2 });
@@ -340,7 +323,6 @@ TEST_CASE("a fence destroyed while a fence-only submission outside a frame uses 
     raw->release();
 }
 
-//======================================================================================================================
 TEST_CASE("destroying a fence no submission named keeps nothing and reads no progress", "[metal4]")
 {
     Device device = *createDevice({ .framesInFlight = 2 });
@@ -361,7 +343,6 @@ TEST_CASE("destroying a fence no submission named keeps nothing and reads no pro
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("fences destroyed without any frame keep a bounded number of events", "[metal4]")
 {
     Device device = *createDevice();
@@ -383,7 +364,6 @@ TEST_CASE("fences destroyed without any frame keep a bounded number of events", 
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("a fence-only submission signals queue progress on the compute and copy queues only", "[metal4]")
 {
     const QueueType type = GENERATE(QueueType::Graphics, QueueType::Compute, QueueType::Copy);
@@ -402,7 +382,6 @@ TEST_CASE("a fence-only submission signals queue progress on the compute and cop
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("submissions with lists signal no queue progress, whatever fences they name", "[metal4]")
 {
     Device device = *createDevice();
@@ -436,7 +415,6 @@ TEST_CASE("submissions with lists signal no queue progress, whatever fences they
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("a fence a frame's compute lists signal, destroyed in the frame, keeps its event until the frame retires", "[metal4]")
 {
     Device device = *createDevice({ .framesInFlight = 2 });
@@ -481,7 +459,6 @@ TEST_CASE("a fence a frame's compute lists signal, destroyed in the frame, keeps
     raw->release();
 }
 
-//======================================================================================================================
 TEST_CASE("a fence a graphics submission outside a frame signals keeps its event until the next frame retires", "[metal4]")
 {
     Device device = *createDevice({ .framesInFlight = 2 });
@@ -520,7 +497,6 @@ TEST_CASE("a fence a graphics submission outside a frame signals keeps its event
     raw->release();
 }
 
-//======================================================================================================================
 TEST_CASE("a compute or copy submission with lists and two signals signals queue progress", "[metal4]")
 {
     const QueueType type = GENERATE(QueueType::Compute, QueueType::Copy);

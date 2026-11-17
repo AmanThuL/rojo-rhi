@@ -25,13 +25,10 @@ using namespace rojoRHI;
 using test::PassKit;
 
 namespace {
-    /// A copy's write.
     constexpr core::Scope kCopyWrite{ .stage = Stage::Copy, .access = Access::CopyWrite };
-    /// A merge floor above every position the tests use.
+    // A merge floor above every position the tests use.
     constexpr std::array<uint64_t, 3> kFloor{ 100, 100, 100 };
 
-    //==================================================================================================================
-    /// Returns the first and one-past-last byte of each segment of `segments`, in order.
     std::vector<std::pair<uint64_t, uint64_t>> bounds(const core::ByteSegments& segments)
     {
         std::vector<std::pair<uint64_t, uint64_t>> out;
@@ -42,8 +39,6 @@ namespace {
         return out;
     }
 
-    //==================================================================================================================
-    /// Notes a copy's write at `position` on the graphics queue in every segment of `segments`.
     void write(std::span<core::ByteSegment> segments, uint64_t position)
     {
         for (core::ByteSegment& segment : segments)
@@ -53,7 +48,6 @@ namespace {
     }
 } // namespace
 
-//======================================================================================================================
 TEST_CASE("a new buffer is one segment, and a range splits it where the range starts and ends", "[core]")
 {
     core::ByteSegments segments(1024);
@@ -70,7 +64,6 @@ TEST_CASE("a new buffer is one segment, and a range splits it where the range st
     CHECK(segments.isolate(0, 1024).size() == 5);
 }
 
-//======================================================================================================================
 TEST_CASE("neighbouring segments merge only when their hazard states are alike and older than the current command", "[core]")
 {
     core::ByteSegments segments(1024);
@@ -92,7 +85,6 @@ TEST_CASE("neighbouring segments merge only when their hazard states are alike a
     CHECK(bounds(segments) == std::vector<std::pair<uint64_t, uint64_t>>{ { 0, 1024 } });
 }
 
-//======================================================================================================================
 TEST_CASE("reaches compare as sets when segments merge", "[core]")
 {
     constexpr core::Scope kRead{ .stage = Stage::Copy, .access = Access::CopyRead };
@@ -114,7 +106,6 @@ TEST_CASE("reaches compare as sets when segments merge", "[core]")
     CHECK(bounds(segments) == std::vector<std::pair<uint64_t, uint64_t>>{ { 0, 512 } });
 }
 
-//======================================================================================================================
 TEST_CASE("a ring buffer written at moving offsets over many commands keeps a bounded number of segments", "[core]")
 {
     constexpr uint64_t kSlot = 256;
@@ -148,7 +139,6 @@ TEST_CASE("a ring buffer written at moving offsets over many commands keeps a bo
     CHECK(most <= 4);
 }
 
-//======================================================================================================================
 TEST_CASE("a write after a write chains through a read between two barriers, never through two records of one call", "[core]")
 {
     constexpr core::Scope kCopyRead{ .stage = Stage::Copy, .access = Access::CopyRead };
@@ -167,7 +157,6 @@ TEST_CASE("a write after a write chains through a read between two barriers, nev
     CHECK(core::checkUse(batched, 3, kCopyWrite).kind == core::HazardKind::Unordered);
 }
 
-//======================================================================================================================
 TEST_CASE("reads alike to one the state remembers are kept once", "[core]")
 {
     constexpr core::Scope kShaderRead{ .stage = Stage::FragmentShader, .access = Access::ShaderRead };
@@ -184,7 +173,6 @@ TEST_CASE("reads alike to one the state remembers are kept once", "[core]")
     CHECK(core::checkUse(state, 100, kCopyWrite).kind == core::HazardKind::None);
 }
 
-//======================================================================================================================
 TEST_CASE("the tracker follows a buffer from creation to destruction, and never a frame-arena page", "[core]")
 {
 #ifndef NDEBUG
@@ -209,7 +197,6 @@ TEST_CASE("the tracker follows a buffer from creation to destruction, and never 
 #endif
 }
 
-//======================================================================================================================
 TEST_CASE("a placed buffer records its heap range for the tracker", "[core]")
 {
     PassKit kit;
@@ -226,7 +213,6 @@ TEST_CASE("a placed buffer records its heap range for the tracker", "[core]")
     kit.finish();
 }
 
-//======================================================================================================================
 TEST_CASE("a placed texture records its heap range for the tracker", "[core]")
 {
     PassKit kit;
@@ -247,7 +233,6 @@ TEST_CASE("a placed texture records its heap range for the tracker", "[core]")
     kit.finish();
 }
 
-//======================================================================================================================
 TEST_CASE("alias marks and heap segments stay bounded while transient buffers churn over a texture's memory", "[core]")
 {
 #ifndef NDEBUG

@@ -31,25 +31,20 @@
 
 namespace rojoRHI {
     namespace {
-        //==============================================================================================================
-        /// Logs that Metal refused to create `what` and aborts, in every build: chapter 04 makes a refused write fatal.
+        // Fatal in every build: chapter 04 makes a refused write fatal.
         [[noreturn]] void refused(std::string_view what)
         {
             ROJORHI_LOG_FATAL("Metal refused to create {}", what);
             std::abort();
         }
 
-        //==============================================================================================================
-        /// Stores `id` at entry `slot` of `table`, a Shared buffer of `MTL::ResourceID`s.
         void writeId(MTL::Buffer* table, uint32_t slot, MTL::ResourceID id)
         {
             static_cast<MTL::ResourceID*>(table->contents())[slot] = id;
         }
 
-        //==============================================================================================================
-        /// Returns the view of `texture` that `desc`, which the core accepted, describes (+1): the texture itself, retained,
-        /// when the view has its type, pixel format and whole mip and layer range, else a new texture view; null when Metal
-        /// refuses. The caller holds an autorelease pool.
+        // Returns +1: the texture itself, retained, when the view has its type, pixel format and whole range; null when
+        // Metal refuses. The caller holds an autorelease pool.
         MTL::Texture* newView(const core::TextureRecord& texture, const TextureViewDesc& desc)
         {
             auto* parent = static_cast<MTL::Texture*>(texture.native);
@@ -76,9 +71,7 @@ namespace rojoRHI {
             return view;
         }
 
-        //==============================================================================================================
-        /// Returns the sampler state of `desc`, which the core accepted (+1), or null when Metal refuses. The caller holds an
-        /// autorelease pool.
+        // Returns +1, or null when Metal refuses. The caller holds an autorelease pool.
         MTL::SamplerState* newSampler(DeviceImpl& impl, const SamplerDesc& desc)
         {
             MTL::SamplerDescriptor* descriptor = metal4::samplerDescriptor(desc, core::resolveLabel(desc.label, "rojorhi.sampler.unnamed"));
@@ -87,22 +80,16 @@ namespace rojoRHI {
             return sampler;
         }
 
-        //==============================================================================================================
-        /// Returns the Metal minification and magnification filter of `filter`.
         MTL::SamplerMinMagFilter minMagFilter(SamplerFilter filter)
         {
             return filter == SamplerFilter::Nearest ? MTL::SamplerMinMagFilterNearest : MTL::SamplerMinMagFilterLinear;
         }
 
-        //==============================================================================================================
-        /// Returns the Metal mip filter of `filter`.
         MTL::SamplerMipFilter mipFilter(SamplerFilter filter)
         {
             return filter == SamplerFilter::Nearest ? MTL::SamplerMipFilterNearest : MTL::SamplerMipFilterLinear;
         }
 
-        //==============================================================================================================
-        /// Returns the Metal address mode of `address`.
         MTL::SamplerAddressMode addressMode(SamplerAddress address)
         {
             switch (address)
@@ -116,7 +103,6 @@ namespace rojoRHI {
     } // namespace
 
     namespace metal4 {
-        //==============================================================================================================
         MTL::SamplerDescriptor* samplerDescriptor(const SamplerDesc& desc, std::string_view label)
         {
             MTL::SamplerDescriptor* descriptor = MTL::SamplerDescriptor::alloc()->init();
@@ -136,7 +122,6 @@ namespace rojoRHI {
             return descriptor;
         }
 
-        //==============================================================================================================
         void retireView([[maybe_unused]] void* context, void* native)
         {
             if (native == nullptr)
@@ -147,7 +132,6 @@ namespace rojoRHI {
             static_cast<MTL::Texture*>(native)->release();
         }
 
-        //==============================================================================================================
         void retireSampler([[maybe_unused]] void* context, void* native)
         {
             if (native == nullptr)
@@ -159,7 +143,6 @@ namespace rojoRHI {
         }
     } // namespace metal4
 
-    //==================================================================================================================
     Result<ViewIndex> Device::createView(Texture texture, const TextureViewDesc& desc)
     {
         DeviceImpl& impl = DeviceImpl::of(*this);
@@ -181,7 +164,6 @@ namespace rojoRHI {
         return index;
     }
 
-    //==================================================================================================================
     void Device::writeView(IndexRange range, uint32_t index, Texture texture, const TextureViewDesc& desc)
     {
         DeviceImpl& impl = DeviceImpl::of(*this);
@@ -202,19 +184,16 @@ namespace rojoRHI {
         writeId(impl.viewTable, range.base + index, id);
     }
 
-    //==================================================================================================================
     void Device::destroy(ViewIndex view)
     {
         core::destroyView(DeviceImpl::of(*this).core, view);
     }
 
-    //==================================================================================================================
     Result<IndexRange> Device::reserveViews(uint32_t count)
     {
         return core::reserveViews(DeviceImpl::of(*this).core, count);
     }
 
-    //==================================================================================================================
     Result<SamplerIndex> Device::createSampler(const SamplerDesc& desc)
     {
         DeviceImpl& impl = DeviceImpl::of(*this);
@@ -236,7 +215,6 @@ namespace rojoRHI {
         return index;
     }
 
-    //==================================================================================================================
     void Device::writeSampler(IndexRange range, uint32_t index, const SamplerDesc& desc)
     {
         DeviceImpl& impl = DeviceImpl::of(*this);
@@ -257,19 +235,16 @@ namespace rojoRHI {
         writeId(impl.samplerTable, range.base + index, id);
     }
 
-    //==================================================================================================================
     void Device::destroy(SamplerIndex sampler)
     {
         core::destroySampler(DeviceImpl::of(*this).core, sampler);
     }
 
-    //==================================================================================================================
     Result<IndexRange> Device::reserveSamplers(uint32_t count)
     {
         return core::reserveSamplers(DeviceImpl::of(*this).core, count);
     }
 
-    //==================================================================================================================
     void Device::release(IndexRange range)
     {
         core::releaseRange(DeviceImpl::of(*this).core, range);

@@ -62,6 +62,7 @@ static const float2 kCorners[6] = { float2(-1, -1), float2(1, -1), float2(1, 1),
 Varyings particleVertex(rojoRHI::VertexIds ids)
 {
     DrawRoot root = rojoRHI::root<DrawRoot>();
+    // One instance per particle, six vertices for its quad; instanceIndex is zero-based on every backend.
     Particle particle = rojoRHI::load<Particle>(root.particles, rojoRHI::instanceIndex(ids));
     float2 corner = kCorners[rojoRHI::vertexIndex(ids)];
 

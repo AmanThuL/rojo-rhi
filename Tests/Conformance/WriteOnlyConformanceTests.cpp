@@ -22,40 +22,35 @@
 using namespace rojoRHI;
 
 namespace {
-    /// Four floats, one `float4`.
     using Float4 = std::array<float, 4>;
 
-    /// AbiWriteOnly's root.
+    // The root of the AbiWriteOnly entries.
     struct WriteRoot
     {
-        uint32_t view; ///< The written view.
-        uint32_t pad0; ///< Padding.
-        uint32_t pad1; ///< Padding.
-        uint32_t pad2; ///< Padding.
-        Float4 value;  ///< The value each entry stores.
+        uint32_t view;
+        uint32_t pad0;
+        uint32_t pad1;
+        uint32_t pad2;
+        Float4 value;
     };
 
-    /// Where an entry of AbiWriteOnly stores: texel (`x`, `y`, `z`) of layer `layer`.
     struct Target
     {
-        uint32_t x;     ///< The column.
-        uint32_t y;     ///< The row.
-        uint32_t z;     ///< The depth plane.
-        uint32_t layer; ///< The array layer.
+        uint32_t x;
+        uint32_t y;
+        uint32_t z;
+        uint32_t layer;
     };
 
-    /// The clear color every texel holds before a kernel runs; each channel is exact in half precision.
+    // Every texel holds this before a kernel runs; each channel is exact in half precision.
     constexpr ClearColor kSentinel{ -7.0f, 3.0f, 0.25f, 1024.0f };
 
-    /// The value the kernels store; each channel is exact in half precision.
+    // Each channel is exact in half precision.
     constexpr Float4 kValue{ 1.5f, -2.25f, 0.5f, 8.0f };
 
-    /// The half-precision bits of `kSentinel` and `kValue`, channel by channel.
     constexpr std::array<uint16_t, 4> kSentinelHalves{ 0xC700, 0x4200, 0x3400, 0x6400 };
     constexpr std::array<uint16_t, 4> kValueHalves{ 0x3E00, 0xC080, 0x3800, 0x4800 };
 
-    //==================================================================================================================
-    /// The bytes of `values`, in memory order.
     template<typename T> std::vector<std::byte> bytesOf(std::span<const T> values)
     {
         std::vector<std::byte> bytes(values.size_bytes());
@@ -63,9 +58,6 @@ namespace {
         return bytes;
     }
 
-    //==================================================================================================================
-    /// Creates a Storage texture of `desc`, clears it to `sentinel`, stores `value` through the AbiWriteOnly kernel `entry`
-    /// into a Storage view of every layer, and returns every texel read back.
     std::vector<std::byte> writeThrough(test::GpuKit& kit, const TextureDesc& desc, std::string_view entry, const ClearColor& sentinel, const Float4& value)
     {
         const Texture texture = *kit.device.createTexture(desc);
@@ -92,9 +84,6 @@ namespace {
         return kit.readTexture(texture, TextureRegion{ .layers = desc.layers, .extent = desc.extent }, desc.format);
     }
 
-    //==================================================================================================================
-    /// The texels `writeThrough` reads back from a texture of `desc` when the kernel wrote `written` at `target` and every
-    /// other texel holds `sentinel`.
     std::vector<std::byte> expectedTexels(
         const TextureDesc& desc, const Target& target, std::span<const std::byte> sentinel, std::span<const std::byte> written
     )
@@ -112,7 +101,6 @@ namespace {
     }
 } // namespace
 
-//======================================================================================================================
 TEST_CASE("a write-only accessor writes RG16Float at the floor", "[conformance]")
 {
     test::requireGpu();
@@ -126,17 +114,16 @@ TEST_CASE("a write-only accessor writes RG16Float at the floor", "[conformance]"
     CHECK(texels == expectedTexels(desc, Target{ 1, 1, 0, 0 }, bytesOf<uint16_t>(sentinel), bytesOf<uint16_t>(written)));
 }
 
-//======================================================================================================================
 TEST_CASE("each write-only form stores one texel of an RGBA16Float view and leaves the rest", "[conformance]")
 {
     test::requireGpu();
     struct Form
     {
-        std::string_view entry; ///< The AbiWriteOnly kernel.
-        TextureType type;       ///< The texture and view type.
-        Extent3D extent;        ///< The texture's extent.
-        uint32_t layers;        ///< The texture's layers.
-        Target target;          ///< Where the kernel stores.
+        std::string_view entry;
+        TextureType type;
+        Extent3D extent;
+        uint32_t layers;
+        Target target;
     };
     const Form form = GENERATE(
         Form{ "wTexture1DMain", TextureType::Tex1D, { 4, 1, 1 }, 1, { 1, 0, 0, 0 } },
@@ -155,7 +142,6 @@ TEST_CASE("each write-only form stores one texel of an RGBA16Float view and leav
     CHECK(texels == expectedTexels(desc, form.target, bytesOf<uint16_t>(kSentinelHalves), bytesOf<uint16_t>(kValueHalves)));
 }
 
-//======================================================================================================================
 TEST_CASE("BGRA8Unorm and RGB10A2Unorm write through a write-only accessor", "[conformance]")
 {
     test::requireGpu();
@@ -164,9 +150,9 @@ TEST_CASE("BGRA8Unorm and RGB10A2Unorm write through a write-only accessor", "[c
     constexpr Float4 kUnormValue{ 1.0f, 0.0f, 0.0f, 1.0f };
     struct Case
     {
-        Format format;                   ///< The texture's format.
-        std::array<uint8_t, 4> sentinel; ///< `kUnormSentinel` as a texel, in memory order.
-        std::array<uint8_t, 4> written;  ///< `kUnormValue` as a texel, in memory order.
+        Format format;
+        std::array<uint8_t, 4> sentinel;
+        std::array<uint8_t, 4> written;
     };
     // BGRA8Unorm stores blue, green, red, alpha bytes. RGB10A2Unorm packs red in bits 0-9, green in 10-19, blue in 20-29 and
     // alpha in 30-31 of a little-endian word: the sentinel is 0x3FFFFC00 and the value 0xC00003FF.

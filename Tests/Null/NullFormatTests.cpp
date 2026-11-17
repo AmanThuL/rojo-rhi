@@ -8,7 +8,6 @@
 
 using namespace rojoRHI;
 
-//======================================================================================================================
 TEST_CASE("the Null device reports every capability the reference allows a color format", "[null]")
 {
     Device device = *createDevice();
@@ -37,7 +36,6 @@ TEST_CASE("the Null device reports every capability the reference allows a color
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("the Null device reports no storage for an sRGB format", "[null]")
 {
     Device device = *createDevice();
@@ -50,7 +48,6 @@ TEST_CASE("the Null device reports no storage for an sRGB format", "[null]")
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("the Null device reports a block-compressed format as sampled only", "[null]")
 {
     Device device = *createDevice();
@@ -71,7 +68,6 @@ TEST_CASE("the Null device reports a block-compressed format as sampled only", "
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("the Null device reports a depth format as a depth attachment without storage or color use", "[null]")
 {
     Device device = *createDevice();

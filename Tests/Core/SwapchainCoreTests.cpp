@@ -16,16 +16,14 @@
 using namespace rojoRHI;
 
 namespace {
-    /// Stand-ins for native surfaces: the tests never dereference them.
+    // Stand-ins for native surfaces: the tests never dereference them.
     std::array<int, 2> g_surfaces = {};
 
-    //==================================================================================================================
     Swapchain makeSwapchain(Device device, uint32_t imageCount = 3, std::string_view label = "core.swapchain")
     {
         return *device.createSwapchain(SwapchainDesc{ .nativeSurface = &g_surfaces[0], .imageCount = imageCount, .maxLatency = 1, .label = label });
     }
 
-    //==================================================================================================================
     void acquireAndPresent(Device device, Swapchain swapchain)
     {
         device.beginFrame();
@@ -34,14 +32,12 @@ namespace {
         device.endFrame();
     }
 
-    //==================================================================================================================
     core::LookupStatus statusOf(Device device, Texture texture)
     {
         return core::coreOf(device).pool<Texture>().lookup(texture).status;
     }
 } // namespace
 
-//======================================================================================================================
 TEST_CASE("a swapchain's record keeps its description with every image available", "[core]")
 {
     Device device = *createDevice();
@@ -68,7 +64,6 @@ TEST_CASE("a swapchain's record keeps its description with every image available
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("an unlabelled swapchain takes the default label", "[core]")
 {
     Device device = *createDevice();
@@ -77,7 +72,6 @@ TEST_CASE("an unlabelled swapchain takes the default label", "[core]")
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("an acquired image is a RenderTarget texture record labelled after the swapchain", "[core]")
 {
     Device device = *createDevice();
@@ -100,7 +94,6 @@ TEST_CASE("an acquired image is a RenderTarget texture record labelled after the
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("acquire hands the images out in order and wraps", "[core]")
 {
     Device device = *createDevice();
@@ -116,7 +109,6 @@ TEST_CASE("acquire hands the images out in order and wraps", "[core]")
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("present makes the image available and its handle stale", "[core]")
 {
     Device device = *createDevice();
@@ -131,7 +123,6 @@ TEST_CASE("present makes the image available and its handle stale", "[core]")
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("destroying a swapchain releases the image it holds", "[core]")
 {
     Device device = *createDevice();
@@ -144,7 +135,6 @@ TEST_CASE("destroying a swapchain releases the image it holds", "[core]")
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("resize changes the extent the next image has", "[core]")
 {
     Device device = *createDevice();
@@ -161,7 +151,6 @@ TEST_CASE("resize changes the extent the next image has", "[core]")
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("an image acquired again after a present is a different texture of the same swapchain", "[core]")
 {
     Device device = *createDevice();
@@ -173,7 +162,6 @@ TEST_CASE("an image acquired again after a present is a different texture of the
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("an acquired image's texture carries the backend's payload from its allocation", "[core]")
 {
     Device device = *createDevice();
@@ -187,7 +175,6 @@ TEST_CASE("an acquired image's texture carries the backend's payload from its al
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("checkAcquireImage refuses no valid acquire and leaves the swapchain unchanged", "[core]")
 {
     Device device = *createDevice();
@@ -211,7 +198,6 @@ TEST_CASE("checkAcquireImage refuses no valid acquire and leaves the swapchain u
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-present-0002 a surface the backend's predicate rejects creates a swapchain", "[core][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-present-0002", [] {

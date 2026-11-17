@@ -24,24 +24,17 @@
 using namespace rojoRHI;
 
 namespace {
-    /// The bytes of every buffer the cases copy and fill.
     [[maybe_unused]] constexpr uint64_t kBytes = 256;
 
-    /// The bytes of the buffer a texture copy reads from.
     [[maybe_unused]] constexpr uint64_t kSourceBytes = 4096;
 
-    /// The nanoseconds a fence wait may take before the case fails.
     [[maybe_unused]] constexpr uint64_t kWaitNanoseconds = 10'000'000'000;
 
-    //==================================================================================================================
-    /// Returns the description of an 8 by 8 `RGBA8Unorm` texture a copy may write and a shader may sample.
     [[maybe_unused]] TextureDesc smallTexture()
     {
         return TextureDesc{ .format = Format::RGBA8Unorm, .extent = { 8, 8, 1 }, .usage = TextureUsage::Sampled, .label = "test.stress.texture" };
     }
 
-    //==================================================================================================================
-    /// Records the global barrier that orders every copy and fill before it before every copy and fill after it.
     [[maybe_unused]] void copiesDone(CommandList list)
     {
         const std::array<GlobalBarrier, 1> globals{ GlobalBarrier{
@@ -49,9 +42,7 @@ namespace {
         list.barrier(globals);
     }
 
-    //==================================================================================================================
-    /// Records the discard of every subresource of `texture` to `CopyDst` that waits for the copy stage, as the first use of
-    /// memory a copy used earlier needs.
+    // Memory a copy used earlier needs this discard before its first use.
     [[maybe_unused]] void discardAfterCopy(CommandList list, Texture texture)
     {
         const std::array<TextureBarrier, 1> barriers{ TextureBarrier{ .texture = texture,
@@ -63,15 +54,12 @@ namespace {
         list.barrier({}, {}, barriers);
     }
 
-    //==================================================================================================================
-    /// Records the copy of the start of `source` into the whole of `texture`, which must be in `CopyDst`.
+    // `texture` must be in `CopyDst`.
     [[maybe_unused]] void copyInto(CommandList list, Buffer source, Texture texture)
     {
         list.copyBufferToTexture(source, BufferTextureLayout{ .rowPitch = 256 }, texture, TextureRegion{ .extent = { 8, 8, 1 } });
     }
 
-    //==================================================================================================================
-    /// Ends `list` and submits it alone to the queue of `type`, waiting on `wait` and signalling `signal`.
     [[maybe_unused]] void submitTo(
         Device device, CommandList list, QueueType type, std::span<const FenceValue> wait = {}, std::span<const FenceValue> signal = {}
     )
@@ -81,7 +69,6 @@ namespace {
         device.queue(type).submit(lists, wait, signal);
     }
 
-    /// The counts of tracker state a long run must keep bounded.
     struct TrackerCounts
     {
         size_t copyClocks = 0;
@@ -92,8 +79,6 @@ namespace {
         size_t liveTextures = 0;
     };
 
-    //==================================================================================================================
-    /// Reads the counts of the state the tracker keeps for the objects of the frame loop.
     [[maybe_unused]] TrackerCounts sample(Device device, Fence copyFence, Fence computeFence, Heap heap, Buffer results, Texture placed)
     {
         core::DeviceCore& core = core::coreOf(device);
@@ -109,7 +94,6 @@ namespace {
     }
 } // namespace
 
-//======================================================================================================================
 TEST_CASE("a validating device runs 100,000 frames on three queues with bounded tracker state", "[stress][.]")
 {
 #ifdef NDEBUG
@@ -214,7 +198,6 @@ TEST_CASE("a validating device runs 100,000 frames on three queues with bounded 
 #endif
 }
 
-//======================================================================================================================
 TEST_CASE("every queue submits from its own thread while another thread reads their fences", "[stress][.]")
 {
 #ifdef NDEBUG
@@ -287,7 +270,6 @@ TEST_CASE("every queue submits from its own thread while another thread reads th
             }
         };
         std::thread observer(observe);
-        // The three submitters begin together.
         std::latch start(static_cast<std::ptrdiff_t>(kQueues.size()));
         std::vector<std::thread> queues;
         for (size_t index = 0; index < kQueues.size(); ++index)

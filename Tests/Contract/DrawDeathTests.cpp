@@ -20,23 +20,19 @@ namespace {
     constexpr std::array<Format, 1> kRgba8 = { Format::RGBA8Unorm };
     constexpr std::array<std::byte, 16> kBytes = {};
 
-    //==================================================================================================================
-    /// Opens a pass with a vertex pipeline bound and returns an address 256 bytes into an `IndirectArgs` buffer.
+    // Also opens a pass with a vertex pipeline bound.
     Addr readyIndirect(PassKit& kit, bool mesh = false)
     {
         kit.readyToDraw(mesh);
         return kit.device.address(kit.buffer(BufferUsage::IndirectArgs), 256);
     }
 
-    //==================================================================================================================
-    /// Returns an address into a buffer without the `IndirectArgs` usage.
     Addr plainAddress(PassKit& kit)
     {
         return kit.device.address(kit.buffer(BufferUsage::None), 256);
     }
 } // namespace
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-abi-0001 setRoot is given the null address", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-abi-0001", [] {
@@ -45,7 +41,6 @@ TEST_CASE("VU-rojo-abi-0001 setRoot is given the null address", "[contract][deat
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-abi-0002 setRoot is given an address not 256 bytes aligned", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-abi-0002", [] {
@@ -54,7 +49,6 @@ TEST_CASE("VU-rojo-abi-0002 setRoot is given an address not 256 bytes aligned", 
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-buffer-0009 setRoot is given an address of a destroyed buffer", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-buffer-0009", [] {
@@ -66,7 +60,6 @@ TEST_CASE("VU-rojo-buffer-0009 setRoot is given an address of a destroyed buffer
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-buffer-0009 an indirect draw is given an address past the end of its buffer", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-buffer-0009", [] {
@@ -77,7 +70,6 @@ TEST_CASE("VU-rojo-buffer-0009 an indirect draw is given an address past the end
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-buffer-0009 a dispatch is given the address of a destroyed buffer", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-buffer-0009", [] {
@@ -90,7 +82,6 @@ TEST_CASE("VU-rojo-buffer-0009 a dispatch is given the address of a destroyed bu
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-buffer-0020 setRoot is given frame data of an earlier frame", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-buffer-0020", [] {
@@ -106,7 +97,6 @@ TEST_CASE("VU-rojo-buffer-0020 setRoot is given frame data of an earlier frame",
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-buffer-0020 an indirect dispatch reads frame data of an earlier frame", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-buffer-0020", [] {
@@ -123,7 +113,6 @@ TEST_CASE("VU-rojo-buffer-0020 an indirect dispatch reads frame data of an earli
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-cmd-0023 draw is recorded outside a render pass", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-cmd-0023", [] {
@@ -132,7 +121,6 @@ TEST_CASE("VU-rojo-cmd-0023 draw is recorded outside a render pass", "[contract]
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-cmd-0023 draw is recorded with a mesh pipeline bound", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-cmd-0023", [] {
@@ -142,7 +130,6 @@ TEST_CASE("VU-rojo-cmd-0023 draw is recorded with a mesh pipeline bound", "[cont
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-cmd-0023 draw is recorded with no pipeline bound", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-cmd-0023", [] {
@@ -152,7 +139,6 @@ TEST_CASE("VU-rojo-cmd-0023 draw is recorded with no pipeline bound", "[contract
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-cmd-0024 draw is recorded before a viewport and scissor are set", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-cmd-0024", [] {
@@ -163,7 +149,6 @@ TEST_CASE("VU-rojo-cmd-0024 draw is recorded before a viewport and scissor are s
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-cmd-0025 drawIndexed is recorded before a viewport and scissor are set", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-cmd-0025", [] {
@@ -174,7 +159,6 @@ TEST_CASE("VU-rojo-cmd-0025 drawIndexed is recorded before a viewport and scisso
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-cmd-0025 drawIndexed is recorded outside a render pass", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-cmd-0025", [] {
@@ -183,7 +167,6 @@ TEST_CASE("VU-rojo-cmd-0025 drawIndexed is recorded outside a render pass", "[co
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-cmd-0026 drawIndexed reads a buffer without the Index usage", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-cmd-0026", [] {
@@ -193,7 +176,6 @@ TEST_CASE("VU-rojo-cmd-0026 drawIndexed reads a buffer without the Index usage",
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-cmd-0026 drawIndexed reads indices past the end of the buffer", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-cmd-0026", [] {
@@ -203,7 +185,6 @@ TEST_CASE("VU-rojo-cmd-0026 drawIndexed reads indices past the end of the buffer
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-cmd-0027 drawMeshTasks is recorded with a vertex pipeline bound", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-cmd-0027", [] {
@@ -213,7 +194,6 @@ TEST_CASE("VU-rojo-cmd-0027 drawMeshTasks is recorded with a vertex pipeline bou
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-cmd-0027 drawMeshTasks is recorded before a viewport and scissor are set", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-cmd-0027", [] {
@@ -224,7 +204,6 @@ TEST_CASE("VU-rojo-cmd-0027 drawMeshTasks is recorded before a viewport and scis
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-cmd-0028 drawMeshTasks launches more groups than a dimension allows", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-cmd-0028", [] {
@@ -234,7 +213,6 @@ TEST_CASE("VU-rojo-cmd-0028 drawMeshTasks launches more groups than a dimension 
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-cmd-0028 drawMeshTasks launches more groups in total than allowed", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-cmd-0028", [] {
@@ -245,7 +223,6 @@ TEST_CASE("VU-rojo-cmd-0028 drawMeshTasks launches more groups in total than all
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-cmd-0029 dispatch is recorded inside a render pass", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-cmd-0029", [] {
@@ -255,7 +232,6 @@ TEST_CASE("VU-rojo-cmd-0029 dispatch is recorded inside a render pass", "[contra
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-cmd-0029 dispatch is recorded on a Copy list", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-cmd-0029", [] {
@@ -264,7 +240,6 @@ TEST_CASE("VU-rojo-cmd-0029 dispatch is recorded on a Copy list", "[contract][de
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-cmd-0030 dispatch is recorded with no compute pipeline bound", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-cmd-0030", [] {
@@ -273,7 +248,6 @@ TEST_CASE("VU-rojo-cmd-0030 dispatch is recorded with no compute pipeline bound"
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-cmd-0030 dispatch is recorded after a render pass unbound the pipeline", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-cmd-0030", [] {
@@ -285,7 +259,6 @@ TEST_CASE("VU-rojo-cmd-0030 dispatch is recorded after a render pass unbound the
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-cmd-0031 dispatch launches more groups than a dimension allows", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-cmd-0031", [] {
@@ -295,7 +268,6 @@ TEST_CASE("VU-rojo-cmd-0031 dispatch launches more groups than a dimension allow
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-indirect-0001 drawIndirect is recorded outside a render pass", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-indirect-0001", [] {
@@ -304,7 +276,6 @@ TEST_CASE("VU-rojo-indirect-0001 drawIndirect is recorded outside a render pass"
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-indirect-0001 drawIndirect is recorded with a mesh pipeline bound", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-indirect-0001", [] {
@@ -314,7 +285,6 @@ TEST_CASE("VU-rojo-indirect-0001 drawIndirect is recorded with a mesh pipeline b
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-indirect-0002 drawIndirect is given the null address", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-indirect-0002", [] {
@@ -324,7 +294,6 @@ TEST_CASE("VU-rojo-indirect-0002 drawIndirect is given the null address", "[cont
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-indirect-0002 drawIndirect is given an address not 4 bytes aligned", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-indirect-0002", [] {
@@ -334,7 +303,6 @@ TEST_CASE("VU-rojo-indirect-0002 drawIndirect is given an address not 4 bytes al
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-indirect-0002 drawIndirect is given a buffer without IndirectArgs", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-indirect-0002", [] {
@@ -344,7 +312,6 @@ TEST_CASE("VU-rojo-indirect-0002 drawIndirect is given a buffer without Indirect
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-indirect-0002 drawIndirect reads records past the end of the buffer", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-indirect-0002", [] {
@@ -354,7 +321,6 @@ TEST_CASE("VU-rojo-indirect-0002 drawIndirect reads records past the end of the 
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-indirect-0003 drawIndirect is given a maxCount of zero", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-indirect-0003", [] {
@@ -364,7 +330,6 @@ TEST_CASE("VU-rojo-indirect-0003 drawIndirect is given a maxCount of zero", "[co
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-indirect-0003 drawIndirect is given a maxCount above the limit", "[contract][death]")
 {
     // The buffer holds 70,000 records, fewer than the limit plus one on every backend, so the count rule must come first.
@@ -376,7 +341,6 @@ TEST_CASE("VU-rojo-indirect-0003 drawIndirect is given a maxCount above the limi
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-indirect-0004 drawIndirect is given a count address not 4 bytes aligned", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-indirect-0004", [] {
@@ -386,7 +350,6 @@ TEST_CASE("VU-rojo-indirect-0004 drawIndirect is given a count address not 4 byt
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-indirect-0004 drawIndirect is given a count in a buffer without IndirectArgs", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-indirect-0004", [] {
@@ -396,7 +359,6 @@ TEST_CASE("VU-rojo-indirect-0004 drawIndirect is given a count in a buffer witho
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-indirect-0006 drawIndexedIndirect is recorded outside a render pass", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-indirect-0006", [] {
@@ -405,7 +367,6 @@ TEST_CASE("VU-rojo-indirect-0006 drawIndexedIndirect is recorded outside a rende
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-indirect-0007 drawIndexedIndirect reads a buffer without the Index usage", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-indirect-0007", [] {
@@ -415,7 +376,6 @@ TEST_CASE("VU-rojo-indirect-0007 drawIndexedIndirect reads a buffer without the 
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-indirect-0008 drawIndexedIndirect is given the null address", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-indirect-0008", [] {
@@ -425,7 +385,6 @@ TEST_CASE("VU-rojo-indirect-0008 drawIndexedIndirect is given the null address",
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-indirect-0008 drawIndexedIndirect reads records past the end of the buffer", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-indirect-0008", [] {
@@ -435,7 +394,6 @@ TEST_CASE("VU-rojo-indirect-0008 drawIndexedIndirect reads records past the end 
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-indirect-0009 drawIndexedIndirect is given a maxCount of zero", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-indirect-0009", [] {
@@ -445,7 +403,6 @@ TEST_CASE("VU-rojo-indirect-0009 drawIndexedIndirect is given a maxCount of zero
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-indirect-0009 drawIndexedIndirect is given a maxCount above the limit with a small buffer", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-indirect-0009", [] {
@@ -455,7 +412,6 @@ TEST_CASE("VU-rojo-indirect-0009 drawIndexedIndirect is given a maxCount above t
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-indirect-0010 drawIndexedIndirect is given a count address not 4 bytes aligned", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-indirect-0010", [] {
@@ -465,7 +421,6 @@ TEST_CASE("VU-rojo-indirect-0010 drawIndexedIndirect is given a count address no
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-indirect-0012 drawMeshTasksIndirect is recorded with a vertex pipeline bound", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-indirect-0012", [] {
@@ -475,7 +430,6 @@ TEST_CASE("VU-rojo-indirect-0012 drawMeshTasksIndirect is recorded with a vertex
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-indirect-0014 drawMeshTasksIndirect is given the null address", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-indirect-0014", [] {
@@ -485,7 +439,6 @@ TEST_CASE("VU-rojo-indirect-0014 drawMeshTasksIndirect is given the null address
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-indirect-0014 drawMeshTasksIndirect is given a buffer without IndirectArgs", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-indirect-0014", [] {
@@ -495,7 +448,6 @@ TEST_CASE("VU-rojo-indirect-0014 drawMeshTasksIndirect is given a buffer without
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-indirect-0015 drawMeshTasksIndirect is given a maxCount of zero", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-indirect-0015", [] {
@@ -505,7 +457,6 @@ TEST_CASE("VU-rojo-indirect-0015 drawMeshTasksIndirect is given a maxCount of ze
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-indirect-0015 drawMeshTasksIndirect is given a maxCount above the limit with a small buffer", "[contract][death]")
 {
     Device device = *createDevice();
@@ -522,7 +473,6 @@ TEST_CASE("VU-rojo-indirect-0015 drawMeshTasksIndirect is given a maxCount above
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-indirect-0016 drawMeshTasksIndirect is given a count in a buffer without IndirectArgs", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-indirect-0016", [] {
@@ -532,7 +482,6 @@ TEST_CASE("VU-rojo-indirect-0016 drawMeshTasksIndirect is given a count in a buf
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-indirect-0018 dispatchIndirect is recorded with no compute pipeline bound", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-indirect-0018", [] {
@@ -541,7 +490,6 @@ TEST_CASE("VU-rojo-indirect-0018 dispatchIndirect is recorded with no compute pi
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-indirect-0018 dispatchIndirect is recorded inside a render pass", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-indirect-0018", [] {
@@ -551,7 +499,6 @@ TEST_CASE("VU-rojo-indirect-0018 dispatchIndirect is recorded inside a render pa
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-indirect-0019 dispatchIndirect is given the null address", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-indirect-0019", [] {
@@ -561,7 +508,6 @@ TEST_CASE("VU-rojo-indirect-0019 dispatchIndirect is given the null address", "[
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-indirect-0019 dispatchIndirect is given a buffer without IndirectArgs", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-indirect-0019", [] {
@@ -571,7 +517,6 @@ TEST_CASE("VU-rojo-indirect-0019 dispatchIndirect is given a buffer without Indi
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-indirect-0021 drawIndirect is recorded before a viewport and scissor are set", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-indirect-0021", [] {
@@ -583,7 +528,6 @@ TEST_CASE("VU-rojo-indirect-0021 drawIndirect is recorded before a viewport and 
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-indirect-0022 drawIndexedIndirect is recorded before a viewport and scissor are set", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-indirect-0022", [] {
@@ -596,7 +540,6 @@ TEST_CASE("VU-rojo-indirect-0022 drawIndexedIndirect is recorded before a viewpo
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-indirect-0023 drawMeshTasksIndirect is recorded before a viewport and scissor are set", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-indirect-0023", [] {

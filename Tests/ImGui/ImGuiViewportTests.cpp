@@ -29,10 +29,10 @@ namespace {
     constexpr bool kValidation = true;
 #endif
 
-    /// The main display's edge and every platform window's default edge, in pixels: Metal 4's shared surfaces are as large.
+    // The main display's edge and every platform window's default edge: Metal 4's shared surfaces are as large.
     constexpr uint32_t kEdge = 256;
 
-    /// A window of the fake platform. Index 0 is the main viewport's.
+    // Index 0 is the main viewport's.
     struct FakeWindow
     {
         ImVec2 pos;
@@ -41,14 +41,13 @@ namespace {
         bool open = true;
     };
 
-    /// The fake platform's windows; a viewport's `PlatformHandle` is its window's index plus one, so none is null.
+    // A viewport's `PlatformHandle` is its window's index plus one, so none is null.
     std::vector<FakeWindow> g_windows;
 
-    /// The framebuffer scale the fake platform reports for every window; a case changes it as an OS would when a window
-    /// moves to a denser display.
+    // The framebuffer scale the fake platform reports for every window; a case changes it as an OS would when a window
+    // moves to a denser display.
     ImVec2 g_framebufferScale(1.0f, 1.0f);
 
-    /// What the surface callbacks observed.
     struct SurfaceLog
     {
         int creates = 0;
@@ -58,25 +57,21 @@ namespace {
 
     SurfaceLog g_surfaces;
 
-    //==================================================================================================================
     void* handleOf(size_t index)
     {
         return reinterpret_cast<void*>(uintptr_t(index + 1));
     }
 
-    //==================================================================================================================
     size_t indexOf(ImGuiViewport* viewport)
     {
         return size_t(reinterpret_cast<uintptr_t>(viewport->PlatformHandle)) - 1;
     }
 
-    //==================================================================================================================
     FakeWindow& windowOf(ImGuiViewport* viewport)
     {
         return g_windows[indexOf(viewport)];
     }
 
-    //==================================================================================================================
     void platformCreateWindow(ImGuiViewport* viewport)
     {
         g_windows.push_back(FakeWindow{ .pos = viewport->Pos, .size = viewport->Size });
@@ -84,7 +79,6 @@ namespace {
         viewport->PlatformHandleRaw = viewport->PlatformHandle;
     }
 
-    //==================================================================================================================
     void platformDestroyWindow(ImGuiViewport* viewport)
     {
         if (viewport != ImGui::GetMainViewport() && viewport->PlatformHandle != nullptr)
@@ -93,66 +87,55 @@ namespace {
         }
     }
 
-    //==================================================================================================================
     void platformShowWindow(ImGuiViewport*)
     {
     }
 
-    //==================================================================================================================
     void platformSetWindowPos(ImGuiViewport* viewport, ImVec2 pos)
     {
         windowOf(viewport).pos = pos;
     }
 
-    //==================================================================================================================
     ImVec2 platformGetWindowPos(ImGuiViewport* viewport)
     {
         return windowOf(viewport).pos;
     }
 
-    //==================================================================================================================
     void platformSetWindowSize(ImGuiViewport* viewport, ImVec2 size)
     {
         windowOf(viewport).size = size;
     }
 
-    //==================================================================================================================
     ImVec2 platformGetWindowSize(ImGuiViewport* viewport)
     {
         return windowOf(viewport).size;
     }
 
-    //==================================================================================================================
     ImVec2 platformGetWindowFramebufferScale(ImGuiViewport*)
     {
         return g_framebufferScale;
     }
 
-    //==================================================================================================================
     // The pixels of `size` at `scale`, rounded to nearest as the adapter rounds a framebuffer size.
     uint32_t pixels(float size, float scale)
     {
         return uint32_t(std::lround(size * scale));
     }
 
-    //==================================================================================================================
     bool platformGetWindowFocus(ImGuiViewport*)
     {
         return false;
     }
 
-    //==================================================================================================================
     bool platformGetWindowMinimized(ImGuiViewport* viewport)
     {
         return windowOf(viewport).minimized;
     }
 
-    //==================================================================================================================
     void platformSetWindowTitle(ImGuiViewport*, const char*)
     {
     }
 
-    //==================================================================================================================
     // The first platform window (index 1) gets surface 6 and the second surface 7.
     void* createSurface(ImGuiViewport* viewport, void*)
     {
@@ -160,27 +143,23 @@ namespace {
         return test::surface(uint32_t(5 + indexOf(viewport)));
     }
 
-    //==================================================================================================================
     void destroySurface(ImGuiViewport* viewport, void* surface, void*)
     {
         g_surfaces.destroyed.push_back(surface);
         g_surfaces.destroyedMain = g_surfaces.destroyedMain || viewport == ImGui::GetMainViewport();
     }
 
-    /// A device, an ImGui context with viewports enabled over the fake platform, the adapter and an offscreen main target.
     class Host
     {
       public:
-        /// Creates the device (validating in Debug builds), the context, the fake platform and the target, then the adapter.
         Host();
 
-        /// Shuts the adapter and the fake platform down, then destroys the target, the context and the device.
         ~Host();
 
-        /// Runs one frame in the documented host order, with the callback between `ImGui::NewFrame` and `ImGui::Render`.
+        // The callback runs between `ImGui::NewFrame` and `ImGui::Render`.
         void frame(const std::function<void()>&);
 
-        /// Runs the frame `frame` runs after `imgui::newFrame`, for a case that calls that itself.
+        // The part of `frame` after `imgui::newFrame`, for a case that calls that itself.
         void finishFrame(const std::function<void()>&);
 
         Device device;
@@ -188,7 +167,6 @@ namespace {
         Texture target;
     };
 
-    //==================================================================================================================
     Host::Host()
     {
         g_windows.assign(1, FakeWindow{ .pos = ImVec2(0.0f, 0.0f), .size = ImVec2(float(kEdge), float(kEdge)) });
@@ -237,7 +215,6 @@ namespace {
         REQUIRE(initialized);
     }
 
-    //==================================================================================================================
     Host::~Host()
     {
         imgui::shutdown();
@@ -250,14 +227,12 @@ namespace {
         destroyDevice(device);
     }
 
-    //==================================================================================================================
     void Host::frame(const std::function<void()>& draw)
     {
         imgui::newFrame();
         finishFrame(draw);
     }
 
-    //==================================================================================================================
     void Host::finishFrame(const std::function<void()>& draw)
     {
         ImGui::NewFrame();
@@ -288,7 +263,6 @@ namespace {
         ImGui::UpdatePlatformWindows();
     }
 
-    //==================================================================================================================
     // One window placed outside the main display, so it gets a viewport of its own.
     void drawWindow(const char* name, float x, ImVec2 size)
     {
@@ -299,14 +273,12 @@ namespace {
         ImGui::End();
     }
 
-    //==================================================================================================================
     void drawBoth()
     {
         drawWindow("one", 1000.0f, ImVec2(float(kEdge), float(kEdge)));
         drawWindow("two", 1400.0f, ImVec2(float(kEdge), float(kEdge)));
     }
 
-    //==================================================================================================================
     // The viewport of the window `name`, which has one of its own.
     ImGuiViewport* viewportOf(const char* name)
     {
@@ -315,7 +287,6 @@ namespace {
     }
 } // namespace
 
-//======================================================================================================================
 TEST_CASE("a frame with two platform windows renders and presents both", "[imgui]")
 {
     Host host;
@@ -334,7 +305,6 @@ TEST_CASE("a frame with two platform windows renders and presents both", "[imgui
     CHECK(g_surfaces.destroyed.empty());
 }
 
-//======================================================================================================================
 TEST_CASE("closing a platform window destroys its surface once", "[imgui]")
 {
     {
@@ -354,7 +324,6 @@ TEST_CASE("closing a platform window destroys its surface once", "[imgui]")
     CHECK(g_surfaces.creates == 2);
 }
 
-//======================================================================================================================
 TEST_CASE("a resized or minimized platform window", "[imgui]")
 {
     Host host;
@@ -394,7 +363,6 @@ TEST_CASE("a resized or minimized platform window", "[imgui]")
     CHECK(g_surfaces.destroyed.empty());
 }
 
-//======================================================================================================================
 TEST_CASE("a platform window resized on consecutive frames presents every frame", "[imgui]")
 {
     Host host;
@@ -420,7 +388,6 @@ TEST_CASE("a platform window resized on consecutive frames presents every frame"
     CHECK(imgui::detail::platformWindowPresents(two) == 5);
 }
 
-//======================================================================================================================
 TEST_CASE("newFrame sizes a platform window's swapchain from the platform's size and scale, not the viewport's older ones", "[imgui]")
 {
     Host host;
@@ -455,7 +422,6 @@ TEST_CASE("newFrame sizes a platform window's swapchain from the platform's size
     CHECK(imgui::detail::platformWindowPresents(two) == 3);
 }
 
-//======================================================================================================================
 TEST_CASE("newFrame sizes a platform window's swapchain from the viewport when the platform reports no window size", "[imgui]")
 {
     Host host;

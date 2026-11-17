@@ -30,52 +30,48 @@ using namespace rojoRHI;
 namespace {
     // A production reader lives in each backend; the readers here only check what the build wrote.
 
-    /// What distinguishes the two library formats.
     struct LibraryFormat
     {
-        std::string_view magic;        ///< The first line.
-        std::string_view extension;    ///< The file extension.
-        std::string_view closing;      ///< The first word of the last header line, a payload byte count follows it.
-        std::size_t entryTokens;       ///< The fields of an `entry` line, the word included.
-        std::string_view payloadMagic; ///< The four bytes that start the metallib, or each entry's DXIL.
+        std::string_view magic;
+        std::string_view extension;
+        std::string_view closing;      // The first word of the last header line, a payload byte count follows it.
+        std::size_t entryTokens;       // The fields of an `entry` line, the word included.
+        std::string_view payloadMagic; // The four bytes that start the metallib, or each entry's DXIL.
     };
 
     constexpr LibraryFormat kMetal = { "rojorhi.metal4.shaderlibrary", ".metal4lib", "metallib", 6, "MTLB" };
     constexpr LibraryFormat kD3D12 = { "rojorhi.d3d12.shaderlibrary", ".d3d12lib", "dxil", 7, "DXBC" };
 
-    /// One `entry` line of a library header.
     struct LibraryEntry
     {
-        std::string name;                  ///< The entry point's name.
-        std::string stage;                 ///< The stage word, as `core::stageName` spells it.
-        std::array<uint64_t, 3> size = {}; ///< The threadgroup size; zero for vertex and fragment.
-        uint64_t bytes = 0;                ///< The DXIL byte count of a D3D12 entry line; zero for Metal, which has none.
+        std::string name;
+        std::string stage;                 // The stage word, as `core::stageName` spells it.
+        std::array<uint64_t, 3> size = {}; // The threadgroup size; zero for vertex and fragment.
+        uint64_t bytes = 0;                // The DXIL byte count of a D3D12 entry line; zero for Metal, which has none.
 
-        /// Compares two entries by name, stage and size; the byte count is read, not compared.
+        // The byte count is read, not compared.
         friend bool operator==(const LibraryEntry& left, const LibraryEntry& right)
         {
             return left.name == right.name && left.stage == right.stage && left.size == right.size;
         }
     };
 
-    /// What the header of a library declares, read up to and including its closing line.
+    // Read up to and including the closing line.
     struct LibraryHeader
     {
-        uint64_t abi = 0;                  ///< The value of the `abi` line.
-        std::vector<LibraryEntry> entries; ///< The `entry` lines, in file order.
-        uint64_t declaredBytes = 0;        ///< The count of the closing line.
-        std::vector<char> payload;         ///< The bytes after the closing line, to the end of the file.
-        std::string error;                 ///< "line <n>: <breach>" for the first breach; empty when there is none.
+        uint64_t abi = 0;
+        std::vector<LibraryEntry> entries;
+        uint64_t declaredBytes = 0;
+        std::vector<char> payload; // The bytes after the closing line, to the end of the file.
+        std::string error;         //"line <n>: <breach>" for the first breach; empty when there is none.
     };
 
-    //==================================================================================================================
     std::vector<char> readFile(const std::filesystem::path& file)
     {
         std::ifstream stream(file, std::ios::binary);
         return { std::istreambuf_iterator<char>(stream), std::istreambuf_iterator<char>() };
     }
 
-    //==================================================================================================================
     // A canonical unsigned decimal: digits only, no sign, no leading zero except for 0 itself.
     std::optional<uint64_t> canonicalNumber(std::string_view text)
     {
@@ -92,7 +88,6 @@ namespace {
         return value;
     }
 
-    //==================================================================================================================
     bool validName(std::string_view name)
     {
         const auto letter = [](char c) { return (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || c == '_'; };
@@ -111,7 +106,6 @@ namespace {
         return true;
     }
 
-    //==================================================================================================================
     std::vector<std::string_view> splitSpaces(std::string_view line)
     {
         std::vector<std::string_view> tokens;
@@ -127,7 +121,6 @@ namespace {
         }
     }
 
-    //==================================================================================================================
     bool knownStage(std::string_view stage)
     {
         bool known = false;
@@ -139,7 +132,6 @@ namespace {
         return known;
     }
 
-    //==================================================================================================================
     // Reads an `entry <name> <stage> <x> <y> <z>` line, with a trailing byte count in a D3D12 library, into `header`, or
     // returns the breach.
     std::string readEntry(const LibraryFormat& format, std::string_view line, LibraryHeader& header, std::set<std::string, std::less<>>& names)
@@ -194,7 +186,6 @@ namespace {
         return {};
     }
 
-    //==================================================================================================================
     // Reads LF-ended header lines up to and including the closing `metallib <n>` or `dxil <n>`, never the payload as text.
     LibraryHeader readHeader(const LibraryFormat& format, std::span<const char> bytes)
     {
@@ -270,14 +261,12 @@ namespace {
         }
     }
 
-    //==================================================================================================================
     // Catch2 prints a failed comparison of entries through this.
     std::ostream& operator<<(std::ostream& stream, const LibraryEntry& entry)
     {
         return stream << std::format("{} {} {} {} {}", entry.name, entry.stage, entry.size[0], entry.size[1], entry.size[2]);
     }
 
-    //==================================================================================================================
     // Reads the header of a conformance shader's library and fails the case on a breach. xmake runs a test from its target
     // directory, which is where the build wrote Shaders/.
     LibraryHeader readLibrary(const LibraryFormat& format, std::string_view shader)
@@ -293,17 +282,15 @@ namespace {
 
     using Entries = std::vector<LibraryEntry>;
 
-    /// A conformance shader whose entries are known in full.
     struct ExpectedLibrary
     {
-        std::string_view shader; ///< The entry file's basename.
-        Entries entries;         ///< Its entries, in the order of the reflection.
+        std::string_view shader; // The entry file's basename.
+        Entries entries;         // Its entries, in the order of the reflection.
     };
 
     // One kernel per texture type of AbiTextures: seven sampled, the comparison sample, two multisample and five storage.
     constexpr std::size_t kTextureEntries = 15;
 
-    //==================================================================================================================
     std::vector<ExpectedLibrary> expectedLibraries()
     {
         return {
@@ -322,7 +309,6 @@ namespace {
         };
     }
 
-    //==================================================================================================================
     // Checks the entry lists of every conformance shader's library in `format`; both formats carry the same ones.
     void checkEntryLists(const LibraryFormat& format)
     {
@@ -342,24 +328,20 @@ namespace {
         }
     }
 
-    /// One `entry <name> <stage>` line of a Null library.
     struct NullEntry
     {
-        std::string name;  ///< The entry point's name.
-        std::string stage; ///< The stage word, as `core::stageName` spells it.
+        std::string name;
+        std::string stage; // The stage word, as `core::stageName` spells it.
 
-        /// Compares two entries by name and stage.
         friend bool operator==(const NullEntry&, const NullEntry&) = default;
     };
 
-    //==================================================================================================================
     // Catch2 prints a failed comparison of Null entries through this.
     std::ostream& operator<<(std::ostream& stream, const NullEntry& entry)
     {
         return stream << std::format("{} {}", entry.name, entry.stage);
     }
 
-    //==================================================================================================================
     // Reads the LF-ended lines of a conformance shader's Null library, failing the case on a missing file, a missing final
     // line feed or a carriage return.
     std::vector<std::string> readNullLines(std::string_view shader)
@@ -381,8 +363,6 @@ namespace {
         return lines;
     }
 
-    //==================================================================================================================
-    // The entries of a conformance shader's Null library, in file order.
     std::vector<NullEntry> readNullEntries(std::string_view shader)
     {
         const std::vector<std::string> lines = readNullLines(shader);
@@ -397,7 +377,6 @@ namespace {
     }
 } // namespace
 
-//======================================================================================================================
 TEST_CASE("every conformance shader packages a Metal shader library", "[abi]")
 {
     if (!kMetalLibrariesBuilt)
@@ -416,7 +395,6 @@ TEST_CASE("every conformance shader packages a Metal shader library", "[abi]")
     }
 }
 
-//======================================================================================================================
 TEST_CASE("the Metal shader libraries carry each entry's stage and threadgroup size", "[abi]")
 {
     if (!kMetalLibrariesBuilt)
@@ -426,7 +404,6 @@ TEST_CASE("the Metal shader libraries carry each entry's stage and threadgroup s
     checkEntryLists(kMetal);
 }
 
-//======================================================================================================================
 TEST_CASE("every conformance shader packages a D3D12 shader library", "[abi]")
 {
     if (!kD3D12LibrariesBuilt)
@@ -454,7 +431,6 @@ TEST_CASE("every conformance shader packages a D3D12 shader library", "[abi]")
     }
 }
 
-//======================================================================================================================
 TEST_CASE("the D3D12 shader libraries carry each entry's stage, threadgroup size and DXIL", "[abi]")
 {
     if (!kD3D12LibrariesBuilt)
@@ -473,7 +449,6 @@ TEST_CASE("the D3D12 shader libraries carry each entry's stage, threadgroup size
     }
 }
 
-//======================================================================================================================
 TEST_CASE("each entry's DXIL in a D3D12 library is the rule's .dxil for that entry", "[abi]")
 {
     if (!kD3D12LibrariesBuilt)
@@ -507,7 +482,6 @@ TEST_CASE("each entry's DXIL in a D3D12 library is the rule's .dxil for that ent
     }
 }
 
-//======================================================================================================================
 TEST_CASE("every conformance shader packages a Null shader library", "[abi]")
 {
     STATIC_REQUIRE(kNullLibrariesBuilt);
@@ -532,7 +506,6 @@ TEST_CASE("every conformance shader packages a Null shader library", "[abi]")
     }
 }
 
-//======================================================================================================================
 TEST_CASE("the Null shader libraries list the entries the Metal and D3D12 libraries carry", "[abi]")
 {
     for (const ExpectedLibrary& expected : expectedLibraries())
@@ -555,7 +528,6 @@ TEST_CASE("the Null shader libraries list the entries the Metal and D3D12 librar
     }
 }
 
-//======================================================================================================================
 TEST_CASE("the embedded Standard library is the configured backend's library", "[abi]")
 {
 #if defined(ROJORHI_TEST_BACKEND_METAL4)

@@ -16,27 +16,23 @@ using namespace rojoRHI;
 using rojoRHI::test::SparseKit;
 
 namespace {
-    //==================================================================================================================
     Texture plainTexture(Device device)
     {
         return *device.createTexture(TextureDesc{ .format = Format::RGBA8Unorm, .extent = { 256, 256, 1 }, .usage = TextureUsage::Sampled });
     }
 
-    //==================================================================================================================
-    /// A sparse texture of one 128 by 128 tile and a single mip, which therefore has no mip tail.
+    // One tile and one mip, so no mip tail.
     Texture oneTileTexture(Device device)
     {
         return *device.createTexture(TextureDesc{ .format = Format::RGBA8Unorm, .extent = { 128, 128, 1 }, .usage = TextureUsage::Sparse });
     }
 
-    //==================================================================================================================
     void mapOne(SparseKit& kit, const TileMapping& mapping)
     {
         kit.queue.mapTiles(std::array{ mapping });
     }
 } // namespace
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-sparse-0001 the tile shape of a texture without Sparse usage is asked", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-sparse-0001", [] {
@@ -45,7 +41,6 @@ TEST_CASE("VU-rojo-sparse-0001 the tile shape of a texture without Sparse usage 
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-sparse-0001 the tile shape of a buffer without Sparse usage is asked", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-sparse-0001", [] {
@@ -54,7 +49,6 @@ TEST_CASE("VU-rojo-sparse-0001 the tile shape of a buffer without Sparse usage i
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-present-0012 the tile shape of a swapchain image is asked", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-present-0012", [] {
@@ -65,7 +59,6 @@ TEST_CASE("VU-rojo-present-0012 the tile shape of a swapchain image is asked", "
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-present-0012 a swapchain image is mapped", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-present-0012", [] {
@@ -78,7 +71,6 @@ TEST_CASE("VU-rojo-present-0012 a swapchain image is mapped", "[contract][death]
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-sparse-0002 a mapping names neither a texture nor a buffer", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-sparse-0002", [] {
@@ -89,7 +81,6 @@ TEST_CASE("VU-rojo-sparse-0002 a mapping names neither a texture nor a buffer", 
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-sparse-0002 a mapping names a texture and a buffer", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-sparse-0002", [] {
@@ -100,7 +91,6 @@ TEST_CASE("VU-rojo-sparse-0002 a mapping names a texture and a buffer", "[contra
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-sparse-0003 a mapping names a texture without Sparse usage", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-sparse-0003", [] {
@@ -111,7 +101,6 @@ TEST_CASE("VU-rojo-sparse-0003 a mapping names a texture without Sparse usage", 
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-sparse-0003 a mapping names a buffer without Sparse usage", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-sparse-0003", [] {
@@ -122,7 +111,6 @@ TEST_CASE("VU-rojo-sparse-0003 a mapping names a buffer without Sparse usage", "
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-sparse-0004 a region starts off the tile grid", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-sparse-0004", [] {
@@ -133,7 +121,6 @@ TEST_CASE("VU-rojo-sparse-0004 a region starts off the tile grid", "[contract][d
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-sparse-0004 a region ends inside a tile short of the level's edge", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-sparse-0004", [] {
@@ -144,7 +131,6 @@ TEST_CASE("VU-rojo-sparse-0004 a region ends inside a tile short of the level's 
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-sparse-0004 a region lies in the mip tail", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-sparse-0004", [] {
@@ -156,7 +142,6 @@ TEST_CASE("VU-rojo-sparse-0004 a region lies in the mip tail", "[contract][death
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-sparse-0004 a region reaches past its level", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-sparse-0004", [] {
@@ -167,7 +152,6 @@ TEST_CASE("VU-rojo-sparse-0004 a region reaches past its level", "[contract][dea
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-sparse-0004 a region names layers past the texture", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-sparse-0004", [] {
@@ -178,7 +162,6 @@ TEST_CASE("VU-rojo-sparse-0004 a region names layers past the texture", "[contra
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-sparse-0005 a mip tail is mapped on a texture without one", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-sparse-0005", [] {
@@ -190,7 +173,6 @@ TEST_CASE("VU-rojo-sparse-0005 a mip tail is mapped on a texture without one", "
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-sparse-0005 a mip tail is mapped for layers past the texture", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-sparse-0005", [] {
@@ -201,7 +183,6 @@ TEST_CASE("VU-rojo-sparse-0005 a mip tail is mapped for layers past the texture"
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-sparse-0006 a buffer mapping sets mipTail", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-sparse-0006", [] {
@@ -212,7 +193,6 @@ TEST_CASE("VU-rojo-sparse-0006 a buffer mapping sets mipTail", "[contract][death
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-sparse-0007 a buffer range starts off the tile grid", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-sparse-0007", [] {
@@ -223,7 +203,6 @@ TEST_CASE("VU-rojo-sparse-0007 a buffer range starts off the tile grid", "[contr
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-sparse-0007 a buffer range is empty", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-sparse-0007", [] {
@@ -234,7 +213,6 @@ TEST_CASE("VU-rojo-sparse-0007 a buffer range is empty", "[contract][death]")
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-sparse-0007 a buffer range ends inside a tile short of the buffer's end", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-sparse-0007", [] {
@@ -245,7 +223,6 @@ TEST_CASE("VU-rojo-sparse-0007 a buffer range ends inside a tile short of the bu
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-sparse-0007 a buffer range reaches past the buffer", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-sparse-0007", [] {
@@ -254,7 +231,6 @@ TEST_CASE("VU-rojo-sparse-0007 a buffer range reaches past the buffer", "[contra
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-sparse-0008 a mapping names no heap", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-sparse-0008", [] {
@@ -265,7 +241,6 @@ TEST_CASE("VU-rojo-sparse-0008 a mapping names no heap", "[contract][death]")
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-sparse-0008 a heap offset is not a multiple of the tile bytes", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-sparse-0008", [] {
@@ -276,7 +251,6 @@ TEST_CASE("VU-rojo-sparse-0008 a heap offset is not a multiple of the tile bytes
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-sparse-0008 a mapped tile lies past the end of the heap", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-sparse-0008", [] {
@@ -285,7 +259,6 @@ TEST_CASE("VU-rojo-sparse-0008 a mapped tile lies past the end of the heap", "[c
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-sparse-0009 tiles are mapped from an Upload heap", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-sparse-0009", [] {
@@ -296,7 +269,6 @@ TEST_CASE("VU-rojo-sparse-0009 tiles are mapped from an Upload heap", "[contract
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-sparse-0010 an unmap names a heap", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-sparse-0010", [] {
@@ -307,7 +279,6 @@ TEST_CASE("VU-rojo-sparse-0010 an unmap names a heap", "[contract][death]")
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-sparse-0010 an unmap gives a heap offset", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-sparse-0010", [] {
@@ -318,7 +289,6 @@ TEST_CASE("VU-rojo-sparse-0010 an unmap gives a heap offset", "[contract][death]
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-sparse-0006 the third element of a call of three sets mipTail on a buffer", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-sparse-0006", [] {
@@ -331,7 +301,6 @@ TEST_CASE("VU-rojo-sparse-0006 the third element of a call of three sets mipTail
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-sparse-0012 two elements map the same tile", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-sparse-0012", [] {
@@ -342,7 +311,6 @@ TEST_CASE("VU-rojo-sparse-0012 two elements map the same tile", "[contract][deat
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-sparse-0012 a region and an unmap name the same tile", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-sparse-0012", [] {
@@ -351,7 +319,6 @@ TEST_CASE("VU-rojo-sparse-0012 a region and an unmap name the same tile", "[cont
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-sparse-0012 two elements map the same range of a buffer", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-sparse-0012", [] {
@@ -360,7 +327,6 @@ TEST_CASE("VU-rojo-sparse-0012 two elements map the same range of a buffer", "[c
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-device-0009 a heap with a mapped tile is destroyed", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-device-0009", [] {

@@ -28,14 +28,11 @@
 using namespace rojoRHI;
 
 namespace {
-    /// Guards `g_messages`, which the message callback may fill from any thread.
+    // The message callback may fill `g_messages` from any thread.
     std::mutex g_messagesMutex;
 
-    /// The messages at `Warning` or above the library reported while a case collected them.
     std::vector<std::string> g_messages;
 
-    //==================================================================================================================
-    /// Keeps `message` when it is a warning or an error. It may run on any thread.
     void collectMessage(MessageSeverity severity, std::string_view message, void*)
     {
         if (severity == MessageSeverity::Info)
@@ -46,25 +43,20 @@ namespace {
         g_messages.emplace_back(message);
     }
 
-    /// Collects the library's warnings and errors, the debug layer's included, into `g_messages`, emptied first, while it
-    /// lives, and removes the callback when it goes, however the case ends.
+    // Removes the callback when it goes, however the case ends.
     class MessageCollection
     {
       public:
         MessageCollection();
         ~MessageCollection();
 
-        //==============================================================================================================
         MessageCollection(const MessageCollection&) = delete;
 
-        //==============================================================================================================
         MessageCollection& operator=(const MessageCollection&) = delete;
 
-        /// Returns the messages collected so far, and lists them for the log.
         size_t count() const;
     };
 
-    //==================================================================================================================
     MessageCollection::MessageCollection()
     {
         {
@@ -74,13 +66,11 @@ namespace {
         setMessageCallback(collectMessage, nullptr);
     }
 
-    //==================================================================================================================
     MessageCollection::~MessageCollection()
     {
         setMessageCallback(nullptr, nullptr);
     }
 
-    //==================================================================================================================
     size_t MessageCollection::count() const
     {
         const std::lock_guard lock(g_messagesMutex);
@@ -91,8 +81,6 @@ namespace {
         return g_messages.size();
     }
 
-    //==================================================================================================================
-    /// Returns a new device with the default description.
     Device makeDevice()
     {
         Result<Device> created = createDevice();
@@ -100,8 +88,6 @@ namespace {
         return *created;
     }
 
-    //==================================================================================================================
-    /// Returns a new texture of `desc` on `device`.
     Texture makeTexture(Device device, const TextureDesc& desc, std::span<const TextureData> initial = {})
     {
         Result<Texture> created = device.createTexture(desc, initial);
@@ -109,8 +95,6 @@ namespace {
         return *created;
     }
 
-    //==================================================================================================================
-    /// Returns the payload of `texture`, a live texture of `device`.
     const d3d12::TexturePayload& payloadOf(Device device, Texture texture)
     {
         const auto* payload = static_cast<const d3d12::TexturePayload*>(DeviceImpl::of(device).core.pool<Texture>().native(texture));
@@ -119,8 +103,6 @@ namespace {
         return *payload;
     }
 
-    //==================================================================================================================
-    /// Returns the description `resource` was created with.
     D3D12_RESOURCE_DESC1 descOf(ID3D12Resource* resource)
     {
         d3d12::Com<ID3D12Resource2> described;
@@ -128,16 +110,13 @@ namespace {
         return described->GetDesc1();
     }
 
-    //==================================================================================================================
-    /// Returns the references `resource` holds, read by taking one and giving it back.
+    // Read by taking one reference and giving it back.
     ULONG referencesOf(ID3D12Resource* resource)
     {
         resource->AddRef();
         return resource->Release();
     }
 
-    //==================================================================================================================
-    /// Runs `count` frames on `device`, with no work in them.
     void emptyFrames(Device device, uint32_t count)
     {
         for (uint32_t frame = 0; frame < count; ++frame)
@@ -147,8 +126,6 @@ namespace {
         }
     }
 
-    //==================================================================================================================
-    /// Returns `size` bytes counting up from `seed`, wrapping at 256.
     std::vector<std::byte> pattern(size_t size, uint32_t seed)
     {
         std::vector<std::byte> bytes(size);
@@ -159,18 +136,16 @@ namespace {
         return bytes;
     }
 
-    /// The shape of one texture type and the resource D3D12 makes of it.
     struct TypeShape
     {
-        TextureType type = TextureType::Tex2D;                                   ///< The texture's type.
-        Extent3D extent = {};                                                    ///< Its mip-0 extent.
-        uint32_t layers = 1;                                                     ///< Its layers, faces for cube types.
-        D3D12_RESOURCE_DIMENSION dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D; ///< The resource's dimension.
-        UINT16 depthOrArraySize = 1;                                             ///< The resource's depth or array size.
+        TextureType type = TextureType::Tex2D;
+        Extent3D extent = {};
+        uint32_t layers = 1; // Faces for cube types.
+        D3D12_RESOURCE_DIMENSION dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
+        UINT16 depthOrArraySize = 1;
     };
 } // namespace
 
-//======================================================================================================================
 TEST_CASE("every texture type creates its D3D12 resource", "[d3d12]")
 {
     const TypeShape shapes[] = {
@@ -207,7 +182,6 @@ TEST_CASE("every texture type creates its D3D12 resource", "[d3d12]")
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("a texture's initial data is in every mip and layer when createTexture returns", "[d3d12]")
 {
     constexpr uint32_t kMips = 3;
@@ -248,7 +222,6 @@ TEST_CASE("a texture's initial data is in every mip and layer when createTexture
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("a texture with initial data is in the generic shader-resource layout when created", "[d3d12]")
 {
     Device device = makeDevice();
@@ -264,7 +237,6 @@ TEST_CASE("a texture with initial data is in the generic shader-resource layout 
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("an sRGB texture is castable or typeless", "[d3d12]")
 {
     Device device = makeDevice();
@@ -286,7 +258,6 @@ TEST_CASE("an sRGB texture is castable or typeless", "[d3d12]")
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("a sampled depth texture is typeless and its views read depth and stencil planes", "[d3d12]")
 {
     Device device = makeDevice();
@@ -338,7 +309,6 @@ TEST_CASE("a sampled depth texture is typeless and its views read depth and sten
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("a render-target texture caches one RTV per mip and layer", "[d3d12]")
 {
     Device device = makeDevice();
@@ -388,7 +358,6 @@ TEST_CASE("a render-target texture caches one RTV per mip and layer", "[d3d12]")
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("a single-layer view of layer 0 takes the non-array dimension and a later layer the array one", "[d3d12]")
 {
     core::TextureRecord array;
@@ -479,7 +448,6 @@ TEST_CASE("a single-layer view of layer 0 takes the non-array dimension and a la
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("a view holds its texture's resource until the view retires", "[d3d12]")
 {
     Device device = makeDevice();
@@ -502,7 +470,6 @@ TEST_CASE("a view holds its texture's resource until the view retires", "[d3d12]
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("a sampler is written at its sampler-heap index", "[d3d12]")
 {
     Device device = makeDevice();
@@ -524,7 +491,6 @@ TEST_CASE("a sampler is written at its sampler-heap index", "[d3d12]")
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("views of a reserved range are written at the range's indices", "[d3d12]")
 {
     Device device = makeDevice();

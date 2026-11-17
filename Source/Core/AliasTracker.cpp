@@ -13,11 +13,9 @@
 
 namespace rojoRHI::core {
     namespace {
-        /// The value a texture's flag holds while it aliases; only its being non-null matters.
+        // Only a flag's being non-null matters.
         int gAliasMark = 0;
 
-        //==============================================================================================================
-        /// Returns true when `occupied` holds a byte of [begin, end).
         bool overlaps(const std::map<uint64_t, uint64_t>& occupied, uint64_t begin, uint64_t end)
         {
             auto next = occupied.upper_bound(begin);
@@ -28,8 +26,6 @@ namespace rojoRHI::core {
             return next != occupied.end() && next->first < end;
         }
 
-        //==============================================================================================================
-        /// Adds [begin, end) to `occupied`, merging the ranges it touches.
         void occupy(std::map<uint64_t, uint64_t>& occupied, uint64_t begin, uint64_t end)
         {
             auto next = occupied.upper_bound(begin);
@@ -49,19 +45,16 @@ namespace rojoRHI::core {
         }
     } // namespace
 
-    //==================================================================================================================
     void AliasTracker::placeBuffer(Buffer buffer, Heap heap, uint64_t offset, uint64_t size)
     {
         place(buffer.bits, 0, heap, offset, size);
     }
 
-    //==================================================================================================================
     void AliasTracker::placeTexture(Texture texture, Heap heap, uint64_t offset, uint64_t size)
     {
         place(texture.bits, HandlePool<Texture, TextureRecord>::slotIndex(texture), heap, offset, size);
     }
 
-    //==================================================================================================================
     void AliasTracker::place(uint64_t bits, uint32_t slot, Heap heap, uint64_t offset, uint64_t size)
     {
         std::lock_guard lock(m_mutex);
@@ -83,7 +76,6 @@ namespace rojoRHI::core {
         state.live.emplace(bits, placed);
     }
 
-    //==================================================================================================================
     void AliasTracker::markAliased(Placed& placed)
     {
         placed.aliased = true;
@@ -94,7 +86,6 @@ namespace rojoRHI::core {
         }
     }
 
-    //==================================================================================================================
     void AliasTracker::unplace(Heap heap, uint64_t bits)
     {
         std::lock_guard lock(m_mutex);
@@ -120,39 +111,33 @@ namespace rojoRHI::core {
         state->second.live.erase(placed);
     }
 
-    //==================================================================================================================
     void AliasTracker::addSparse()
     {
         m_counts.fetch_add(kSparseOne, std::memory_order_relaxed);
     }
 
-    //==================================================================================================================
     void AliasTracker::removeSparse()
     {
         [[maybe_unused]] const uint64_t before = m_counts.fetch_sub(kSparseOne, std::memory_order_relaxed);
         ROJORHI_INTERNAL_ASSERT(before >= kSparseOne, "more sparse resources were destroyed than were created");
     }
 
-    //==================================================================================================================
     void AliasTracker::forgetHeap(Heap heap)
     {
         std::lock_guard lock(m_mutex);
         m_heaps.erase(heap.bits);
     }
 
-    //==================================================================================================================
     bool AliasTracker::anyAliasing() const
     {
         return m_counts.load(std::memory_order_relaxed) != 0;
     }
 
-    //==================================================================================================================
     bool AliasTracker::anySparse() const
     {
         return m_counts.load(std::memory_order_relaxed) >= kSparseOne;
     }
 
-    //==================================================================================================================
     bool AliasTracker::textureAliases(Texture texture) const
     {
         return m_textureFlags.load(HandlePool<Texture, TextureRecord>::slotIndex(texture)) != nullptr;

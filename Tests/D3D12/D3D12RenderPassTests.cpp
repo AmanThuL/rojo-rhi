@@ -27,20 +27,15 @@
 using namespace rojoRHI;
 
 namespace {
-    /// The width and height of the textures the cases render to.
     constexpr uint32_t kSize = 4;
 
-    /// The samples of a multisampled attachment.
     constexpr uint32_t kSamples = 4;
 
-    /// Guards `g_messages`, which the message callback may fill from any thread.
+    // The message callback may fill `g_messages` from any thread.
     std::mutex g_messagesMutex;
 
-    /// The messages at `Warning` or above the library reported while a case collected them.
     std::vector<std::string> g_messages;
 
-    //==================================================================================================================
-    /// Keeps `message` when it is a warning or an error. It may run on any thread.
     void collectMessage(MessageSeverity severity, std::string_view message, void*)
     {
         if (severity == MessageSeverity::Info)
@@ -51,25 +46,20 @@ namespace {
         g_messages.emplace_back(message);
     }
 
-    /// Collects the library's warnings and errors, the debug layer's included, into `g_messages`, emptied first, while it
-    /// lives.
+    // Collects warnings and errors, the debug layer's included, into `g_messages`, emptied first, while it lives.
     class MessageCollection
     {
       public:
         MessageCollection();
         ~MessageCollection();
 
-        //==============================================================================================================
         MessageCollection(const MessageCollection&) = delete;
 
-        //==============================================================================================================
         MessageCollection& operator=(const MessageCollection&) = delete;
 
-        /// Returns how many messages were collected, and lists them for the log.
         size_t count() const;
     };
 
-    //==================================================================================================================
     MessageCollection::MessageCollection()
     {
         {
@@ -79,13 +69,11 @@ namespace {
         setMessageCallback(collectMessage, nullptr);
     }
 
-    //==================================================================================================================
     MessageCollection::~MessageCollection()
     {
         setMessageCallback(nullptr, nullptr);
     }
 
-    //==================================================================================================================
     size_t MessageCollection::count() const
     {
         const std::lock_guard lock(g_messagesMutex);
@@ -96,9 +84,7 @@ namespace {
         return g_messages.size();
     }
 
-    //==================================================================================================================
-    /// Returns a new device with the default description, except that it times scopes, so a pass's counts include its two
-    /// queries.
+    // Times scopes and emits their events (ADR 0034), so a pass's counts include its two queries and its event pair.
     Device makeDevice()
     {
         Result<Device> created = createDevice({ .scopeTimings = true, .debugMarkers = true });
@@ -106,8 +92,6 @@ namespace {
         return *created;
     }
 
-    //==================================================================================================================
-    /// Returns a new fence at zero on `device`, labelled `label`.
     Fence makeFence(Device device, std::string_view label)
     {
         Result<Fence> created = device.createFence(0, label);
@@ -115,8 +99,6 @@ namespace {
         return *created;
     }
 
-    //==================================================================================================================
-    /// Returns a new `kSize` by `kSize` 2D texture of `format`, `samples` and `usage` on `device`, labelled `label`.
     Texture makeTexture(Device device, Format format, uint32_t samples, TextureUsage usage, std::string_view label)
     {
         Result<Texture> created = device.createTexture({ .format = format, .extent = { kSize, kSize, 1 }, .samples = samples, .usage = usage, .label = label });
@@ -124,22 +106,16 @@ namespace {
         return *created;
     }
 
-    //==================================================================================================================
-    /// Returns a new single-sample RGBA8 render target on `device`, labelled `label`.
     Texture makeColor(Device device, std::string_view label)
     {
         return makeTexture(device, Format::RGBA8Unorm, 1, TextureUsage::RenderTarget, label);
     }
 
-    //==================================================================================================================
-    /// Returns a new multisampled RGBA8 render target on `device`, labelled `label`.
     Texture makeMultisample(Device device, std::string_view label)
     {
         return makeTexture(device, Format::RGBA8Unorm, kSamples, TextureUsage::RenderTarget, label);
     }
 
-    //==================================================================================================================
-    /// Returns the payload of `texture`, a live texture of `device`.
     const d3d12::TexturePayload& payloadOf(Device device, Texture texture)
     {
         const auto* payload = static_cast<const d3d12::TexturePayload*>(DeviceImpl::of(device).core.pool<Texture>().native(texture));
@@ -148,46 +124,35 @@ namespace {
         return *payload;
     }
 
-    //==================================================================================================================
-    /// Returns the native state of `list`.
     d3d12::ListState& stateOf(CommandList list)
     {
         return CommandListImpl::of(list).state;
     }
 
-    //==================================================================================================================
-    /// Returns the native calls `list` has recorded since its acquisition.
     uint64_t recordCalls(CommandList list)
     {
         return core::coreOf(list).counts.nativeRecordCalls;
     }
 
-    //==================================================================================================================
-    /// Returns the native barrier commands `list` has recorded since its acquisition.
     uint64_t nativeBarriers(CommandList list)
     {
         return core::coreOf(list).counts.nativeBarriers;
     }
 
-    //==================================================================================================================
-    /// Returns the render passes `list` has begun since its acquisition.
     uint64_t passesBegun(CommandList list)
     {
         return core::coreOf(list).counts.encodersOpened;
     }
 
-    /// The stage and access of one use of a texture subresource.
     struct Use
     {
-        Stage stage = Stage::None;    ///< The stages the use runs in.
-        Access access = Access::None; ///< What the use does to memory.
+        Stage stage = Stage::None;
+        Access access = Access::None;
     };
 
-    //==================================================================================================================
-    /// Returns the use of a subresource in `layout` that a barrier into the layout names as its destination and a barrier out
-    /// of it as its source. `ColorAttachment` names the color-attachment and resolve stages with color-attachment writes, the
-    /// render-target access that layout admits; `DepthStencilWrite` names depth-stencil reads and writes, and `CopySrc` copy
-    /// reads.
+    // The use a barrier into `layout` names as its destination and one out of it as its source: `ColorAttachment` names
+    // the color-attachment and resolve stages with color-attachment writes, `DepthStencilWrite` depth-stencil reads and
+    // writes, and `CopySrc` copy reads.
     Use useOf(Layout layout)
     {
         switch (layout)
@@ -199,9 +164,7 @@ namespace {
         }
     }
 
-    //==================================================================================================================
-    /// Returns a barrier that moves every subresource of `texture` from `from` to `to`, waiting for the use `from` permits
-    /// and holding back the use `to` permits; a barrier from `Undefined` waits for nothing.
+    // Waits for the use `from` permits and holds back the use `to` permits; from `Undefined` it waits for nothing.
     TextureBarrier transition(Texture texture, Layout from, Layout to)
     {
         const Use before = useOf(from);
@@ -215,8 +178,6 @@ namespace {
                  .newLayout = to };
     }
 
-    //==================================================================================================================
-    /// Records one batch on `list` moving each texture of `textures` from `from` to `to`.
     void transitionAll(CommandList list, std::span<const Texture> textures, Layout from, Layout to)
     {
         std::vector<TextureBarrier> barriers;
@@ -227,15 +188,11 @@ namespace {
         list.barrier({}, {}, barriers);
     }
 
-    //==================================================================================================================
-    /// Returns a pass over `colors` and `depth` that renders to the whole of a `kSize` by `kSize` attachment.
     RenderPassDesc passOf(std::span<const ColorAttachment> colors, const DepthAttachment& depth = {})
     {
         return RenderPassDesc{ .colors = colors, .depth = depth, .area = { 0, 0, kSize, kSize }, .label = "test.pass" };
     }
 
-    //==================================================================================================================
-    /// Ends `list`, a Graphics list of `device`, submits it signalling `value` on `done`, and waits for the value.
     void submitAndWait(Device device, CommandList list, Fence done, uint64_t value)
     {
         list.end();
@@ -244,8 +201,6 @@ namespace {
         REQUIRE(device.wait({ done, value }, UINT64_MAX));
     }
 
-    //==================================================================================================================
-    /// Returns `kSize * kSize` copies of the RGBA8 texel `texel`.
     std::vector<std::byte> filled(const std::array<uint8_t, 4>& texel)
     {
         std::vector<std::byte> bytes;
@@ -260,7 +215,6 @@ namespace {
     }
 } // namespace
 
-//======================================================================================================================
 TEST_CASE("a pass without a resolve costs BeginRenderPass, EndRenderPass and the scope; its starting values wait for a draw that reads them", "[d3d12]")
 {
     Device device = makeDevice();
@@ -289,7 +243,6 @@ TEST_CASE("a pass without a resolve costs BeginRenderPass, EndRenderPass and the
     CHECK(scope.label == "test.pass");
     CHECK(scope.timestamp == ((state.ordinal << 16) | 0u));
     CHECK(state.timestamps.open == std::vector<uint32_t>{ 0 });
-    // The target's view, its clear and its store.
     REQUIRE(state.pass.targetCount == 1u);
     const D3D12_RENDER_PASS_RENDER_TARGET_DESC& target = state.pass.targets[0];
     CHECK(target.cpuDescriptor.ptr == d3d12::targetView(payloadOf(device, color), 0, 0).ptr);
@@ -323,7 +276,6 @@ TEST_CASE("a pass without a resolve costs BeginRenderPass, EndRenderPass and the
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("a pass with a resolve target adds one barrier before and one after, and keeps its parameters alive until EndRenderPass", "[d3d12]")
 {
     Device device = makeDevice();
@@ -396,7 +348,6 @@ TEST_CASE("a pass with a resolve target adds one barrier before and one after, a
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("a pass whose resolve store is DontCare resolves without preserving the source", "[d3d12]")
 {
     Device device = makeDevice();
@@ -424,7 +375,6 @@ TEST_CASE("a pass whose resolve store is DontCare resolves without preserving th
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("a D32Float attachment uses NO_ACCESS for stencil; a D32FloatS8 attachment uses its stencil ops", "[d3d12]")
 {
     Device device = makeDevice();
@@ -486,7 +436,6 @@ TEST_CASE("a D32Float attachment uses NO_ACCESS for stencil; a D32FloatS8 attach
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("encodersOpened counts passes begun", "[d3d12]")
 {
     Device device = makeDevice();
@@ -517,7 +466,6 @@ TEST_CASE("encodersOpened counts passes begun", "[d3d12]")
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("a resolve target resolved by two consecutive passes and then read raises no GBV message and holds the second clear", "[d3d12]")
 {
     Device device = makeDevice();

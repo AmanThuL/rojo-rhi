@@ -28,11 +28,8 @@
 using namespace rojoRHI;
 
 namespace {
-    /// The one color target most cases draw to.
     constexpr std::array<ColorTarget, 1> kColor = { ColorTarget{ .format = Format::RGBA8Unorm } };
 
-    //==================================================================================================================
-    /// Loads the packaged conformance library `name` on `device`.
     ShaderLibrary load(Device& device, std::string_view name)
     {
         const Result<ShaderLibrary> library = device.loadShaderLibrary(test::shaderLibraryFile(name), std::string("test.") + std::string(name));
@@ -40,8 +37,6 @@ namespace {
         return *library;
     }
 
-    //==================================================================================================================
-    /// Returns the payload of `pipeline`, read as recording reads it.
     const metal4::PipelineState& stateOf(Device& device, Pipeline pipeline)
     {
         const auto* state = static_cast<const metal4::PipelineState*>(DeviceImpl::of(device).core.pool<Pipeline>().native(pipeline));
@@ -49,8 +44,6 @@ namespace {
         return *state;
     }
 
-    //==================================================================================================================
-    /// Creates `desc` on `device`, failing the case with the error's message when creation fails.
     Pipeline create(Device& device, const GraphicsPipelineDesc& desc)
     {
         const Result<Pipeline> pipeline = device.createPipeline(desc);
@@ -59,8 +52,6 @@ namespace {
         return *pipeline;
     }
 
-    //==================================================================================================================
-    /// Creates a compute pipeline over `entry` of `library`, failing the case with the error's message when creation fails.
     Pipeline createCompute(Device& device, ShaderLibrary library, std::string_view entry)
     {
         const Result<Pipeline> pipeline = device.createPipeline(ComputePipelineDesc{ .compute = { library, entry }, .label = "test.compute" });
@@ -70,8 +61,6 @@ namespace {
         return *pipeline;
     }
 
-    //==================================================================================================================
-    /// The standard vertex and fragment pipeline over one `RGBA8Unorm` target, with `raster` and `depthStencil`.
     GraphicsPipelineDesc standardDesc(ShaderLibrary library, const RasterState& raster = {}, const DepthStencilState& depthStencil = {})
     {
         return GraphicsPipelineDesc{
@@ -85,15 +74,12 @@ namespace {
         };
     }
 
-    //==================================================================================================================
-    /// Returns `object`'s retain count.
     NS::UInteger retainsOf(const NS::Object* object)
     {
         return object->retainCount();
     }
 } // namespace
 
-//======================================================================================================================
 TEST_CASE("a vertex pipeline's payload holds its raster state, list topology and depth-stencil state", "[metal4]")
 {
     Device device = *createDevice({});
@@ -136,7 +122,6 @@ TEST_CASE("a vertex pipeline's payload holds its raster state, list topology and
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("pipelines with equal depth-stencil states share one native state, and one testing neither has none", "[metal4]")
 {
     Device device = *createDevice({});
@@ -181,7 +166,6 @@ TEST_CASE("pipelines with equal depth-stencil states share one native state, and
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("the depth-stencil cache counts each native creation and release", "[metal4]")
 {
     Device device = *createDevice({});
@@ -208,7 +192,6 @@ TEST_CASE("the depth-stencil cache counts each native creation and release", "[m
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("a compute pipeline's payload holds the library's threadgroup size", "[metal4]")
 {
     REQUIRE(kMetalLibrariesBuilt);
@@ -225,7 +208,6 @@ TEST_CASE("a compute pipeline's payload holds the library's threadgroup size", "
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("a mesh pipeline holds the object and mesh sizes of its library", "[metal4]")
 {
     REQUIRE(kMetalLibrariesBuilt);
@@ -245,7 +227,6 @@ TEST_CASE("a mesh pipeline holds the object and mesh sizes of its library", "[me
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("every conformance entry makes a pipeline", "[metal4]")
 {
     REQUIRE(kMetalLibrariesBuilt);
@@ -307,7 +288,6 @@ TEST_CASE("every conformance entry makes a pipeline", "[metal4]")
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("createPipeline counts the pipeline and its compile time", "[metal4]")
 {
     Device device = *createDevice({});
@@ -324,7 +304,6 @@ TEST_CASE("createPipeline counts the pipeline and its compile time", "[metal4]")
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("four threads create pipelines at once and share depth-stencil states", "[metal4]")
 {
     Device device = *createDevice({});
@@ -374,7 +353,6 @@ TEST_CASE("four threads create pipelines at once and share depth-stencil states"
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("a destroyed pipeline is released when its frame retires; device teardown releases the depth-stencil states", "[metal4]")
 {
     Device device = *createDevice({ .framesInFlight = 2 });
@@ -406,7 +384,6 @@ TEST_CASE("a destroyed pipeline is released when its frame retires; device teard
     depthStencil->release();
 }
 
-//======================================================================================================================
 TEST_CASE("a pipeline whose fragment reads a varying its vertex does not write is DriverFailure", "[metal4]")
 {
     REQUIRE(kMetalLibrariesBuilt);
@@ -424,7 +401,6 @@ TEST_CASE("a pipeline whose fragment reads a varying its vertex does not write i
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("a mesh pipeline with color targets, a depth format and no fragment entry is DriverFailure", "[metal4]")
 {
     Device device = *createDevice({});
@@ -441,7 +417,6 @@ TEST_CASE("a mesh pipeline with color targets, a depth format and no fragment en
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("color targets reach the descriptor with their write masks, blend factors and operations", "[metal4]")
 {
     const std::array<ColorTarget, 3> targets = {

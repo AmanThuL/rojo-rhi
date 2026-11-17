@@ -11,19 +11,16 @@
 #include <vector>
 
 namespace {
-    //==================================================================================================================
     void callSetMessageCallbackFromCallback(rojoRHI::MessageSeverity, std::string_view, void*)
     {
         rojoRHI::setMessageCallback(nullptr, nullptr);
     }
 
-    //==================================================================================================================
     void keepEveryMessage(rojoRHI::MessageSeverity, std::string_view, void*)
     {
     }
 } // namespace
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-core-0008 a message callback calls setMessageCallback", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-core-0008", [] {
@@ -32,7 +29,6 @@ TEST_CASE("VU-rojo-core-0008 a message callback calls setMessageCallback", "[con
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-cmd-0002 reaches stderr while a callback keeps every message", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-cmd-0002", [] {
@@ -46,13 +42,11 @@ TEST_CASE("VU-rojo-cmd-0002 reaches stderr while a callback keeps every message"
 }
 
 // The two cases below check the harness itself; Catch2 reports each as passing only when the case fails.
-//======================================================================================================================
 TEST_CASE("the death harness fails a body that returns", "[contract][death][!shouldfail]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-core-0008", [] {});
 }
 
-//======================================================================================================================
 TEST_CASE("the death harness fails a body that violates another rule", "[contract][death][!shouldfail]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-core-0008", [] {
@@ -61,7 +55,6 @@ TEST_CASE("the death harness fails a body that violates another rule", "[contrac
     });
 }
 
-//======================================================================================================================
 TEST_CASE("quoteWindowsArgument follows the command-line quoting rule", "[contract]")
 {
     CHECK(rojoRHI::test::quoteWindowsArgument("plain") == "\"plain\"");
@@ -72,7 +65,6 @@ TEST_CASE("quoteWindowsArgument follows the command-line quoting rule", "[contra
     CHECK(rojoRHI::test::quoteWindowsArgument("a\\, b \\[c\\]") == "\"a\\, b \\[c\\]\"");
 }
 
-//======================================================================================================================
 TEST_CASE("the child environment carries exactly one marker whatever the parent held", "[contract]")
 {
     using rojoRHI::test::withDeathChildMarker;
@@ -83,7 +75,6 @@ TEST_CASE("the child environment carries exactly one marker whatever the parent 
     CHECK(withDeathChildMarker(std::vector<std::string>{ "ROJORHI_DEATH_CHILD=1" }) == std::vector<std::string>{ "ROJORHI_DEATH_CHILD=1" });
 }
 
-//======================================================================================================================
 TEST_CASE("the wide child environment drops the marker in any casing", "[contract]")
 {
     using rojoRHI::test::withDeathChildMarker;
@@ -92,7 +83,6 @@ TEST_CASE("the wide child environment drops the marker in any casing", "[contrac
     CHECK(withDeathChildMarker(parent) == expected);
 }
 
-//======================================================================================================================
 TEST_CASE("only an unset marker is a parent and only 1 is a child", "[contract]")
 {
     using rojoRHI::test::DeathRole;

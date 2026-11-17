@@ -17,20 +17,16 @@ using namespace rojoRHI::core;
 namespace {
     constexpr uint32_t kCapacity = 4;
 
-    /// Collects the native payloads an allocator hands over, in order.
     struct Handed
     {
         std::vector<void*> payloads;
 
-        //==============================================================================================================
-        /// Returns the function `retire` and `drain` call with each payload.
         auto sink()
         {
             return [this](void* native) { payloads.push_back(native); };
         }
 
-        //==============================================================================================================
-        /// Returns the payloads handed over so far in address order, which for elements of one array is index order.
+        // Address order, which for elements of one array is index order.
         std::vector<void*> sorted() const
         {
             std::vector<void*> ordered = payloads;
@@ -40,7 +36,6 @@ namespace {
     };
 } // namespace
 
-//======================================================================================================================
 TEST_CASE("fresh slots are handed out from zero in order", "[core]")
 {
     SlotAllocator slots;
@@ -51,7 +46,6 @@ TEST_CASE("fresh slots are handed out from zero in order", "[core]")
     CHECK(slots.state(2) == SlotState::Free);
 }
 
-//======================================================================================================================
 TEST_CASE("a full heap hands out nothing", "[core]")
 {
     SlotAllocator slots;
@@ -62,7 +56,6 @@ TEST_CASE("a full heap hands out nothing", "[core]")
     CHECK_FALSE(slots.allocate(kCapacity, 99).has_value());
 }
 
-//======================================================================================================================
 TEST_CASE("release returns the owner and a released slot is not reused before its frame retires", "[core]")
 {
     SlotAllocator slots;
@@ -78,7 +71,6 @@ TEST_CASE("release returns the owner and a released slot is not reused before it
     CHECK(slots.allocate(kCapacity, 3) == 0);
 }
 
-//======================================================================================================================
 TEST_CASE("a retired slot is reused even when the heap is full", "[core]")
 {
     SlotAllocator slots;
@@ -92,7 +84,6 @@ TEST_CASE("a retired slot is reused even when the heap is full", "[core]")
     CHECK(slots.allocate(kCapacity, 7) == 2);
 }
 
-//======================================================================================================================
 TEST_CASE("releasing a slot that is not assigned releases nothing", "[core]")
 {
     SlotAllocator slots;
@@ -103,7 +94,6 @@ TEST_CASE("releasing a slot that is not assigned releases nothing", "[core]")
     CHECK_FALSE(slots.release(3, [] { return uint64_t{ 1 }; }).has_value());
 }
 
-//======================================================================================================================
 TEST_CASE("a range takes contiguous slots after the singles and is not split by a single", "[core]")
 {
     SlotAllocator slots;
@@ -113,7 +103,6 @@ TEST_CASE("a range takes contiguous slots after the singles and is not split by 
     CHECK(slots.assignedCount() == 5);
 }
 
-//======================================================================================================================
 TEST_CASE("a range needs one contiguous run, not just enough free slots", "[core]")
 {
     SlotAllocator slots;
@@ -128,7 +117,6 @@ TEST_CASE("a range needs one contiguous run, not just enough free slots", "[core
     CHECK(slots.allocateRange(6, 1, 0).has_value());
 }
 
-//======================================================================================================================
 TEST_CASE("a range reuses a retired run and leaves its slots out of the single free list", "[core]")
 {
     SlotAllocator slots;
@@ -145,7 +133,6 @@ TEST_CASE("a range reuses a retired run and leaves its slots out of the single f
     CHECK_FALSE(slots.allocate(6, 9).has_value());
 }
 
-//======================================================================================================================
 TEST_CASE("a range can run from retired slots into never-used ones", "[core]")
 {
     SlotAllocator slots;
@@ -157,7 +144,6 @@ TEST_CASE("a range can run from retired slots into never-used ones", "[core]")
     CHECK_FALSE(slots.allocateRange(5, 1, 0).has_value());
 }
 
-//======================================================================================================================
 TEST_CASE("a range larger than the capacity is refused", "[core]")
 {
     SlotAllocator slots;
@@ -165,7 +151,6 @@ TEST_CASE("a range larger than the capacity is refused", "[core]")
     CHECK(slots.allocateRange(4, 4, 0) == 0);
 }
 
-//======================================================================================================================
 TEST_CASE("a released range returns its owners and is not reused before its frame retires", "[core]")
 {
     SlotAllocator slots;
@@ -181,7 +166,6 @@ TEST_CASE("a released range returns its owners and is not reused before its fram
     CHECK(slots.allocateRange(4, 3, 0) == 0);
 }
 
-//======================================================================================================================
 TEST_CASE("only the exact range that was reserved can be released, once", "[core]")
 {
     SlotAllocator slots;
@@ -194,7 +178,6 @@ TEST_CASE("only the exact range that was reserved can be released, once", "[core
     CHECK_FALSE(slots.releaseRange(0, 3, frame).has_value());
 }
 
-//======================================================================================================================
 TEST_CASE("a slot of a range is not released as a single and a single is not released as a range", "[core]")
 {
     SlotAllocator slots;
@@ -207,7 +190,6 @@ TEST_CASE("a slot of a range is not released as a single and a single is not rel
     CHECK(slots.release(2, frame) == 5);
 }
 
-//======================================================================================================================
 TEST_CASE("an owner is replaced only in a slot of an assigned range", "[core]")
 {
     SlotAllocator slots;
@@ -222,7 +204,6 @@ TEST_CASE("an owner is replaced only in a slot of an assigned range", "[core]")
     CHECK_FALSE(slots.replace(2, 11, nullptr, frame).has_value());
 }
 
-//======================================================================================================================
 TEST_CASE("holdsRange is true only for the exact assigned range", "[core]")
 {
     SlotAllocator slots;
@@ -237,7 +218,6 @@ TEST_CASE("holdsRange is true only for the exact assigned range", "[core]")
     CHECK_FALSE(slots.holdsRange(1, 3));
 }
 
-//======================================================================================================================
 TEST_CASE("a released slot hands its native payload over when its frame retires, not before", "[core]")
 {
     std::array<int, 1> payload{};
@@ -253,7 +233,6 @@ TEST_CASE("a released slot hands its native payload over when its frame retires,
     CHECK(handed.payloads.size() == 1);
 }
 
-//======================================================================================================================
 TEST_CASE("a replaced payload waits for the frame the replacement was made in", "[core]")
 {
     std::array<int, 2> payload{};
@@ -272,7 +251,6 @@ TEST_CASE("a replaced payload waits for the frame the replacement was made in", 
     CHECK(slots.state(0) == SlotState::Assigned);
 }
 
-//======================================================================================================================
 TEST_CASE("a released range hands over the payload of every slot it holds", "[core]")
 {
     std::array<int, 3> payload{};
@@ -291,7 +269,6 @@ TEST_CASE("a released range hands over the payload of every slot it holds", "[co
     CHECK(handed.payloads.size() == 3);
 }
 
-//======================================================================================================================
 TEST_CASE("retire still counts only single slots", "[core]")
 {
     std::array<int, 3> payload{};
@@ -308,7 +285,6 @@ TEST_CASE("retire still counts only single slots", "[core]")
     CHECK(handed.payloads.size() == 3);
 }
 
-//======================================================================================================================
 TEST_CASE("drain hands over every held and pending payload once and empties the allocator", "[core]")
 {
     std::array<int, 4> payload{};
@@ -332,7 +308,6 @@ TEST_CASE("drain hands over every held and pending payload once and empties the 
     CHECK(slots.allocate(8, 1) == 0);
 }
 
-//======================================================================================================================
 TEST_CASE("a reserved leading block is never handed out and capacity counts the slots after it", "[core]")
 {
     SlotAllocator slots;
@@ -356,7 +331,6 @@ TEST_CASE("a reserved leading block is never handed out and capacity counts the 
     CHECK(slots.allocate(2, 1) == 3);
 }
 
-//======================================================================================================================
 TEST_CASE("drain ends a reservation", "[core]")
 {
     SlotAllocator slots;

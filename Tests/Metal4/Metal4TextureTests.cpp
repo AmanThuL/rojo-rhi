@@ -28,36 +28,26 @@
 using namespace rojoRHI;
 
 namespace {
-    //==================================================================================================================
-    /// The native texture `texture` wraps.
     MTL::Texture* nativeOf(Device device, Texture texture)
     {
         return static_cast<MTL::Texture*>(DeviceImpl::of(device).core.pool<Texture>().native(texture));
     }
 
-    //==================================================================================================================
-    /// The native heap `heap` wraps.
     MTL::Heap* nativeOf(Device device, Heap heap)
     {
         return static_cast<MTL::Heap*>(DeviceImpl::of(device).core.pool<Heap>().native(heap));
     }
 
-    //==================================================================================================================
-    /// The resource ID the view table holds at `slot`.
     uint64_t viewEntry(Device device, uint32_t slot)
     {
         return static_cast<const MTL::ResourceID*>(DeviceImpl::of(device).viewTable->contents())[slot]._impl;
     }
 
-    //==================================================================================================================
-    /// The resource ID the sampler table holds at `slot`.
     uint64_t samplerEntry(Device device, uint32_t slot)
     {
         return static_cast<const MTL::ResourceID*>(DeviceImpl::of(device).samplerTable->contents())[slot]._impl;
     }
 
-    //==================================================================================================================
-    /// Runs `count` empty frames on `device`.
     void runFrames(Device device, uint32_t count)
     {
         for (uint32_t i = 0; i < count; ++i)
@@ -67,20 +57,18 @@ namespace {
         }
     }
 
-    /// One subresource of initial data: the bytes handed to `createTexture`, with the strides the case chose, and the tight
-    /// rows a readback of it returns.
     struct Subresource
     {
-        std::vector<std::byte> bytes;      ///< What `TextureData::bytes` views, padding included.
-        uint64_t bytesPerRow = 0;          ///< The stride between rows of texels or blocks.
-        uint64_t bytesPerImage = 0;        ///< The stride between slices; nonzero for Tex3D only.
-        std::vector<std::byte> tight = {}; ///< The same texels with no padding, as `test::readTexture` returns them.
-        uint64_t minimumSize = 0;          ///< The bytes chapter 04 requires: the last row and slice unpadded.
+        std::vector<std::byte> bytes;
+        uint64_t bytesPerRow = 0;
+        // Nonzero for Tex3D only.
+        uint64_t bytesPerImage = 0;
+        std::vector<std::byte> tight = {};
+        // The bytes chapter 04 requires: the last row and slice unpadded.
+        uint64_t minimumSize = 0;
     };
 
-    //==================================================================================================================
-    /// Builds subresource `mip` of a texture of `format` and mip-0 `extent`, every texel byte distinct per `seed`, with
-    /// `rowPadding` bytes after each row and `slicePadding` bytes after each slice of a volume.
+    // Every texel byte is distinct per `seed`.
     Subresource subresource(Format format, Extent3D extent, uint32_t mip, uint32_t seed, uint64_t rowPadding, uint64_t slicePadding, bool volume)
     {
         const core::FormatLayout layout = core::formatLayout(format);
@@ -110,8 +98,6 @@ namespace {
         return result;
     }
 
-    //==================================================================================================================
-    /// The `TextureData` entries that view `subresources`, in their order.
     std::vector<TextureData> dataOf(const std::vector<Subresource>& subresources)
     {
         std::vector<TextureData> data;
@@ -122,19 +108,17 @@ namespace {
         return data;
     }
 
-    /// The view and sampler payloads that retired while a spy was installed, each retained so a case can inspect it.
+    // Each payload is retained so a case can inspect it after retirement.
     struct Retired
     {
-        std::vector<MTL::Texture*> views;         ///< Each view payload handed to the `view` hook, in order.
-        std::vector<MTL::SamplerState*> samplers; ///< Each sampler payload handed to the `sampler` hook, in order.
+        std::vector<MTL::Texture*> views;
+        std::vector<MTL::SamplerState*> samplers;
     };
 
-    /// The hooks the spy wraps and what it saw; one device is spied on at a time.
+    // One device is spied on at a time.
     core::RetireHooks g_original;
     Retired g_retired;
 
-    //==================================================================================================================
-    /// Keeps a retained reference to a retiring view payload, then runs the wrapped hook.
     void spyView(void* context, void* native)
     {
         static_cast<MTL::Texture*>(native)->retain();
@@ -142,8 +126,6 @@ namespace {
         g_original.view(context, native);
     }
 
-    //==================================================================================================================
-    /// Keeps a retained reference to a retiring sampler payload, then runs the wrapped hook.
     void spySampler(void* context, void* native)
     {
         static_cast<MTL::SamplerState*>(native)->retain();
@@ -151,8 +133,6 @@ namespace {
         g_original.sampler(context, native);
     }
 
-    //==================================================================================================================
-    /// Wraps the `view` and `sampler` retire hooks of `device`, keeping each payload they release in `g_retired`.
     void spyOnRetirement(Device device)
     {
         core::DeviceCore& core = core::coreOf(device);
@@ -164,8 +144,6 @@ namespace {
         core.setRetireHooks(hooks);
     }
 
-    //==================================================================================================================
-    /// Releases every payload the spy kept and forgets them.
     void releaseRetired()
     {
         const metal4::AutoreleasePool pool;
@@ -180,8 +158,6 @@ namespace {
         g_retired = {};
     }
 
-    //==================================================================================================================
-    /// Destroys `view` and runs frames until its slot retires; returns the view object it held, which the spy keeps.
     MTL::Texture* retireView(Device device, ViewIndex view)
     {
         const size_t before = g_retired.views.size();
@@ -192,7 +168,6 @@ namespace {
     }
 } // namespace
 
-//======================================================================================================================
 TEST_CASE("a texture's initial data is in every mip and layer when createTexture returns", "[metal4]")
 {
     Device device = *createDevice();
@@ -224,7 +199,6 @@ TEST_CASE("a texture's initial data is in every mip and layer when createTexture
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("initial data of the minimum size, its last row and slice unpadded, arrives in full", "[metal4]")
 {
     Device device = *createDevice();
@@ -260,7 +234,6 @@ TEST_CASE("initial data of the minimum size, its last row and slice unpadded, ar
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("a cube texture's faces and a volume's slices receive their initial data", "[metal4]")
 {
     Device device = *createDevice();
@@ -298,7 +271,6 @@ TEST_CASE("a cube texture's faces and a volume's slices receive their initial da
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("a BC1 texture's blocks arrive when the device supports BC", "[metal4]")
 {
     Device device = *createDevice();
@@ -324,7 +296,6 @@ TEST_CASE("a BC1 texture's blocks arrive when the device supports BC", "[metal4]
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("a placed texture's initial data arrives and the texture stays out of the residency set", "[metal4]")
 {
     Device device = *createDevice();
@@ -358,7 +329,6 @@ TEST_CASE("a placed texture's initial data arrives and the texture stays out of 
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("a dedicated texture leaves the residency set when its frame retires", "[metal4]")
 {
     Device device = *createDevice({ .framesInFlight = 2 });
@@ -379,7 +349,6 @@ TEST_CASE("a dedicated texture leaves the residency set when its frame retires",
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("a texture's descriptor maps its type, extent, layers, samples and usage", "[metal4]")
 {
     const metal4::AutoreleasePool pool;
@@ -428,7 +397,6 @@ TEST_CASE("a texture's descriptor maps its type, extent, layers, samples and usa
     storage->release();
 }
 
-//======================================================================================================================
 TEST_CASE("a view of the whole texture stores the texture's own resource ID", "[metal4]")
 {
     Device device = *createDevice();
@@ -444,7 +412,6 @@ TEST_CASE("a view of the whole texture stores the texture's own resource ID", "[
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("a view of one mip stores a new view's resource ID", "[metal4]")
 {
     Device device = *createDevice();
@@ -479,7 +446,6 @@ TEST_CASE("a view of one mip stores a new view's resource ID", "[metal4]")
     releaseRetired();
 }
 
-//======================================================================================================================
 TEST_CASE("a stencil view of D32FloatS8 is an X32_Stencil8 view", "[metal4]")
 {
     Device device = *createDevice();
@@ -503,7 +469,6 @@ TEST_CASE("a stencil view of D32FloatS8 is an X32_Stencil8 view", "[metal4]")
     releaseRetired();
 }
 
-//======================================================================================================================
 TEST_CASE("an sRGB texture has a linear view in its family", "[metal4]")
 {
     Device device = *createDevice();
@@ -522,7 +487,6 @@ TEST_CASE("an sRGB texture has a linear view in its family", "[metal4]")
     releaseRetired();
 }
 
-//======================================================================================================================
 TEST_CASE("a linear texture has an sRGB view in its family and no format-view usage", "[metal4]")
 {
     Device device = *createDevice();
@@ -541,7 +505,6 @@ TEST_CASE("a linear texture has an sRGB view in its family and no format-view us
     releaseRetired();
 }
 
-//======================================================================================================================
 TEST_CASE("writeView replaces a slot's view and its old view is released when the frame retires", "[metal4]")
 {
     Device device = *createDevice({ .framesInFlight = 2 });
@@ -572,7 +535,6 @@ TEST_CASE("writeView replaces a slot's view and its old view is released when th
     releaseRetired();
 }
 
-//======================================================================================================================
 TEST_CASE("a sampler stores its resource ID in the sampler table and honours compare and anisotropy", "[metal4]")
 {
     Device device = *createDevice();
@@ -627,7 +589,6 @@ TEST_CASE("a sampler stores its resource ID in the sampler table and honours com
     releaseRetired();
 }
 
-//======================================================================================================================
 TEST_CASE("placement requirements of a texture are the device's size and alignment for the placed descriptor", "[metal4]")
 {
     Device device = *createDevice();
@@ -650,7 +611,6 @@ TEST_CASE("placement requirements of a texture are the device's size and alignme
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("a staged texture counts one staging buffer and one submission, and empty initial data stages nothing", "[metal4]")
 {
     Device device = *createDevice();

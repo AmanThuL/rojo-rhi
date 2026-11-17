@@ -17,19 +17,17 @@
 using namespace rojoRHI;
 
 namespace {
-    //==================================================================================================================
     uint32_t slotOf(Buffer buffer)
     {
         return core::HandlePool<Buffer, core::BufferRecord>::slotIndex(buffer);
     }
 
-    //==================================================================================================================
     void* nativeOf(Device device, Buffer buffer)
     {
         return core::coreOf(device).pool<Buffer>().lookup(buffer).record->native;
     }
 
-    /// Wraps the Null buffer hook: forwards each retiring record, then notes the frame and whether the payload was cleared.
+    // Forwards each retiring record to the Null buffer hook, then notes the frame and whether the payload was cleared.
     struct Spy
     {
         core::RetireHooks inner;
@@ -37,7 +35,6 @@ namespace {
         std::vector<std::pair<uint64_t, bool>> seen;
     };
 
-    //==================================================================================================================
     void spyOnBuffer(void* context, core::BufferRecord& record)
     {
         Spy& spy = *static_cast<Spy*>(context);
@@ -45,7 +42,6 @@ namespace {
         spy.seen.emplace_back(spy.core->frameNumber(), record.native == nullptr);
     }
 
-    //==================================================================================================================
     void spyOnSlot(void* context, uint32_t slot)
     {
         Spy& spy = *static_cast<Spy*>(context);
@@ -53,7 +49,6 @@ namespace {
     }
 } // namespace
 
-//======================================================================================================================
 TEST_CASE("a Null address holds the buffer's slot index in lo and the offset in hi", "[null]")
 {
     Device device = *createDevice();
@@ -68,7 +63,6 @@ TEST_CASE("a Null address holds the buffer's slot index in lo and the offset in 
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("Null operator+ adds to the offset word and keeps the index word", "[null]")
 {
     Device device = *createDevice();
@@ -79,7 +73,6 @@ TEST_CASE("Null operator+ adds to the offset word and keeps the index word", "[n
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("an address one byte below maxAddrOffset is accepted", "[null]")
 {
     Device device = *createDevice();
@@ -89,7 +82,6 @@ TEST_CASE("an address one byte below maxAddrOffset is accepted", "[null]")
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("an Upload buffer without initial data is zero-filled", "[null]")
 {
     Device device = *createDevice();
@@ -104,7 +96,6 @@ TEST_CASE("an Upload buffer without initial data is zero-filled", "[null]")
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("the unwritten tail of an Upload buffer with initial data is zero", "[null]")
 {
     Device device = *createDevice();
@@ -116,7 +107,6 @@ TEST_CASE("the unwritten tail of an Upload buffer with initial data is zero", "[
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("only Upload and Readback buffers hold host memory", "[null]")
 {
     Device device = *createDevice();
@@ -126,7 +116,6 @@ TEST_CASE("only Upload and Readback buffers hold host memory", "[null]")
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("host memory is freed when the frame that released the buffer retires", "[null]")
 {
     Device device = *createDevice({ .framesInFlight = 2 });
@@ -155,7 +144,6 @@ TEST_CASE("host memory is freed when the frame that released the buffer retires"
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("the Null decode of an address is its buffer's slot index and its byte offset", "[null]")
 {
     Device device = *createDevice();

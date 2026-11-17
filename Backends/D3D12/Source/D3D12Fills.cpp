@@ -22,7 +22,6 @@
 #include <cstdint>
 
 namespace rojoRHI {
-    //==================================================================================================================
     void CommandList::fillBuffer(Buffer dst, uint64_t offset, uint64_t size, uint32_t pattern)
     {
         CommandListImpl& list = CommandListImpl::of(*this);

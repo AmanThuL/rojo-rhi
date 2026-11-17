@@ -30,7 +30,6 @@ namespace {
     using BufferPool = HandlePool<Buffer, Rec>;
 } // namespace
 
-//======================================================================================================================
 TEST_CASE("a new handle is non-zero and carries the type tag", "[core]")
 {
     BufferPool pool;
@@ -40,7 +39,6 @@ TEST_CASE("a new handle is non-zero and carries the type tag", "[core]")
     CHECK(rojoRHI::core::handleTypeTag<rojoRHI::Upscaler>() == 7);
 }
 
-//======================================================================================================================
 TEST_CASE("a lookup returns the stored record", "[core]")
 {
     BufferPool pool;
@@ -51,7 +49,6 @@ TEST_CASE("a lookup returns the stored record", "[core]")
     CHECK(pool.checked(buffer, false) == result.record);
 }
 
-//======================================================================================================================
 TEST_CASE("the null handle reports core-0001 and is allowed only on request", "[core]")
 {
     BufferPool pool;
@@ -59,7 +56,6 @@ TEST_CASE("the null handle reports core-0001 and is allowed only on request", "[
     CHECK(pool.checked(Buffer{}, true) == nullptr);
 }
 
-//======================================================================================================================
 TEST_CASE("a released handle is rejected at once as stale", "[core]")
 {
     BufferPool pool;
@@ -69,7 +65,6 @@ TEST_CASE("a released handle is rejected at once as stale", "[core]")
     CHECK(pool.release(buffer, 5) == LookupStatus::StaleGeneration);
 }
 
-//======================================================================================================================
 TEST_CASE("a released slot is reused only after its frame retires", "[core]")
 {
     BufferPool pool;
@@ -91,7 +86,6 @@ TEST_CASE("a released slot is reused only after its frame retires", "[core]")
     CHECK(pool.lookup(reused).status == LookupStatus::Ok);
 }
 
-//======================================================================================================================
 TEST_CASE("a handle of another type reports core-0003", "[core]")
 {
     BufferPool pool;
@@ -101,7 +95,6 @@ TEST_CASE("a handle of another type reports core-0003", "[core]")
     CHECK(textures.lookup(Texture{ buffer.bits }).status == LookupStatus::WrongType);
 }
 
-//======================================================================================================================
 TEST_CASE("a slot at the last generation is retired for good", "[core]")
 {
     HandlePool<Buffer, Rec> pool(2);
@@ -120,13 +113,11 @@ TEST_CASE("a slot at the last generation is retired for good", "[core]")
     CHECK(static_cast<uint32_t>(pool.allocate({ 1 }).bits) != index);
 }
 
-//======================================================================================================================
 TEST_CASE("the default generation limit is 2^24 - 1", "[core]")
 {
     CHECK(BufferPool::kMaxGeneration == 16777215u);
 }
 
-//======================================================================================================================
 TEST_CASE("concurrent allocate and release keep handles unique and valid", "[core]")
 {
     BufferPool pool;
@@ -167,7 +158,6 @@ TEST_CASE("concurrent allocate and release keep handles unique and valid", "[cor
     CHECK(pool.liveCount() == kept.size());
 }
 
-//======================================================================================================================
 TEST_CASE("a released record stays until retire hands it to the callback", "[core]")
 {
     BufferPool pool;
@@ -184,7 +174,6 @@ TEST_CASE("a released record stays until retire hands it to the callback", "[cor
     CHECK(seen.size() == 1);
 }
 
-//======================================================================================================================
 TEST_CASE("a slot retired for good still hands its record to the retire callback", "[core]")
 {
     HandlePool<Buffer, Rec> pool(1);
@@ -198,7 +187,6 @@ TEST_CASE("a slot retired for good still hands its record to the retire callback
     CHECK(seen == 9);
 }
 
-//======================================================================================================================
 TEST_CASE("checkedRelease reads the frame from its supplier under the lock", "[core]")
 {
     BufferPool pool;
@@ -217,7 +205,6 @@ TEST_CASE("checkedRelease reads the frame from its supplier under the lock", "[c
     CHECK(seen.size() == 1);
 }
 
-//======================================================================================================================
 TEST_CASE("drain hands over each live and pending record once and empties the pool", "[core]")
 {
     BufferPool pool;
@@ -239,7 +226,6 @@ TEST_CASE("drain hands over each live and pending record once and empties the po
     CHECK(again == 0);
 }
 
-//======================================================================================================================
 TEST_CASE("drain does not hand over a slot already retired for good", "[core]")
 {
     HandlePool<Buffer, Rec> pool(1);
@@ -256,18 +242,16 @@ TEST_CASE("drain does not hand over a slot already retired for good", "[core]")
     CHECK(pool.lookup(live).status == LookupStatus::StaleGeneration);
 }
 
-//======================================================================================================================
 TEST_CASE("no slot is reused after drain", "[core]")
 {
     BufferPool pool;
     const Buffer buffer = pool.allocate({ 1 });
     pool.release(buffer, 1);
-    pool.retire(1); // The slot is now free for reuse.
+    pool.retire(1);
     pool.drain([](Rec&) {});
     CHECK(static_cast<uint32_t>(pool.allocate({ 2 }).bits) != static_cast<uint32_t>(buffer.bits));
 }
 
-//======================================================================================================================
 TEST_CASE("a handle's native payload is readable without a lookup", "[core]")
 {
     BufferPool pool;
@@ -277,7 +261,6 @@ TEST_CASE("a handle's native payload is readable without a lookup", "[core]")
     CHECK(pool.native(Buffer{}) == nullptr);
 }
 
-//======================================================================================================================
 TEST_CASE("a retired slot's native payload reads null and a reused slot reads the new payload", "[core]")
 {
     BufferPool pool;
@@ -295,7 +278,6 @@ TEST_CASE("a retired slot's native payload reads null and a reused slot reads th
     CHECK(pool.native(reused) == &second);
 }
 
-//======================================================================================================================
 TEST_CASE("a pool at its capacity issues the null handle and leaves the record untouched", "[core]")
 {
     HandlePool<Buffer, Rec> pool(BufferPool::kMaxGeneration, 3);
@@ -314,7 +296,6 @@ TEST_CASE("a pool at its capacity issues the null handle and leaves the record u
     CHECK(allocations.load() == 2);
 }
 
-//======================================================================================================================
 TEST_CASE("a full pool still reuses a retired slot", "[core]")
 {
     HandlePool<Buffer, Rec> pool(BufferPool::kMaxGeneration, 3);
@@ -330,7 +311,6 @@ TEST_CASE("a full pool still reuses a retired slot", "[core]")
     CHECK(pool.native(reused) == &payload);
 }
 
-//======================================================================================================================
 TEST_CASE("drain clears every native payload", "[core]")
 {
     BufferPool pool;
@@ -346,7 +326,6 @@ TEST_CASE("drain clears every native payload", "[core]")
     CHECK(pool.native(live) == nullptr);
 }
 
-//======================================================================================================================
 TEST_CASE("a retiring slot's native payload reads null before its hook runs", "[core]")
 {
     BufferPool pool;
@@ -358,7 +337,6 @@ TEST_CASE("a retiring slot's native payload reads null before its hook runs", "[
     CHECK(readInHook == nullptr);
 }
 
-//======================================================================================================================
 TEST_CASE("a draining slot's native payload reads null before its record is handed over", "[core]")
 {
     BufferPool pool;

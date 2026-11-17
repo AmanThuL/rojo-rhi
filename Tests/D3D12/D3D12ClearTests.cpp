@@ -33,23 +33,19 @@
 using namespace rojoRHI;
 
 namespace {
-    /// A clear colour whose RGBA8 encoding is exact: 51, 102, 153 and 204.
+    // Its RGBA8 encoding is exact: 51, 102, 153 and 204.
     constexpr ClearColor kFirst = { 0.2f, 0.4f, 0.6f, 0.8f };
 
-    /// A second clear colour, the first reversed.
     constexpr ClearColor kSecond = { 0.8f, 0.6f, 0.4f, 0.2f };
 
-    /// A third clear colour: 0, 255, 51 and 255.
+    // RGBA8 0, 255, 51 and 255.
     constexpr ClearColor kThird = { 0.0f, 1.0f, 0.2f, 1.0f };
 
-    /// Guards `g_messages`, which the message callback may fill from any thread.
+    // The message callback may fill `g_messages` from any thread.
     std::mutex g_messagesMutex;
 
-    /// The messages at `Warning` or above the library reported while a case collected them.
     std::vector<std::string> g_messages;
 
-    //==================================================================================================================
-    /// Keeps `message` when it is a warning or an error. It may run on any thread.
     void collectMessage(MessageSeverity severity, std::string_view message, void*)
     {
         if (severity == MessageSeverity::Info)
@@ -60,25 +56,22 @@ namespace {
         g_messages.emplace_back(message);
     }
 
-    /// Collects the library's warnings and errors, the debug layer's included, into `g_messages`, emptied first, while it
-    /// lives, and removes the callback when it goes, however the case ends.
+    // Collects the library's warnings and errors, the debug layer's included, into `g_messages` (emptied first) while it
+    // lives, and removes the callback however the case ends.
     class MessageCollection
     {
       public:
         MessageCollection();
         ~MessageCollection();
 
-        //==============================================================================================================
         MessageCollection(const MessageCollection&) = delete;
 
-        //==============================================================================================================
         MessageCollection& operator=(const MessageCollection&) = delete;
 
-        /// Returns the messages collected so far, and lists them for the log.
+        // Also lists the messages for the log.
         size_t count() const;
     };
 
-    //==================================================================================================================
     MessageCollection::MessageCollection()
     {
         {
@@ -88,13 +81,11 @@ namespace {
         setMessageCallback(collectMessage, nullptr);
     }
 
-    //==================================================================================================================
     MessageCollection::~MessageCollection()
     {
         setMessageCallback(nullptr, nullptr);
     }
 
-    //==================================================================================================================
     size_t MessageCollection::count() const
     {
         const std::lock_guard lock(g_messagesMutex);
@@ -105,8 +96,6 @@ namespace {
         return g_messages.size();
     }
 
-    //==================================================================================================================
-    /// Returns a new device with the default description.
     Device makeDevice()
     {
         Result<Device> created = createDevice();
@@ -114,8 +103,6 @@ namespace {
         return *created;
     }
 
-    //==================================================================================================================
-    /// Returns a new fence at zero on `device`, labelled `label`.
     Fence makeFence(Device device, std::string_view label)
     {
         Result<Fence> created = device.createFence(0, label);
@@ -123,8 +110,6 @@ namespace {
         return *created;
     }
 
-    //==================================================================================================================
-    /// Returns a new texture of `desc` on `device`, placed by `placement`.
     Texture makeTexture(Device device, const TextureDesc& desc, Placement placement = {})
     {
         Result<Texture> created = device.createTexture(desc, {}, placement);
@@ -132,8 +117,6 @@ namespace {
         return *created;
     }
 
-    //==================================================================================================================
-    /// Returns the payload of `texture`, a live texture of `device`.
     const d3d12::TexturePayload& payloadOf(Device device, Texture texture)
     {
         const auto* payload = static_cast<const d3d12::TexturePayload*>(DeviceImpl::of(device).core.pool<Texture>().native(texture));
@@ -142,8 +125,6 @@ namespace {
         return *payload;
     }
 
-    //==================================================================================================================
-    /// Returns the native buffer of `buffer`, a live buffer of `device`.
     ID3D12Resource* resourceOf(Device device, Buffer buffer)
     {
         const auto* payload = static_cast<const d3d12::BufferPayload*>(DeviceImpl::of(device).core.pool<Buffer>().native(buffer));
@@ -151,29 +132,21 @@ namespace {
         return payload->resource;
     }
 
-    //==================================================================================================================
-    /// Returns the native calls `list` has recorded since its acquisition.
     uint64_t recordCalls(CommandList list)
     {
         return core::coreOf(list).counts.nativeRecordCalls;
     }
 
-    //==================================================================================================================
-    /// Returns the native barrier commands `list` has recorded since its acquisition.
     uint64_t nativeBarriers(CommandList list)
     {
         return core::coreOf(list).counts.nativeBarriers;
     }
 
-    //==================================================================================================================
-    /// Returns the descriptors `device` has written since its creation.
     uint64_t descriptorWrites(Device device)
     {
         return device.counters().descriptorWrites;
     }
 
-    //==================================================================================================================
-    /// Returns a barrier that moves `range` of `texture` from `Undefined` into `CopyDst` for a clear.
     TextureBarrier enter(Texture texture, SubresourceRange range = {})
     {
         return { .texture = texture,
@@ -186,8 +159,7 @@ namespace {
                  .newLayout = Layout::CopyDst };
     }
 
-    //==================================================================================================================
-    /// Returns a barrier that orders a copy write of `range` of `texture` before another, both in `CopyDst`.
+    // Orders one copy write before another, both in `CopyDst`.
     TextureBarrier rewrite(Texture texture, SubresourceRange range = {})
     {
         return { .texture = texture,
@@ -200,8 +172,6 @@ namespace {
                  .newLayout = Layout::CopyDst };
     }
 
-    //==================================================================================================================
-    /// Returns a barrier that moves `range` of `texture` from `CopyDst`, after a clear, into `CopySrc`.
     TextureBarrier toCopySrc(Texture texture, SubresourceRange range = {})
     {
         return { .texture = texture,
@@ -214,15 +184,12 @@ namespace {
                  .newLayout = Layout::CopySrc };
     }
 
-    //==================================================================================================================
-    /// Records `barrier` on `list` as a batch of its own.
+    // As a batch of its own.
     void record(CommandList list, const TextureBarrier& barrier)
     {
         list.barrier({}, {}, std::span(&barrier, 1));
     }
 
-    //==================================================================================================================
-    /// Ends `list`, a Graphics list of `device`, submits it signalling `value` on `done`, and waits for the value.
     void submitAndWait(Device device, CommandList list, Fence done, uint64_t value)
     {
         list.end();
@@ -231,9 +198,8 @@ namespace {
         REQUIRE(device.wait({ done, value }, UINT64_MAX));
     }
 
-    //==================================================================================================================
-    /// Ends `compute`, a Compute list of `device`, submits it signalling `value` on `computed`, and joins it into the frame:
-    /// an empty Graphics list waits for that value and signals `value` on `done`, which the call waits for.
+    // Joins `compute` into the frame: an empty Graphics list waits for `value` on `computed` and signals `value` on `done`,
+    // which the call waits for.
     void submitComputeAndJoin(Device device, CommandList compute, Fence computed, Fence done, uint64_t value)
     {
         compute.end();
@@ -246,23 +212,18 @@ namespace {
         REQUIRE(device.wait({ done, value }, UINT64_MAX));
     }
 
-    //==================================================================================================================
-    /// Returns the RGBA8 texel `color` clears an `RGBA8Unorm` texture to.
     std::array<std::byte, 4> rgba8(ClearColor color)
     {
         const auto unorm = [](float value) { return static_cast<std::byte>(std::lround(value * 255.0f)); };
         return { unorm(color.r), unorm(color.g), unorm(color.b), unorm(color.a) };
     }
 
-    //==================================================================================================================
-    /// Returns the bytes of the 32-bit float `value`.
     std::array<std::byte, 4> float32(float value)
     {
         return std::bit_cast<std::array<std::byte, 4>>(value);
     }
 
-    //==================================================================================================================
-    /// Returns how many texels of `bytes`, tight texels of `texel.size()` bytes, differ from `texel`.
+    // `bytes` holds tight texels of `texel.size()` bytes.
     size_t mismatches(const std::vector<std::byte>& bytes, std::span<const std::byte> texel)
     {
         size_t differing = 0;
@@ -276,9 +237,7 @@ namespace {
         return differing;
     }
 
-    //==================================================================================================================
-    /// Checks that native subresource `subresource` of `texture`, in `layout` and no longer in use, is `texels` texels that
-    /// all equal `texel`.
+    // `subresource` must be in `layout` and no longer in use.
     void expectTexels(Device device, Texture texture, uint32_t subresource, D3D12_BARRIER_LAYOUT layout, std::span<const std::byte> texel, size_t texels)
     {
         INFO("subresource " << subresource);
@@ -288,7 +247,6 @@ namespace {
     }
 } // namespace
 
-//======================================================================================================================
 TEST_CASE("a render target's clear is two barriers and one clear per mip and layer", "[d3d12]")
 {
     Device device = makeDevice();
@@ -331,7 +289,6 @@ TEST_CASE("a render target's clear is two barriers and one clear per mip and lay
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("a 3D render target clears each depth slice of each mip in the range", "[d3d12]")
 {
     Device device = makeDevice();
@@ -372,7 +329,6 @@ TEST_CASE("a 3D render target clears each depth slice of each mip in the range",
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("a depth-stencil clear writes depth and stencil of a D32FloatS8 texture", "[d3d12]")
 {
     constexpr float kDepth = 0.25f;
@@ -430,7 +386,6 @@ TEST_CASE("a depth-stencil clear writes depth and stencil of a D32FloatS8 textur
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("a Storage-only texture clears once per mip through two transient descriptors", "[d3d12]")
 {
     Device device = makeDevice();
@@ -483,7 +438,6 @@ TEST_CASE("a Storage-only texture clears once per mip through two transient desc
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("a Storage-only texture clears on a Compute list", "[d3d12]")
 {
     Device device = makeDevice();
@@ -515,7 +469,6 @@ TEST_CASE("a Storage-only texture clears on a Compute list", "[d3d12]")
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("a RenderTarget+Storage texture clears through its render-target view on a Graphics list", "[d3d12]")
 {
     Device device = makeDevice();
@@ -555,7 +508,6 @@ TEST_CASE("a RenderTarget+Storage texture clears through its render-target view 
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("a multisampled render target and a placed render target clear", "[d3d12]")
 {
     Device device = makeDevice();
@@ -602,7 +554,6 @@ TEST_CASE("a multisampled render target and a placed render target clear", "[d3d
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("a clear writes the value into every subresource of the range and nothing else", "[d3d12]")
 {
     constexpr uint32_t kMips = 3;
@@ -683,7 +634,6 @@ TEST_CASE("a clear writes the value into every subresource of the range and noth
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("a clear leaves its subresources in CopyDst", "[d3d12]")
 {
     constexpr SubresourceRange kRange = { .baseMip = 1, .mipCount = 1, .baseLayer = 1, .layerCount = 1 };
@@ -752,7 +702,6 @@ TEST_CASE("a clear leaves its subresources in CopyDst", "[d3d12]")
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("clears on two threads in one frame take distinct transient views", "[d3d12]")
 {
     Device device = makeDevice();
@@ -811,7 +760,6 @@ TEST_CASE("clears on two threads in one frame take distinct transient views", "[
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("a clear right after a fill binds no root signature or pipeline", "[d3d12]")
 {
     constexpr uint64_t kSize = 256;

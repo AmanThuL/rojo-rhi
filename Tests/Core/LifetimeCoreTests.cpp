@@ -15,7 +15,6 @@
 using namespace rojoRHI;
 using test::PassKit;
 
-//======================================================================================================================
 TEST_CASE("a list recycled without a submission leaves no references behind", "[core]")
 {
 #ifdef NDEBUG

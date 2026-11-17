@@ -31,18 +31,13 @@
 
 namespace rojoRHI {
     namespace {
-        /// The label of each caller-visible queue, indexed by `QueueType`.
         constexpr std::array<std::string_view, 3> kQueueLabels = { "rojorhi.queue.graphics", "rojorhi.queue.compute", "rojorhi.queue.copy" };
 
-        /// The native list type of each queue, indexed by `QueueType`.
         constexpr std::array<D3D12_COMMAND_LIST_TYPE, 3> kQueueTypes = { D3D12_COMMAND_LIST_TYPE_DIRECT,
                                                                          D3D12_COMMAND_LIST_TYPE_COMPUTE,
                                                                          D3D12_COMMAND_LIST_TYPE_COPY };
 
-        //==============================================================================================================
-        /// Reports the removal of `impl`'s device, found by `entry`, then logs and aborts, in every build, when the device was
-        /// removed; does nothing otherwise. A removed device's fences report `UINT64_MAX`, a value no entry may pass on as
-        /// reached.
+        // A removed device's fences report UINT64_MAX, a value no entry may pass on as reached.
         void abortIfRemoved(DeviceImpl& impl, std::string_view entry)
         {
             if (const HRESULT reason = impl.device()->GetDeviceRemovedReason(); reason != S_OK)
@@ -53,12 +48,9 @@ namespace rojoRHI {
             }
         }
 
-        //==============================================================================================================
-        /// Blocks until `fence` reaches `value` or `timeoutNs` nanoseconds pass and returns whether it reached the value; a zero
-        /// timeout only polls. It counts each `GetCompletedValue` and `SetEventOnCompletion` of `d3d12::waitForFence` as one
-        /// `nativeHostCalls`: one for a value already reached or a poll, two more for an armed wait and one more per further
-        /// wake. Before a reached value is returned, a device found removed is reported and aborts (`entry` names the caller),
-        /// so `UINT64_MAX` never reaches the core.
+        // A zero timeout only polls. Each GetCompletedValue and SetEventOnCompletion counts as one `nativeHostCalls`. A
+        // device found removed is reported and aborts before a reached value is returned, so UINT64_MAX never reaches
+        // the core.
         bool waitOn(DeviceImpl& impl, ID3D12Fence* fence, uint64_t value, uint64_t timeoutNs, std::string_view what, std::string_view entry)
         {
             const d3d12::FenceWait waited = d3d12::waitForFence(fence, value, timeoutNs, what);
@@ -70,8 +62,6 @@ namespace rojoRHI {
             return waited.reached;
         }
 
-        //==============================================================================================================
-        /// Creates a fence at `initial` on `impl`'s device into `fence` and names it `label`; returns the error of a refusal.
         Result<void> createNativeFence(DeviceImpl& impl, uint64_t initial, std::string_view label, d3d12::Com<ID3D12Fence>& fence)
         {
             if (const HRESULT made = impl.device()->CreateFence(initial, D3D12_FENCE_FLAG_NONE, IID_PPV_ARGS(fence.put())); FAILED(made))
@@ -84,19 +74,16 @@ namespace rojoRHI {
     } // namespace
 
     namespace d3d12 {
-        //==============================================================================================================
         Result<void> FrameState::create(DeviceImpl& impl)
         {
             return createNativeFence(impl, 0, "rojorhi.frame", m_frame);
         }
 
-        //==============================================================================================================
         ID3D12Fence* FrameState::fence() const
         {
             return m_frame.get();
         }
 
-        //==============================================================================================================
         void FrameState::keep(DeviceImpl& impl, ID3D12Fence* fence)
         {
             // The graphics queue signals no progress: the frame retirement that released the fence covers its submissions. A
@@ -115,7 +102,6 @@ namespace rojoRHI {
             m_kept.push_back(std::move(kept));
         }
 
-        //==============================================================================================================
         void FrameState::releasePassed(DeviceImpl& impl)
         {
             std::lock_guard lock(m_mutex);
@@ -153,21 +139,18 @@ namespace rojoRHI {
             });
         }
 
-        //==============================================================================================================
         void FrameState::releaseAll()
         {
             std::lock_guard lock(m_mutex);
             m_kept.clear();
         }
 
-        //==============================================================================================================
         size_t FrameState::keptCount() const
         {
             std::lock_guard lock(m_mutex);
             return m_kept.size();
         }
 
-        //==============================================================================================================
         Result<void> createQueues(DeviceImpl& impl)
         {
             for (size_t i = 0; i < impl.queues.size(); ++i)
@@ -192,7 +175,6 @@ namespace rojoRHI {
             return {};
         }
 
-        //==============================================================================================================
         void idleQueues(DeviceImpl& impl)
         {
             for (size_t i = 0; i < impl.queues.size(); ++i)
@@ -224,7 +206,6 @@ namespace rojoRHI {
             }
         }
 
-        //==============================================================================================================
         void retireFence(void* context, core::FenceRecord& record)
         {
             auto* fence = static_cast<ID3D12Fence*>(record.native);
@@ -239,7 +220,6 @@ namespace rojoRHI {
             impl.frames.releasePassed(impl);
         }
 
-        //==============================================================================================================
         void waitFrame(void* context, uint64_t frame)
         {
             // The fence is named, and a slow wait's warning names the frame it waits for, so no label is formatted per frame.
@@ -247,7 +227,6 @@ namespace rojoRHI {
             waitOn(impl, impl.frames.fence(), frame, UINT64_MAX, "the frame fence", "Device::beginFrame");
         }
 
-        //==============================================================================================================
         void reuseSlot(void* context, uint32_t slot)
         {
             // The frame wait before it has proven the slot's work complete, the compute and copy work the frame joined included.
@@ -260,14 +239,12 @@ namespace rojoRHI {
         }
     } // namespace d3d12
 
-    //==================================================================================================================
     void Device::beginFrame()
     {
         // The core waits for the frame whose slot it reuses through the waitFrame hook, after its own checks.
         DeviceImpl::of(*this).core.beginFrame();
     }
 
-    //==================================================================================================================
     void Device::endFrame()
     {
         DeviceImpl& impl = DeviceImpl::of(*this);
@@ -278,7 +255,6 @@ namespace rojoRHI {
         core::DeviceCounts::add(impl.core.counts().nativeSubmitCalls);
     }
 
-    //==================================================================================================================
     Result<Fence> Device::createFence(uint64_t initial, std::string_view label)
     {
         DeviceImpl& impl = DeviceImpl::of(*this);
@@ -300,7 +276,6 @@ namespace rojoRHI {
         return handle;
     }
 
-    //==================================================================================================================
     uint64_t Device::completedValue(Fence fence)
     {
         DeviceImpl& impl = DeviceImpl::of(*this);
@@ -317,7 +292,6 @@ namespace rojoRHI {
         return core::completedValue(impl.core, fence);
     }
 
-    //==================================================================================================================
     bool Device::wait(FenceValue value, uint64_t timeoutNs)
     {
         DeviceImpl& impl = DeviceImpl::of(*this);
@@ -336,7 +310,6 @@ namespace rojoRHI {
         return core::checkWait(impl.core, value, timeoutNs);
     }
 
-    //==================================================================================================================
     void Device::destroy(Fence fence)
     {
         // The fence's retirement keeps its native fence until every queue has passed the submissions made before this call.

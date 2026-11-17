@@ -1,7 +1,7 @@
 # 07. Command recording: copies and clears
 
 **Status**: Accepted
-**API version**: 1.0.0
+**API version**: 1.0.1
 
 This part of the command-recording chapter ([command recording](07-command-recording.md)) defines
 copies, fills and clears. All are recorded outside render passes; on Metal 4 copies and fills

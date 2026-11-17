@@ -23,7 +23,6 @@
 #include <vector>
 
 namespace rojoRHI::test {
-    //==================================================================================================================
     // Fails the running case through Catch2, so it is called from a test thread.
     std::vector<std::byte> readBuffer(Device device, Buffer buffer)
     {
@@ -44,7 +43,6 @@ namespace rojoRHI::test {
         return bytes;
     }
 
-    //==================================================================================================================
     // Fails the running case through Catch2, so it is called from a test thread.
     std::vector<std::byte> readTexture(Device device, Texture texture, uint32_t mip, uint32_t layer)
     {

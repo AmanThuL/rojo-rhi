@@ -26,14 +26,13 @@
 
 namespace rojoRHI::test {
     namespace {
-        /// The layers `surface` hands out, created on first use and retained for the process.
+        // Created on first use and retained for the process.
         std::array<CA::MetalLayer*, 8> g_layers = {};
 
-        /// Guards `g_layers`, because cases may ask for a surface from several threads.
+        // Cases may ask for a surface from several threads.
         std::mutex g_layersMutex;
 
-        //==============================================================================================================
-        /// The packaged standard library, read on first use and kept for the process.
+        // Read on first use and kept for the process.
         const std::vector<std::byte>& standardBytes()
         {
             static const std::vector<std::byte> bytes = [] {
@@ -56,13 +55,11 @@ namespace rojoRHI::test {
         }
     } // namespace
 
-    //==================================================================================================================
     std::vector<std::byte> standardLibrary()
     {
         return standardBytes();
     }
 
-    //==================================================================================================================
     // The container's second line is `abi <N>`; replacing it leaves the payload byte count unchanged.
     std::vector<std::byte> libraryStampedWith(uint32_t abi)
     {
@@ -80,7 +77,6 @@ namespace rojoRHI::test {
         return bytes;
     }
 
-    //==================================================================================================================
     std::vector<std::byte> foreignLibrary()
     {
         const std::string_view text = "rojorhi.null.shaderlibrary\nabi 1\nentry vsMain vertex\n";
@@ -88,7 +84,6 @@ namespace rojoRHI::test {
         return { bytes, bytes + text.size() };
     }
 
-    //==================================================================================================================
     // Fails the running case through Catch2, so it is called from a test thread.
     std::vector<std::byte> shaderLibraryFile(std::string_view name)
     {
@@ -107,7 +102,6 @@ namespace rojoRHI::test {
         return { begin, begin + text.size() };
     }
 
-    //==================================================================================================================
     // Fails the running case through Catch2, so it is called from a test thread.
     void* surface(uint32_t index)
     {
@@ -126,37 +120,31 @@ namespace rojoRHI::test {
         return g_layers[index];
     }
 
-    //==================================================================================================================
     bool runsOnGpu()
     {
         return true;
     }
 
-    //==================================================================================================================
     bool multisampleReadsSize()
     {
         return true;
     }
 
-    //==================================================================================================================
     std::string_view misplacedClearEndsRecording()
     {
         return {};
     }
 
-    //==================================================================================================================
     bool layoutsAreNative()
     {
         return false;
     }
 
-    //==================================================================================================================
     std::string_view upscalesNeverComplete()
     {
         return {};
     }
 
-    //==================================================================================================================
     std::string_view fusesPreciseArithmetic()
     {
         return {};

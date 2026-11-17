@@ -25,7 +25,6 @@ namespace rojoRHI {
     // view-heap index of the buffer's raw SRV, whose raw UAV, when it has one, sits at `lo + 1`, and `hi` is the byte offset
     // into the buffer. No other file of the backend encodes, decodes or offsets an address.
     namespace d3d12 {
-        //==============================================================================================================
         Addr encodeAddr(const BufferPayload& payload, uint64_t offset)
         {
             ROJORHI_INTERNAL_ASSERT(payload.viewCount > 0, "an address of a buffer with no raw view");
@@ -33,13 +32,11 @@ namespace rojoRHI {
             return Addr{ payload.viewIndex, static_cast<uint32_t>(offset) };
         }
 
-        //==============================================================================================================
         void HeapDirectory::create(uint32_t capacity)
         {
             m_table = std::make_unique<core::NativeTable>(capacity);
         }
 
-        //==============================================================================================================
         void HeapDirectory::publish(uint32_t index, const BufferPayload* payload)
         {
             std::lock_guard lock(m_mutex);
@@ -47,21 +44,18 @@ namespace rojoRHI {
             m_table->publish(index, const_cast<BufferPayload*>(payload));
         }
 
-        //==============================================================================================================
         void HeapDirectory::clear(uint32_t index)
         {
             std::lock_guard lock(m_mutex);
             m_table->publish(index, nullptr);
         }
 
-        //==============================================================================================================
         const BufferPayload* HeapDirectory::find(uint32_t index) const
         {
             // The table wraps an index past its directory, so an index past the heap is refused here instead.
             return index < m_table->capacity() ? static_cast<const BufferPayload*>(m_table->load(index)) : nullptr;
         }
 
-        //==============================================================================================================
         D3D12_GPU_VIRTUAL_ADDRESS rootAddress(const HeapDirectory& directory, Addr addr)
         {
             const BufferPayload* payload = directory.find(addr.lo);
@@ -70,7 +64,6 @@ namespace rojoRHI {
     } // namespace d3d12
 
     namespace core {
-        //==============================================================================================================
         DecodedAddr decodeAddr(DeviceCore& core, Addr addr)
         {
             const DeviceImpl& impl = *static_cast<const DeviceImpl*>(core.retireHooks().context);
@@ -86,7 +79,6 @@ namespace rojoRHI {
         }
     } // namespace core
 
-    //==================================================================================================================
     Addr operator+(Addr base, uint64_t offset)
     {
         // The byte offset lives in `hi`; the offset is checked alone first so the sum cannot wrap.

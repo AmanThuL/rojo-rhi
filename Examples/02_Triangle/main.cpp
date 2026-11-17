@@ -13,6 +13,8 @@ struct Vertex
     float color[4];
 };
 
+// Matches TriangleRoot in Triangle.slang. There is no vertex layout: the shader pulls vertices through
+// `vertices`, an address into the frame's upload memory.
 struct TriangleRoot
 {
     Addr vertices;
@@ -57,8 +59,10 @@ int main()
             extent = size;
         }
 
+        // A slot's command lists and upload memory are reused, so this waits for the frame that last used them.
         device.beginFrame();
         const Texture image = swapchain.acquire();
+        // No image freed in time; the open frame must still be closed.
         if (image == Texture{})
         {
             device.endFrame();
@@ -66,6 +70,8 @@ int main()
         }
 
         CommandList list = device.acquireCommandList(QueueType::Graphics, "frame");
+        // Barriers are invalid inside a render pass, so the image takes its attachment layout first. Undefined
+        // discards the old contents, which the clear replaces anyway.
         const std::array toRender{ TextureBarrier{ .texture = image,
                                                    .dstStage = Stage::ColorAttachment,
                                                    .dstAccess = Access::ColorAttachmentWrite,
@@ -78,6 +84,7 @@ int main()
         list.setPipeline(pipeline);
         list.setViewport({ .width = float(extent.width), .height = float(extent.height) });
         list.setScissor({ 0, 0, extent.width, extent.height });
+        // The vertices are uploaded every frame, because an uploadFrameData address is valid only in the frame that made it.
         list.pushRoot(
             TriangleRoot{ .vertices = list.uploadFrameData(std::as_bytes(std::span(vertices))),
                           .angle = float(window.time()),
@@ -86,6 +93,7 @@ int main()
         list.draw(3);
         list.endRenderPass();
 
+        // present takes the image in Layout::Present, ordered after the pass's color writes.
         const std::array toPresent{ TextureBarrier{ .texture = image,
                                                     .srcStage = Stage::ColorAttachment,
                                                     .srcAccess = Access::ColorAttachmentWrite,

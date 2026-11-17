@@ -30,24 +30,21 @@ namespace rojoRHI {
     namespace {
         static_assert(core::kTileBytes == static_cast<uint32_t>(D3D12_TILED_RESOURCE_TILE_SIZE_IN_BYTES), "a sparse tile is one D3D12 tile");
 
-        /// The resource one group of mapping elements updates, the heap it maps from, null for an unmap, and the regions of
-        /// its elements in element order: one `UpdateTileMappings` call.
+        // One `UpdateTileMappings` call: the regions of its elements, in element order.
         struct MappingGroup
         {
-            ID3D12Resource* resource = nullptr;     ///< The reserved resource.
-            ID3D12Heap* heap = nullptr;             ///< The heap the tiles map from; null when they are unmapped.
-            std::vector<d3d12::TileRegion> regions; ///< Every region of the group's elements.
+            ID3D12Resource* resource = nullptr;
+            ID3D12Heap* heap = nullptr; // Null for an unmap.
+            std::vector<d3d12::TileRegion> regions;
         };
 
-        //==============================================================================================================
-        /// Returns the tiles `texels` texels span when a tile covers `tile` of them, a partial last tile included.
+        // A partial last tile included.
         UINT tilesAlong(uint64_t texels, uint64_t tile)
         {
             return static_cast<UINT>((texels + tile - 1) / tile);
         }
 
-        //==============================================================================================================
-        /// Returns the reserved form of `native`: the same resource with `layout`, as `CreateReservedResource2` takes it.
+        // As `CreateReservedResource2` takes it.
         D3D12_RESOURCE_DESC reservedDesc(const D3D12_RESOURCE_DESC1& native, D3D12_TEXTURE_LAYOUT layout)
         {
             D3D12_RESOURCE_DESC desc = {};
@@ -64,16 +61,12 @@ namespace rojoRHI {
             return desc;
         }
 
-        //==============================================================================================================
-        /// Returns the `Unsupported` error of the Sparse texture `label`, which D3D12 cannot reserve because of `why`.
         std::unexpected<Error> refused(std::string_view label, std::string_view why)
         {
             return std::unexpected(Error{ ErrorCategory::Unsupported, std::format("the Sparse texture \"{}\" is not supported: {}", label, why) });
         }
 
-        //==============================================================================================================
-        /// Returns the group of `groups` that updates `resource` from `heap`, adding it at the end when no earlier element
-        /// named that resource and heap.
+        // Added at the end when no earlier element named that resource and heap.
         MappingGroup& groupFor(std::vector<MappingGroup>& groups, ID3D12Resource* resource, ID3D12Heap* heap)
         {
             for (MappingGroup& group : groups)
@@ -89,10 +82,9 @@ namespace rojoRHI {
             return group;
         }
 
-        //==============================================================================================================
-        /// Returns the groups of `mappings`, one per resource and heap in the order their first element appears. The core has
-        /// checked every handle in Debug; in Release an element naming no live resource, or a map whose heap slot holds no
-        /// native heap, is misuse that no tier detects, and it is skipped.
+        // One per resource and heap, in the order their first element appears. The core has checked every handle in
+        // Debug; in Release an element naming no live resource, or a map whose heap slot holds no native heap, is
+        // misuse no tier detects, and it is skipped.
         std::vector<MappingGroup> groupMappings(core::DeviceCore& core, std::span<const TileMapping> mappings)
         {
             std::vector<MappingGroup> groups;
@@ -127,9 +119,8 @@ namespace rojoRHI {
             return groups;
         }
 
-        //==============================================================================================================
-        /// Issues the one `UpdateTileMappings` call of `group` on `queue`: each region maps a range of heap tiles from its
-        /// start, or to null for an unmap. Counts one `nativeSubmitCalls`.
+        // Each region maps a range of heap tiles from its start, or to null for an unmap. Counts one
+        // `nativeSubmitCalls`.
         void updateMappings(QueueImpl& queue, const MappingGroup& group)
         {
             const size_t count = group.regions.size();
@@ -164,7 +155,6 @@ namespace rojoRHI {
     } // namespace
 
     namespace d3d12 {
-        //==============================================================================================================
         Result<Com<ID3D12Resource>> createReservedBuffer(DeviceImpl& impl, const D3D12_RESOURCE_DESC1& desc, std::string_view label)
         {
             D3D12_RESOURCE_DESC reserved = reservedDesc(desc, D3D12_TEXTURE_LAYOUT_ROW_MAJOR);
@@ -181,7 +171,6 @@ namespace rojoRHI {
             return resource;
         }
 
-        //==============================================================================================================
         Result<Com<ID3D12Resource>> createReservedTexture(
             DeviceImpl& impl, const TextureDesc& desc, const D3D12_RESOURCE_DESC1& native, std::span<const DXGI_FORMAT> castable, std::string_view label
         )
@@ -214,7 +203,6 @@ namespace rojoRHI {
             return resource;
         }
 
-        //==============================================================================================================
         TileShape readTileShape(ID3D12Device12& device, ID3D12Resource& resource, uint32_t mips)
         {
             D3D12_PACKED_MIP_INFO packed = {};
@@ -231,7 +219,6 @@ namespace rojoRHI {
             return shape;
         }
 
-        //==============================================================================================================
         std::vector<TileRegion> tileCoordinates(const core::TextureRecord& texture, const TileMapping& mapping)
         {
             const TileShape& shape = texture.tiles;
@@ -272,7 +259,6 @@ namespace rojoRHI {
             return regions;
         }
 
-        //==============================================================================================================
         TileRegion tileCoordinates(const TileMapping& mapping)
         {
             TileRegion region;
@@ -284,19 +270,16 @@ namespace rojoRHI {
         }
     } // namespace d3d12
 
-    //==================================================================================================================
     TileShape Device::tileShape(Texture texture)
     {
         return core::tileShape(DeviceImpl::of(*this).core, texture);
     }
 
-    //==================================================================================================================
     TileShape Device::tileShape(Buffer buffer)
     {
         return core::tileShape(DeviceImpl::of(*this).core, buffer);
     }
 
-    //==================================================================================================================
     void Queue::mapTiles(std::span<const TileMapping> mappings)
     {
         QueueImpl& queue = QueueImpl::of(*this);

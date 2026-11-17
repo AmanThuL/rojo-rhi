@@ -28,26 +28,20 @@
 
 namespace rojoRHI::metal4 {
     namespace {
-        /// The entries of every heap of one frame slot.
         constexpr uint32_t kSlotEntries = Timestamps::kSlotHeaps * Timestamps::kHeapEntries;
 
-        //==============================================================================================================
-        /// Returns the frame slot `list` records into, which owns the timestamp pairs its scopes claim.
         uint32_t slotOf(const core::CommandListCore& list)
         {
             return static_cast<uint32_t>(list.frame % list.device->framesInFlight());
         }
 
-        //==============================================================================================================
-        /// Returns the device `list` records for: the retire hooks' context, fixed from its creation to its destruction.
+        // The retire hooks' context, fixed from the device's creation to its destruction.
         DeviceImpl& deviceOf(const core::CommandListCore& list)
         {
             return *static_cast<DeviceImpl*>(list.device->retireHooks().context);
         }
 
-        //==============================================================================================================
-        /// Returns the begin entry the open pass of `list` still owes its first encoder and marks it written, or returns
-        /// `core::kNoTimestamp` when the pass owes none.
+        // Marks the begin entry written; `core::kNoTimestamp` when the pass owes none.
         uint32_t takePassBegin(CommandListImpl& list)
         {
             const uint32_t index = list.draw.passBegin;
@@ -56,14 +50,12 @@ namespace rojoRHI::metal4 {
         }
     } // namespace
 
-    //==================================================================================================================
     void Timestamps::create(MTL::Device* device)
     {
         m_device = device;
         m_frequency = device->queryTimestampFrequency();
     }
 
-    //==================================================================================================================
     uint32_t Timestamps::claim(uint32_t slot, core::DeviceCounts& counts)
     {
         Slot& state = m_slots[slot];
@@ -81,7 +73,6 @@ namespace rojoRHI::metal4 {
         return index;
     }
 
-    //==================================================================================================================
     bool Timestamps::createHeap(uint32_t slot, uint32_t number, core::DeviceCounts& counts)
     {
         Slot& state = m_slots[slot];
@@ -125,13 +116,11 @@ namespace rojoRHI::metal4 {
         return true;
     }
 
-    //==================================================================================================================
     uint32_t Timestamps::used(const Slot& slot) const
     {
         return std::min(slot.cursor.load(std::memory_order_relaxed), kSlotEntries);
     }
 
-    //==================================================================================================================
     std::optional<double> Timestamps::milliseconds(const Slot& slot, uint32_t index) const
     {
         const NS::Data* data = slot.resolved[index / kHeapEntries];
@@ -152,7 +141,6 @@ namespace rojoRHI::metal4 {
         return static_cast<double>(end - begin) * 1000.0 / static_cast<double>(m_frequency);
     }
 
-    //==================================================================================================================
     void Timestamps::resolve(uint32_t slot, std::span<const core::ScopeRecord> records, std::span<ScopeTiming> report, core::DeviceCounts& counts)
     {
         Slot& state = m_slots[slot];
@@ -200,7 +188,6 @@ namespace rojoRHI::metal4 {
         }
     }
 
-    //==================================================================================================================
     void Timestamps::reuse(uint32_t slot, core::DeviceCounts& counts)
     {
         Slot& state = m_slots[slot];
@@ -262,7 +249,6 @@ namespace rojoRHI::metal4 {
         state.unwritten = 0;
     }
 
-    //==================================================================================================================
     void Timestamps::release()
     {
         for (Slot& state : m_slots)
@@ -285,14 +271,12 @@ namespace rojoRHI::metal4 {
         }
     }
 
-    //==================================================================================================================
     void scopeTimes(void* context, uint32_t slot, std::span<const core::ScopeRecord> records, std::span<ScopeTiming> report)
     {
         DeviceImpl& impl = *static_cast<DeviceImpl*>(context);
         impl.timestamps.resolve(slot, records, report, impl.core.counts());
     }
 
-    //==================================================================================================================
     uint32_t claimPair(CommandListImpl& list)
     {
         DeviceImpl& device = deviceOf(list.core);
@@ -304,7 +288,6 @@ namespace rojoRHI::metal4 {
         return pair;
     }
 
-    //==================================================================================================================
     uint32_t popPairEnd(CommandListImpl& list)
     {
         const uint32_t pair = list.state.scopeTimestamps.back();
@@ -312,7 +295,6 @@ namespace rojoRHI::metal4 {
         return pair == core::kNoTimestamp ? core::kNoTimestamp : pair + 1;
     }
 
-    //==================================================================================================================
     void writeBetweenEncoders(CommandListImpl& list, uint32_t index)
     {
         if (index == core::kNoTimestamp)
@@ -325,7 +307,6 @@ namespace rojoRHI::metal4 {
         core::noteNativeCall(list.core);
     }
 
-    //==================================================================================================================
     void writeInPass(CommandListImpl& list, MTL4::RenderCommandEncoder* encoder, uint32_t index)
     {
         if (index == core::kNoTimestamp)
@@ -342,7 +323,6 @@ namespace rojoRHI::metal4 {
         core::noteNativeCall(list.core);
     }
 
-    //==================================================================================================================
     void writePassBegin(CommandListImpl& list, MTL4::RenderCommandEncoder* encoder)
     {
         const uint32_t index = takePassBegin(list);

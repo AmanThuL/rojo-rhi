@@ -92,6 +92,8 @@ SceneVaryings sceneVertex(rojoRHI::VertexIds ids)
     SceneVaryings output;
     output.current = transform(root.viewProj, float4(place(instance, phase, local, root.time), 1.0));
     output.previous = transform(root.previousViewProj, float4(place(instance, phase, local, root.previousTime), 1.0));
+    // Only the rasterized position is jittered: scaled by w, the offset survives the divide, and `current` and
+    // `previous` stay unjittered for the motion vector.
     output.position = output.current + float4(root.jitter * output.current.w, 0.0, 0.0);
     output.local = local;
     output.normal = rotate(n, root.time * (0.6 + phase), root.time * (0.4 + 0.5 * phase));
@@ -118,6 +120,7 @@ SceneTargets sceneFragment(SceneVaryings input)
 
     SceneTargets output;
     output.color = float4(albedo * (light + glow), 1.0);
+    // From the current position to the previous one, NDC to input pixels with y down, as the upscaler reads it.
     output.motion = (previous - current) * float2(0.5, -0.5) * root.inputSize;
     return output;
 }
@@ -126,6 +129,7 @@ SceneTargets sceneFragment(SceneVaryings input)
 PresentVaryings presentVertex(rojoRHI::VertexIds ids)
 {
     uint vertex = rojoRHI::vertexIndex(ids);
+    // A full-screen triangle from the vertex index alone: uv (0, 0), (2, 0) and (0, 2) cover the screen.
     float2 uv = float2(float((vertex << 1) & 2), float(vertex & 2));
 
     PresentVaryings output;
@@ -144,5 +148,6 @@ float4 presentFragment(PresentVaryings input) : SV_Target
 {
     PresentRoot root = rojoRHI::root<PresentRoot>();
     float3 hdr = rojoRHI::texture2D(root.image).Sample(rojoRHI::sampler(root.sampler), input.uv).rgb;
+    // Reinhard tone mapping, then sRGB encoding by hand: the swapchain's BGRA8Unorm images take sRGB-encoded values.
     return float4(encodeSrgb(hdr / (1.0 + hdr)), 1.0);
 }

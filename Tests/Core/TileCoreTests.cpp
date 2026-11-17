@@ -21,15 +21,12 @@ using namespace rojoRHI;
 using test::PassKit;
 
 namespace {
-    //==================================================================================================================
-    /// Returns the box of `width` by `height` texels from (`x`, `y`) in one slice.
     core::TexelBox box(uint32_t x, uint32_t y, uint32_t width, uint32_t height)
     {
         return core::TexelBox{ .offset = { x, y, 0 }, .extent = { width, height, 1 } };
     }
 } // namespace
 
-//======================================================================================================================
 TEST_CASE("texel boxes overlap only when they share a texel on every axis", "[core]")
 {
     CHECK(core::overlaps(box(0, 0, 128, 128), box(64, 64, 128, 128)));
@@ -38,7 +35,6 @@ TEST_CASE("texel boxes overlap only when they share a texel on every axis", "[co
     CHECK_FALSE(core::overlaps(core::TexelBox{ .offset = { 0, 0, 1 }, .extent = { 4, 4, 1 } }, box(0, 0, 4, 4)));
 }
 
-//======================================================================================================================
 TEST_CASE("tile events report the latest event of the tiles a query names", "[core]")
 {
     core::TileEvents events;
@@ -56,7 +52,6 @@ TEST_CASE("tile events report the latest event of the tiles a query names", "[co
     CHECK(events.parts() == 0);
 }
 
-//======================================================================================================================
 TEST_CASE("tile events forget parts a later part contains and events at or below the floor", "[core]")
 {
     core::TileEvents events;
@@ -72,7 +67,6 @@ TEST_CASE("tile events forget parts a later part contains and events at or below
     CHECK(events.latest(std::nullopt) == 8);
 }
 
-//======================================================================================================================
 TEST_CASE("byte events report the latest event of a range and merge what the floor forgets", "[core]")
 {
     core::ByteEvents events;
@@ -89,7 +83,6 @@ TEST_CASE("byte events report the latest event of a range and merge what the flo
     CHECK(events.ranges() == 3);
 }
 
-//======================================================================================================================
 TEST_CASE("tile marks reach an event of a newly mapped box, and an event of the whole subresource", "[core]")
 {
     core::TileMarks marks;
@@ -110,7 +103,6 @@ TEST_CASE("tile marks reach an event of a newly mapped box, and an event of the 
     CHECK(marks.count() == 0);
 }
 
-//======================================================================================================================
 TEST_CASE("an unmap clears exactly the texels of the tile marks it names", "[core]")
 {
     core::TileMarks marks;
@@ -126,7 +118,6 @@ TEST_CASE("an unmap clears exactly the texels of the tile marks it names", "[cor
     CHECK(marks.count() == 0);
 }
 
-//======================================================================================================================
 TEST_CASE("a whole-subresource tile mark reaches every event until a whole clear", "[core]")
 {
     core::TileMarks marks;
@@ -137,7 +128,6 @@ TEST_CASE("a whole-subresource tile mark reaches every event until a whole clear
     CHECK_FALSE(marks.reaches(box(0, 0, 1, 1)));
 }
 
-//======================================================================================================================
 TEST_CASE("subtracting a box leaves the texels outside it as disjoint boxes", "[core]")
 {
     const core::TexelBox from{ .offset = { 0, 0, 0 }, .extent = { 4, 4, 4 } };
@@ -160,7 +150,6 @@ TEST_CASE("subtracting a box leaves the texels outside it as disjoint boxes", "[
     CHECK(core::subtract(cut, from).empty());
 }
 
-//======================================================================================================================
 TEST_CASE("byte marks clear at a use that a global barrier after the mapping orders", "[core]")
 {
     constexpr core::Scope kCopyWrite{ .stage = Stage::Copy, .access = Access::CopyWrite };
@@ -186,7 +175,6 @@ TEST_CASE("byte marks clear at a use that a global barrier after the mapping ord
     CHECK(marks.count() == 0);
 }
 
-//======================================================================================================================
 TEST_CASE("byte marks gain another queue's barrier only when its clock orders the mapping", "[core]")
 {
     constexpr core::Scope kCopyWrite{ .stage = Stage::Copy, .access = Access::CopyWrite };
@@ -201,7 +189,6 @@ TEST_CASE("byte marks gain another queue's barrier only when its clock orders th
     CHECK_FALSE(marks.firstUse(0, 65536, QueueType::Graphics, kCopyWrite).has_value());
 }
 
-//======================================================================================================================
 TEST_CASE("a remap of buffer bytes needs a new barrier, and an unmap clears their marks", "[core]")
 {
     constexpr core::Scope kCopyWrite{ .stage = Stage::Copy, .access = Access::CopyWrite };
@@ -217,7 +204,6 @@ TEST_CASE("a remap of buffer bytes needs a new barrier, and an unmap clears thei
     CHECK_FALSE(marks.firstUse(0, 131072, QueueType::Graphics, kCopyWrite).has_value());
 }
 
-//======================================================================================================================
 TEST_CASE("a mip-tail mapping changes every tail mip of its layers and nothing else", "[core]")
 {
 #ifndef NDEBUG
@@ -252,7 +238,6 @@ TEST_CASE("a mip-tail mapping changes every tail mip of its layers and nothing e
 #endif
 }
 
-//======================================================================================================================
 TEST_CASE("a submission with no lists to the compute queue stays unjoined until a graphics submission waits on it", "[core]")
 {
 #ifndef NDEBUG

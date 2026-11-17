@@ -19,11 +19,8 @@ using namespace rojoRHI;
 using test::PassKit;
 
 namespace {
-    /// The first row of a `PassKit::kSize` square texture, which every copy names.
     constexpr TextureRegion kRow{ .extent = { PassKit::kSize, 1, 1 } };
 
-    //==================================================================================================================
-    /// Ends `list` and submits it alone to the queue of `type` of `device`, waiting on `wait` and signalling `signal`.
     void submitTo(Device device, CommandList list, QueueType type, std::span<const FenceValue> wait = {}, std::span<const FenceValue> signal = {})
     {
         list.end();
@@ -31,8 +28,6 @@ namespace {
         device.queue(type).submit(lists, wait, signal);
     }
 
-    //==================================================================================================================
-    /// Records a dispatch in `list` that declares `access` of every subresource of `texture` from the compute shader.
     void dispatchWith(PassKit& kit, CommandList list, Texture texture, Access access)
     {
         const std::array<ResourceAccess, 1> accesses{ ResourceAccess{ .texture = texture, .stage = Stage::ComputeShader, .access = access } };
@@ -42,7 +37,6 @@ namespace {
     }
 } // namespace
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-sync-0025 a depth texture handed from Graphics to Compute in DepthStencilRead is sampled there", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-sync-0025", [] {
@@ -59,7 +53,6 @@ TEST_CASE("VU-rojo-sync-0025 a depth texture handed from Graphics to Compute in 
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-sync-0025 a texture handed from Graphics to Copy in ShaderRead is copied there", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-sync-0025", [] {
@@ -77,7 +70,6 @@ TEST_CASE("VU-rojo-sync-0025 a texture handed from Graphics to Copy in ShaderRea
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-sync-0025 Copy's first barrier on a texture handed from Graphics in CopyDst takes it over in General", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-sync-0025", [] {
@@ -96,7 +88,6 @@ TEST_CASE("VU-rojo-sync-0025 Copy's first barrier on a texture handed from Graph
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-sync-0025 Compute's first barrier on a texture handed over in ShaderRead starts from General", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-sync-0025", [] {
@@ -112,7 +103,6 @@ TEST_CASE("VU-rojo-sync-0025 Compute's first barrier on a texture handed over in
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-sync-0025 Compute's first barrier on a swapchain image handed over in General starts from ShaderRead", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-sync-0025", [] {
@@ -132,7 +122,6 @@ TEST_CASE("VU-rojo-sync-0025 Compute's first barrier on a swapchain image handed
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-sync-0025 Copy's first barrier on a texture created with data and sampled on Graphics takes it over in ShaderRead", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-sync-0025", [] {
@@ -160,7 +149,6 @@ TEST_CASE("VU-rojo-sync-0025 Copy's first barrier on a texture created with data
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-queue-0005 a texture moved on Graphics after the value Compute waits on is not handed over", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-queue-0005", [] {

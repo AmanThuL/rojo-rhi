@@ -33,70 +33,57 @@
 using namespace rojoRHI;
 
 namespace {
-    /// The viewport and scissor that cover the 16-texel square targets of these cases.
     constexpr Viewport kViewport{ .width = 16.0f, .height = 16.0f };
     constexpr Rect2D kScissor{ 0, 0, 16, 16 };
 
-    //==================================================================================================================
-    /// The calls a pass's render encoder makes when it opens with no barrier owed: the factory, the label when
-    /// `list`'s encoders carry one, and the list's table.
+    // A render encoder that opens with no barrier owed: the factory, the label when the list's encoders carry one, and
+    // the list's table.
     uint64_t openCalls(CommandList list)
     {
         return 2 + test::encoderLabel(list);
     }
 
-    //==================================================================================================================
-    /// The calls the compute encoder of a pass's counted draws makes when it opens with no barrier owed: the factory and the
-    /// label when `list`'s encoders carry one.
+    // The compute encoder of a pass's counted draws, opening with no barrier owed: the factory and the label when the
+    // list's encoders carry one.
     uint64_t batchOpenCalls(CommandList list)
     {
         return 1 + test::encoderLabel(list);
     }
 
-    /// The calls a pass's render encoder makes for the mesh oracle's pipeline and the viewport and scissor: the list's table
-    /// at the object and mesh stages, the pipeline with its counter-clockwise winding, the viewport and the scissor.
+    // The mesh oracle's pipeline state: the list's table at the object and mesh stages, the pipeline with its
+    // counter-clockwise winding, the viewport and the scissor.
     constexpr uint64_t kStateCalls = 5;
 
-    /// The call of the begin timestamp a pass's first render encoder writes right after it opens; the kernels' encoder of
-    /// counted draws ahead of it writes none.
+    // A pass's first render encoder writes the begin timestamp right after it opens; the kernels' encoder of counted draws
+    // ahead of it writes none.
     constexpr uint64_t kPassBegin = 1;
 
-    /// The records of these cases.
     constexpr uint32_t kRecords = 16;
 
     using Kind = metal4::PrefixKind;
 
-    //==================================================================================================================
-    /// The encoders of `list`.
     const metal4::Encoders& encodersOf(CommandList list)
     {
         return CommandListImpl::of(list).encoders;
     }
 
-    //==================================================================================================================
-    /// The graphics state of `list`.
     const metal4::DrawState& drawOf(CommandList list)
     {
         return CommandListImpl::of(list).draw;
     }
 
-    //==================================================================================================================
-    /// What `list` has counted so far; fails the case when a scope it recorded holds no timestamp pair, since the pinned
-    /// counts include both timestamp writes.
+    // Fails the case when a scope the list recorded holds no timestamp pair, since the pinned counts include both
+    // timestamp writes.
     const core::RecordCounts& countsOf(CommandList list)
     {
         return test::timedCounts(list);
     }
 
-    //==================================================================================================================
-    /// The native calls `list` has recorded so far.
     uint64_t callsOf(CommandList list)
     {
         return countsOf(list).nativeRecordCalls;
     }
 
-    //==================================================================================================================
-    /// The kinds of `list`'s prefix, in order.
     std::vector<Kind> prefixKinds(CommandList list)
     {
         std::vector<Kind> kinds;
@@ -107,19 +94,13 @@ namespace {
         return kinds;
     }
 
-    //==================================================================================================================
-    /// The GPU address `address` names.
     uint64_t gpuAddressOf(Addr address)
     {
         return uint64_t{ address.lo } | uint64_t{ address.hi } << 32;
     }
 
-    /// What a case draws with: the mesh oracle's pipeline, a mesh pipeline without a task entry, a target, mesh records and a
-    /// count, all on one device.
     struct Fixture
     {
-        //==============================================================================================================
-        /// Creates the objects on `created`.
         explicit Fixture(Device created) : device(created)
         {
             // Every case records drawMeshTasksIndirect, which the core refuses on a device without it.
@@ -159,8 +140,6 @@ namespace {
             );
         }
 
-        //==============================================================================================================
-        /// Begins a pass over the target on `list`, cleared, and binds `bound`, the viewport and the scissor.
         void begin(CommandList list, Pipeline bound) const
         {
             const std::array colors{ ColorAttachment{ .texture = target, .load = LoadOp::Clear } };
@@ -170,40 +149,32 @@ namespace {
             list.setScissor(kScissor);
         }
 
-        //==============================================================================================================
-        /// Begins a pass with the mesh oracle's pipeline.
         void begin(CommandList list) const
         {
             begin(list, pipeline);
         }
 
-        //==============================================================================================================
-        /// The address of record `index`.
         Addr record(uint32_t index = 0) const
         {
             return Device(device).address(records, uint64_t{ index } * sizeof(DrawMeshTasksIndirectArgs));
         }
 
-        //==============================================================================================================
-        /// The address of the count.
         Addr counted() const
         {
             return Device(device).address(count);
         }
 
-        Device device;          ///< The device.
-        ShaderLibrary library;  ///< The mesh oracle library.
-        ShaderLibrary standard; ///< The standard library.
-        Pipeline pipeline;      ///< The mesh oracle's task, mesh and fragment pipeline over one `RGBA8Unorm` target.
-        Pipeline meshOnly;      ///< A mesh and fragment pipeline without a task entry.
-        Texture target;         ///< The pass's target.
-        Buffer records;         ///< `kRecords` mesh records of one group each, record `i` with drawId `i`.
-        Buffer count;           ///< A count of `kRecords`.
+        Device device;
+        ShaderLibrary library;
+        ShaderLibrary standard;
+        Pipeline pipeline;
+        Pipeline meshOnly;
+        Texture target;
+        // `kRecords` mesh records of one group each; record `i` has drawId `i`.
+        Buffer records;
+        Buffer count;
     };
 
-    //==================================================================================================================
-    /// The parameters the encode kernel of the mesh execute `command` of `list` reads, found from its range in the list's
-    /// frame-arena page.
     metal4::MeshParams paramsOf(CommandList list, const metal4::PrefixCommand& command)
     {
         const core::ArenaPage& page = core::coreOf(list).page;
@@ -213,8 +184,6 @@ namespace {
         return params;
     }
 
-    //==================================================================================================================
-    /// Ends `list`, submits it to the graphics queue, waits for it on the host and ends the frame.
     void finish(Device device, CommandList list)
     {
         list.end();
@@ -226,7 +195,6 @@ namespace {
     }
 } // namespace
 
-//======================================================================================================================
 TEST_CASE("a lone mesh record with a null count is one native indirect draw that binds the record and opens no compute encoder", "[metal4]")
 {
     test::GpuKit kit(2, true);
@@ -262,7 +230,6 @@ TEST_CASE("a lone mesh record with a null count is one native indirect draw that
     kit.run(std::array{ list });
 }
 
-//======================================================================================================================
 TEST_CASE("a mesh draw with a count runs the writer kernel and one native indirect draw", "[metal4]")
 {
     test::GpuKit kit(2, true, false, true);
@@ -296,7 +263,6 @@ TEST_CASE("a mesh draw with a count runs the writer kernel and one native indire
     kit.run(std::array{ list });
 }
 
-//======================================================================================================================
 TEST_CASE("a counted mesh draw that splits a pass leaves the resumed encoder to bind the mesh stages again", "[metal4]")
 {
     test::GpuKit kit(2, true);
@@ -327,7 +293,6 @@ TEST_CASE("a counted mesh draw that splits a pass leaves the resumed encoder to 
     kit.run(std::array{ list });
 }
 
-//======================================================================================================================
 TEST_CASE("a mesh batch encodes an ICB whose commands bind the reserved buffers on each stage", "[metal4]")
 {
     test::GpuKit kit(2, true, false, true);
@@ -378,7 +343,6 @@ TEST_CASE("a mesh batch encodes an ICB whose commands bind the reserved buffers 
     kit.run(std::array{ list });
 }
 
-//======================================================================================================================
 TEST_CASE("mesh ICBs are reused across frames like the others", "[metal4]")
 {
     Device device = *createDevice({ .scopeTimings = true });

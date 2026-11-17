@@ -13,7 +13,6 @@
 
 using namespace rojoRHI;
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-queue-0003 a fence appears twice in one signal list", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-queue-0003", [] {
@@ -24,7 +23,6 @@ TEST_CASE("VU-rojo-queue-0003 a fence appears twice in one signal list", "[contr
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-queue-0003 a signal value is not above the initial value", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-queue-0003", [] {
@@ -35,7 +33,6 @@ TEST_CASE("VU-rojo-queue-0003 a signal value is not above the initial value", "[
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-queue-0003 a signal value is not above the last submitted value", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-queue-0003", [] {
@@ -49,7 +46,6 @@ TEST_CASE("VU-rojo-queue-0003 a signal value is not above the last submitted val
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-queue-0007 a wait value was above the greatest submitted for signal", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-queue-0007", [] {
@@ -60,7 +56,6 @@ TEST_CASE("VU-rojo-queue-0007 a wait value was above the greatest submitted for 
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-queue-0008 an unlimited wait names a value above the greatest submitted for signal", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-queue-0008", [] {
@@ -70,7 +65,6 @@ TEST_CASE("VU-rojo-queue-0008 an unlimited wait names a value above the greatest
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-core-0004 a default-constructed Queue submits", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-core-0004", [] {

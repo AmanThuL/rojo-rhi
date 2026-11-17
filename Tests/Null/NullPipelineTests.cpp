@@ -19,21 +19,18 @@
 using namespace rojoRHI;
 
 namespace {
-    //==================================================================================================================
     std::vector<std::byte> bytesOf(std::string_view text)
     {
         const auto* data = reinterpret_cast<const std::byte*>(text.data());
         return { data, data + text.size() };
     }
 
-    //==================================================================================================================
     std::string textOf(const std::vector<std::byte>& blob)
     {
         return { reinterpret_cast<const char*>(blob.data()), blob.size() };
     }
 } // namespace
 
-//======================================================================================================================
 TEST_CASE("a Null library of the magic, the ABI stamp and no entries loads", "[null]")
 {
     Device device = *createDevice();
@@ -42,7 +39,6 @@ TEST_CASE("a Null library of the magic, the ABI stamp and no entries loads", "[n
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("a Null library of another magic is a DriverFailure", "[null]")
 {
     Device device = *createDevice();
@@ -52,7 +48,6 @@ TEST_CASE("a Null library of another magic is a DriverFailure", "[null]")
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("a Null library with no ABI line is a DriverFailure", "[null]")
 {
     Device device = *createDevice();
@@ -62,7 +57,6 @@ TEST_CASE("a Null library with no ABI line is a DriverFailure", "[null]")
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("a Null library with an unknown stage is a DriverFailure", "[null]")
 {
     Device device = *createDevice();
@@ -72,7 +66,6 @@ TEST_CASE("a Null library with an unknown stage is a DriverFailure", "[null]")
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("a Null library of ABI version 0 or one above the current is a ShaderAbiMismatch", "[null]")
 {
     Device device = *createDevice();
@@ -85,7 +78,6 @@ TEST_CASE("a Null library of ABI version 0 or one above the current is a ShaderA
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("the Null pipeline cache blob names the Null backend and the pipelines it covers", "[null]")
 {
     Device device = *createDevice();
@@ -98,7 +90,6 @@ TEST_CASE("the Null pipeline cache blob names the Null backend and the pipelines
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("a Null device carries the pipelines of the cache blob it was created with", "[null]")
 {
     const std::vector<std::byte> cache = bytesOf("rojorhi.null.pipelinecache\nversion 1\npipelines 7\n");
@@ -107,7 +98,6 @@ TEST_CASE("a Null device carries the pipelines of the cache blob it was created 
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("a Null device discards a cache blob of another version and starts empty", "[null]")
 {
     const std::vector<std::byte> cache = bytesOf("rojorhi.null.pipelinecache\nversion 2\npipelines 7\n");
@@ -116,7 +106,6 @@ TEST_CASE("a Null device discards a cache blob of another version and starts emp
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("a Null library that repeats an entry name is a DriverFailure", "[null]")
 {
     Device device = *createDevice();
@@ -130,7 +119,6 @@ TEST_CASE("a Null library that repeats an entry name is a DriverFailure", "[null
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("a malformed Null library is an error and never a crash", "[null]")
 {
     Device device = *createDevice();
@@ -153,7 +141,6 @@ TEST_CASE("a malformed Null library is an error and never a crash", "[null]")
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("every rule-built Null library loads", "[null]")
 {
     Device device = *createDevice();

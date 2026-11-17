@@ -24,23 +24,19 @@
 using namespace rojoRHI;
 
 namespace {
-    //==================================================================================================================
-    /// The encoders of `list`.
     const metal4::Encoders& encodersOf(CommandList list)
     {
         return CommandListImpl::of(list).encoders;
     }
 
-    //==================================================================================================================
-    /// What `list` has counted so far; fails the case when a scope it recorded holds no timestamp pair, since the pinned
-    /// counts include both timestamp writes.
+    // Fails the case when a scope `list` recorded holds no timestamp pair, since the pinned counts include both
+    // timestamp writes.
     const core::RecordCounts& countsOf(CommandList list)
     {
         return test::timedCounts(list);
     }
 
-    //==================================================================================================================
-    /// The label of the compute encoder `list` has open, read inside a pool because the getter autoreleases.
+    // Read inside a pool, because the getter autoreleases.
     std::string encoderLabel(CommandList list)
     {
         MTL4::ComputeCommandEncoder* encoder = encodersOf(list).computeEncoder();
@@ -49,8 +45,6 @@ namespace {
         return metal4::toStdString(encoder->label());
     }
 
-    //==================================================================================================================
-    /// Ends `list`, submits it to the queue of `type`, waits for it on the host and ends the frame.
     void finish(Device device, CommandList list, QueueType type = QueueType::Graphics)
     {
         list.end();
@@ -61,8 +55,6 @@ namespace {
         device.endFrame();
     }
 
-    //==================================================================================================================
-    /// Creates a texture of `type` with `layers` layers (or `depth` slices) of 8 by 8 RGBA8Unorm texels.
     Texture texture8(Device device, TextureType type, uint32_t layers, uint32_t depth = 1)
     {
         return *device.createTexture(
@@ -76,7 +68,6 @@ namespace {
     }
 } // namespace
 
-//======================================================================================================================
 TEST_CASE("the first copy opens a compute encoder labelled after the list and bound to its table", "[metal4]")
 {
     Device device = *createDevice({ .scopeTimings = true });
@@ -100,7 +91,6 @@ TEST_CASE("the first copy opens a compute encoder labelled after the list and bo
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("copies share one encoder until a scope boundary closes it, and the next encoder takes the scope's label", "[metal4]")
 {
     Device device = *createDevice({ .scopeTimings = true, .debugMarkers = true });
@@ -134,7 +124,6 @@ TEST_CASE("copies share one encoder until a scope boundary closes it, and the ne
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("an equal-byte fill is one native fillBuffer", "[metal4]")
 {
     Device device = *createDevice({ .scopeTimings = true });
@@ -153,7 +142,6 @@ TEST_CASE("an equal-byte fill is one native fillBuffer", "[metal4]")
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("a three-layer buffer-to-texture copy is three native copies and a 3D copy is one", "[metal4]")
 {
     Device device = *createDevice({ .scopeTimings = true });
@@ -177,7 +165,6 @@ TEST_CASE("a three-layer buffer-to-texture copy is three native copies and a 3D 
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("end closes the open encoder before it ends the command buffer", "[metal4]")
 {
     Device device = *createDevice({ .scopeTimings = true });
@@ -196,7 +183,6 @@ TEST_CASE("end closes the open encoder before it ends the command buffer", "[met
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("lists recorded on other threads than their acquisition each open their own encoder", "[metal4]")
 {
     Device device = *createDevice({ .scopeTimings = true });

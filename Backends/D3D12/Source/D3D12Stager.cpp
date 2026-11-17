@@ -29,25 +29,21 @@
 
 namespace rojoRHI::d3d12 {
     namespace {
-        /// The label of the upload queue and of everything it records and signals with.
         constexpr std::string_view kQueueLabel = "rojorhi.upload";
 
-        /// The label of every staging buffer.
         constexpr std::string_view kStagingLabel = "rojorhi.staging";
 
-        /// `D3D12_BARRIER_SUBRESOURCE_RANGE::IndexOrFirstMipLevel` with `NumMipLevels` 0: every subresource of the texture.
+        // With `NumMipLevels` 0, `IndexOrFirstMipLevel` names every subresource of the texture.
         constexpr UINT kAllSubresources = 0xFFFFFFFF;
 
-        /// A committed `UPLOAD` buffer, mapped for writing until it is released.
+        // Mapped for writing until it is released.
         struct Staging
         {
-            Com<ID3D12Resource> buffer; ///< The staging buffer.
-            std::byte* host = nullptr;  ///< Its mapped bytes.
+            Com<ID3D12Resource> buffer;
+            std::byte* host = nullptr;
         };
 
-        //==============================================================================================================
-        /// Creates a committed `UPLOAD` buffer of `size` bytes labelled `rojorhi.staging` on `impl`'s device and maps it,
-        /// counting one `nativeCreateCalls` and one `nativeHostCalls`.
+        // Counts one `nativeCreateCalls` and one `nativeHostCalls`.
         Result<Staging> createStaging(DeviceImpl& impl, uint64_t size)
         {
             D3D12_HEAP_PROPERTIES heap = {};
@@ -85,8 +81,6 @@ namespace rojoRHI::d3d12 {
             return staging;
         }
 
-        //==============================================================================================================
-        /// Unmaps the staging buffer of `staging`, if it has one, before its release.
         void unmap(Staging& staging)
         {
             if (staging.buffer)
@@ -95,10 +89,6 @@ namespace rojoRHI::d3d12 {
             }
         }
 
-        //==============================================================================================================
-        /// Records into `list` the copy of each non-empty entry of `subresources` from `staging`, laid out as `footprints`
-        /// says, into the same subresource of `destination`, then the barrier that moves every subresource of `destination`
-        /// from COPY_DEST to SHADER_RESOURCE, after the copies when there are any.
         void recordTexture(
             ID3D12GraphicsCommandList9* list,
             ID3D12Resource* destination,
@@ -147,7 +137,6 @@ namespace rojoRHI::d3d12 {
         }
     } // namespace
 
-    //==================================================================================================================
     Result<void> Stager::create(DeviceImpl& impl)
     {
         ID3D12Device12* device = impl.device();
@@ -180,7 +169,6 @@ namespace rojoRHI::d3d12 {
         return {};
     }
 
-    //==================================================================================================================
     Result<void> Stager::uploadBuffer(DeviceImpl& impl, ID3D12Resource* destination, std::span<const std::byte> bytes)
     {
         ROJORHI_INTERNAL_ASSERT(destination != nullptr, "uploadBuffer was given no destination");
@@ -203,7 +191,6 @@ namespace rojoRHI::d3d12 {
         return copied;
     }
 
-    //==================================================================================================================
     Result<void> Stager::uploadTexture(DeviceImpl& impl, ID3D12Resource* destination, std::span<const SubresourceData> subresources)
     {
         ROJORHI_INTERNAL_ASSERT(destination != nullptr, "uploadTexture was given no destination");
@@ -281,7 +268,6 @@ namespace rojoRHI::d3d12 {
         return copied;
     }
 
-    //==================================================================================================================
     void Stager::idle()
     {
         const std::lock_guard lock(m_mutex);
@@ -292,7 +278,6 @@ namespace rojoRHI::d3d12 {
         }
     }
 
-    //==================================================================================================================
     Result<void> Stager::reset(DeviceImpl& impl)
     {
         if (const HRESULT cleared = m_allocator->Reset(); FAILED(cleared))
@@ -306,7 +291,6 @@ namespace rojoRHI::d3d12 {
         return {};
     }
 
-    //==================================================================================================================
     Result<void> Stager::submit(DeviceImpl& impl)
     {
         if (const HRESULT closed = m_list->Close(); FAILED(closed))

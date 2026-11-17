@@ -23,16 +23,13 @@
 
 namespace rojoRHI::test {
     namespace {
-        /// The surfaces a test may ask for, each a distinct window.
         constexpr uint32_t kSurfaceCount = 8;
 
-        /// The width and height of the client area of every surface window, in pixels.
         constexpr int kSurfaceSize = 256;
 
-        /// The window class every surface window belongs to, registered once for the process.
+        // Registered once for the process.
         constexpr const wchar_t* kSurfaceClass = L"RojoRHITestSurface";
-        //==============================================================================================================
-        /// Reads the library file `path`, failing the running case when it is missing or empty.
+        // Fails the running case when the file is missing or empty.
         std::vector<std::byte> readLibrary(const std::filesystem::path& path)
         {
             std::ifstream file(path, std::ios::binary);
@@ -49,8 +46,7 @@ namespace rojoRHI::test {
             return { begin, begin + text.size() };
         }
 
-        //==============================================================================================================
-        /// The packaged standard library, read on first use and kept for the process.
+        // Read on first use and kept for the process.
         const std::vector<std::byte>& standardBytes()
         {
             static const std::vector<std::byte> bytes = readLibrary("Shaders/Standard.d3d12lib");
@@ -58,13 +54,11 @@ namespace rojoRHI::test {
         }
     } // namespace
 
-    //==================================================================================================================
     std::vector<std::byte> standardLibrary()
     {
         return standardBytes();
     }
 
-    //==================================================================================================================
     // The container's second line is `abi <N>`; replacing it leaves the DXIL byte counts unchanged.
     std::vector<std::byte> libraryStampedWith(uint32_t abi)
     {
@@ -82,7 +76,6 @@ namespace rojoRHI::test {
         return bytes;
     }
 
-    //==================================================================================================================
     std::vector<std::byte> foreignLibrary()
     {
         const std::string_view text = "rojorhi.null.shaderlibrary\nabi 1\nentry vsMain vertex\n";
@@ -90,14 +83,12 @@ namespace rojoRHI::test {
         return { bytes, bytes + text.size() };
     }
 
-    //==================================================================================================================
     // Fails the running case through Catch2, so it is called from a test thread.
     std::vector<std::byte> shaderLibraryFile(std::string_view name)
     {
         return readLibrary(std::filesystem::path("Shaders") / (std::string(name) + ".d3d12lib"));
     }
 
-    //==================================================================================================================
     // Each surface is a hidden window whose client area is 256 x 256, the extent a new swapchain takes, never shown, created
     // on first use and alive for the process.
     void* surface(uint32_t index)
@@ -154,19 +145,16 @@ namespace rojoRHI::test {
         return windows[index];
     }
 
-    //==================================================================================================================
     bool runsOnGpu()
     {
         return true;
     }
 
-    //==================================================================================================================
     bool multisampleReadsSize()
     {
         return false;
     }
 
-    //==================================================================================================================
     std::string_view misplacedClearEndsRecording()
     {
 #if defined(ROJORHI_D3D12_DEBUG_LAYER) || defined(ROJORHI_D3D12_DEBUG_GBV) || (defined(ROJORHI_D3D12_DEBUG_MODE) && !defined(NDEBUG))
@@ -177,13 +165,11 @@ namespace rojoRHI::test {
 #endif
     }
 
-    //==================================================================================================================
     bool layoutsAreNative()
     {
         return true;
     }
 
-    //==================================================================================================================
     std::string_view upscalesNeverComplete()
     {
 #if defined(ROJORHI_D3D12_ADAPTER_WARP) && defined(ROJORHI_D3D12_DEBUG_GBV)
@@ -194,7 +180,6 @@ namespace rojoRHI::test {
 #endif
     }
 
-    //==================================================================================================================
     std::string_view fusesPreciseArithmetic()
     {
 #if defined(ROJORHI_D3D12_ADAPTER_WARP)

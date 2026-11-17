@@ -25,23 +25,17 @@
 
 namespace rojoRHI::metal4 {
     namespace {
-        /// The label of each kind's indirect command buffers, indexed by `IcbKind`.
         constexpr std::array<std::string_view, kIcbKinds> kIcbLabels{ "rojorhi.list.icb.draw", "rojorhi.list.icb.indexed", "rojorhi.list.icb.mesh" };
 
-        /// The command type of each kind's indirect command buffers, indexed by `IcbKind`.
         constexpr std::array<MTL::IndirectCommandType, kIcbKinds> kCommandTypes{ MTL::IndirectCommandTypeDraw,
                                                                                  MTL::IndirectCommandTypeDrawIndexed,
                                                                                  MTL::IndirectCommandTypeDrawMeshThreadgroups };
 
-        /// The buffers a command binds on each stage it runs: the four reserved bindings (ADR 0018).
         constexpr NS::UInteger kBufferBindings = 4;
 
-        //==============================================================================================================
-        /// Makes an indirect command buffer of `kind` with `capacity` commands on `device`, labelled. Its commands take the
-        /// pipeline and every piece of render state from the render encoder that runs them. Each command binds its own record,
-        /// which a command that inherits buffers cannot, so it inherits none and binds all four reserved buffers on the stages
-        /// it runs: vertex and fragment for draw and indexed commands, object, mesh and fragment for mesh commands. The caller
-        /// holds an autorelease pool. Returns null when Metal refuses it.
+        // Commands take the pipeline and all render state from the encoder that runs them. Each binds its own record,
+        // which a command that inherits buffers cannot, so it inherits none and binds all four reserved buffers on the
+        // stages it runs. The caller holds an autorelease pool.
         MTL::IndirectCommandBuffer* newIcb(MTL::Device* device, IcbKind kind, uint32_t capacity)
         {
             MTL::IndirectCommandBufferDescriptor* descriptor = MTL::IndirectCommandBufferDescriptor::alloc()->init();
@@ -72,7 +66,6 @@ namespace rojoRHI::metal4 {
         }
     } // namespace
 
-    //==================================================================================================================
     const IcbSlot& IcbPool::take(MTL::Device* device, core::DeviceCore& core, IcbKind kind, uint32_t maxCount)
     {
         std::vector<IcbSlot>& slots = m_slots[static_cast<size_t>(kind)];
@@ -116,7 +109,6 @@ namespace rojoRHI::metal4 {
         return slots[cursor++];
     }
 
-    //==================================================================================================================
     void IcbPool::handOverChanges(Residency& residency)
     {
         for (const MTL::IndirectCommandBuffer* buffer : m_joining)
@@ -137,13 +129,11 @@ namespace rojoRHI::metal4 {
         }
     }
 
-    //==================================================================================================================
     void IcbPool::reset()
     {
         m_cursor = {};
     }
 
-    //==================================================================================================================
     void IcbPool::release(Residency& residency)
     {
         for (std::vector<IcbSlot>& slots : m_slots)

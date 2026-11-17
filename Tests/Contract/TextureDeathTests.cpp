@@ -15,21 +15,18 @@
 using namespace rojoRHI;
 
 namespace {
-    //==================================================================================================================
-    /// A texture description that obeys every rule; each case breaks one.
+    // Obeys every rule; each case breaks one.
     TextureDesc validDesc()
     {
         return TextureDesc{ .format = Format::RGBA8Unorm, .extent = { 64, 64, 1 }, .usage = TextureUsage::Sampled };
     }
 
-    //==================================================================================================================
     Texture makeTexture(Device device, const TextureDesc& desc)
     {
         return *device.createTexture(desc);
     }
 } // namespace
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-texture-0001 a texture has Format::Undefined", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-texture-0001", [] {
@@ -40,7 +37,6 @@ TEST_CASE("VU-rojo-texture-0001 a texture has Format::Undefined", "[contract][de
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-texture-0002 a texture has a zero extent component", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-texture-0002", [] {
@@ -51,7 +47,6 @@ TEST_CASE("VU-rojo-texture-0002 a texture has a zero extent component", "[contra
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-texture-0003 a Tex1D texture is two texels high", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-texture-0003", [] {
@@ -63,7 +58,6 @@ TEST_CASE("VU-rojo-texture-0003 a Tex1D texture is two texels high", "[contract]
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-texture-0004 a cube texture is not square", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-texture-0004", [] {
@@ -76,7 +70,6 @@ TEST_CASE("VU-rojo-texture-0004 a cube texture is not square", "[contract][death
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-texture-0005 a Tex2D texture has two layers", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-texture-0005", [] {
@@ -87,7 +80,6 @@ TEST_CASE("VU-rojo-texture-0005 a Tex2D texture has two layers", "[contract][dea
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-texture-0039 a texture has more layers than the device allows", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-texture-0039", [] {
@@ -99,7 +91,6 @@ TEST_CASE("VU-rojo-texture-0039 a texture has more layers than the device allows
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-texture-0006 a texture has more mips than its extent allows", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-texture-0006", [] {
@@ -110,7 +101,6 @@ TEST_CASE("VU-rojo-texture-0006 a texture has more mips than its extent allows",
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-texture-0042 a Tex1D texture has two mips", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-texture-0042", [] {
@@ -121,7 +111,6 @@ TEST_CASE("VU-rojo-texture-0042 a Tex1D texture has two mips", "[contract][death
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-texture-0042 a Tex1DArray texture has two mips", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-texture-0042", [] {
@@ -132,7 +121,6 @@ TEST_CASE("VU-rojo-texture-0042 a Tex1DArray texture has two mips", "[contract][
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-texture-0007 a texture has three samples", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-texture-0007", [] {
@@ -144,7 +132,6 @@ TEST_CASE("VU-rojo-texture-0007 a texture has three samples", "[contract][death]
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-texture-0008 a multisampled texture has two mips", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-texture-0008", [] {
@@ -157,7 +144,6 @@ TEST_CASE("VU-rojo-texture-0008 a multisampled texture has two mips", "[contract
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-texture-0009 a texture has no usage", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-texture-0009", [] {
@@ -168,7 +154,6 @@ TEST_CASE("VU-rojo-texture-0009 a texture has no usage", "[contract][death]")
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-texture-0010 DepthStencil is set on a color format", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-texture-0010", [] {
@@ -179,7 +164,6 @@ TEST_CASE("VU-rojo-texture-0010 DepthStencil is set on a color format", "[contra
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-texture-0010 Storage is set on a format with no storage access", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-texture-0010", [] {
@@ -189,7 +173,6 @@ TEST_CASE("VU-rojo-texture-0010 Storage is set on a format with no storage acces
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-texture-0011 a Tex3D texture has DepthStencil usage", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-texture-0011", [] {
@@ -203,7 +186,6 @@ TEST_CASE("VU-rojo-texture-0011 a Tex3D texture has DepthStencil usage", "[contr
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-texture-0012 Sparse is set on a device without sparse resources", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-texture-0012", [] {
@@ -215,7 +197,6 @@ TEST_CASE("VU-rojo-texture-0012 Sparse is set on a device without sparse resourc
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-texture-0013 a row stride is below the packed row", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-texture-0013", [] {
@@ -228,7 +209,6 @@ TEST_CASE("VU-rojo-texture-0013 a row stride is below the packed row", "[contrac
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-texture-0014 a Tex2D subresource has a slice stride", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-texture-0014", [] {
@@ -241,7 +221,6 @@ TEST_CASE("VU-rojo-texture-0014 a Tex2D subresource has a slice stride", "[contr
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-texture-0015 initial data is smaller than its strides imply", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-texture-0015", [] {
@@ -254,7 +233,6 @@ TEST_CASE("VU-rojo-texture-0015 initial data is smaller than its strides imply",
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-texture-0015 a row stride is so large that the implied size wraps", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-texture-0015", [] {
@@ -267,7 +245,6 @@ TEST_CASE("VU-rojo-texture-0015 a row stride is so large that the implied size w
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-texture-0016 a view range has no mips", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-texture-0016", [] {
@@ -277,7 +254,6 @@ TEST_CASE("VU-rojo-texture-0016 a view range has no mips", "[contract][death]")
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-texture-0017 a view range starts past the last mip", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-texture-0017", [] {
@@ -287,7 +263,6 @@ TEST_CASE("VU-rojo-texture-0017 a view range starts past the last mip", "[contra
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-texture-0041 a view range with all counts starts past the last mip", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-texture-0041", [] {
@@ -297,7 +272,6 @@ TEST_CASE("VU-rojo-texture-0041 a view range with all counts starts past the las
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-texture-0018 initial data has one entry too many", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-texture-0018", [] {
@@ -307,7 +281,6 @@ TEST_CASE("VU-rojo-texture-0018 initial data has one entry too many", "[contract
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-texture-0019 initial data is given for a Sparse texture", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-texture-0019", [] {
@@ -325,7 +298,6 @@ TEST_CASE("VU-rojo-texture-0019 initial data is given for a Sparse texture", "[c
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-texture-0020 initial data is given for a texture without Sampled", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-texture-0020", [] {
@@ -337,7 +309,6 @@ TEST_CASE("VU-rojo-texture-0020 initial data is given for a texture without Samp
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-texture-0021 initial data is given for a multisampled texture", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-texture-0021", [] {
@@ -350,7 +321,6 @@ TEST_CASE("VU-rojo-texture-0021 initial data is given for a multisampled texture
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-texture-0040 initial data is given for D32FloatS8", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-texture-0040", [] {
@@ -362,7 +332,6 @@ TEST_CASE("VU-rojo-texture-0040 initial data is given for D32FloatS8", "[contrac
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-texture-0022 a Storage view is made of a Sampled-only texture", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-texture-0022", [] {
@@ -372,7 +341,6 @@ TEST_CASE("VU-rojo-texture-0022 a Storage view is made of a Sampled-only texture
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-texture-0023 a Tex3D view is made of a Tex2D texture", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-texture-0023", [] {
@@ -382,7 +350,6 @@ TEST_CASE("VU-rojo-texture-0023 a Tex3D view is made of a Tex2D texture", "[cont
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-texture-0024 a Tex2D view covers two layers", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-texture-0024", [] {
@@ -395,7 +362,6 @@ TEST_CASE("VU-rojo-texture-0024 a Tex2D view covers two layers", "[contract][dea
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-texture-0025 a view reinterprets the format outside its family", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-texture-0025", [] {
@@ -405,7 +371,6 @@ TEST_CASE("VU-rojo-texture-0025 a view reinterprets the format outside its famil
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-texture-0026 a Storage view covers two mips", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-texture-0026", [] {
@@ -418,7 +383,6 @@ TEST_CASE("VU-rojo-texture-0026 a Storage view covers two mips", "[contract][dea
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-texture-0027 a color view is made of a depth texture", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-texture-0027", [] {
@@ -430,7 +394,6 @@ TEST_CASE("VU-rojo-texture-0027 a color view is made of a depth texture", "[cont
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-texture-0028 a texture is destroyed while a view of it is live", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-texture-0028", [] {
@@ -441,7 +404,6 @@ TEST_CASE("VU-rojo-texture-0028 a texture is destroyed while a view of it is liv
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-device-0010 a view index that createView never returned is destroyed", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-device-0010", [] {

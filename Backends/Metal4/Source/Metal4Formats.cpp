@@ -16,14 +16,12 @@
 
 namespace rojoRHI::metal4 {
     namespace {
-        //==============================================================================================================
         FormatCapabilities& entry(core::FormatTable& table, Format format)
         {
             return table[static_cast<uint32_t>(format)];
         }
     } // namespace
 
-    //==================================================================================================================
     MTL::PixelFormat pixelFormat(Format format)
     {
         switch (format)
@@ -46,7 +44,6 @@ namespace rojoRHI::metal4 {
         return MTL::PixelFormatInvalid;
     }
 
-    //==================================================================================================================
     Format formatOf(MTL::PixelFormat pixelFormat)
     {
         switch (pixelFormat)
@@ -68,7 +65,6 @@ namespace rojoRHI::metal4 {
         }
     }
 
-    //==================================================================================================================
     core::FormatTable metalFormatTable(MTL::Device* device)
     {
         core::FormatTable table = core::formatCeilings();
@@ -92,11 +88,10 @@ namespace rojoRHI::metal4 {
         // ordinary 32-bit pixel formats). Blend stays at the ceiling.
         entry(table, Format::R32Float).filterLinear = device->supports32BitFloatFiltering();
         entry(table, Format::R32Float).resolve = device->supports32BitFloatFiltering();
-        // Storage reads go through the shader ABI's rwTexture accessors, which are read_write, and read-write texture tier 2
-        // lists neither BGRA8Unorm, RG16Float nor RGB10A2Unorm (Metal Feature Set Tables, May 2026, read-write texture
-        // tiers). The Apple7 and later columns list Write for all three (same tables, ordinary and packed 32-bit pixel
-        // formats), and a shader writes them through the write-only wTexture accessors (access::write): the write-only
-        // conformance cases read every texel back bit-exact under the validation layer, so they keep storageWrite.
+        // Storage reads go through the ABI's read_write rwTexture accessors, and read-write texture tier 2 lists none
+        // of BGRA8Unorm, RG16Float and RGB10A2Unorm (Metal Feature Set Tables, May 2026). Apple7 and later list Write
+        // for all three, and the write-only conformance cases read every texel back bit-exact through wTexture
+        // (access::write), so they keep storageWrite.
         entry(table, Format::BGRA8Unorm).storageRead = false;
         entry(table, Format::RGB10A2Unorm).storageRead = false;
         entry(table, Format::RG16Float).storageRead = false;

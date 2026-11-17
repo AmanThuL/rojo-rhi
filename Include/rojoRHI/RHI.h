@@ -16,7 +16,7 @@
 // Version
 #define ROJORHI_VERSION_MAJOR 1
 #define ROJORHI_VERSION_MINOR 0
-#define ROJORHI_VERSION_PATCH 0
+#define ROJORHI_VERSION_PATCH 1
 
 namespace rojoRHI {
     // Fundamentals

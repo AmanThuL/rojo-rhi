@@ -46,5 +46,7 @@ Varyings bindlessVertex(rojoRHI::VertexIds ids)
 float4 bindlessFragment(Varyings input) : SV_Target
 {
     BindlessRoot root = rojoRHI::root<BindlessRoot>();
+    // The index differs between instances one wave may shade together, so it is marked nonUniform; an unmarked
+    // index is assumed uniform across the wave.
     return rojoRHI::texture2D(rojoRHI::nonUniform(input.texture)).Sample(rojoRHI::sampler(root.sampler), input.uv);
 }

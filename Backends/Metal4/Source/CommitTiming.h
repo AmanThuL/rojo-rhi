@@ -14,7 +14,7 @@ namespace rojoRHI::metal4 {
     struct CommitTime
     {
         QueueType queue;
-        uint64_t serial; ///< Per queue, counted from 1 from the first commit after setCommitTiming.
+        uint64_t serial; // Per queue, counted from 1 from the first commit after setCommitTiming.
         double gpuStartSeconds;
         double gpuEndSeconds;
         bool failed;
@@ -22,13 +22,10 @@ namespace rojoRHI::metal4 {
 
     using CommitTimingCallback = void (*)(void* user, const CommitTime& time);
 
-    // Every later commit of `queue` carries MTL4::CommitOptions feedback that calls `callback` from Metal's completion
-    // thread; a null callback detaches. Detaching does not cancel the reports of commits already made, which hold copies of
-    // `callback` and `user`: they may still arrive afterwards, so the caller keeps `user` alive until the queue's earlier work has
-    // completed. A submission with no lists makes no commit and no report. Calls on MTL4::CommitOptions are not counted in Device::counters.
-    // The harness relies on one contract: exactly one commit per Queue::submit, and no backend-internal commit on the
-    // queue while timing is attached to it, because RojoGpuTiming fails a frame on a stray or non-contiguous serial
-    // (RojoContext's beginFrame(commits) names the count it expects). The feedback must also coexist with a commit
-    // feedback handler the backend sets for its own waits, as the stager does.
+    // Every later commit of `queue` reports through `callback` on Metal's completion thread; a null callback detaches.
+    // Commits made before detaching may still report afterwards, so the caller keeps `user` alive until that work has
+    // completed. The harness relies on exactly one commit per `Queue::submit` and no backend-internal commit while
+    // timing is attached; the feedback coexists with the stager's own commit handler. Calls on MTL4::CommitOptions are
+    // not counted in Device::counters.
     void setCommitTiming(Queue queue, CommitTimingCallback callback, void* user);
 } // namespace rojoRHI::metal4

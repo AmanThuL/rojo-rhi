@@ -22,22 +22,16 @@
 using namespace rojoRHI;
 
 namespace {
-    /// The commands of each kind a case records at the smaller of its two sizes.
     constexpr uint32_t kCommands = 64;
 
-    /// The edge of the render target, in texels.
     constexpr uint32_t kEdge = 64;
 
-    /// Which count a case reads: every pool the thread opened, or the `CommandPool`s alone.
     enum class Counting
     {
         AllPools,
         CommandPools,
     };
 
-    //==================================================================================================================
-    /// Runs `record` with `count` on a list of the Graphics queue, then submits the list, waits for it and ends the frame.
-    /// Returns how many pools `record` opened, counted as `counting` says.
     template<typename Record> uint64_t poolsOpenedBy(Device device, Record record, uint32_t count, Counting counting)
     {
         const uint64_t& counter = counting == Counting::AllPools ? metal4::poolsOpened() : metal4::commandPoolsOpened();
@@ -55,10 +49,8 @@ namespace {
         return opened;
     }
 
-    //==================================================================================================================
-    /// Checks the pools of `kCommands` more commands of `record`: `perCommand` each under the validation layer, none without
-    /// it. The opening of the list's encoder opens pools of its own, which the two sizes share, so only their difference
-    /// counts.
+    // Under the validation layer each of `kCommands` more commands opens `perCommand` pools, and none without it. The
+    // list's encoder opens pools of its own, which both sizes share, so only their difference counts.
     template<typename Record> void checkPoolsPerCommand(Device device, Record record, uint64_t perCommand, Counting counting = Counting::AllPools)
     {
         const uint64_t small = poolsOpenedBy(device, record, kCommands, counting);
@@ -68,7 +60,6 @@ namespace {
     }
 } // namespace
 
-//======================================================================================================================
 TEST_CASE("a dispatch opens a command pool only under the validation layer", "[metal4]")
 {
     Device device = *createDevice({ .scopeTimings = true });
@@ -89,7 +80,6 @@ TEST_CASE("a dispatch opens a command pool only under the validation layer", "[m
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("a buffer copy and a fill open a command pool only under the validation layer", "[metal4]")
 {
     Device device = *createDevice({ .scopeTimings = true });
@@ -129,7 +119,6 @@ TEST_CASE("a buffer copy and a fill open a command pool only under the validatio
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("a draw opens a command pool only under the validation layer", "[metal4]")
 {
     Device device = *createDevice({ .scopeTimings = true });
@@ -165,7 +154,6 @@ TEST_CASE("a draw opens a command pool only under the validation layer", "[metal
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("the detected flag matches the layer the process runs under", "[metal4]")
 {
     Device device = *createDevice({ .scopeTimings = true });
@@ -177,7 +165,6 @@ TEST_CASE("the detected flag matches the layer the process runs under", "[metal4
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("a scope between encoders and a render pass open their command pools only under the validation layer", "[metal4]")
 {
     Device device = *createDevice({ .scopeTimings = true });
@@ -214,7 +201,6 @@ TEST_CASE("a scope between encoders and a render pass open their command pools o
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("a render pass opens one pool for its debug group and one around its descriptor and encoder factory", "[metal4]")
 {
     Device device = *createDevice({ .scopeTimings = true, .debugMarkers = true });
@@ -237,7 +223,6 @@ TEST_CASE("a render pass opens one pool for its debug group and one around its d
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("counted draws open their kernel and replay command pools only under the validation layer", "[metal4]")
 {
     constexpr uint32_t kRecords = 8;
@@ -284,7 +269,6 @@ TEST_CASE("counted draws open their kernel and replay command pools only under t
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("mesh draws open a command pool only under the validation layer", "[metal4]")
 {
     Device device = *createDevice({ .scopeTimings = true });
@@ -325,7 +309,6 @@ TEST_CASE("mesh draws open a command pool only under the validation layer", "[me
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("a list empties its pass descriptor's attachments without an autorelease pool", "[metal4]")
 {
     Device device = *createDevice({ .scopeTimings = true });

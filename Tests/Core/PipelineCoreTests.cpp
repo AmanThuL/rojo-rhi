@@ -16,21 +16,18 @@
 using namespace rojoRHI;
 
 namespace {
-    //==================================================================================================================
     ShaderLibrary loadStandard(Device device)
     {
         const std::vector<std::byte> blob = test::standardLibrary();
         return *device.loadShaderLibrary(blob, "core.library");
     }
 
-    //==================================================================================================================
     const core::PipelineRecord& recordOf(Device device, Pipeline pipeline)
     {
         return *core::coreOf(device).pool<Pipeline>().lookup(pipeline).record;
     }
 } // namespace
 
-//======================================================================================================================
 TEST_CASE("a shader library's record keeps its label and entries", "[core]")
 {
     Device device = *createDevice();
@@ -47,7 +44,6 @@ TEST_CASE("a shader library's record keeps its label and entries", "[core]")
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("a shader library without a label is recorded as rojorhi.shaderlibrary.unnamed", "[core]")
 {
     Device device = *createDevice();
@@ -57,7 +53,6 @@ TEST_CASE("a shader library without a label is recorded as rojorhi.shaderlibrary
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("a graphics pipeline's record keeps its attachments, samples, stages and class", "[core]")
 {
     Device device = *createDevice();
@@ -83,7 +78,6 @@ TEST_CASE("a graphics pipeline's record keeps its attachments, samples, stages a
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("a mesh pipeline's record holds the task and mesh stages", "[core]")
 {
     Device device = *createDevice();
@@ -96,7 +90,6 @@ TEST_CASE("a mesh pipeline's record holds the task and mesh stages", "[core]")
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("a compute pipeline's record is compute with only the compute stage and no label", "[core]")
 {
     Device device = *createDevice();

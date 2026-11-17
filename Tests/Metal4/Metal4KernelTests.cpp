@@ -27,23 +27,18 @@
 using namespace rojoRHI;
 
 namespace {
-    //==================================================================================================================
-    /// The encoders of `list`.
     const metal4::Encoders& encodersOf(CommandList list)
     {
         return CommandListImpl::of(list).encoders;
     }
 
-    //==================================================================================================================
-    /// What `list` has counted so far; fails the case when a scope it recorded holds no timestamp pair, since the pinned
-    /// counts include both timestamp writes.
+    // Fails the case when a scope `list` recorded holds no timestamp pair, since the pinned counts include both
+    // timestamp writes.
     const core::RecordCounts& countsOf(CommandList list)
     {
         return test::timedCounts(list);
     }
 
-    //==================================================================================================================
-    /// Ends `list`, submits it to the queue of `type`, waits for it on the host and ends the frame.
     void finish(Device device, CommandList list, QueueType type = QueueType::Graphics)
     {
         list.end();
@@ -55,7 +50,6 @@ namespace {
     }
 } // namespace
 
-//======================================================================================================================
 TEST_CASE("createDevice loads the embedded kernel library and the fill pipeline", "[metal4]")
 {
     Device first = *createDevice({ .scopeTimings = true });
@@ -79,7 +73,6 @@ TEST_CASE("createDevice loads the embedded kernel library and the fill pipeline"
     destroyDevice(first);
 }
 
-//======================================================================================================================
 TEST_CASE("a new list creates its kernel table with its other objects", "[metal4]")
 {
     Device device = *createDevice({ .scopeTimings = true });
@@ -99,7 +92,6 @@ TEST_CASE("a new list creates its kernel table with its other objects", "[metal4
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("an unequal-pattern fill runs the fill kernel on the open encoder and sets the list's table back", "[metal4]")
 {
     Device device = *createDevice({ .scopeTimings = true });
@@ -132,7 +124,6 @@ TEST_CASE("an unequal-pattern fill runs the fill kernel on the open encoder and 
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("fill parameters take arena space but count as no frame data upload", "[metal4]")
 {
     Device device = *createDevice({ .scopeTimings = true });
@@ -156,7 +147,6 @@ TEST_CASE("fill parameters take arena space but count as no frame data upload", 
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("a fill splits into dispatches of at most 2^31 words", "[metal4]")
 {
     constexpr uint64_t kChunk = uint64_t{ 1 } << 31;
@@ -169,7 +159,6 @@ TEST_CASE("a fill splits into dispatches of at most 2^31 words", "[metal4]")
     CHECK(metal4::fillDispatchCount(3 * kChunk + 5) == 4);
 }
 
-//======================================================================================================================
 TEST_CASE("device creation time with the kernel library", "[metal4]")
 {
     // Reports the median of ten creations; asserts nothing on time, which depends on the machine and its load.
@@ -189,7 +178,6 @@ TEST_CASE("device creation time with the kernel library", "[metal4]")
     );
 }
 
-//======================================================================================================================
 TEST_CASE("a kernel fill runs in the dispatch stage after an encoder-level barrier held for a dispatch", "[metal4]")
 {
     Device device = *createDevice({ .scopeTimings = true });
@@ -225,7 +213,6 @@ TEST_CASE("a kernel fill runs in the dispatch stage after an encoder-level barri
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("a kernel pipeline is set once per open encoder and forgotten when the encoder closes", "[metal4]")
 {
     Device device = *createDevice({ .scopeTimings = true });

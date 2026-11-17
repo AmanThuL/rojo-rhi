@@ -23,24 +23,19 @@
 
 namespace rojoRHI {
     namespace {
-        /// How a copy between a buffer and a texture walks the buffer: the footprint of one image and the distance between images.
         struct BufferImages
         {
-            uint32_t width = 0;      ///< The footprint's width in texels, whole blocks.
-            uint32_t height = 0;     ///< The footprint's height in texels, whole blocks: `rowsPerImage` rows when it is set.
-            uint32_t boxHeight = 0;  ///< The region's height in texels, whole blocks.
-            uint64_t imageBytes = 0; ///< Bytes between consecutive images in the buffer.
+            uint32_t width = 0;     // In texels, whole blocks.
+            uint32_t height = 0;    // In texels, whole blocks: `rowsPerImage` rows when it is set.
+            uint32_t boxHeight = 0; // In texels, whole blocks.
+            uint64_t imageBytes = 0;
         };
 
-        //==============================================================================================================
-        /// Returns `value` rounded up to a multiple of `edge`.
         uint32_t roundUp(uint32_t value, uint32_t edge)
         {
             return (value + edge - 1) / edge * edge;
         }
 
-        //==============================================================================================================
-        /// Returns how a buffer laid out by `layout` holds the images of `region` of a texture of `format`.
         BufferImages bufferImages(Format format, const BufferTextureLayout& layout, const TextureRegion& region)
         {
             const core::FormatLayout packing = core::formatLayout(format);
@@ -52,8 +47,6 @@ namespace rojoRHI {
             return images;
         }
 
-        //==============================================================================================================
-        /// Returns the location of subresource `subresource` of `resource`.
         D3D12_TEXTURE_COPY_LOCATION subresourceLocation(ID3D12Resource* resource, uint32_t subresource)
         {
             D3D12_TEXTURE_COPY_LOCATION location = {};
@@ -63,8 +56,6 @@ namespace rojoRHI {
             return location;
         }
 
-        //==============================================================================================================
-        /// Returns the location of a `depth`-slice image of `images` in `resource` at byte `offset`, its rows `rowPitch` apart.
         D3D12_TEXTURE_COPY_LOCATION footprintLocation(
             ID3D12Resource* resource, uint64_t offset, DXGI_FORMAT format, const BufferImages& images, uint32_t depth, uint32_t rowPitch
         )
@@ -81,9 +72,6 @@ namespace rojoRHI {
             return location;
         }
 
-        //==============================================================================================================
-        /// Returns the box of `region`'s texels in a texture, `width` by `height` texels: the region's depth slices when `volume`
-        /// is set, else one slice.
         D3D12_BOX boxOf(const TextureRegion& region, uint32_t width, uint32_t height, bool volume)
         {
             D3D12_BOX box = {};
@@ -96,23 +84,18 @@ namespace rojoRHI {
             return box;
         }
 
-        //==============================================================================================================
-        /// Returns the native texture a copy of `list` names; the payload is fixed from creation to retirement, so it is read with
-        /// one load and no lock (ADR 0020).
+        // The payload is fixed from creation to retirement, so it is read with one load and no lock (ADR 0020).
         const d3d12::TexturePayload& texturePayload(const core::CommandListCore& list, Texture texture)
         {
             return *static_cast<const d3d12::TexturePayload*>(list.device->pool<Texture>().native(texture));
         }
 
-        //==============================================================================================================
-        /// Returns the native buffer a copy of `list` names, read as `texturePayload` reads a texture.
         ID3D12Resource* nativeBuffer(const core::CommandListCore& list, Buffer buffer)
         {
             return static_cast<const d3d12::BufferPayload*>(list.device->pool<Buffer>().native(buffer))->resource;
         }
     } // namespace
 
-    //==================================================================================================================
     void CommandList::copyBuffer(Buffer src, uint64_t srcOffset, Buffer dst, uint64_t dstOffset, uint64_t size)
     {
         CommandListImpl& impl = CommandListImpl::of(*this);
@@ -122,7 +105,6 @@ namespace rojoRHI {
         core::noteNativeCall(list);
     }
 
-    //==================================================================================================================
     void CommandList::copyBufferToTexture(Buffer src, const BufferTextureLayout& layout, Texture dst, const TextureRegion& region)
     {
         CommandListImpl& impl = CommandListImpl::of(*this);
@@ -146,7 +128,6 @@ namespace rojoRHI {
         }
     }
 
-    //==================================================================================================================
     void CommandList::copyTextureToBuffer(Texture src, const TextureRegion& region, Buffer dst, const BufferTextureLayout& layout)
     {
         CommandListImpl& impl = CommandListImpl::of(*this);
@@ -169,7 +150,6 @@ namespace rojoRHI {
         }
     }
 
-    //==================================================================================================================
     void CommandList::copyTexture(Texture src, const TextureRegion& srcRegion, Texture dst, const TextureRegion& dstRegion)
     {
         CommandListImpl& impl = CommandListImpl::of(*this);

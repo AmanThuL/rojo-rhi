@@ -15,7 +15,6 @@ using namespace rojoRHI;
 using rojoRHI::test::PassKit;
 
 namespace {
-    /// A device with validation, a recording list, and the resources the valid declarations below name.
     struct Rig
     {
         PassKit kit{ QueueType::Graphics, true };
@@ -23,22 +22,16 @@ namespace {
         Texture texture = kit.texture(Format::RGBA8Unorm, TextureUsage::Sampled | TextureUsage::Storage, 2, 2); // 2 mips, 2 layers
     };
 
-    //==================================================================================================================
-    /// Returns a valid fragment read of the rig's buffer.
     ResourceAccess valid(const Rig& rig)
     {
         return ResourceAccess{ .buffer = rig.buffer, .stage = Stage::FragmentShader, .access = Access::ShaderRead };
     }
 
-    //==================================================================================================================
-    /// Returns a valid fragment read of the rig's texture.
     ResourceAccess validTexture(const Rig& rig)
     {
         return ResourceAccess{ .texture = rig.texture, .stage = Stage::FragmentShader, .access = Access::ShaderRead };
     }
 
-    //==================================================================================================================
-    /// Declares `access` on the rig's list.
     void declare(Rig& rig, const ResourceAccess& access)
     {
         const std::array<ResourceAccess, 1> accesses{ access };
@@ -46,7 +39,6 @@ namespace {
     }
 } // namespace
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-diag-0001 neither a buffer nor a texture is declared", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-diag-0001", [] {
@@ -57,7 +49,6 @@ TEST_CASE("VU-rojo-diag-0001 neither a buffer nor a texture is declared", "[cont
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-diag-0001 both a buffer and a texture are declared", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-diag-0001", [] {
@@ -68,7 +59,6 @@ TEST_CASE("VU-rojo-diag-0001 both a buffer and a texture are declared", "[contra
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-diag-0002 the buffer offset is past the end", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-diag-0002", [] {
@@ -80,7 +70,6 @@ TEST_CASE("VU-rojo-diag-0002 the buffer offset is past the end", "[contract][dea
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-diag-0002 the buffer range runs past the end", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-diag-0002", [] {
@@ -92,7 +81,6 @@ TEST_CASE("VU-rojo-diag-0002 the buffer range runs past the end", "[contract][de
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-diag-0002 the texture range starts past the last mip", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-diag-0002", [] {
@@ -103,7 +91,6 @@ TEST_CASE("VU-rojo-diag-0002 the texture range starts past the last mip", "[cont
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-diag-0002 the texture range runs past the last layer", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-diag-0002", [] {
@@ -114,7 +101,6 @@ TEST_CASE("VU-rojo-diag-0002 the texture range runs past the last layer", "[cont
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-diag-0002 the texture range has no mips", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-diag-0002", [] {
@@ -125,7 +111,6 @@ TEST_CASE("VU-rojo-diag-0002 the texture range has no mips", "[contract][death]"
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-diag-0002 the texture range has no layers", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-diag-0002", [] {
@@ -136,7 +121,6 @@ TEST_CASE("VU-rojo-diag-0002 the texture range has no layers", "[contract][death
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-diag-0003 the stage is not a shader stage", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-diag-0003", [] {
@@ -147,7 +131,6 @@ TEST_CASE("VU-rojo-diag-0003 the stage is not a shader stage", "[contract][death
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-diag-0003 the stage names two shader stages", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-diag-0003", [] {
@@ -158,7 +141,6 @@ TEST_CASE("VU-rojo-diag-0003 the stage names two shader stages", "[contract][dea
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-diag-0003 the stage is empty", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-diag-0003", [] {
@@ -169,7 +151,6 @@ TEST_CASE("VU-rojo-diag-0003 the stage is empty", "[contract][death]")
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-diag-0003 the access holds a bit other than a shader access", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-diag-0003", [] {
@@ -180,7 +161,6 @@ TEST_CASE("VU-rojo-diag-0003 the access holds a bit other than a shader access",
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-diag-0003 the access is empty", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-diag-0003", [] {
@@ -191,7 +171,6 @@ TEST_CASE("VU-rojo-diag-0003 the access is empty", "[contract][death]")
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-diag-0004 an access is declared on a list that has ended", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-diag-0004", [] {
@@ -201,7 +180,6 @@ TEST_CASE("VU-rojo-diag-0004 an access is declared on a list that has ended", "[
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-diag-0005 a buffer write is declared on a buffer without ShaderWrite", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-diag-0005", [] {
@@ -213,7 +191,6 @@ TEST_CASE("VU-rojo-diag-0005 a buffer write is declared on a buffer without Shad
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-diag-0005 a texture read is declared without Sampled or Storage", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-diag-0005", [] {
@@ -224,7 +201,6 @@ TEST_CASE("VU-rojo-diag-0005 a texture read is declared without Sampled or Stora
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-diag-0005 a texture write is declared on a texture without Storage", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-diag-0005", [] {
@@ -236,7 +212,6 @@ TEST_CASE("VU-rojo-diag-0005 a texture write is declared on a texture without St
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-diag-0005 a texture read and write are declared without Storage", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-diag-0005", [] {
@@ -248,7 +223,6 @@ TEST_CASE("VU-rojo-diag-0005 a texture read and write are declared without Stora
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-sync-0024 a Storage-only texture read lacks its producer's destination access", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-sync-0024", [] {
@@ -272,7 +246,6 @@ TEST_CASE("VU-rojo-sync-0024 a Storage-only texture read lacks its producer's de
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-diag-0006 a compute stage is declared for a draw", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-diag-0006", [] {
@@ -285,7 +258,6 @@ TEST_CASE("VU-rojo-diag-0006 a compute stage is declared for a draw", "[contract
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-diag-0006 a graphics stage is declared for a dispatch", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-diag-0006", [] {
@@ -296,7 +268,6 @@ TEST_CASE("VU-rojo-diag-0006 a graphics stage is declared for a dispatch", "[con
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-diag-0007 a list ends with a declaration no draw followed", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-diag-0007", [] {
@@ -306,7 +277,6 @@ TEST_CASE("VU-rojo-diag-0007 a list ends with a declaration no draw followed", "
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-diag-0009 the capture path is empty", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-diag-0009", [] {
@@ -315,7 +285,6 @@ TEST_CASE("VU-rojo-diag-0009 the capture path is empty", "[contract][death]")
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-diag-0010 endCapture is called with no capture in progress", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-diag-0010", [] {

@@ -37,14 +37,12 @@
 
 namespace rojoRHI {
 
-    //==================================================================================================================
     CommandListImpl& CommandListImpl::of(CommandList list)
     {
         core::checkObject(list.m_impl, "CommandList");
         return *list.m_impl;
     }
 
-    //==================================================================================================================
     CommandList CommandListImpl::wrap(CommandListImpl* impl)
     {
         CommandList list;
@@ -53,7 +51,6 @@ namespace rojoRHI {
     }
 
     namespace metal4 {
-        //==============================================================================================================
         Result<core::ArenaPage> createArenaPage(void* context, uint64_t size)
         {
             core::DeviceCore& core = *static_cast<core::DeviceCore*>(context);
@@ -90,14 +87,12 @@ namespace rojoRHI {
     } // namespace metal4
 
     namespace core {
-        //==============================================================================================================
         CommandListCore& coreOf(CommandList list)
         {
             return CommandListImpl::of(list).core;
         }
     } // namespace core
 
-    //==================================================================================================================
     CommandList Device::acquireCommandList(QueueType type, std::string_view label)
     {
         DeviceImpl& impl = DeviceImpl::of(*this);
@@ -196,7 +191,6 @@ namespace rojoRHI {
         return CommandListImpl::wrap(list);
     }
 
-    //==================================================================================================================
     void CommandList::end()
     {
         CommandListImpl& list = CommandListImpl::of(*this);
@@ -214,7 +208,6 @@ namespace rojoRHI {
         core::noteNativeCall(list.core);
     }
 
-    //==================================================================================================================
     Addr CommandList::uploadFrameData(std::span<const std::byte> bytes, uint32_t alignment)
     {
         core::CommandListCore& list = CommandListImpl::of(*this).core;
@@ -224,7 +217,6 @@ namespace rojoRHI {
         return Addr{ static_cast<uint32_t>(place.address), static_cast<uint32_t>(place.address >> 32) };
     }
 
-    //==================================================================================================================
     void CommandList::declareAccessChecked(std::span<const ResourceAccess> accesses)
     {
         // A record for the validation tracker only: no native call.

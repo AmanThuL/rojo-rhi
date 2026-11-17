@@ -37,62 +37,51 @@
 namespace rojoRHI {
     struct DeviceImpl;
 
-    /// The D3D12 backend's queue: its type, the device that owns it, which is how a queue used with another device is told
-    /// apart, the native queue it submits to, and the progress fence only it signals.
     struct QueueImpl
     {
-        DeviceImpl* device = nullptr;          ///< The device that owns the queue.
-        QueueType type = QueueType::Graphics;  ///< The queue's type.
-        d3d12::Com<ID3D12CommandQueue> native; ///< The native queue; null until `d3d12::createQueues` makes it.
-        d3d12::QueueProgress progress;         ///< The fence only this queue signals, and its last submitted value.
-        /// The native lists of the submission being made, kept so the next submission reuses the storage.
+        DeviceImpl* device = nullptr;
+        QueueType type = QueueType::Graphics;
+        d3d12::Com<ID3D12CommandQueue> native;
+        d3d12::QueueProgress progress; // Signalled by this queue alone.
+        // Kept so the next submission reuses the storage.
         std::vector<ID3D12CommandList*> executing;
-        /// The submission timing attached by `d3d12::setSubmitTiming`; null while detached. Its hooks read it with one relaxed
-        /// load.
+        // Null while detached; its hooks read it with one relaxed load.
         std::atomic<d3d12::SubmitTimingState*> timing = nullptr;
-        /// Every submission timing attached to the queue, the current one last, kept until the device is destroyed: a list
-        /// acquired while one was attached may still write into it.
+        // Kept until the device is destroyed: a list acquired while one was attached may still write into it.
         std::vector<std::unique_ptr<d3d12::SubmitTimingState>> timings;
 
-        /// Returns the state `queue` wraps; checks VU-rojo-core-0004.
+        // Checks VU-rojo-core-0004.
         static QueueImpl& of(Queue queue);
 
-        /// Returns the queue handle that wraps `impl`.
         static Queue wrap(QueueImpl* impl);
     };
 
-    /// The D3D12 backend's command list: the core's recording state, the device that acquired it, and the native list.
     struct CommandListImpl
     {
-        core::CommandListCore core; ///< The state machine the recording rules read, and the device that acquired the list.
-        d3d12::ListState state;     ///< The native list, its allocator and what recording keeps between commands.
+        core::CommandListCore core;
+        d3d12::ListState state;
 
-        /// Returns the state `list` wraps; checks VU-rojo-core-0004.
+        // Checks VU-rojo-core-0004.
         static CommandListImpl& of(CommandList list);
 
-        /// Returns the list handle that wraps `impl`.
         static CommandList wrap(CommandListImpl* impl);
     };
 
-    /// The D3D12 backend's swapchain: the core's record of the images and their state, and the DXGI swapchain behind them.
     struct SwapchainImpl
     {
-        core::SwapchainCore core;      ///< The description, extent and image state the presentation rules read.
-        d3d12::SwapchainNative native; ///< The DXGI swapchain, its back buffers and their render-target views.
+        core::SwapchainCore core;
+        d3d12::SwapchainNative native;
 
-        /// Returns the state `swapchain` wraps; checks VU-rojo-core-0004.
+        // Checks VU-rojo-core-0004.
         static SwapchainImpl& of(Swapchain swapchain);
 
-        /// Returns the swapchain handle that wraps `impl`.
         static Swapchain wrap(SwapchainImpl* impl);
     };
 
-    /// The D3D12 backend's device: the shared core, which also keeps the capabilities it reports, what `d3d12::loadDevice`
-    /// opened, and the device-wide native state. Members are declared in creation order; `destroyDevice` idles the queues,
-    /// drains the core and then destroys them in reverse order, so every object made on the device is released before it.
+    // Members are declared in creation order; `destroyDevice` idles the queues, drains the core and then destroys them
+    // in reverse, so every object made on the device is released before it.
     struct DeviceImpl
     {
-        /// Creates the state of a device from a description `core::validateDeviceDesc` accepted and the device `opened`.
         DeviceImpl(const DeviceDesc& desc, d3d12::Loaded opened) : core(desc), loaded(std::move(opened))
         {
             for (size_t i = 0; i < queues.size(); ++i)
@@ -102,35 +91,33 @@ namespace rojoRHI {
             }
         }
 
-        core::DeviceCore core;                ///< Frame bookkeeping, pools, labels, capabilities and the format table.
-        d3d12::Loaded loaded;                 ///< The device factory, DXGI factory, adapter and device.
-        d3d12::FsrRuntime fsr;                ///< The FidelityFX runtime beside the executable, if it loaded.
-        d3d12::MessageRouter messages;        ///< Routes the debug layer's messages while the device lives.
-        d3d12::DeviceFeatures features;       ///< The optional features the device reports.
-        std::array<QueueImpl, 3> queues = {}; ///< One queue per `QueueType`, indexed by its value.
-        d3d12::FrameState frames;             ///< The frame fence and the fences of destroyed caller fences.
-        d3d12::Presentation presentation;     ///< The live swapchains and the destroyed ones by frame.
-        d3d12::DescriptorHeaps descriptors;   ///< The shader-visible view and sampler heaps.
-        d3d12::HeapDirectory directory;       ///< The buffer of each raw SRV, by view-heap index.
-        d3d12::RootSignatures roots;          ///< The root and command signatures every pipeline shares.
-        d3d12::Timestamps timestamps;         ///< The device-wide timestamp state.
-        d3d12::Kernels kernels;               ///< The pipelines of the backend's own kernels.
-        d3d12::Stager stager;                 ///< Copies initial data on the internal upload queue.
-        d3d12::PipelineCache pipelineCache;   ///< The pipeline library every pipeline creation looks up first.
-        d3d12::ListPools lists;               ///< The command lists of each frame slot.
-        std::string adapterName;              ///< The storage `Capabilities::adapterName` views.
-        std::string floorName;                ///< The storage `Capabilities::floorName` views.
+        core::DeviceCore core;
+        d3d12::Loaded loaded;
+        d3d12::FsrRuntime fsr;
+        d3d12::MessageRouter messages;
+        d3d12::DeviceFeatures features;
+        std::array<QueueImpl, 3> queues = {}; // Indexed by `QueueType`.
+        d3d12::FrameState frames;
+        d3d12::Presentation presentation;
+        d3d12::DescriptorHeaps descriptors;
+        d3d12::HeapDirectory directory;
+        d3d12::RootSignatures roots;
+        d3d12::Timestamps timestamps;
+        d3d12::Kernels kernels;
+        d3d12::Stager stager;
+        d3d12::PipelineCache pipelineCache;
+        d3d12::ListPools lists;
+        std::string adapterName; // The storage `Capabilities::adapterName` views.
+        std::string floorName;   // The storage `Capabilities::floorName` views.
 
-        /// Returns the native device.
         ID3D12Device12* device() const
         {
             return loaded.device.get();
         }
 
-        /// Returns the state `device` wraps; checks VU-rojo-core-0004.
+        // Checks VU-rojo-core-0004.
         static DeviceImpl& of(Device device);
 
-        /// Returns the device handle that wraps `impl`.
         static Device wrap(DeviceImpl* impl);
     };
 } // namespace rojoRHI

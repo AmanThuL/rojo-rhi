@@ -35,69 +35,60 @@ using namespace rojoRHI;
 // Values a shader reads are compared exactly for float and depth channels. A normalized channel must lie within half a
 // step of the stored code (0.5/255 for 8 bits), which identifies it; an sRGB color channel is re-encoded first and
 // compared the same way. A linearly filtered sRGB color channel, the mean of two decoded codes, is compared in linear
-// space, within the smaller of half an 8-bit step and half its distance to the decoded codes beside the one it rounds to.
+// space, within one 8-bit step (1/255, kSrgbMeanBound).
 namespace {
-    /// Four floats, one `float4`.
     using Float4 = std::array<float, 4>;
 
-    /// The edge of every texture, in texels.
     constexpr uint32_t kEdge = 4;
 
-    /// The texels of one texture.
     constexpr uint32_t kTexels = kEdge * kEdge;
 
-    /// The samples `readSamplesMain` stores per texel, the most a texture may have.
+    // The most samples a texture may have.
     constexpr uint32_t kMaxSamples = 8;
 
-    /// Every format the interface names.
+    // Every format the interface names.
     constexpr std::array kFormats{
         Format::BGRA8Unorm,    Format::RGBA8Unorm, Format::RGBA8Unorm_sRGB, Format::RGBA16Float, Format::RG16Float,  Format::R8Unorm,      Format::BC1Unorm,
         Format::BC1Unorm_sRGB, Format::D32Float,   Format::R16Float,        Format::R32Float,    Format::D32FloatS8, Format::RGB10A2Unorm,
     };
 
-    /// FormatOracle's root for the kernels that read.
     struct ReadRoot
     {
-        uint32_t view;             ///< The view read.
-        uint32_t sampler;          ///< The sampler of the sampling entries.
-        uint32_t samples;          ///< The samples `readSamplesMain` reads per texel.
-        uint32_t pad;              ///< Padding.
-        Addr output;               ///< Where the kernel stores its `float4` values.
-        std::array<float, 2> at{}; ///< The coordinate `sampleAtMain` samples.
+        uint32_t view;
+        uint32_t sampler;
+        uint32_t samples;
+        uint32_t pad;
+        Addr output;
+        std::array<float, 2> at{};
     };
 
-    /// FormatOracle's root for the kernels that store.
     struct WriteRoot
     {
-        uint32_t view; ///< The view written.
-        uint32_t pad0; ///< Padding.
-        uint32_t pad1; ///< Padding.
-        uint32_t pad2; ///< Padding.
-        Float4 left;   ///< The value of the left two columns.
-        Float4 right;  ///< The value of the right two columns.
+        uint32_t view;
+        uint32_t pad0;
+        uint32_t pad1;
+        uint32_t pad2;
+        Float4 left;
+        Float4 right;
     };
 
-    /// How a format holds its channels.
     enum class Encoding
     {
-        Unorm, ///< Normalized integers.
-        Srgb,  ///< Normalized integers, color channels with sRGB transfer.
-        Float, ///< Half- or single-precision floats.
-        Depth, ///< A single-precision depth.
+        Unorm,
+        Srgb,
+        Float,
+        Depth,
     };
 
-    /// What the cases need to know of one format.
     struct Traits
     {
-        std::string_view name;             ///< The enumerator's name.
-        Encoding encoding;                 ///< How the channels are held.
-        uint32_t channels;                 ///< The channels a shader read compares.
-        std::array<uint32_t, 4> maxCode{}; ///< Per normalized channel, its largest code.
-        bool block = false;                ///< BC1: stored as one 4 by 4 block.
+        std::string_view name;
+        Encoding encoding;
+        uint32_t channels;
+        std::array<uint32_t, 4> maxCode{};
+        bool block = false;
     };
 
-    //==================================================================================================================
-    /// Returns the traits of `format`.
     Traits traitsOf(Format format)
     {
         constexpr std::array<uint32_t, 4> kEightBits{ 255, 255, 255, 255 };
@@ -122,16 +113,13 @@ namespace {
         return {};
     }
 
-    //==================================================================================================================
-    /// True for the depth formats, which a pass fills.
     bool isDepth(Format format)
     {
         return traitsOf(format).encoding == Encoding::Depth;
     }
 
-    //==================================================================================================================
-    /// The value the left two columns of a texture of `format` hold, as stored: an sRGB color channel before decoding. Its
-    /// first channel is not zero, so a blend that ignored the destination would show even in a one-channel format.
+    // As stored: an sRGB color channel before decoding. The first channel is not zero, so a blend that ignored the
+    // destination would show even in a one-channel format.
     Float4 leftOf(Format format)
     {
         switch (traitsOf(format).encoding)
@@ -144,9 +132,8 @@ namespace {
         return {};
     }
 
-    //==================================================================================================================
-    /// The value the right two columns of a texture of `format` hold, as stored. Each channel is at least the left one's, and
-    /// the two codes of a normalized channel are both even or both odd, so their mean is a code too.
+    // As stored. Each channel is at least the left one's, and the two codes of a normalized channel are both even or both
+    // odd, so their mean is a code too.
     Float4 rightOf(Format format)
     {
         switch (traitsOf(format).encoding)
@@ -159,16 +146,14 @@ namespace {
         return {};
     }
 
-    //==================================================================================================================
-    /// The linear value of the sRGB-encoded `value` (IEC 61966-2-1).
+    // IEC 61966-2-1.
     float decodeSrgb(float value)
     {
         const double encoded = value;
         return static_cast<float>(encoded <= 0.04045 ? encoded / 12.92 : std::pow((encoded + 0.055) / 1.055, 2.4));
     }
 
-    //==================================================================================================================
-    /// The value a shader reads from, or writes to store, `stored` in `format`: sRGB color channels are decoded.
+    // What a shader reads, or writes to store, `stored`: sRGB color channels are decoded.
     Float4 visibleOf(Format format, Float4 stored)
     {
         if (traitsOf(format).encoding == Encoding::Srgb)
@@ -181,8 +166,7 @@ namespace {
         return stored;
     }
 
-    //==================================================================================================================
-    /// The half-precision bits of `value`, which is zero or a normal half-precision value held exactly.
+    // `value` is zero or a normal half-precision value held exactly.
     uint16_t halfOf(float value)
     {
         if (value == 0.0f)
@@ -195,23 +179,18 @@ namespace {
         return static_cast<uint16_t>(sign | (exponent << 10) | ((bits >> 13) & 0x3FFu));
     }
 
-    //==================================================================================================================
-    /// Appends the bytes of `value` to `bytes`.
     template<class T> void append(std::vector<std::byte>& bytes, T value)
     {
         const auto* first = reinterpret_cast<const std::byte*>(&value);
         bytes.insert(bytes.end(), first, first + sizeof(value));
     }
 
-    //==================================================================================================================
-    /// The code of the stored normalized value `stored` in a channel whose largest code is `maxCode`.
     uint32_t codeOf(float stored, uint32_t maxCode)
     {
         return static_cast<uint32_t>(std::lround(static_cast<double>(stored) * maxCode));
     }
 
-    //==================================================================================================================
-    /// Appends the texel `format` packs for the stored value `stored` to `bytes`. Not for BC1, which packs blocks.
+    // Not for BC1, which packs blocks.
     void appendTexel(std::vector<std::byte>& bytes, Format format, const Float4& stored)
     {
         const auto byteOf = [&](size_t channel) { return static_cast<uint8_t>(codeOf(stored[channel], 255)); };
@@ -233,10 +212,8 @@ namespace {
         }
     }
 
-    //==================================================================================================================
-    /// The tight bytes of a texture of `format` whose left two columns hold its left value and right two its right value. For BC1
-    /// it is one block: color0 is (0, 42 of 63, 0), which expands to 170 of 255, color1 is black, and color0 > color1 picks
-    /// the four-color mode, so index 0 is color0 and index 1 is color1; the left columns take index 1, the right index 0.
+    // BC1 is one block: color0 (0, 42 of 63, 0) expands to 170 of 255, color1 is black, and color0 > color1 picks the
+    // four-color mode, so index 0 is color0 and index 1 color1; the left columns take index 1, the right index 0.
     std::vector<std::byte> imageOf(Format format)
     {
         if (traitsOf(format).block)
@@ -255,15 +232,11 @@ namespace {
         return bytes;
     }
 
-    //==================================================================================================================
-    /// The bytes of one row of a texture of `format`, or of one row of blocks.
     uint64_t rowBytesOf(Format format)
     {
         return imageOf(format).size() / (traitsOf(format).block ? 1 : kEdge);
     }
 
-    //==================================================================================================================
-    /// The mean of `a` and `b`, channel by channel.
     Float4 meanOf(const Float4& a, const Float4& b)
     {
         Float4 mean{};
@@ -274,15 +247,12 @@ namespace {
         return mean;
     }
 
-    //==================================================================================================================
-    /// The sRGB encoding of the linear `value` (IEC 61966-2-1).
+    // IEC 61966-2-1.
     double encodeSrgb(double value)
     {
         return value <= 0.0031308 ? value * 12.92 : 1.055 * std::pow(value, 1.0 / 2.4) - 0.055;
     }
 
-    //==================================================================================================================
-    /// Describes `actual` against `expected` when they disagree; empty otherwise.
     std::string describe(const Float4& actual, const Float4& expected, bool agrees)
     {
         if (agrees)
@@ -294,17 +264,11 @@ namespace {
         );
     }
 
-    //==================================================================================================================
-    /// True when channel `channel` of a format with `traits` is an sRGB color channel.
     bool srgbColor(const Traits& traits, size_t channel)
     {
         return traits.encoding == Encoding::Srgb && channel < 3;
     }
 
-    //==================================================================================================================
-    /// Describes where `actual`, a value a shader read from `format`, differs from the texel value `stored` holds; empty when
-    /// they agree. Float and depth channels agree when equal; a normalized channel, re-encoded first when it is an sRGB color
-    /// channel, when it lies within half a step of the stored code.
     std::string mismatch(Format format, const Float4& actual, const Float4& stored)
     {
         const Traits traits = traitsOf(format);
@@ -322,15 +286,11 @@ namespace {
         return describe(actual, visibleOf(format, stored), agrees);
     }
 
-    /// The bound a linearly filtered sRGB color channel is compared within, in linear space: one 8-bit step. Filtering units
-    /// decode sRGB to linear at a limited precision (an RTX 3080 Ti returns its means on a grid of 1/512), and a step still
-    /// separates the linear mean from a mean taken in encoded space, which misses the values the cases use by over 0.09.
+    // 1/255, one 8-bit step, in linear space. Filtering units decode sRGB at a limited precision (an RTX 3080 Ti returns its means
+    // on a grid of 1/512), and a step still separates the linear mean from a mean taken in encoded space, which misses the
+    // values the cases use by over 0.09.
     constexpr double kSrgbMeanBound = 1.0 / 255.0;
 
-    //==================================================================================================================
-    /// Describes where `actual`, a linear sample of `format` halfway between texels holding `left` and `right` as stored,
-    /// differs from the mean of the two values a shader reads; empty when they agree. A normalized channel's mean is a code
-    /// and agrees within half a step; an sRGB color channel's mean is compared in linear space within `kSrgbMeanBound`.
     std::string mismatchMean(Format format, const Float4& actual, const Float4& left, const Float4& right)
     {
         const Traits traits = traitsOf(format);
@@ -355,8 +315,6 @@ namespace {
         return describe(actual, mean, agrees);
     }
 
-    //==================================================================================================================
-    /// `a` minus `b`, channel by channel.
     Float4 difference(const Float4& a, const Float4& b)
     {
         Float4 result{};
@@ -367,8 +325,6 @@ namespace {
         return result;
     }
 
-    //==================================================================================================================
-    /// The bytes of `values`.
     template<class T> std::vector<std::byte> bytesOf(std::span<const T> values)
     {
         std::vector<std::byte> bytes(values.size_bytes());
@@ -376,27 +332,19 @@ namespace {
         return bytes;
     }
 
-    /// The two oracle libraries on one kit's device, with the pipelines, samplers and kernel runs a case makes from them.
     struct Oracle
     {
-        //==============================================================================================================
-        /// Loads the format and draw oracle libraries on `kit`'s device.
         explicit Oracle(test::GpuKit& gpu)
             : kit(gpu), library(*gpu.device.loadShaderLibrary(test::shaderLibraryFile("FormatOracle"), "FormatOracle")),
               drawLibrary(*gpu.device.loadShaderLibrary(test::shaderLibraryFile("DrawOracle"), "DrawOracle"))
         {
         }
 
-        //==============================================================================================================
-        /// The compute pipeline of FormatOracle's `entry`.
         Pipeline compute(std::string_view entry) const
         {
             return *kit.device.createPipeline(ComputePipelineDesc{ .compute = { library, entry }, .label = "test.formatKernel" });
         }
 
-        //==============================================================================================================
-        /// A pipeline that covers the target with the root's color into one `format` target of `samples` samples, blending
-        /// with `blend`.
         Pipeline color(Format format, uint32_t samples = 1, const BlendState& blend = {}) const
         {
             const std::array targets{ ColorTarget{ .format = format, .blend = blend } };
@@ -414,8 +362,6 @@ namespace {
             return *pipeline;
         }
 
-        //==============================================================================================================
-        /// A depth-only pipeline that covers the target and writes its depth into a `format` attachment of `samples` samples.
         Pipeline depth(Format format, uint32_t samples = 1) const
         {
             Result<Pipeline> pipeline = kit.device.createPipeline(
@@ -432,8 +378,6 @@ namespace {
             return *pipeline;
         }
 
-        //==============================================================================================================
-        /// A clamping sampler of `filter`.
         uint32_t sampler(SamplerFilter filter) const
         {
             const SamplerIndex index = *kit.device.createSampler(
@@ -442,9 +386,6 @@ namespace {
             return static_cast<uint32_t>(index);
         }
 
-        //==============================================================================================================
-        /// Runs FormatOracle's reading kernel `entry` over `view` with `root`, whose view and output it fills in, and returns
-        /// the `count` values it stored.
         std::vector<Float4> read(std::string_view entry, ViewIndex view, ReadRoot root, uint32_t count) const
         {
             const Pipeline pipeline = compute(entry);
@@ -463,26 +404,21 @@ namespace {
             return values;
         }
 
-        test::GpuKit& kit;         ///< The kit whose device the pipelines live on.
-        ShaderLibrary library;     ///< FormatOracle.
-        ShaderLibrary drawLibrary; ///< DrawOracle, whose fullscreen vertex entry touches no reserved binding.
+        test::GpuKit& kit;
+        ShaderLibrary library;
+        // DrawOracle, whose fullscreen vertex entry touches no reserved binding.
+        ShaderLibrary drawLibrary;
     };
 
-    //==================================================================================================================
-    /// The viewport over the whole texture, whose depth range is the single value `depth`.
     Viewport viewportAt(float depth = 0.0f)
     {
         return Viewport{ .width = static_cast<float>(kEdge), .height = static_cast<float>(kEdge), .minDepth = depth, .maxDepth = depth };
     }
 
-    /// The scissor over the right two columns.
     constexpr Rect2D kRightHalf{ kEdge / 2, 0, kEdge / 2, kEdge };
 
-    /// The area of every pass.
     constexpr Rect2D kWhole{ 0, 0, kEdge, kEdge };
 
-    //==================================================================================================================
-    /// Creates a `kEdge` square 2D texture of `format` with `samples` samples and `usage`.
     Texture textureOf(Device device, Format format, TextureUsage usage, uint32_t samples = 1, std::span<const TextureData> initial = {})
     {
         Result<Texture> texture = device.createTexture(
@@ -495,9 +431,6 @@ namespace {
         return *texture;
     }
 
-    //==================================================================================================================
-    /// Records a pass that clears the color attachment `target` to the visible left value of `format` and covers its right
-    /// two columns with `color` through `pipeline`, resolving into `resolve` when it is not null.
     void recordColorPass(CommandList list, Format format, Texture target, Pipeline pipeline, const Float4& color, Texture resolve = {})
     {
         const Float4 clear = visibleOf(format, leftOf(format));
@@ -512,9 +445,6 @@ namespace {
         list.endRenderPass();
     }
 
-    //==================================================================================================================
-    /// Records a pass that clears the depth attachment `target` of `format` to the left depth and writes the right depth
-    /// over its right two columns through `pipeline`.
     void recordDepthPass(CommandList list, Format format, Texture target, Pipeline pipeline)
     {
         list.beginRenderPass(
@@ -529,10 +459,8 @@ namespace {
         list.endRenderPass();
     }
 
-    //==================================================================================================================
-    /// Creates a single-sample texture of `format` with `usage` besides `Sampled`, whose left two columns hold the left value
-    /// and right two the right value, left in `Layout::ShaderRead` (`Layout::DepthStencilRead` for a depth format). A
-    /// depth format is filled by a pass, any other by initial data.
+    // Left in `ShaderRead` (`DepthStencilRead` for a depth format). A depth format is filled by a pass, any other by
+    // initial data.
     Texture filledTexture(test::GpuKit& kit, const Oracle& oracle, Format format, TextureUsage usage = TextureUsage::None)
     {
         if (!isDepth(format))
@@ -550,16 +478,11 @@ namespace {
         return texture;
     }
 
-    //==================================================================================================================
-    /// A sampled view of every texel of `texture`, of the depth aspect for a depth format.
     ViewIndex sampledView(Device device, Texture texture, Format format)
     {
         return *device.createView(texture, TextureViewDesc{ .aspect = isDepth(format) ? TextureAspect::Depth : TextureAspect::Color });
     }
 
-    //==================================================================================================================
-    /// Checks that `values`, read by a shader from texel i in turn, hold the left value in the left two columns and the right
-    /// value in the right two.
     void checkTexels(Format format, std::span<const Float4> values, uint32_t samples = 1)
     {
         const Float4 left = leftOf(format);
@@ -576,18 +499,12 @@ namespace {
         }
     }
 
-    //==================================================================================================================
-    /// Checks that `texture` of `format` holds, byte for byte, the left value in its left two columns and the right value in
-    /// its right two.
     void checkStored(test::GpuKit& kit, Texture texture, Format format)
     {
         const std::vector<std::byte> actual = kit.readTexture(texture, TextureRegion{ .extent = { kEdge, kEdge, 1 } }, format);
         CHECK(actual == imageOf(format));
     }
 
-    //==================================================================================================================
-    /// Stores the left and right values of `format` into a new Storage texture through FormatOracle's kernel `entry` and
-    /// checks the texels it holds.
     void storeTexels(test::GpuKit& kit, Format format, std::string_view entry)
     {
         const Oracle oracle(kit);
@@ -604,8 +521,6 @@ namespace {
         checkStored(kit, texture, format);
     }
 
-    //==================================================================================================================
-    /// Skips the running case for `format` unless the device's table reports `capability` (named `name`) for it.
     void requireReported(bool capability, Format format, std::string_view name)
     {
         if (!capability)
@@ -615,7 +530,6 @@ namespace {
     }
 } // namespace
 
-//======================================================================================================================
 TEST_CASE("every format with a packed size round-trips its texels through buffer copies", "[conformance]")
 {
     test::requireGpu();
@@ -645,7 +559,6 @@ TEST_CASE("every format with a packed size round-trips its texels through buffer
     CHECK(kit.readTexture(texture, TextureRegion{ .extent = { kEdge, kEdge, 1 } }, format) == image);
 }
 
-//======================================================================================================================
 TEST_CASE("a sampled format returns each texel through a nearest sampler", "[conformance]")
 {
     test::requireGpu();
@@ -659,7 +572,6 @@ TEST_CASE("a sampled format returns each texel through a nearest sampler", "[con
     checkTexels(format, oracle.read("sampleTexelsMain", view, ReadRoot{ .sampler = oracle.sampler(SamplerFilter::Nearest) }, kTexels));
 }
 
-//======================================================================================================================
 TEST_CASE("a linearly filtered format returns the mean of the two texels a sample falls between", "[conformance]")
 {
     test::requireGpu();
@@ -677,7 +589,6 @@ TEST_CASE("a linearly filtered format returns the mean of the two texels a sampl
     CHECK(difference.empty());
 }
 
-//======================================================================================================================
 TEST_CASE("a storage-readable format loads each texel through rwTexture2D", "[conformance]")
 {
     test::requireGpu();
@@ -694,7 +605,6 @@ TEST_CASE("a storage-readable format loads each texel through rwTexture2D", "[co
     checkTexels(format, oracle.read("loadTexelsMain", view, ReadRoot{}, kTexels));
 }
 
-//======================================================================================================================
 TEST_CASE("a storage-readable and -writable format stores each texel through rwTexture2D", "[conformance]")
 {
     test::requireGpu();
@@ -707,7 +617,6 @@ TEST_CASE("a storage-readable and -writable format stores each texel through rwT
     storeTexels(kit, format, "storeTexelsMain");
 }
 
-//======================================================================================================================
 TEST_CASE("a format with storage writes but no storage reads stores each texel through wTexture2D", "[conformance]")
 {
     test::requireGpu();
@@ -724,7 +633,6 @@ TEST_CASE("a format with storage writes but no storage reads stores each texel t
     storeTexels(kit, format, "writeTexelsMain");
 }
 
-//======================================================================================================================
 TEST_CASE("a color-attachment format keeps the clear color and stores a drawn color", "[conformance]")
 {
     test::requireGpu();
@@ -742,7 +650,6 @@ TEST_CASE("a color-attachment format keeps the clear color and stores a drawn co
     checkStored(kit, target, format);
 }
 
-//======================================================================================================================
 TEST_CASE("a blendable format adds a drawn color to the cleared destination", "[conformance]")
 {
     test::requireGpu();
@@ -763,7 +670,6 @@ TEST_CASE("a blendable format adds a drawn color to the cleared destination", "[
     checkStored(kit, target, format);
 }
 
-//======================================================================================================================
 TEST_CASE("a resolvable format receives the mean of a multisampled pass's samples", "[conformance]")
 {
     test::requireGpu();
@@ -788,7 +694,6 @@ TEST_CASE("a resolvable format receives the mean of a multisampled pass's sample
     checkStored(kit, resolve, format);
 }
 
-//======================================================================================================================
 TEST_CASE("each reported sample count of a format holds the clear and the drawn value in every sample", "[conformance]")
 {
     test::requireGpu();
@@ -830,7 +735,6 @@ TEST_CASE("each reported sample count of a format holds the clear and the drawn 
     checkTexels(format, read, samples);
 }
 
-//======================================================================================================================
 TEST_CASE("a depth format keeps a cleared and a drawn depth for copies and sampling", "[conformance]")
 {
     test::requireGpu();

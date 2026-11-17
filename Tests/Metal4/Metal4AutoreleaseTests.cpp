@@ -16,10 +16,8 @@
 using namespace rojoRHI;
 
 namespace {
-    //==================================================================================================================
-    /// Runs `body` under a pool of its own and returns whether it autoreleased anything into it. A pool pushed and popped
-    /// first marks where the next boundary lands when nothing sits in between, so the probe boundary pushed after the body
-    /// lands there too unless the body added an object.
+    // A pool pushed and popped first marks where the next boundary lands when nothing sits in between, so the probe
+    // boundary pushed after `body` lands there too unless `body` autoreleased an object.
     template<typename Body> bool autoreleasesInto(Body&& body)
     {
         // The runtime's own entries, since the pool tokens are what show where an object lands.
@@ -39,9 +37,6 @@ namespace {
         return leaked;
     }
 
-    //==================================================================================================================
-    /// Records a list with `label` on the list, a scope, a copy and a render pass with a split, and checks that no entry
-    /// leaves an object in the caller's pool.
     void checkLabelsLeaveNothing(const char* label)
     {
         Device device = *createDevice();
@@ -73,26 +68,22 @@ namespace {
     }
 } // namespace
 
-//======================================================================================================================
 TEST_CASE("a short label reaches the driver inside a pool of the call's own", "[metal4]")
 {
     // A short label is a tagged-pointer string, and the driver reads its text through an autoreleased container.
     checkLabelsLeaveNothing("l");
 }
 
-//======================================================================================================================
 TEST_CASE("a non-ASCII label reaches the driver inside a pool of the call's own", "[metal4]")
 {
     checkLabelsLeaveNothing("p\xC3\xA4sse");
 }
 
-//======================================================================================================================
 TEST_CASE("a long label reaches the driver inside a pool of the call's own", "[metal4]")
 {
     checkLabelsLeaveNothing("test.a.label.much.longer.than.any.tagged.pointer.string.can.hold");
 }
 
-//======================================================================================================================
 TEST_CASE("ending a command list leaves nothing in the caller's pool", "[metal4]")
 {
     Device device = *createDevice();

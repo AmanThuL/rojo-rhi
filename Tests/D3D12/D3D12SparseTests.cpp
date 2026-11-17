@@ -29,15 +29,12 @@ using namespace rojoRHI;
 using rojoRHI::test::SparseKit;
 
 namespace {
-    /// Heap bytes of one tile.
     constexpr uint64_t kTile = 65536;
 
-    /// The warnings and errors `countWarning` has seen.
     std::atomic<uint64_t> g_warnings = 0;
 
-    //==================================================================================================================
-    /// Counts `severity` when it is a warning or an error, the debug layer's among them, and writes it to stderr, since the
-    /// router aborts right after an error and the count would never be read. It may run on any thread.
+    // Writes to stderr too, since the router aborts right after an error and the count would never be read. May run on
+    // any thread.
     void countWarning(MessageSeverity severity, std::string_view message, void*)
     {
         if (severity != MessageSeverity::Info)
@@ -48,36 +45,29 @@ namespace {
         }
     }
 
-    /// Counts the library's warnings and errors into `g_warnings`, reset first, while it lives, and removes the callback when it
-    /// goes, however the case ends.
+    // Removes the callback when it goes, however the case ends.
     class WarningCount
     {
       public:
         WarningCount();
         ~WarningCount();
 
-        //==============================================================================================================
         WarningCount(const WarningCount&) = delete;
 
-        //==============================================================================================================
         WarningCount& operator=(const WarningCount&) = delete;
     };
 
-    //==================================================================================================================
     WarningCount::WarningCount()
     {
         g_warnings = 0;
         setMessageCallback(countWarning, nullptr);
     }
 
-    //==================================================================================================================
     WarningCount::~WarningCount()
     {
         setMessageCallback(nullptr, nullptr);
     }
 
-    //==================================================================================================================
-    /// Returns the native resource of `texture`, a live texture of `device`.
     ID3D12Resource* nativeOf(Device device, Texture texture)
     {
         const auto* payload = static_cast<const d3d12::TexturePayload*>(DeviceImpl::of(device).core.pool<Texture>().native(texture));
@@ -85,8 +75,6 @@ namespace {
         return payload->resource;
     }
 
-    //==================================================================================================================
-    /// Returns the native resource of `buffer`, a live buffer of `device`.
     ID3D12Resource* nativeOf(Device device, Buffer buffer)
     {
         const auto* payload = static_cast<const d3d12::BufferPayload*>(DeviceImpl::of(device).core.pool<Buffer>().native(buffer));
@@ -94,16 +82,13 @@ namespace {
         return payload->resource;
     }
 
-    /// What `GetResourceTiling` reports of a reserved resource.
     struct Tiling
     {
-        UINT tiles = 0;                    ///< Tiles of the whole resource.
-        D3D12_PACKED_MIP_INFO packed = {}; ///< The packed mips.
-        D3D12_TILE_SHAPE shape = {};       ///< The shape of a tile of the standard mips.
+        UINT tiles = 0;
+        D3D12_PACKED_MIP_INFO packed = {};
+        D3D12_TILE_SHAPE shape = {};
     };
 
-    //==================================================================================================================
-    /// Returns what `GetResourceTiling` reports of `resource` on `device`.
     Tiling tilingOf(Device device, ID3D12Resource* resource)
     {
         Tiling tiling;
@@ -111,9 +96,8 @@ namespace {
         return tiling;
     }
 
-    //==================================================================================================================
-    /// Returns a record of a 2D array texture of 512 square texels, 10 mips and 2 layers, measured as 128 by 128 tiles with
-    /// a tail from mip 3 of `tailTiles` tiles per layer.
+    // A 2D array texture of 512 square texels, 10 mips and 2 layers, measured as 128 by 128 tiles with a tail from mip
+    // 3 of `tailTiles` tiles per layer.
     core::TextureRecord arrayRecord(uint32_t tailTiles)
     {
         core::TextureRecord record;
@@ -127,9 +111,6 @@ namespace {
         return record;
     }
 
-    //==================================================================================================================
-    /// Checks that `region` starts at tile (`x`, `y`, `z`) of `subresource` and, from heap tile `heapStart`, maps a box of
-    /// `width` by `height` by `depth` tiles.
     void checkBox(const d3d12::TileRegion& region, UINT subresource, std::array<UINT, 3> origin, std::array<UINT, 3> size, UINT heapStart)
     {
         CHECK(region.start.Subresource == subresource);
@@ -145,7 +126,6 @@ namespace {
     }
 } // namespace
 
-//======================================================================================================================
 TEST_CASE("tileCoordinates maps a region of two layers to one coordinate per layer", "[d3d12]")
 {
     const core::TextureRecord record = arrayRecord(1);
@@ -171,7 +151,6 @@ TEST_CASE("tileCoordinates maps a region of two layers to one coordinate per lay
     checkBox(unmapped[1], 11, { 1, 0, 0 }, { 1, 2, 1 }, 0);
 }
 
-//======================================================================================================================
 TEST_CASE("tileCoordinates maps the mip tail of layer 1 alone at its first packed mip", "[d3d12]")
 {
     const core::TextureRecord record = arrayRecord(2);
@@ -190,7 +169,6 @@ TEST_CASE("tileCoordinates maps the mip tail of layer 1 alone at its first packe
     CHECK(regions[0].heapStart == 9u);
 }
 
-//======================================================================================================================
 TEST_CASE("tileCoordinates maps a buffer range from its first tile", "[d3d12]")
 {
     // Two whole tiles and the 100 bytes of a last partial one, from tile 3 of the buffer onto heap tile 4.
@@ -205,7 +183,6 @@ TEST_CASE("tileCoordinates maps a buffer range from its first tile", "[d3d12]")
     CHECK(region.heapStart == 4u);
 }
 
-//======================================================================================================================
 TEST_CASE("placementSparse follows the tiled-resources tier", "[d3d12]")
 {
     Result<Device> created = createDevice();
@@ -219,7 +196,6 @@ TEST_CASE("placementSparse follows the tiled-resources tier", "[d3d12]")
     destroyDevice(*created);
 }
 
-//======================================================================================================================
 TEST_CASE("a sparse texture's tile shape matches GetResourceTiling and the standard extent", "[d3d12]")
 {
     Result<Device> created = createDevice();
@@ -260,7 +236,6 @@ TEST_CASE("a sparse texture's tile shape matches GetResourceTiling and the stand
     destroyDevice(*created);
 }
 
-//======================================================================================================================
 TEST_CASE("a one-dimensional sparse texture fails creation with Unsupported", "[d3d12]")
 {
     Result<Device> created = createDevice();
@@ -274,7 +249,6 @@ TEST_CASE("a one-dimensional sparse texture fails creation with Unsupported", "[
     destroyDevice(*created);
 }
 
-//======================================================================================================================
 TEST_CASE("a sparse buffer is a reserved resource rounded up to whole tiles", "[d3d12]")
 {
     Result<Device> created = createDevice();
@@ -290,7 +264,6 @@ TEST_CASE("a sparse buffer is a reserved resource rounded up to whole tiles", "[
     destroyDevice(*created);
 }
 
-//======================================================================================================================
 TEST_CASE("mapTiles counts one submit call per resource and heap group", "[d3d12]")
 {
     SparseKit kit;
@@ -322,7 +295,6 @@ TEST_CASE("mapTiles counts one submit call per resource and heap group", "[d3d12
     destroyDevice(kit.device);
 }
 
-//======================================================================================================================
 TEST_CASE("every queue type maps and unmaps a tile", "[d3d12]")
 {
     const WarningCount warnings;

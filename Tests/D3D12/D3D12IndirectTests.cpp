@@ -31,40 +31,34 @@
 using namespace rojoRHI;
 
 namespace {
-    /// The width and height of the target the counting cases render to.
     constexpr uint32_t kSize = 4;
 
-    /// The width and height of the draw oracle's target: it places the triangle of a drawId on pixel `drawId` of these rows.
+    // The draw oracle places the triangle of a drawId on pixel `drawId` of these rows.
     constexpr uint32_t kOracleEdge = 256;
 
-    /// Four `uint32` words of one cell AbiVertex stores.
     using Cell = std::array<uint32_t, 4>;
 
-    /// The cell an untouched output holds.
     constexpr Cell kUntouched{ 0xDEADBEEFu, 0xDEADBEEFu, 0xDEADBEEFu, 0xDEADBEEFu };
 
-    /// AbiVertex's root.
+    // AbiVertex's root: `output` takes one `uint4` per vertex.
     struct VertexRoot
     {
-        Addr output;                  ///< Where the entry stores what it observed, one `uint4` per vertex.
-        uint32_t firstVertex;         ///< The first vertex index the draw passes.
-        uint32_t verticesPerInstance; ///< The vertices of each instance.
+        Addr output;
+        uint32_t firstVertex;
+        uint32_t verticesPerInstance;
     };
 
-    /// A root block no standard entry reads.
+    // No standard entry reads this root.
     struct UnreadRoot
     {
-        std::array<uint32_t, 4> words; ///< Any value.
+        std::array<uint32_t, 4> words;
     };
 
-    /// Guards `g_messages`, which the message callback may fill from any thread.
+    // The message callback may fill `g_messages` from any thread.
     std::mutex g_messagesMutex;
 
-    /// The messages at `Warning` or above the library reported while a case collected them.
     std::vector<std::string> g_messages;
 
-    //==================================================================================================================
-    /// Keeps `message` when it is a warning or an error. It may run on any thread.
     void collectMessage(MessageSeverity severity, std::string_view message, void*)
     {
         if (severity == MessageSeverity::Info)
@@ -75,25 +69,22 @@ namespace {
         g_messages.emplace_back(message);
     }
 
-    /// Collects the library's warnings and errors, the debug layer's included, into `g_messages`, emptied first, while it
-    /// lives, and removes the callback when it goes, however the case ends.
+    // Collects the library's warnings and errors, the debug layer's included, into `g_messages` (emptied first) while it
+    // lives, and removes the callback however the case ends.
     class MessageCollection
     {
       public:
         MessageCollection();
         ~MessageCollection();
 
-        //==============================================================================================================
         MessageCollection(const MessageCollection&) = delete;
 
-        //==============================================================================================================
         MessageCollection& operator=(const MessageCollection&) = delete;
 
-        /// Returns how many messages were collected, and lists them for the log.
+        // Also lists the messages for the log.
         size_t count() const;
     };
 
-    //==================================================================================================================
     MessageCollection::MessageCollection()
     {
         {
@@ -103,13 +94,11 @@ namespace {
         setMessageCallback(collectMessage, nullptr);
     }
 
-    //==================================================================================================================
     MessageCollection::~MessageCollection()
     {
         setMessageCallback(nullptr, nullptr);
     }
 
-    //==================================================================================================================
     size_t MessageCollection::count() const
     {
         const std::lock_guard lock(g_messagesMutex);
@@ -120,9 +109,7 @@ namespace {
         return g_messages.size();
     }
 
-    //==================================================================================================================
-    /// Returns a new device that keeps two frames in flight, times scopes and emits their events (ADR 0034), so a pass's counts
-    /// include its two queries and its event pair.
+    // Times scopes and emits their events (ADR 0034), so a pass's counts include its two queries and its event pair.
     Device makeDevice()
     {
         DeviceDesc desc;
@@ -135,8 +122,6 @@ namespace {
         return *created;
     }
 
-    //==================================================================================================================
-    /// Returns a new fence at zero on `device`, labelled `label`.
     Fence makeFence(Device device, std::string_view label)
     {
         Result<Fence> created = device.createFence(0, label);
@@ -144,8 +129,6 @@ namespace {
         return *created;
     }
 
-    //==================================================================================================================
-    /// Returns a new `edge` by `edge` render target of `format` on `device`.
     Texture makeTarget(Device device, Format format = Format::RGBA8Unorm, uint32_t edge = kSize)
     {
         Result<Texture> created =
@@ -154,8 +137,6 @@ namespace {
         return *created;
     }
 
-    //==================================================================================================================
-    /// Returns a new buffer of `desc` on `device`, holding `initial` when it is not empty.
     Buffer makeBuffer(Device device, const BufferDesc& desc, std::span<const std::byte> initial = {})
     {
         Result<Buffer> created = device.createBuffer(desc, initial);
@@ -163,23 +144,17 @@ namespace {
         return *created;
     }
 
-    //==================================================================================================================
-    /// Returns the bytes of `values`.
     template<class T> std::vector<std::byte> bytesOf(std::span<const T> values)
     {
         const std::span<const std::byte> bytes = std::as_bytes(values);
         return { bytes.begin(), bytes.end() };
     }
 
-    //==================================================================================================================
-    /// Returns a new `IndirectArgs` buffer holding `records`.
     template<class T> Buffer argsBuffer(Device device, std::span<const T> records)
     {
         return makeBuffer(device, { .size = records.size_bytes(), .usage = BufferUsage::IndirectArgs, .label = "test.args" }, bytesOf(records));
     }
 
-    //==================================================================================================================
-    /// Returns a new buffer AbiVertex can store `cells` cells into, each holding `kUntouched`.
     Buffer outputBuffer(Device device, uint64_t cells)
     {
         const std::vector<Cell> initial(cells, kUntouched);
@@ -188,15 +163,11 @@ namespace {
         );
     }
 
-    //==================================================================================================================
-    /// Returns a new index buffer holding `indices`.
     Buffer indexBuffer(Device device, std::span<const uint32_t> indices)
     {
         return makeBuffer(device, { .size = indices.size_bytes(), .usage = BufferUsage::Index, .label = "test.indices" }, bytesOf(indices));
     }
 
-    //==================================================================================================================
-    /// Loads the standard library on `device`.
     ShaderLibrary loadStandard(Device device)
     {
         const Result<ShaderLibrary> library = device.loadShaderLibrary(test::standardLibrary(), "test.standard");
@@ -205,8 +176,6 @@ namespace {
         return *library;
     }
 
-    //==================================================================================================================
-    /// Loads the packaged conformance library `name` on `device`.
     ShaderLibrary loadLibrary(Device device, std::string_view name)
     {
         const Result<ShaderLibrary> library = device.loadShaderLibrary(test::shaderLibraryFile(name), std::string("test.") + std::string(name));
@@ -215,9 +184,6 @@ namespace {
         return *library;
     }
 
-    //==================================================================================================================
-    /// Creates `desc` over one color target of `format` on `device`, failing the case with the error's message when creation
-    /// fails.
     Pipeline create(Device device, GraphicsPipelineDesc desc, Format format = Format::RGBA8Unorm)
     {
         const std::array colors{ ColorTarget{ .format = format } };
@@ -229,29 +195,23 @@ namespace {
         return *pipeline;
     }
 
-    //==================================================================================================================
-    /// Creates the standard vertex and fragment pipeline of `library`.
     Pipeline standardPipeline(Device device, ShaderLibrary library)
     {
         return create(device, GraphicsPipelineDesc{ .vertex = { library, "vsMain" }, .fragment = { library, "fsMain" }, .label = "test.standard" });
     }
 
-    //==================================================================================================================
-    /// Creates the standard mesh pipeline of `library`, without a task stage.
     Pipeline meshPipeline(Device device, ShaderLibrary library)
     {
         return create(device, GraphicsPipelineDesc{ .mesh = { library, "msMain" }, .fragment = { library, "fsMain" }, .label = "test.mesh" });
     }
 
-    //==================================================================================================================
-    /// Creates AbiVertex's pipeline on `device`: no fragment entry, so only its stores are observable.
+    // No fragment entry, so only its stores are observable.
     Pipeline abiVertexPipeline(Device device)
     {
         return create(device, GraphicsPipelineDesc{ .vertex = { loadLibrary(device, "AbiVertex"), "vertexMain" }, .label = "test.abiVertex" });
     }
 
-    //==================================================================================================================
-    /// Creates the draw oracle's pipeline on `device` over an `R32Float` target, which holds each drawn drawId plus one.
+    // Over an `R32Float` target, which holds each drawn drawId plus one.
     Pipeline oraclePipeline(Device device)
     {
         const ShaderLibrary library = loadLibrary(device, "DrawOracle");
@@ -262,8 +222,6 @@ namespace {
         );
     }
 
-    //==================================================================================================================
-    /// Returns the payload of `buffer`, a live buffer of `device`.
     const d3d12::BufferPayload& bufferOf(Device device, Buffer buffer)
     {
         const auto* payload = static_cast<const d3d12::BufferPayload*>(DeviceImpl::of(device).core.pool<Buffer>().native(buffer));
@@ -271,8 +229,6 @@ namespace {
         return *payload;
     }
 
-    //==================================================================================================================
-    /// Returns the payload of `texture`, a live texture of `device`.
     const d3d12::TexturePayload& textureOf(Device device, Texture texture)
     {
         const auto* payload = static_cast<const d3d12::TexturePayload*>(DeviceImpl::of(device).core.pool<Texture>().native(texture));
@@ -280,22 +236,16 @@ namespace {
         return *payload;
     }
 
-    //==================================================================================================================
-    /// Returns the native state of `list`.
     d3d12::ListState& stateOf(CommandList list)
     {
         return CommandListImpl::of(list).state;
     }
 
-    //==================================================================================================================
-    /// Returns the native calls `list` has recorded since its acquisition.
     uint64_t recordCalls(CommandList list)
     {
         return core::coreOf(list).counts.nativeRecordCalls;
     }
 
-    //==================================================================================================================
-    /// Records one barrier on `list` that moves every subresource of `target` from `Undefined` to `ColorAttachment`.
     void toColorAttachment(CommandList list, Texture target)
     {
         const std::array barriers{ TextureBarrier{ .texture = target,
@@ -306,9 +256,8 @@ namespace {
         list.barrier({}, {}, barriers);
     }
 
-    //==================================================================================================================
-    /// Moves `target` to `ColorAttachment`, begins a pass over the whole of it, `edge` texels square, that clears it, and
-    /// binds `pipeline`, the full viewport and the full scissor.
+    // Moves `target` to `ColorAttachment`, begins a pass that clears all of it, and binds `pipeline`, the full viewport and
+    // the full scissor.
     void beginPass(CommandList list, Texture target, Pipeline pipeline, uint32_t edge = kSize)
     {
         toColorAttachment(list, target);
@@ -319,8 +268,6 @@ namespace {
         list.setScissor(Rect2D{ 0, 0, edge, edge });
     }
 
-    //==================================================================================================================
-    /// Ends `list`, submits it on the Graphics queue signalling `done` to 1, ends the frame and waits for the signal.
     void run(Device device, CommandList list, Fence done)
     {
         list.end();
@@ -330,15 +277,12 @@ namespace {
         REQUIRE(device.wait({ done, 1 }, UINT64_MAX));
     }
 
-    //==================================================================================================================
-    /// Returns the first `cells` cells of `output`, a buffer of `device` no queue is using, read natively.
     std::vector<std::byte> readCells(Device device, Buffer output, uint64_t cells)
     {
         return test::readNativeBuffer(DeviceImpl::of(device), bufferOf(device, output).resource, cells * sizeof(Cell));
     }
 
-    //==================================================================================================================
-    /// Returns the cells AbiVertex stores for vertices 0, 1 and 2 of instance 0 of a draw that reads `drawId`.
+    // What AbiVertex stores for vertices 0, 1 and 2 of instance 0 of a draw that reads `drawId`.
     std::vector<std::byte> triangleCells(uint32_t drawId)
     {
         const std::array cells{ Cell{ 0, 0, drawId, 0 }, Cell{ 1, 0, drawId, 0 }, Cell{ 2, 0, drawId, 0 } };
@@ -346,7 +290,6 @@ namespace {
     }
 } // namespace
 
-//======================================================================================================================
 TEST_CASE("an indirect draw after setRoot costs the root SRV and one ExecuteIndirect, no b1 write", "[d3d12]")
 {
     REQUIRE(kD3D12LibrariesBuilt);
@@ -382,7 +325,6 @@ TEST_CASE("an indirect draw after setRoot costs the root SRV and one ExecuteIndi
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("a direct draw after an indirect draw writes b1 once; a second direct draw writes nothing more", "[d3d12]")
 {
     REQUIRE(kD3D12LibrariesBuilt);
@@ -438,7 +380,6 @@ TEST_CASE("a direct draw after an indirect draw writes b1 once; a second direct 
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("drawMeshTasksIndirect is one ExecuteIndirect, and the next direct mesh draw writes b1 once", "[d3d12]")
 {
     REQUIRE(kD3D12LibrariesBuilt);
@@ -480,7 +421,6 @@ TEST_CASE("drawMeshTasksIndirect is one ExecuteIndirect, and the next direct mes
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("drawIndexedIndirect sets the index buffer only when it differs", "[d3d12]")
 {
     REQUIRE(kD3D12LibrariesBuilt);
@@ -537,7 +477,6 @@ TEST_CASE("drawIndexedIndirect sets the index buffer only when it differs", "[d3
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("maxCount 0 records nothing", "[d3d12]")
 {
 #ifndef NDEBUG
@@ -590,7 +529,6 @@ TEST_CASE("maxCount 0 records nothing", "[d3d12]")
 #endif
 }
 
-//======================================================================================================================
 TEST_CASE("a count of 0 draws nothing and a count above maxCount draws maxCount", "[d3d12]")
 {
     REQUIRE(kD3D12LibrariesBuilt);

@@ -16,15 +16,11 @@
 
 namespace rojoRHI::metal4 {
     namespace {
-        //==============================================================================================================
-        /// Returns true when `usage` holds `flag`.
         bool hasUsage(TextureUsage usage, TextureUsage flag)
         {
             return (usage & flag) != TextureUsage::None;
         }
 
-        //==============================================================================================================
-        /// Returns the Metal usage of a texture of `format` with `usage`.
         MTL::TextureUsage textureUsage(Format format, TextureUsage usage)
         {
             MTL::TextureUsage native = MTL::TextureUsageUnknown;
@@ -51,7 +47,6 @@ namespace rojoRHI::metal4 {
         }
     } // namespace
 
-    //==================================================================================================================
     MTL::TextureType textureType(TextureType type, uint32_t samples)
     {
         switch (type)
@@ -67,7 +62,6 @@ namespace rojoRHI::metal4 {
         return MTL::TextureType2D;
     }
 
-    //==================================================================================================================
     MTL::TextureDescriptor* textureDescriptor(const TextureDesc& desc, bool placed)
     {
         MTL::TextureDescriptor* descriptor = MTL::TextureDescriptor::alloc()->init();

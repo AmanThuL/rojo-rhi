@@ -21,9 +21,7 @@ using test::PassKit;
 using test::UpscaleKit;
 
 namespace {
-    //==================================================================================================================
-    /// Records the barrier that moves every subresource of `texture` from `oldLayout` to `newLayout`, with no access on either
-    /// side: it orders the transitions of a chain, and no use.
+    // No access on either side: the barrier orders the transitions of a chain, and no use.
     [[maybe_unused]] void move(CommandList list, Texture texture, Layout oldLayout, Layout newLayout)
     {
         const std::array<TextureBarrier, 1> barriers{ TextureBarrier{
@@ -31,8 +29,6 @@ namespace {
         list.barrier({}, {}, barriers);
     }
 
-    //==================================================================================================================
-    /// Records the global barrier that orders every copy before it before every copy after it.
     [[maybe_unused]] void copiesDone(CommandList list)
     {
         constexpr Access kCopies = Access::CopyRead | Access::CopyWrite;
@@ -41,8 +37,6 @@ namespace {
         list.barrier(globals);
     }
 
-    //==================================================================================================================
-    /// Ends `list` and submits it alone to the queue of `type`.
     [[maybe_unused]] void submit(Device device, CommandList list, QueueType type = QueueType::Graphics)
     {
         list.end();
@@ -51,7 +45,6 @@ namespace {
     }
 } // namespace
 
-//======================================================================================================================
 TEST_CASE("a chain of texture barriers that each start from the current layout or Undefined is accepted", "[contract]")
 {
 #ifdef NDEBUG
@@ -83,7 +76,6 @@ TEST_CASE("a chain of texture barriers that each start from the current layout o
 #endif
 }
 
-//======================================================================================================================
 TEST_CASE("the tracker carries layouts from one submission to the next", "[contract]")
 {
 #ifdef NDEBUG
@@ -116,7 +108,6 @@ TEST_CASE("the tracker carries layouts from one submission to the next", "[contr
 #endif
 }
 
-//======================================================================================================================
 TEST_CASE("lists are judged in queue submission order, not in the order they were recorded", "[contract]")
 {
 #ifdef NDEBUG
@@ -140,7 +131,6 @@ TEST_CASE("lists are judged in queue submission order, not in the order they wer
 #endif
 }
 
-//======================================================================================================================
 TEST_CASE("a texture created with initial data starts in ShaderRead", "[contract]")
 {
 #ifdef NDEBUG
@@ -157,7 +147,6 @@ TEST_CASE("a texture created with initial data starts in ShaderRead", "[contract
 #endif
 }
 
-//======================================================================================================================
 TEST_CASE("each acquire of a swapchain image starts a chain from Undefined", "[contract]")
 {
 #ifdef NDEBUG
@@ -186,7 +175,6 @@ TEST_CASE("each acquire of a swapchain image starts a chain from Undefined", "[c
 #endif
 }
 
-//======================================================================================================================
 TEST_CASE("two queues submitting from two threads share the tracker without a race", "[contract]")
 {
 #ifdef NDEBUG
@@ -223,7 +211,6 @@ TEST_CASE("two queues submitting from two threads share the tracker without a ra
 #endif
 }
 
-//======================================================================================================================
 TEST_CASE("correct layouts pass the checks of every copy, clear and upscale entry", "[contract]")
 {
 #ifndef NDEBUG
@@ -247,7 +234,6 @@ TEST_CASE("correct layouts pass the checks of every copy, clear and upscale entr
 #endif
 }
 
-//======================================================================================================================
 TEST_CASE("General permits a copy to and from a texture on a Copy list", "[contract]")
 {
 #ifndef NDEBUG
@@ -262,7 +248,6 @@ TEST_CASE("General permits a copy to and from a texture on a Copy list", "[contr
 #endif
 }
 
-//======================================================================================================================
 TEST_CASE("a Copy list's first barrier on a new texture starts from General", "[contract]")
 {
 #ifndef NDEBUG
@@ -282,7 +267,6 @@ TEST_CASE("a Copy list's first barrier on a new texture starts from General", "[
 #endif
 }
 
-//======================================================================================================================
 TEST_CASE("a Copy list uses a mip of a new texture that Graphics never moved", "[contract]")
 {
 #ifndef NDEBUG
@@ -302,7 +286,6 @@ TEST_CASE("a Copy list uses a mip of a new texture that Graphics never moved", "
 #endif
 }
 
-//======================================================================================================================
 TEST_CASE("a placed texture is discarded on Graphics before its first use on a Copy list", "[contract]")
 {
 #ifndef NDEBUG
@@ -327,7 +310,6 @@ TEST_CASE("a placed texture is discarded on Graphics before its first use on a C
 #endif
 }
 
-//======================================================================================================================
 TEST_CASE("an upscale of inputs in ShaderRead and an output in ShaderWrite passes", "[contract]")
 {
 #ifndef NDEBUG
@@ -342,7 +324,6 @@ TEST_CASE("an upscale of inputs in ShaderRead and an output in ShaderWrite passe
 #endif
 }
 
-//======================================================================================================================
 TEST_CASE("a declared read passes in each layout a read through any view permits", "[contract]")
 {
 #ifndef NDEBUG
@@ -360,7 +341,6 @@ TEST_CASE("a declared read passes in each layout a read through any view permits
 #endif
 }
 
-//======================================================================================================================
 TEST_CASE("an image acquired, drawn to in ColorAttachment and moved to Present is presented", "[contract]")
 {
 #ifndef NDEBUG
@@ -378,7 +358,6 @@ TEST_CASE("an image acquired, drawn to in ColorAttachment and moved to Present i
 #endif
 }
 
-//======================================================================================================================
 TEST_CASE("copies and clears name subresources by mip and layer, each in its own layout", "[contract]")
 {
 #ifndef NDEBUG
@@ -415,7 +394,6 @@ TEST_CASE("copies and clears name subresources by mip and layer, each in its own
 #endif
 }
 
-//======================================================================================================================
 TEST_CASE("a pass with color, depth and resolve attachments in the layouts they need is accepted", "[contract]")
 {
 #ifdef NDEBUG
@@ -437,7 +415,6 @@ TEST_CASE("a pass with color, depth and resolve attachments in the layouts they 
 #endif
 }
 
-//======================================================================================================================
 TEST_CASE("a pass on mip 1 and layer 1 needs only that subresource in ColorAttachment", "[contract]")
 {
 #ifdef NDEBUG

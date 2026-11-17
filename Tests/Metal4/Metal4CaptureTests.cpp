@@ -19,16 +19,12 @@
 using namespace rojoRHI;
 
 namespace {
-    //==================================================================================================================
-    /// Whether the process was launched with Metal capture enabled.
     bool captureEnabled()
     {
         const char* value = std::getenv("MTL_CAPTURE_ENABLED");
         return value != nullptr && std::string(value) == "1";
     }
 
-    //==================================================================================================================
-    /// A `.gputrace` path in the temporary directory that names nothing yet.
     std::filesystem::path freshTracePath(const char* name)
     {
         std::filesystem::path path = std::filesystem::temp_directory_path() / name;
@@ -36,26 +32,21 @@ namespace {
         return path;
     }
 
-    //==================================================================================================================
-    /// Ends the capture `device` began. A `HeldCapture` runs it when it is reset or destroyed, so a failed check cannot leave
-    /// Metal's process-global capture running for the cases after it.
+    // A `HeldCapture` runs this when it is reset or destroyed, so a failed check cannot leave Metal's process-global
+    // capture running for the cases after it.
     void endHeldCapture(Device* device)
     {
         device->endCapture();
     }
 
-    /// Holds the capture a case began on a device until it is reset or destroyed; empty when none is held.
     using HeldCapture = std::unique_ptr<Device, void (*)(Device*)>;
 
-    //==================================================================================================================
-    /// An empty `HeldCapture`. A case declares it after its device and resets it before `destroyDevice`.
+    // A case declares it after its device and resets it before `destroyDevice`.
     HeldCapture holdCapture()
     {
         return HeldCapture(nullptr, endHeldCapture);
     }
 
-    //==================================================================================================================
-    /// Begins a capture of `device` to `path` and, when Metal starts it, makes `held` own its end.
     Result<void> beginHeldCapture(Device& device, HeldCapture& held, const std::filesystem::path& path)
     {
         Result<void> started = device.beginCapture(path.string());
@@ -67,7 +58,6 @@ namespace {
     }
 } // namespace
 
-//======================================================================================================================
 TEST_CASE("capture reports whether the process can write a GPU trace document", "[metal4]")
 {
     // The manager answers false until the process has a Metal device, so the device comes first.
@@ -84,7 +74,6 @@ TEST_CASE("capture reports whether the process can write a GPU trace document", 
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("beginCapture without MTL_CAPTURE_ENABLED is unsupported and leaves no capture in progress", "[metal4]")
 {
     if (captureEnabled())
@@ -104,7 +93,6 @@ TEST_CASE("beginCapture without MTL_CAPTURE_ENABLED is unsupported and leaves no
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("a capture writes a gputrace document around a submission and a frame", "[metal4][capture]")
 {
     if (!captureEnabled())
@@ -133,7 +121,6 @@ TEST_CASE("a capture writes a gputrace document around a submission and a frame"
     std::filesystem::remove_all(path);
 }
 
-//======================================================================================================================
 TEST_CASE("a second device cannot begin a capture while one is in progress", "[metal4][capture]")
 {
     if (!captureEnabled())
@@ -158,7 +145,6 @@ TEST_CASE("a second device cannot begin a capture while one is in progress", "[m
     std::filesystem::remove_all(other);
 }
 
-//======================================================================================================================
 TEST_CASE("a capture path below a regular file is refused and leaves no capture running", "[metal4][capture]")
 {
     if (!captureEnabled())

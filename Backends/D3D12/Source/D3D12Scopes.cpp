@@ -21,11 +21,10 @@
 namespace rojoRHI {
     namespace d3d12 {
         namespace {
-            /// The legacy Unicode form of a PIX event's metadata: the data is a NUL-terminated UTF-16 string.
+            // PIX's legacy Unicode event metadata: the data is a NUL-terminated UTF-16 string.
             constexpr UINT kUnicodeEvent = 0;
         } // namespace
 
-        //==============================================================================================================
         void beginNativeScope(CommandListImpl& list, std::string_view label)
         {
             ListState& state = list.state;
@@ -60,7 +59,6 @@ namespace rojoRHI {
             record.timestamp = (state.ordinal << 16) | pair;
         }
 
-        //==============================================================================================================
         void endNativeScope(CommandListImpl& list)
         {
             ListState& state = list.state;
@@ -81,7 +79,6 @@ namespace rojoRHI {
         }
     } // namespace d3d12
 
-    //==================================================================================================================
     void CommandList::beginScope(std::string_view label)
     {
         CommandListImpl& list = CommandListImpl::of(*this);
@@ -90,7 +87,6 @@ namespace rojoRHI {
         d3d12::beginNativeScope(list, label);
     }
 
-    //==================================================================================================================
     void CommandList::endScope()
     {
         CommandListImpl& list = CommandListImpl::of(*this);

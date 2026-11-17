@@ -160,6 +160,8 @@ int main()
     );
     Buffer instances =
         check(device.createBuffer({ .size = field.size() * sizeof(Instance), .label = "instances" }, std::as_bytes(std::span(field))), "createBuffer");
+    // Both this buffer and `count` are written by the cull shader and read as indirect arguments, hence both usages;
+    // `count` holds how many records the draw consumes.
     Buffer records = check(
         device.createBuffer(
             { .size = kInstanceCount * sizeof(DrawIndexedIndirectArgs), .usage = BufferUsage::ShaderWrite | BufferUsage::IndirectArgs, .label = "records" }
@@ -192,12 +194,14 @@ int main()
         if (size.width != extent.width || size.height != extent.height)
         {
             swapchain.resize(size);
+            // Deferred: the old texture is released once the frames that used it retire.
             device.destroy(depth);
             depth = createDepth(size);
             extent = size;
         }
 
         device.beginFrame();
+        // The timings belong to the frame beginFrame just waited for, so reading them never stalls.
         if (++frame % 120 == 0)
         {
             for (const ScopeTiming& timing : device.scopeTimings())
@@ -221,6 +225,8 @@ int main()
 
         CommandList list = device.acquireCommandList(QueueType::Graphics, "frame");
 
+        // Every frame in flight shares records and count: the last frame's draw read them as indirect arguments, and
+        // this frame's fill and cull overwrite them. A write after a read needs execution order only, so no access.
         const std::array reuse{ GlobalBarrier{ .srcStage = Stage::IndirectArgs, .dstStage = Stage::Copy | Stage::ComputeShader } };
         list.barrier(reuse);
 
@@ -242,12 +248,16 @@ int main()
                       .instanceCount = kInstanceCount,
                       .indexCount = uint32_t(cubeIndices.size()) }
         );
+        // The shader writes through addresses the tracker cannot see; declaring the accesses lets it check the
+        // barriers on either side.
         const std::array cullAccesses{ ResourceAccess{ .buffer = records, .stage = Stage::ComputeShader, .access = Access::ShaderWrite },
                                        ResourceAccess{ .buffer = count, .stage = Stage::ComputeShader, .access = Access::ShaderRead | Access::ShaderWrite } };
         list.declareAccess(cullAccesses);
         list.dispatch((kInstanceCount + 63) / 64, 1, 1);
         list.endScope();
 
+        // The draw reads what the cull wrote as indirect arguments. No barrier may sit inside a render pass, so
+        // this one goes before it, batched with the attachment transitions.
         const std::array toDraw{ BufferBarrier{ .buffer = records,
                                                 .srcStage = Stage::ComputeShader,
                                                 .srcAccess = Access::ShaderWrite,
@@ -258,6 +268,7 @@ int main()
                                                 .srcAccess = Access::ShaderWrite,
                                                 .dstStage = Stage::IndirectArgs,
                                                 .dstAccess = Access::IndirectArgs } };
+        // The depth barrier's srcStage orders this frame's clear after the last frame's depth test.
         const std::array toRender{ TextureBarrier{ .texture = image,
                                                    .dstStage = Stage::ColorAttachment,
                                                    .dstAccess = Access::ColorAttachmentWrite,
@@ -272,6 +283,8 @@ int main()
         list.barrier({}, toDraw, toRender);
 
         const std::array attachments{ ColorAttachment{ .texture = image, .load = LoadOp::Clear, .clear = { 0.55f, 0.7f, 0.9f, 1.0f } } };
+        // Reverse Z: the projection maps the near plane to 1 and infinity to 0, so depth clears to 0 and the
+        // pipeline keeps its default GreaterOrEqual compare.
         list.beginRenderPass(
             { .colors = attachments,
               .depth = { .texture = depth, .load = LoadOp::Clear, .store = StoreOp::DontCare, .clearDepth = 0.0f },
@@ -282,6 +295,7 @@ int main()
         list.setViewport({ .width = float(extent.width), .height = float(extent.height) });
         list.setScissor({ 0, 0, extent.width, extent.height });
         list.pushRoot(DrawRoot{ .viewProj = viewProj, .instances = device.address(instances), .vertices = device.address(vertices) });
+        // The cull pass decides on the GPU how many records draw; kInstanceCount only bounds them.
         list.drawIndexedIndirect(indices, IndexType::UInt16, device.address(records), kInstanceCount, device.address(count));
         list.endRenderPass();
 

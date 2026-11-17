@@ -16,7 +16,6 @@
 #include <mutex>
 
 namespace rojoRHI::metal4 {
-    //==================================================================================================================
     Result<void> Residency::create(MTL::Device* device)
     {
         MTL::ResidencySetDescriptor* descriptor = MTL::ResidencySetDescriptor::alloc()->init();
@@ -31,19 +30,16 @@ namespace rojoRHI::metal4 {
         return {};
     }
 
-    //==================================================================================================================
     void Residency::attach(MTL4::CommandQueue* queue)
     {
         queue->addResidencySet(m_set);
     }
 
-    //==================================================================================================================
     void Residency::detach(MTL4::CommandQueue* queue)
     {
         queue->removeResidencySet(m_set);
     }
 
-    //==================================================================================================================
     void Residency::add(const MTL::Allocation* allocation)
     {
         std::lock_guard lock(m_mutex);
@@ -51,7 +47,6 @@ namespace rojoRHI::metal4 {
         m_dirty.store(true, std::memory_order_release);
     }
 
-    //==================================================================================================================
     void Residency::remove(const MTL::Allocation* allocation)
     {
         std::lock_guard lock(m_mutex);
@@ -59,14 +54,12 @@ namespace rojoRHI::metal4 {
         m_dirty.store(true, std::memory_order_release);
     }
 
-    //==================================================================================================================
     bool Residency::contains(const MTL::Allocation* allocation)
     {
         std::lock_guard lock(m_mutex);
         return m_set->containsAllocation(allocation);
     }
 
-    //==================================================================================================================
     bool Residency::commitIfDirty()
     {
         // A change made before this call is seen here; one racing it is committed by this call or by the next.
@@ -86,7 +79,6 @@ namespace rojoRHI::metal4 {
         return true;
     }
 
-    //==================================================================================================================
     void Residency::release()
     {
         std::lock_guard lock(m_mutex);

@@ -11,9 +11,7 @@
 #include <span>
 
 namespace rojoRHI::core {
-    /// Checks one batch of barriers (VU-rojo-cmd-0063, VU-rojo-sync-0001 to 0003, 0005, 0007, 0008, 0010, 0011, 0014 to 0016, 0019,
-    /// 0020, VU-rojo-texture-0016, 0017, 0041, VU-rojo-core-0001 to 0003). The rules that follow resource state are the
-    /// validation tracker's.
+    // Checks only the rules that need no resource state; the rules that follow resource state are the tracker's.
     void barrier(
         CommandListCore& list, std::span<const GlobalBarrier> globals, std::span<const BufferBarrier> buffers, std::span<const TextureBarrier> textures
     );

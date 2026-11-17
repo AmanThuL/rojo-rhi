@@ -1,7 +1,7 @@
 # 06. Pipelines
 
 **Status**: Accepted
-**API version**: 1.0.0
+**API version**: 1.0.1
 
 A pipeline holds only the state that at least one backend must bake at creation. There is no
 vertex-input state, because vertices are always pulled by the shader, and no pipeline layout: Metal

@@ -20,35 +20,29 @@
 using namespace rojoRHI;
 
 namespace {
-    /// The capturer's module name, which identifies it once loaded.
     constexpr const wchar_t* kCapturerModule = L"WinPixGpuCapturer.dll";
 
-    /// Owns a device created from a description and destroys it when the case ends, however it ends.
     class OwnedDevice
     {
       public:
         explicit OwnedDevice(const DeviceDesc&);
         ~OwnedDevice();
 
-        //==============================================================================================================
         OwnedDevice(const OwnedDevice&) = delete;
 
-        //==============================================================================================================
         OwnedDevice& operator=(const OwnedDevice&) = delete;
 
-        /// Returns the device; the creation is required to have succeeded.
+        // The creation must have succeeded.
         Device get() const;
 
       private:
-        Result<Device> m_created; ///< The result of the creation.
+        Result<Device> m_created;
     };
 
-    //==================================================================================================================
     OwnedDevice::OwnedDevice(const DeviceDesc& desc) : m_created(createDevice(desc))
     {
     }
 
-    //==================================================================================================================
     OwnedDevice::~OwnedDevice()
     {
         if (m_created.has_value())
@@ -57,23 +51,18 @@ namespace {
         }
     }
 
-    //==================================================================================================================
     Device OwnedDevice::get() const
     {
         REQUIRE(m_created.has_value());
         return *m_created;
     }
 
-    //==================================================================================================================
-    /// Returns true when the PIX GPU capturer is loaded into the process.
     bool capturerLoaded()
     {
         return GetModuleHandleW(kCapturerModule) != nullptr;
     }
 
-    //==================================================================================================================
-    /// Checks that `device`, created without `DeviceDesc::enableCapture`, refuses `beginCapture` naming `enableCapture`,
-    /// twice, so that a refusal leaves no capture in progress.
+    // Refuses twice, so a refusal is shown to leave no capture in progress.
     void checkRefusesWithoutEnableCapture(Device device)
     {
         for (int attempt = 0; attempt < 2; ++attempt)
@@ -86,7 +75,6 @@ namespace {
     }
 } // namespace
 
-//======================================================================================================================
 TEST_CASE("a device without enableCapture loads no capturer and refuses capture", "[d3d12]")
 {
     // Whether the capturer was loaded can be checked only when no earlier case loaded it; the refusal holds either way.
@@ -98,22 +86,20 @@ TEST_CASE("a device without enableCapture loads no capturer and refuses capture"
     checkRefusesWithoutEnableCapture(created);
 }
 
-//======================================================================================================================
 TEST_CASE("a device without enableCapture refuses capture beside a device with it", "[d3d12][capture]")
 {
     DeviceDesc enabled;
     enabled.enableCapture = true;
     const OwnedDevice capturing(enabled);
     const OwnedDevice plain(DeviceDesc{});
-    // A device with enableCapture reports whether the capturer loaded; hosted WARP has no PIX installed, so false there.
-    // WARP checks only the false path; hardware with PIX installed is the real check of the true one.
+    // A device with enableCapture reports whether the capturer loaded, which is false where PIX is not installed; a
+    // machine with PIX installed checks the true path.
     CHECK(capturing.get().capabilities().capture == d3d12::loadCapturer());
     CHECK_FALSE(plain.get().capabilities().capture);
     // The capturer, when the first device loaded it, is process-wide; the second device still refuses.
     checkRefusesWithoutEnableCapture(plain.get());
 }
 
-//======================================================================================================================
 TEST_CASE("without PIX, beginCapture returns Unsupported and starts nothing", "[d3d12][capture]")
 {
     DeviceDesc desc;
@@ -133,7 +119,6 @@ TEST_CASE("without PIX, beginCapture returns Unsupported and starts nothing", "[
     }
 }
 
-//======================================================================================================================
 TEST_CASE("with PIX, a capture around a submitted list writes its wpix file", "[d3d12][capture]")
 {
     DeviceDesc desc;
@@ -167,7 +152,6 @@ TEST_CASE("with PIX, a capture around a submitted list writes its wpix file", "[
     std::filesystem::remove(path);
 }
 
-//======================================================================================================================
 TEST_CASE("the capturer search picks the highest version directory", "[d3d12]")
 {
     const std::vector<std::wstring> names = { L"2409.23", L"2501.30", L"2412.1" };

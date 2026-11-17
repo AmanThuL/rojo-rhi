@@ -19,7 +19,6 @@
 
 namespace rojoRHI {
     namespace d3d12 {
-        //==============================================================================================================
         void flushCompute(CommandListImpl& list)
         {
             ListState& state = list.state;
@@ -55,7 +54,6 @@ namespace rojoRHI {
         }
     } // namespace d3d12
 
-    //==================================================================================================================
     void CommandList::dispatch(uint32_t x, uint32_t y, uint32_t z)
     {
         CommandListImpl& list = CommandListImpl::of(*this);
@@ -69,7 +67,6 @@ namespace rojoRHI {
         core::noteNativeCall(list.core);
     }
 
-    //==================================================================================================================
     void CommandList::dispatchIndirect(Addr args)
     {
         CommandListImpl& list = CommandListImpl::of(*this);

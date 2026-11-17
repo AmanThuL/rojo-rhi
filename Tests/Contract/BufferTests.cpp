@@ -17,7 +17,6 @@ namespace {
     static_assert(sizeof(Addr) == 8 && alignof(Addr) == 8);
     static_assert(std::is_trivially_copyable_v<Addr>);
 
-    //==================================================================================================================
     Device makeDevice()
     {
         Result<Device> created = createDevice();
@@ -25,7 +24,6 @@ namespace {
         return *created;
     }
 
-    //==================================================================================================================
     Buffer makeBuffer(Device device, BufferDesc desc, std::span<const std::byte> initial = {})
     {
         Result<Buffer> created = device.createBuffer(desc, initial);
@@ -34,7 +32,6 @@ namespace {
     }
 } // namespace
 
-//======================================================================================================================
 TEST_CASE("a buffer is created in every memory class", "[contract]")
 {
     Device device = makeDevice();
@@ -46,7 +43,6 @@ TEST_CASE("a buffer is created in every memory class", "[contract]")
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("two buffers have different handles", "[contract]")
 {
     Device device = makeDevice();
@@ -54,7 +50,6 @@ TEST_CASE("two buffers have different handles", "[contract]")
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("usage flags combine with operator| and test with operator&", "[contract]")
 {
     constexpr BufferUsage both = BufferUsage::Index | BufferUsage::IndirectArgs;
@@ -63,7 +58,6 @@ TEST_CASE("usage flags combine with operator| and test with operator&", "[contra
     SUCCEED();
 }
 
-//======================================================================================================================
 TEST_CASE("a Gpu buffer takes ShaderWrite and Index and IndirectArgs", "[contract]")
 {
     Device device = makeDevice();
@@ -72,7 +66,6 @@ TEST_CASE("a Gpu buffer takes ShaderWrite and Index and IndirectArgs", "[contrac
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("an Upload buffer takes Index and IndirectArgs", "[contract]")
 {
     Device device = makeDevice();
@@ -81,7 +74,6 @@ TEST_CASE("an Upload buffer takes Index and IndirectArgs", "[contract]")
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("a Sparse buffer is created when the device reports sparse resources", "[contract]")
 {
     Device device = makeDevice();
@@ -92,7 +84,6 @@ TEST_CASE("a Sparse buffer is created when the device reports sparse resources",
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("initial data is visible through the CPU pointer of an Upload buffer", "[contract]")
 {
     Device device = makeDevice();
@@ -104,7 +95,6 @@ TEST_CASE("initial data is visible through the CPU pointer of an Upload buffer",
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("initial data of exactly the buffer size is accepted", "[contract]")
 {
     Device device = makeDevice();
@@ -113,7 +103,6 @@ TEST_CASE("initial data of exactly the buffer size is accepted", "[contract]")
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("the CPU pointer of an Upload buffer is writable and stable", "[contract]")
 {
     Device device = makeDevice();
@@ -126,7 +115,6 @@ TEST_CASE("the CPU pointer of an Upload buffer is writable and stable", "[contra
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("a Readback buffer has a CPU pointer", "[contract]")
 {
     Device device = makeDevice();
@@ -134,7 +122,6 @@ TEST_CASE("a Readback buffer has a CPU pointer", "[contract]")
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("the address of a buffer is not null and is stable", "[contract]")
 {
     Device device = makeDevice();
@@ -146,7 +133,6 @@ TEST_CASE("the address of a buffer is not null and is stable", "[contract]")
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("the address of byte N equals the base address plus N", "[contract]")
 {
     Device device = makeDevice();
@@ -157,7 +143,6 @@ TEST_CASE("the address of byte N equals the base address plus N", "[contract]")
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("the address of the last byte is accepted", "[contract]")
 {
     Device device = makeDevice();
@@ -166,7 +151,6 @@ TEST_CASE("the address of the last byte is accepted", "[contract]")
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("two buffers have different addresses", "[contract]")
 {
     Device device = makeDevice();
@@ -176,7 +160,6 @@ TEST_CASE("two buffers have different addresses", "[contract]")
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("an Upload buffer has an address", "[contract]")
 {
     Device device = makeDevice();
@@ -185,7 +168,6 @@ TEST_CASE("an Upload buffer has an address", "[contract]")
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("the null Addr is both words zero", "[contract]")
 {
     constexpr Addr none{};
@@ -193,7 +175,6 @@ TEST_CASE("the null Addr is both words zero", "[contract]")
     CHECK(none.hi == 0);
 }
 
-//======================================================================================================================
 TEST_CASE("adding zero leaves an address unchanged", "[contract]")
 {
     Device device = makeDevice();
@@ -203,7 +184,6 @@ TEST_CASE("adding zero leaves an address unchanged", "[contract]")
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("a destroyed buffer's replacement gets a fresh handle", "[contract]")
 {
     Device device = makeDevice();

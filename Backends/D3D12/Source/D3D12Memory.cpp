@@ -6,7 +6,6 @@
 #include "D3D12Memory.h"
 
 namespace rojoRHI::d3d12 {
-    //==================================================================================================================
     D3D12_HEAP_TYPE heapType(Memory memory, bool gpuUploadHeap)
     {
         switch (memory)

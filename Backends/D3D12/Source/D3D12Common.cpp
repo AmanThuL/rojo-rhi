@@ -18,24 +18,20 @@
 
 namespace rojoRHI::d3d12 {
     namespace {
-        /// The longest single wait on a fence event, in milliseconds; a longer wait runs in slices of this length.
+        // In milliseconds; a longer wait runs in slices of this length.
         constexpr uint64_t kWaitSliceMs = 10'000;
 
-        /// The calling thread's fence-wait event: auto-reset, made on the thread's first wait and closed at its exit unless a
-        /// wait timed out, which leaves the event armed for good.
+        // The calling thread's fence-wait event: auto-reset, made on the thread's first wait and closed at its exit,
+        // unless a wait timed out, which leaves the event armed for good.
         class WaitEvent
         {
           public:
-            //==========================================================================================================
             WaitEvent() = default;
 
-            //==========================================================================================================
             WaitEvent(const WaitEvent&) = delete;
 
-            //==========================================================================================================
             WaitEvent& operator=(const WaitEvent&) = delete;
 
-            //==========================================================================================================
             ~WaitEvent()
             {
                 // An armed event stays open: closing it would let the fence signal whatever handle reuses its value.
@@ -45,8 +41,7 @@ namespace rojoRHI::d3d12 {
                 }
             }
 
-            //==========================================================================================================
-            /// Returns the event, made on the first call; logs and aborts, in every build, when none can be made for `what`.
+            // Logs and aborts, in every build, when no event can be made.
             HANDLE get(std::string_view what)
             {
                 if (m_event == nullptr)
@@ -61,8 +56,7 @@ namespace rojoRHI::d3d12 {
                 return m_event;
             }
 
-            //==========================================================================================================
-            /// Records that a wait timed out, so an arming of the event may never be signalled before the thread exits.
+            // The arming of a timed-out wait may never be signalled before the thread exits.
             void leaveArmed()
             {
                 m_armed = true;
@@ -74,13 +68,11 @@ namespace rojoRHI::d3d12 {
         };
     } // namespace
 
-    //==================================================================================================================
     uint32_t hresultBits(HRESULT result)
     {
         return static_cast<uint32_t>(result);
     }
 
-    //==================================================================================================================
     std::string utf8(std::wstring_view text)
     {
         if (text.empty())
@@ -94,7 +86,6 @@ namespace rojoRHI::d3d12 {
         return result;
     }
 
-    //==================================================================================================================
     std::wstring executableDirectory()
     {
         std::wstring path(MAX_PATH, L'\0');
@@ -121,14 +112,12 @@ namespace rojoRHI::d3d12 {
         return path;
     }
 
-    //==================================================================================================================
     Error hresultError(HRESULT result, std::string_view what)
     {
         const ErrorCategory category = result == E_OUTOFMEMORY ? ErrorCategory::OutOfMemory : ErrorCategory::DriverFailure;
         return Error{ category, std::format("{} failed with HRESULT 0x{:08X}", what, hresultBits(result)) };
     }
 
-    //==================================================================================================================
     void widen(std::string_view label, std::wstring& out)
     {
         // A UTF-8 sequence never takes fewer bytes than the UTF-16 code units it decodes to, so one call fills the string.
@@ -146,7 +135,6 @@ namespace rojoRHI::d3d12 {
         out.resize(static_cast<size_t>(written));
     }
 
-    //==================================================================================================================
     void setName(ID3D12Object* object, std::string_view label)
     {
         ROJORHI_INTERNAL_ASSERT(object != nullptr, "setName was given no object");
@@ -160,7 +148,6 @@ namespace rojoRHI::d3d12 {
         }
     }
 
-    //==================================================================================================================
     FenceWait waitForFence(ID3D12Fence* fence, uint64_t value, uint64_t timeoutNs, std::string_view what)
     {
         // A removed device reports UINT64_MAX, which passes every value, so no wait outlives the device.
@@ -228,7 +215,6 @@ namespace rojoRHI::d3d12 {
         }
     }
 
-    //==================================================================================================================
     void requireSucceeded(DeviceImpl& impl, HRESULT result, std::string_view what)
     {
         if (SUCCEEDED(result))

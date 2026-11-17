@@ -26,9 +26,7 @@
 
 namespace rojoRHI {
     namespace {
-        //==============================================================================================================
-        /// Counts the native call of one debug marker boundary, a group's push or pop, at a scope, pass or upscale of a list
-        /// whose device emits debug markers (ADR 0034); a device without them sends none.
+        // One native call per debug-marker push or pop, only on a device that emits markers (ADR 0034).
         void noteMarker(core::CommandListCore& list)
         {
             if (list.device->marksScopes())
@@ -38,7 +36,6 @@ namespace rojoRHI {
         }
     } // namespace
 
-    //==================================================================================================================
     std::byte* allocateHostMemory(uint64_t size)
     {
         void* const memory = ::operator new(size, std::align_val_t{ core::kArenaPageAlignment }, std::nothrow);
@@ -49,13 +46,11 @@ namespace rojoRHI {
         return static_cast<std::byte*>(memory);
     }
 
-    //==================================================================================================================
     void freeHostMemory(void* memory)
     {
         ::operator delete(memory, std::align_val_t{ core::kArenaPageAlignment });
     }
 
-    //==================================================================================================================
     Result<core::ArenaPage> createArenaPage(void* context, uint64_t size)
     {
         core::DeviceCore& core = *static_cast<core::DeviceCore*>(context);
@@ -79,14 +74,12 @@ namespace rojoRHI {
         return core::ArenaPage{ .buffer = *page, .host = host, .size = size, .address = 0 };
     }
 
-    //==================================================================================================================
     CommandListImpl& CommandListImpl::of(CommandList list)
     {
         core::checkObject(list.m_impl, "CommandList");
         return *list.m_impl;
     }
 
-    //==================================================================================================================
     CommandList CommandListImpl::wrap(CommandListImpl* impl)
     {
         CommandList list;
@@ -95,14 +88,12 @@ namespace rojoRHI {
     }
 
     namespace core {
-        //==============================================================================================================
         CommandListCore& coreOf(CommandList list)
         {
             return CommandListImpl::of(list).core;
         }
     } // namespace core
 
-    //==================================================================================================================
     CommandList Device::acquireCommandList(QueueType type, std::string_view label)
     {
         DeviceImpl& impl = DeviceImpl::of(*this);
@@ -122,13 +113,11 @@ namespace rojoRHI {
         return CommandListImpl::wrap(list);
     }
 
-    //==================================================================================================================
     void CommandList::end()
     {
         core::endList(CommandListImpl::of(*this).core);
     }
 
-    //==================================================================================================================
     Addr CommandList::uploadFrameData(std::span<const std::byte> bytes, uint32_t alignment)
     {
         core::CommandListCore& list = CommandListImpl::of(*this).core;
@@ -138,7 +127,6 @@ namespace rojoRHI {
         return Addr{ core::HandlePool<Buffer, core::BufferRecord>::slotIndex(place.page), static_cast<uint32_t>(place.offset) };
     }
 
-    //==================================================================================================================
     void CommandList::beginRenderPass(const RenderPassDesc& desc)
     {
         core::CommandListCore& list = CommandListImpl::of(*this).core;
@@ -148,7 +136,6 @@ namespace rojoRHI {
         noteMarker(list);
     }
 
-    //==================================================================================================================
     void CommandList::endRenderPass()
     {
         core::CommandListCore& list = CommandListImpl::of(*this).core;
@@ -157,7 +144,6 @@ namespace rojoRHI {
         noteMarker(list);
     }
 
-    //==================================================================================================================
     void CommandList::beginScope(std::string_view label)
     {
         core::CommandListCore& list = CommandListImpl::of(*this).core;
@@ -165,7 +151,6 @@ namespace rojoRHI {
         noteMarker(list);
     }
 
-    //==================================================================================================================
     void CommandList::endScope()
     {
         core::CommandListCore& list = CommandListImpl::of(*this).core;
@@ -173,7 +158,6 @@ namespace rojoRHI {
         noteMarker(list);
     }
 
-    //==================================================================================================================
     void CommandList::setPipeline(Pipeline pipeline)
     {
         core::CommandListCore& list = CommandListImpl::of(*this).core;
@@ -181,7 +165,6 @@ namespace rojoRHI {
         core::noteNativeCall(list);
     }
 
-    //==================================================================================================================
     void CommandList::setViewport(const Viewport& viewport)
     {
         core::CommandListCore& list = CommandListImpl::of(*this).core;
@@ -189,7 +172,6 @@ namespace rojoRHI {
         core::noteNativeCall(list);
     }
 
-    //==================================================================================================================
     void CommandList::setScissor(const Rect2D& rect)
     {
         core::CommandListCore& list = CommandListImpl::of(*this).core;
@@ -197,7 +179,6 @@ namespace rojoRHI {
         core::noteNativeCall(list);
     }
 
-    //==================================================================================================================
     void CommandList::setStencilReference([[maybe_unused]] uint8_t reference)
     {
         core::CommandListCore& list = CommandListImpl::of(*this).core;
@@ -205,7 +186,6 @@ namespace rojoRHI {
         core::noteNativeCall(list);
     }
 
-    //==================================================================================================================
     void CommandList::setBlendConstants([[maybe_unused]] float r, [[maybe_unused]] float g, [[maybe_unused]] float b, [[maybe_unused]] float a)
     {
         core::CommandListCore& list = CommandListImpl::of(*this).core;
@@ -213,13 +193,11 @@ namespace rojoRHI {
         core::noteNativeCall(list);
     }
 
-    //==================================================================================================================
     void CommandList::setPrimitiveTopology(PrimitiveTopology topology)
     {
         core::setPrimitiveTopology(CommandListImpl::of(*this).core, topology);
     }
 
-    //==================================================================================================================
     void CommandList::setDepthBias([[maybe_unused]] float constant, [[maybe_unused]] float slopeScaled, [[maybe_unused]] float clamp)
     {
         core::CommandListCore& list = CommandListImpl::of(*this).core;
@@ -227,7 +205,6 @@ namespace rojoRHI {
         core::noteNativeCall(list);
     }
 
-    //==================================================================================================================
     void CommandList::setRoot(Addr root)
     {
         core::CommandListCore& list = CommandListImpl::of(*this).core;
@@ -235,7 +212,6 @@ namespace rojoRHI {
         core::noteNativeCall(list);
     }
 
-    //==================================================================================================================
     void CommandList::draw(uint32_t vertices, uint32_t instances, [[maybe_unused]] uint32_t firstVertex, [[maybe_unused]] uint32_t firstInstance)
     {
         core::CommandListCore& list = CommandListImpl::of(*this).core;
@@ -243,7 +219,6 @@ namespace rojoRHI {
         core::noteNativeCall(list);
     }
 
-    //==================================================================================================================
     void CommandList::drawIndexed(
         Buffer indices,
         IndexType type,
@@ -259,7 +234,6 @@ namespace rojoRHI {
         core::noteNativeCall(list);
     }
 
-    //==================================================================================================================
     void CommandList::drawMeshTasks(uint32_t x, uint32_t y, uint32_t z)
     {
         core::CommandListCore& list = CommandListImpl::of(*this).core;
@@ -267,7 +241,6 @@ namespace rojoRHI {
         core::noteNativeCall(list);
     }
 
-    //==================================================================================================================
     void CommandList::dispatch(uint32_t x, uint32_t y, uint32_t z)
     {
         core::CommandListCore& list = CommandListImpl::of(*this).core;
@@ -275,7 +248,6 @@ namespace rojoRHI {
         core::noteNativeCall(list);
     }
 
-    //==================================================================================================================
     void CommandList::drawIndirect(Addr args, uint32_t maxCount, Addr count)
     {
         core::CommandListCore& list = CommandListImpl::of(*this).core;
@@ -283,7 +255,6 @@ namespace rojoRHI {
         core::noteNativeCall(list);
     }
 
-    //==================================================================================================================
     void CommandList::drawIndexedIndirect(Buffer indices, [[maybe_unused]] IndexType type, Addr args, uint32_t maxCount, Addr count)
     {
         core::CommandListCore& list = CommandListImpl::of(*this).core;
@@ -291,7 +262,6 @@ namespace rojoRHI {
         core::noteNativeCall(list);
     }
 
-    //==================================================================================================================
     void CommandList::drawMeshTasksIndirect(Addr args, uint32_t maxCount, Addr count)
     {
         core::CommandListCore& list = CommandListImpl::of(*this).core;
@@ -299,7 +269,6 @@ namespace rojoRHI {
         core::noteNativeCall(list);
     }
 
-    //==================================================================================================================
     void CommandList::dispatchIndirect(Addr args)
     {
         core::CommandListCore& list = CommandListImpl::of(*this).core;
@@ -307,7 +276,6 @@ namespace rojoRHI {
         core::noteNativeCall(list);
     }
 
-    //==================================================================================================================
     void CommandList::copyBuffer(Buffer src, uint64_t srcOffset, Buffer dst, uint64_t dstOffset, uint64_t size)
     {
         core::CommandListCore& list = CommandListImpl::of(*this).core;
@@ -315,7 +283,6 @@ namespace rojoRHI {
         core::noteNativeCall(list);
     }
 
-    //==================================================================================================================
     void CommandList::copyBufferToTexture(Buffer src, const BufferTextureLayout& layout, Texture dst, const TextureRegion& region)
     {
         core::CommandListCore& list = CommandListImpl::of(*this).core;
@@ -323,7 +290,6 @@ namespace rojoRHI {
         core::noteNativeCall(list);
     }
 
-    //==================================================================================================================
     void CommandList::copyTextureToBuffer(Texture src, const TextureRegion& region, Buffer dst, const BufferTextureLayout& layout)
     {
         core::CommandListCore& list = CommandListImpl::of(*this).core;
@@ -331,7 +297,6 @@ namespace rojoRHI {
         core::noteNativeCall(list);
     }
 
-    //==================================================================================================================
     void CommandList::copyTexture(Texture src, const TextureRegion& srcRegion, Texture dst, const TextureRegion& dstRegion)
     {
         core::CommandListCore& list = CommandListImpl::of(*this).core;
@@ -339,7 +304,6 @@ namespace rojoRHI {
         core::noteNativeCall(list);
     }
 
-    //==================================================================================================================
     void CommandList::fillBuffer(Buffer dst, uint64_t offset, uint64_t size, [[maybe_unused]] uint32_t pattern)
     {
         core::CommandListCore& list = CommandListImpl::of(*this).core;
@@ -347,7 +311,6 @@ namespace rojoRHI {
         core::noteNativeCall(list);
     }
 
-    //==================================================================================================================
     void CommandList::clearTexture(Texture texture, const SubresourceRange& range, const ClearValue& value)
     {
         core::CommandListCore& list = CommandListImpl::of(*this).core;
@@ -355,7 +318,6 @@ namespace rojoRHI {
         core::noteNativeCall(list);
     }
 
-    //==================================================================================================================
     void CommandList::upscale(Upscaler upscaler, const UpscaleParams& params)
     {
         core::CommandListCore& list = CommandListImpl::of(*this).core;
@@ -365,13 +327,11 @@ namespace rojoRHI {
         noteMarker(list);
     }
 
-    //==================================================================================================================
     void CommandList::declareAccessChecked(std::span<const ResourceAccess> accesses)
     {
         core::declareAccess(CommandListImpl::of(*this).core, accesses);
     }
 
-    //==================================================================================================================
     void CommandList::barrier(std::span<const GlobalBarrier> globals, std::span<const BufferBarrier> buffers, std::span<const TextureBarrier> textures)
     {
         core::CommandListCore& list = CommandListImpl::of(*this).core;

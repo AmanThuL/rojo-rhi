@@ -13,7 +13,6 @@
 
 using namespace rojoRHI;
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-buffer-0003 ShaderWrite is set on an Upload buffer", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-buffer-0003", [] {
@@ -22,7 +21,6 @@ TEST_CASE("VU-rojo-buffer-0003 ShaderWrite is set on an Upload buffer", "[contra
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-buffer-0004 Index is set on a Readback buffer", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-buffer-0004", [] {
@@ -31,7 +29,6 @@ TEST_CASE("VU-rojo-buffer-0004 Index is set on a Readback buffer", "[contract][d
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-buffer-0005 Sparse is set on a device without sparse resources", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-buffer-0005", [] {
@@ -41,7 +38,6 @@ TEST_CASE("VU-rojo-buffer-0005 Sparse is set on a device without sparse resource
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-buffer-0006 a buffer has size zero", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-buffer-0006", [] {
@@ -50,7 +46,6 @@ TEST_CASE("VU-rojo-buffer-0006 a buffer has size zero", "[contract][death]")
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-buffer-0007 initial data is larger than the buffer", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-buffer-0007", [] {
@@ -60,7 +55,6 @@ TEST_CASE("VU-rojo-buffer-0007 initial data is larger than the buffer", "[contra
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-buffer-0008 initial data is given for a Readback buffer", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-buffer-0008", [] {
@@ -70,7 +64,6 @@ TEST_CASE("VU-rojo-buffer-0008 initial data is given for a Readback buffer", "[c
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-buffer-0011 Addr arithmetic reaches maxAddrOffset", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-buffer-0011", [] {
@@ -80,7 +73,6 @@ TEST_CASE("VU-rojo-buffer-0011 Addr arithmetic reaches maxAddrOffset", "[contrac
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-buffer-0012 the address offset is the buffer size", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-buffer-0012", [] {
@@ -90,7 +82,6 @@ TEST_CASE("VU-rojo-buffer-0012 the address offset is the buffer size", "[contrac
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-buffer-0013 the address of a Readback buffer is taken", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-buffer-0013", [] {
@@ -100,7 +91,6 @@ TEST_CASE("VU-rojo-buffer-0013 the address of a Readback buffer is taken", "[con
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-buffer-0014 the CPU pointer of a Gpu buffer is taken", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-buffer-0014", [] {

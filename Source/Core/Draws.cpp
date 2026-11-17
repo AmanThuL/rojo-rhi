@@ -19,19 +19,14 @@
 
 namespace rojoRHI::core {
     namespace {
-        /// The byte alignment VU-rojo-abi-0002 requires of a root address: the rule's own number, which every backend's
-        /// `Limits::rootAlignment` equals.
+        // The alignment VU-rojo-abi-0002 states; every backend's `Limits::rootAlignment` equals it.
         [[maybe_unused]] constexpr uint64_t kRootAlignment = 256;
 
-        //==============================================================================================================
         [[maybe_unused]] bool hasUsage(BufferUsage usage, BufferUsage flag)
         {
             return (usage & flag) != BufferUsage::None;
         }
 
-        //==============================================================================================================
-        /// Says what keeps `list` from drawing with a graphics pipeline that has a `stage` stage, or returns an empty string.
-        /// `needsViewport` adds the rule that a viewport and a scissor were set since the pass began.
         [[maybe_unused]] std::string drawProblem(const CommandListCore& list, ShaderStage stage, bool needsViewport)
         {
             if (!list.passOpen)
@@ -53,8 +48,6 @@ namespace rojoRHI::core {
             return {};
         }
 
-        //==============================================================================================================
-        /// Says what keeps `list` from dispatching, or returns an empty string.
         [[maybe_unused]] std::string dispatchProblem(const CommandListCore& list)
         {
             if (list.passOpen)
@@ -72,8 +65,6 @@ namespace rojoRHI::core {
             return {};
         }
 
-        //==============================================================================================================
-        /// Says why `at` is not a 4-byte aligned run of `bytes` bytes inside one `IndirectArgs` buffer, or returns an empty string.
         [[maybe_unused]] std::string indirectProblem(const ResolvedAddr& at, uint64_t bytes)
         {
             if (at.record == nullptr)
@@ -95,16 +86,13 @@ namespace rojoRHI::core {
             return {};
         }
 
-        //==============================================================================================================
         [[maybe_unused]] uint64_t indexBytes(IndexType type)
         {
             return type == IndexType::UInt16 ? 2 : 4;
         }
 
-        //==============================================================================================================
-        /// Consumes the declared accesses of a draw or, when `dispatch` is set, a dispatch, and completes the attachment uses
-        /// of the open pass with a draw's own. A command with `work` false, a zero count, makes neither, though it still
-        /// consumes the declarations; an indirect command's count is unknown while recording, so it always passes true.
+        // A zero-count command (`work` false) makes no use but still consumes the declared accesses. An indirect command's
+        // count is unknown while recording, so it passes true.
         void logWork(CommandListCore& list, bool dispatch, bool work)
         {
             // A draw or dispatch reads the root bound now, so only now does the list reference the root's buffer (VU-rojo-abi-0003).
@@ -116,9 +104,6 @@ namespace rojoRHI::core {
             }
         }
 
-        //==============================================================================================================
-        /// Logs the argument reads of an indirect command: `bytes` bytes at `args`, reported as `recordsRule`, and the count at
-        /// `count`, reported as `countRule`, unless it is null.
         [[maybe_unused]] void logIndirect(
             CommandListCore& list, const ResolvedAddr& args, uint64_t bytes, UseRule recordsRule, const ResolvedAddr& count, UseRule countRule
         )
@@ -133,7 +118,6 @@ namespace rojoRHI::core {
         }
     } // namespace
 
-    //==================================================================================================================
     void setRoot(CommandListCore& list, Addr root)
     {
         checkRecording(list);
@@ -152,7 +136,6 @@ namespace rojoRHI::core {
         list.root = root;
     }
 
-    //==================================================================================================================
     void draw(CommandListCore& list, [[maybe_unused]] uint32_t vertices, [[maybe_unused]] uint32_t instances)
     {
         checkRecording(list);
@@ -162,7 +145,6 @@ namespace rojoRHI::core {
         logWork(list, false, vertices != 0 && instances != 0);
     }
 
-    //==================================================================================================================
     void drawIndexed(
         CommandListCore& list,
         [[maybe_unused]] Buffer indices,
@@ -199,7 +181,6 @@ namespace rojoRHI::core {
         logWork(list, false, count != 0 && instances != 0);
     }
 
-    //==================================================================================================================
     void drawMeshTasks(CommandListCore& list, [[maybe_unused]] uint32_t x, [[maybe_unused]] uint32_t y, [[maybe_unused]] uint32_t z)
     {
         checkRecording(list);
@@ -220,7 +201,6 @@ namespace rojoRHI::core {
         logWork(list, false, x != 0 && y != 0 && z != 0);
     }
 
-    //==================================================================================================================
     void dispatch(CommandListCore& list, [[maybe_unused]] uint32_t x, [[maybe_unused]] uint32_t y, [[maybe_unused]] uint32_t z)
     {
         checkRecording(list);
@@ -240,7 +220,6 @@ namespace rojoRHI::core {
         logWork(list, true, x != 0 && y != 0 && z != 0);
     }
 
-    //==================================================================================================================
     void drawIndirect(CommandListCore& list, [[maybe_unused]] Addr args, [[maybe_unused]] uint32_t maxCount, [[maybe_unused]] Addr count)
     {
         checkRecording(list);
@@ -276,7 +255,6 @@ namespace rojoRHI::core {
         logWork(list, false, true);
     }
 
-    //==================================================================================================================
     void drawIndexedIndirect(
         CommandListCore& list, [[maybe_unused]] Buffer indices, [[maybe_unused]] Addr args, [[maybe_unused]] uint32_t maxCount, [[maybe_unused]] Addr count
     )
@@ -326,7 +304,6 @@ namespace rojoRHI::core {
         logWork(list, false, true);
     }
 
-    //==================================================================================================================
     void drawMeshTasksIndirect(CommandListCore& list, [[maybe_unused]] Addr args, [[maybe_unused]] uint32_t maxCount, [[maybe_unused]] Addr count)
     {
         checkRecording(list);
@@ -370,7 +347,6 @@ namespace rojoRHI::core {
         logWork(list, false, true);
     }
 
-    //==================================================================================================================
     void dispatchIndirect(CommandListCore& list, [[maybe_unused]] Addr args)
     {
         checkRecording(list);

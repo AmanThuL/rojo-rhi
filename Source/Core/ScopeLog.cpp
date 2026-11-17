@@ -10,12 +10,10 @@
 #include <cstddef>
 
 namespace rojoRHI::core {
-    //==================================================================================================================
     ScopeLog::ScopeLog(uint32_t slots) : m_slots(slots)
     {
     }
 
-    //==================================================================================================================
     void ScopeLog::submit(uint32_t slot, QueueType queue, std::span<const ScopeRecord> scopes)
     {
         if (scopes.empty())
@@ -28,14 +26,12 @@ namespace rojoRHI::core {
         record.insert(record.end(), scopes.begin(), scopes.end());
     }
 
-    //==================================================================================================================
     void ScopeLog::clearReport()
     {
         m_report.clear();
         m_labels.clear();
     }
 
-    //==================================================================================================================
     void ScopeLog::retire(uint32_t slot, uint64_t frame, ScopeTimesFn scopeTimes, void* context)
     {
         std::lock_guard lock(m_mutex);
@@ -72,7 +68,6 @@ namespace rojoRHI::core {
         }
     }
 
-    //==================================================================================================================
     std::span<const ScopeTiming> ScopeLog::report() const
     {
         return m_report;

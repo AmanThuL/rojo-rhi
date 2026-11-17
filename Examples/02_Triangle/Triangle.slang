@@ -19,10 +19,13 @@ struct Varyings
     float4 color : COLOR0;
 };
 
+// VertexIds carries the built-ins, which differ per backend; vertexIndex reads them alike on each.
 [shader("vertex")]
 Varyings triangleVertex(rojoRHI::VertexIds ids)
 {
     TriangleRoot root = rojoRHI::root<TriangleRoot>();
+    // Vertex pulling: the vertex index selects an element behind the root's address, so the pipeline has no
+    // vertex input.
     Vertex vertex = rojoRHI::load<Vertex>(root.vertices, rojoRHI::vertexIndex(ids));
 
     float s = sin(root.angle);

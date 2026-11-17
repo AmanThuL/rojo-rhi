@@ -7,7 +7,7 @@
 #include "Core/Records.h"
 
 namespace rojoRHI::metal4 {
-    /// Releases the native texture of a retiring record, after it leaves the device residency set unless it is placed.
-    /// `context` is the `DeviceImpl`; a null payload is skipped. It runs under the texture pool's lock.
+    // Runs under the texture pool's lock. A texture that is not placed leaves the device residency set before its
+    // release.
     void retireTexture(void* context, core::TextureRecord& record);
 } // namespace rojoRHI::metal4

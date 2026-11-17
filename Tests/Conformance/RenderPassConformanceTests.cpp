@@ -22,18 +22,13 @@
 using namespace rojoRHI;
 
 namespace {
-    //==================================================================================================================
-    /// The width and height of mip `mip` of a texture of `desc`.
     Extent3D mipExtent(const TextureDesc& desc, uint32_t mip)
     {
         return Extent3D{ std::max(desc.extent.width >> mip, 1u), std::max(desc.extent.height >> mip, 1u), 1 };
     }
 
-    //==================================================================================================================
-    /// Creates a texture of `desc`, with `Sampled` added to its usage as initial data needs (VU-rojo-texture-0020), whose every
-    /// subresource holds distinct bytes of `texelBytes`-byte texels, seeded by its index from `seed`, and returns the bytes of
-    /// each subresource in `TextureData` order: by layer, then by mip. It starts in `ShaderRead`. The texture is placed at
-    /// `placement`, a dedicated allocation by default.
+    // Adds `Sampled`, which initial data needs (VU-rojo-texture-0020). Returns each subresource's bytes in `TextureData`
+    // order, by layer then by mip; the texture starts in `ShaderRead`.
     std::vector<std::vector<std::byte>> fillTexture(
         Device device, TextureDesc desc, uint32_t texelBytes, uint32_t seed, Texture& texture, Placement placement = {}
     )
@@ -54,15 +49,11 @@ namespace {
         return bytes;
     }
 
-    //==================================================================================================================
-    /// Returns the texels of mip `mip` of layer `layer` of `texture`, a texture of `desc`.
     std::vector<std::byte> readSubresource(test::GpuKit& kit, Texture texture, const TextureDesc& desc, uint32_t mip, uint32_t layer)
     {
         return kit.readTexture(texture, TextureRegion{ .mip = mip, .layer = layer, .layers = 1, .extent = mipExtent(desc, mip) }, desc.format);
     }
 
-    //==================================================================================================================
-    /// Returns `count` copies of the texel `texel`.
     std::vector<std::byte> repeated(std::span<const std::byte> texel, uint64_t count)
     {
         std::vector<std::byte> bytes;
@@ -74,8 +65,6 @@ namespace {
         return bytes;
     }
 
-    //==================================================================================================================
-    /// Returns the bytes of `values`, in memory order.
     template<typename T, size_t N> std::vector<std::byte> bytesOf(const std::array<T, N>& values)
     {
         std::vector<std::byte> bytes(sizeof(values));
@@ -83,40 +72,33 @@ namespace {
         return bytes;
     }
 
-    //==================================================================================================================
-    /// A pass over `colors` and `depth` that renders to `extent`.
     RenderPassDesc passOf(std::span<const ColorAttachment> colors, Extent3D extent, const DepthAttachment& depth = {})
     {
         return RenderPassDesc{ .colors = colors, .depth = depth, .area = { 0, 0, extent.width, extent.height }, .label = "test.pass" };
     }
 
-    //==================================================================================================================
-    /// The subresource `mip` and `layer` alone.
     SubresourceRange only(uint32_t mip, uint32_t layer)
     {
         return SubresourceRange{ .baseMip = mip, .mipCount = 1, .baseLayer = layer, .layerCount = 1 };
     }
 
-    /// A clear color each 8-bit normalized format holds exactly: 0.2 and 0.6 are 51 and 153 out of 255.
+    // Every 8-bit normalized format holds this exactly: 0.2 and 0.6 are 51 and 153 out of 255.
     constexpr ClearColor kUnormColor{ 1.0f, 0.0f, 0.2f, 0.6f };
 
-    /// `kUnormColor` as an RGBA8Unorm texel.
     constexpr std::array<uint8_t, 4> kUnormTexel{ 255, 0, 51, 153 };
 
-    /// A clear color each float format holds exactly.
+    // Every float format holds this exactly.
     constexpr ClearColor kFloatColor{ 1.0f, 0.0f, 0.25f, -2.0f };
 
-    /// One format a pass clears, with the clear color and the texel it must write.
     struct ClearCase
     {
-        Format format;                ///< The attachment's format.
-        uint32_t texelBytes;          ///< Bytes per texel.
-        ClearColor clear;             ///< The clear color.
-        std::vector<std::byte> texel; ///< The texel the clear writes, in memory order.
+        Format format;
+        uint32_t texelBytes;
+        ClearColor clear;
+        std::vector<std::byte> texel;
     };
 } // namespace
 
-//======================================================================================================================
 TEST_CASE("a pass with Clear and Store writes the clear color to each color format", "[conformance]")
 {
     test::requireGpu();
@@ -148,7 +130,6 @@ TEST_CASE("a pass with Clear and Store writes the clear color to each color form
     CHECK(readSubresource(kit, texture, desc, 0, 0) == repeated(format.texel, 16 * 8));
 }
 
-//======================================================================================================================
 TEST_CASE("a pass with Load and Store keeps the attachment's contents", "[conformance]")
 {
     test::requireGpu();
@@ -168,7 +149,6 @@ TEST_CASE("a pass with Load and Store keeps the attachment's contents", "[confor
     CHECK(readSubresource(kit, texture, desc, 0, 0) == initial[0]);
 }
 
-//======================================================================================================================
 TEST_CASE("a pass clears only the mip and layer it names, and a cube face as a layer", "[conformance]")
 {
     test::requireGpu();
@@ -258,7 +238,6 @@ TEST_CASE("a pass clears only the mip and layer it names, and a cube face as a l
     }
 }
 
-//======================================================================================================================
 TEST_CASE("a pass clears every color attachment it names, with its own clear color", "[conformance]")
 {
     test::requireGpu();
@@ -293,7 +272,6 @@ TEST_CASE("a pass clears every color attachment it names, with its own clear col
     }
 }
 
-//======================================================================================================================
 TEST_CASE("a pass with Clear and a resolve target writes the clear color to the resolve target", "[conformance]")
 {
     test::requireGpu();
@@ -320,7 +298,6 @@ TEST_CASE("a pass with Clear and a resolve target writes the clear color to the 
     CHECK(readSubresource(kit, resolve, desc, 0, 0) == repeated(bytesOf(kUnormTexel), 16 * 16));
 }
 
-//======================================================================================================================
 TEST_CASE("a pass clears a D32Float depth attachment to its clear depth", "[conformance]")
 {
     test::requireGpu();
@@ -332,7 +309,6 @@ TEST_CASE("a pass clears a D32Float depth attachment to its clear depth", "[conf
     fillTexture(kit.device, desc, 4, 70, texture);
     CommandList list = kit.list(QueueType::Graphics, "test.pass");
     test::transition(list, texture, Layout::ShaderRead, Layout::DepthStencilWrite);
-    // The pass's only attachment is depth.
     list.beginRenderPass(passOf({}, desc.extent, DepthAttachment{ .texture = texture, .load = LoadOp::Clear, .clearDepth = 0.375f }));
     list.endRenderPass();
     test::transition(list, texture, Layout::DepthStencilWrite, Layout::CopySrc);
@@ -340,7 +316,6 @@ TEST_CASE("a pass clears a D32Float depth attachment to its clear depth", "[conf
     CHECK(readSubresource(kit, texture, desc, 0, 0) == repeated(bytesOf(std::array<float, 1>{ 0.375f }), 16 * 8));
 }
 
-//======================================================================================================================
 TEST_CASE("a pass with a D32FloatS8 attachment clears depth and stencil under the validation layer", "[conformance]")
 {
     test::requireGpu();
@@ -383,7 +358,6 @@ TEST_CASE("a pass with a D32FloatS8 attachment clears depth and stencil under th
     kit.run(std::array{ list });
 }
 
-//======================================================================================================================
 TEST_CASE("back-to-back passes on one target with a barrier between them keep the second's clear", "[conformance]")
 {
     test::requireGpu();

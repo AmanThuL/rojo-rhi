@@ -10,7 +10,6 @@
 #include <Metal/Metal.hpp>
 
 namespace rojoRHI::metal4 {
-    //==================================================================================================================
     MTL::ResourceOptions resourceOptions(Memory memory)
     {
         switch (memory)
@@ -24,13 +23,11 @@ namespace rojoRHI::metal4 {
         return MTL::ResourceStorageModePrivate;
     }
 
-    //==================================================================================================================
     MTL::ResourceOptions placedOptions(Memory memory)
     {
         return resourceOptions(memory) | MTL::ResourceHazardTrackingModeUntracked;
     }
 
-    //==================================================================================================================
     MTL::StorageMode storageMode(Memory memory)
     {
         return memory == Memory::Gpu ? MTL::StorageModePrivate : MTL::StorageModeShared;

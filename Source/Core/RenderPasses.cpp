@@ -21,49 +21,41 @@
 
 namespace rojoRHI::core {
     namespace {
-        //==============================================================================================================
         [[maybe_unused]] bool hasUsage(TextureUsage usage, TextureUsage flag)
         {
             return (usage & flag) != TextureUsage::None;
         }
 
-        //==============================================================================================================
-        /// The width and height of mip `mip` of `texture`.
         [[maybe_unused]] Extent2D extentAt(const TextureRecord& texture, uint32_t mip)
         {
             const Extent3D extent = mipExtent(texture.extent, mip);
             return Extent2D{ extent.width, extent.height };
         }
 
-        //==============================================================================================================
         [[maybe_unused]] bool sameExtent(Extent2D a, Extent2D b)
         {
             return a.width == b.width && a.height == b.height;
         }
 
-        /// One subresource a pass names, to find a subresource named twice.
         struct Subresource
         {
-            uint64_t texture; ///< The texture handle's bits.
-            uint32_t mip;     ///< The mip.
-            uint32_t layer;   ///< The array layer.
+            uint64_t texture;
+            uint32_t mip;
+            uint32_t layer;
 
-            /// Compares two subresources.
             friend bool operator==(const Subresource&, const Subresource&) = default;
         };
 
-        /// What `beginPass` learns of the attachments while it checks them, in Debug builds only.
         struct AttachmentSummary
         {
-            std::vector<Subresource> subresources; ///< Every attachment and resolve target.
-            Extent2D extent;                       ///< The extent of the first attachment at its mip.
-            uint32_t samples = 0;                  ///< The sample count of the first attachment that is not a resolve target.
-            bool uniformExtent = true;             ///< Every attachment has `extent`.
-            bool uniformSamples = true;            ///< Every attachment that is not a resolve target has `samples`.
-            uint32_t colorBytes = 0;               ///< Bytes per sample of the color formats.
+            std::vector<Subresource> subresources;
+            Extent2D extent;
+            uint32_t samples = 0;
+            bool uniformExtent = true;
+            bool uniformSamples = true;
+            // Bytes per sample, summed over the color formats.
+            uint32_t colorBytes = 0;
 
-            //==========================================================================================================
-            /// Notes an attachment of extent `size` and, unless it resolves, of `count` samples.
             void note(Extent2D size, uint32_t count, bool resolveTarget)
             {
                 if (subresources.empty())
@@ -79,8 +71,6 @@ namespace rojoRHI::core {
             }
         };
 
-        //==============================================================================================================
-        /// Checks one color attachment and notes it (VU-rojo-cmd-0005, VU-rojo-cmd-0071, VU-rojo-format-0003); returns its format.
         [[maybe_unused]] Format checkColor(DeviceCore& core, const ColorAttachment& attachment, AttachmentSummary& summary)
         {
             const TextureRecord* texture = core.pool<Texture>().checked(attachment.texture, false);
@@ -112,8 +102,6 @@ namespace rojoRHI::core {
             return texture->format;
         }
 
-        //==============================================================================================================
-        /// Checks the depth attachment and notes it (VU-rojo-cmd-0008, VU-rojo-cmd-0009); returns its format.
         [[maybe_unused]] Format checkDepth(DeviceCore& core, const DepthAttachment& attachment, AttachmentSummary& summary)
         {
             const TextureRecord* texture = core.pool<Texture>().checked(attachment.texture, false);
@@ -133,8 +121,6 @@ namespace rojoRHI::core {
             return texture->format;
         }
 
-        //==============================================================================================================
-        /// Returns true when no subresource appears twice.
         [[maybe_unused]] bool allDistinct(const std::vector<Subresource>& subresources)
         {
             for (size_t i = 0; i < subresources.size(); ++i)
@@ -147,8 +133,6 @@ namespace rojoRHI::core {
             return true;
         }
 
-        //==============================================================================================================
-        /// Returns what differs between the pass's attachments and the pipeline's, or an empty string when they agree.
         [[maybe_unused]] std::string_view passMismatch(const PassState& pass, const PipelineRecord& pipeline)
         {
             if (pipeline.colors != pass.colors)
@@ -166,8 +150,6 @@ namespace rojoRHI::core {
             return {};
         }
 
-        //==============================================================================================================
-        /// Returns the class a topology belongs to.
         [[maybe_unused]] PrimitiveClass classOf(PrimitiveTopology topology)
         {
             switch (topology)
@@ -181,15 +163,12 @@ namespace rojoRHI::core {
             return PrimitiveClass::Triangle;
         }
 
-        //==============================================================================================================
-        /// Returns true when a graphics pipeline with a vertex stage is bound.
         [[maybe_unused]] bool vertexPipelineBound(const BoundPipeline& pipeline)
         {
             return pipeline.bound && pipeline.kind == PipelineKind::Graphics && (pipeline.stages & stageBit(ShaderStage::Vertex)) != 0;
         }
     } // namespace
 
-    //==================================================================================================================
     void beginPass(CommandListCore& list, const RenderPassDesc& desc)
     {
         checkRecording(list);
@@ -255,7 +234,6 @@ namespace rojoRHI::core {
         list.passOpen = true;
     }
 
-    //==================================================================================================================
     void endPass(CommandListCore& list)
     {
         checkRecording(list);
@@ -273,7 +251,6 @@ namespace rojoRHI::core {
         endPassLog(list);
     }
 
-    //==================================================================================================================
     void beginScope(CommandListCore& list, std::string_view label)
     {
         checkRecording(list);
@@ -283,7 +260,6 @@ namespace rojoRHI::core {
         list.scopes.push_back(list.passOpen);
     }
 
-    //==================================================================================================================
     void endScope(CommandListCore& list)
     {
         checkRecording(list);
@@ -299,7 +275,6 @@ namespace rojoRHI::core {
         list.scopes.pop_back();
     }
 
-    //==================================================================================================================
     void bindPipeline(CommandListCore& list, [[maybe_unused]] Pipeline pipeline)
     {
         checkRecording(list);
@@ -336,7 +311,6 @@ namespace rojoRHI::core {
 #endif
     }
 
-    //==================================================================================================================
     void setViewport(CommandListCore& list, [[maybe_unused]] const Viewport& viewport)
     {
         checkRecording(list);
@@ -353,7 +327,6 @@ namespace rojoRHI::core {
         list.pass.viewportSet = true;
     }
 
-    //==================================================================================================================
     void setScissor(CommandListCore& list, [[maybe_unused]] const Rect2D& rect)
     {
         checkRecording(list);
@@ -377,7 +350,6 @@ namespace rojoRHI::core {
         list.pass.scissorSet = true;
     }
 
-    //==================================================================================================================
     void setStencilReference(CommandListCore& list)
     {
         checkRecording(list);
@@ -385,7 +357,6 @@ namespace rojoRHI::core {
         ROJORHI_VU(list.passOpen, "VU-rojo-pipeline-0020", "setStencilReference was recorded outside a render pass");
     }
 
-    //==================================================================================================================
     void setBlendConstants(CommandListCore& list)
     {
         checkRecording(list);
@@ -393,7 +364,6 @@ namespace rojoRHI::core {
         ROJORHI_VU(list.passOpen, "VU-rojo-pipeline-0021", "setBlendConstants was recorded outside a render pass");
     }
 
-    //==================================================================================================================
     void setPrimitiveTopology(CommandListCore& list, [[maybe_unused]] PrimitiveTopology topology)
     {
         checkRecording(list);
@@ -410,7 +380,6 @@ namespace rojoRHI::core {
         );
     }
 
-    //==================================================================================================================
     void setDepthBias(CommandListCore& list)
     {
         checkRecording(list);

@@ -17,7 +17,6 @@ namespace rojoRHI {
         void* gUser = nullptr;
         thread_local bool gInsideCallback = false;
 
-        //==============================================================================================================
         const char* severityTag(MessageSeverity severity)
         {
             switch (severity)
@@ -29,8 +28,6 @@ namespace rojoRHI {
             return "info";
         }
 
-        //==============================================================================================================
-        /// Writes `message` to standard error as "[RHI] [severity] message" and flushes it.
         void writeDefault(MessageSeverity severity, std::string_view message)
         {
             std::string line = "[RHI] [";
@@ -42,8 +39,6 @@ namespace rojoRHI {
             std::fflush(stderr);
         }
 
-        //==============================================================================================================
-        /// Delivers `message` to the installed callback, or to the stderr default, and returns whether a callback received it.
         bool deliverMessage(MessageSeverity severity, std::string_view message)
         {
             MessageCallback callback = nullptr;
@@ -67,7 +62,6 @@ namespace rojoRHI {
         }
     } // namespace
 
-    //==================================================================================================================
     void setMessageCallback(MessageCallback callback, void* user)
     {
         ROJORHI_VU(!base::insideMessageCallback(), "VU-rojo-core-0008", "setMessageCallback was called from inside a message callback");
@@ -77,13 +71,11 @@ namespace rojoRHI {
     }
 
     namespace base {
-        //==============================================================================================================
         void emitMessage(MessageSeverity severity, std::string_view message)
         {
             deliverMessage(severity, message);
         }
 
-        //==============================================================================================================
         void emitFatal(std::string_view message)
         {
             // A callback may keep the message where an abort loses it, so standard error gets it too.
@@ -93,7 +85,6 @@ namespace rojoRHI {
             }
         }
 
-        //==============================================================================================================
         bool insideMessageCallback()
         {
             return gInsideCallback;

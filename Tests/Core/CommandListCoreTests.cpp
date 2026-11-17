@@ -18,7 +18,6 @@
 using namespace rojoRHI;
 
 namespace {
-    //==================================================================================================================
     void submit(Device device, CommandList list, QueueType type = QueueType::Graphics)
     {
         list.end();
@@ -27,7 +26,6 @@ namespace {
     }
 } // namespace
 
-//======================================================================================================================
 TEST_CASE("an acquired list records its type, frame and label and is recording", "[core]")
 {
     Device device = *createDevice();
@@ -45,7 +43,6 @@ TEST_CASE("an acquired list records its type, frame and label and is recording",
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("a list without a label is recorded as rojorhi.commandlist.unnamed", "[core]")
 {
     Device device = *createDevice();
@@ -57,7 +54,6 @@ TEST_CASE("a list without a label is recorded as rojorhi.commandlist.unnamed", "
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("end and submit move a list through its states", "[core]")
 {
     Device device = *createDevice();
@@ -72,7 +68,6 @@ TEST_CASE("end and submit move a list through its states", "[core]")
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("a list is reused when its frame slot is reused and not before", "[core]")
 {
     Device device = *createDevice(DeviceDesc{ .framesInFlight = 2 });
@@ -99,7 +94,6 @@ TEST_CASE("a list is reused when its frame slot is reused and not before", "[cor
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("a reused list starts empty and keeps the capacity of its scope stack", "[core]")
 {
     Device device = *createDevice(DeviceDesc{ .framesInFlight = 2 });
@@ -137,7 +131,6 @@ TEST_CASE("a reused list starts empty and keeps the capacity of its scope stack"
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("a reused list resets every field it recorded and keeps its containers' capacity", "[core]")
 {
     Device device = *createDevice(DeviceDesc{ .framesInFlight = 2 });
@@ -198,7 +191,6 @@ TEST_CASE("a reused list resets every field it recorded and keeps its containers
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("a slot hands out distinct lists within one frame", "[core]")
 {
     Device device = *createDevice();
@@ -212,7 +204,6 @@ TEST_CASE("a slot hands out distinct lists within one frame", "[core]")
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("the frame arena counts its pages", "[core]")
 {
     Device device = *createDevice();
@@ -229,7 +220,6 @@ TEST_CASE("the frame arena counts its pages", "[core]")
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("a list bumps an arena page only as far as maxAddrOffset and claims a new page beyond it", "[core]")
 {
     // The reach is lowered below the standard 1 MiB page, so every page is larger than the reach, as a page made for an
@@ -273,7 +263,6 @@ TEST_CASE("a list bumps an arena page only as far as maxAddrOffset and claims a 
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("a render pass records its attachments, a pipeline its fields in Debug, and both clear when the pass ends", "[core]")
 {
     test::PassKit kit;
@@ -313,7 +302,6 @@ TEST_CASE("a render pass records its attachments, a pipeline its fields in Debug
     kit.finish();
 }
 
-//======================================================================================================================
 TEST_CASE("scopes record which side of a pass each began on", "[core]")
 {
     test::PassKit kit;

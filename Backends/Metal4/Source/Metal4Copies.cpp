@@ -27,36 +27,31 @@
 
 namespace rojoRHI {
     namespace {
-        //==============================================================================================================
-        /// The native buffer `buffer` names. A record's payload is fixed from creation to retirement, so it is read with one
-        /// load and no lock (ADR 0020).
+        // A record's payload is fixed from creation to retirement, so it is read with one load and no lock (ADR 0020).
         const MTL::Buffer* nativeBuffer(const core::CommandListCore& list, Buffer buffer)
         {
             return metal4::bufferPayload(*list.device, buffer)->buffer;
         }
 
-        //==============================================================================================================
-        /// The native texture `texture` names, read as `nativeBuffer` reads a buffer.
         const MTL::Texture* nativeTexture(const core::CommandListCore& list, Texture texture)
         {
             return static_cast<const MTL::Texture*>(list.device->pool<Texture>().native(texture));
         }
 
-        /// The arena bytes, and their alignment, a fill dispatch's parameters take.
+        // Also the alignment of the parameters.
         constexpr uint32_t kFillParamsBytes = 16;
         static_assert(sizeof(metal4::FillParams) <= kFillParamsBytes);
 
-        /// How a copy between a buffer and a texture walks the buffer: one native call for a volume, else one per layer.
+        // One native call for a volume, else one per layer.
         struct BufferImages
         {
-            bool volume = false;        ///< The texture is 3D: one call covers every slice of the region.
-            uint64_t imageBytes = 0;    ///< Bytes between consecutive images in the buffer.
-            uint64_t bytesPerImage = 0; ///< The native call's bytes-per-image argument: `imageBytes` for 3D and array types, else 0.
+            bool volume = false;        // One call covers every slice of the region.
+            uint64_t imageBytes = 0;    // Between consecutive images in the buffer.
+            uint64_t bytesPerImage = 0; // `imageBytes` for 3D and array types, else 0.
         };
 
-        //==============================================================================================================
-        /// Returns how a copy of `region` of `texture` walks a buffer laid out by `layout`. The block height comes from the
-        /// texture's own pixel format, read through its getter rather than from the record, which is behind a lock.
+        // The block height comes from the texture's own pixel format, read through its getter rather than from the
+        // record, which is behind a lock.
         BufferImages bufferImages(const MTL::Texture* texture, const BufferTextureLayout& layout, const TextureRegion& region)
         {
             const core::FormatLayout packing = core::formatLayout(metal4::formatOf(texture->pixelFormat()));
@@ -80,7 +75,6 @@ namespace rojoRHI {
         }
     } // namespace
 
-    //==================================================================================================================
     void CommandList::copyBuffer(Buffer src, uint64_t srcOffset, Buffer dst, uint64_t dstOffset, uint64_t size)
     {
         CommandListImpl& impl = CommandListImpl::of(*this);
@@ -96,7 +90,6 @@ namespace rojoRHI {
         impl.encoders.markWork();
     }
 
-    //==================================================================================================================
     void CommandList::copyBufferToTexture(Buffer src, const BufferTextureLayout& layout, Texture dst, const TextureRegion& region)
     {
         CommandListImpl& impl = CommandListImpl::of(*this);
@@ -145,7 +138,6 @@ namespace rojoRHI {
         impl.encoders.markWork();
     }
 
-    //==================================================================================================================
     void CommandList::copyTextureToBuffer(Texture src, const TextureRegion& region, Buffer dst, const BufferTextureLayout& layout)
     {
         CommandListImpl& impl = CommandListImpl::of(*this);
@@ -193,7 +185,6 @@ namespace rojoRHI {
         impl.encoders.markWork();
     }
 
-    //==================================================================================================================
     void CommandList::copyTexture(Texture src, const TextureRegion& srcRegion, Texture dst, const TextureRegion& dstRegion)
     {
         CommandListImpl& impl = CommandListImpl::of(*this);
@@ -237,7 +228,6 @@ namespace rojoRHI {
         impl.encoders.markWork();
     }
 
-    //==================================================================================================================
     void CommandList::fillBuffer(Buffer dst, uint64_t offset, uint64_t size, uint32_t pattern)
     {
         CommandListImpl& impl = CommandListImpl::of(*this);

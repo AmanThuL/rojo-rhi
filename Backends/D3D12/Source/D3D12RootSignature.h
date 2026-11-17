@@ -17,33 +17,26 @@ namespace rojoRHI {
 }
 
 namespace rojoRHI::d3d12 {
-    /// The root signatures every pipeline of a device shares and the command signatures of its indirect commands, created
-    /// once with the device and fixed for its life.
+    // Created once with the device and fixed for its life.
     class RootSignatures
     {
       public:
-        /// Creates every signature on `impl`'s device.
         Result<void> create(DeviceImpl& impl);
 
-        /// Returns the global root signature of graphics and compute pipelines: the root SRV and the draw-record constant.
+        // Graphics and compute pipelines share it: the root SRV and the draw-record constant.
         ID3D12RootSignature* global() const;
 
-        /// Returns the root signature of the backend's own kernels.
         ID3D12RootSignature* kernel() const;
 
-        /// Returns the command signature of an indirect draw.
         ID3D12CommandSignature* draw() const;
 
-        /// Returns the command signature of an indirect indexed draw.
         ID3D12CommandSignature* drawIndexed() const;
 
-        /// Returns the command signature of an indirect mesh-task draw.
         ID3D12CommandSignature* mesh() const;
 
-        /// Returns the command signature of an indirect dispatch.
         ID3D12CommandSignature* dispatch() const;
 
-        /// Returns the serialized global root signature, kept for the device's life.
+        // Kept for the device's life.
         std::span<const std::byte> serializedGlobal() const;
 
       private:

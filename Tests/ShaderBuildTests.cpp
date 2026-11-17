@@ -13,7 +13,6 @@
 #include <string_view>
 #include <vector>
 
-//======================================================================================================================
 // xmake runs a test from its target directory, which is where the build wrote Shaders/.
 TEST_CASE("every conformance shader compiles to MSL, SPIR-V and HLSL", "[abi]")
 {
@@ -32,7 +31,6 @@ TEST_CASE("every conformance shader compiles to MSL, SPIR-V and HLSL", "[abi]")
 // An SPIR-V module is a 5-word header, then instructions whose first word is (word count << 16) | opcode.
 static constexpr std::size_t kSpirvHeaderWords = 5;
 
-//======================================================================================================================
 static std::vector<std::uint32_t> readSpirvWords(const std::filesystem::path& module)
 {
     std::ifstream file(module, std::ios::binary);
@@ -42,7 +40,6 @@ static std::vector<std::uint32_t> readSpirvWords(const std::filesystem::path& mo
     return words;
 }
 
-//======================================================================================================================
 static bool declaresCapability(const std::filesystem::path& module, std::uint32_t capability)
 {
     constexpr std::uint32_t kOpCapability = 17;
@@ -63,7 +60,6 @@ static bool declaresCapability(const std::filesystem::path& module, std::uint32_
     return false;
 }
 
-//======================================================================================================================
 // A literal string operand: NUL-terminated UTF-8 packed little-endian into words.
 static std::string spirvString(const std::vector<std::uint32_t>& words, std::size_t first, std::size_t end)
 {
@@ -83,14 +79,12 @@ static std::string spirvString(const std::vector<std::uint32_t>& words, std::siz
     return text;
 }
 
-//======================================================================================================================
 TEST_CASE("SPIR-V heap fetches carry the NonUniform capability", "[abi]")
 {
     constexpr std::uint32_t kShaderNonUniform = 5301;
     CHECK(declaresCapability("Shaders/AbiTextures.spv", kShaderNonUniform));
 }
 
-//======================================================================================================================
 TEST_CASE("write-only accessors lower to write-only storage textures", "[abi]")
 {
     std::ifstream file("Shaders/AbiWriteOnly.metal");
@@ -104,7 +98,6 @@ TEST_CASE("write-only accessors lower to write-only storage textures", "[abi]")
     CHECK_FALSE(declaresCapability("Shaders/AbiWriteOnly.spv", kStorageImageReadWithoutFormat));
 }
 
-//======================================================================================================================
 TEST_CASE("every SPIR-V heap fetch is decorated NonUniform", "[abi]")
 {
     constexpr std::uint32_t kOpName = 5;

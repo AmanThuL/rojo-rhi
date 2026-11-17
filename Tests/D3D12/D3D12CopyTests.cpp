@@ -28,14 +28,11 @@
 using namespace rojoRHI;
 
 namespace {
-    /// Guards `g_messages`, which the message callback may fill from any thread.
+    // The message callback may fill `g_messages` from any thread.
     std::mutex g_messagesMutex;
 
-    /// The messages at `Warning` or above the library reported while a case collected them.
     std::vector<std::string> g_messages;
 
-    //==================================================================================================================
-    /// Keeps `message` when it is a warning or an error. It may run on any thread.
     void collectMessage(MessageSeverity severity, std::string_view message, void*)
     {
         if (severity == MessageSeverity::Info)
@@ -46,25 +43,22 @@ namespace {
         g_messages.emplace_back(message);
     }
 
-    /// Collects the library's warnings and errors, the debug layer's included, into `g_messages`, emptied first, while it
-    /// lives, and removes the callback when it goes, however the case ends.
+    // Collects the library's warnings and errors, the debug layer's included, into `g_messages` (emptied first) while it
+    // lives, and removes the callback however the case ends.
     class MessageCollection
     {
       public:
         MessageCollection();
         ~MessageCollection();
 
-        //==============================================================================================================
         MessageCollection(const MessageCollection&) = delete;
 
-        //==============================================================================================================
         MessageCollection& operator=(const MessageCollection&) = delete;
 
-        /// Returns the messages collected so far, and lists them for the log.
+        // Also lists the messages for the log.
         size_t count() const;
     };
 
-    //==================================================================================================================
     MessageCollection::MessageCollection()
     {
         {
@@ -74,13 +68,11 @@ namespace {
         setMessageCallback(collectMessage, nullptr);
     }
 
-    //==================================================================================================================
     MessageCollection::~MessageCollection()
     {
         setMessageCallback(nullptr, nullptr);
     }
 
-    //==================================================================================================================
     size_t MessageCollection::count() const
     {
         const std::lock_guard lock(g_messagesMutex);
@@ -91,8 +83,6 @@ namespace {
         return g_messages.size();
     }
 
-    //==================================================================================================================
-    /// Returns a new device with the default frames in flight.
     Device makeDevice()
     {
         Result<Device> created = createDevice({});
@@ -100,8 +90,6 @@ namespace {
         return *created;
     }
 
-    //==================================================================================================================
-    /// Returns a new buffer of `desc` on `device`, holding `initial` when it is not empty.
     Buffer makeBuffer(Device device, const BufferDesc& desc, std::span<const std::byte> initial = {})
     {
         Result<Buffer> created = device.createBuffer(desc, initial);
@@ -109,8 +97,6 @@ namespace {
         return *created;
     }
 
-    //==================================================================================================================
-    /// Returns a new texture of `desc` on `device`, holding `initial` when it is not empty.
     Texture makeTexture(Device device, const TextureDesc& desc, std::span<const TextureData> initial = {})
     {
         Result<Texture> created = device.createTexture(desc, initial);
@@ -118,8 +104,6 @@ namespace {
         return *created;
     }
 
-    //==================================================================================================================
-    /// Returns the native buffer of `buffer`, a live buffer of `device`.
     ID3D12Resource* resourceOf(Device device, Buffer buffer)
     {
         const auto* payload = static_cast<const d3d12::BufferPayload*>(DeviceImpl::of(device).core.pool<Buffer>().native(buffer));
@@ -127,8 +111,6 @@ namespace {
         return payload->resource;
     }
 
-    //==================================================================================================================
-    /// Returns the native texture of `texture`, a live texture of `device`.
     ID3D12Resource* resourceOf(Device device, Texture texture)
     {
         const auto* payload = static_cast<const d3d12::TexturePayload*>(DeviceImpl::of(device).core.pool<Texture>().native(texture));
@@ -136,15 +118,11 @@ namespace {
         return payload->resource;
     }
 
-    //==================================================================================================================
-    /// Returns the native calls `list` has recorded since its acquisition.
     uint64_t recordCalls(CommandList list)
     {
         return core::coreOf(list).counts.nativeRecordCalls;
     }
 
-    //==================================================================================================================
-    /// Returns `size` bytes counting up from `seed`, wrapping at 256.
     std::vector<std::byte> pattern(size_t size, uint32_t seed)
     {
         std::vector<std::byte> bytes(size);
@@ -155,9 +133,7 @@ namespace {
         return bytes;
     }
 
-    //==================================================================================================================
-    /// Returns `images` images of `rows` rows of `rowBytes` bytes taken from `source`, rows `pitch` apart from `offset` and
-    /// images `imageBytes` apart, joined into tight rows.
+    // Rows are `pitch` apart from `offset` and images `imageBytes` apart; the result joins them into tight rows.
     std::vector<std::byte> gather(
         const std::vector<std::byte>& source, uint64_t offset, uint64_t pitch, uint64_t imageBytes, uint64_t images, uint64_t rows, uint64_t rowBytes
     )
@@ -174,15 +150,12 @@ namespace {
         return tight;
     }
 
-    /// The stage and access of one use of a texture subresource.
     struct Use
     {
-        Stage stage = Stage::None;    ///< The stages the use runs in.
-        Access access = Access::None; ///< What the use does to memory.
+        Stage stage = Stage::None;
+        Access access = Access::None;
     };
 
-    //==================================================================================================================
-    /// Returns the use of a subresource in `layout` on a Graphics list.
     Use useOf(Layout layout)
     {
         switch (layout)
@@ -195,8 +168,6 @@ namespace {
         }
     }
 
-    //==================================================================================================================
-    /// Returns a barrier that moves every subresource of `texture` from `from` to `to`.
     TextureBarrier transition(Texture texture, Layout from, Layout to)
     {
         const Use before = useOf(from);
@@ -210,27 +181,24 @@ namespace {
                  .newLayout = to };
     }
 
-    /// Submits lists one at a time in a frame, each signalling the next value of one fence and waited for on the host. A list of
-    /// a Compute or Copy queue is joined into the frame by an empty Graphics submission that waits for its value.
+    // Submits lists one at a time in a frame, each signalling the next value of one fence and waited for on the host. A list of
+    // a Compute or Copy queue is joined into the frame by an empty Graphics submission that waits for its value.
     class Submitter
     {
       public:
-        /// Opens a frame on `device`, which the submitter's fence belongs to.
+        // Opens a frame on `device`.
         explicit Submitter(Device);
 
-        /// Ends the frame; `device` is destroyed by the case.
+        // Ends the frame; the case destroys `device`.
         ~Submitter();
 
-        //==============================================================================================================
         Submitter(const Submitter&) = delete;
 
-        //==============================================================================================================
         Submitter& operator=(const Submitter&) = delete;
 
-        /// Ends `list`, a list of `type`, submits it and waits until it has run.
         void run(CommandList, QueueType = QueueType::Graphics);
 
-        /// Records the barrier of `texture` from `from` to `to` on a new Graphics list and runs it.
+        // From the first layout to the second, on a new Graphics list that runs at once.
         void move(Texture, Layout, Layout);
 
       private:
@@ -239,7 +207,6 @@ namespace {
         uint64_t m_value = 0;
     };
 
-    //==================================================================================================================
     Submitter::Submitter(Device device) : m_device(device)
     {
         Result<Fence> created = device.createFence(0, "test.done");
@@ -248,7 +215,6 @@ namespace {
         device.beginFrame();
     }
 
-    //==================================================================================================================
     Submitter::~Submitter()
     {
         m_device.endFrame();
@@ -256,7 +222,6 @@ namespace {
         m_device.destroy(m_fence);
     }
 
-    //==================================================================================================================
     void Submitter::run(CommandList list, QueueType type)
     {
         list.end();
@@ -270,7 +235,6 @@ namespace {
         REQUIRE(m_device.wait({ m_fence, m_value }, UINT64_MAX));
     }
 
-    //==================================================================================================================
     void Submitter::move(Texture texture, Layout from, Layout to)
     {
         CommandList list = m_device.acquireCommandList(QueueType::Graphics, "test.move");
@@ -280,7 +244,6 @@ namespace {
     }
 } // namespace
 
-//======================================================================================================================
 TEST_CASE("copyBuffer is one CopyBufferRegion on Graphics, Compute and Copy lists", "[d3d12]")
 {
     const QueueType type = GENERATE(QueueType::Graphics, QueueType::Compute, QueueType::Copy);
@@ -315,7 +278,6 @@ TEST_CASE("copyBuffer is one CopyBufferRegion on Graphics, Compute and Copy list
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("a three-layer buffer-to-texture copy is three CopyTextureRegion and a 3D copy is one", "[d3d12]")
 {
     const bool volume = GENERATE(false, true);
@@ -380,7 +342,6 @@ TEST_CASE("a three-layer buffer-to-texture copy is three CopyTextureRegion and a
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("a buffer-to-texture copy lands its bytes in the subresource it names", "[d3d12]")
 {
     Device device = makeDevice();
@@ -453,7 +414,6 @@ TEST_CASE("a buffer-to-texture copy lands its bytes in the subresource it names"
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("rowsPerImage zero and above the region's height place each layer where the layout says", "[d3d12]")
 {
     // Zero takes the region's four rows; six leaves two rows of padding after each image. Both keep images 512-byte aligned.
@@ -495,7 +455,6 @@ TEST_CASE("rowsPerImage zero and above the region's height place each layer wher
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("a D32Float texture copies to a buffer and back", "[d3d12]")
 {
     Device device = makeDevice();
@@ -529,7 +488,6 @@ TEST_CASE("a D32Float texture copies to a buffer and back", "[d3d12]")
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("copyTexture between an sRGB format and its linear partner moves the stored bits", "[d3d12]")
 {
     Device device = makeDevice();
@@ -563,7 +521,6 @@ TEST_CASE("copyTexture between an sRGB format and its linear partner moves the s
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("a copy on a Copy list from a General texture submits clean", "[d3d12]")
 {
     Device device = makeDevice();

@@ -14,7 +14,6 @@
 using namespace rojoRHI;
 
 namespace {
-    //==================================================================================================================
     Device makeDevice()
     {
         Result<Device> created = createDevice();
@@ -22,7 +21,6 @@ namespace {
         return *created;
     }
 
-    //==================================================================================================================
     Texture makeTexture(Device device, const TextureDesc& desc, std::span<const TextureData> initial = {}, Placement placement = {})
     {
         Result<Texture> created = device.createTexture(desc, initial, placement);
@@ -30,7 +28,6 @@ namespace {
         return *created;
     }
 
-    //==================================================================================================================
     ViewIndex makeView(Device device, Texture texture, const TextureViewDesc& desc = {})
     {
         Result<ViewIndex> created = device.createView(texture, desc);
@@ -38,7 +35,6 @@ namespace {
         return *created;
     }
 
-    //==================================================================================================================
     bool isPowerOfTwo(uint64_t value)
     {
         return value != 0 && (value & (value - 1)) == 0;
@@ -46,7 +42,6 @@ namespace {
 
 } // namespace
 
-//======================================================================================================================
 TEST_CASE("a texture is created in every type", "[contract]")
 {
     Device device = makeDevice();
@@ -75,7 +70,6 @@ TEST_CASE("a texture is created in every type", "[contract]")
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("a one-dimensional texture is created with one mip", "[contract]")
 {
     Device device = makeDevice();
@@ -89,7 +83,6 @@ TEST_CASE("a one-dimensional texture is created with one mip", "[contract]")
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("two textures have different handles", "[contract]")
 {
     Device device = makeDevice();
@@ -98,7 +91,6 @@ TEST_CASE("two textures have different handles", "[contract]")
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("a texture takes a full mip chain and every attachment usage", "[contract]")
 {
     Device device = makeDevice();
@@ -122,7 +114,6 @@ TEST_CASE("a texture takes a full mip chain and every attachment usage", "[contr
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("a texture takes initial data for every subresource", "[contract]")
 {
     Device device = makeDevice();
@@ -147,7 +138,6 @@ TEST_CASE("a texture takes initial data for every subresource", "[contract]")
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("initial data may pad its rows, leave a subresource empty and describe a volume or compressed blocks", "[contract]")
 {
     Device device = makeDevice();
@@ -169,7 +159,6 @@ TEST_CASE("initial data may pad its rows, leave a subresource empty and describe
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("placement requirements of a texture have a power-of-two alignment and are repeatable", "[contract]")
 {
     Device device = makeDevice();
@@ -183,7 +172,6 @@ TEST_CASE("placement requirements of a texture have a power-of-two alignment and
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("a texture is placed in a Gpu heap at its required alignment and the heap is destroyed after it", "[contract]")
 {
     Device device = makeDevice();
@@ -200,7 +188,6 @@ TEST_CASE("a texture is placed in a Gpu heap at its required alignment and the h
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("views of every type are created", "[contract]")
 {
     Device device = makeDevice();
@@ -222,7 +209,6 @@ TEST_CASE("views of every type are created", "[contract]")
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("a view reinterprets an sRGB format within its family and selects the planes of a depth-stencil format", "[contract]")
 {
     Device device = makeDevice();
@@ -236,7 +222,6 @@ TEST_CASE("a view reinterprets an sRGB format within its family and selects the 
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("two live views have different indices", "[contract]")
 {
     Device device = makeDevice();
@@ -249,7 +234,6 @@ TEST_CASE("two live views have different indices", "[contract]")
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("a destroyed view's index is not handed out before the frame that destroyed it retires", "[contract]")
 {
     Device device = makeDevice();
@@ -271,7 +255,6 @@ TEST_CASE("a destroyed view's index is not handed out before the frame that dest
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("a texture is destroyed once its views are destroyed", "[contract]")
 {
     Device device = makeDevice();

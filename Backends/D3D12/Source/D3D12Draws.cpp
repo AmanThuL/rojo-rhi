@@ -21,9 +21,7 @@
 namespace rojoRHI {
     namespace d3d12 {
         namespace {
-            //==========================================================================================================
-            /// Returns the view of the whole of `buffer` as indices of `type`, from offset 0: the indices of `type` that fit in
-            /// the buffer and in the view's 32-bit size.
+            // From offset 0: the indices of `type` that fit in the buffer and in the view's 32-bit size.
             D3D12_INDEX_BUFFER_VIEW indexView(const BufferPayload& buffer, IndexType type)
             {
                 const uint32_t indexSize = type == IndexType::UInt16 ? 2 : 4;
@@ -36,7 +34,6 @@ namespace rojoRHI {
             }
         } // namespace
 
-        //==============================================================================================================
         void applyIndexBuffer(CommandListImpl& list, Buffer indices, IndexType type)
         {
             DynamicState& dynamic = list.state.dynamic;
@@ -61,10 +58,8 @@ namespace rojoRHI {
     } // namespace d3d12
 
     namespace {
-        //==============================================================================================================
-        /// Brings the graphics side of `list` to the caller's binding and writes 0 to the draw-record constant `b1`, which
-        /// `rojoRHI::drawId` reads for a direct draw, unless the native list holds 0 there: after acquisition it holds no
-        /// value, and after an indirect draw the last record's.
+        // Writes 0 to the draw-record constant b1, which `rojoRHI::drawId` reads for a direct draw, unless the native
+        // list holds 0 there: after acquisition it holds no value, and after an indirect draw the last record's.
         void prepareDirect(CommandListImpl& list)
         {
             d3d12::flushGraphics(list);
@@ -78,7 +73,6 @@ namespace rojoRHI {
         }
     } // namespace
 
-    //==================================================================================================================
     void CommandList::draw(uint32_t vertices, uint32_t instances, uint32_t firstVertex, uint32_t firstInstance)
     {
         CommandListImpl& list = CommandListImpl::of(*this);
@@ -93,7 +87,6 @@ namespace rojoRHI {
         core::noteNativeCall(list.core);
     }
 
-    //==================================================================================================================
     void CommandList::drawIndexed(
         Buffer indices, IndexType type, uint32_t count, uint32_t instances, uint32_t firstIndex, int32_t baseVertex, uint32_t firstInstance
     )
@@ -111,7 +104,6 @@ namespace rojoRHI {
         core::noteNativeCall(list.core);
     }
 
-    //==================================================================================================================
     void CommandList::drawMeshTasks(uint32_t x, uint32_t y, uint32_t z)
     {
         CommandListImpl& list = CommandListImpl::of(*this);

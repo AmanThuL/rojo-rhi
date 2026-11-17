@@ -25,38 +25,28 @@
 
 namespace rojoRHI {
     namespace {
-        /// How a clear reaches its subresources: the view kind it clears through, with the sync, access and layout the
-        /// subresources take for it.
         struct ClearPath
         {
-            D3D12_BARRIER_SYNC sync = D3D12_BARRIER_SYNC_NONE;            ///< The sync scope of the clear.
-            D3D12_BARRIER_ACCESS access = D3D12_BARRIER_ACCESS_NO_ACCESS; ///< The access the clear writes with.
-            D3D12_BARRIER_LAYOUT layout = D3D12_BARRIER_LAYOUT_UNDEFINED; ///< The layout the clear needs.
+            D3D12_BARRIER_SYNC sync = D3D12_BARRIER_SYNC_NONE;
+            D3D12_BARRIER_ACCESS access = D3D12_BARRIER_ACCESS_NO_ACCESS;
+            D3D12_BARRIER_LAYOUT layout = D3D12_BARRIER_LAYOUT_UNDEFINED;
         };
 
-        /// The path of a clear through the texture's render-target views.
         constexpr ClearPath kRenderTargetPath = { D3D12_BARRIER_SYNC_RENDER_TARGET, D3D12_BARRIER_ACCESS_RENDER_TARGET, D3D12_BARRIER_LAYOUT_RENDER_TARGET };
 
-        /// The path of a clear through the texture's depth-stencil views.
         constexpr ClearPath kDepthStencilPath = { D3D12_BARRIER_SYNC_DEPTH_STENCIL,
                                                   D3D12_BARRIER_ACCESS_DEPTH_STENCIL_WRITE,
                                                   D3D12_BARRIER_LAYOUT_DEPTH_STENCIL_WRITE };
 
-        /// The path of a clear through a transient unordered-access view.
         constexpr ClearPath kUnorderedAccessPath = { D3D12_BARRIER_SYNC_CLEAR_UNORDERED_ACCESS_VIEW,
                                                      D3D12_BARRIER_ACCESS_UNORDERED_ACCESS,
                                                      D3D12_BARRIER_LAYOUT_UNORDERED_ACCESS };
 
-        //==============================================================================================================
-        /// Returns the depth slices of mip `mip` of a 3D texture whose mip 0 has `depth` slices.
         uint32_t slicesOf(uint32_t depth, uint32_t mip)
         {
             return std::max(depth >> mip, 1u);
         }
 
-        //==============================================================================================================
-        /// Records one native barrier on `list` that moves `range` of `resource` from the sync, access and layout of `before`
-        /// to those of `after`, counted as one native call and one native barrier.
         void transition(
             CommandListImpl& list, ID3D12Resource* resource, const D3D12_BARRIER_SUBRESOURCE_RANGE& range, const ClearPath& before, const ClearPath& after
         )
@@ -80,10 +70,8 @@ namespace rojoRHI {
             ++list.core.counts.nativeBarriers;
         }
 
-        //==============================================================================================================
-        /// Returns the unordered-access view of mip `mip` of `payload`'s texture over the layers `range` covers, or over every
-        /// depth slice of the mip for a 3D texture. A UAV has no cube dimension, so a cube type is the 2D array of its faces.
-        /// A Storage texture has one sample.
+        // A UAV has no cube dimension, so a cube is the 2D array of its faces; a 3D texture's view covers every depth
+        // slice of the mip.
         D3D12_UNORDERED_ACCESS_VIEW_DESC clearView(const d3d12::TexturePayload& payload, uint32_t mip, const D3D12_BARRIER_SUBRESOURCE_RANGE& range)
         {
             D3D12_UNORDERED_ACCESS_VIEW_DESC view = {};
@@ -118,7 +106,6 @@ namespace rojoRHI {
         }
     } // namespace
 
-    //==================================================================================================================
     void CommandList::clearTexture(Texture texture, const SubresourceRange& range, const ClearValue& value)
     {
         CommandListImpl& list = CommandListImpl::of(*this);

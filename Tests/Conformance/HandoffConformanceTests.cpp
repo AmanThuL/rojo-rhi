@@ -19,26 +19,26 @@
 using namespace rojoRHI;
 
 namespace {
-    /// The edge of the textures, in texels of 4 bytes, so one row is `kRowPitch` bytes once padded.
+    // Texels are 4 bytes, so a row of kEdge texels pads to kRowPitch.
     constexpr uint32_t kEdge = 8;
     constexpr uint64_t kRowPitch = 256;
 
-    /// BarrierOracle's root.
+    // The root of the BarrierOracle entry.
     struct DelayRoot
     {
-        uint32_t view;                ///< The 2D storage view the entry stores into.
-        uint32_t spins;               ///< The steps each thread spins for before its store.
-        uint32_t mask = 0;            ///< Always zero; it keeps the spin loop in the compiled entry.
-        uint32_t pad = 0;             ///< Padding.
-        uint32_t width;               ///< The extent in texels.
-        uint32_t height;              ///< The extent in texels.
-        uint32_t pad0 = 0;            ///< Padding.
-        uint32_t pad1 = 0;            ///< Padding.
-        std::array<float, 4> value{}; ///< The value each thread stores.
+        uint32_t view;
+        uint32_t spins;
+        // Always zero; it keeps the spin loop in the compiled entry.
+        uint32_t mask = 0;
+        uint32_t pad = 0;
+        uint32_t width;
+        uint32_t height;
+        uint32_t pad0 = 0;
+        uint32_t pad1 = 0;
+        std::array<float, 4> value{};
     };
 } // namespace
 
-//======================================================================================================================
 TEST_CASE("a buffer copied on the Copy queue is read on the Compute queue after a fence", "[conformance]")
 {
     test::requireGpu();
@@ -56,7 +56,6 @@ TEST_CASE("a buffer copied on the Copy queue is read on the Compute queue after 
     CHECK(kit.read(readback) == bytes);
 }
 
-//======================================================================================================================
 TEST_CASE("a new texture written on the Copy queue with no barrier is read back on the Graphics queue", "[conformance]")
 {
     test::requireGpu();
@@ -82,7 +81,6 @@ TEST_CASE("a new texture written on the Copy queue with no barrier is read back 
     }
 }
 
-//======================================================================================================================
 TEST_CASE("a new texture written on the Copy queue is moved from General on the Graphics queue and read back", "[conformance]")
 {
     test::requireGpu();
@@ -110,7 +108,6 @@ TEST_CASE("a new texture written on the Copy queue is moved from General on the 
     }
 }
 
-//======================================================================================================================
 TEST_CASE("the Compute queue discards a render target the Graphics queue left in ColorAttachment and writes it", "[conformance]")
 {
     test::requireGpu();
@@ -136,7 +133,7 @@ TEST_CASE("the Compute queue discards a render target the Graphics queue left in
     graphics.beginRenderPass(RenderPassDesc{ .colors = colors, .area = { 0, 0, kEdge, kEdge }, .label = "test.clear" });
     graphics.endRenderPass();
     // Compute takes nothing over: its first barrier discards from Undefined (VU-rojo-sync-0025), so the layout Graphics left
-    // is named nowhere on the Compute queue. It then writes green to every texel and copies the texture out.
+    // is named nowhere on the Compute queue.
     CommandList compute = kit.list(QueueType::Compute, "test.compute");
     const std::array<TextureBarrier, 1> discard{ TextureBarrier{ .texture = texture,
                                                                  .dstStage = Stage::ComputeShader,
@@ -172,7 +169,6 @@ TEST_CASE("the Compute queue discards a render target the Graphics queue left in
     CHECK(wrong == 0u);
 }
 
-//======================================================================================================================
 TEST_CASE("fills and copies chained through the three queues by fences end with each step's bytes", "[conformance]")
 {
     test::requireGpu();
@@ -205,7 +201,6 @@ TEST_CASE("fills and copies chained through the three queues by fences end with 
     CHECK(secondHalf);
 }
 
-//======================================================================================================================
 TEST_CASE("a wait on a fence's initial value holds nothing back", "[conformance]")
 {
     test::requireGpu();
@@ -220,7 +215,6 @@ TEST_CASE("a wait on a fence's initial value holds nothing back", "[conformance]
     CHECK(kit.read(readback) == bytes);
 }
 
-//======================================================================================================================
 TEST_CASE("two queues' work joined into the frame's graphics work completes before the frame retires", "[conformance]")
 {
     test::requireGpu();

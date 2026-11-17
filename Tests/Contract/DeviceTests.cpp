@@ -25,13 +25,11 @@ namespace {
     };
     std::vector<Message> gMessages;
 
-    //==================================================================================================================
     void collectMessage(MessageSeverity severity, std::string_view message, void*)
     {
         gMessages.push_back({ severity, std::string(message) });
     }
 
-    //==================================================================================================================
     Device makeDevice(DeviceDesc desc = {})
     {
         Result<Device> created = createDevice(desc);
@@ -39,14 +37,12 @@ namespace {
         return *created;
     }
 
-    //==================================================================================================================
     uint32_t slotOf(Buffer buffer)
     {
         return static_cast<uint32_t>(buffer.bits);
     }
 } // namespace
 
-//======================================================================================================================
 TEST_CASE("a default DeviceDesc creates a device with three frame slots", "[contract]")
 {
     Device device = makeDevice();
@@ -54,7 +50,6 @@ TEST_CASE("a default DeviceDesc creates a device with three frame slots", "[cont
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("two and three frame slots are both accepted", "[contract]")
 {
     for (const uint32_t slots : { 2u, 3u })
@@ -65,7 +60,6 @@ TEST_CASE("two and three frame slots are both accepted", "[contract]")
     }
 }
 
-//======================================================================================================================
 TEST_CASE("an empty device label becomes rojorhi.device.unnamed", "[contract]")
 {
     Device device = makeDevice();
@@ -73,7 +67,6 @@ TEST_CASE("an empty device label becomes rojorhi.device.unnamed", "[contract]")
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("a device label is kept verbatim", "[contract]")
 {
     Device device = makeDevice({ .label = "my.Device \xC3\xA9" });
@@ -81,7 +74,6 @@ TEST_CASE("a device label is kept verbatim", "[contract]")
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("several devices coexist with independent frames", "[contract]")
 {
     Device first = makeDevice();
@@ -94,7 +86,6 @@ TEST_CASE("several devices coexist with independent frames", "[contract]")
     destroyDevice(second);
 }
 
-//======================================================================================================================
 TEST_CASE("a pipeline cache blob is accepted and ignored", "[contract]")
 {
     const std::byte blob[4] = {};
@@ -102,7 +93,6 @@ TEST_CASE("a pipeline cache blob is accepted and ignored", "[contract]")
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("validation is unsupported in Release and creates a device in Debug", "[contract]")
 {
     Result<Device> created = createDevice({ .validation = true });
@@ -117,7 +107,6 @@ TEST_CASE("validation is unsupported in Release and creates a device in Debug", 
 #endif
 }
 
-//======================================================================================================================
 TEST_CASE("capabilities never list Auto as an upscaler and name the device", "[contract]")
 {
     Device device = makeDevice();
@@ -131,7 +120,6 @@ TEST_CASE("capabilities never list Auto as an upscaler and name the device", "[c
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("every listed upscaler has a scale range inside (0, 1] and a kind of its own", "[contract]")
 {
     Device device = makeDevice();
@@ -150,7 +138,6 @@ TEST_CASE("every listed upscaler has a scale range inside (0, 1] and a kind of i
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("every limit is at least the floor of the reference", "[contract]")
 {
     Device device = makeDevice();
@@ -185,7 +172,6 @@ TEST_CASE("every limit is at least the floor of the reference", "[contract]")
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("capabilities returns the same object on every call", "[contract]")
 {
     Device device = makeDevice();
@@ -193,7 +179,6 @@ TEST_CASE("capabilities returns the same object on every call", "[contract]")
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("frames open and close in sequence", "[contract]")
 {
     Device device = makeDevice();
@@ -210,12 +195,11 @@ TEST_CASE("frames open and close in sequence", "[contract]")
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("a destroyed handle is rejected at once and its slot is reused after the frame retires", "[contract]")
 {
     Device device = makeDevice({ .framesInFlight = 2 });
     auto& pool = core::coreOf(device).pool<Buffer>();
-    device.beginFrame(); // frame 1
+    device.beginFrame();
     const Buffer buffer = pool.allocate({ "rojorhi.buffer.unnamed" });
     device.destroy(buffer);
     CHECK(pool.lookup(buffer).status == core::LookupStatus::StaleGeneration);
@@ -232,7 +216,6 @@ TEST_CASE("a destroyed handle is rejected at once and its slot is reused after t
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("an object destroyed outside a frame is released with the next frame opened", "[contract]")
 {
     Device device = makeDevice({ .framesInFlight = 2 });
@@ -241,10 +224,10 @@ TEST_CASE("an object destroyed outside a frame is released with the next frame o
     device.destroy(texture);
     const auto occupied = [&] { return static_cast<uint32_t>(pool.allocate({}).bits); };
 
-    device.beginFrame(); // frame 1
+    device.beginFrame();
     CHECK(occupied() != static_cast<uint32_t>(texture.bits));
     device.endFrame();
-    device.beginFrame(); // frame 2
+    device.beginFrame();
     CHECK(occupied() != static_cast<uint32_t>(texture.bits));
     device.endFrame();
     device.beginFrame(); // frame 3 retires frame 1
@@ -253,7 +236,6 @@ TEST_CASE("an object destroyed outside a frame is released with the next frame o
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("destroy accepts a live handle of every resource type", "[contract]")
 {
     Device device = makeDevice();
@@ -276,7 +258,6 @@ TEST_CASE("destroy accepts a live handle of every resource type", "[contract]")
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("destroy accepts a view index createView returned and a sampler index on a live device", "[contract]")
 {
     Device device = makeDevice();
@@ -289,7 +270,6 @@ TEST_CASE("destroy accepts a view index createView returned and a sampler index 
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("destroyDevice with validation warns of each live object by label", "[contract]")
 {
 #ifdef NDEBUG
@@ -312,7 +292,6 @@ TEST_CASE("destroyDevice with validation warns of each live object by label", "[
 #endif
 }
 
-//======================================================================================================================
 TEST_CASE("destroyDevice without validation reports nothing", "[contract]")
 {
     gMessages.clear();
@@ -324,7 +303,6 @@ TEST_CASE("destroyDevice without validation reports nothing", "[contract]")
     CHECK(gMessages.empty());
 }
 
-//======================================================================================================================
 TEST_CASE("destroying from another thread while frames run releases every handle", "[contract]")
 {
     Device device = makeDevice();

@@ -23,11 +23,8 @@
 using namespace rojoRHI;
 
 namespace {
-    /// The longest a case waits on a native fence before it fails: thirty seconds, in nanoseconds.
     constexpr uint64_t kNativeWaitNs = 30'000'000'000;
 
-    //==================================================================================================================
-    /// Returns the name `object` carries, without a terminating null.
     std::wstring objectName(ID3D12Object* object)
     {
         wchar_t name[128] = {};
@@ -45,11 +42,9 @@ namespace {
         return read;
     }
 
-    /// The warnings and errors `countWarning` has seen.
     std::atomic<uint64_t> g_warnings = 0;
 
-    //==================================================================================================================
-    /// Counts `severity` when it is a warning or an error, the debug layer's among them. It may run on any thread.
+    // Counts the debug layer's warnings and errors too. May run on any thread.
     void countWarning(MessageSeverity severity, std::string_view, void*)
     {
         if (severity != MessageSeverity::Info)
@@ -58,8 +53,7 @@ namespace {
         }
     }
 
-    //==================================================================================================================
-    /// Returns a native fence at zero named `test.gate`, which only the CPU signals, made on `device`'s native device.
+    // A native fence at zero that only the CPU signals.
     d3d12::Com<ID3D12Fence> makeGate(Device device)
     {
         d3d12::Com<ID3D12Fence> gate;
@@ -68,23 +62,18 @@ namespace {
         return gate;
     }
 
-    //==================================================================================================================
-    /// Queues a native wait for `gate` to reach 1 on `device`'s queue of `type`, which holds that queue's later work until the
-    /// CPU opens the gate.
+    // Holds the queue's later work until the CPU opens `gate`.
     void holdQueue(Device device, QueueType type, ID3D12Fence* gate)
     {
         REQUIRE(SUCCEEDED(DeviceImpl::of(device).queues[static_cast<size_t>(type)].native->Wait(gate, 1)));
     }
 
-    //==================================================================================================================
-    /// Returns the native fence of `fence`, created on `device`.
     ID3D12Fence* nativeFence(Device device, Fence fence)
     {
         return static_cast<ID3D12Fence*>(DeviceImpl::of(device).core.pool<Fence>().native(fence));
     }
 } // namespace
 
-//======================================================================================================================
 TEST_CASE("each queue type has its own native queue of the matching list type", "[d3d12]")
 {
     Result<Device> created = createDevice();
@@ -104,7 +93,6 @@ TEST_CASE("each queue type has its own native queue of the matching list type", 
     destroyDevice(*created);
 }
 
-//======================================================================================================================
 TEST_CASE("a fence is an ID3D12Fence at its initial value", "[d3d12]")
 {
     Result<Device> created = createDevice();
@@ -118,7 +106,6 @@ TEST_CASE("a fence is an ID3D12Fence at its initial value", "[d3d12]")
     destroyDevice(*created);
 }
 
-//======================================================================================================================
 TEST_CASE("a signal submitted with no lists completes on the GPU", "[d3d12]")
 {
     Result<Device> created = createDevice();
@@ -135,7 +122,6 @@ TEST_CASE("a signal submitted with no lists completes on the GPU", "[d3d12]")
     destroyDevice(*created);
 }
 
-//======================================================================================================================
 TEST_CASE("a wait on another queue's fence holds the waiting queue's signal", "[d3d12]")
 {
     Result<Device> created = createDevice();
@@ -163,7 +149,6 @@ TEST_CASE("a wait on another queue's fence holds the waiting queue's signal", "[
     destroyDevice(*created);
 }
 
-//======================================================================================================================
 TEST_CASE("endFrame signals the frame fence with the frame number", "[d3d12]")
 {
     Result<Device> created = createDevice();
@@ -181,7 +166,6 @@ TEST_CASE("endFrame signals the frame fence with the frame number", "[d3d12]")
     destroyDevice(*created);
 }
 
-//======================================================================================================================
 TEST_CASE("beginFrame waits for the frame framesInFlight earlier", "[d3d12]")
 {
     DeviceDesc desc;
@@ -216,7 +200,6 @@ TEST_CASE("beginFrame waits for the frame framesInFlight earlier", "[d3d12]")
     destroyDevice(*created);
 }
 
-//======================================================================================================================
 TEST_CASE("a destroyed fence is released once every queue has passed it", "[d3d12]")
 {
     Result<Device> created = createDevice();
@@ -252,7 +235,6 @@ TEST_CASE("a destroyed fence is released once every queue has passed it", "[d3d1
     destroyDevice(*created);
 }
 
-//======================================================================================================================
 TEST_CASE("a submission counts one native queue call per wait and signal", "[d3d12]")
 {
     Result<Device> created = createDevice();
@@ -274,7 +256,6 @@ TEST_CASE("a submission counts one native queue call per wait and signal", "[d3d
     destroyDevice(*created);
 }
 
-//======================================================================================================================
 TEST_CASE("Device::wait with a zero timeout polls", "[d3d12]")
 {
     Result<Device> created = createDevice();
@@ -288,7 +269,6 @@ TEST_CASE("Device::wait with a zero timeout polls", "[d3d12]")
     destroyDevice(*created);
 }
 
-//======================================================================================================================
 TEST_CASE("a submission that waits for value zero raises no debug-layer message", "[d3d12]")
 {
     Result<Device> created = createDevice();

@@ -16,20 +16,16 @@ using namespace rojoRHI;
 using test::PassKit;
 
 namespace {
-    /// The bytes the buffer tests copy into the sparse buffer.
     [[maybe_unused]] constexpr uint64_t kBytes = 256;
 
-    /// A `Memory::Gpu` heap, a sparse buffer of four tiles and a sparse 2D texture of two layers with a mip tail.
     struct SparseSet
     {
-        Heap heap;       ///< The heap tiles map onto.
-        Buffer buffer;   ///< The sparse buffer.
-        Texture texture; ///< The sparse texture.
-        TileShape shape; ///< The tile shape of `texture`.
+        Heap heap;
+        Buffer buffer;
+        Texture texture;
+        TileShape shape;
     };
 
-    //==================================================================================================================
-    /// Creates the sparse resources of a test on the device of `kit`.
     [[maybe_unused]] SparseSet sparse(PassKit& kit)
     {
         SparseSet set;
@@ -49,22 +45,16 @@ namespace {
         return set;
     }
 
-    //==================================================================================================================
-    /// Returns the mapping of the first tile of `set`'s buffer onto the heap's first tile.
     [[maybe_unused]] TileMapping bufferTile(const SparseSet& set)
     {
         return TileMapping{ .buffer = set.buffer, .bufferSize = 65536, .heap = set.heap };
     }
 
-    //==================================================================================================================
-    /// Returns the region of tile `x` of row 0 of mip 0, layer 0 of `set`'s texture.
     [[maybe_unused]] TextureRegion tileRegion(const SparseSet& set, uint32_t x)
     {
         return TextureRegion{ .offset = { x * set.shape.width, 0, 0 }, .extent = { set.shape.width, set.shape.height, 1 } };
     }
 
-    //==================================================================================================================
-    /// Ends `list` and submits it alone to the queue of `type` of `device`, waiting on `wait` and signalling `signal`.
     [[maybe_unused]] void submitTo(
         Device device, CommandList list, QueueType type, std::span<const FenceValue> wait = {}, std::span<const FenceValue> signal = {}
     )
@@ -74,9 +64,7 @@ namespace {
         device.queue(type).submit(lists, wait, signal);
     }
 
-    //==================================================================================================================
-    /// Submits a compute list that moves every subresource of `set`'s texture from `Undefined` to `CopyDst`, signalling
-    /// `moved`, and an empty graphics submission that waits on it, so the move is ordered before what Graphics does next.
+    // The empty graphics submission orders the move before what Graphics does next.
     [[maybe_unused]] void moveOnCompute(PassKit& kit, const SparseSet& set, std::span<const FenceValue> moved)
     {
         CommandList compute = kit.device.acquireCommandList(QueueType::Compute, "test.move");
@@ -86,7 +74,6 @@ namespace {
     }
 } // namespace
 
-//======================================================================================================================
 TEST_CASE("a sparse buffer copied to on Compute is remapped on Graphics after a fence wait", "[contract]")
 {
 #ifdef NDEBUG
@@ -108,7 +95,6 @@ TEST_CASE("a sparse buffer copied to on Compute is remapped on Graphics after a 
 #endif
 }
 
-//======================================================================================================================
 TEST_CASE("a sparse buffer remapped on Graphics is copied to on Compute after a fence wait", "[contract]")
 {
 #ifdef NDEBUG
@@ -132,7 +118,6 @@ TEST_CASE("a sparse buffer remapped on Graphics is copied to on Compute after a 
 #endif
 }
 
-//======================================================================================================================
 TEST_CASE("a sparse buffer copied to on Compute is remapped on Graphics after the CPU waits for the copy", "[contract]")
 {
 #ifdef NDEBUG
@@ -155,7 +140,6 @@ TEST_CASE("a sparse buffer copied to on Compute is remapped on Graphics after th
 #endif
 }
 
-//======================================================================================================================
 TEST_CASE("a copy on Compute to other tiles of a texture than Graphics remaps after it needs no fence", "[contract]")
 {
 #ifdef NDEBUG
@@ -179,7 +163,6 @@ TEST_CASE("a copy on Compute to other tiles of a texture than Graphics remaps af
 #endif
 }
 
-//======================================================================================================================
 TEST_CASE("a copy on Compute to other tiles of a texture than Graphics remapped before it needs no fence", "[contract]")
 {
 #ifdef NDEBUG
@@ -203,7 +186,6 @@ TEST_CASE("a copy on Compute to other tiles of a texture than Graphics remapped 
 #endif
 }
 
-//======================================================================================================================
 TEST_CASE("a copy on Compute to the mip tail of one layer needs no fence against Graphics remapping another layer's tail", "[contract]")
 {
 #ifdef NDEBUG
@@ -232,7 +214,6 @@ TEST_CASE("a copy on Compute to the mip tail of one layer needs no fence against
 #endif
 }
 
-//======================================================================================================================
 TEST_CASE("a sparse buffer remapped and copied to on one queue is ordered by queue order alone", "[contract]")
 {
 #ifdef NDEBUG
@@ -251,7 +232,6 @@ TEST_CASE("a sparse buffer remapped and copied to on one queue is ordered by que
 #endif
 }
 
-//======================================================================================================================
 TEST_CASE("a newly mapped texture tile discarded from Undefined is copied to", "[contract]")
 {
 #ifdef NDEBUG
@@ -269,7 +249,6 @@ TEST_CASE("a newly mapped texture tile discarded from Undefined is copied to", "
 #endif
 }
 
-//======================================================================================================================
 TEST_CASE("a newly mapped buffer tile is copied to after a global barrier", "[contract]")
 {
 #ifdef NDEBUG
@@ -287,7 +266,6 @@ TEST_CASE("a newly mapped buffer tile is copied to after a global barrier", "[co
 #endif
 }
 
-//======================================================================================================================
 TEST_CASE("a copy to an old tile of a subresource whose other tile was newly mapped needs no discard", "[contract]")
 {
 #ifdef NDEBUG
@@ -312,7 +290,6 @@ TEST_CASE("a copy to an old tile of a subresource whose other tile was newly map
 #endif
 }
 
-//======================================================================================================================
 TEST_CASE("an unmapped tile leaves no first use to order", "[contract]")
 {
 #ifdef NDEBUG
@@ -334,7 +311,6 @@ TEST_CASE("an unmapped tile leaves no first use to order", "[contract]")
 #endif
 }
 
-//======================================================================================================================
 TEST_CASE("a mapping on Compute is first used on Graphics after a fence and a global barrier there", "[contract]")
 {
 #ifdef NDEBUG
@@ -355,7 +331,6 @@ TEST_CASE("a mapping on Compute is first used on Graphics after a fence and a gl
 #endif
 }
 
-//======================================================================================================================
 TEST_CASE("bytes of a buffer tile mapped and then unmapped are copied to with no global barrier", "[contract]")
 {
 #ifdef NDEBUG

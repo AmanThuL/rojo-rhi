@@ -13,7 +13,6 @@
 using namespace rojoRHI;
 using rojoRHI::test::SparseKit;
 
-//======================================================================================================================
 TEST_CASE("a sparse buffer's tile shape counts bytes in one row", "[contract]")
 {
     SparseKit kit;
@@ -25,7 +24,6 @@ TEST_CASE("a sparse buffer's tile shape counts bytes in one row", "[contract]")
     destroyDevice(kit.device);
 }
 
-//======================================================================================================================
 TEST_CASE("a sparse texture's tile shape has extents, bytes and a tail inside its mip chain", "[contract]")
 {
     SparseKit kit;
@@ -38,7 +36,6 @@ TEST_CASE("a sparse texture's tile shape has extents, bytes and a tail inside it
     destroyDevice(kit.device);
 }
 
-//======================================================================================================================
 TEST_CASE("a texture too small for a tail reports its mip count as the first tail level", "[contract]")
 {
     Device device = *createDevice();
@@ -49,7 +46,6 @@ TEST_CASE("a texture too small for a tail reports its mip count as the first tai
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("an empty span of mappings does nothing", "[contract]")
 {
     SparseKit kit;
@@ -57,7 +53,6 @@ TEST_CASE("an empty span of mappings does nothing", "[contract]")
     destroyDevice(kit.device);
 }
 
-//======================================================================================================================
 TEST_CASE("a mapped heap is destroyed after its tiles are unmapped", "[contract]")
 {
     SparseKit kit;
@@ -68,7 +63,6 @@ TEST_CASE("a mapped heap is destroyed after its tiles are unmapped", "[contract]
     destroyDevice(kit.device);
 }
 
-//======================================================================================================================
 TEST_CASE("destroying a sparse texture unmaps its tiles so the heap can be destroyed", "[contract]")
 {
     SparseKit kit;
@@ -78,7 +72,6 @@ TEST_CASE("destroying a sparse texture unmaps its tiles so the heap can be destr
     destroyDevice(kit.device);
 }
 
-//======================================================================================================================
 TEST_CASE("destroying a sparse buffer unmaps its tiles so the heap can be destroyed", "[contract]")
 {
     SparseKit kit;
@@ -88,7 +81,6 @@ TEST_CASE("destroying a sparse buffer unmaps its tiles so the heap can be destro
     destroyDevice(kit.device);
 }
 
-//======================================================================================================================
 TEST_CASE("a tile maps again onto other heap memory without being unmapped", "[contract]")
 {
     SparseKit kit;
@@ -101,7 +93,6 @@ TEST_CASE("a tile maps again onto other heap memory without being unmapped", "[c
     destroyDevice(kit.device);
 }
 
-//======================================================================================================================
 TEST_CASE("one call maps a region, a mip tail and a buffer range together", "[contract]")
 {
     SparseKit kit;
@@ -122,7 +113,6 @@ TEST_CASE("one call maps a region, a mip tail and a buffer range together", "[co
     destroyDevice(kit.device);
 }
 
-//======================================================================================================================
 TEST_CASE("unmapping a tile that was never mapped is accepted", "[contract]")
 {
     SparseKit kit;
@@ -131,7 +121,6 @@ TEST_CASE("unmapping a tile that was never mapped is accepted", "[contract]")
     destroyDevice(kit.device);
 }
 
-//======================================================================================================================
 TEST_CASE("any queue type may map tiles", "[contract]")
 {
     SparseKit kit;

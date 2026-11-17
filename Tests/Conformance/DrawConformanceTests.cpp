@@ -26,21 +26,18 @@
 using namespace rojoRHI;
 
 namespace {
-    /// The edge of the oracle targets, in pixels.
     constexpr uint32_t kEdge = 256;
 
-    /// The rows one instance or task group advances the oracle's pixel by: 16,384 cells of a 256-pixel row.
+    // The rows one instance or task group advances the oracle's pixel by: 16,384 cells of a 256-pixel row.
     constexpr uint32_t kInstanceRows = 64;
 
-    /// The viewport and scissor of the whole target.
     constexpr Viewport kFull{ .width = static_cast<float>(kEdge), .height = static_cast<float>(kEdge) };
     constexpr Rect2D kFullRect{ 0, 0, kEdge, kEdge };
 
-    /// The solid fragment entry's color.
+    // The solid fragment entry's color.
     constexpr std::array<float, 4> kSolid{ 0.25f, 0.5f, 0.75f, 1.0f };
 
-    //==================================================================================================================
-    /// The half-precision bits of `value`, which is zero or a normal half-precision value held exactly.
+    // `value` is zero or a normal half-precision value held exactly.
     uint16_t halfOf(float value)
     {
         if (value == 0.0f)
@@ -53,13 +50,10 @@ namespace {
         return static_cast<uint16_t>(sign | (exponent << 10) | ((bits >> 13) & 0x3FFu));
     }
 
-    /// An `RGBA16Float` image of the oracle target, as half-precision bits in texel order.
     struct Image
     {
-        std::vector<uint16_t> texels = std::vector<uint16_t>(size_t{ kEdge } * kEdge * 4, 0); ///< Four halves per texel.
+        std::vector<uint16_t> texels = std::vector<uint16_t>(size_t{ kEdge } * kEdge * 4, 0);
 
-        //==============================================================================================================
-        /// Sets the texel at `x`, `y` to `value`.
         void set(uint32_t x, uint32_t y, const std::array<float, 4>& value)
         {
             for (size_t channel = 0; channel < 4; ++channel)
@@ -69,8 +63,6 @@ namespace {
         }
     };
 
-    //==================================================================================================================
-    /// Describes the texels where `actual` differs from `expected`, the first eight of them; empty when they are equal.
     std::string differences(const Image& actual, const Image& expected)
     {
         std::string text;
@@ -106,16 +98,12 @@ namespace {
         return text;
     }
 
-    //==================================================================================================================
-    /// Loads the conformance library `name` on `device`.
     ShaderLibrary loadLibrary(Device device, std::string_view name)
     {
         const std::vector<std::byte> blob = test::shaderLibraryFile(name);
         return *device.loadShaderLibrary(blob, name);
     }
 
-    //==================================================================================================================
-    /// Creates the graphics pipeline `desc` describes over the one color target `target`.
     Pipeline pipelineOf(Device device, GraphicsPipelineDesc desc, const ColorTarget& target = ColorTarget{ .format = Format::RGBA16Float })
     {
         const std::array targets{ target };
@@ -129,8 +117,6 @@ namespace {
         return *pipeline;
     }
 
-    //==================================================================================================================
-    /// Creates a `kEdge` square texture of `format` with `usage`.
     Texture targetOf(Device device, Format format = Format::RGBA16Float, TextureUsage usage = TextureUsage::RenderTarget)
     {
         return *device.createTexture(
@@ -138,15 +124,11 @@ namespace {
         );
     }
 
-    //==================================================================================================================
-    /// A pass over `colors` and `depth` that renders to the whole target.
     RenderPassDesc passOf(std::span<const ColorAttachment> colors, const DepthAttachment& depth = {})
     {
         return RenderPassDesc{ .colors = colors, .depth = depth, .area = kFullRect, .label = "test.pass" };
     }
 
-    //==================================================================================================================
-    /// Reads `texture`, an `RGBA16Float` oracle target, back.
     Image readImage(test::GpuKit& kit, Texture texture)
     {
         const std::vector<std::byte> bytes = kit.readTexture(texture, TextureRegion{ .extent = { kEdge, kEdge, 1 } }, Format::RGBA16Float);
@@ -156,8 +138,6 @@ namespace {
         return image;
     }
 
-    //==================================================================================================================
-    /// Creates an index buffer holding `indices` as `type`.
     Buffer indexBuffer(test::GpuKit& kit, IndexType type, std::span<const uint32_t> indices)
     {
         std::vector<std::byte> bytes;
@@ -178,31 +158,23 @@ namespace {
         return kit.buffer(bytes.size(), Memory::Gpu, BufferUsage::Index, bytes);
     }
 
-    //==================================================================================================================
-    /// A viewport over the whole target moved `x` pixels right and `y` pixels down, so the oracle's pixel moves with it.
+    // The oracle's pixel moves with the viewport.
     Viewport shifted(uint32_t x, uint32_t y)
     {
         return Viewport{ .x = static_cast<float>(x), .y = static_cast<float>(y), .width = static_cast<float>(kEdge), .height = static_cast<float>(kEdge) };
     }
 
-    //==================================================================================================================
-    /// The oracle's value for a triangle of draw identifier 0, instance `instance` and first vertex `base`.
     std::array<float, 4> oracleValue(uint32_t instance, uint32_t base)
     {
         return { 1.0f, static_cast<float>(instance + 1), static_cast<float>(base + 1), 1.0f };
     }
 
-    /// The oracle pipelines a case needs, on one device.
     struct Oracle
     {
-        //==============================================================================================================
-        /// Loads the draw oracle library on `device`.
         explicit Oracle(Device created) : device(created), library(loadLibrary(created, "DrawOracle"))
         {
         }
 
-        //==============================================================================================================
-        /// The oracle's vertex and fragment pipeline of `primitive`, with `raster`.
         Pipeline pipeline(PrimitiveClass primitive = PrimitiveClass::Triangle, const RasterState& raster = {}) const
         {
             return pipelineOf(
@@ -212,12 +184,11 @@ namespace {
             );
         }
 
-        Device device;         ///< The device.
-        ShaderLibrary library; ///< The draw oracle library.
+        Device device;
+        ShaderLibrary library;
     };
 } // namespace
 
-//======================================================================================================================
 TEST_CASE("draw writes each instance of each vertex range with drawId 0, firstVertex and firstInstance invisible", "[conformance]")
 {
     test::requireGpu();
@@ -251,7 +222,6 @@ TEST_CASE("draw writes each instance of each vertex range with drawId 0, firstVe
     CHECK(difference.empty());
 }
 
-//======================================================================================================================
 TEST_CASE("drawIndexed applies firstIndex with UInt16 and UInt32 indices, baseVertex invisible", "[conformance]")
 {
     test::requireGpu();
@@ -285,7 +255,6 @@ TEST_CASE("drawIndexed applies firstIndex with UInt16 and UInt32 indices, baseVe
     CHECK(difference.empty());
 }
 
-//======================================================================================================================
 TEST_CASE("triangle strips and line lists draw with the topology set after setPipeline", "[conformance]")
 {
     test::requireGpu();
@@ -326,7 +295,6 @@ TEST_CASE("triangle strips and line lists draw with the topology set after setPi
     CHECK(difference.empty());
 }
 
-//======================================================================================================================
 TEST_CASE("setPipeline resets the topology to its class's list form", "[conformance]")
 {
     test::requireGpu();
@@ -360,7 +328,6 @@ TEST_CASE("setPipeline resets the topology to its class's list form", "[conforma
     CHECK(difference.empty());
 }
 
-//======================================================================================================================
 TEST_CASE("a viewport and a scissor limit what a full-target draw writes", "[conformance]")
 {
     test::requireGpu();
@@ -395,7 +362,6 @@ TEST_CASE("a viewport and a scissor limit what a full-target draw writes", "[con
     CHECK(difference.empty());
 }
 
-//======================================================================================================================
 TEST_CASE("a pass with a DontCare load stores what a draw over every pixel writes", "[conformance]")
 {
     test::requireGpu();
@@ -430,7 +396,6 @@ TEST_CASE("a pass with a DontCare load stores what a draw over every pixel write
     CHECK(difference.empty());
 }
 
-//======================================================================================================================
 TEST_CASE("the stencil reference and a Replace operation mark exactly the drawn pixels", "[conformance]")
 {
     test::requireGpu();
@@ -485,7 +450,6 @@ TEST_CASE("the stencil reference and a Replace operation mark exactly the drawn 
     CHECK(difference.empty());
 }
 
-//======================================================================================================================
 TEST_CASE("blend constants scale the solid color exactly", "[conformance]")
 {
     test::requireGpu();
@@ -525,7 +489,6 @@ TEST_CASE("blend constants scale the solid color exactly", "[conformance]")
     CHECK(difference.empty());
 }
 
-//======================================================================================================================
 TEST_CASE("depth bias moves a D32Float depth by the constant term", "[conformance]")
 {
     test::requireGpu();
@@ -581,7 +544,6 @@ TEST_CASE("depth bias moves a D32Float depth by the constant term", "[conformanc
     CHECK(wrong == 0);
 }
 
-//======================================================================================================================
 TEST_CASE("a Greater depth test over a depth cleared to 0 passes only nearer fragments, and GreaterOrEqual passes an equal one", "[conformance]")
 {
     test::requireGpu();
@@ -678,7 +640,6 @@ TEST_CASE("a Greater depth test over a depth cleared to 0 passes only nearer fra
     CHECK(wrong == 0);
 }
 
-//======================================================================================================================
 TEST_CASE("back-face culling drops the triangles of one winding", "[conformance]")
 {
     test::requireGpu();
@@ -689,9 +650,9 @@ TEST_CASE("back-face culling drops the triangles of one winding", "[conformance]
     const Buffer buffer = indexBuffer(kit, IndexType::UInt16, indices);
     struct Culling
     {
-        RasterState raster;  ///< The pipeline's raster state.
-        bool clockwiseDrawn; ///< The clockwise triangle is drawn.
-        bool counterDrawn;   ///< The counter-clockwise triangle is drawn.
+        RasterState raster;
+        bool clockwiseDrawn;
+        bool counterDrawn;
     };
     const std::array<Culling, 4> cases{
         Culling{ RasterState{ .cull = CullMode::None }, true, true },
@@ -736,7 +697,6 @@ TEST_CASE("back-face culling drops the triangles of one winding", "[conformance]
     CHECK(difference.empty());
 }
 
-//======================================================================================================================
 TEST_CASE("a pipeline that culls nothing applies its own winding to two-sided stencil after a culling pipeline", "[conformance]")
 {
     test::requireGpu();
@@ -813,7 +773,6 @@ TEST_CASE("a pipeline that culls nothing applies its own winding to two-sided st
     CHECK(difference.empty());
 }
 
-//======================================================================================================================
 TEST_CASE("state set before the pass's first draw applies to that draw", "[conformance]")
 {
     test::requireGpu();
@@ -830,10 +789,10 @@ TEST_CASE("state set before the pass's first draw applies to that draw", "[confo
         *kit.device.createSampler(SamplerDesc{ .filter = SamplerFilter::Nearest, .mipFilter = SamplerFilter::Nearest, .address = SamplerAddress::ClampToEdge });
     struct FragmentRoot
     {
-        uint32_t view;    ///< The sampled view.
-        uint32_t sampler; ///< The sampler.
-        uint32_t pad0;    ///< Padding.
-        uint32_t pad1;    ///< Padding.
+        uint32_t view;
+        uint32_t sampler;
+        uint32_t pad0;
+        uint32_t pad1;
     };
     std::array<FragmentRoot, 3> roots{};
     for (size_t i = 0; i < texels.size(); ++i)
@@ -895,7 +854,6 @@ TEST_CASE("state set before the pass's first draw applies to that draw", "[confo
     CHECK(secondDifference.empty());
 }
 
-//======================================================================================================================
 TEST_CASE("drawMeshTasks draws each task group with drawId 0", "[conformance]")
 {
     test::requireGpu();
@@ -927,7 +885,6 @@ TEST_CASE("drawMeshTasks draws each task group with drawId 0", "[conformance]")
     CHECK(difference.empty());
 }
 
-//======================================================================================================================
 TEST_CASE("conservative rasterization covers the pixels a triangle touches and no pixel two away", "[conformance]")
 {
     test::requireGpu();

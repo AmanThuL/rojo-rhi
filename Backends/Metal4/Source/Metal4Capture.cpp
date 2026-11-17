@@ -25,7 +25,6 @@
 
 namespace rojoRHI {
     namespace metal4 {
-        //==============================================================================================================
         bool captureSupported()
         {
             const AutoreleasePool pool;
@@ -33,7 +32,6 @@ namespace rojoRHI {
             return manager != nullptr && manager->supportsDestination(MTL::CaptureDestinationGPUTraceDocument);
         }
 
-        //==============================================================================================================
         Result<void> startCapture(std::string_view path)
         {
             if (!captureSupported())
@@ -84,7 +82,6 @@ namespace rojoRHI {
         }
     } // namespace metal4
 
-    //==================================================================================================================
     Result<void> Device::beginCapture(std::string_view path)
     {
         DeviceImpl& impl = DeviceImpl::of(*this);
@@ -96,7 +93,6 @@ namespace rojoRHI {
         return started;
     }
 
-    //==================================================================================================================
     void Device::endCapture()
     {
         DeviceImpl& impl = DeviceImpl::of(*this);

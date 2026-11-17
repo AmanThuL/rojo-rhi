@@ -85,6 +85,7 @@ void terrainTask(uint thread : SV_GroupThreadID, uint group : SV_GroupID)
 
     uint patch = group * kTaskThreads + thread;
     float2 center = patchOrigin(root, patch) + 0.5 * root.patchSize;
+    // Radius: half the patch diagonal (under 0.75 of its side) plus 2.6, the largest |height|.
     if (visible(root.viewProj, float3(center.x, 0.0, center.y), 0.75 * root.patchSize + 2.6))
     {
         uint slot;
@@ -93,6 +94,7 @@ void terrainTask(uint thread : SV_GroupThreadID, uint group : SV_GroupID)
     }
     GroupMemoryBarrierWithGroupSync();
 
+    // After the sync every thread sees the final count; mesh group i shades payload.patches[i].
     DispatchMesh(gCount, 1, 1, gPayload);
 }
 
@@ -111,6 +113,8 @@ void terrainMesh(
 
     uint patch = payload.patches[group];
     float step = root.patchSize / float(kSide - 1);
+    // One thread per vertex of the kSide x kSide grid; all but the last row and column also write their cell's
+    // two triangles.
     uint2 grid = uint2(thread % kSide, thread / kSide);
     float2 p = patchOrigin(root, patch) + float2(grid) * step;
 
@@ -127,6 +131,7 @@ void terrainMesh(
     if (grid.x < kSide - 1 && grid.y < kSide - 1)
     {
         uint first = 2 * (grid.y * (kSide - 1) + grid.x);
+        // Through a local, because Slang lowers `triangles[first + 1]` to MSL as `first + 1U*3`.
         uint second = first + 1;
         triangles[first] = uint3(thread, thread + 1, thread + kSide);
         triangles[second] = uint3(thread + 1, thread + kSide + 1, thread + kSide);

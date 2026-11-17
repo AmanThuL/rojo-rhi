@@ -17,44 +17,35 @@
 using namespace rojoRHI;
 
 namespace {
-    /// The bytes every operation moves or writes.
     constexpr uint64_t kBytes = 256;
 
-    /// The repetition counts of the pairs: the low and high count of the in-list measures, and of the per-submission one.
     constexpr uint32_t kLow = 100;
     constexpr uint32_t kHigh = 1000;
     constexpr uint32_t kSubmitLow = 10;
 
-    /// What the operations of one case record into: two buffers of `kHigh` slices of `kBytes` bytes.
     struct Fixture
     {
         Device device = *createDevice({ .scopeTimings = true });
-        uint32_t measures = 0; ///< The measures run so far, which name each measure's list.
+        uint32_t measures = 0;
         Buffer source;
         Buffer target;
 
-        //==============================================================================================================
         Fixture()
         {
             source = *device.createBuffer({ .size = kBytes * kHigh, .usage = BufferUsage::ShaderWrite, .label = "test.source" });
             target = *device.createBuffer({ .size = kBytes * kHigh, .usage = BufferUsage::ShaderWrite, .label = "test.target" });
         }
 
-        //==============================================================================================================
         ~Fixture()
         {
             destroyDevice(device);
         }
 
-        //==============================================================================================================
         Fixture(const Fixture&) = delete;
 
-        //==============================================================================================================
         Fixture& operator=(const Fixture&) = delete;
 
-        //==============================================================================================================
-        /// Runs a frame in which one list of `type` records `count` repetitions of `record`, then submits it and waits for it.
-        /// Returns the counters' growth from before the list is acquired to after the wait.
+        // The counters' growth from before the list is acquired to after the wait.
         Counters measure(QueueType type, uint32_t count, const std::function<void(CommandList, uint32_t)>& record)
         {
             device.beginFrame();
@@ -78,8 +69,6 @@ namespace {
         }
     };
 
-    //==================================================================================================================
-    /// The exact per-repetition growth of `field` between a low and a high count; fails the case when it is not a whole number.
     uint64_t perOperation(const Counters& low, const Counters& high, uint64_t Counters::* field)
     {
         const uint64_t grown = high.*field - low.*field;
@@ -87,8 +76,6 @@ namespace {
         return grown / (kHigh - kLow);
     }
 
-    //==================================================================================================================
-    /// A global barrier from copy writes to copy reads and writes.
     GlobalBarrier copyToCopy()
     {
         return GlobalBarrier{
@@ -97,7 +84,6 @@ namespace {
     }
 } // namespace
 
-//======================================================================================================================
 TEST_CASE("uploadFrameData of 256 bytes makes no native call", "[metal4]")
 {
     Fixture fixture;
@@ -109,7 +95,6 @@ TEST_CASE("uploadFrameData of 256 bytes makes no native call", "[metal4]")
     CHECK(perOperation(low, high, &Counters::nativeSubmitCalls) == 0);
 }
 
-//======================================================================================================================
 TEST_CASE("copyBuffer of 256 bytes is one native call", "[metal4]")
 {
     Fixture fixture;
@@ -119,7 +104,6 @@ TEST_CASE("copyBuffer of 256 bytes is one native call", "[metal4]")
     CHECK(perOperation(low, high, &Counters::nativeRecordCalls) == 1);
 }
 
-//======================================================================================================================
 TEST_CASE("an equal-byte fill is one native call and an unequal one five once the encoder holds the kernel pipeline", "[metal4]")
 {
     Fixture fixture;
@@ -134,7 +118,6 @@ TEST_CASE("an equal-byte fill is one native call and an unequal one five once th
     );
 }
 
-//======================================================================================================================
 TEST_CASE("a copy and a Copy-to-Copy global barrier are two native calls and one native barrier, on a Graphics and on a Compute list", "[metal4]")
 {
     Fixture fixture;
@@ -151,7 +134,6 @@ TEST_CASE("a copy and a Copy-to-Copy global barrier are two native calls and one
     }
 }
 
-//======================================================================================================================
 TEST_CASE("a submission of one list signalling one fence is two native submit calls", "[metal4]")
 {
     Fixture fixture;

@@ -25,44 +25,33 @@
 using namespace rojoRHI;
 
 namespace {
-    //==================================================================================================================
-    /// The calls the lazy compute encoder makes when it opens with no barrier owed: the factory, the label when `list`'s
-    /// encoders carry one, and the table.
+    // What the lazy compute encoder calls when it opens with no barrier owed: the factory, the label when `list`'s
+    // encoders carry one, and the table.
     uint64_t openCalls(CommandList list)
     {
         return 2 + test::encoderLabel(list);
     }
 
-    //==================================================================================================================
-    /// The native calls `list` has recorded so far.
     uint64_t callsOf(CommandList list)
     {
         return core::coreOf(list).counts.nativeRecordCalls;
     }
 
-    //==================================================================================================================
-    /// The encoders `list` has opened so far.
     uint64_t encodersOpenedOf(CommandList list)
     {
         return core::coreOf(list).counts.encodersOpened;
     }
 
-    //==================================================================================================================
-    /// The encoders of `list`.
     const metal4::Encoders& encodersOf(CommandList list)
     {
         return CommandListImpl::of(list).encoders;
     }
 
-    //==================================================================================================================
-    /// The payload of `pipeline` on the device of `list`.
     const metal4::PipelineState* stateOf(CommandList list, Pipeline pipeline)
     {
         return static_cast<const metal4::PipelineState*>(core::coreOf(list).device->pool<Pipeline>().native(pipeline));
     }
 
-    //==================================================================================================================
-    /// Creates a compute pipeline over the standard library's `csMain` on `device`.
     Pipeline standardCompute(Device device)
     {
         const std::vector<std::byte> blob = test::standardLibrary();
@@ -70,8 +59,6 @@ namespace {
         return *device.createPipeline(ComputePipelineDesc{ .compute = { library, "csMain" }, .label = "test.compute" });
     }
 
-    //==================================================================================================================
-    /// Ends `list`, submits it to the graphics queue, waits for it on the host and ends the frame.
     void finish(Device device, CommandList list)
     {
         list.end();
@@ -83,7 +70,6 @@ namespace {
     }
 } // namespace
 
-//======================================================================================================================
 TEST_CASE("a dispatch after setPipeline sends one call, and a second one more", "[metal4]")
 {
     Device device = *createDevice({ .scopeTimings = true });
@@ -108,7 +94,6 @@ TEST_CASE("a dispatch after setPipeline sends one call, and a second one more", 
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("a dispatch after an unequal-pattern fill sets the caller's pipeline again, once", "[metal4]")
 {
     Device device = *createDevice({ .scopeTimings = true });
@@ -131,7 +116,6 @@ TEST_CASE("a dispatch after an unequal-pattern fill sets the caller's pipeline a
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("a dispatch on an encoder opened after a scope boundary sets the caller's pipeline again", "[metal4]")
 {
     Device device = *createDevice({ .scopeTimings = true });
@@ -151,7 +135,6 @@ TEST_CASE("a dispatch on an encoder opened after a scope boundary sets the calle
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("a zero-group dispatch opens no encoder", "[metal4]")
 {
     Device device = *createDevice({ .scopeTimings = true });
@@ -175,7 +158,6 @@ TEST_CASE("a zero-group dispatch opens no encoder", "[metal4]")
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("a compute pipeline carries the threadgroup size its library declares", "[metal4]")
 {
     Device device = *createDevice({ .scopeTimings = true });
@@ -192,7 +174,6 @@ TEST_CASE("a compute pipeline carries the threadgroup size its library declares"
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("a pending barrier waits through a zero-group dispatch and is emitted once, before the next real one", "[metal4]")
 {
     Device device = *createDevice({ .scopeTimings = true });

@@ -16,20 +16,15 @@ using namespace rojoRHI;
 using test::PassKit;
 
 namespace {
-    /// The bytes of every argument buffer.
     [[maybe_unused]] constexpr uint64_t kBytes = 1024;
-    /// The offset of the count in an argument buffer, after the records.
+    // The count sits in the last word, after the records.
     [[maybe_unused]] constexpr uint64_t kCountOffset = 1020;
 
-    //==================================================================================================================
-    /// Creates an `IndirectArgs` buffer of `kBytes` bytes that a fill or a shader may write.
     [[maybe_unused]] Buffer argsBuffer(PassKit& kit)
     {
         return kit.buffer(BufferUsage::IndirectArgs | BufferUsage::ShaderWrite, kBytes);
     }
 
-    //==================================================================================================================
-    /// Records one global barrier from `srcStage` and `srcAccess` to `dstStage` and `dstAccess`.
     [[maybe_unused]] void global(CommandList list, Stage srcStage, Access srcAccess, Stage dstStage, Access dstAccess)
     {
         const std::array<GlobalBarrier, 1> globals{ GlobalBarrier{
@@ -38,7 +33,6 @@ namespace {
     }
 } // namespace
 
-//======================================================================================================================
 TEST_CASE("an indirect dispatch reads a record a compute dispatch wrote, after a barrier to IndirectArgs", "[contract]")
 {
 #ifdef NDEBUG
@@ -62,7 +56,6 @@ TEST_CASE("an indirect dispatch reads a record a compute dispatch wrote, after a
 #endif
 }
 
-//======================================================================================================================
 TEST_CASE("indirect draws read records and a count a copy wrote, after a global barrier to IndirectArgs", "[contract]")
 {
 #ifdef NDEBUG
@@ -87,7 +80,6 @@ TEST_CASE("indirect draws read records and a count a copy wrote, after a global 
 #endif
 }
 
-//======================================================================================================================
 TEST_CASE("indirect commands read arguments only the CPU wrote with no barrier", "[contract]")
 {
 #ifdef NDEBUG
@@ -112,7 +104,6 @@ TEST_CASE("indirect commands read arguments only the CPU wrote with no barrier",
 #endif
 }
 
-//======================================================================================================================
 TEST_CASE("a compute write after an indirect read is ordered after the earlier write by a chain of two barriers", "[contract]")
 {
 #ifdef NDEBUG

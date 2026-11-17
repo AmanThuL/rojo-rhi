@@ -15,14 +15,12 @@
 #include <expected>
 
 namespace rojoRHI::d3d12 {
-    //==================================================================================================================
     uint32_t fillGroups(uint64_t words)
     {
         const uint64_t groups = (words + kFillGroupThreads - 1) / kFillGroupThreads;
         return static_cast<uint32_t>(std::min<uint64_t>(groups, D3D12_CS_DISPATCH_MAX_THREAD_GROUPS_PER_DIMENSION));
     }
 
-    //==================================================================================================================
     Result<void> Kernels::create(ID3D12Device12& device, ID3D12RootSignature& kernelRoot)
     {
         // The shader carries no root signature: the pipeline names the kernel root signature.
@@ -41,13 +39,11 @@ namespace rojoRHI::d3d12 {
         return {};
     }
 
-    //==================================================================================================================
     void Kernels::release()
     {
         m_fill.reset();
     }
 
-    //==================================================================================================================
     ID3D12PipelineState* Kernels::fill() const
     {
         return m_fill.get();

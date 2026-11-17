@@ -20,11 +20,9 @@
 
 namespace rojoRHI {
     namespace {
-        //==============================================================================================================
-        /// Records up to `maxCount` records of `signature` from `args` on `list`, whose graphics side is flushed: exactly
-        /// `maxCount` when `count` is null, else as many as the `uint32` at `count` says, at most `maxCount`, which is
-        /// `ExecuteIndirect`'s own rule. The signature writes each record's drawId to `b1`, so after it `b1` holds no value a
-        /// direct draw can rely on, and the next direct draw writes 0 again.
+        // Exactly `maxCount` records when `count` is null, else the uint32 at `count`, at most `maxCount`, as
+        // ExecuteIndirect does. The signature writes each record's drawId to b1, so the next direct draw writes 0
+        // again.
         void execute(CommandListImpl& list, ID3D12CommandSignature* signature, Addr args, uint32_t maxCount, Addr count)
         {
             // A buffer's payload is published before its handle is returned, so the directory finds it with one acquire load,
@@ -52,7 +50,6 @@ namespace rojoRHI {
         }
     } // namespace
 
-    //==================================================================================================================
     void CommandList::drawIndirect(Addr args, uint32_t maxCount, Addr count)
     {
         CommandListImpl& list = CommandListImpl::of(*this);
@@ -66,7 +63,6 @@ namespace rojoRHI {
         execute(list, d3d12::deviceOf(list).roots.draw(), args, maxCount, count);
     }
 
-    //==================================================================================================================
     void CommandList::drawIndexedIndirect(Buffer indices, IndexType type, Addr args, uint32_t maxCount, Addr count)
     {
         CommandListImpl& list = CommandListImpl::of(*this);
@@ -81,7 +77,6 @@ namespace rojoRHI {
         execute(list, d3d12::deviceOf(list).roots.drawIndexed(), args, maxCount, count);
     }
 
-    //==================================================================================================================
     void CommandList::drawMeshTasksIndirect(Addr args, uint32_t maxCount, Addr count)
     {
         CommandListImpl& list = CommandListImpl::of(*this);

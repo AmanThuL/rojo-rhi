@@ -13,9 +13,6 @@
 
 namespace rojoRHI::core {
     namespace {
-        //==============================================================================================================
-        /// Checks that the stage `entry` fills, if present, names an entry point of its live library with the stage `stage`
-        /// (VU-rojo-pipeline-0001, VU-rojo-pipeline-0002), and returns the stage's bit, or zero for an absent stage.
         uint32_t checkEntry(DeviceCore& core, const ShaderEntry& entry, ShaderStage stage)
         {
             if (entry.library.bits == 0)
@@ -35,9 +32,6 @@ namespace rojoRHI::core {
             return stageBit(stage);
         }
 
-        //==============================================================================================================
-        /// Checks the color targets: their count (VU-rojo-pipeline-0010), and the format rules VU-rojo-format-0002 and 0003 for
-        /// attachment, blend and sample-count support.
         void checkColors([[maybe_unused]] const DeviceCore& core, [[maybe_unused]] std::span<const ColorTarget> colors, [[maybe_unused]] uint32_t samples)
         {
             ROJORHI_VU(
@@ -59,9 +53,6 @@ namespace rojoRHI::core {
             }
         }
 
-        //==============================================================================================================
-        /// Checks the depth attachment format against the depth-stencil state (VU-rojo-pipeline-0007, 0011) and the format rule
-        /// VU-rojo-format-0003 for attachment and sample-count support.
         void checkDepth([[maybe_unused]] const DeviceCore& core, [[maybe_unused]] const GraphicsPipelineDesc& desc)
         {
             ROJORHI_VU(!desc.depthStencil.depthWrite || desc.depthStencil.depthTest, "VU-rojo-pipeline-0007", "depthWrite is set without depthTest");
@@ -88,7 +79,6 @@ namespace rojoRHI::core {
         }
     } // namespace
 
-    //==================================================================================================================
     std::string_view stageName(ShaderStage stage)
     {
         switch (stage)
@@ -102,7 +92,6 @@ namespace rojoRHI::core {
         return "unknown";
     }
 
-    //==================================================================================================================
     ShaderLibraryRecord prepareShaderLibrary([[maybe_unused]] std::span<const std::byte> blob, std::string_view label)
     {
         ROJORHI_VU(!blob.empty(), "VU-rojo-pipeline-0003", "loadShaderLibrary was given an empty blob");
@@ -111,7 +100,6 @@ namespace rojoRHI::core {
         return record;
     }
 
-    //==================================================================================================================
     PipelineRecord prepareGraphicsPipeline(DeviceCore& core, const GraphicsPipelineDesc& desc)
     {
         const ScopedNanoseconds timer(core.counts().pipelineCompileNanoseconds);
@@ -160,7 +148,6 @@ namespace rojoRHI::core {
         return record;
     }
 
-    //==================================================================================================================
     PipelineRecord prepareComputePipeline(DeviceCore& core, const ComputePipelineDesc& desc)
     {
         const ScopedNanoseconds timer(core.counts().pipelineCompileNanoseconds);

@@ -15,40 +15,29 @@ using namespace rojoRHI;
 using test::PassKit;
 
 namespace {
-    /// The bytes of every placed buffer.
     [[maybe_unused]] constexpr uint64_t kBytes = 256;
 
-    //==================================================================================================================
-    /// Creates a `Memory::Gpu` heap of one mebibyte.
     [[maybe_unused]] Heap makeHeap(PassKit& kit)
     {
         return *kit.device.createHeap(HeapDesc{ .size = 1u << 20, .label = "test.heap" });
     }
 
-    //==================================================================================================================
-    /// Creates a buffer of `size` bytes that a fill may write, placed at `offset` in `heap`.
     [[maybe_unused]] Buffer placedBuffer(PassKit& kit, Heap heap, uint64_t offset, uint64_t size = kBytes)
     {
         const BufferDesc desc{ .size = size, .usage = BufferUsage::ShaderWrite, .label = "test.placed.buffer" };
         return *kit.device.createBuffer(desc, {}, Placement{ .heap = heap, .offset = offset });
     }
 
-    //==================================================================================================================
-    /// Returns the description of a `PassKit::kSize` square texture with `usage`, a render target by default.
     [[maybe_unused]] TextureDesc targetDesc(TextureUsage usage = TextureUsage::RenderTarget)
     {
         return TextureDesc{ .format = Format::RGBA8Unorm, .extent = { PassKit::kSize, PassKit::kSize, 1 }, .usage = usage, .label = "test.placed.texture" };
     }
 
-    //==================================================================================================================
-    /// Creates a `PassKit::kSize` square texture with `usage`, a render target by default, placed at `offset` in `heap`.
     [[maybe_unused]] Texture placedTexture(PassKit& kit, Heap heap, uint64_t offset, TextureUsage usage = TextureUsage::RenderTarget)
     {
         return *kit.device.createTexture(targetDesc(usage), {}, Placement{ .heap = heap, .offset = offset });
     }
 
-    //==================================================================================================================
-    /// Records one global barrier from `srcStage` and `srcAccess` to `dstStage` and `dstAccess`.
     [[maybe_unused]] void global(CommandList list, Stage srcStage, Access srcAccess, Stage dstStage, Access dstAccess)
     {
         const std::array<GlobalBarrier, 1> globals{ GlobalBarrier{
@@ -56,9 +45,6 @@ namespace {
         list.barrier(globals);
     }
 
-    //==================================================================================================================
-    /// Records the discard of every subresource of `texture` to `CopyDst` that waits for the copy stage, as the first use of
-    /// memory a copy used earlier needs.
     [[maybe_unused]] void discardAfterCopy(CommandList list, Texture texture)
     {
         const std::array<TextureBarrier, 1> barriers{ TextureBarrier{ .texture = texture,
@@ -70,8 +56,6 @@ namespace {
         list.barrier({}, {}, barriers);
     }
 
-    //==================================================================================================================
-    /// Ends `list` and submits it alone to the queue of `type` of `device`.
     [[maybe_unused]] void submit(Device device, CommandList list, QueueType type)
     {
         list.end();
@@ -79,8 +63,6 @@ namespace {
         device.queue(type).submit(lists);
     }
 
-    //==================================================================================================================
-    /// Ends `list` and submits it alone to the queue of `type` of `device`, waiting on `wait` and signalling `signal`.
     [[maybe_unused]] void submitWith(Device device, CommandList list, QueueType type, std::span<const FenceValue> wait, std::span<const FenceValue> signal)
     {
         list.end();
@@ -89,7 +71,6 @@ namespace {
     }
 } // namespace
 
-//======================================================================================================================
 TEST_CASE("a placed buffer and texture alternate on one heap range behind the barriers aliasing needs", "[contract]")
 {
 #ifdef NDEBUG
@@ -116,7 +97,6 @@ TEST_CASE("a placed buffer and texture alternate on one heap range behind the ba
 #endif
 }
 
-//======================================================================================================================
 TEST_CASE("placed resources that share no heap bytes need no barrier between them", "[contract]")
 {
 #ifdef NDEBUG
@@ -146,7 +126,6 @@ TEST_CASE("placed resources that share no heap bytes need no barrier between the
 #endif
 }
 
-//======================================================================================================================
 TEST_CASE("aliased placed resources used on different queues are ordered by fences, not by the aliasing rules", "[contract]")
 {
 #ifdef NDEBUG
@@ -177,7 +156,6 @@ TEST_CASE("aliased placed resources used on different queues are ordered by fenc
 #endif
 }
 
-//======================================================================================================================
 TEST_CASE("a texture placed over bytes a buffer used first discards, waiting for that use", "[contract]")
 {
 #ifdef NDEBUG
@@ -200,8 +178,6 @@ TEST_CASE("a texture placed over bytes a buffer used first discards, waiting for
 }
 
 namespace {
-    //==================================================================================================================
-    /// Records a pass that clears and stores the whole of `texture`, already in `ColorAttachment`, with no draw.
     [[maybe_unused]] void clearPass(CommandList list, Texture texture)
     {
         const std::array<ColorAttachment, 1> colors{ ColorAttachment{ .texture = texture, .load = LoadOp::Clear } };
@@ -209,9 +185,6 @@ namespace {
         list.endRenderPass();
     }
 
-    //==================================================================================================================
-    /// Records the discard of every subresource of `texture` to `newLayout`, waiting for `srcStage` and making it visible to
-    /// `dstStage` and `dstAccess`.
     [[maybe_unused]] void discard(CommandList list, Texture texture, Stage srcStage, Layout newLayout, Stage dstStage, Access dstAccess)
     {
         const std::array<TextureBarrier, 1> barriers{ TextureBarrier{
@@ -220,7 +193,6 @@ namespace {
     }
 } // namespace
 
-//======================================================================================================================
 TEST_CASE("two transient render targets ping-pong over one heap range behind discards", "[contract]")
 {
 #ifdef NDEBUG
@@ -241,7 +213,6 @@ TEST_CASE("two transient render targets ping-pong over one heap range behind dis
 #endif
 }
 
-//======================================================================================================================
 TEST_CASE("a placed buffer's own earlier fill is ordered by the aliasing chain through a texture", "[contract]")
 {
 #ifdef NDEBUG
@@ -260,7 +231,6 @@ TEST_CASE("a placed buffer's own earlier fill is ordered by the aliasing chain t
 #endif
 }
 
-//======================================================================================================================
 TEST_CASE("a placed buffer used on another queue since an alias's use on this one is not compared with it", "[contract]")
 {
 #ifdef NDEBUG
@@ -286,7 +256,6 @@ TEST_CASE("a placed buffer used on another queue since an alias's use on this on
 #endif
 }
 
-//======================================================================================================================
 TEST_CASE("a placed texture discarded on another queue since an alias's use is not compared with it", "[contract]")
 {
 #ifdef NDEBUG
@@ -314,7 +283,6 @@ TEST_CASE("a placed texture discarded on another queue since an alias's use is n
 #endif
 }
 
-//======================================================================================================================
 TEST_CASE("a placed buffer's own uses are ordered by its own barriers and not by the aliasing rule", "[contract]")
 {
 #ifdef NDEBUG
@@ -332,7 +300,6 @@ TEST_CASE("a placed buffer's own uses are ordered by its own barriers and not by
 #endif
 }
 
-//======================================================================================================================
 TEST_CASE("a placed buffer's first use follows another buffer's through a chain of global barriers", "[contract]")
 {
 #ifdef NDEBUG
@@ -352,7 +319,6 @@ TEST_CASE("a placed buffer's first use follows another buffer's through a chain 
 #endif
 }
 
-//======================================================================================================================
 TEST_CASE("a placed texture's own uses are ordered by its own barriers and not by the aliasing rule", "[contract]")
 {
 #ifdef NDEBUG
@@ -376,7 +342,6 @@ TEST_CASE("a placed texture's own uses are ordered by its own barriers and not b
 #endif
 }
 
-//======================================================================================================================
 TEST_CASE("a placed texture's discard waits only for the latest use another resource made of its memory", "[contract]")
 {
 #ifdef NDEBUG
@@ -402,7 +367,6 @@ TEST_CASE("a placed texture's discard waits only for the latest use another reso
 #endif
 }
 
-//======================================================================================================================
 TEST_CASE("a placed buffer used on another queue since an alias's use stays exempt after a third buffer's later use there", "[contract]")
 {
 #ifdef NDEBUG
@@ -431,7 +395,6 @@ TEST_CASE("a placed buffer used on another queue since an alias's use stays exem
 #endif
 }
 
-//======================================================================================================================
 TEST_CASE("a placed buffer's fill follows a placed texture's discard through a global barrier from the discard's destination", "[contract]")
 {
 #ifdef NDEBUG

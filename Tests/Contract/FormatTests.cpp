@@ -12,7 +12,7 @@
 using namespace rojoRHI;
 
 namespace {
-    /// One cell of the guaranteed-capabilities table: the floor requires it, the reference forbids it, or the device reports it.
+    // A cell of chapter 15's guaranteed-capabilities table: required, forbidden, or left to the device to report.
     enum class Cell
     {
         Yes,
@@ -27,7 +27,7 @@ namespace {
         Cell filterLinear;
         Cell storageRead;
         Cell storageWrite;
-        Cell color; ///< The "color attachment and blend" column: both members.
+        Cell color; // The "color attachment and blend" column: both members.
         Cell depth;
     };
 
@@ -52,7 +52,6 @@ namespace {
         { Format::RGB10A2Unorm, Y, Y, R, R, Y, N },
     } };
 
-    //==================================================================================================================
     void checkCell(Cell cell, bool reported)
     {
         if (cell == Cell::Yes)
@@ -66,7 +65,6 @@ namespace {
     }
 } // namespace
 
-//======================================================================================================================
 TEST_CASE("Format enumerators keep the values chapter 15 lists", "[contract]")
 {
     static_assert(std::is_same_v<std::underlying_type_t<Format>, uint32_t>);
@@ -86,7 +84,6 @@ TEST_CASE("Format enumerators keep the values chapter 15 lists", "[contract]")
     CHECK(static_cast<uint32_t>(Format::RGB10A2Unorm) == 13);
 }
 
-//======================================================================================================================
 TEST_CASE("a default FormatCapabilities supports nothing and one sample", "[contract]")
 {
     const FormatCapabilities caps;
@@ -102,7 +99,6 @@ TEST_CASE("a default FormatCapabilities supports nothing and one sample", "[cont
     CHECK(caps.sampleCounts == 1);
 }
 
-//======================================================================================================================
 TEST_CASE("every format reports at least its guaranteed capabilities and none the reference forbids", "[contract]")
 {
     Device device = *createDevice();
@@ -121,7 +117,6 @@ TEST_CASE("every format reports at least its guaranteed capabilities and none th
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("a capability that depends on an attachment role is reported only with that role", "[contract]")
 {
     Device device = *createDevice();
@@ -143,7 +138,6 @@ TEST_CASE("a capability that depends on an attachment role is reported only with
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("formatCapabilities returns the same value on every call", "[contract]")
 {
     Device device = *createDevice();

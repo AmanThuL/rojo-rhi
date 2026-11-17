@@ -8,7 +8,6 @@
 #include <cstring>
 
 namespace rojoRHI::core {
-    //==================================================================================================================
     void recordScope(CommandListCore& list, std::string_view label, std::string_view defaultLabel, uint32_t depth)
     {
         std::string_view kept = defaultLabel;

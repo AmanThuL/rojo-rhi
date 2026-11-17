@@ -26,31 +26,25 @@
 using namespace rojoRHI;
 
 namespace {
-    //==================================================================================================================
-    /// The native state of `list`.
     metal4::ListState& stateOf(CommandList list)
     {
         return CommandListImpl::of(list).state;
     }
 
-    //==================================================================================================================
-    /// The UTF-8 text of `string`, read inside a pool because a getter may autorelease.
+    // Read inside a pool, because a getter may autorelease.
     std::string textOf(NS::String* string)
     {
         const metal4::AutoreleasePool pool;
         return metal4::toStdString(string);
     }
 
-    //==================================================================================================================
-    /// The label of `list`'s command buffer, read inside a pool because the getter autoreleases.
+    // Read inside a pool, because the getter autoreleases.
     std::string commandBufferLabel(CommandList list)
     {
         const metal4::AutoreleasePool pool;
         return metal4::toStdString(stateOf(list).commandBuffer->label());
     }
 
-    //==================================================================================================================
-    /// Ends every list of `lists` and submits them to the graphics queue in one submission.
     void endAndSubmit(Device device, std::span<const CommandList> lists)
     {
         for (CommandList list : lists)
@@ -61,7 +55,6 @@ namespace {
     }
 } // namespace
 
-//======================================================================================================================
 TEST_CASE("a list records into its own command buffer, labelled with the list's label", "[metal4]")
 {
     Device device = *createDevice({ .scopeTimings = true });
@@ -90,7 +83,6 @@ TEST_CASE("a list records into its own command buffer, labelled with the list's 
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("a new list creates its allocator, command buffer and tables once and a reused list creates none", "[metal4]")
 {
     Device device = *createDevice({ .scopeTimings = true });
@@ -111,7 +103,6 @@ TEST_CASE("a new list creates its allocator, command buffer and tables once and 
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("acquire and end count beginCommandBuffer, setLabel and endCommandBuffer", "[metal4]")
 {
     Device device = *createDevice({ .scopeTimings = true });
@@ -129,7 +120,6 @@ TEST_CASE("acquire and end count beginCommandBuffer, setLabel and endCommandBuff
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("submit commits the lists' command buffers and their signal completes on the GPU", "[metal4]")
 {
     Device device = *createDevice({ .scopeTimings = true });
@@ -155,7 +145,6 @@ TEST_CASE("submit commits the lists' command buffers and their signal completes 
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("a reused slot resets the allocator of every list it took", "[metal4]")
 {
     Device device = *createDevice({ .scopeTimings = true });
@@ -188,7 +177,6 @@ TEST_CASE("a reused slot resets the allocator of every list it took", "[metal4]"
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("a list keeps the encoders it ended until its slot is reused and frees none while it records", "[metal4]")
 {
     Device device = *createDevice({ .scopeTimings = true });
@@ -217,7 +205,6 @@ TEST_CASE("a list keeps the encoders it ended until its slot is reused and frees
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("nested scopes push and pop debug groups on the command buffer", "[metal4]")
 {
     Device device = *createDevice({ .scopeTimings = true, .debugMarkers = true });
@@ -252,7 +239,6 @@ TEST_CASE("nested scopes push and pop debug groups on the command buffer", "[met
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("a scope label that is not valid UTF-8 names its debug group with the default label", "[metal4]")
 {
     Device device = *createDevice({ .scopeTimings = true, .debugMarkers = true });
@@ -270,7 +256,6 @@ TEST_CASE("a scope label that is not valid UTF-8 names its debug group with the 
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("declareAccess makes no native call", "[metal4]")
 {
     // Without validation the core keeps no declaration, so the list ends with none pending.
@@ -285,7 +270,6 @@ TEST_CASE("declareAccess makes no native call", "[metal4]")
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("four threads record lists of one frame at once", "[metal4]")
 {
     Device device = *createDevice({ .scopeTimings = true, .debugMarkers = true });
@@ -327,7 +311,6 @@ TEST_CASE("four threads record lists of one frame at once", "[metal4]")
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("destroyDevice releases every list after the queues drain", "[metal4]")
 {
     Device device = *createDevice({ .scopeTimings = true });
@@ -345,7 +328,6 @@ TEST_CASE("destroyDevice releases every list after the queues drain", "[metal4]"
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("a list acquired again with the same label sends its command buffer no label, and a new label is set", "[metal4]")
 {
     Device device = *createDevice({ .scopeTimings = true, .framesInFlight = 2, .debugMarkers = true });
@@ -398,7 +380,6 @@ TEST_CASE("a list acquired again with the same label sends its command buffer no
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("encoders carry labels only on a device created with debug markers or for capture", "[metal4]")
 {
     const bool markers = GENERATE(false, true);
@@ -441,7 +422,6 @@ TEST_CASE("encoders carry labels only on a device created with debug markers or 
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("a device created with enableCapture pushes debug groups, as one with debugMarkers does", "[metal4]")
 {
     Device device = *createDevice({ .enableCapture = true });
@@ -461,7 +441,6 @@ TEST_CASE("a device created with enableCapture pushes debug groups, as one with 
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("without debug markers or scope timings a scope sends Metal nothing and leaves the open encoder open", "[metal4]")
 {
     Device device = *createDevice();
@@ -489,7 +468,6 @@ TEST_CASE("without debug markers or scope timings a scope sends Metal nothing an
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("a render pass on a device without debug markers sends three calls fewer: its group and its encoder's label", "[metal4]")
 {
     const auto calls = [](bool markers) {

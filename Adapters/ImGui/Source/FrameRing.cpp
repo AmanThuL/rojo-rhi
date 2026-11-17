@@ -15,19 +15,16 @@ namespace rojoRHI::imgui::detail {
         constexpr uint64_t kMinimumCapacity = 256 * 1024;
         constexpr uint64_t kCapacityGranule = 64 * 1024;
 
-        //==============================================================================================================
         constexpr uint64_t alignUp(uint64_t value, uint64_t alignment)
         {
             return (value + alignment - 1) & ~(alignment - 1);
         }
     } // namespace
 
-    //==================================================================================================================
     FrameRing::FrameRing(Device device, std::string_view label) : m_device(device), m_label(label)
     {
     }
 
-    //==================================================================================================================
     FrameRing::Allocation FrameRing::allocate(uint64_t size, uint64_t alignment)
     {
         if (m_advance)
@@ -48,7 +45,6 @@ namespace rojoRHI::imgui::detail {
         return Allocation{ .buffer = slot->buffer, .offset = offset, .cpu = slot->cpu + offset, .address = slot->base + offset };
     }
 
-    //==================================================================================================================
     void FrameRing::grow(uint64_t request)
     {
         Slot& slot = m_slots[m_current];
@@ -78,7 +74,6 @@ namespace rojoRHI::imgui::detail {
         slot.used = 0;
     }
 
-    //==================================================================================================================
     void FrameRing::newFrame()
     {
         for (const Buffer buffer : m_retired)
@@ -89,7 +84,6 @@ namespace rojoRHI::imgui::detail {
         m_advance = true;
     }
 
-    //==================================================================================================================
     void FrameRing::destroy()
     {
         newFrame();

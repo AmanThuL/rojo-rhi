@@ -21,18 +21,17 @@ namespace rojoRHI::d3d12 {
     namespace {
         static_assert(D3D12_SDK_VERSION >= 619, "the D3D12 backend needs the Agility SDK headers of version 619 or later");
 
-        /// The Windows build the backend requires: the Windows 11 kernel line, which Windows Server 2025 shares.
+        // The Windows 11 kernel line, which Windows Server 2025 shares.
         constexpr ULONG kMinimumBuild = 22'000;
 
-        /// The adapter kind the build selects (`rojorhi_d3d12_adapter`): WARP, or the high-performance hardware adapters.
 #if defined(ROJORHI_D3D12_ADAPTER_WARP)
         constexpr bool kWarpAdapter = true;
 #else
         constexpr bool kWarpAdapter = false;
 #endif
 
-        /// The debug features the build selects (`rojorhi_d3d12_debug`): `layer` and `gbv` always, `mode` in Debug builds only,
-        /// `off` never. DRED goes with the layer; GPU-based validation only with `gbv`.
+        // `rojorhi_d3d12_debug`: `layer` and `gbv` always, `mode` in Debug builds only, `off` never. DRED goes with the
+        // layer; GPU-based validation only with `gbv`.
 #if defined(ROJORHI_D3D12_DEBUG_GBV)
         constexpr bool kDebugLayer = true;
         constexpr bool kGpuValidation = true;
@@ -44,16 +43,12 @@ namespace rojoRHI::d3d12 {
         constexpr bool kGpuValidation = false;
 #endif
 
-        //==============================================================================================================
-        /// Returns the error of a requirement the process does not meet.
         std::unexpected<Error> missing(std::string message)
         {
             return std::unexpected(Error{ ErrorCategory::Unsupported, std::move(message) });
         }
 
-        //==============================================================================================================
-        /// Refuses a Windows build below the Windows 11 kernel line, read with `RtlGetVersion`, which reports the true build
-        /// whatever the executable's compatibility manifest says.
+        // `RtlGetVersion` reports the true build whatever the executable's compatibility manifest says.
         Result<void> checkWindows()
         {
             using RtlGetVersionFunction = LONG(WINAPI*)(RTL_OSVERSIONINFOW*);
@@ -72,9 +67,8 @@ namespace rojoRHI::d3d12 {
             return {};
         }
 
-        //==============================================================================================================
-        /// Creates the device factory of the Agility runtime in the `D3D12\` directory beside the executable. It is the only
-        /// way the backend loads the runtime, so a consumer executable exports nothing.
+        // The Agility runtime in the `D3D12\` directory beside the executable. This factory is the only way the backend
+        // loads the runtime, so a consumer executable exports nothing.
         Result<Com<ID3D12DeviceFactory>> createFactory()
         {
             Com<ID3D12SDKConfiguration1> configuration;
@@ -109,10 +103,9 @@ namespace rojoRHI::d3d12 {
             return factory;
         }
 
-        //==============================================================================================================
-        /// Enables on `factory`, never process-wide, the debug features the build selects: the debug layer and DRED's
-        /// breadcrumbs, breadcrumb contexts and page-fault reports, and GPU-based validation for `gbv`. A configuration
-        /// interface the factory refuses fails creation, because the build asked for it.
+        // On `factory`, never process-wide: the debug layer, DRED's breadcrumbs, breadcrumb contexts and page-fault
+        // reports, and GPU-based validation for `gbv`. A configuration interface the factory refuses fails creation,
+        // because the build asked for it.
         Result<void> configureDebug([[maybe_unused]] ID3D12DeviceFactory* factory)
         {
             if constexpr (kDebugLayer)
@@ -153,9 +146,8 @@ namespace rojoRHI::d3d12 {
             return {};
         }
 
-        //==============================================================================================================
-        /// Returns the adapters of the configured kind, in the order devices are tried: WARP alone, or every hardware adapter
-        /// by high-performance preference, software adapters skipped.
+        // In the order devices are tried: WARP alone, or every hardware adapter by high-performance preference,
+        // software adapters skipped.
         Result<std::vector<Com<IDXGIAdapter1>>> candidateAdapters(IDXGIFactory6* dxgi)
         {
             std::vector<Com<IDXGIAdapter1>> candidates;
@@ -200,8 +192,6 @@ namespace rojoRHI::d3d12 {
             return candidates;
         }
 
-        //==============================================================================================================
-        /// Returns the adapter's description, for messages.
         std::string adapterName(IDXGIAdapter1* adapter)
         {
             DXGI_ADAPTER_DESC1 desc = {};
@@ -213,7 +203,6 @@ namespace rojoRHI::d3d12 {
         }
     } // namespace
 
-    //==================================================================================================================
     Result<Loaded> loadDevice()
     {
         if (Result<void> windows = checkWindows(); !windows)

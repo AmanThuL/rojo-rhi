@@ -14,8 +14,6 @@
 
 namespace rojoRHI {
     namespace {
-        //==============================================================================================================
-        /// Splits `text` into its lines, dropping one empty line at the end.
         std::vector<std::string_view> splitLines(std::string_view text)
         {
             std::vector<std::string_view> lines;
@@ -28,15 +26,11 @@ namespace rojoRHI {
             return lines;
         }
 
-        //==============================================================================================================
-        /// Returns the text of `blob`.
         std::string_view textOf(std::span<const std::byte> blob)
         {
             return { reinterpret_cast<const char*>(blob.data()), blob.size() };
         }
 
-        //==============================================================================================================
-        /// Reads the number in `text` after `prefix`, or nothing when the line has another prefix or is not a plain number.
         std::optional<uint64_t> numberAfter(std::string_view text, std::string_view prefix)
         {
             if (!text.starts_with(prefix))
@@ -53,8 +47,6 @@ namespace rojoRHI {
             return value;
         }
 
-        //==============================================================================================================
-        /// Maps a stage word of a library line to its stage.
         std::optional<core::ShaderStage> stageOf(std::string_view word)
         {
             for (core::ShaderStage stage :
@@ -68,15 +60,12 @@ namespace rojoRHI {
             return std::nullopt;
         }
 
-        //==============================================================================================================
-        /// Builds the error of a malformed library.
         std::unexpected<Error> malformed(std::string_view why)
         {
             return std::unexpected(Error{ ErrorCategory::DriverFailure, std::format("malformed Null shader library: {}", why) });
         }
     } // namespace
 
-    //==================================================================================================================
     Result<std::vector<core::ShaderEntryRecord>> parseNullShaderLibrary(std::span<const std::byte> blob)
     {
         const std::vector<std::string_view> lines = splitLines(textOf(blob));
@@ -115,7 +104,6 @@ namespace rojoRHI {
         return entries;
     }
 
-    //==================================================================================================================
     std::vector<std::byte> serializeNullPipelineCache(uint64_t pipelines)
     {
         const std::string text = std::format("{}\nversion {}\npipelines {}\n", kNullCacheMagic, kNullCacheVersion, pipelines);
@@ -123,7 +111,6 @@ namespace rojoRHI {
         return { bytes, bytes + text.size() };
     }
 
-    //==================================================================================================================
     std::optional<uint64_t> parseNullPipelineCache(std::span<const std::byte> blob)
     {
         const std::vector<std::string_view> lines = splitLines(textOf(blob));

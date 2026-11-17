@@ -17,8 +17,6 @@
 using namespace rojoRHI;
 
 namespace {
-    //==================================================================================================================
-    /// Returns the debug name of `object` as UTF-8, empty when it has none.
     std::string nameOf(ID3D12Object* object)
     {
         wchar_t name[64] = {};
@@ -36,9 +34,7 @@ namespace {
         return d3d12::utf8(read);
     }
 
-    //==================================================================================================================
-    /// Returns the cost in 32-bit values of `parameter` in a root signature: two for a root descriptor, one for each root
-    /// constant, one for a descriptor table.
+    // In 32-bit values: two for a root descriptor, one for each root constant, one for a descriptor table.
     UINT rootCost(const D3D12_ROOT_PARAMETER1& parameter)
     {
         switch (parameter.ParameterType)
@@ -52,8 +48,6 @@ namespace {
         return 0;
     }
 
-    //==================================================================================================================
-    /// Deserializes the global root signature of `impl` at version 1.1 into `deserializer` and returns its description.
     const D3D12_ROOT_SIGNATURE_DESC1& globalDesc(DeviceImpl& impl, d3d12::Com<ID3D12VersionedRootSignatureDeserializer>& deserializer)
     {
         d3d12::Com<ID3D12DeviceConfiguration> configuration;
@@ -69,7 +63,6 @@ namespace {
     }
 } // namespace
 
-//======================================================================================================================
 TEST_CASE("the global root signature holds the root SRV at t0 and one root constant at b1", "[d3d12]")
 {
     Result<Device> created = createDevice();
@@ -95,7 +88,6 @@ TEST_CASE("the global root signature holds the root SRV at t0 and one root const
     destroyDevice(*created);
 }
 
-//======================================================================================================================
 TEST_CASE("the root signatures and command signatures exist and carry their labels", "[d3d12]")
 {
     Result<Device> created = createDevice();
@@ -116,7 +108,6 @@ TEST_CASE("the root signatures and command signatures exist and carry their labe
     destroyDevice(*created);
 }
 
-//======================================================================================================================
 TEST_CASE("the root parameters fit the root budget", "[d3d12]")
 {
     Result<Device> created = createDevice();
@@ -134,7 +125,6 @@ TEST_CASE("the root parameters fit the root budget", "[d3d12]")
     destroyDevice(*created);
 }
 
-//======================================================================================================================
 TEST_CASE("the command signatures' strides match the indirect records", "[d3d12]")
 {
     CHECK(sizeof(DrawIndirectArgs) == 20U);

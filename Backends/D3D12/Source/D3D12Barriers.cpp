@@ -28,29 +28,24 @@
 namespace rojoRHI {
     namespace d3d12 {
         namespace {
-            //==========================================================================================================
-            /// Returns true when `stages` and `mask` share a bit.
             bool any(Stage stages, Stage mask)
             {
                 return (stages & mask) != Stage::None;
             }
 
-            //==========================================================================================================
-            /// Returns true when `access` and `mask` share a bit.
             bool any(Access access, Access mask)
             {
                 return (access & mask) != Access::None;
             }
 
-            /// A sync and access pair: a sync bit and the access bits compatible with it, from the access and sync
-            /// compatibility of enhanced barriers, or the sync and access of one side of a barrier.
             struct SyncAccess
             {
-                D3D12_BARRIER_SYNC sync;     ///< The sync scopes.
-                D3D12_BARRIER_ACCESS access; ///< The access bits.
+                D3D12_BARRIER_SYNC sync;
+                D3D12_BARRIER_ACCESS access;
             };
 
-            /// Every sync bit the lowering names besides `SYNC_ALL`, with the accesses it is compatible with.
+            // Every sync bit the lowering names besides SYNC_ALL, with the accesses enhanced barriers make compatible
+            // with it.
             constexpr std::array<SyncAccess, 12> kSyncAccesses = { {
                 { D3D12_BARRIER_SYNC_DRAW,
                   D3D12_BARRIER_ACCESS_VERTEX_BUFFER | D3D12_BARRIER_ACCESS_CONSTANT_BUFFER | D3D12_BARRIER_ACCESS_INDEX_BUFFER |
@@ -75,11 +70,9 @@ namespace rojoRHI {
                 { D3D12_BARRIER_SYNC_CLEAR_UNORDERED_ACCESS_VIEW, D3D12_BARRIER_ACCESS_UNORDERED_ACCESS },
             } };
 
-            //==========================================================================================================
-            /// Returns the sync before of a buffer or texture barrier whose sides lowered to `before` and `after`, the
-            /// first with access `access`: `before`, or, when the caller named no source stage, the destination's scope, or
-            /// every scope when the destination has none too. GPU-based validation rejects `SYNC_NONE` before a resource
-            /// any earlier command touched, in any earlier ExecuteCommandLists too, which RojoRHI does not track.
+            // The source stages when the caller named some, else the destination's scope, else SYNC_ALL: GPU-based
+            // validation rejects SYNC_NONE before a resource any earlier command touched, in any earlier
+            // ExecuteCommandLists too, which RojoRHI does not track.
             D3D12_BARRIER_SYNC resourceSyncBefore(D3D12_BARRIER_SYNC before, D3D12_BARRIER_SYNC after, D3D12_BARRIER_ACCESS access)
             {
                 if (before != D3D12_BARRIER_SYNC_NONE)
@@ -89,9 +82,8 @@ namespace rojoRHI {
                 return narrowSync(after != D3D12_BARRIER_SYNC_NONE ? after : D3D12_BARRIER_SYNC_ALL, access);
             }
 
-            //==========================================================================================================
-            /// Returns the access bits a list of `type` can perform: copy accesses on a Copy list, and on a Compute list
-            /// every access but the render-target, depth-stencil, resolve and input-assembly ones.
+            // A Copy list performs copy accesses alone; a Compute list every access but the render-target,
+            // depth-stencil, resolve and input-assembly ones.
             D3D12_BARRIER_ACCESS queueAccesses(QueueType type)
             {
                 switch (type)
@@ -104,10 +96,8 @@ namespace rojoRHI {
                 }
             }
 
-            //==========================================================================================================
-            /// Returns the access bits of one side on a list of `type`: none when its stage is `None`, which orders no earlier
-            /// or later work. `Stage::All` performs every access, so a side may name one the queue never performs; it is
-            /// dropped, and a side left with none names `NO_ACCESS`.
+            // `Stage::None` orders no work, so its side names no access. `Stage::All` may name an access the queue
+            // never performs: it is dropped, and a side left with none names NO_ACCESS.
             D3D12_BARRIER_ACCESS sideAccess(Stage stage, Access access, AccessTarget target, Layout layout, QueueType type)
             {
                 if (stage == Stage::None)
@@ -123,8 +113,6 @@ namespace rojoRHI {
                 return performed == D3D12_BARRIER_ACCESS_COMMON ? D3D12_BARRIER_ACCESS_NO_ACCESS : performed;
             }
 
-            //==========================================================================================================
-            /// Returns the access bits the scopes of `sync` can run, every access for `SYNC_ALL`.
             D3D12_BARRIER_ACCESS accessesOfSync(D3D12_BARRIER_SYNC sync)
             {
                 if ((sync & D3D12_BARRIER_SYNC_ALL) != D3D12_BARRIER_SYNC_NONE)
@@ -142,8 +130,6 @@ namespace rojoRHI {
                 return accesses;
             }
 
-            //==========================================================================================================
-            /// Returns the accesses a texture subresource in `layout` admits and the scopes they run in.
             SyncAccess layoutUse(Layout layout)
             {
                 switch (layout)
@@ -164,13 +150,10 @@ namespace rojoRHI {
                 }
             }
 
-            //==========================================================================================================
-            /// Returns the sync and access of a texture side in `layout`, not `Undefined`, that names no access, `sync` its
-            /// narrowed sync, on a list of `type`. The layer accepts no access in a defined layout only with `SYNC_NONE`, and
-            /// GPU-based validation rejects `SYNC_NONE` before a subresource an earlier command touched, so the side names
-            /// the accesses the layout admits instead: those its scopes run, or, when its scopes run none or not all of
-            /// them, every scope; a side with no scope takes the layout's own. A layout the queue admits no access in keeps
-            /// the side as it is.
+            // For a texture side in a defined layout that names no access. The layer accepts no access there only with
+            // SYNC_NONE, and GPU-based validation rejects SYNC_NONE before a subresource an earlier command touched, so
+            // the side names the accesses the layout admits: those its scopes run, else every scope; a side with no
+            // scope takes the layout's own. A layout the queue admits no access in keeps the side as it is.
             SyncAccess layoutSide(D3D12_BARRIER_SYNC sync, Layout layout, QueueType type)
             {
                 const SyncAccess use = layoutUse(layout);
@@ -191,31 +174,25 @@ namespace rojoRHI {
                 return { D3D12_BARRIER_SYNC_ALL, admitted };
             }
 
-            /// The accesses a texture performs only in its own layout: render-target, depth-stencil, resolve and
-            /// shading-rate. A global barrier changes no layout, and the layer rejects one whose two sides no single layout
-            /// admits, such as a depth-stencil write before a shader read.
+            // The accesses a texture performs only in its own layout. A global barrier changes no layout, and the layer
+            // rejects one whose two sides no single layout admits, such as a depth-stencil write before a shader read.
             constexpr D3D12_BARRIER_ACCESS kLayoutBoundAccesses = D3D12_BARRIER_ACCESS_RENDER_TARGET | D3D12_BARRIER_ACCESS_DEPTH_STENCIL_WRITE |
                                                                   D3D12_BARRIER_ACCESS_DEPTH_STENCIL_READ | D3D12_BARRIER_ACCESS_RESOLVE_DEST |
                                                                   D3D12_BARRIER_ACCESS_RESOLVE_SOURCE | D3D12_BARRIER_ACCESS_SHADING_RATE_SOURCE;
 
-            /// The layout-bound accesses the lowering names, grouped by the one layout that admits each group:
-            /// `LAYOUT_RENDER_TARGET` and `LAYOUT_DEPTH_STENCIL_WRITE`.
+            // Grouped by the one layout that admits each group: LAYOUT_RENDER_TARGET and LAYOUT_DEPTH_STENCIL_WRITE.
             constexpr std::array<D3D12_BARRIER_ACCESS, 2> kLayoutFamilies = {
                 D3D12_BARRIER_ACCESS_RENDER_TARGET, D3D12_BARRIER_ACCESS_DEPTH_STENCIL_READ | D3D12_BARRIER_ACCESS_DEPTH_STENCIL_WRITE
             };
 
-            //==========================================================================================================
-            /// Returns the access bits `access` names, none for `ACCESS_NO_ACCESS`.
             D3D12_BARRIER_ACCESS namedBits(D3D12_BARRIER_ACCESS access)
             {
                 return access == D3D12_BARRIER_ACCESS_NO_ACCESS ? D3D12_BARRIER_ACCESS_COMMON : access;
             }
 
-            //==========================================================================================================
-            /// Returns one side of a global barrier, `sync` and `access`, without its layout-bound accesses. The sync still
-            /// waits in the scopes of every access the side named: a side left with no access keeps it, and one whose
-            /// remaining accesses do not run in every scope it names waits in every scope, rather than name a scope its
-            /// accesses never run in.
+            // Drops the layout-bound accesses but still waits in the scopes of every access the side named: a side left
+            // with no access keeps its sync, and one whose remaining accesses do not run in every scope it names waits
+            // in every scope, rather than name a scope its accesses never run in.
             SyncAccess withoutLayoutBound(D3D12_BARRIER_SYNC sync, D3D12_BARRIER_ACCESS access)
             {
                 if ((namedBits(access) & kLayoutBoundAccesses) == D3D12_BARRIER_ACCESS_COMMON)
@@ -230,8 +207,6 @@ namespace rojoRHI {
                 return { narrowSync(sync, kept) == sync ? sync : D3D12_BARRIER_SYNC_ALL, kept };
             }
 
-            //==========================================================================================================
-            /// Returns the write accesses `stages` perform: a shader store, an attachment write, a copy's write or a resolve's.
             Access stageWrites(Stage stages)
             {
                 constexpr Stage kShaderStages = Stage::VertexShader | Stage::TaskShader | Stage::MeshShader | Stage::FragmentShader | Stage::ComputeShader;
@@ -245,9 +220,7 @@ namespace rojoRHI {
                 return writes;
             }
 
-            //==========================================================================================================
-            /// Removes from `globals` each barrier from `first` on that repeats one before it, keeping the order of the rest:
-            /// discards that share their source stages and destination need their writes ordered once in the call.
+            // Discards that share their source stages and destination need their writes ordered once per call.
             void dropRepeatedGlobals(std::vector<D3D12_GLOBAL_BARRIER>& globals, size_t first)
             {
                 size_t kept = first;
@@ -266,12 +239,10 @@ namespace rojoRHI {
                 globals.resize(kept);
             }
 
-            //==========================================================================================================
-            /// Appends to `lowered` the global barriers `global` lowers to on a list of `type`. A barrier whose accesses one
-            /// layout admits on both sides lowers to one global barrier. Otherwise a layout-bound access touches only a
-            /// texture in its own layout, which a texture barrier takes out of it: the first global barrier names every
-            /// stage and the other accesses, and each layout's accesses that both sides name get a global barrier of
-            /// their own.
+            // A barrier whose accesses one layout admits on both sides lowers to one global barrier. Otherwise a
+            // layout-bound access touches only a texture in its own layout, which a texture barrier takes out of it:
+            // the first global barrier names every stage and the other accesses, and each layout's accesses that both
+            // sides name get a global barrier of their own.
             void lowerGlobal(const GlobalBarrier& global, QueueType type, std::vector<D3D12_GLOBAL_BARRIER>& lowered)
             {
                 const D3D12_BARRIER_ACCESS before = sideAccess(global.srcStage, global.srcAccess, AccessTarget::Global, Layout::Undefined, type);
@@ -311,7 +282,6 @@ namespace rojoRHI {
             }
         } // namespace
 
-        //==============================================================================================================
         D3D12_BARRIER_SYNC copyStageSync(QueueType type)
         {
             switch (type)
@@ -325,7 +295,6 @@ namespace rojoRHI {
             }
         }
 
-        //==============================================================================================================
         D3D12_BARRIER_SYNC syncOf(Stage stages, QueueType type)
         {
             if (stages == Stage::None)
@@ -383,7 +352,6 @@ namespace rojoRHI {
             return sync;
         }
 
-        //==============================================================================================================
         D3D12_BARRIER_ACCESS accessOf(Access access, AccessTarget target, Layout layout)
         {
             // A subresource in Undefined holds nothing to make visible.
@@ -453,7 +421,6 @@ namespace rojoRHI {
             return lowered;
         }
 
-        //==============================================================================================================
         D3D12_BARRIER_SYNC narrowSync(D3D12_BARRIER_SYNC sync, D3D12_BARRIER_ACCESS access)
         {
             if (access == D3D12_BARRIER_ACCESS_COMMON || sync == D3D12_BARRIER_SYNC_NONE || (sync & D3D12_BARRIER_SYNC_ALL) != D3D12_BARRIER_SYNC_NONE)
@@ -482,7 +449,6 @@ namespace rojoRHI {
             return kept == D3D12_BARRIER_SYNC_NONE ? D3D12_BARRIER_SYNC_ALL : kept;
         }
 
-        //==============================================================================================================
         D3D12_BARRIER_LAYOUT layoutOf(Layout layout)
         {
             switch (layout)
@@ -502,7 +468,6 @@ namespace rojoRHI {
             }
         }
 
-        //==============================================================================================================
         D3D12_BARRIER_SUBRESOURCE_RANGE rangeOf(const TexturePayload& payload, const SubresourceRange& range)
         {
             D3D12_BARRIER_SUBRESOURCE_RANGE lowered = {};
@@ -526,15 +491,11 @@ namespace rojoRHI {
         }
 
         namespace {
-            //==========================================================================================================
-            /// Returns true when two records name the same stages and accesses on each side.
             template<class Record> bool sameSides(const Record& a, const Record& b)
             {
                 return a.srcStage == b.srcStage && a.srcAccess == b.srcAccess && a.dstStage == b.dstStage && a.dstAccess == b.dstAccess;
             }
 
-            //==========================================================================================================
-            /// Returns true when the batch is one record equal to the one whose lowering `scratch` holds.
             bool repeatsSingle(
                 const BarrierScratch& scratch,
                 std::span<const GlobalBarrier> globals,
@@ -563,9 +524,7 @@ namespace rojoRHI {
                        a.oldLayout == b.oldLayout && a.newLayout == b.newLayout && sameSides(a, b);
             }
 
-            //==========================================================================================================
-            /// Records the batch `state` holds lowered as one native `Barrier`, one group per non-empty kind: the debug layer
-            /// warns on an empty group.
+            // One group per non-empty kind: the debug layer warns on an empty group.
             void sendScratch(ListState& state, core::CommandListCore& list)
             {
                 const BarrierScratch& scratch = state.barriers;
@@ -599,7 +558,6 @@ namespace rojoRHI {
         } // namespace
     } // namespace d3d12
 
-    //==================================================================================================================
     void CommandList::barrier(std::span<const GlobalBarrier> globals, std::span<const BufferBarrier> buffers, std::span<const TextureBarrier> textures)
     {
         CommandListImpl& impl = CommandListImpl::of(*this);

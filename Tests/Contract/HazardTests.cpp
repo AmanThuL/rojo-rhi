@@ -16,22 +16,16 @@ using namespace rojoRHI;
 using test::PassKit;
 
 namespace {
-    /// The bytes every buffer test writes and reads.
     [[maybe_unused]] constexpr uint64_t kBytes = 256;
-    /// The region of the 4 by 4 texels every texture test copies.
     [[maybe_unused]] constexpr TextureRegion kRegion{ .extent = { 4, 4, 1 } };
-    /// The buffer layout of `kRegion`.
     [[maybe_unused]] constexpr BufferTextureLayout kLayout{ .rowPitch = 256 };
 
-    /// One side of a barrier.
     struct Scope
     {
-        Stage stage = Stage::None;    ///< The stages.
-        Access access = Access::None; ///< The accesses.
+        Stage stage = Stage::None;
+        Access access = Access::None;
     };
 
-    //==================================================================================================================
-    /// Records one global barrier from `srcStage` and `srcAccess` to `dstStage` and `dstAccess`.
     [[maybe_unused]] void global(CommandList list, Stage srcStage, Access srcAccess, Stage dstStage, Access dstAccess)
     {
         const std::array<GlobalBarrier, 1> globals{ GlobalBarrier{
@@ -39,16 +33,11 @@ namespace {
         list.barrier(globals);
     }
 
-    //==================================================================================================================
-    /// Records the barrier that orders a copy's write of `buffer` before a copy's read of it.
     [[maybe_unused]] void writeToRead(CommandList list)
     {
         global(list, Stage::Copy, Access::CopyWrite, Stage::Copy, Access::CopyRead);
     }
 
-    //==================================================================================================================
-    /// Records the barrier that moves every subresource of `texture` from Undefined to `newLayout`, making it visible to
-    /// `dstStage` and `dstAccess`.
     [[maybe_unused]] void discardTo(CommandList list, Texture texture, Layout newLayout, Stage dstStage, Access dstAccess)
     {
         const std::array<TextureBarrier, 1> barriers{ TextureBarrier{ .texture = texture,
@@ -60,8 +49,6 @@ namespace {
         list.barrier({}, {}, barriers);
     }
 
-    //==================================================================================================================
-    /// Ends `list` and submits it alone to the graphics queue of `device`.
     [[maybe_unused]] void submit(Device device, CommandList list)
     {
         list.end();
@@ -70,7 +57,6 @@ namespace {
     }
 } // namespace
 
-//======================================================================================================================
 TEST_CASE("a write after a write is ordered through a read and two barriers", "[contract]")
 {
 #ifdef NDEBUG
@@ -89,7 +75,6 @@ TEST_CASE("a write after a write is ordered through a read and two barriers", "[
 #endif
 }
 
-//======================================================================================================================
 TEST_CASE("a read after a read needs no barrier", "[contract]")
 {
 #ifdef NDEBUG
@@ -107,7 +92,6 @@ TEST_CASE("a read after a read needs no barrier", "[contract]")
 #endif
 }
 
-//======================================================================================================================
 TEST_CASE("a buffer barrier orders exactly the range it names", "[contract]")
 {
 #ifdef NDEBUG
@@ -132,7 +116,6 @@ TEST_CASE("a buffer barrier orders exactly the range it names", "[contract]")
 #endif
 }
 
-//======================================================================================================================
 TEST_CASE("a global barrier orders every buffer and texture", "[contract]")
 {
 #ifdef NDEBUG
@@ -153,7 +136,6 @@ TEST_CASE("a global barrier orders every buffer and texture", "[contract]")
 #endif
 }
 
-//======================================================================================================================
 TEST_CASE("the uses one render pass makes of its attachments are not compared with each other", "[contract]")
 {
 #ifdef NDEBUG
@@ -197,7 +179,6 @@ TEST_CASE("the uses one render pass makes of its attachments are not compared wi
 #endif
 }
 
-//======================================================================================================================
 TEST_CASE("a draw or dispatch of no work makes no use, though it consumes the declarations before it", "[contract]")
 {
 #ifdef NDEBUG
@@ -220,7 +201,6 @@ TEST_CASE("a draw or dispatch of no work makes no use, though it consumes the de
 #endif
 }
 
-//======================================================================================================================
 TEST_CASE("a pipeline whose stencil write mask is zero does not write stencil", "[contract]")
 {
 #ifdef NDEBUG
@@ -259,7 +239,6 @@ TEST_CASE("a pipeline whose stencil write mask is zero does not write stencil", 
 #endif
 }
 
-//======================================================================================================================
 TEST_CASE("a buffer destroyed and created again in its slot starts with no hazard", "[contract]")
 {
 #ifdef NDEBUG
@@ -287,7 +266,6 @@ TEST_CASE("a buffer destroyed and created again in its slot starts with no hazar
 #endif
 }
 
-//======================================================================================================================
 TEST_CASE("hazards are judged in queue submission order, not in the order lists were recorded", "[contract]")
 {
 #ifdef NDEBUG
@@ -310,7 +288,6 @@ TEST_CASE("hazards are judged in queue submission order, not in the order lists 
 #endif
 }
 
-//======================================================================================================================
 TEST_CASE("uses of frame data are not tracked", "[contract]")
 {
 #ifdef NDEBUG
@@ -328,8 +305,6 @@ TEST_CASE("uses of frame data are not tracked", "[contract]")
 }
 
 namespace {
-    //==================================================================================================================
-    /// Records one texture barrier of every subresource of `texture`.
     [[maybe_unused]] void textureBarrier(CommandList list, Texture texture, Layout oldLayout, Layout newLayout, Scope source, Scope destination)
     {
         const std::array<TextureBarrier, 1> barriers{ TextureBarrier{ .texture = texture,
@@ -342,16 +317,13 @@ namespace {
         list.barrier({}, {}, barriers);
     }
 
-    //==================================================================================================================
-    /// Declares `access` of every subresource of `texture` at `stage` for the next draw or dispatch.
     [[maybe_unused]] void declare(CommandList list, Texture texture, Stage stage, Access access)
     {
         const std::array<ResourceAccess, 1> accesses{ ResourceAccess{ .texture = texture, .stage = stage, .access = access } };
         list.declareAccess(accesses);
     }
 
-    //==================================================================================================================
-    /// Records a pass that tests and writes the depth attachment `depth`, whose layout is already `DepthStencilWrite`.
+    // `depth` must already be in DepthStencilWrite.
     [[maybe_unused]] void depthPass(PassKit& kit, CommandList list, Texture depth)
     {
         const Texture color = kit.target();
@@ -368,8 +340,6 @@ namespace {
         list.endRenderPass();
     }
 
-    //==================================================================================================================
-    /// Begins a pass, draws once with a fragment read of `texture` declared and ends the pass.
     [[maybe_unused]] void fragmentRead(PassKit& kit, Texture texture)
     {
         kit.readyToDraw();
@@ -379,7 +349,6 @@ namespace {
     }
 } // namespace
 
-//======================================================================================================================
 TEST_CASE("a depth prepass is read by fragment shaders after a barrier from its depth writes", "[contract]")
 {
 #ifdef NDEBUG
@@ -412,7 +381,6 @@ TEST_CASE("a depth prepass is read by fragment shaders after a barrier from its 
 #endif
 }
 
-//======================================================================================================================
 TEST_CASE("a colour pass that loads its attachment follows a barrier from the earlier pass's writes", "[contract]")
 {
 #ifdef NDEBUG
@@ -441,7 +409,6 @@ TEST_CASE("a colour pass that loads its attachment follows a barrier from the ea
 #endif
 }
 
-//======================================================================================================================
 TEST_CASE("a dispatch that reads and writes storage follows a barrier from the earlier shader writes", "[contract]")
 {
 #ifdef NDEBUG
@@ -461,7 +428,6 @@ TEST_CASE("a dispatch that reads and writes storage follows a barrier from the e
 #endif
 }
 
-//======================================================================================================================
 TEST_CASE("a discard follows a read with only the read's stage as its source", "[contract]")
 {
 #ifdef NDEBUG
@@ -480,7 +446,6 @@ TEST_CASE("a discard follows a read with only the read's stage as its source", "
 #endif
 }
 
-//======================================================================================================================
 TEST_CASE("a discard follows a write with only the write's stage as its source", "[contract]")
 {
 #ifdef NDEBUG
@@ -501,7 +466,6 @@ TEST_CASE("a discard follows a write with only the write's stage as its source",
 #endif
 }
 
-//======================================================================================================================
 TEST_CASE("a depth buffer written in one frame is discarded in the next", "[contract]")
 {
 #ifdef NDEBUG
@@ -527,7 +491,6 @@ TEST_CASE("a depth buffer written in one frame is discarded in the next", "[cont
 #endif
 }
 
-//======================================================================================================================
 TEST_CASE("a write after a read follows a barrier whose destination names no access", "[contract]")
 {
 #ifdef NDEBUG
@@ -546,7 +509,6 @@ TEST_CASE("a write after a read follows a barrier whose destination names no acc
 #endif
 }
 
-//======================================================================================================================
 TEST_CASE("a transition is ordered after the last write through a read between them", "[contract]")
 {
 #ifdef NDEBUG
@@ -573,7 +535,6 @@ TEST_CASE("a transition is ordered after the last write through a read between t
 #endif
 }
 
-//======================================================================================================================
 TEST_CASE("the first transition of a fresh texture needs no source stage", "[contract]")
 {
 #ifdef NDEBUG
@@ -589,7 +550,6 @@ TEST_CASE("the first transition of a fresh texture needs no source stage", "[con
 #endif
 }
 
-//======================================================================================================================
 TEST_CASE("a transition chains after the previous one through a barrier between them", "[contract]")
 {
 #ifdef NDEBUG

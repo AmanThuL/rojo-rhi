@@ -6,7 +6,6 @@
 #include "Core/SlotAllocator.h"
 
 namespace rojoRHI::core {
-    //==================================================================================================================
     void SlotAllocator::reserveLeading(uint32_t count)
     {
         std::lock_guard lock(m_mutex);
@@ -15,7 +14,6 @@ namespace rojoRHI::core {
         m_reserved = count;
     }
 
-    //==================================================================================================================
     std::optional<uint32_t> SlotAllocator::allocate(uint32_t capacity, uint64_t owner, void* native)
     {
         std::lock_guard lock(m_mutex);
@@ -38,7 +36,6 @@ namespace rojoRHI::core {
         return index;
     }
 
-    //==================================================================================================================
     std::optional<uint32_t> SlotAllocator::allocateRange(uint32_t capacity, uint32_t count, uint64_t owner)
     {
         std::lock_guard lock(m_mutex);
@@ -74,34 +71,29 @@ namespace rojoRHI::core {
         return start;
     }
 
-    //==================================================================================================================
     bool SlotAllocator::holdsRange(uint32_t base, uint32_t count)
     {
         std::lock_guard lock(m_mutex);
         return count != 0 && base < m_slots.size() && m_slots[base].state == SlotState::Assigned && m_slots[base].rangeCount == count;
     }
 
-    //==================================================================================================================
     uint64_t SlotAllocator::retire(uint64_t upToFrame)
     {
         return retire(upToFrame, [](void*) { ROJORHI_INTERNAL_ASSERT(false, "a slot payload was retired with no one to release it"); });
     }
 
-    //==================================================================================================================
     bool SlotAllocator::empty()
     {
         std::lock_guard lock(m_mutex);
         return m_slots.size() == m_reserved && m_pending.empty();
     }
 
-    //==================================================================================================================
     SlotState SlotAllocator::state(uint32_t index)
     {
         std::lock_guard lock(m_mutex);
         return index < m_slots.size() ? m_slots[index].state : SlotState::Free;
     }
 
-    //==================================================================================================================
     size_t SlotAllocator::assignedCount()
     {
         std::lock_guard lock(m_mutex);

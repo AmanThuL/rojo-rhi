@@ -26,42 +26,33 @@
 using namespace rojoRHI;
 
 namespace {
-    /// Four floats, one `float4`.
     using Float4 = std::array<float, 4>;
 
-    /// The shader ABI version `ROJORHI_SHADER_ABI_VERSION` holds.
+    // The value of `ROJORHI_SHADER_ABI_VERSION`.
     constexpr uint32_t kAbiVersion = 3;
 
-    /// AbiTextures' root.
     struct FetchRoot
     {
-        uint32_t view;       ///< The fetched view.
-        uint32_t sampler;    ///< The linear-clamp sampler.
-        uint32_t comparison; ///< The comparison sampler.
-        uint32_t pad;        ///< Padding.
-        Addr output;         ///< Where the entry stores its `float4`.
+        uint32_t view;
+        uint32_t sampler;
+        uint32_t comparison;
+        uint32_t pad;
+        Addr output;
     };
 
-    /// The edge of the textures, in texels.
     constexpr uint32_t kEdge = 4;
 
-    //==================================================================================================================
-    /// Loads the conformance library `name` on `device`.
     ShaderLibrary loadLibrary(Device device, std::string_view name)
     {
         const std::vector<std::byte> blob = test::shaderLibraryFile(name);
         return *device.loadShaderLibrary(blob, name);
     }
 
-    //==================================================================================================================
-    /// Creates the compute pipeline of `entry` of `library` on `device`.
     Pipeline computeOf(Device device, ShaderLibrary library, std::string_view entry)
     {
         return *device.createPipeline(ComputePipelineDesc{ .compute = { library, entry }, .label = "test.compute" });
     }
 
-    //==================================================================================================================
-    /// The bytes of `values`.
     template<class T> std::vector<std::byte> bytesOf(std::span<const T> values)
     {
         std::vector<std::byte> bytes(values.size_bytes());
@@ -69,17 +60,14 @@ namespace {
         return bytes;
     }
 
-    //==================================================================================================================
-    /// The value texel (`x`, `y`, `z`) of layer `layer` of a fetched texture holds: distinct for every texel, exact in
-    /// half precision.
+    // Distinct for every texel and exact in half precision.
     Float4 texelValue(uint32_t layer, uint32_t x, uint32_t y, uint32_t z)
     {
         return Float4{ static_cast<float>(layer * 100 + z * 16 + y * 4 + x + 1), 0.5f, 0.25f, 8.0f };
     }
 
-    //==================================================================================================================
-    /// What a linear sample at the centre of layer `layer` returns: the mean of the texels 1 and 2 along each axis the texture
-    /// has (`rows` adds the y axis, `planes` the z axis), each weighted equally.
+    // A linear sample at the centre returns the equal-weight mean of texels 1 and 2 along each axis the texture has
+    // (`rows` adds y, `planes` adds z).
     Float4 centerValue(uint32_t layer, bool rows, bool planes)
     {
         Float4 sum{};
@@ -106,8 +94,7 @@ namespace {
         return sum;
     }
 
-    //==================================================================================================================
-    /// The half-precision bits of `value`, which is zero or a normal half-precision value held exactly.
+    // `value` is zero or a normal half-precision value held exactly.
     uint16_t halfOf(float value)
     {
         if (value == 0.0f)
@@ -120,9 +107,6 @@ namespace {
         return static_cast<uint16_t>(sign | (exponent << 10) | ((bits >> 13) & 0x3FFu));
     }
 
-    //==================================================================================================================
-    /// Creates a `RGBA16Float` texture of `type` with `layers` layers, one mip and the usage `usage` besides `Sampled`, in
-    /// whose texels hold `texelValue`.
     Texture patternTexture(Device device, TextureType type, uint32_t layers, TextureUsage usage)
     {
         const bool oneDimensional = type == TextureType::Tex1D || type == TextureType::Tex1DArray;
@@ -160,8 +144,6 @@ namespace {
         );
     }
 
-    //==================================================================================================================
-    /// The `RGBA16Float` texels of mip `mip` of an 8x8 texture, tight rows, texel (x, y) holding `texelValue(mip, x, y, 0)`.
     std::vector<std::byte> mipPattern(uint32_t mip)
     {
         const uint32_t edge = (2 * kEdge) >> mip;
@@ -179,9 +161,6 @@ namespace {
         return bytesOf<uint16_t>(texels);
     }
 
-    //==================================================================================================================
-    /// Creates an 8x8 `RGBA16Float` texture of two mips with the usage `usage` besides `Sampled`, whose mip `m` holds
-    /// `mipPattern(m)`.
     Texture mipPatternTexture(Device device, TextureUsage usage)
     {
         constexpr uint64_t kTexelBytes = 4 * sizeof(uint16_t);
@@ -199,9 +178,6 @@ namespace {
         );
     }
 
-    //==================================================================================================================
-    /// Runs the kernel `entry` of AbiTextures with the root `root`, whose output the helper fills in, and returns the `float4`
-    /// it stored.
     Float4 fetch(test::GpuKit& kit, std::string_view entry, FetchRoot root)
     {
         const ShaderLibrary library = loadLibrary(kit.device, "AbiTextures");
@@ -220,9 +196,7 @@ namespace {
         return value;
     }
 
-    //==================================================================================================================
-    /// Clears layer `layer` of the multisample `texture` to (1, 0, 1, 1) through a render pass and leaves it readable by a
-    /// shader, as the fetch kernels need. Every layer changes layout together, so no view spans mixed layouts.
+    // Every layer changes layout together, so no view spans mixed layouts.
     void clearMultisample(test::GpuKit& kit, Texture texture, uint32_t layer)
     {
         CommandList list = kit.list(QueueType::Graphics, "test.clearMultisample");
@@ -235,8 +209,6 @@ namespace {
         kit.run(std::array{ list });
     }
 
-    //==================================================================================================================
-    /// Creates a linear-clamp sampler on `device` and returns its index.
     uint32_t linearClamp(Device device)
     {
         const SamplerIndex index = *device.createSampler(
@@ -245,9 +217,6 @@ namespace {
         return static_cast<uint32_t>(index);
     }
 
-    //==================================================================================================================
-    /// Fetches a sampled view of the patterned texture of `type` and `layers` layers through the kernel `entry`, over a view of
-    /// `viewType` and `viewLayers` layers.
     Float4 sampledFetch(test::GpuKit& kit, std::string_view entry, TextureType type, uint32_t layers, TextureType viewType, uint32_t viewLayers)
     {
         const Texture texture = patternTexture(kit.device, type, layers, TextureUsage::None);
@@ -259,9 +228,6 @@ namespace {
         return fetch(kit, entry, FetchRoot{ .view = static_cast<uint32_t>(view), .sampler = linearClamp(kit.device) });
     }
 
-    //==================================================================================================================
-    /// Fetches a storage view of the patterned texture of `type` and `layers` layers through the kernel `entry`, over a view of
-    /// `viewType` and `viewLayers` layers.
     Float4 storageFetch(
         test::GpuKit& kit, std::string_view entry, TextureType type, uint32_t layers, TextureType viewType, uint32_t viewLayers, Texture* created = nullptr
     )
@@ -283,29 +249,26 @@ namespace {
         return fetch(kit, entry, FetchRoot{ .view = static_cast<uint32_t>(view) });
     }
 
-    /// AbiNonUniform's root: each thread takes the even or the odd member of each pair by the parity of its index.
+    // Each thread takes the even or the odd member of each pair by the parity of its index.
     struct NonUniformRoot
     {
-        Addr evenBase;        ///< The buffer even threads load, store or add to.
-        Addr oddBase;         ///< The buffer odd threads load, store or add to.
-        Addr output;          ///< Where each thread stores what it read, at its own index.
-        uint32_t evenView;    ///< The view even threads fetch.
-        uint32_t oddView;     ///< The view odd threads fetch.
-        uint32_t evenSampler; ///< The sampler even threads sample with.
-        uint32_t oddSampler;  ///< The sampler odd threads sample with.
-        uint32_t pad0 = 0;    ///< Padding.
-        uint32_t pad1 = 0;    ///< Padding.
+        Addr evenBase;
+        Addr oddBase;
+        Addr output;
+        uint32_t evenView;
+        uint32_t oddView;
+        uint32_t evenSampler;
+        uint32_t oddSampler;
+        uint32_t pad0 = 0;
+        uint32_t pad1 = 0;
     };
 
-    /// The threads of AbiNonUniform's one group: two waves of 32 or one of 64, each holding even and odd threads, so the
-    /// threads of every wave index different descriptors.
+    // Two waves of 32 or one of 64, each holding even and odd threads, so the threads of every wave index different
+    // descriptors.
     constexpr uint32_t kThreads = 64;
 
-    /// Four `uint32` words, one `uint4`.
     using Uint4 = std::array<uint32_t, 4>;
 
-    //==================================================================================================================
-    /// Runs the AbiNonUniform kernel `entry` as one group of `kThreads` threads with the root `root`.
     void runNonUniform(test::GpuKit& kit, std::string_view entry, const NonUniformRoot& root)
     {
         const ShaderLibrary library = loadLibrary(kit.device, "AbiNonUniform");
@@ -317,8 +280,7 @@ namespace {
         kit.run(std::array{ list });
     }
 
-    //==================================================================================================================
-    /// Returns `count` `uint4` cells from `seed`, distinct between cells and between seeds.
+    // Distinct between cells and between seeds.
     std::vector<Uint4> cellsOf(uint32_t count, uint32_t seed)
     {
         std::vector<Uint4> cells(count);
@@ -329,9 +291,7 @@ namespace {
         return cells;
     }
 
-    //==================================================================================================================
-    /// Creates a 2x2 `RGBA16Float` sampled texture whose texels (0, 0), (1, 0), (0, 1) and (1, 1) hold `texels`, each channel
-    /// of a texel the same.
+    // `texels` fills (0, 0), (1, 0), (0, 1) and (1, 1), each in every channel.
     Texture quadTexture(Device device, const std::array<float, 4>& texels)
     {
         std::vector<uint16_t> halves;
@@ -349,8 +309,6 @@ namespace {
         );
     }
 
-    //==================================================================================================================
-    /// Returns the `float4` cells of `bytes`.
     std::vector<Float4> float4sOf(std::span<const std::byte> bytes)
     {
         std::vector<Float4> values(bytes.size() / sizeof(Float4));
@@ -359,7 +317,6 @@ namespace {
     }
 } // namespace
 
-//======================================================================================================================
 TEST_CASE("AbiCompute loads, stores and reads the ABI version through the root", "[conformance]")
 {
     test::requireGpu();
@@ -401,7 +358,6 @@ TEST_CASE("AbiCompute loads, stores and reads the ABI version through the root",
     CHECK(kit.readBuffer(instanceBuffer) == bytesOf<Float4>(expectedInstances));
 }
 
-//======================================================================================================================
 TEST_CASE("AbiTextures texture1DMain samples a 1D texture", "[conformance]")
 {
     test::requireGpu();
@@ -409,7 +365,6 @@ TEST_CASE("AbiTextures texture1DMain samples a 1D texture", "[conformance]")
     CHECK(sampledFetch(kit, "texture1DMain", TextureType::Tex1D, 1, TextureType::Tex1D, 1) == centerValue(0, false, false));
 }
 
-//======================================================================================================================
 TEST_CASE("AbiTextures texture1DArrayMain samples layer 1 of a 1D array", "[conformance]")
 {
     test::requireGpu();
@@ -417,7 +372,6 @@ TEST_CASE("AbiTextures texture1DArrayMain samples layer 1 of a 1D array", "[conf
     CHECK(sampledFetch(kit, "texture1DArrayMain", TextureType::Tex1DArray, 3, TextureType::Tex1DArray, 3) == centerValue(1, false, false));
 }
 
-//======================================================================================================================
 TEST_CASE("AbiTextures texture2DMain samples a 2D texture", "[conformance]")
 {
     test::requireGpu();
@@ -425,7 +379,6 @@ TEST_CASE("AbiTextures texture2DMain samples a 2D texture", "[conformance]")
     CHECK(sampledFetch(kit, "texture2DMain", TextureType::Tex2D, 1, TextureType::Tex2D, 1) == centerValue(0, true, false));
 }
 
-//======================================================================================================================
 TEST_CASE("AbiTextures texture2DMain samples a linear texture through its sRGB view and the reverse", "[conformance]")
 {
     test::requireGpu();
@@ -452,7 +405,6 @@ TEST_CASE("AbiTextures texture2DMain samples a linear texture through its sRGB v
     }
 }
 
-//======================================================================================================================
 TEST_CASE("AbiTextures texture2DMain samples a BC1 texture through its sRGB view and the reverse", "[conformance]")
 {
     test::requireGpu();
@@ -482,7 +434,6 @@ TEST_CASE("AbiTextures texture2DMain samples a BC1 texture through its sRGB view
     }
 }
 
-//======================================================================================================================
 TEST_CASE("AbiTextures texture2DArrayMain samples layer 1 of a 2D array", "[conformance]")
 {
     test::requireGpu();
@@ -490,7 +441,6 @@ TEST_CASE("AbiTextures texture2DArrayMain samples layer 1 of a 2D array", "[conf
     CHECK(sampledFetch(kit, "texture2DArrayMain", TextureType::Tex2DArray, 3, TextureType::Tex2DArray, 3) == centerValue(1, true, false));
 }
 
-//======================================================================================================================
 TEST_CASE("AbiTextures texture3DMain samples a 3D texture", "[conformance]")
 {
     test::requireGpu();
@@ -498,7 +448,6 @@ TEST_CASE("AbiTextures texture3DMain samples a 3D texture", "[conformance]")
     CHECK(sampledFetch(kit, "texture3DMain", TextureType::Tex3D, 1, TextureType::Tex3D, 1) == centerValue(0, true, true));
 }
 
-//======================================================================================================================
 TEST_CASE("AbiTextures textureCubeMain samples the +Z face of a cube", "[conformance]")
 {
     test::requireGpu();
@@ -507,7 +456,6 @@ TEST_CASE("AbiTextures textureCubeMain samples the +Z face of a cube", "[conform
     CHECK(sampledFetch(kit, "textureCubeMain", TextureType::Cube, 6, TextureType::Cube, 6) == centerValue(4, true, false));
 }
 
-//======================================================================================================================
 TEST_CASE("AbiTextures textureCubeArrayMain samples the +Z face of cube 1 of a cube array", "[conformance]")
 {
     test::requireGpu();
@@ -515,7 +463,6 @@ TEST_CASE("AbiTextures textureCubeArrayMain samples the +Z face of cube 1 of a c
     CHECK(sampledFetch(kit, "textureCubeArrayMain", TextureType::CubeArray, 12, TextureType::CubeArray, 12) == centerValue(6 + 4, true, false));
 }
 
-//======================================================================================================================
 TEST_CASE("AbiTextures compareMain returns the comparison of a depth texture against 0.5", "[conformance]")
 {
     test::requireGpu();
@@ -548,7 +495,6 @@ TEST_CASE("AbiTextures compareMain returns the comparison of a depth texture aga
     CHECK(value == Float4{ depth > 0.5f ? 1.0f : 0.0f, 0, 0, 0 });
 }
 
-//======================================================================================================================
 TEST_CASE("AbiTextures texture2DMSMain reads a cleared multisample texture", "[conformance]")
 {
     test::requireGpu();
@@ -569,7 +515,6 @@ TEST_CASE("AbiTextures texture2DMSMain reads a cleared multisample texture", "[c
     CHECK(fetch(kit, "texture2DMSMain", FetchRoot{ .view = static_cast<uint32_t>(view) }) == expected);
 }
 
-//======================================================================================================================
 TEST_CASE("AbiTextures texture2DMSArrayMain reads a cleared multisample array", "[conformance]")
 {
     test::requireGpu();
@@ -591,7 +536,6 @@ TEST_CASE("AbiTextures texture2DMSArrayMain reads a cleared multisample array", 
     CHECK(fetch(kit, "texture2DMSArrayMain", FetchRoot{ .view = static_cast<uint32_t>(view) }) == expected);
 }
 
-//======================================================================================================================
 TEST_CASE("AbiTextures rwTexture1DMain reads texel 1 of a 1D storage texture", "[conformance]")
 {
     test::requireGpu();
@@ -599,7 +543,6 @@ TEST_CASE("AbiTextures rwTexture1DMain reads texel 1 of a 1D storage texture", "
     CHECK(storageFetch(kit, "rwTexture1DMain", TextureType::Tex1D, 1, TextureType::Tex1D, 1) == texelValue(0, 1, 0, 0));
 }
 
-//======================================================================================================================
 TEST_CASE("AbiTextures rwTexture1DArrayMain reads texel 1 of layer 1 of a 1D array", "[conformance]")
 {
     test::requireGpu();
@@ -607,7 +550,6 @@ TEST_CASE("AbiTextures rwTexture1DArrayMain reads texel 1 of layer 1 of a 1D arr
     CHECK(storageFetch(kit, "rwTexture1DArrayMain", TextureType::Tex1DArray, 3, TextureType::Tex1DArray, 3) == texelValue(1, 1, 0, 0));
 }
 
-//======================================================================================================================
 TEST_CASE("AbiTextures rwTexture2DMain reads texel (1, 1) of a 2D storage texture and writes it to (0, 0)", "[conformance]")
 {
     test::requireGpu();
@@ -626,7 +568,6 @@ TEST_CASE("AbiTextures rwTexture2DMain reads texel (1, 1) of a 2D storage textur
     CHECK(first == std::array<uint16_t, 4>{ halfOf(expected[0]), halfOf(expected[1]), halfOf(expected[2]), halfOf(expected[3]) });
 }
 
-//======================================================================================================================
 TEST_CASE("AbiTextures rwTexture2DArrayMain reads texel (1, 1) of layer 1 of a 2D array", "[conformance]")
 {
     test::requireGpu();
@@ -634,7 +575,6 @@ TEST_CASE("AbiTextures rwTexture2DArrayMain reads texel (1, 1) of layer 1 of a 2
     CHECK(storageFetch(kit, "rwTexture2DArrayMain", TextureType::Tex2DArray, 3, TextureType::Tex2DArray, 3) == texelValue(1, 1, 1, 0));
 }
 
-//======================================================================================================================
 TEST_CASE("AbiTextures reads a Storage-only texture under declared-access validation", "[conformance]")
 {
     test::requireGpu();
@@ -688,7 +628,6 @@ TEST_CASE("AbiTextures reads a Storage-only texture under declared-access valida
     CHECK(kit.readBuffer(output) == bytesOf<float>(Float4{ 7, 3, 1, 1 }));
 }
 
-//======================================================================================================================
 TEST_CASE("AbiTextures rwTexture3DMain reads texel (1, 1, 1) of a 3D storage texture", "[conformance]")
 {
     test::requireGpu();
@@ -696,7 +635,6 @@ TEST_CASE("AbiTextures rwTexture3DMain reads texel (1, 1, 1) of a 3D storage tex
     CHECK(storageFetch(kit, "rwTexture3DMain", TextureType::Tex3D, 1, TextureType::Tex3D, 1) == texelValue(0, 1, 1, 1));
 }
 
-//======================================================================================================================
 TEST_CASE("AbiTextures texture2DMain samples a view of mip 1 alone", "[conformance]")
 {
     test::requireGpu();
@@ -709,7 +647,6 @@ TEST_CASE("AbiTextures texture2DMain samples a view of mip 1 alone", "[conforman
     CHECK(fetch(kit, "texture2DMain", FetchRoot{ .view = static_cast<uint32_t>(view), .sampler = linearClamp(kit.device) }) == centerValue(1, true, false));
 }
 
-//======================================================================================================================
 TEST_CASE("AbiTextures rwTexture2DMain reads and writes mip 1 through a storage view of that mip alone", "[conformance]")
 {
     test::requireGpu();
@@ -736,11 +673,9 @@ TEST_CASE("AbiTextures rwTexture2DMain reads and writes mip 1 through a storage 
     const std::array<uint16_t, 4> writtenBits{ halfOf(written[0]), halfOf(written[1]), halfOf(written[2]), halfOf(written[3]) };
     std::memcpy(expectedMip1.data(), writtenBits.data(), sizeof(writtenBits));
     CHECK(kit.readTexture(texture, TextureRegion{ .mip = 1, .extent = { kEdge, kEdge, 1 } }, Format::RGBA16Float) == expectedMip1);
-    // Mip 0 is untouched.
     CHECK(kit.readTexture(texture, TextureRegion{ .mip = 0, .extent = { 2 * kEdge, 2 * kEdge, 1 } }, Format::RGBA16Float) == mipPattern(0));
 }
 
-//======================================================================================================================
 TEST_CASE("AbiNonUniform loadMain loads through a buffer that differs between the threads of a wave", "[conformance]")
 {
     test::requireGpu();
@@ -765,7 +700,6 @@ TEST_CASE("AbiNonUniform loadMain loads through a buffer that differs between th
     CHECK(kit.readBuffer(output) == bytesOf<Uint4>(expected));
 }
 
-//======================================================================================================================
 TEST_CASE("AbiNonUniform storeMain stores through a buffer that differs between the threads of a wave", "[conformance]")
 {
     test::requireGpu();
@@ -790,7 +724,6 @@ TEST_CASE("AbiNonUniform storeMain stores through a buffer that differs between 
     CHECK(kit.readBuffer(oddBuffer) == bytesOf<Uint4>(expectedOdd));
 }
 
-//======================================================================================================================
 TEST_CASE("AbiNonUniform atomicMain adds to a buffer that differs between the threads of a wave", "[conformance]")
 {
     test::requireGpu();
@@ -831,7 +764,6 @@ TEST_CASE("AbiNonUniform atomicMain adds to a buffer that differs between the th
     CHECK(wrong == 0u);
 }
 
-//======================================================================================================================
 TEST_CASE("AbiNonUniform textureMain loads through a view that differs between the threads of a wave", "[conformance]")
 {
     test::requireGpu();
@@ -854,7 +786,6 @@ TEST_CASE("AbiNonUniform textureMain loads through a view that differs between t
     CHECK(float4sOf(kit.readBuffer(output)) == expected);
 }
 
-//======================================================================================================================
 TEST_CASE("AbiNonUniform wTextureMain stores through a view that differs between the threads of a wave", "[conformance]")
 {
     test::requireGpu();
@@ -896,7 +827,6 @@ TEST_CASE("AbiNonUniform wTextureMain stores through a view that differs between
     }
 }
 
-//======================================================================================================================
 TEST_CASE("AbiNonUniform samplerMain samples through a sampler that differs between the threads of a wave", "[conformance]")
 {
     test::requireGpu();

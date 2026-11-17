@@ -16,22 +16,16 @@
 
 namespace rojoRHI::d3d12 {
     namespace {
-        //==============================================================================================================
-        /// Returns true when `format` is an sRGB-encoded member of a pair `srgbCounterpart` knows.
         bool isSrgb(Format format)
         {
             return format == Format::RGBA8Unorm_sRGB || format == Format::BC1Unorm_sRGB;
         }
 
-        //==============================================================================================================
-        /// Returns true when `flags` has every bit of `flag`.
         bool has(UINT flags, UINT flag)
         {
             return (flags & flag) == flag;
         }
 
-        //==============================================================================================================
-        /// Returns the format support `device` reports for `format`, or the error of the query that failed.
         Result<D3D12_FEATURE_DATA_FORMAT_SUPPORT> supportOf(ID3D12Device12* device, DXGI_FORMAT format)
         {
             D3D12_FEATURE_DATA_FORMAT_SUPPORT support = {};
@@ -43,9 +37,6 @@ namespace rojoRHI::d3d12 {
             return support;
         }
 
-        //==============================================================================================================
-        /// Returns whether `device` offers at least one quality level of `format` at `samples` samples, or the error of the
-        /// query that failed.
         Result<bool> multisampled(ID3D12Device12* device, DXGI_FORMAT format, uint32_t samples)
         {
             D3D12_FEATURE_DATA_MULTISAMPLE_QUALITY_LEVELS levels = {};
@@ -60,8 +51,7 @@ namespace rojoRHI::d3d12 {
             return levels.NumQualityLevels > 0;
         }
 
-        //==============================================================================================================
-        /// Returns what `device` supports for `format`, never more than the core's ceiling.
+        // Never more than the core's ceiling.
         Result<FormatCapabilities> queryFormat(ID3D12Device12* device, Format format)
         {
             const FormatCapabilities ceiling = core::formatCeiling(format);
@@ -134,7 +124,6 @@ namespace rojoRHI::d3d12 {
         }
     } // namespace
 
-    //==================================================================================================================
     DXGI_FORMAT dxgiFormat(Format format)
     {
         switch (format)
@@ -157,7 +146,6 @@ namespace rojoRHI::d3d12 {
         return DXGI_FORMAT_UNKNOWN;
     }
 
-    //==================================================================================================================
     DXGI_FORMAT resourceFormat(Format format, TextureUsage usage, bool relaxedCasting)
     {
         const bool sampled = (usage & TextureUsage::Sampled) == TextureUsage::Sampled;
@@ -172,7 +160,6 @@ namespace rojoRHI::d3d12 {
         return dxgiFormat(format);
     }
 
-    //==================================================================================================================
     std::span<const DXGI_FORMAT> castableFormats(Format format)
     {
         static constexpr DXGI_FORMAT kRgba8[] = { DXGI_FORMAT_R8G8B8A8_UNORM_SRGB, DXGI_FORMAT_R8G8B8A8_UNORM };
@@ -187,7 +174,6 @@ namespace rojoRHI::d3d12 {
         }
     }
 
-    //==================================================================================================================
     DXGI_FORMAT viewFormat(Format texture, Format view, TextureAspect aspect, TextureUsage viewUsage)
     {
         if (aspect == TextureAspect::Stencil)
@@ -207,13 +193,11 @@ namespace rojoRHI::d3d12 {
         return dxgiFormat(chosen);
     }
 
-    //==================================================================================================================
     DXGI_FORMAT dsvFormat(Format format)
     {
         return format == Format::D32Float ? DXGI_FORMAT_D32_FLOAT : DXGI_FORMAT_D32_FLOAT_S8X24_UINT;
     }
 
-    //==================================================================================================================
     Result<core::FormatTable> queryFormatTable(ID3D12Device12* device)
     {
         core::FormatTable table;

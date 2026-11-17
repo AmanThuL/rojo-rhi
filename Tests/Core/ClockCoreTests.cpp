@@ -21,8 +21,6 @@ using namespace rojoRHI;
 using test::PassKit;
 
 namespace {
-    //==================================================================================================================
-    /// Ends `list` and submits it alone to the queue of `type` of `device`, waiting on `wait` and signalling `signal`.
     [[maybe_unused]] void submitTo(Device device, CommandList list, QueueType type, std::span<const FenceValue> wait, std::span<const FenceValue> signal)
     {
         list.end();
@@ -31,7 +29,6 @@ namespace {
     }
 } // namespace
 
-//======================================================================================================================
 TEST_CASE("a clock join takes the greater position of each queue and a meet the lesser", "[core]")
 {
     const core::Clock a{ 4, 0, 7 };
@@ -40,7 +37,6 @@ TEST_CASE("a clock join takes the greater position of each queue and a meet the 
     CHECK(core::meet(a, b) == core::Clock{ 2, 0, 7 });
 }
 
-//======================================================================================================================
 TEST_CASE("a clock covers the positions of a queue up to its component of that queue", "[core]")
 {
     const core::Clock clock{ 4, 0, 2 };
@@ -50,7 +46,6 @@ TEST_CASE("a clock covers the positions of a queue up to its component of that q
     CHECK(core::covers(clock, QueueType::Copy, 1));
 }
 
-//======================================================================================================================
 TEST_CASE("a wait on a value at most a fence's initial value orders nothing", "[core]")
 {
     core::FenceClocks fence(5);
@@ -60,7 +55,6 @@ TEST_CASE("a wait on a value at most a fence's initial value orders nothing", "[
     CHECK(fence.reached(6) == core::Clock{ 3, 0, 0 });
 }
 
-//======================================================================================================================
 TEST_CASE("a wait takes the meet of the clocks of every value at least it", "[core]")
 {
     // Two queues signal one fence with no order between them: the fence may reach 2 before 1.
@@ -74,7 +68,6 @@ TEST_CASE("a wait takes the meet of the clocks of every value at least it", "[co
     CHECK(fence.reached(4) == std::nullopt);
 }
 
-//======================================================================================================================
 TEST_CASE("signals that each follow the one before keep each value's own clock", "[core]")
 {
     core::FenceClocks fence(0);
@@ -86,7 +79,6 @@ TEST_CASE("signals that each follow the one before keep each value's own clock",
     CHECK(fence.reached(3) == core::Clock{ 6, 3, 1 });
 }
 
-//======================================================================================================================
 TEST_CASE("a queue's running clock joins the clock of the value it waits on, and a CPU wait raises the host clock", "[core]")
 {
 #ifndef NDEBUG
@@ -112,7 +104,6 @@ TEST_CASE("a queue's running clock joins the clock of the value it waits on, and
 #endif
 }
 
-//======================================================================================================================
 TEST_CASE("values the host clock covers collapse into a floor that orders what the last of them ordered", "[core]")
 {
     core::FenceClocks fence(0);
@@ -132,7 +123,6 @@ TEST_CASE("values the host clock covers collapse into a floor that orders what t
     CHECK(fence.reached(1) == core::Clock{ 4, 0, 0 });
 }
 
-//======================================================================================================================
 TEST_CASE("pruning keeps a value whose stored meet the host clock does not cover", "[core]")
 {
     // The meet of value 1 takes in value 2's clock, so it rises along the list and pruning stops at the first uncovered one.
@@ -148,7 +138,6 @@ TEST_CASE("pruning keeps a value whose stored meet the host clock does not cover
     CHECK(fence.reached(3) == core::Clock{ 5, 3, 0 });
 }
 
-//======================================================================================================================
 TEST_CASE("a fence signalled every frame keeps about framesInFlight values", "[core]")
 {
 #ifndef NDEBUG

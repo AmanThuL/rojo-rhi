@@ -45,12 +45,9 @@
 
 namespace rojoRHI {
     namespace {
-        /// The label of each caller-visible queue, indexed by `QueueType`.
         constexpr std::array<std::string_view, 3> kQueueLabels = { "rojorhi.queue.graphics", "rojorhi.queue.compute", "rojorhi.queue.copy" };
 
-        //==============================================================================================================
-        /// Waits until frame `frame` has completed on the graphics queue, which signals the frame event with the number of each
-        /// frame it ends; counts the wait as one native host call.
+        // The graphics queue signals the frame event with the number of each frame it ends.
         void waitFrame(void* context, uint64_t frame)
         {
             DeviceImpl& impl = *static_cast<DeviceImpl*>(context);
@@ -58,14 +55,11 @@ namespace rojoRHI {
             core::DeviceCounts::add(impl.core.counts().nativeHostCalls);
         }
 
-        //==============================================================================================================
-        /// Blocks until `queue`, labelled `label`, has finished the work submitted to it so far, through an event of its own,
-        /// and then until Metal's completion work for those commits has let go of what it held, through a last empty commit
-        /// that `metal4::commitAndWait` waits for: a list's allocator released afterwards is released for the last time here,
-        /// not on Metal's notification thread, which holds no autorelease pool. Logs and aborts, in every build, when Metal
-        /// makes no event, allocator or command buffer: the device's objects cannot be released while the queue may still
-        /// use them. The caller holds an autorelease pool. Only `destroyDevice` calls it, after the caller's last submission:
-        /// its empty commit is the one native commit on a caller queue that no `Queue::submit` makes, and it is not counted.
+        // A last empty commit, waited for by `metal4::commitAndWait`, makes Metal's completion work let go of what it
+        // held, so an allocator released afterwards is released here, not on Metal's notification thread, which holds
+        // no autorelease pool. Fatal in every build when Metal makes no event, allocator or command buffer: the
+        // device's objects cannot be released while the queue may still use them. The empty commit is the one uncounted
+        // native commit no `Queue::submit` makes.
         void drainQueue(MTL::Device* device, MTL4::CommandQueue* queue, std::string_view label)
         {
             MTL::SharedEvent* drained = device->newSharedEvent();
@@ -97,11 +91,8 @@ namespace rojoRHI {
             allocator->release();
         }
 
-        //==============================================================================================================
-        /// Returns the command lists of a reused frame slot to its pool, each list's ended encoders released and its allocator
-        /// reset, frees the swapchains destroyed in the slot's frames, readies the slot's timestamps, which the scope-time hook
-        /// has read, and releases the events of destroyed fences every queue has passed. The frame wait before it has proven
-        /// the slot's work complete, the compute and copy work included, which the frame's graphics work joins.
+        // The frame wait before it has proven the slot's work complete, the compute and copy work included, which the
+        // frame's graphics work joins.
         void reuseSlot(void* context, uint32_t slot)
         {
             DeviceImpl& impl = *static_cast<DeviceImpl*>(context);
@@ -123,9 +114,7 @@ namespace rojoRHI {
             metal4::releasePassedFences(impl);
         }
 
-        //==============================================================================================================
-        /// Creates a Shared buffer of `entries` `MTL::ResourceID`s labelled `label`, or returns null. The caller holds an
-        /// autorelease pool.
+        // The caller holds an autorelease pool.
         MTL::Buffer* newIdTable(MTL::Device* device, uint64_t entries, std::string_view label)
         {
             MTL::Buffer* table = device->newBuffer(entries * sizeof(MTL::ResourceID), MTL::ResourceStorageModeShared | MTL::ResourceCPUCacheModeDefaultCache);
@@ -136,9 +125,7 @@ namespace rojoRHI {
             return table;
         }
 
-        //==============================================================================================================
-        /// Releases the native objects of `impl` that exist, in reverse order of creation, and clears each pointer. The caller
-        /// holds an autorelease pool, and no queue holds work that uses them.
+        // The caller holds an autorelease pool, and no queue holds work that uses them.
         void releaseNative(DeviceImpl& impl)
         {
             metal4::releaseRetiringFences(impl);
@@ -210,11 +197,9 @@ namespace rojoRHI {
             }
         }
 
-        //==============================================================================================================
-        /// Creates the native objects of `impl` on its device, in the order `releaseNative` reverses. The caller holds an
-        /// autorelease pool and releases what exists when this fails. As on the Null backend, which counts nothing at device
-        /// creation or destruction, the device's own objects and the calls that create, drain and release them are not counted:
-        /// the counters measure frames and the objects a caller creates.
+        // The caller holds an autorelease pool and releases what exists when this fails. As on the Null backend, the
+        // device's own objects and the calls that create, drain and release them are not counted: the counters measure
+        // frames and the objects a caller creates.
         Result<void> createNative(DeviceImpl& impl)
         {
             NS::Error* error = nullptr;
@@ -321,9 +306,6 @@ namespace rojoRHI {
             return {};
         }
 
-        //==============================================================================================================
-        /// Reports what `impl`'s device supports: its names, limits and format table, and the features this backend does not
-        /// provide yet as absent.
         void reportCapabilities(DeviceImpl& impl)
         {
             impl.adapterName = metal4::toStdString(impl.device->name());
@@ -345,14 +327,12 @@ namespace rojoRHI {
         }
     } // namespace
 
-    //==================================================================================================================
     DeviceImpl& DeviceImpl::of(Device device)
     {
         core::checkObject(device.m_impl, "Device");
         return *device.m_impl;
     }
 
-    //==================================================================================================================
     Device DeviceImpl::wrap(DeviceImpl* impl)
     {
         Device device;
@@ -361,20 +341,17 @@ namespace rojoRHI {
     }
 
     namespace core {
-        //==============================================================================================================
         DeviceCore& coreOf(Device device)
         {
             return DeviceImpl::of(device).core;
         }
 
-        //==============================================================================================================
         SwapchainCore& coreOf(Swapchain swapchain)
         {
             return SwapchainImpl::of(swapchain).core;
         }
     } // namespace core
 
-    //==================================================================================================================
     Result<Device> createDevice(const DeviceDesc& desc)
     {
         if (Result<void> valid = core::validateDeviceDesc(desc); !valid)
@@ -430,7 +407,6 @@ namespace rojoRHI {
         return DeviceImpl::wrap(impl.release());
     }
 
-    //==================================================================================================================
     void destroyDevice(Device device)
     {
         DeviceImpl& impl = DeviceImpl::of(device);
@@ -462,19 +438,16 @@ namespace rojoRHI {
         delete &impl;
     }
 
-    //==================================================================================================================
     const Capabilities& Device::capabilities() const
     {
         return DeviceImpl::of(*this).core.capabilities();
     }
 
-    //==================================================================================================================
     FormatCapabilities Device::formatCapabilities(Format format) const
     {
         return DeviceImpl::of(*this).core.formatCapabilities(format);
     }
 
-    //==================================================================================================================
     void Device::beginFrame()
     {
         DeviceImpl& impl = DeviceImpl::of(*this);
@@ -490,7 +463,6 @@ namespace rojoRHI {
         }
     }
 
-    //==================================================================================================================
     void Device::endFrame()
     {
         DeviceImpl& impl = DeviceImpl::of(*this);
@@ -499,7 +471,6 @@ namespace rojoRHI {
         core::DeviceCounts::add(impl.core.counts().nativeSubmitCalls);
     }
 
-    //==================================================================================================================
     Queue Device::queue(QueueType type)
     {
         DeviceImpl& impl = DeviceImpl::of(*this);
@@ -508,25 +479,21 @@ namespace rojoRHI {
         return QueueImpl::wrap(&impl.queues[index]);
     }
 
-    //==================================================================================================================
     Counters Device::counters() const
     {
         return DeviceImpl::of(*this).core.counters();
     }
 
-    //==================================================================================================================
     std::span<const ScopeTiming> Device::scopeTimings()
     {
         return DeviceImpl::of(*this).core.scopeTimings();
     }
 
-    //==================================================================================================================
     TileShape Device::tileShape(Texture texture)
     {
         return core::tileShape(DeviceImpl::of(*this).core, texture);
     }
 
-    //==================================================================================================================
     TileShape Device::tileShape(Buffer buffer)
     {
         return core::tileShape(DeviceImpl::of(*this).core, buffer);

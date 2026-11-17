@@ -41,50 +41,45 @@
 
 namespace rojoRHI {
     namespace {
-        /// The file name of the FidelityFX loader, which loads the upscaler module beside it.
+        // It loads the upscaler module beside it.
         constexpr const wchar_t* kLoaderName = L"amd_fidelityfx_loader_dx12.dll";
 
-        /// What an `Auto` or `FSR` refusal adds when no runtime loaded, so the caller learns which file is missing.
         constexpr std::string_view kMissingRuntime =
             "; FSR needs the FidelityFX runtime, amd_fidelityfx_loader_dx12.dll beside the executable, and none loaded";
 
-        /// The return code of a FidelityFX call that succeeded, as the type the calls return.
         constexpr ffxReturnCode_t kOk = FFX_API_RETURN_OK;
 
-        /// The smallest input extent, in texels per axis, an FSR upscaler is created for. FidelityFX makes internal surfaces at
-        /// half the largest render size, so a one-texel axis gives one of zero texels, which the runtime refuses.
+        // The smallest input extent, in texels per axis, an FSR upscaler is created for. FidelityFX makes internal surfaces at
+        // half the largest render size, so a one-texel axis gives one of zero texels, which the runtime refuses.
         constexpr uint32_t kMinInput = 2;
 
-        /// The legacy state an upscale's inputs are passed in: `Layout::ShaderRead` is `LAYOUT_SHADER_RESOURCE`, which the
-        /// enhanced-barrier mapping of legacy states gives `NON_PIXEL_SHADER_RESOURCE | PIXEL_SHADER_RESOURCE`.
+        // The legacy state an upscale's inputs are passed in: `Layout::ShaderRead` is `LAYOUT_SHADER_RESOURCE`, which the
+        // enhanced-barrier mapping of legacy states gives `NON_PIXEL_SHADER_RESOURCE | PIXEL_SHADER_RESOURCE`.
         constexpr uint32_t kInputState = static_cast<uint32_t>(FFX_API_RESOURCE_STATE_PIXEL_COMPUTE_READ);
 
-        /// The legacy state an upscale's output is passed in: `Layout::ShaderWrite` is `LAYOUT_UNORDERED_ACCESS`, which the same
-        /// mapping gives `UNORDERED_ACCESS`.
+        // The legacy state an upscale's output is passed in: `Layout::ShaderWrite` is `LAYOUT_UNORDERED_ACCESS`, which the same
+        // mapping gives `UNORDERED_ACCESS`.
         constexpr uint32_t kOutputState = static_cast<uint32_t>(FFX_API_RESOURCE_STATE_UNORDERED_ACCESS);
 
-        /// The milliseconds since the last frame an upscale passes: `UpscaleParams` carries no frame time, so every upscale
-        /// stands for a 60 Hz frame.
+        // The milliseconds since the last frame an upscale passes: `UpscaleParams` carries no frame time, so every upscale
+        // stands for a 60 Hz frame.
         constexpr float kFrameTimeMs = 1000.0f / 60.0f;
 
-        /// The camera an upscale passes, which `UpscaleParams` does not carry: a near plane at 0.1 and a far plane at 100 view
-        /// units, a vertical field of view of one radian and one view unit to the metre.
+        // The camera an upscale passes, which `UpscaleParams` does not carry: a near plane at 0.1 and a far plane at 100 view
+        // units, a vertical field of view of one radian and one view unit to the metre.
         constexpr float kCameraNear = 0.1f;
         constexpr float kCameraFar = 100.0f;
         constexpr float kCameraFovRadians = 1.0f;
         constexpr float kMetresPerViewUnit = 1.0f;
 
-        //==============================================================================================================
-        /// Returns the process-wide mutex held around every FidelityFX query, context creation and context destruction: the
-        /// loader is one per process, whichever device loaded it, and documents no thread safety. It is a leaf.
+        // Held around every FidelityFX query, context creation and context destruction: the loader is one per process,
+        // whichever device loaded it, and documents no thread safety. A leaf.
         std::mutex& fidelityFxCalls()
         {
             static std::mutex mutex;
             return mutex;
         }
 
-        //==============================================================================================================
-        /// Returns the name of the FidelityFX return code `code`.
         const char* returnCodeName(ffxReturnCode_t code)
         {
             switch (code)
@@ -101,8 +96,6 @@ namespace rojoRHI {
             return "an unknown return code";
         }
 
-        //==============================================================================================================
-        /// Resolves the export `name` of `module` into `entry`; returns false, and logs a warning, when it is missing.
         template<typename T> bool resolve(HMODULE module, const char* name, T& entry)
         {
             entry = reinterpret_cast<T>(GetProcAddress(module, name));
@@ -114,9 +107,7 @@ namespace rojoRHI {
             return true;
         }
 
-        //==============================================================================================================
-        /// Returns the `ffxCreateContextDescUpscale` flags of `flags`. Every upscaler takes a per-frame content extent, so
-        /// dynamic resolution is always enabled.
+        // Every upscaler takes a per-frame content extent, so dynamic resolution is always enabled.
         uint32_t createFlags(UpscalerFlags flags)
         {
             uint32_t native = static_cast<uint32_t>(FFX_UPSCALE_ENABLE_DYNAMIC_RESOLUTION);
@@ -135,9 +126,8 @@ namespace rojoRHI {
             return native;
         }
 
-        //==============================================================================================================
-        /// Returns the error of a creation of `record` that `ffxCreateContext` refused with `code`: `OutOfMemory` for a failed
-        /// allocation, `Unsupported` when no provider takes the description, `DriverFailure` otherwise.
+        // `OutOfMemory` for a failed allocation, `Unsupported` when no provider takes the description, `DriverFailure`
+        // otherwise.
         Error refusal(const core::UpscalerRecord& record, ffxReturnCode_t code)
         {
             const ffxReturnCode_t memory = FFX_API_RETURN_ERROR_MEMORY;
@@ -158,11 +148,8 @@ namespace rojoRHI {
                           ) };
         }
 
-        //==============================================================================================================
-        /// Creates the FSR upscale context of `record` on `impl`'s device: `ffxCreateContextDescUpscale` with the input as the
-        /// largest render size and the output as the upscale size, chained to the version the headers declare and the DX12
-        /// backend description. Creation is synchronous and takes the FidelityFX mutex. A FidelityFX context is no
-        /// `ID3D12Object`, so it takes no name.
+        // The input is the largest render size and the output the upscale size. Creation is synchronous and takes the
+        // FidelityFX mutex. A FidelityFX context is no `ID3D12Object`, so it takes no name.
         Result<ffxContext> createContext(DeviceImpl& impl, const core::UpscalerRecord& record)
         {
             ffxCreateBackendDX12Desc backend = {};
@@ -190,10 +177,8 @@ namespace rojoRHI {
             return context;
         }
 
-        //==============================================================================================================
-        /// Returns the FidelityFX description of `texture`, a 2D texture an upscale reads or writes at mip 0 of layer 0, with
-        /// `usage` and in the legacy `state`. The surface format is the one a view of `viewUsage` reads: the depth plane of a
-        /// depth format as a float, and the linear counterpart of an sRGB format a `Storage` view writes.
+        // The surface format is the one a view of `viewUsage` reads: the depth plane of a depth format as a float, and
+        // the linear counterpart of an sRGB format a `Storage` view writes.
         FfxApiResource describe(const d3d12::TexturePayload& texture, uint32_t usage, uint32_t state, TextureUsage viewUsage)
         {
             const TextureAspect aspect = core::isDepthFormat(texture.format) ? TextureAspect::Depth : TextureAspect::Color;
@@ -211,10 +196,8 @@ namespace rojoRHI {
             return resource;
         }
 
-        //==============================================================================================================
-        /// Returns the FidelityFX description of `texture` as an upscale input, from the texture payloads `textures`. A depth
-        /// format is a depth target, with a stencil target when it has a stencil plane; any other is read only. A null handle
-        /// gives an empty description, which FidelityFX takes as no input.
+        // A depth format is a depth target, with a stencil target when it has a stencil plane; any other is read only.
+        // A null handle gives an empty description, which FidelityFX takes as no input.
         FfxApiResource describeInput(const core::HandlePool<Texture, core::TextureRecord>& textures, Texture texture)
         {
             if (texture.bits == 0)
@@ -234,9 +217,7 @@ namespace rojoRHI {
             return describe(payload, usage, kInputState, TextureUsage::Sampled);
         }
 
-        //==============================================================================================================
-        /// Destroys `context`, the FSR context of the upscaler `label`, under the FidelityFX mutex. Logs and aborts, in every
-        /// build, when the runtime refuses.
+        // Under the FidelityFX mutex. Logs and aborts, in every build, when the runtime refuses.
         void destroyContext(d3d12::FsrRuntime& runtime, ffxContext context, std::string_view label)
         {
             ROJORHI_INTERNAL_ASSERT(runtime.fidelityFx.has_value(), "an FSR context outlived the FidelityFX runtime that made it");
@@ -252,7 +233,6 @@ namespace rojoRHI {
     } // namespace
 
     namespace d3d12 {
-        //==============================================================================================================
         std::optional<FidelityFx> loadFidelityFx(std::wstring_view directory)
         {
             if (directory.empty())
@@ -289,7 +269,6 @@ namespace rojoRHI {
             return fidelityFx;
         }
 
-        //==============================================================================================================
         void unloadFidelityFx(FsrRuntime& runtime)
         {
             if (runtime.fidelityFx.has_value())
@@ -299,7 +278,6 @@ namespace rojoRHI {
             }
         }
 
-        //==============================================================================================================
         bool fsrAvailable(const FidelityFx& fidelityFx, ID3D12Device12& device)
         {
             // A zero count with no output arrays asks for the number of versions the device can create.
@@ -320,7 +298,6 @@ namespace rojoRHI {
             return count > 0;
         }
 
-        //==============================================================================================================
         std::span<const UpscalerSupport> listedUpscalers(const std::optional<FidelityFx>& fidelityFx, ID3D12Device12& device)
         {
             // FidelityFX's documented quality modes run from native AA (1.0x) to ultra performance (3.0x); the range is not
@@ -333,7 +310,6 @@ namespace rojoRHI {
             return {};
         }
 
-        //==============================================================================================================
         void retireUpscaler(void* context, core::UpscalerRecord& record)
         {
             if (record.native == nullptr)
@@ -346,7 +322,6 @@ namespace rojoRHI {
         }
     } // namespace d3d12
 
-    //==================================================================================================================
     void CommandList::upscale(Upscaler upscaler, const UpscaleParams& params)
     {
         CommandListImpl& list = CommandListImpl::of(*this);
@@ -387,7 +362,8 @@ namespace rojoRHI {
         desc.cameraFovAngleVertical = kCameraFovRadians;
         desc.viewSpaceToMetersFactor = kMetresPerViewUnit;
         desc.flags = 0;
-        // The upscale's scope, a PIX event and a timestamp pair when timed, brackets FidelityFX's work alone.
+        // The upscale's scope (its PIX event when the device marks scopes, its timestamp pair when timed) brackets
+        // FidelityFX's work alone.
         d3d12::beginNativeScope(list, params.label);
         const ffxReturnCode_t code = impl.fsr.fidelityFx->dispatch(&context, &desc.header);
         core::noteNativeCall(list.core);
@@ -401,7 +377,6 @@ namespace rojoRHI {
         d3d12::resumeAfterVendorWork(list);
     }
 
-    //==================================================================================================================
     Result<Upscaler> Device::createUpscaler(const UpscalerDesc& desc)
     {
         DeviceImpl& impl = DeviceImpl::of(*this);

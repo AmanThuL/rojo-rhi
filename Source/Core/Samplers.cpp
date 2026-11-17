@@ -14,28 +14,23 @@
 
 namespace rojoRHI::core {
     namespace {
-        //==============================================================================================================
-        /// The largest `maxAnisotropy` a sampler may have: VU-rojo-texture-0029 allows 1 to 16 whatever a device reports, so a
-        /// larger limit never widens it.
+        // VU-rojo-texture-0029 allows 1 to 16 whatever a device reports, so a larger limit never widens it.
         [[maybe_unused]] uint32_t anisotropyBound(const DeviceCore& core)
         {
             return std::min(core.capabilities().limits.maxSamplerAnisotropy, 16u);
         }
 
-        //==============================================================================================================
         [[maybe_unused]] bool anisotropyInRange(const DeviceCore& core, const SamplerDesc& desc)
         {
             return desc.maxAnisotropy >= 1 && desc.maxAnisotropy <= anisotropyBound(core);
         }
 
-        //==============================================================================================================
         [[maybe_unused]] bool anisotropyFiltersLinear(const SamplerDesc& desc)
         {
             return desc.maxAnisotropy <= 1 || (desc.filter == SamplerFilter::Linear && desc.mipFilter == SamplerFilter::Linear);
         }
     } // namespace
 
-    //==================================================================================================================
     void checkSampler([[maybe_unused]] DeviceCore& core, const SamplerDesc& desc)
     {
         ROJORHI_VU(anisotropyInRange(core, desc), "VU-rojo-texture-0029", "maxAnisotropy {} is not in 1 to {}", desc.maxAnisotropy, anisotropyBound(core));
@@ -48,7 +43,6 @@ namespace rojoRHI::core {
         (void)resolveLabel(desc.label, "rojorhi.sampler.unnamed");
     }
 
-    //==================================================================================================================
     Result<SamplerIndex> addSampler(DeviceCore& core, void* native)
     {
         const std::optional<uint32_t> slot = core.samplers().allocate(core.capabilities().maxSamplers, 0, native);
@@ -61,7 +55,6 @@ namespace rojoRHI::core {
         return static_cast<SamplerIndex>(*slot);
     }
 
-    //==================================================================================================================
     void destroySampler(DeviceCore& core, SamplerIndex sampler)
     {
         [[maybe_unused]] const std::optional<uint64_t> owner = core.samplers().release(std::to_underlying(sampler), [&core] { return core.releaseFrame(); });
@@ -73,7 +66,6 @@ namespace rojoRHI::core {
         );
     }
 
-    //==================================================================================================================
     void checkSamplerWrite([[maybe_unused]] DeviceCore& core, [[maybe_unused]] IndexRange range, [[maybe_unused]] uint32_t index, const SamplerDesc& desc)
     {
         ROJORHI_VU(
@@ -101,7 +93,6 @@ namespace rojoRHI::core {
         (void)resolveLabel(desc.label, "rojorhi.sampler.unnamed");
     }
 
-    //==================================================================================================================
     bool placeSampler(DeviceCore& core, IndexRange range, uint32_t index, void* native)
     {
         if (!core.samplers().replace(range.base + index, 0, native, [&core] { return core.releaseFrame(); }))

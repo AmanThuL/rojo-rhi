@@ -19,26 +19,21 @@
 
 namespace rojoRHI::metal4 {
     namespace {
-        /// The buffer bindings of a list's argument table: the root, the view table, the sampler table and a draw's record.
+        // The four reserved buffer bindings (ADR 0018).
         constexpr NS::UInteger kTableBindings = 4;
 
-        /// The binding of the view table's address (ADR 0018).
         constexpr NS::UInteger kViewTableBinding = 1;
 
-        /// The binding of the sampler table's address (ADR 0018).
         constexpr NS::UInteger kSamplerTableBinding = 2;
 
-        /// The binding of a draw's record, the zero record until a draw binds another (ADR 0028).
+        // The zero record until a draw binds another (ADR 0028).
         constexpr NS::UInteger kDrawRecordBinding = 3;
 
-        /// The buffer bindings of a list's kernel table: a backend kernel's parameters and the buffer it writes.
         constexpr NS::UInteger kKernelBufferBindings = 2;
 
-        /// The texture bindings of a list's kernel table: the texture a backend kernel writes.
         constexpr NS::UInteger kKernelTextureBindings = 1;
     } // namespace
 
-    //==================================================================================================================
     Result<void> ListState::create(
         MTL::Device* device, uint64_t viewTableAddress, uint64_t samplerTableAddress, uint64_t zeroRecordAddress, bool perCommandPools, bool emitMarkers
     )
@@ -91,7 +86,6 @@ namespace rojoRHI::metal4 {
         return {};
     }
 
-    //==================================================================================================================
     void ListState::release()
     {
         for (auto it = scopeLabels.rbegin(); it != scopeLabels.rend(); ++it)
@@ -135,7 +129,6 @@ namespace rojoRHI::metal4 {
         }
     }
 
-    //==================================================================================================================
     NS::String* ListState::makeGroupLabel(std::string_view label, const char* fallback)
     {
         const size_t index = groupCursor++;

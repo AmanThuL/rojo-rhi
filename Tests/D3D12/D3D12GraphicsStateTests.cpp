@@ -31,44 +31,36 @@
 using namespace rojoRHI;
 
 namespace {
-    /// The width and height of the target the cases render to.
     constexpr uint32_t kSize = 4;
 
-    /// The one color target of every pipeline the cases create.
     constexpr std::array<ColorTarget, 1> kColor = { ColorTarget{ .format = Format::RGBA8Unorm } };
 
-    /// The viewport and scissor of the whole target.
     constexpr Viewport kFull{ .width = static_cast<float>(kSize), .height = static_cast<float>(kSize) };
     constexpr Rect2D kFullRect{ 0, 0, kSize, kSize };
 
-    /// Four `uint32` words of one cell AbiVertex stores.
     using Cell = std::array<uint32_t, 4>;
 
-    /// The cell an untouched output holds.
     constexpr Cell kUntouched{ 0xDEADBEEFu, 0xDEADBEEFu, 0xDEADBEEFu, 0xDEADBEEFu };
 
-    /// AbiVertex's root.
+    // AbiVertex's root: `output` takes one `uint4` per vertex.
     struct VertexRoot
     {
-        Addr output;                  ///< Where the entry stores what it observed, one `uint4` per vertex.
-        uint32_t firstVertex;         ///< The first vertex index the draw passes.
-        uint32_t verticesPerInstance; ///< The vertices of each instance.
+        Addr output;
+        uint32_t firstVertex;
+        uint32_t verticesPerInstance;
     };
 
-    /// A root block no standard entry reads.
+    // No standard entry reads this root.
     struct UnreadRoot
     {
-        std::array<uint32_t, 4> words; ///< Any value.
+        std::array<uint32_t, 4> words;
     };
 
-    /// Guards `g_messages`, which the message callback may fill from any thread.
+    // The message callback may fill `g_messages` from any thread.
     std::mutex g_messagesMutex;
 
-    /// The messages at `Warning` or above the library reported while a case collected them.
     std::vector<std::string> g_messages;
 
-    //==================================================================================================================
-    /// Keeps `message` when it is a warning or an error. It may run on any thread.
     void collectMessage(MessageSeverity severity, std::string_view message, void*)
     {
         if (severity == MessageSeverity::Info)
@@ -79,25 +71,22 @@ namespace {
         g_messages.emplace_back(message);
     }
 
-    /// Collects the library's warnings and errors, the debug layer's included, into `g_messages`, emptied first, while it
-    /// lives, and removes the callback when it goes, however the case ends.
+    // Collects the library's warnings and errors, the debug layer's included, into `g_messages` (emptied first) while it
+    // lives, and removes the callback however the case ends.
     class MessageCollection
     {
       public:
         MessageCollection();
         ~MessageCollection();
 
-        //==============================================================================================================
         MessageCollection(const MessageCollection&) = delete;
 
-        //==============================================================================================================
         MessageCollection& operator=(const MessageCollection&) = delete;
 
-        /// Returns how many messages were collected, and lists them for the log.
+        // Also lists the messages for the log.
         size_t count() const;
     };
 
-    //==================================================================================================================
     MessageCollection::MessageCollection()
     {
         {
@@ -107,13 +96,11 @@ namespace {
         setMessageCallback(collectMessage, nullptr);
     }
 
-    //==================================================================================================================
     MessageCollection::~MessageCollection()
     {
         setMessageCallback(nullptr, nullptr);
     }
 
-    //==================================================================================================================
     size_t MessageCollection::count() const
     {
         const std::lock_guard lock(g_messagesMutex);
@@ -124,9 +111,7 @@ namespace {
         return g_messages.size();
     }
 
-    //==================================================================================================================
-    /// Returns a new device that keeps two frames in flight, times scopes and emits their events (ADR 0034), so a pass's counts
-    /// include its two queries and its event pair.
+    // Times scopes and emits their events (ADR 0034), so a pass's counts include its two queries and its event pair.
     Device makeDevice()
     {
         DeviceDesc desc;
@@ -139,8 +124,6 @@ namespace {
         return *created;
     }
 
-    //==================================================================================================================
-    /// Returns a new fence at zero on `device`, labelled `label`.
     Fence makeFence(Device device, std::string_view label)
     {
         Result<Fence> created = device.createFence(0, label);
@@ -148,8 +131,6 @@ namespace {
         return *created;
     }
 
-    //==================================================================================================================
-    /// Returns a new `kSize` by `kSize` RGBA8 render target on `device`.
     Texture makeTarget(Device device)
     {
         Result<Texture> created =
@@ -158,8 +139,6 @@ namespace {
         return *created;
     }
 
-    //==================================================================================================================
-    /// Returns a new buffer of `desc` on `device`, holding `initial` when it is not empty.
     Buffer makeBuffer(Device device, const BufferDesc& desc, std::span<const std::byte> initial = {})
     {
         Result<Buffer> created = device.createBuffer(desc, initial);
@@ -167,8 +146,6 @@ namespace {
         return *created;
     }
 
-    //==================================================================================================================
-    /// Returns the bytes of `cells`.
     std::vector<std::byte> bytesOf(std::span<const Cell> cells)
     {
         std::vector<std::byte> bytes(cells.size() * sizeof(Cell));
@@ -176,23 +153,17 @@ namespace {
         return bytes;
     }
 
-    //==================================================================================================================
-    /// Returns a new buffer AbiVertex can store `cells` cells into, each holding `kUntouched`.
     Buffer outputBuffer(Device device, uint64_t cells)
     {
         const std::vector<Cell> initial(cells, kUntouched);
         return makeBuffer(device, { .size = cells * sizeof(Cell), .usage = BufferUsage::ShaderWrite, .label = "test.output" }, bytesOf(initial));
     }
 
-    //==================================================================================================================
-    /// Returns a new index buffer holding `bytes`.
     Buffer indexBuffer(Device device, std::span<const std::byte> bytes)
     {
         return makeBuffer(device, { .size = bytes.size(), .usage = BufferUsage::Index, .label = "test.indices" }, bytes);
     }
 
-    //==================================================================================================================
-    /// Loads the standard library on `device`.
     ShaderLibrary loadStandard(Device device)
     {
         const Result<ShaderLibrary> library = device.loadShaderLibrary(test::standardLibrary(), "test.standard");
@@ -201,8 +172,6 @@ namespace {
         return *library;
     }
 
-    //==================================================================================================================
-    /// Loads the packaged conformance library `name` on `device`.
     ShaderLibrary loadLibrary(Device device, std::string_view name)
     {
         const Result<ShaderLibrary> library = device.loadShaderLibrary(test::shaderLibraryFile(name), std::string("test.") + std::string(name));
@@ -211,8 +180,6 @@ namespace {
         return *library;
     }
 
-    //==================================================================================================================
-    /// Creates `desc` over `kColor` on `device`, failing the case with the error's message when creation fails.
     Pipeline create(Device device, GraphicsPipelineDesc desc)
     {
         desc.colors = kColor;
@@ -223,8 +190,6 @@ namespace {
         return *pipeline;
     }
 
-    //==================================================================================================================
-    /// Creates the standard vertex and fragment pipeline of `library`, with `raster`.
     Pipeline standardPipeline(Device device, ShaderLibrary library, const RasterState& raster = {})
     {
         return create(
@@ -232,22 +197,18 @@ namespace {
         );
     }
 
-    //==================================================================================================================
-    /// Creates the standard mesh pipeline of `library`, without a task stage.
     Pipeline meshPipeline(Device device, ShaderLibrary library)
     {
         return create(device, GraphicsPipelineDesc{ .mesh = { library, "msMain" }, .fragment = { library, "fsMain" }, .label = "test.mesh" });
     }
 
-    //==================================================================================================================
-    /// Creates AbiVertex's pipeline on `device`: no fragment entry, so only its stores are observable.
+    // No fragment entry, so only its stores are observable.
     Pipeline abiVertexPipeline(Device device)
     {
         return create(device, GraphicsPipelineDesc{ .vertex = { loadLibrary(device, "AbiVertex"), "vertexMain" }, .label = "test.abiVertex" });
     }
 
-    //==================================================================================================================
-    /// Returns the payload of `pipeline`, read as recording reads it.
+    // Read as recording reads it.
     const d3d12::PipelineState& payloadOf(Device device, Pipeline pipeline)
     {
         const auto* state = static_cast<const d3d12::PipelineState*>(DeviceImpl::of(device).core.pool<Pipeline>().native(pipeline));
@@ -256,8 +217,6 @@ namespace {
         return *state;
     }
 
-    //==================================================================================================================
-    /// Returns the payload of `buffer`, a live buffer of `device`.
     const d3d12::BufferPayload& bufferOf(Device device, Buffer buffer)
     {
         const auto* payload = static_cast<const d3d12::BufferPayload*>(DeviceImpl::of(device).core.pool<Buffer>().native(buffer));
@@ -265,22 +224,16 @@ namespace {
         return *payload;
     }
 
-    //==================================================================================================================
-    /// Returns the native state of `list`.
     d3d12::ListState& stateOf(CommandList list)
     {
         return CommandListImpl::of(list).state;
     }
 
-    //==================================================================================================================
-    /// Returns the native calls `list` has recorded since its acquisition.
     uint64_t recordCalls(CommandList list)
     {
         return core::coreOf(list).counts.nativeRecordCalls;
     }
 
-    //==================================================================================================================
-    /// Records one barrier on `list` that moves every subresource of `target` from `Undefined` to `ColorAttachment`.
     void toColorAttachment(CommandList list, Texture target)
     {
         const std::array barriers{ TextureBarrier{ .texture = target,
@@ -291,8 +244,6 @@ namespace {
         list.barrier({}, {}, barriers);
     }
 
-    //==================================================================================================================
-    /// Returns the barrier between two passes that write `target`, which stays in `ColorAttachment`.
     TextureBarrier betweenPasses(Texture target)
     {
         return { .texture = target,
@@ -304,15 +255,11 @@ namespace {
                  .newLayout = Layout::ColorAttachment };
     }
 
-    //==================================================================================================================
-    /// Returns a pass over `colors` that renders to the whole target.
     RenderPassDesc passOver(const std::array<ColorAttachment, 1>& colors)
     {
         return RenderPassDesc{ .colors = colors, .area = kFullRect, .label = "test.pass" };
     }
 
-    //==================================================================================================================
-    /// Ends `list`, submits it on the Graphics queue signalling `done` to 1, ends the frame and waits for the signal.
     void run(Device device, CommandList list, Fence done)
     {
         list.end();
@@ -322,15 +269,12 @@ namespace {
         REQUIRE(device.wait({ done, 1 }, UINT64_MAX));
     }
 
-    //==================================================================================================================
-    /// Returns the first `cells` cells of `output`, a buffer of `device` no queue is using, read natively.
     std::vector<std::byte> readCells(Device device, Buffer output, uint64_t cells)
     {
         return test::readNativeBuffer(DeviceImpl::of(device), bufferOf(device, output).resource, cells * sizeof(Cell));
     }
 } // namespace
 
-//======================================================================================================================
 TEST_CASE("the first draw after setRoot costs the root, b1 and the draw; the next draw costs one call", "[d3d12]")
 {
     REQUIRE(kD3D12LibrariesBuilt);
@@ -377,7 +321,6 @@ TEST_CASE("the first draw after setRoot costs the root, b1 and the draw; the nex
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("setPipeline sets PSO and topology once; the same pipeline again sends nothing", "[d3d12]")
 {
     REQUIRE(kD3D12LibrariesBuilt);
@@ -433,7 +376,6 @@ TEST_CASE("setPipeline sets PSO and topology once; the same pipeline again sends
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("a mesh pipeline sets no topology", "[d3d12]")
 {
     REQUIRE(kD3D12LibrariesBuilt);
@@ -483,7 +425,6 @@ TEST_CASE("a mesh pipeline sets no topology", "[d3d12]")
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("equal dynamic state sends no call; a changed value sends one", "[d3d12]")
 {
     REQUIRE(kD3D12LibrariesBuilt);
@@ -572,7 +513,6 @@ TEST_CASE("equal dynamic state sends no call; a changed value sends one", "[d3d1
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("a pass's starting blend factor goes out with its first draw whose pipeline blends with the constant", "[d3d12]")
 {
     REQUIRE(kD3D12LibrariesBuilt);
@@ -637,7 +577,6 @@ TEST_CASE("a pass's starting blend factor goes out with its first draw whose pip
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("a depthBias pipeline re-issues the recorded bias at every setPipeline; a pipeline without depthBias sends none", "[d3d12]")
 {
     REQUIRE(kD3D12LibrariesBuilt);
@@ -696,7 +635,6 @@ TEST_CASE("a depthBias pipeline re-issues the recorded bias at every setPipeline
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("drawIndexed sets the index buffer once per buffer and format, with firstIndex as StartIndexLocation", "[d3d12]")
 {
     REQUIRE(kD3D12LibrariesBuilt);
@@ -757,7 +695,6 @@ TEST_CASE("drawIndexed sets the index buffer once per buffer and format, with fi
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("a zero-count draw, indexed draw or mesh draw records nothing", "[d3d12]")
 {
     REQUIRE(kD3D12LibrariesBuilt);
@@ -805,7 +742,6 @@ TEST_CASE("a zero-count draw, indexed draw or mesh draw records nothing", "[d3d1
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("setRoot before the pass, a fill, then the pass: the first draw binds the caller's root", "[d3d12]")
 {
     REQUIRE(kD3D12LibrariesBuilt);
@@ -854,7 +790,6 @@ TEST_CASE("setRoot before the pass, a fill, then the pass: the first draw binds 
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("C8's sequence costs the native minimum + 1", "[d3d12]")
 {
     REQUIRE(kD3D12LibrariesBuilt);

@@ -12,7 +12,6 @@
 
 using namespace rojoRHI;
 
-//======================================================================================================================
 TEST_CASE("a paced frame with fence submissions counts the Metal 4 native calls", "[metal4]")
 {
     Device device = *createDevice({ .framesInFlight = 2 });

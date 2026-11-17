@@ -14,7 +14,6 @@
 using namespace rojoRHI;
 using test::PassKit;
 
-//======================================================================================================================
 TEST_CASE("an empty batch of barriers is accepted", "[contract]")
 {
     PassKit kit;
@@ -22,7 +21,6 @@ TEST_CASE("an empty batch of barriers is accepted", "[contract]")
     kit.finish();
 }
 
-//======================================================================================================================
 TEST_CASE("one batch holds a global, a buffer and a texture barrier", "[contract]")
 {
     PassKit kit;
@@ -53,7 +51,6 @@ TEST_CASE("one batch holds a global, a buffer and a texture barrier", "[contract
     kit.finish();
 }
 
-//======================================================================================================================
 TEST_CASE("a buffer barrier names the whole buffer, its last byte or a range ending at its end", "[contract]")
 {
     PassKit kit;
@@ -68,7 +65,6 @@ TEST_CASE("a buffer barrier names the whole buffer, its last byte or a range end
     kit.finish();
 }
 
-//======================================================================================================================
 TEST_CASE("a texture barrier discards from Undefined and moves a texture through the layouts its usage allows", "[contract]")
 {
     PassKit kit;
@@ -98,7 +94,6 @@ TEST_CASE("a texture barrier discards from Undefined and moves a texture through
     kit.finish();
 }
 
-//======================================================================================================================
 TEST_CASE("texture barriers of one batch on disjoint subresources or on different textures are accepted", "[contract]")
 {
     PassKit kit;
@@ -114,7 +109,6 @@ TEST_CASE("texture barriers of one batch on disjoint subresources or on differen
     kit.finish();
 }
 
-//======================================================================================================================
 TEST_CASE("a Compute list takes barriers over its stages and layouts", "[contract]")
 {
     PassKit kit(QueueType::Compute);
@@ -132,7 +126,6 @@ TEST_CASE("a Compute list takes barriers over its stages and layouts", "[contrac
     kit.finish();
 }
 
-//======================================================================================================================
 TEST_CASE("a Copy list takes barriers over the Copy stage", "[contract]")
 {
     PassKit kit(QueueType::Copy);
@@ -142,7 +135,6 @@ TEST_CASE("a Copy list takes barriers over the Copy stage", "[contract]")
     kit.finish();
 }
 
-//======================================================================================================================
 TEST_CASE("barriers are recorded again after a render pass ends", "[contract]")
 {
     PassKit kit;

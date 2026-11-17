@@ -27,24 +27,22 @@
 
 namespace rojoRHI {
     namespace {
-        /// The arena bytes a clear dispatch's parameters take.
         constexpr uint32_t kClearParamsBytes = sizeof(metal4::ClearParams);
 
-        /// The alignment of a clear dispatch's parameters: that of the `float4` that leads them.
+        // That of the `float4` that leads them.
         constexpr uint32_t kClearParamsAlignment = 16;
 
-        /// The mips and layers a clear covers, with `kAllMips` and `kAllLayers` resolved.
+        // With `kAllMips` and `kAllLayers` resolved.
         struct Subresources
         {
-            uint32_t baseMip = 0;   ///< The first mip.
-            uint32_t mips = 0;      ///< How many mips.
-            uint32_t baseLayer = 0; ///< The first layer, counting faces for cube types.
-            uint32_t layers = 0;    ///< How many layers.
+            uint32_t baseMip = 0;
+            uint32_t mips = 0;
+            uint32_t baseLayer = 0; // Counting faces for cube types.
+            uint32_t layers = 0;
         };
 
-        //==============================================================================================================
-        /// Returns the subresources `range` names in `texture`, read from the native texture's getters rather than from the
-        /// record, which is behind a lock. Metal counts cubes in a cube type's array length, RojoRHI counts faces.
+        // Read from the native texture's getters rather than from the record, which is behind a lock. Metal counts
+        // cubes in a cube type's array length, RojoRHI counts faces.
         Subresources resolve(const MTL::Texture* texture, const SubresourceRange& range)
         {
             const auto mips = static_cast<uint32_t>(texture->mipmapLevelCount());
@@ -62,9 +60,6 @@ namespace rojoRHI {
             };
         }
 
-        //==============================================================================================================
-        /// Points `attachment` at mip `mip` and slice `layer` (depth plane `plane` of a 3D texture) of `texture`, cleared when
-        /// the pass loads it and stored when it ends.
         void clearAttachment(MTL::RenderPassAttachmentDescriptor* attachment, const MTL::Texture* texture, uint32_t mip, uint32_t layer, uint32_t plane)
         {
             attachment->setTexture(texture);
@@ -75,9 +70,8 @@ namespace rojoRHI {
             attachment->setStoreAction(MTL::StoreActionStore);
         }
 
-        //==============================================================================================================
-        /// Clears `subresources` of `texture`, a render target or depth-stencil texture, with one render encoder per mip and
-        /// layer (per depth plane of each mip for a 3D texture), each running only its clear load actions.
+        // One render encoder per mip and layer (per depth plane of a 3D texture's mip), each running only its clear
+        // load actions.
         void clearByLoadActions(CommandListImpl& impl, const MTL::Texture* texture, const Subresources& subresources, const ClearValue& value)
         {
             core::CommandListCore& list = impl.core;
@@ -125,9 +119,6 @@ namespace rojoRHI {
             }
         }
 
-        //==============================================================================================================
-        /// Clears `subresources` of `texture`, a texture made for storage only, with one dispatch of the clear kernel of its type
-        /// per mip, on the list's compute encoder.
         void clearByKernel(CommandListImpl& impl, const MTL::Texture* texture, const Subresources& subresources, const ClearValue& value)
         {
             core::CommandListCore& list = impl.core;
@@ -173,7 +164,6 @@ namespace rojoRHI {
         }
     } // namespace
 
-    //==================================================================================================================
     void CommandList::clearTexture(Texture texture, const SubresourceRange& range, const ClearValue& value)
     {
         CommandListImpl& impl = CommandListImpl::of(*this);

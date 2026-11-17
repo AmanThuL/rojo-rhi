@@ -7,6 +7,7 @@ struct Varyings
     float3 color : COLOR;
 };
 
+// Apart from MeshShaders.slang: Metal rejects that file's groupshared declarations in a fragment function.
 [shader("fragment")]
 float4 terrainFragment(Varyings input) : SV_Target
 {

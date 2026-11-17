@@ -37,7 +37,6 @@ namespace {
     Received gReceived;
     int gMarker = 0;
 
-    //==================================================================================================================
     void recordMessage(rojoRHI::MessageSeverity severity, std::string_view message, void* user)
     {
         ++gReceived.count;
@@ -46,8 +45,6 @@ namespace {
         gReceived.user = user;
     }
 
-    //==================================================================================================================
-    /// Runs `emit` with standard error redirected to a temporary file and returns what it wrote.
     template<class F> std::string captureStderr(F&& emit)
     {
         std::fflush(stderr);
@@ -77,7 +74,6 @@ namespace {
 
 } // namespace
 
-//======================================================================================================================
 TEST_CASE("a Result holds either a value or an Error", "[contract]")
 {
     rojoRHI::Result<int> ok = 7;
@@ -92,7 +88,6 @@ TEST_CASE("a Result holds either a value or an Error", "[contract]")
     CHECK(none.has_value());
 }
 
-//======================================================================================================================
 TEST_CASE("every ErrorCategory enumerator exists and keeps its order", "[contract]")
 {
     using rojoRHI::ErrorCategory;
@@ -103,13 +98,11 @@ TEST_CASE("every ErrorCategory enumerator exists and keeps its order", "[contrac
     STATIC_REQUIRE(static_cast<uint8_t>(ErrorCategory::ShaderAbiMismatch) == 3);
 }
 
-//======================================================================================================================
 TEST_CASE("an Error owns a string and is not trivially copyable", "[contract]")
 {
     STATIC_REQUIRE_FALSE(std::is_trivially_copyable_v<rojoRHI::Error>);
 }
 
-//======================================================================================================================
 TEST_CASE("resource handles are eight trivially copyable zero-initialised comparable bytes", "[contract]")
 {
     using namespace rojoRHI;
@@ -122,7 +115,6 @@ TEST_CASE("resource handles are eight trivially copyable zero-initialised compar
     STATIC_REQUIRE(isHandleShaped<Upscaler>);
 }
 
-//======================================================================================================================
 TEST_CASE("resource handles with different bits compare unequal", "[contract]")
 {
     rojoRHI::Buffer a{ 1 };
@@ -132,7 +124,6 @@ TEST_CASE("resource handles with different bits compare unequal", "[contract]")
     CHECK_FALSE(a == rojoRHI::Buffer{});
 }
 
-//======================================================================================================================
 TEST_CASE("geometry types default as chapter 01 writes them", "[contract]")
 {
     using namespace rojoRHI;
@@ -150,7 +141,6 @@ TEST_CASE("geometry types default as chapter 01 writes them", "[contract]")
     STATIC_REQUIRE(std::is_trivially_copyable_v<Rect2D>);
 }
 
-//======================================================================================================================
 TEST_CASE("an installed message callback receives severity, text and user", "[contract]")
 {
     gReceived = {};
@@ -165,7 +155,6 @@ TEST_CASE("an installed message callback receives severity, text and user", "[co
     CHECK(gReceived.user == &gMarker);
 }
 
-//======================================================================================================================
 TEST_CASE("the default message sink writes to standard error", "[contract]")
 {
     rojoRHI::setMessageCallback(nullptr, nullptr);
@@ -173,7 +162,6 @@ TEST_CASE("the default message sink writes to standard error", "[contract]")
     CHECK(text.find("default sink line") != std::string::npos);
 }
 
-//======================================================================================================================
 TEST_CASE("setMessageCallback with nullptr restores the default sink", "[contract]")
 {
     gReceived = {};
@@ -186,7 +174,6 @@ TEST_CASE("setMessageCallback with nullptr restores the default sink", "[contrac
     CHECK(text.find("after restore") != std::string::npos);
 }
 
-//======================================================================================================================
 TEST_CASE("the inside-callback flag is set only while a callback runs", "[contract]")
 {
     static bool seenInside = false;
@@ -198,7 +185,6 @@ TEST_CASE("the inside-callback flag is set only while a callback runs", "[contra
     CHECK_FALSE(rojoRHI::base::insideMessageCallback());
 }
 
-//======================================================================================================================
 TEST_CASE("a satisfied ROJORHI_VU does not terminate", "[contract]")
 {
     // A volatile operand keeps the condition from folding to a constant, which would make the macro's failure path
@@ -208,7 +194,6 @@ TEST_CASE("a satisfied ROJORHI_VU does not terminate", "[contract]")
     SUCCEED();
 }
 
-//======================================================================================================================
 TEST_CASE("ROJORHI_VU evaluates its condition once in Debug and never in Release", "[contract]")
 {
     int evaluations = 0;

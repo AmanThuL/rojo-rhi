@@ -26,37 +26,28 @@
 using namespace rojoRHI;
 
 namespace {
-    //==================================================================================================================
-    /// The encoders of `list`.
     const metal4::Encoders& encodersOf(CommandList list)
     {
         return CommandListImpl::of(list).encoders;
     }
 
-    //==================================================================================================================
-    /// The barrier state of `list`.
     const metal4::BarrierState& barriersOf(CommandList list)
     {
         return CommandListImpl::of(list).encoders.barriers();
     }
 
-    //==================================================================================================================
-    /// What `list` has counted so far, after checking that every scope it recorded holds a timestamp pair.
+    // Also checks that every scope `list` recorded holds a timestamp pair.
     const core::RecordCounts& countsOf(CommandList list)
     {
         return test::timedCounts(list);
     }
 
-    //==================================================================================================================
-    /// A global barrier from `srcStage` with `srcAccess` to `dstStage` with `dstAccess`.
     GlobalBarrier global(Stage srcStage, Access srcAccess, Stage dstStage, Access dstAccess)
     {
         return GlobalBarrier{ .srcStage = srcStage, .srcAccess = srcAccess, .dstStage = dstStage, .dstAccess = dstAccess };
     }
 
-    //==================================================================================================================
-    /// Records on `list` a barrier on `buffer` from `srcStage` with `srcAccess` to `dstStage` with `dstAccess`. A buffer
-    /// barrier adds no alias visibility, which would keep the dispatch stage out of the carry fence.
+    // A buffer barrier adds no alias visibility, which would keep the dispatch stage out of the carry fence.
     void order(CommandList list, Buffer buffer, Stage srcStage, Access srcAccess, Stage dstStage, Access dstAccess)
     {
         list.barrier(
@@ -64,8 +55,6 @@ namespace {
         );
     }
 
-    //==================================================================================================================
-    /// Submits the ended `list` to the queue of `type`, waits for it on the host and ends the frame.
     void submitAndWait(Device device, CommandList list, QueueType type = QueueType::Graphics)
     {
         const Fence fence = *device.createFence(0, "test.done");
@@ -75,8 +64,7 @@ namespace {
         device.endFrame();
     }
 
-    //==================================================================================================================
-    /// Begins and ends a pass over `target` that clears it and draws nothing, so its encoder runs only load and store actions.
+    // Draws nothing, so the pass's encoder runs only load and store actions.
     void emptyPass(CommandList list, Texture target)
     {
         const std::array colors{ ColorAttachment{ .texture = target, .load = LoadOp::Clear } };
@@ -84,9 +72,6 @@ namespace {
         list.endRenderPass();
     }
 
-    //==================================================================================================================
-    /// Ends and submits `kit.list`, waits for it, ends the frame, opens the next and acquires a new graphics list into
-    /// `kit.list`.
     void nextFrame(test::PassKit& kit)
     {
         kit.list.end();
@@ -95,9 +80,8 @@ namespace {
         kit.list = kit.device.acquireCommandList(QueueType::Graphics, "test.next");
     }
 
-    //==================================================================================================================
-    /// Records a counted draw on `kit.list`, which runs its kernels on a kernels-only encoder, then moves to the next frame:
-    /// from there on the device's graphics lists carry a closing batch's dispatch stage through the carry fence.
+    // The counted draw runs its kernels on a kernels-only encoder. From the next frame on, the device's graphics lists
+    // carry a closing batch's dispatch stage through the carry fence.
     void runCountedDraw(test::PassKit& kit)
     {
         const std::vector<std::byte> zeroes(16 * sizeof(DrawIndirectArgs), std::byte{ 0 });
@@ -111,7 +95,6 @@ namespace {
     }
 } // namespace
 
-//======================================================================================================================
 TEST_CASE("a graphics list carries the dispatch stage in a barrier until a counted draw has run in an earlier frame", "[metal4]")
 {
     test::PassKit kit(QueueType::Graphics, false, true);
@@ -163,7 +146,6 @@ TEST_CASE("a graphics list carries the dispatch stage in a barrier until a count
     destroyDevice(kit.device);
 }
 
-//======================================================================================================================
 TEST_CASE("a pass's encoder stays open after endRenderPass and a barrier after it neither closes nor defers", "[metal4]")
 {
     test::PassKit kit(QueueType::Graphics, false, true);
@@ -189,11 +171,9 @@ TEST_CASE("a pass's encoder stays open after endRenderPass and a barrier after i
     destroyDevice(kit.device);
 }
 
-//======================================================================================================================
 TEST_CASE("a pass's closing batch whose sources its opening barrier waited for is carried by the pass's encoder", "[metal4]")
 {
     test::PassKit kit(QueueType::Graphics, false, true);
-    // A counted draw in an earlier frame makes the device's graphics lists use the carry fence.
     runCountedDraw(kit);
     CommandList list = kit.list;
     const Buffer ordered = kit.buffer(BufferUsage::ShaderWrite);
@@ -237,11 +217,9 @@ TEST_CASE("a pass's closing batch whose sources its opening barrier waited for i
     destroyDevice(kit.device);
 }
 
-//======================================================================================================================
 TEST_CASE("a closing batch whose sources may lie before the closing encoder takes the trailing encoder, with the carry fence", "[metal4]")
 {
     test::PassKit kit(QueueType::Graphics, false, true);
-    // A counted draw in an earlier frame makes the device's graphics lists use the carry fence.
     runCountedDraw(kit);
     CommandList list = kit.list;
     const uint64_t label = test::encoderLabel(list);
@@ -275,7 +253,6 @@ TEST_CASE("a closing batch whose sources may lie before the closing encoder take
     destroyDevice(kit.device);
 }
 
-//======================================================================================================================
 TEST_CASE("Compute and Copy lists carry a covered closing batch with a producer barrier on the closing encoder", "[metal4]")
 {
     const QueueType type = GENERATE(QueueType::Compute, QueueType::Copy);
@@ -300,13 +277,11 @@ TEST_CASE("Compute and Copy lists carry a covered closing batch with a producer 
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("a closing batch into IndirectArgs is carried by a producer barrier that holds the dispatch stage", "[metal4]")
 {
     const bool arguments = GENERATE(false, true);
     CAPTURE(arguments);
     test::PassKit kit(QueueType::Graphics, false, true);
-    // A counted draw in an earlier frame makes the device's graphics lists use the carry fence.
     runCountedDraw(kit);
     CommandList list = kit.list;
     const Buffer ordered = kit.buffer(BufferUsage::ShaderWrite);
@@ -334,11 +309,9 @@ TEST_CASE("a closing batch into IndirectArgs is carried by a producer barrier th
     destroyDevice(kit.device);
 }
 
-//======================================================================================================================
 TEST_CASE("a graphics compute encoder waits on the carry fence once, before its first dispatch", "[metal4]")
 {
     test::PassKit kit(QueueType::Graphics, false, true);
-    // A counted draw in an earlier frame makes the device's graphics lists use the carry fence.
     runCountedDraw(kit);
     CommandList list = kit.list;
     const uint64_t label = test::encoderLabel(list);
@@ -372,7 +345,6 @@ TEST_CASE("a graphics compute encoder waits on the carry fence once, before its 
     destroyDevice(kit.device);
 }
 
-//======================================================================================================================
 TEST_CASE("a counted draw's kernels encoder does not wait on the carry fence, and a Compute list has none", "[metal4]")
 {
     SECTION("the kernels of a counted draw")
@@ -407,13 +379,11 @@ TEST_CASE("a counted draw's kernels encoder does not wait on the carry fence, an
     }
 }
 
-//======================================================================================================================
 TEST_CASE("a closing batch whose visibility includes ResourceAlias keeps the dispatch stage in a barrier", "[metal4]")
 {
     const bool covered = GENERATE(false, true);
     CAPTURE(covered);
     test::PassKit kit(QueueType::Graphics, false, true);
-    // A counted draw in an earlier frame makes the device's graphics lists use the carry fence.
     runCountedDraw(kit);
     CommandList list = kit.list;
     const uint64_t label = test::encoderLabel(list);

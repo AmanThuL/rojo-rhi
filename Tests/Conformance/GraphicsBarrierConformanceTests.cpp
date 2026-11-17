@@ -31,97 +31,84 @@ namespace {
     // consumer, after a pass, a copy or a dispatch, read the producer's values even without a barrier. Those cases check the
     // barrier's lowering, not its necessity.
 
-    /// The `uint4` elements the copy kernel moves for a buffer producer: 64 MiB through 2^22 threads. A pass that pulled the
-    /// tail without a barrier never overtook the kernel at 16 MiB, and overtook it once in seven runs at 64 MiB, which later
-    /// runs did not reproduce: this case is one of those that check the lowering.
+    // 64 MiB through 2^22 threads. A pass that pulled the tail without a barrier never overtook the kernel at 16 MiB, and
+    // overtook it once in seven runs at 64 MiB, which later runs did not reproduce: this case is one of those that check the
+    // lowering.
     constexpr uint32_t kCopyElements = uint32_t{ 1 } << 22;
 
-    /// The bytes of a buffer producer's destination.
     constexpr uint64_t kCopyBytes = uint64_t{ kCopyElements } * 16;
 
-    /// The threads of one copy kernel group, as `PullOracle.slang` declares them.
+    // As `PullOracle.slang` declares it.
     constexpr uint32_t kCopyGroup = 256;
 
-    /// The bytes at the end of a buffer producer's destination that the consumers read: records, a count or positions.
+    // What the consumers read: records, a count or positions.
     constexpr uint64_t kTail = 4096;
 
-    /// Where the tail starts in a buffer producer's destination.
     constexpr uint64_t kTailOffset = kCopyBytes - kTail;
 
-    /// Where a count lies in a buffer producer's destination: its last 16 bytes.
     constexpr uint64_t kCountOffset = kCopyBytes - 16;
 
-    /// The edge of a render producer's target, in texels.
     constexpr uint32_t kBigEdge = 2048;
 
-    /// The fullscreen triangles a render producer draws over its target: 16 times 2^22 fragments. A depth producer of this
-    /// size is overtaken by a dispatch without its barrier; 128 triangles made no pass consumer overtake a pass.
+    // 16 times 2^22 fragments. A depth producer of this size is overtaken by a dispatch without its barrier; 128 triangles
+    // made no pass consumer overtake a pass.
     constexpr uint32_t kLayers = 16;
 
-    /// The edge of the oracle targets the consumers draw into, in pixels: the draw and mesh oracles place their triangles
-    /// on a grid of this edge.
+    // The draw and mesh oracles place their triangles on a grid of this edge.
     constexpr uint32_t kEdge = 256;
 
-    /// The color the solid and pull fragment entries write, exact in every format the cases use but `RGBA8Unorm`.
+    // What the solid and pull fragment entries write, exact in every format the cases use but `RGBA8Unorm`.
     constexpr std::array<float, 4> kSolid{ 0.25f, 0.5f, 0.75f, 1.0f };
 
-    /// The color a producer's target holds before the producer runs, so a consumer that overtakes it reads another value.
+    // A producer's target holds this before the producer runs, so a consumer that overtakes it reads another value.
     constexpr ClearColor kStale{ 2.0f, 4.0f, 8.0f, 16.0f };
 
-    /// The viewport and scissor of an oracle target.
     constexpr Viewport kOracleViewport{ .width = static_cast<float>(kEdge), .height = static_cast<float>(kEdge) };
     constexpr Rect2D kOracleRect{ 0, 0, kEdge, kEdge };
 
-    /// The scissor of a render producer's target.
     constexpr Rect2D kBigRect{ 0, 0, kBigEdge, kBigEdge };
 
-    /// The copy kernel's root.
     struct CopyRoot
     {
-        Addr source;      ///< Where the kernel reads.
-        Addr destination; ///< Where it writes.
-        uint32_t count;   ///< The `uint4` elements it copies.
-        uint32_t pad;     ///< Padding.
+        Addr source;
+        Addr destination;
+        uint32_t count;
+        uint32_t pad;
     };
 
-    /// The pull vertex entry's root.
     struct PullRoot
     {
-        Addr vertices; ///< The clip-space positions, one `float4` per vertex index.
+        Addr vertices;
     };
 
-    /// AbiFragment's root.
     struct FragmentRoot
     {
-        uint32_t view;    ///< The sampled view.
-        uint32_t sampler; ///< The sampler.
-        uint32_t pad0;    ///< Padding.
-        uint32_t pad1;    ///< Padding.
+        uint32_t view;
+        uint32_t sampler;
+        uint32_t pad0;
+        uint32_t pad1;
     };
 
-    /// AbiTextures' root.
     struct FetchRoot
     {
-        uint32_t view;       ///< The fetched view.
-        uint32_t sampler;    ///< The sampler.
-        uint32_t comparison; ///< The comparison sampler.
-        uint32_t pad;        ///< Padding.
-        Addr output;         ///< Where the entry stores its `float4`.
+        uint32_t view;
+        uint32_t sampler;
+        uint32_t comparison;
+        uint32_t pad;
+        Addr output;
     };
 
-    /// FormatOracle's root for the kernels that store.
     struct WriteRoot
     {
-        uint32_t view;              ///< The view written.
-        uint32_t pad0;              ///< Padding.
-        uint32_t pad1;              ///< Padding.
-        uint32_t pad2;              ///< Padding.
-        std::array<float, 4> left;  ///< The value of the left two columns.
-        std::array<float, 4> right; ///< The value of the right two columns.
+        uint32_t view;
+        uint32_t pad0;
+        uint32_t pad1;
+        uint32_t pad2;
+        std::array<float, 4> left;
+        std::array<float, 4> right;
     };
 
-    //==================================================================================================================
-    /// The half-precision bits of `value`, which is zero or a normal half-precision value held exactly.
+    // `value` is zero or a normal half-precision value held exactly.
     uint16_t halfOf(float value)
     {
         if (value == 0.0f)
@@ -134,8 +121,6 @@ namespace {
         return static_cast<uint16_t>(sign | (exponent << 10) | ((bits >> 13) & 0x3FFu));
     }
 
-    //==================================================================================================================
-    /// The bytes of `value` as one `RGBA16Float` texel.
     std::array<std::byte, 8> texelOf(const std::array<float, 4>& value)
     {
         std::array<uint16_t, 4> halves{};
@@ -146,8 +131,6 @@ namespace {
         return std::bit_cast<std::array<std::byte, 8>>(halves);
     }
 
-    //==================================================================================================================
-    /// The bytes of `count` `RGBA16Float` texels of `value`.
     std::vector<std::byte> texelsOf(uint64_t count, const std::array<float, 4>& value)
     {
         const std::array<std::byte, 8> texel = texelOf(value);
@@ -160,17 +143,12 @@ namespace {
         return bytes;
     }
 
-    //==================================================================================================================
-    /// The bytes of `values`.
     template<class T, size_t N> std::vector<std::byte> bytesOf(std::span<T, N> values)
     {
         const std::span<const std::byte> bytes = std::as_bytes(values);
         return { bytes.begin(), bytes.end() };
     }
 
-    //==================================================================================================================
-    /// Describes where `actual` differs from `expected`, both rows of `width` texels of `texelBytes` bytes: the first eight
-    /// texels and how many differ; empty when they are equal.
     std::string differences(std::span<const std::byte> actual, std::span<const std::byte> expected, uint32_t texelBytes, uint32_t width)
     {
         if (actual.size() != expected.size())
@@ -202,30 +180,23 @@ namespace {
         return text;
     }
 
-    /// An `RGBA16Float` oracle target's bytes, zero but for the texels `set` names.
     struct OracleImage
     {
-        //==============================================================================================================
-        /// Sets the texel at cell `cell`, `x` plus `kEdge` times `y`, to `value`.
         void set(uint32_t cell, const std::array<float, 4>& value)
         {
             const std::array<std::byte, 8> texel = texelOf(value);
             std::memcpy(bytes.data() + size_t{ cell } * texel.size(), texel.data(), texel.size());
         }
 
-        std::vector<std::byte> bytes = std::vector<std::byte>(size_t{ kEdge } * kEdge * 8); ///< In texel order.
+        std::vector<std::byte> bytes = std::vector<std::byte>(size_t{ kEdge } * kEdge * 8);
     };
 
-    //==================================================================================================================
-    /// Loads the conformance library `name` on `device`.
     ShaderLibrary loadLibrary(Device device, std::string_view name)
     {
         const std::vector<std::byte> blob = test::shaderLibraryFile(name);
         return *device.loadShaderLibrary(blob, name);
     }
 
-    //==================================================================================================================
-    /// Creates the graphics pipeline `desc` describes over the color targets `targets`; fails the case when it is refused.
     Pipeline graphicsOf(Device device, GraphicsPipelineDesc desc, std::span<const ColorTarget> targets)
     {
         desc.colors = targets;
@@ -238,23 +209,17 @@ namespace {
         return *pipeline;
     }
 
-    //==================================================================================================================
-    /// Creates the compute pipeline of `entry` of `library`.
     Pipeline computeOf(Device device, ShaderLibrary library, std::string_view entry)
     {
         return *device.createPipeline(ComputePipelineDesc{ .compute = { library, entry }, .label = "test.compute" });
     }
 
-    //==================================================================================================================
-    /// Creates a 2D texture of `edge` texels square.
     Texture textureOf(Device device, uint32_t edge, Format format, TextureUsage usage, uint32_t samples = 1)
     {
         return *device.createTexture(TextureDesc{ .format = format, .extent = { edge, edge, 1 }, .samples = samples, .usage = usage, .label = "test.texture" });
     }
 
-    //==================================================================================================================
-    /// Runs a list that moves the new texture `texture` from `Undefined` to `layout`, through `CopyDst` and a clear to
-    /// `clear` when one is given, so the texture holds a value a consumer overtaking its producer would read.
+    // The clear gives the texture a value that a consumer overtaking its producer would read.
     void prepare(test::GpuKit& kit, Texture texture, Layout layout, const ClearValue* clear = nullptr)
     {
         CommandList list = kit.list(QueueType::Graphics, "test.prepare");
@@ -271,8 +236,6 @@ namespace {
         kit.run(std::array{ list });
     }
 
-    //==================================================================================================================
-    /// A barrier on `texture` from `srcStage` and `srcAccess` in `oldLayout` to `dstStage` and `dstAccess` in `newLayout`.
     TextureBarrier textureBarrier(Texture texture, Stage srcStage, Access srcAccess, Layout oldLayout, Stage dstStage, Access dstAccess, Layout newLayout)
     {
         return TextureBarrier{ .texture = texture,
@@ -284,8 +247,6 @@ namespace {
                                .newLayout = newLayout };
     }
 
-    //==================================================================================================================
-    /// A barrier on `buffer` from compute shader writes to `dstStage` and `dstAccess`.
     BufferBarrier computeWritten(Buffer buffer, Stage dstStage, Access dstAccess)
     {
         return BufferBarrier{
@@ -293,19 +254,14 @@ namespace {
         };
     }
 
-    /// The oracles one case uses, on one kit: the libraries load once, the pipelines on demand.
     struct Oracles
     {
-        //==============================================================================================================
-        /// Loads the draw, pull and fragment oracle libraries on `kit`'s device.
         explicit Oracles(test::GpuKit& created)
             : kit(created), draw(loadLibrary(created.device, "DrawOracle")), pull(loadLibrary(created.device, "PullOracle")),
               fragment(loadLibrary(created.device, "AbiFragment")), copy(computeOf(created.device, pull, "copyMain"))
         {
         }
 
-        //==============================================================================================================
-        /// The fullscreen solid pipeline over one color target of `format` with `samples`.
         Pipeline solid(Format format, uint32_t samples = 1) const
         {
             const std::array targets{ ColorTarget{ .format = format } };
@@ -316,32 +272,24 @@ namespace {
             );
         }
 
-        //==============================================================================================================
-        /// The draw oracle's pipeline over one color target of `format`.
         Pipeline oracle(Format format = Format::RGBA16Float) const
         {
             const std::array targets{ ColorTarget{ .format = format } };
             return graphicsOf(kit.device, GraphicsPipelineDesc{ .vertex = { draw, "oracleVertexMain" }, .fragment = { draw, "oracleFragmentMain" } }, targets);
         }
 
-        //==============================================================================================================
-        /// The pull oracle's pipeline over one `RGBA16Float` target.
         Pipeline pulled() const
         {
             const std::array targets{ ColorTarget{ .format = Format::RGBA16Float } };
             return graphicsOf(kit.device, GraphicsPipelineDesc{ .vertex = { pull, "pullVertexMain" }, .fragment = { pull, "pullFragmentMain" } }, targets);
         }
 
-        //==============================================================================================================
-        /// The draw oracle's vertex with AbiFragment, which samples the view its root names, over one `RGBA16Float` target.
         Pipeline sampled() const
         {
             const std::array targets{ ColorTarget{ .format = Format::RGBA16Float } };
             return graphicsOf(kit.device, GraphicsPipelineDesc{ .vertex = { draw, "oracleVertexMain" }, .fragment = { fragment, "fragmentMain" } }, targets);
         }
 
-        //==============================================================================================================
-        /// A nearest, clamped sampler.
         SamplerIndex nearest() const
         {
             return *kit.device.createSampler(
@@ -350,8 +298,6 @@ namespace {
             );
         }
 
-        //==============================================================================================================
-        /// Records on `list` the copy kernel moving `count` `uint4` elements from `source` to `destination`.
         void copyOn(CommandList list, Addr source, Addr destination, uint32_t count) const
         {
             list.setPipeline(copy);
@@ -359,16 +305,11 @@ namespace {
             list.dispatch((count + kCopyGroup - 1) / kCopyGroup, 1, 1);
         }
 
-        //==============================================================================================================
-        /// Records on `list` the slow buffer producer: the copy kernel moving every byte of `source` into `destination`.
         void produceOn(CommandList list, Buffer source, Buffer destination) const
         {
             copyOn(list, kit.device.address(source), kit.device.address(destination), kCopyElements);
         }
 
-        //==============================================================================================================
-        /// Records on `list` the slow render producer: a pass over the `edge` square `target` that clears it to zero and draws
-        /// `kLayers` fullscreen triangles of the solid color with `pipeline`, resolving into `resolve` when it is given.
         static void renderOn(CommandList list, Texture target, Pipeline pipeline, Texture resolve = {}, uint32_t edge = kBigEdge)
         {
             const std::array colors{ ColorAttachment{
@@ -382,9 +323,6 @@ namespace {
             list.endRenderPass();
         }
 
-        //==============================================================================================================
-        /// Records on `list` a pass over the oracle target `target` that clears it, binds `pipeline` and pushes `root`, then
-        /// draws three vertices: one oracle triangle at its first pixel, or the triangle a pull root names.
         template<class Root> static void drawOn(CommandList list, Texture target, Pipeline pipeline, const Root& root)
         {
             const std::array colors{ ColorAttachment{ .texture = target, .load = LoadOp::Clear } };
@@ -397,16 +335,12 @@ namespace {
             list.endRenderPass();
         }
 
-        //==============================================================================================================
-        /// Records on `list` a pass over the oracle target `target` that samples `view` at its centre into the first pixel.
         void sampleOn(CommandList list, Texture target, Pipeline pipeline, Texture view) const
         {
             const ViewIndex index = *kit.device.createView(view, {});
             drawOn(list, target, pipeline, FragmentRoot{ static_cast<uint32_t>(index), static_cast<uint32_t>(nearest()), 0, 0 });
         }
 
-        //==============================================================================================================
-        /// Creates an `RGBA16Float` oracle target in `ColorAttachment`.
         Texture target() const
         {
             const Texture texture = textureOf(kit.device, kEdge, Format::RGBA16Float, TextureUsage::RenderTarget);
@@ -414,9 +348,6 @@ namespace {
             return texture;
         }
 
-        //==============================================================================================================
-        /// Creates a `kBigEdge` square `RGBA16Float` render producer target with `usage` besides `RenderTarget`, holding
-        /// `kStale`, in `ColorAttachment`.
         Texture bigTarget(TextureUsage usage = TextureUsage::None) const
         {
             const Texture texture = textureOf(kit.device, kBigEdge, Format::RGBA16Float, TextureUsage::RenderTarget | usage);
@@ -425,9 +356,6 @@ namespace {
             return texture;
         }
 
-        //==============================================================================================================
-        /// Moves `texture`, an `RGBA16Float` oracle target in `ColorAttachment`, to `CopySrc`, where a copy reads it, and reads
-        /// it back.
         std::vector<std::byte> read(Texture texture) const
         {
             CommandList list = kit.list(QueueType::Graphics, "test.toCopy");
@@ -436,16 +364,13 @@ namespace {
             return kit.readTexture(texture, TextureRegion{ .extent = { kEdge, kEdge, 1 } }, Format::RGBA16Float);
         }
 
-        test::GpuKit& kit;      ///< The kit.
-        ShaderLibrary draw;     ///< The draw oracle library.
-        ShaderLibrary pull;     ///< The pull oracle library.
-        ShaderLibrary fragment; ///< AbiFragment.
-        Pipeline copy;          ///< The copy kernel.
+        test::GpuKit& kit;
+        ShaderLibrary draw;
+        ShaderLibrary pull;
+        ShaderLibrary fragment;
+        Pipeline copy;
     };
 
-    //==================================================================================================================
-    /// The source of a buffer producer: `kCopyBytes` bytes in an Upload buffer, zero but for `tail` from `kTailOffset` and
-    /// `count` at `kCountOffset`.
     Buffer sourceOf(test::GpuKit& kit, std::span<const std::byte> tail, uint32_t count = 0)
     {
         std::vector<std::byte> bytes(kCopyBytes, std::byte{ 0 });
@@ -455,21 +380,16 @@ namespace {
         return kit.buffer(kCopyBytes, Memory::Upload, BufferUsage::None, bytes);
     }
 
-    //==================================================================================================================
-    /// A buffer producer's destination: `kCopyBytes` zero bytes in GPU memory that shaders write, with `usage` besides.
     Buffer destinationOf(test::GpuKit& kit, BufferUsage usage = BufferUsage::None)
     {
         const std::vector<std::byte> zeroes(kCopyBytes, std::byte{ 0 });
         return kit.buffer(kCopyBytes, Memory::Gpu, BufferUsage::ShaderWrite | usage, zeroes);
     }
 
-    /// The clip-space corners of a triangle over the whole target.
     constexpr std::array<std::array<float, 4>, 3> kFullscreen{ std::array{ -1.0f, -1.0f, 0.0f, 1.0f },
                                                                std::array{ 3.0f, -1.0f, 0.0f, 1.0f },
                                                                std::array{ -1.0f, 3.0f, 0.0f, 1.0f } };
 
-    //==================================================================================================================
-    /// An oracle target's image when the solid color covers it.
     OracleImage solidImage()
     {
         OracleImage image;
@@ -480,8 +400,6 @@ namespace {
         return image;
     }
 
-    //==================================================================================================================
-    /// An oracle target's image when one oracle triangle wrote `value` at its first pixel.
     OracleImage firstPixel(const std::array<float, 4>& value)
     {
         OracleImage image;
@@ -489,9 +407,7 @@ namespace {
         return image;
     }
 
-    //==================================================================================================================
-    /// Ends `producer` and `consumer` and submits them to the graphics queue in that order, in one submission or, when `two`,
-    /// in two, then waits for both on the host: only the barrier the producer still owes at its end orders them.
+    // Only the barrier the producer still owes at its end orders the two lists.
     void submitInOrder(test::GpuKit& kit, CommandList producer, CommandList consumer, bool two)
     {
         producer.end();
@@ -512,10 +428,8 @@ namespace {
         kit.device.destroy(fence);
     }
 
-    //==================================================================================================================
-    /// Runs a list whose counted draw over `records`, zeroed `IndirectArgs` records, draws nothing with `counted` into `target`,
-    /// then opens the next frame. A backend may lower the barrier a list owes at its end differently once a counted draw has
-    /// run in an earlier frame (chapter 09's Metal 4 row), so a carry case runs with and without this first.
+    // A backend may lower the barrier a list owes at its end differently once a counted draw has run in an earlier frame
+    // (chapter 09's Metal 4 row), so a carry case runs with and without this first. The zeroed records draw nothing.
     void runCountedFrame(test::GpuKit& kit, Pipeline counted, Texture target, Buffer records)
     {
         CommandList list = kit.list(QueueType::Graphics, "test.counted");
@@ -530,8 +444,6 @@ namespace {
         kit.nextFrame();
     }
 
-    //==================================================================================================================
-    /// Checks that `actual`, an oracle target read back, equals `expected`.
     void checkImage(const std::vector<std::byte>& actual, const OracleImage& expected)
     {
         const std::string difference = differences(actual, expected.bytes, 8, kEdge);
@@ -539,9 +451,6 @@ namespace {
         CHECK(difference.empty());
     }
 
-    //==================================================================================================================
-    /// Creates a `kBigEdge` square `RGBA16Float` storage texture that a dispatch can also sample, holding `kStale`, in
-    /// `ShaderWrite`.
     Texture storageTarget(test::GpuKit& kit)
     {
         const Texture texture = textureOf(kit.device, kBigEdge, Format::RGBA16Float, TextureUsage::Storage | TextureUsage::Sampled);
@@ -550,9 +459,6 @@ namespace {
         return texture;
     }
 
-    //==================================================================================================================
-    /// Records on `list` the slow storage producer: a dispatch of `FormatOracle`'s store kernel writing `kSolid` over every
-    /// texel of `texture` through a storage view.
     void storeOn(test::GpuKit& kit, CommandList list, Texture texture)
     {
         const ShaderLibrary library = loadLibrary(kit.device, "FormatOracle");
@@ -563,9 +469,6 @@ namespace {
         list.dispatch(kBigEdge / 4, kBigEdge / 4, 1);
     }
 
-    //==================================================================================================================
-    /// Records on `list` a dispatch of the AbiTextures entry `entry` over `view` and `sampler` that stores its `float4` into
-    /// `output`.
     void fetchOn(test::GpuKit& kit, CommandList list, std::string_view entry, ViewIndex view, SamplerIndex sampler, Buffer output)
     {
         const ShaderLibrary textures = loadLibrary(kit.device, "AbiTextures");
@@ -581,7 +484,6 @@ namespace {
     }
 } // namespace
 
-//======================================================================================================================
 TEST_CASE("a color attachment written in one pass is sampled by the next pass's fragment stage", "[conformance]")
 {
     test::requireGpu();
@@ -611,7 +513,6 @@ TEST_CASE("a color attachment written in one pass is sampled by the next pass's 
     checkImage(oracles.read(target), firstPixel(kSolid));
 }
 
-//======================================================================================================================
 TEST_CASE("a compute shader's buffer writes are pulled by the next pass's vertex stage", "[conformance]")
 {
     test::requireGpu();
@@ -630,7 +531,6 @@ TEST_CASE("a compute shader's buffer writes are pulled by the next pass's vertex
     checkImage(oracles.read(target), solidImage());
 }
 
-//======================================================================================================================
 TEST_CASE("a compute shader's storage-texture writes are loaded by the next dispatch through a storage view", "[conformance]")
 {
     test::requireGpu();
@@ -659,7 +559,6 @@ TEST_CASE("a compute shader's storage-texture writes are loaded by the next disp
     CHECK(kit.readBuffer(output) == bytesOf(std::span<const float>(kSolid)));
 }
 
-//======================================================================================================================
 TEST_CASE("a compute shader's storage-texture writes are sampled by the next dispatch", "[conformance]")
 {
     test::requireGpu();
@@ -683,7 +582,6 @@ TEST_CASE("a compute shader's storage-texture writes are sampled by the next dis
     CHECK(kit.readBuffer(output) == bytesOf(std::span<const float>(kSolid)));
 }
 
-//======================================================================================================================
 TEST_CASE("a compute shader's storage-texture writes are sampled by the next pass's fragment stage", "[conformance]")
 {
     test::requireGpu();
@@ -706,7 +604,6 @@ TEST_CASE("a compute shader's storage-texture writes are sampled by the next pas
     checkImage(oracles.read(target), firstPixel(kSolid));
 }
 
-//======================================================================================================================
 TEST_CASE("a compute shader's record writes are read by a counted draw", "[conformance]")
 {
     test::requireGpu();
@@ -747,7 +644,6 @@ TEST_CASE("a compute shader's record writes are read by a counted draw", "[confo
     checkImage(oracles.read(target), expected);
 }
 
-//======================================================================================================================
 TEST_CASE("a compute shader's record writes are read by a lone mesh record", "[conformance]")
 {
     test::requireGpu();
@@ -789,7 +685,6 @@ TEST_CASE("a compute shader's record writes are read by a lone mesh record", "[c
     checkImage(oracles.read(target), expected);
 }
 
-//======================================================================================================================
 TEST_CASE("a depth attachment written in one pass is sampled by a compute dispatch", "[conformance]")
 {
     test::requireGpu();
@@ -845,7 +740,6 @@ TEST_CASE("a depth attachment written in one pass is sampled by a compute dispat
     CHECK(kit.readBuffer(output) == bytesOf(std::span<const float>(passed)));
 }
 
-//======================================================================================================================
 TEST_CASE("a copy into a texture is loaded by the next pass's attachment", "[conformance]")
 {
     test::requireGpu();
@@ -890,7 +784,6 @@ TEST_CASE("a copy into a texture is loaded by the next pass's attachment", "[con
     CHECK(difference.empty());
 }
 
-//======================================================================================================================
 TEST_CASE("a pass's attachment is copied to a buffer after the barrier", "[conformance]")
 {
     test::requireGpu();
@@ -919,7 +812,6 @@ TEST_CASE("a pass's attachment is copied to a buffer after the barrier", "[confo
     CHECK(difference.empty());
 }
 
-//======================================================================================================================
 TEST_CASE("a resolve target is sampled after the barrier", "[conformance]")
 {
     test::requireGpu();
@@ -948,7 +840,6 @@ TEST_CASE("a resolve target is sampled after the barrier", "[conformance]")
     checkImage(oracles.read(target), firstPixel(kSolid));
 }
 
-//======================================================================================================================
 TEST_CASE("a barrier at the start of a list orders the previous list's render pass on the queue", "[conformance]")
 {
     test::requireGpu();
@@ -979,7 +870,6 @@ TEST_CASE("a barrier at the start of a list orders the previous list's render pa
     CHECK(difference.empty());
 }
 
-//======================================================================================================================
 TEST_CASE("a barrier at the end of a list orders the next list's pass on the queue", "[conformance]")
 {
     test::requireGpu();
@@ -1010,7 +900,6 @@ TEST_CASE("a barrier at the end of a list orders the next list's pass on the que
     checkImage(oracles.read(target), firstPixel(kSolid));
 }
 
-//======================================================================================================================
 TEST_CASE("a barrier whose destination names compute and render stages holds back both kinds of encoder after it", "[conformance]")
 {
     test::requireGpu();
@@ -1045,7 +934,6 @@ TEST_CASE("a barrier whose destination names compute and render stages holds bac
     checkImage(oracles.read(target), solidImage());
 }
 
-//======================================================================================================================
 TEST_CASE("an attachment rendered on the graphics queue is read on the compute queue after a fence", "[conformance]")
 {
     test::requireGpu();
@@ -1084,7 +972,6 @@ TEST_CASE("an attachment rendered on the graphics queue is read on the compute q
     CHECK(kit.readBuffer(output, QueueType::Compute) == bytesOf(std::span<const float>(kSolid)));
 }
 
-//======================================================================================================================
 TEST_CASE("a pass's closing batch orders the next list's dispatch on the queue, whichever list is recorded first", "[conformance]")
 {
     test::requireGpu();
@@ -1208,7 +1095,6 @@ TEST_CASE("a pass's closing batch orders the next list's dispatch on the queue, 
     CHECK(kit.readBuffer(output) == bytesOf(std::span<const float>(passed)));
 }
 
-//======================================================================================================================
 TEST_CASE("a pass's closing batch orders the next list's copy and sampling pass on the queue", "[conformance]")
 {
     test::requireGpu();
@@ -1291,7 +1177,6 @@ TEST_CASE("a pass's closing batch orders the next list's copy and sampling pass 
     }
 }
 
-//======================================================================================================================
 TEST_CASE("a closing batch into IndirectArgs orders the next list's counted draw on the queue", "[conformance]")
 {
     test::requireGpu();
@@ -1357,7 +1242,6 @@ TEST_CASE("a closing batch into IndirectArgs orders the next list's counted draw
     checkImage(oracles.read(target), expected);
 }
 
-//======================================================================================================================
 TEST_CASE("two lists that carry barriers in a row both order a later list's dispatch", "[conformance]")
 {
     test::requireGpu();
@@ -1466,7 +1350,6 @@ TEST_CASE("two lists that carry barriers in a row both order a later list's disp
     CHECK(kit.readBuffer(output) == bytesOf(std::span<const float>(passed)));
 }
 
-//======================================================================================================================
 TEST_CASE("a barrier on a compute encoder that ran only copies orders the dispatch after it", "[conformance]")
 {
     test::requireGpu();

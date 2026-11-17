@@ -14,11 +14,10 @@
 using namespace rojoRHI;
 
 namespace {
-    /// Stand-ins for native surfaces: the Null backend never dereferences them.
+    // Stand-ins for native surfaces: the Null backend never dereferences them.
     std::array<int, 2> g_surfaces = {};
 } // namespace
 
-//======================================================================================================================
 TEST_CASE("a Null swapchain's images have the same extent whatever the surface", "[null]")
 {
     Device device = *createDevice();
@@ -36,7 +35,6 @@ TEST_CASE("a Null swapchain's images have the same extent whatever the surface",
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("a Null swapchain presents without waiting for a display", "[null]")
 {
     Device device = *createDevice();
@@ -51,7 +49,6 @@ TEST_CASE("a Null swapchain presents without waiting for a display", "[null]")
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("a Release build creates a swapchain on a null surface", "[null]")
 {
 #ifdef NDEBUG

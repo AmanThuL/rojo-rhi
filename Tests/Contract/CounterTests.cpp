@@ -16,8 +16,6 @@ using namespace rojoRHI;
 using test::PassKit;
 
 namespace {
-    //==================================================================================================================
-    /// Returns true when no field of `later` is below the same field of `earlier`.
     bool monotonic(const Counters& earlier, const Counters& later)
     {
         return later.nativeCreateCalls >= earlier.nativeCreateCalls && later.nativeRecordCalls >= earlier.nativeRecordCalls &&
@@ -32,8 +30,7 @@ namespace {
                later.encodersOpened >= earlier.encodersOpened && later.deferredDestructionsRetired >= earlier.deferredDestructionsRetired;
     }
 
-    //==================================================================================================================
-    /// Ends the kit's list, submits it and ends the frame, leaving the device alive.
+    // Also ends the frame.
     void submit(PassKit& kit)
     {
         kit.list.end();
@@ -43,7 +40,6 @@ namespace {
     }
 } // namespace
 
-//======================================================================================================================
 TEST_CASE("counters never decrease across creation, recording, submission and retirement", "[contract]")
 {
     PassKit kit;
@@ -65,7 +61,6 @@ TEST_CASE("counters never decrease across creation, recording, submission and re
     destroyDevice(kit.device);
 }
 
-//======================================================================================================================
 TEST_CASE("recording counts reach the device only when the list is submitted", "[contract]")
 {
     PassKit kit;
@@ -88,7 +83,6 @@ TEST_CASE("recording counts reach the device only when the list is submitted", "
     destroyDevice(kit.device);
 }
 
-//======================================================================================================================
 TEST_CASE("uploadFrameData counts one upload and the bytes it copies, not the padding", "[contract]")
 {
     PassKit kit;
@@ -104,7 +98,6 @@ TEST_CASE("uploadFrameData counts one upload and the bytes it copies, not the pa
     destroyDevice(kit.device);
 }
 
-//======================================================================================================================
 TEST_CASE("a debug scope claims arena space but is no frame data upload", "[contract]")
 {
     PassKit kit;
@@ -118,7 +111,6 @@ TEST_CASE("a debug scope claims arena space but is no frame data upload", "[cont
     destroyDevice(kit.device);
 }
 
-//======================================================================================================================
 TEST_CASE("barrier records are counted by kind", "[contract]")
 {
     PassKit kit;
@@ -142,7 +134,6 @@ TEST_CASE("barrier records are counted by kind", "[contract]")
     destroyDevice(kit.device);
 }
 
-//======================================================================================================================
 TEST_CASE("every pipeline creation is a cache hit or a miss", "[contract]")
 {
     PassKit kit;
@@ -156,7 +147,6 @@ TEST_CASE("every pipeline creation is a cache hit or a miss", "[contract]")
     destroyDevice(kit.device);
 }
 
-//======================================================================================================================
 TEST_CASE("creating a buffer counts a native creation and a native memory object", "[contract]")
 {
     PassKit kit;
@@ -169,7 +159,6 @@ TEST_CASE("creating a buffer counts a native creation and a native memory object
     destroyDevice(kit.device);
 }
 
-//======================================================================================================================
 TEST_CASE("each heap-slot write counts one descriptor write", "[contract]")
 {
     PassKit kit;
@@ -190,7 +179,6 @@ TEST_CASE("each heap-slot write counts one descriptor write", "[contract]")
     destroyDevice(kit.device);
 }
 
-//======================================================================================================================
 TEST_CASE("a submission and a fence query count native queue and host calls", "[contract]")
 {
     PassKit kit;
@@ -208,7 +196,6 @@ TEST_CASE("a submission and a fence query count native queue and host calls", "[
     destroyDevice(kit.device);
 }
 
-//======================================================================================================================
 TEST_CASE("the counts of a list that is not yet submitted do not appear in the device", "[contract]")
 {
     PassKit kit;
@@ -237,7 +224,6 @@ TEST_CASE("the counts of a list that is not yet submitted do not appear in the d
     destroyDevice(kit.device);
 }
 
-//======================================================================================================================
 TEST_CASE("a device without debugMarkers sends two native calls fewer for a scope and at least two for a render pass", "[contract]")
 {
     // Each scope and pass of a device with debug markers pushes and pops a group, two native calls (ADR 0034); a backend may
@@ -264,7 +250,6 @@ TEST_CASE("a device without debugMarkers sends two native calls fewer for a scop
     CHECK(calls(true, true) >= calls(false, true) + 2);
 }
 
-//======================================================================================================================
 TEST_CASE("a device created with enableCapture sends a scope's two marker calls, as one with debugMarkers does", "[contract][capture]")
 {
     // enableCapture implies debug markers (ADR 0034), which the core decides for every backend. The case loads or arms a
@@ -289,7 +274,6 @@ TEST_CASE("a device created with enableCapture sends a scope's two marker calls,
     CHECK(calls(DeviceDesc{ .debugMarkers = true }) == plain + 2);
 }
 
-//======================================================================================================================
 TEST_CASE("an unmarked, untimed scope between two dependent copies changes nothing the validation tracker judges", "[contract]")
 {
 #ifdef NDEBUG

@@ -20,12 +20,9 @@
 
 namespace rojoRHI::d3d12 {
     namespace {
-        /// The root parameter that holds the draw record's `drawId`.
         constexpr UINT kDrawIdParameter = 1;
 
-        //==============================================================================================================
-        /// Serializes `desc` with the device's configuration interface, so the Agility runtime owns the format, and returns
-        /// the blob.
+        // With the device's configuration interface, so the Agility runtime owns the format.
         Result<Com<ID3DBlob>> serialize(DeviceImpl& impl, const D3D12_VERSIONED_ROOT_SIGNATURE_DESC& desc, std::string_view what)
         {
             Com<ID3D12DeviceConfiguration> configuration;
@@ -47,8 +44,6 @@ namespace rojoRHI::d3d12 {
             return blob;
         }
 
-        //==============================================================================================================
-        /// Creates the root signature `blob` holds on `impl`'s device and names it `label`.
         Result<Com<ID3D12RootSignature>> createRoot(DeviceImpl& impl, ID3DBlob& blob, std::string_view label)
         {
             Com<ID3D12RootSignature> root;
@@ -60,9 +55,7 @@ namespace rojoRHI::d3d12 {
             return root;
         }
 
-        //==============================================================================================================
-        /// Creates the command signature of `argumentCount` arguments of `arguments`, `stride` bytes for each record, over
-        /// `root` (null when no argument changes the root), and names it `label`.
+        // `root` is null when no argument changes the root.
         Result<Com<ID3D12CommandSignature>> createCommand(
             DeviceImpl& impl, ID3D12RootSignature* root, const D3D12_INDIRECT_ARGUMENT_DESC* arguments, UINT argumentCount, UINT stride, std::string_view label
         )
@@ -80,9 +73,7 @@ namespace rojoRHI::d3d12 {
             return signature;
         }
 
-        //==============================================================================================================
-        /// Creates the command signature of a draw-like command: the record's first value goes to the draw-id root constant,
-        /// then `command` reads the rest.
+        // The record's first value goes to the draw-id root constant; `command` reads the rest.
         Result<Com<ID3D12CommandSignature>> createDrawCommand(DeviceImpl& impl, D3D12_INDIRECT_ARGUMENT_TYPE command, size_t stride, std::string_view label)
         {
             D3D12_INDIRECT_ARGUMENT_DESC arguments[2] = {};
@@ -95,7 +86,6 @@ namespace rojoRHI::d3d12 {
         }
     } // namespace
 
-    //==================================================================================================================
     Result<void> RootSignatures::create(DeviceImpl& impl)
     {
         // The global root signature: the root SRV at t0 and the draw id at b1, both visible to every stage. Both heaps are
@@ -197,43 +187,36 @@ namespace rojoRHI::d3d12 {
         return {};
     }
 
-    //==================================================================================================================
     ID3D12RootSignature* RootSignatures::global() const
     {
         return m_global.get();
     }
 
-    //==================================================================================================================
     ID3D12RootSignature* RootSignatures::kernel() const
     {
         return m_kernel.get();
     }
 
-    //==================================================================================================================
     ID3D12CommandSignature* RootSignatures::draw() const
     {
         return m_draw.get();
     }
 
-    //==================================================================================================================
     ID3D12CommandSignature* RootSignatures::drawIndexed() const
     {
         return m_drawIndexed.get();
     }
 
-    //==================================================================================================================
     ID3D12CommandSignature* RootSignatures::mesh() const
     {
         return m_mesh.get();
     }
 
-    //==================================================================================================================
     ID3D12CommandSignature* RootSignatures::dispatch() const
     {
         return m_dispatch.get();
     }
 
-    //==================================================================================================================
     std::span<const std::byte> RootSignatures::serializedGlobal() const
     {
         return m_serializedGlobal;

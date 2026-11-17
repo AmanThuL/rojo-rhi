@@ -22,9 +22,6 @@
 using namespace rojoRHI;
 
 namespace {
-    //==================================================================================================================
-    /// Records a barrier on `list` that moves every subresource of `texture` from `from` to `to`, after the copy or clear that
-    /// last used it in `from` and before the copies and clears that use it in `to`.
     void move(CommandList list, Texture texture, Layout from, Layout to)
     {
         const bool used = from == Layout::CopyDst || from == Layout::CopySrc;
@@ -38,8 +35,6 @@ namespace {
         list.barrier({}, {}, barriers);
     }
 
-    //==================================================================================================================
-    /// The width, height and depth of mip `mip` of a texture of `desc`.
     Extent3D mipExtent(const TextureDesc& desc, uint32_t mip)
     {
         return Extent3D{ std::max(desc.extent.width >> mip, 1u),
@@ -47,11 +42,8 @@ namespace {
                          desc.type == TextureType::Tex3D ? std::max(desc.extent.depth >> mip, 1u) : 1u };
     }
 
-    //==================================================================================================================
-    /// Creates a texture of `desc`, with `Sampled` added to its usage as initial data needs (VU-rojo-texture-0020), whose every
-    /// subresource holds distinct bytes of `texelBytes`-byte texels, seeded by its index from `seed`, and returns the bytes of
-    /// each subresource in `TextureData` order: by layer, then by mip. The texture is placed at `placement`, a dedicated
-    /// allocation by default.
+    // Adds `Sampled` to the usage, as initial data needs (VU-rojo-texture-0020). Every subresource holds distinct bytes,
+    // returned in `TextureData` order: by layer, then by mip.
     std::vector<std::vector<std::byte>> fillTexture(
         Device device, TextureDesc desc, uint32_t texelBytes, uint32_t seed, Texture& texture, Placement placement = {}
     )
@@ -72,15 +64,11 @@ namespace {
         return bytes;
     }
 
-    //==================================================================================================================
-    /// Returns the texels of mip `mip` of layer `layer` of `texture`, a texture of `desc`.
     std::vector<std::byte> readSubresource(test::GpuKit& kit, Texture texture, const TextureDesc& desc, uint32_t mip, uint32_t layer)
     {
         return kit.readTexture(texture, TextureRegion{ .mip = mip, .layer = layer, .layers = 1, .extent = mipExtent(desc, mip) }, desc.format);
     }
 
-    //==================================================================================================================
-    /// Returns `count` copies of the texel `texel`.
     std::vector<std::byte> repeated(std::span<const std::byte> texel, uint64_t count)
     {
         std::vector<std::byte> bytes;
@@ -92,8 +80,6 @@ namespace {
         return bytes;
     }
 
-    //==================================================================================================================
-    /// Returns the bytes of `values`, in memory order.
     template<typename T, size_t N> std::vector<std::byte> bytesOf(const std::array<T, N>& values)
     {
         std::vector<std::byte> bytes(sizeof(values));
@@ -101,15 +87,13 @@ namespace {
         return bytes;
     }
 
-    /// A clear color each format of the cases holds exactly: 0.2 and 0.6 are 51 and 153 out of 255.
+    // Every format of the cases holds it exactly: 0.2 and 0.6 are 51 and 153 out of 255.
     constexpr ClearColor kColor{ 1.0f, 0.0f, 0.2f, 0.6f };
 
-    /// `kColor` as an RGBA8Unorm texel.
     const std::array<uint8_t, 4> kColorRGBA8{ 255, 0, 51, 153 };
 
-    //==================================================================================================================
-    /// Checks every subresource of `texture`, a texture of `desc` created with `initial`: those in mips `[baseMip, endMip)` of
-    /// layers `[baseLayer, endLayer)` hold `texel` at every texel, every other one its initial bytes.
+    // Subresources in mips `[baseMip, endMip)` of layers `[baseLayer, endLayer)` must hold `texel` everywhere; every other
+    // one keeps its initial bytes.
     void checkCleared(
         test::GpuKit& kit,
         Texture texture,
@@ -137,7 +121,6 @@ namespace {
     }
 } // namespace
 
-//======================================================================================================================
 TEST_CASE("clearTexture clears the mips and layers of a render target's range and nothing else", "[conformance]")
 {
     test::requireGpu();
@@ -170,7 +153,6 @@ TEST_CASE("clearTexture clears the mips and layers of a render target's range an
     }
 }
 
-//======================================================================================================================
 TEST_CASE("clearTexture writes RGBA8Unorm, RGBA16Float and R32Float render targets with values each holds exactly", "[conformance]")
 {
     test::requireGpu();
@@ -204,7 +186,6 @@ TEST_CASE("clearTexture writes RGBA8Unorm, RGBA16Float and R32Float render targe
     }
 }
 
-//======================================================================================================================
 TEST_CASE("clearTexture clears a cube render target's faces", "[conformance]")
 {
     test::requireGpu();
@@ -231,7 +212,6 @@ TEST_CASE("clearTexture clears a cube render target's faces", "[conformance]")
     checkCleared(kit, texture, desc, initial, bytesOf(kColorRGBA8), 0, 2, 3, 3 + count);
 }
 
-//======================================================================================================================
 TEST_CASE("clearTexture clears every depth plane of each mip of a 3D render target's range", "[conformance]")
 {
     test::requireGpu();
@@ -251,7 +231,6 @@ TEST_CASE("clearTexture clears every depth plane of each mip of a 3D render targ
     checkCleared(kit, texture, desc, initial, bytesOf(kColorRGBA8), 1, 3, 0, 1);
 }
 
-//======================================================================================================================
 TEST_CASE("clearTexture clears a D32Float texture to the clear depth", "[conformance]")
 {
     test::requireGpu();
@@ -287,7 +266,6 @@ TEST_CASE("clearTexture clears a D32Float texture to the clear depth", "[conform
     checkCleared(kit, texture, desc, initial, bytesOf(std::array<float, 1>{ 0.75f }), 1, 2, 1, 2);
 }
 
-//======================================================================================================================
 TEST_CASE("clearTexture clears Storage-only textures of every type", "[conformance]")
 {
     test::requireGpu();
@@ -332,7 +310,6 @@ TEST_CASE("clearTexture clears Storage-only textures of every type", "[conforman
     checkCleared(kit, texture, desc, initial, bytesOf(kColorRGBA8), baseMip, shape.mips, baseLayer, endLayer);
 }
 
-//======================================================================================================================
 TEST_CASE("clearTexture clears placed textures as it clears dedicated ones", "[conformance]")
 {
     test::requireGpu();
@@ -359,7 +336,6 @@ TEST_CASE("clearTexture clears placed textures as it clears dedicated ones", "[c
     checkCleared(kit, texture, desc, initial, bytesOf(kColorRGBA8), 1, 2, 1, 2);
 }
 
-//======================================================================================================================
 TEST_CASE("clearTexture clears a Storage-only texture on a Compute list", "[conformance]")
 {
     test::requireGpu();
@@ -381,7 +357,6 @@ TEST_CASE("clearTexture clears a Storage-only texture on a Compute list", "[conf
     checkCleared(kit, texture, desc, initial, bytesOf(std::array<uint16_t, 4>{ 0x3400, 0xC000, 0x3E00, 0x6400 }), 0, 2, 1, 2);
 }
 
-//======================================================================================================================
 TEST_CASE("a barrier orders a load-action clear before a copy that reads it", "[conformance]")
 {
     test::requireGpu();
@@ -439,7 +414,6 @@ TEST_CASE("a barrier orders a load-action clear before a copy that reads it", "[
     }
 }
 
-//======================================================================================================================
 TEST_CASE("a barrier orders a copy into a texture before a load-action clear of it", "[conformance]")
 {
     test::requireGpu();

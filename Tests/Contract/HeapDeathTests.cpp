@@ -11,7 +11,6 @@
 
 using namespace rojoRHI;
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-heap-0001 a heap has size zero", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-heap-0001", [] {
@@ -20,7 +19,6 @@ TEST_CASE("VU-rojo-heap-0001 a heap has size zero", "[contract][death]")
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-heap-0002 placement requirements are requested for a Sparse buffer", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-heap-0002", [] {
@@ -30,7 +28,6 @@ TEST_CASE("VU-rojo-heap-0002 placement requirements are requested for a Sparse b
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-heap-0002 placement requirements are requested for a Sparse texture", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-heap-0002", [] {
@@ -47,7 +44,6 @@ TEST_CASE("VU-rojo-heap-0002 placement requirements are requested for a Sparse t
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-heap-0003 a buffer extends past the end of its heap", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-heap-0003", [] {
@@ -60,7 +56,6 @@ TEST_CASE("VU-rojo-heap-0003 a buffer extends past the end of its heap", "[contr
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-heap-0004 a buffer is placed at a misaligned offset", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-heap-0004", [] {
@@ -72,7 +67,6 @@ TEST_CASE("VU-rojo-heap-0004 a buffer is placed at a misaligned offset", "[contr
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-heap-0005 a buffer is placed in a heap of another memory class", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-heap-0005", [] {
@@ -82,7 +76,6 @@ TEST_CASE("VU-rojo-heap-0005 a buffer is placed in a heap of another memory clas
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-heap-0005 a texture is placed in an Upload heap", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-heap-0005", [] {
@@ -92,7 +85,6 @@ TEST_CASE("VU-rojo-heap-0005 a texture is placed in an Upload heap", "[contract]
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-heap-0006 a Sparse buffer is placed in a heap", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-heap-0006", [] {
@@ -103,7 +95,6 @@ TEST_CASE("VU-rojo-heap-0006 a Sparse buffer is placed in a heap", "[contract][d
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-device-0008 a heap is destroyed while a buffer is placed in it", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-device-0008", [] {

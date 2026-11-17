@@ -22,11 +22,10 @@
 using namespace rojoRHI;
 
 namespace {
-    /// The bits of -2^-46, which the case's expression gives when its multiply and add are fused.
+    // The bits of -2^-46, the result when the multiply and add are fused.
     constexpr uint32_t kFused = 0xA8800000u;
 } // namespace
 
-//======================================================================================================================
 TEST_CASE("a precise file rounds a multiply before the add", "[conformance][precision]")
 {
     test::requireGpu();

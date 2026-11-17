@@ -21,23 +21,18 @@
 
 namespace rojoRHI::d3d12 {
     namespace {
-        //==============================================================================================================
-        /// Returns the error of a floor item `device` misses.
         std::unexpected<Error> belowFloor(std::string item)
         {
             return std::unexpected(Error{ ErrorCategory::Unsupported, std::format("the D3D12 hardware floor is not met: {}", std::move(item)) });
         }
 
-        //==============================================================================================================
-        /// Reads `feature` of `device` into `data`.
         template<typename T> HRESULT query(ID3D12Device12* device, D3D12_FEATURE feature, T& data)
         {
             return device->CheckFeatureSupport(feature, &data, static_cast<UINT>(sizeof(T)));
         }
 
-        //==============================================================================================================
-        /// Reads the highest shader model of `device` into `model`. The runtime refuses a shader model newer than it knows with
-        /// E_INVALIDARG, so the request steps down until it is answered or reaches Shader Model 6.6.
+        // The runtime refuses a shader model newer than it knows with E_INVALIDARG, so the request steps down until it
+        // is answered or reaches Shader Model 6.6.
         HRESULT queryShaderModel(ID3D12Device12* device, D3D12_FEATURE_DATA_SHADER_MODEL& model)
         {
             model = { D3D_HIGHEST_SHADER_MODEL };
@@ -50,8 +45,6 @@ namespace rojoRHI::d3d12 {
             return result;
         }
 
-        //==============================================================================================================
-        /// Returns the shader model encoded as `D3D_SHADER_MODEL` as "6.N".
         std::string shaderModelName(D3D_SHADER_MODEL model)
         {
             const int value = static_cast<int>(model);
@@ -59,7 +52,6 @@ namespace rojoRHI::d3d12 {
         }
     } // namespace
 
-    //==================================================================================================================
     Result<void> checkFloor(ID3D12Device12* device)
     {
         D3D12_FEATURE_DATA_SHADER_MODEL model = {};
@@ -103,7 +95,6 @@ namespace rojoRHI::d3d12 {
         return {};
     }
 
-    //==================================================================================================================
     Result<void> reportCapabilities(DeviceImpl& impl)
     {
         ID3D12Device12* device = impl.device();
@@ -154,10 +145,10 @@ namespace rojoRHI::d3d12 {
         impl.adapterName = utf8(adapter.Description);
         impl.floorName = std::format("FL 12_2, SM {}", shaderModelName(model.HighestShaderModel));
 
-        // Nothing past the floor is reported until the backend implements it. Placement sparse
-        // needs tiled-resources tier 2: an unmapped tile then reads as zero and discards writes, which tier 1 leaves
-        // undefined, and no mip of at least one tile is packed into the tail. FSR is listed when the FidelityFX runtime
-        // loaded beside the executable and offers a provider for the device.
+        // Nothing past the floor is reported until the backend implements it. Placement sparse needs tiled-resources
+        // tier 2: an unmapped tile then reads as zero and discards writes, which tier 1 leaves undefined, and no mip of
+        // at least one tile is packed into the tail. FSR is listed when the FidelityFX runtime loaded beside the
+        // executable and offers a provider for the device.
         Capabilities& capabilities = impl.core.capabilities();
         capabilities.adapterName = impl.adapterName;
         capabilities.floorName = impl.floorName;
@@ -192,8 +183,8 @@ namespace rojoRHI::d3d12 {
         // D3D12 has no per-sample byte budget below 8 targets of 16 bytes, so the floor of 64 is what binds.
         limits.maxColorBytesPerSample = 64;
         limits.maxSamplerAnisotropy = D3D12_REQ_MAXANISOTROPY;
-        // Each storage clear takes one mip's transient descriptors from its frame slot's block of the ring, which fills use
-        // no longer, so the limit is the whole block.
+        // Each storage clear takes one mip's transient descriptors from its frame slot's block of the ring, so the
+        // limit is the whole block.
         limits.maxStorageClearsPerFrame = d3d12::kTransientPerSlot;
         // ExecuteIndirect's MaxCommandCount is a UINT; the reference reports the largest count verified on hardware, whose
         // records fit in a 384 MiB buffer (chapter 15).

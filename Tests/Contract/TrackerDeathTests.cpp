@@ -21,16 +21,13 @@ using test::PassKit;
 using test::UpscaleKit;
 
 namespace {
-    //==================================================================================================================
-    /// Records the barrier that moves every subresource of `texture` from `oldLayout` to `newLayout`, covering every use on both
-    /// sides, so only the layout rules can fail.
+    // Covers every use on both sides, so only the layout rules can fail.
     void move(CommandList list, Texture texture, Layout oldLayout, Layout newLayout)
     {
         test::transition(list, texture, oldLayout, newLayout);
     }
 } // namespace
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-sync-0013 a texture barrier starts from a layout the texture is not in", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-sync-0013", [] {
@@ -41,7 +38,6 @@ TEST_CASE("VU-rojo-sync-0013 a texture barrier starts from a layout the texture 
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-present-0014 the first barrier on an acquired image starts from a layout other than Undefined", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-present-0014", [] {
@@ -58,20 +54,15 @@ TEST_CASE("VU-rojo-present-0014 the first barrier on an acquired image starts fr
 }
 
 namespace {
-    /// The region of the 4 by 4 texels every layout test copies.
     constexpr TextureRegion kRegion{ .extent = { 4, 4, 1 } };
-    /// The buffer layout of `kRegion`.
     constexpr BufferTextureLayout kLayout{ .rowPitch = 256 };
 
-    //==================================================================================================================
-    /// Records the barrier that moves the subresources `range` of `texture` from Undefined to `newLayout`.
     void moveRange(CommandList list, Texture texture, const SubresourceRange& range, Layout newLayout)
     {
         test::transition(list, texture, Layout::Undefined, newLayout, range);
     }
 } // namespace
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-cmd-0054 the source of a texture copy is in neither CopySrc nor General", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-cmd-0054", [] {
@@ -84,7 +75,6 @@ TEST_CASE("VU-rojo-cmd-0054 the source of a texture copy is in neither CopySrc n
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-cmd-0054 the destination of a texture copy is in neither CopyDst nor General", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-cmd-0054", [] {
@@ -97,7 +87,6 @@ TEST_CASE("VU-rojo-cmd-0054 the destination of a texture copy is in neither Copy
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-cmd-0067 the destination of a buffer to texture copy is in neither CopyDst nor General", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-cmd-0067", [] {
@@ -108,7 +97,6 @@ TEST_CASE("VU-rojo-cmd-0067 the destination of a buffer to texture copy is in ne
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-cmd-0069 the source of a texture to buffer copy is in neither CopySrc nor General", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-cmd-0069", [] {
@@ -119,7 +107,6 @@ TEST_CASE("VU-rojo-cmd-0069 the source of a texture to buffer copy is in neither
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-cmd-0072 a cleared range is not in CopyDst", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-cmd-0072", [] {
@@ -129,7 +116,6 @@ TEST_CASE("VU-rojo-cmd-0072 a cleared range is not in CopyDst", "[contract][deat
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-cmd-0072 a cleared range is in General", "[contract][death]")
 {
     const std::string_view ends = test::misplacedClearEndsRecording();
@@ -147,7 +133,6 @@ TEST_CASE("VU-rojo-cmd-0072 a cleared range is in General", "[contract][death]")
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-upscale-0016 an upscale reads or writes a texture in the wrong layout", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-upscale-0016", [] {
@@ -161,7 +146,6 @@ TEST_CASE("VU-rojo-upscale-0016 an upscale reads or writes a texture in the wron
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-sync-0006 a texture used by a Copy list is not in General", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-sync-0006", [] {
@@ -180,7 +164,6 @@ TEST_CASE("VU-rojo-sync-0006 a texture used by a Copy list is not in General", "
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-sync-0004 a declared write is made to a texture not in ShaderWrite", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-sync-0004", [] {
@@ -194,7 +177,6 @@ TEST_CASE("VU-rojo-sync-0004 a declared write is made to a texture not in Shader
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-sync-0004 a declared read is made to a texture in CopyDst", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-sync-0004", [] {
@@ -209,7 +191,6 @@ TEST_CASE("VU-rojo-sync-0004 a declared read is made to a texture in CopyDst", "
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-present-0018 an image is presented in a layout other than Present", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-present-0018", [] {
@@ -226,7 +207,6 @@ TEST_CASE("VU-rojo-present-0018 an image is presented in a layout other than Pre
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-sync-0006 is reported before the entry rule for a placed texture", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-sync-0006", [] {
@@ -247,7 +227,6 @@ TEST_CASE("VU-rojo-sync-0006 is reported before the entry rule for a placed text
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-cmd-0054 only mip 1 of layer 1 of the destination is in the wrong layout", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-cmd-0054", [] {
@@ -263,7 +242,6 @@ TEST_CASE("VU-rojo-cmd-0054 only mip 1 of layer 1 of the destination is in the w
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-cmd-0007 a color attachment is not in ColorAttachment", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-cmd-0007", [] {
@@ -276,7 +254,6 @@ TEST_CASE("VU-rojo-cmd-0007 a color attachment is not in ColorAttachment", "[con
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-cmd-0007 a resolve target is not in ColorAttachment", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-cmd-0007", [] {
@@ -292,7 +269,6 @@ TEST_CASE("VU-rojo-cmd-0007 a resolve target is not in ColorAttachment", "[contr
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-cmd-0010 a depth attachment is not in DepthStencilWrite", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-cmd-0010", [] {

@@ -11,8 +11,6 @@
 
 namespace rojoRHI::core {
     namespace {
-        //==============================================================================================================
-        /// Returns the box of texels from (`x0`, `y0`, `z0`) up to, not including, (`x1`, `y1`, `z1`).
         TexelBox spanning(uint64_t x0, uint64_t y0, uint64_t z0, uint64_t x1, uint64_t y1, uint64_t z1)
         {
             return TexelBox{ .offset = { static_cast<uint32_t>(x0), static_cast<uint32_t>(y0), static_cast<uint32_t>(z0) },
@@ -20,7 +18,6 @@ namespace rojoRHI::core {
         }
     } // namespace
 
-    //==================================================================================================================
     std::vector<TexelBox> subtract(const TexelBox& from, const TexelBox& cut)
     {
         if (!overlaps(from, cut))
@@ -63,7 +60,6 @@ namespace rojoRHI::core {
         return rest;
     }
 
-    //==================================================================================================================
     void TileMarks::mark(const std::optional<TexelBox>& box)
     {
         if (!box.has_value())
@@ -80,7 +76,6 @@ namespace rojoRHI::core {
         m_boxes.push_back(*box);
     }
 
-    //==================================================================================================================
     void TileMarks::clear(const std::optional<TexelBox>& box)
     {
         if (!box.has_value())
@@ -98,7 +93,6 @@ namespace rojoRHI::core {
         m_boxes = std::move(kept);
     }
 
-    //==================================================================================================================
     bool TileMarks::reaches(const std::optional<TexelBox>& box) const
     {
         if (m_whole)
@@ -112,13 +106,11 @@ namespace rojoRHI::core {
         return std::ranges::any_of(m_boxes, [&](const TexelBox& marked) { return overlaps(*box, marked); });
     }
 
-    //==================================================================================================================
     size_t TileMarks::count() const
     {
         return (m_whole ? 1 : 0) + m_boxes.size();
     }
 
-    //==================================================================================================================
     void ByteMarks::mark(uint64_t begin, uint64_t end, QueueType queue, uint64_t position)
     {
         for (OffsetMap<std::optional<ByteMark>>::Range& range : m_ranges.isolate(begin, end))
@@ -128,7 +120,6 @@ namespace rojoRHI::core {
         m_ranges.merge(begin, end);
     }
 
-    //==================================================================================================================
     void ByteMarks::clear(uint64_t begin, uint64_t end)
     {
         for (OffsetMap<std::optional<ByteMark>>::Range& range : m_ranges.isolate(begin, end))
@@ -138,7 +129,6 @@ namespace rojoRHI::core {
         m_ranges.merge(begin, end);
     }
 
-    //==================================================================================================================
     void ByteMarks::reach(QueueType queue, const Clock& ordered, Scope destination)
     {
         bool reached = false;
@@ -164,7 +154,6 @@ namespace rojoRHI::core {
         }
     }
 
-    //==================================================================================================================
     std::optional<ByteMark> ByteMarks::firstUse(uint64_t begin, uint64_t end, QueueType queue, Scope use)
     {
         if (begin >= end)
@@ -194,7 +183,6 @@ namespace rojoRHI::core {
         return std::nullopt;
     }
 
-    //==================================================================================================================
     size_t ByteMarks::count() const
     {
         return static_cast<size_t>(std::ranges::count_if(m_ranges.ranges(), [](const OffsetMap<std::optional<ByteMark>>::Range& range) {

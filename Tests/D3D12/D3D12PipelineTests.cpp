@@ -28,32 +28,25 @@
 using namespace rojoRHI;
 
 namespace {
-    /// The one colour target most cases draw to.
     constexpr std::array<ColorTarget, 1> kColor = { ColorTarget{ .format = Format::RGBA8Unorm } };
 
-    /// Bytes standing in for each stage's DXIL in the stream cases, which never reach the runtime.
+    // Stand-in DXIL for the stream cases, which never reach the runtime.
     constexpr std::array<std::byte, 8> kVertexBytes = {};
     constexpr std::array<std::byte, 8> kTaskBytes = {};
     constexpr std::array<std::byte, 8> kMeshBytes = {};
     constexpr std::array<std::byte, 8> kFragmentBytes = {};
     constexpr std::array<std::byte, 8> kComputeBytes = {};
 
-    //==================================================================================================================
-    /// Returns bytecode over `bytes`.
     D3D12_SHADER_BYTECODE bytecodeOf(const std::array<std::byte, 8>& bytes)
     {
         return D3D12_SHADER_BYTECODE{ bytes.data(), bytes.size() };
     }
 
-    //==================================================================================================================
-    /// The stand-in shaders of a vertex pipeline with a fragment entry.
     d3d12::PipelineShaders vertexShaders()
     {
         return d3d12::PipelineShaders{ .vertex = bytecodeOf(kVertexBytes), .fragment = bytecodeOf(kFragmentBytes) };
     }
 
-    //==================================================================================================================
-    /// Returns the value of `stream`'s subobject of `type`, failing the case when the stream has none.
     template<class Value> Value valueOf(const d3d12::PipelineStream& stream, D3D12_PIPELINE_STATE_SUBOBJECT_TYPE type)
     {
         const std::optional<Value> value = stream.find<Value>(type);
@@ -62,8 +55,6 @@ namespace {
         return *value;
     }
 
-    //==================================================================================================================
-    /// Creates a device with two frames in flight, failing the case when it cannot.
     Device makeDevice()
     {
         DeviceDesc desc;
@@ -74,8 +65,6 @@ namespace {
         return *created;
     }
 
-    //==================================================================================================================
-    /// Loads the packaged conformance library `name` on `device`.
     ShaderLibrary load(Device& device, std::string_view name)
     {
         const Result<ShaderLibrary> library = device.loadShaderLibrary(test::shaderLibraryFile(name), std::string("test.") + std::string(name));
@@ -84,8 +73,6 @@ namespace {
         return *library;
     }
 
-    //==================================================================================================================
-    /// Loads the standard library on `device`.
     ShaderLibrary loadStandard(Device& device)
     {
         const Result<ShaderLibrary> library = device.loadShaderLibrary(test::standardLibrary(), "test.standard");
@@ -93,8 +80,7 @@ namespace {
         return *library;
     }
 
-    //==================================================================================================================
-    /// Returns the payload of `pipeline`, read as recording reads it.
+    // Read as recording reads it.
     const d3d12::PipelineState& stateOf(Device& device, Pipeline pipeline)
     {
         const auto* state = static_cast<const d3d12::PipelineState*>(DeviceImpl::of(device).core.pool<Pipeline>().native(pipeline));
@@ -103,8 +89,6 @@ namespace {
         return *state;
     }
 
-    //==================================================================================================================
-    /// Creates `desc` on `device`, failing the case with the error's message when creation fails.
     Pipeline create(Device& device, const GraphicsPipelineDesc& desc)
     {
         const Result<Pipeline> pipeline = device.createPipeline(desc);
@@ -114,8 +98,6 @@ namespace {
         return *pipeline;
     }
 
-    //==================================================================================================================
-    /// Creates a compute pipeline over `entry` of `library`, failing the case with the error's message when creation fails.
     Pipeline createCompute(Device& device, ShaderLibrary library, std::string_view entry)
     {
         const Result<Pipeline> pipeline = device.createPipeline(ComputePipelineDesc{ .compute = { library, entry }, .label = "test.compute" });
@@ -125,8 +107,6 @@ namespace {
         return *pipeline;
     }
 
-    //==================================================================================================================
-    /// The standard vertex and fragment pipeline over one `RGBA8Unorm` target, with `raster`.
     GraphicsPipelineDesc standardDesc(ShaderLibrary library, const RasterState& raster = {})
     {
         return GraphicsPipelineDesc{
@@ -139,7 +119,6 @@ namespace {
     }
 } // namespace
 
-//======================================================================================================================
 TEST_CASE("graphicsStream names the global root signature, an empty input layout and IndependentBlendEnable", "[d3d12]")
 {
     Device device = makeDevice();
@@ -182,7 +161,6 @@ TEST_CASE("graphicsStream names the global root signature, an empty input layout
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("computeStream names the global root signature and the compute entry alone", "[d3d12]")
 {
     Device device = makeDevice();
@@ -199,7 +177,6 @@ TEST_CASE("computeStream names the global root signature and the compute entry a
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("a depthBias pipeline carries D3D12_PIPELINE_STATE_FLAG_DYNAMIC_DEPTH_BIAS and one without does not", "[d3d12]")
 {
     Device device = makeDevice();
@@ -220,7 +197,6 @@ TEST_CASE("a depthBias pipeline carries D3D12_PIPELINE_STATE_FLAG_DYNAMIC_DEPTH_
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("raster state reaches the rasterizer description", "[d3d12]")
 {
     const D3D12_RASTERIZER_DESC2 culled =
@@ -238,7 +214,6 @@ TEST_CASE("raster state reaches the rasterizer description", "[d3d12]")
     CHECK(d3d12::listTopology(PrimitiveClass::Triangle) == D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
 }
 
-//======================================================================================================================
 TEST_CASE("colour targets map to RTVFormats in order and an sRGB target keeps its sRGB format", "[d3d12]")
 {
     const std::array<ColorTarget, 3> targets = {
@@ -274,7 +249,6 @@ TEST_CASE("colour targets map to RTVFormats in order and an sRGB target keeps it
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("a D32Float pipeline's DSVFormat is D32_FLOAT and a D32FloatS8 pipeline's D32_FLOAT_S8X24_UINT", "[d3d12]")
 {
     Device device = makeDevice();
@@ -329,7 +303,6 @@ TEST_CASE("a D32Float pipeline's DSVFormat is D32_FLOAT and a D32FloatS8 pipelin
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("alpha-slot blend factors use alpha forms", "[d3d12]")
 {
     CHECK(d3d12::alphaBlend(BlendFactor::SrcColor) == D3D12_BLEND_SRC_ALPHA);
@@ -378,7 +351,6 @@ TEST_CASE("alpha-slot blend factors use alpha forms", "[d3d12]")
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("a mesh pipeline with a task entry streams AS, MS and PS and no input layout; without one, MS and PS", "[d3d12]")
 {
     Device device = makeDevice();
@@ -413,7 +385,6 @@ TEST_CASE("a mesh pipeline with a task entry streams AS, MS and PS and no input 
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("a mesh stream whose DXIL declares no output topology names no topology type, and a vertex stream the type of its class", "[d3d12]")
 {
     Device device = makeDevice();
@@ -428,7 +399,6 @@ TEST_CASE("a mesh stream whose DXIL declares no output topology names no topolog
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("a vertex pipeline without a fragment entry or a depth format is created", "[d3d12]")
 {
     REQUIRE(kD3D12LibrariesBuilt);
@@ -446,7 +416,6 @@ TEST_CASE("a vertex pipeline without a fragment entry or a depth format is creat
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("createPipeline returns a PSO for each Abi library's entries and counts one creation each", "[d3d12]")
 {
     REQUIRE(kD3D12LibrariesBuilt);
@@ -512,7 +481,6 @@ TEST_CASE("createPipeline returns a PSO for each Abi library's entries and count
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("a destroyed pipeline's PSO is released when its frame retires", "[d3d12]")
 {
     Device device = makeDevice();
@@ -538,7 +506,6 @@ TEST_CASE("a destroyed pipeline's PSO is released when its frame retires", "[d3d
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("a PSO creation the runtime refuses is DriverFailure naming the label", "[d3d12]")
 {
     REQUIRE(kD3D12LibrariesBuilt);
@@ -566,7 +533,6 @@ TEST_CASE("a PSO creation the runtime refuses is DriverFailure naming the label"
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("a conservative mesh pipeline whose mesh entry emits lines is Unsupported, and one that emits triangles is created", "[d3d12]")
 {
     Result<Device> created = createDevice();

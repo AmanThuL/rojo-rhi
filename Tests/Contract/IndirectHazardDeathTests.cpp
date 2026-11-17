@@ -15,18 +15,13 @@ using namespace rojoRHI;
 using test::PassKit;
 
 namespace {
-    /// The bytes of every argument buffer.
     constexpr uint64_t kBytes = 1024;
 
-    //==================================================================================================================
-    /// Creates an `IndirectArgs` buffer of `kBytes` bytes that a fill may write.
     Buffer argsBuffer(PassKit& kit)
     {
         return kit.buffer(BufferUsage::IndirectArgs | BufferUsage::ShaderWrite, kBytes);
     }
 
-    //==================================================================================================================
-    /// Records one global barrier from `srcStage` and `srcAccess` to `dstStage` and `dstAccess`.
     void global(CommandList list, Stage srcStage, Access srcAccess, Stage dstStage, Access dstAccess)
     {
         const std::array<GlobalBarrier, 1> globals{ GlobalBarrier{
@@ -35,7 +30,6 @@ namespace {
     }
 } // namespace
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-indirect-0005 drawIndirect reads records a fill wrote with no barrier between", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-indirect-0005", [] {
@@ -49,7 +43,6 @@ TEST_CASE("VU-rojo-indirect-0005 drawIndirect reads records a fill wrote with no
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-indirect-0005 drawIndirect reads a count a fill wrote with no barrier between", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-indirect-0005", [] {
@@ -64,7 +57,6 @@ TEST_CASE("VU-rojo-indirect-0005 drawIndirect reads a count a fill wrote with no
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-indirect-0011 drawIndexedIndirect reads records after a barrier whose destination is not IndirectArgs", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-indirect-0011", [] {
@@ -80,7 +72,6 @@ TEST_CASE("VU-rojo-indirect-0011 drawIndexedIndirect reads records after a barri
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-indirect-0011 drawIndexedIndirect reads a count a fill wrote with no barrier between", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-indirect-0011", [] {
@@ -96,7 +87,6 @@ TEST_CASE("VU-rojo-indirect-0011 drawIndexedIndirect reads a count a fill wrote 
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-indirect-0017 drawMeshTasksIndirect reads records a fill wrote with no barrier between", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-indirect-0017", [] {
@@ -110,7 +100,6 @@ TEST_CASE("VU-rojo-indirect-0017 drawMeshTasksIndirect reads records a fill wrot
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-indirect-0017 drawMeshTasksIndirect reads a count a fill wrote with no barrier between", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-indirect-0017", [] {
@@ -125,7 +114,6 @@ TEST_CASE("VU-rojo-indirect-0017 drawMeshTasksIndirect reads a count a fill wrot
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-indirect-0020 dispatchIndirect reads a record a fill wrote with no barrier between", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-indirect-0020", [] {
@@ -138,7 +126,6 @@ TEST_CASE("VU-rojo-indirect-0020 dispatchIndirect reads a record a fill wrote wi
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-sync-0024 an indirect read follows a barrier to IndirectArgs whose source misses the write", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-sync-0024", [] {

@@ -30,26 +30,23 @@
 using namespace rojoRHI;
 
 namespace {
-    /// The sync of the `Copy` stage on a Graphics list: copies, the fill kernel and clears through every view kind.
+    // Copies, the fill kernel and clears through every view kind run in the `Copy` stage of a Graphics list.
     constexpr D3D12_BARRIER_SYNC kGraphicsCopySync = D3D12_BARRIER_SYNC_COPY | D3D12_BARRIER_SYNC_COMPUTE_SHADING | D3D12_BARRIER_SYNC_RENDER_TARGET |
                                                      D3D12_BARRIER_SYNC_DEPTH_STENCIL | D3D12_BARRIER_SYNC_CLEAR_UNORDERED_ACCESS_VIEW;
 
-    /// The sync of the `Copy` stage on a Compute list, which has no render-target or depth-stencil work.
+    // A Compute list has no render-target or depth-stencil work.
     constexpr D3D12_BARRIER_SYNC kComputeCopySync =
         D3D12_BARRIER_SYNC_COPY | D3D12_BARRIER_SYNC_COMPUTE_SHADING | D3D12_BARRIER_SYNC_CLEAR_UNORDERED_ACCESS_VIEW;
 
-    /// The sync of the `Copy` stage on a Graphics list on a side with no access, which drops the unordered-access clear.
+    // A side with no access drops the unordered-access clear.
     constexpr D3D12_BARRIER_SYNC kGraphicsCopyNoAccess =
         D3D12_BARRIER_SYNC_COPY | D3D12_BARRIER_SYNC_COMPUTE_SHADING | D3D12_BARRIER_SYNC_RENDER_TARGET | D3D12_BARRIER_SYNC_DEPTH_STENCIL;
 
-    /// Guards `g_messages`, which the message callback may fill from any thread.
+    // The message callback may fill `g_messages` from any thread.
     std::mutex g_messagesMutex;
 
-    /// The messages at `Warning` or above the library reported while a case collected them.
     std::vector<std::string> g_messages;
 
-    //==================================================================================================================
-    /// Keeps `message` when it is a warning or an error. It may run on any thread.
     void collectMessage(MessageSeverity severity, std::string_view message, void*)
     {
         if (severity == MessageSeverity::Info)
@@ -66,25 +63,22 @@ namespace {
         g_messages.emplace_back(message);
     }
 
-    /// Collects the library's warnings and errors, the debug layer's included, into `g_messages`, emptied first, while it
-    /// lives, and removes the callback when it goes, however the case ends.
+    // Collects the library's warnings and errors, the debug layer's included, into `g_messages` (emptied first) while it
+    // lives, and removes the callback however the case ends.
     class MessageCollection
     {
       public:
         MessageCollection();
         ~MessageCollection();
 
-        //==============================================================================================================
         MessageCollection(const MessageCollection&) = delete;
 
-        //==============================================================================================================
         MessageCollection& operator=(const MessageCollection&) = delete;
 
-        /// Returns the messages collected so far, and lists them for the log.
+        // Also lists the messages for the log.
         size_t count() const;
     };
 
-    //==================================================================================================================
     MessageCollection::MessageCollection()
     {
         {
@@ -94,13 +88,11 @@ namespace {
         setMessageCallback(collectMessage, nullptr);
     }
 
-    //==================================================================================================================
     MessageCollection::~MessageCollection()
     {
         setMessageCallback(nullptr, nullptr);
     }
 
-    //==================================================================================================================
     size_t MessageCollection::count() const
     {
         const std::lock_guard lock(g_messagesMutex);
@@ -111,8 +103,6 @@ namespace {
         return g_messages.size();
     }
 
-    //==================================================================================================================
-    /// Returns a new device with the default description.
     Device makeDevice()
     {
         Result<Device> created = createDevice();
@@ -120,8 +110,6 @@ namespace {
         return *created;
     }
 
-    //==================================================================================================================
-    /// Returns a new fence at zero on `device`, labelled `label`.
     Fence makeFence(Device device, std::string_view label)
     {
         Result<Fence> created = device.createFence(0, label);
@@ -129,8 +117,6 @@ namespace {
         return *created;
     }
 
-    //==================================================================================================================
-    /// Returns a new buffer of `desc` on `device`.
     Buffer makeBuffer(Device device, const BufferDesc& desc)
     {
         Result<Buffer> created = device.createBuffer(desc);
@@ -138,8 +124,6 @@ namespace {
         return *created;
     }
 
-    //==================================================================================================================
-    /// Returns a new texture of `desc` on `device`, holding `initial` when it is not empty.
     Texture makeTexture(Device device, const TextureDesc& desc, std::span<const TextureData> initial = {})
     {
         Result<Texture> created = device.createTexture(desc, initial);
@@ -147,15 +131,11 @@ namespace {
         return *created;
     }
 
-    //==================================================================================================================
-    /// Returns a new 4x4 RGBA8 texture of `usage` on `device`, labelled `label`.
     Texture makeColor(Device device, TextureUsage usage, std::string_view label)
     {
         return makeTexture(device, { .format = Format::RGBA8Unorm, .extent = { 4, 4, 1 }, .usage = usage, .label = label });
     }
 
-    //==================================================================================================================
-    /// Returns the native buffer of `buffer`, a live buffer of `device`.
     ID3D12Resource* resourceOf(Device device, Buffer buffer)
     {
         const auto* payload = static_cast<const d3d12::BufferPayload*>(DeviceImpl::of(device).core.pool<Buffer>().native(buffer));
@@ -163,8 +143,6 @@ namespace {
         return payload->resource;
     }
 
-    //==================================================================================================================
-    /// Returns the payload of `texture`, a live texture of `device`.
     const d3d12::TexturePayload& payloadOf(Device device, Texture texture)
     {
         const auto* payload = static_cast<const d3d12::TexturePayload*>(DeviceImpl::of(device).core.pool<Texture>().native(texture));
@@ -173,15 +151,13 @@ namespace {
         return *payload;
     }
 
-    //==================================================================================================================
-    /// Returns the barrier scratch of `list`, which holds the batch it lowered last.
+    // Holds the batch `list` lowered last.
     const d3d12::BarrierScratch& scratchOf(CommandList list)
     {
         return CommandListImpl::of(list).state.barriers;
     }
 
-    //==================================================================================================================
-    /// Returns texture barrier `index` of the batch `list` lowered last, failing the case when the batch has fewer.
+    // From the batch `list` lowered last; fails the case when it has fewer.
     const D3D12_TEXTURE_BARRIER& loweredTexture(CommandList list, size_t index)
     {
         const d3d12::BarrierScratch& scratch = scratchOf(list);
@@ -189,37 +165,30 @@ namespace {
         return scratch.textures[index];
     }
 
-    //==================================================================================================================
-    /// Returns the native calls `list` has recorded since its acquisition.
     uint64_t recordCalls(CommandList list)
     {
         return core::coreOf(list).counts.nativeRecordCalls;
     }
 
-    //==================================================================================================================
-    /// Returns the native barrier commands `list` has recorded since its acquisition.
     uint64_t nativeBarriers(CommandList list)
     {
         return core::coreOf(list).counts.nativeBarriers;
     }
 
-    //==================================================================================================================
-    /// Returns the six fields of `range`, so two ranges compare and print as arrays.
+    // So two ranges compare and print as arrays.
     std::array<UINT, 6> fieldsOf(const D3D12_BARRIER_SUBRESOURCE_RANGE& range)
     {
         return { range.IndexOrFirstMipLevel, range.NumMipLevels, range.FirstArraySlice, range.NumArraySlices, range.FirstPlane, range.NumPlanes };
     }
 
-    /// The stage and access of one use of a texture subresource.
     struct Use
     {
-        Stage stage = Stage::None;    ///< The stages the use runs in.
-        Access access = Access::None; ///< What the use does to memory.
+        Stage stage = Stage::None;
+        Access access = Access::None;
     };
 
-    //==================================================================================================================
-    /// Returns a use of a subresource in `layout` on a list of `type`, with the accesses the layout permits: a barrier into
-    /// the layout names it as its destination and a barrier out of it as its source.
+    // The accesses `layout` permits on a list of `type`: a barrier into the layout names them as its destination and a
+    // barrier out of it as its source.
     Use useOf(Layout layout, QueueType type)
     {
         const Stage shader = type == QueueType::Graphics ? Stage::FragmentShader | Stage::ComputeShader : Stage::ComputeShader;
@@ -237,9 +206,7 @@ namespace {
         }
     }
 
-    //==================================================================================================================
-    /// Returns a barrier that moves `range` of `texture` from `from` to `to` on a list of `type`, waiting for the uses `from`
-    /// permits and holding back those `to` permits; a barrier from `Undefined` waits for nothing.
+    // Waits for the uses `from` permits and holds back those `to` permits; a barrier from `Undefined` waits for nothing.
     TextureBarrier transition(Texture texture, Layout from, Layout to, QueueType type, SubresourceRange range = {})
     {
         const Use before = useOf(from, type);
@@ -254,8 +221,6 @@ namespace {
                  .newLayout = to };
     }
 
-    //==================================================================================================================
-    /// Ends `list`, a Graphics list of `device`, submits it signalling `value` on `done`, and waits for the value.
     void submitAndWait(Device device, CommandList list, Fence done, uint64_t value)
     {
         list.end();
@@ -264,9 +229,8 @@ namespace {
         REQUIRE(device.wait({ done, value }, UINT64_MAX));
     }
 
-    //==================================================================================================================
-    /// Records `barriers` on a new Graphics list of `device`, one batch, and submits it signalling `value` on `done`, which it
-    /// waits for: the debug layer then checks each barrier's layout before against the layout the subresources are in.
+    // One batch, submitted and waited for: the debug layer then checks each barrier's layout before against the layout the
+    // subresources are in.
     void leave(Device device, std::span<const TextureBarrier> barriers, Fence done, uint64_t value)
     {
         CommandList list = device.acquireCommandList(QueueType::Graphics, "test.leave");
@@ -275,7 +239,6 @@ namespace {
     }
 } // namespace
 
-//======================================================================================================================
 TEST_CASE("a batch of one global, two buffer and three texture barriers is one native Barrier", "[d3d12]")
 {
     Device device = makeDevice();
@@ -338,7 +301,6 @@ TEST_CASE("a batch of one global, two buffer and three texture barriers is one n
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("an empty batch records nothing", "[d3d12]")
 {
     Device device = makeDevice();
@@ -357,7 +319,6 @@ TEST_CASE("an empty batch records nothing", "[d3d12]")
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("the stage table lowers each Stage as chapter 09 says on a Graphics list", "[d3d12]")
 {
     constexpr QueueType kGraphics = QueueType::Graphics;
@@ -384,7 +345,6 @@ TEST_CASE("the stage table lowers each Stage as chapter 09 says on a Graphics li
     CHECK(d3d12::copyStageSync(kGraphics) == kGraphicsCopySync);
 }
 
-//======================================================================================================================
 TEST_CASE("Copy drops render-target and depth-stencil sync on a Compute list and is SYNC_COPY alone on a Copy list", "[d3d12]")
 {
     CHECK(d3d12::syncOf(Stage::Copy, QueueType::Compute) == kComputeCopySync);
@@ -401,7 +361,6 @@ TEST_CASE("Copy drops render-target and depth-stencil sync on a Compute list and
     CHECK(d3d12::syncOf(Stage::None, QueueType::Copy) == D3D12_BARRIER_SYNC_NONE);
 }
 
-//======================================================================================================================
 TEST_CASE("CopyWrite adds unordered access only on global barriers and ShaderWrite buffers", "[d3d12]")
 {
     using d3d12::AccessTarget;
@@ -411,7 +370,6 @@ TEST_CASE("CopyWrite adds unordered access only on global barriers and ShaderWri
     CHECK(d3d12::accessOf(Access::CopyWrite, AccessTarget::Buffer, Layout::Undefined) == D3D12_BARRIER_ACCESS_COPY_DEST);
     CHECK(d3d12::accessOf(Access::CopyWrite, AccessTarget::Texture, Layout::CopyDst) == D3D12_BARRIER_ACCESS_COPY_DEST);
     CHECK(d3d12::accessOf(Access::CopyWrite, AccessTarget::Texture, Layout::General) == D3D12_BARRIER_ACCESS_COPY_DEST);
-    // The rest of the access table.
     CHECK(d3d12::accessOf(Access::None, AccessTarget::Global, Layout::Undefined) == D3D12_BARRIER_ACCESS_NO_ACCESS);
     CHECK(d3d12::accessOf(Access::IndirectArgs, AccessTarget::Buffer, Layout::Undefined) == D3D12_BARRIER_ACCESS_INDIRECT_ARGUMENT);
     CHECK(d3d12::accessOf(Access::IndexRead, AccessTarget::Buffer, Layout::Undefined) == D3D12_BARRIER_ACCESS_INDEX_BUFFER);
@@ -492,7 +450,6 @@ TEST_CASE("CopyWrite adds unordered access only on global barriers and ShaderWri
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("ShaderRead of a texture in ShaderWrite is unordered access", "[d3d12]")
 {
     using d3d12::AccessTarget;
@@ -530,7 +487,6 @@ TEST_CASE("ShaderRead of a texture in ShaderWrite is unordered access", "[d3d12]
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("a texture walks Undefined, CopyDst, CopySrc, ShaderRead, ShaderWrite, General and back on a Graphics list", "[d3d12]")
 {
     constexpr std::array<Layout, 10> kWalk = { Layout::Undefined, Layout::CopyDst,     Layout::CopySrc,    Layout::ShaderRead, Layout::ShaderWrite,
@@ -564,7 +520,6 @@ TEST_CASE("a texture walks Undefined, CopyDst, CopySrc, ShaderRead, ShaderWrite,
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("a render target walks ColorAttachment and CopyDst, a depth texture DepthStencilWrite and DepthStencilRead", "[d3d12]")
 {
     constexpr std::array<Layout, 5> kColorWalk = { Layout::Undefined, Layout::ColorAttachment, Layout::CopyDst, Layout::ColorAttachment, Layout::CopyDst };
@@ -606,7 +561,6 @@ TEST_CASE("a render target walks ColorAttachment and CopyDst, a depth texture De
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("a D32FloatS8 texture's barriers cover both planes", "[d3d12]")
 {
     constexpr std::array<Layout, 4> kWalk = { Layout::Undefined, Layout::DepthStencilWrite, Layout::DepthStencilRead, Layout::CopyDst };
@@ -648,7 +602,6 @@ TEST_CASE("a D32FloatS8 texture's barriers cover both planes", "[d3d12]")
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("a Compute list records every stage and layout VU-rojo-sync-0001 and 0007 allow", "[d3d12]")
 {
     constexpr std::array<Layout, 6> kWalk = { Layout::Undefined, Layout::CopyDst, Layout::CopySrc, Layout::ShaderRead, Layout::ShaderWrite, Layout::General };
@@ -716,7 +669,6 @@ TEST_CASE("a Compute list records every stage and layout VU-rojo-sync-0001 and 0
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("a Copy list records Copy and All on General textures and on buffers", "[d3d12]")
 {
     Device device = makeDevice();
@@ -777,7 +729,6 @@ TEST_CASE("a Copy list records Copy and All on General textures and on buffers",
     const std::array<FenceValue, 1> setupDone{ FenceValue{ done, 1 } };
     const std::array<FenceValue, 1> signal{ FenceValue{ copied, 1 } };
     device.queue(QueueType::Copy).submit(std::span(&copy, 1), setupDone, signal);
-    // The graphics queue joins the copy work and takes both textures out of General.
     CommandList graphics = device.acquireCommandList(QueueType::Graphics, "test.graphics");
     const std::array<TextureBarrier, 2> leaving = { transition(textures[0], Layout::General, Layout::CopySrc, QueueType::Graphics),
                                                     transition(textures[1], Layout::General, Layout::CopySrc, QueueType::Graphics) };
@@ -799,7 +750,6 @@ TEST_CASE("a Copy list records Copy and All on General textures and on buffers",
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("a barrier from Undefined discards and names no earlier access", "[d3d12]")
 {
     Device device = makeDevice();
@@ -839,7 +789,6 @@ TEST_CASE("a barrier from Undefined discards and names no earlier access", "[d3d
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("a texture created with initial data leaves ShaderRead without a debug-layer message", "[d3d12]")
 {
     Device device = makeDevice();
@@ -871,7 +820,6 @@ TEST_CASE("a texture created with initial data leaves ShaderRead without a debug
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("a cube array's layer range and a mip range reach exactly those subresources", "[d3d12]")
 {
     Device device = makeDevice();
@@ -927,7 +875,6 @@ TEST_CASE("a cube array's layer range and a mip range reach exactly those subres
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("buffers in Upload and Readback memory take buffer barriers", "[d3d12]")
 {
     Device device = makeDevice();
@@ -958,7 +905,6 @@ TEST_CASE("buffers in Upload and Readback memory take buffer barriers", "[d3d12]
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("a Copy list drops the accesses of Stage::All its queue never performs", "[d3d12]")
 {
     Device device = makeDevice();
@@ -997,7 +943,6 @@ TEST_CASE("a Copy list drops the accesses of Stage::All its queue never performs
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("a Compute list drops the accesses of Stage::All its queue never performs", "[d3d12]")
 {
     Device device = makeDevice();
@@ -1038,7 +983,6 @@ TEST_CASE("a Compute list drops the accesses of Stage::All its queue never perfo
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("a side's sync keeps only the scopes its accesses run in", "[d3d12]")
 {
     constexpr D3D12_BARRIER_SYNC kFillSync = D3D12_BARRIER_SYNC_COPY | D3D12_BARRIER_SYNC_COMPUTE_SHADING | D3D12_BARRIER_SYNC_CLEAR_UNORDERED_ACCESS_VIEW;
@@ -1105,7 +1049,6 @@ TEST_CASE("a side's sync keeps only the scopes its accesses run in", "[d3d12]")
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("a barrier from Undefined after copies keeps the whole Copy scope on a Compute list", "[d3d12]")
 {
     Device device = makeDevice();
@@ -1136,7 +1079,6 @@ TEST_CASE("a barrier from Undefined after copies keeps the whole Copy scope on a
     compute.end();
     const std::array<FenceValue, 1> signal{ FenceValue{ computed, 1 } };
     device.queue(QueueType::Compute).submit(std::span(&compute, 1), {}, signal);
-    // The graphics queue joins the compute work and takes the texture out of CopyDst.
     CommandList graphics = device.acquireCommandList(QueueType::Graphics, "test.graphics");
     const std::array<TextureBarrier, 1> leaving = { transition(texture, Layout::CopyDst, Layout::CopySrc, QueueType::Graphics) };
     graphics.barrier({}, {}, leaving);
@@ -1152,7 +1094,6 @@ TEST_CASE("a barrier from Undefined after copies keeps the whole Copy scope on a
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("a barrier side with no access waits in a scope the layer accepts", "[d3d12]")
 {
     Device device = makeDevice();
@@ -1236,7 +1177,6 @@ TEST_CASE("a barrier side with no access waits in a scope the layer accepts", "[
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("a global barrier names a layout's accesses only where that layout admits both sides", "[d3d12]")
 {
     constexpr D3D12_BARRIER_ACCESS kShaderRead = D3D12_BARRIER_ACCESS_SHADER_RESOURCE | D3D12_BARRIER_ACCESS_CONSTANT_BUFFER;
@@ -1331,7 +1271,6 @@ TEST_CASE("a global barrier names a layout's accesses only where that layout adm
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("a discard behind a source stage adds the global barrier the native frame records", "[d3d12]")
 {
     // The benchmark's native arm records these global barriers for its composed frame and C10, and its [host] case pins
@@ -1404,7 +1343,6 @@ TEST_CASE("a discard behind a source stage adds the global barrier the native fr
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("discards that share their stages and destination add one global barrier between them", "[d3d12]")
 {
     // The composed frame's geometry batch: three color targets behind the compute shaders and a depth behind the depth

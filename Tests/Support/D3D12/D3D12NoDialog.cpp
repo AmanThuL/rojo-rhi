@@ -10,10 +10,9 @@
 #include <initializer_list>
 
 namespace {
-    //==================================================================================================================
-    /// Routes the CRT's warnings, errors and asserts to stderr, keeps abort from writing its dialog or reporting a fault, and
-    /// turns off the system's critical-error and fault boxes, as a death test's child does, so a failure outside a death
-    /// test ends the run at once instead of holding the step until its timeout. Returns true.
+    // Routes the CRT's warnings, errors and asserts to stderr, keeps abort from writing its dialog or reporting a
+    // fault, and turns off the system's critical-error and fault boxes, as a death test's child does, so a failure
+    // outside a death test ends the run at once instead of holding the step until its timeout.
     bool suppressDialogs()
     {
         _set_abort_behavior(0, _WRITE_ABORT_MSG | _CALL_REPORTFAULT);
@@ -26,6 +25,6 @@ namespace {
         return true;
     }
 
-    /// Applies `suppressDialogs` while the test executable starts, before Catch2 runs any case.
+    // Runs while the test executable starts, before Catch2 runs any case.
     [[maybe_unused]] const bool kDialogsSuppressed = suppressDialogs();
 } // namespace

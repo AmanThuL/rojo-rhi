@@ -20,11 +20,8 @@ using namespace rojoRHI;
 using test::PassKit;
 
 namespace {
-    /// The bytes every test writes and reads.
     [[maybe_unused]] constexpr uint64_t kBytes = 256;
 
-    //==================================================================================================================
-    /// Ends `list` and submits it alone to the queue of `type` of `device`, waiting on `wait` and signalling `signal`.
     [[maybe_unused]] void submitTo(
         Device device, CommandList list, QueueType type, std::span<const FenceValue> wait = {}, std::span<const FenceValue> signal = {}
     )
@@ -34,30 +31,23 @@ namespace {
         device.queue(type).submit(lists, wait, signal);
     }
 
-    //==================================================================================================================
-    /// Creates a buffer of `kBytes` bytes that a fill may write.
     [[maybe_unused]] Buffer storage(PassKit& kit)
     {
         return kit.buffer(BufferUsage::ShaderWrite, kBytes);
     }
 
-    //==================================================================================================================
-    /// Creates a `Memory::Gpu` heap of one mebibyte.
     [[maybe_unused]] Heap makeHeap(PassKit& kit)
     {
         return *kit.device.createHeap(HeapDesc{ .size = 1u << 20, .label = "test.heap" });
     }
 
-    //==================================================================================================================
-    /// Creates a buffer of `kBytes` bytes that a fill may write, placed at the start of `heap`.
     [[maybe_unused]] Buffer placedBuffer(PassKit& kit, Heap heap)
     {
         const BufferDesc desc{ .size = kBytes, .usage = BufferUsage::ShaderWrite, .label = "test.placed.buffer" };
         return *kit.device.createBuffer(desc, {}, Placement{ .heap = heap });
     }
 
-    //==================================================================================================================
-    /// Joins the compute and copy work into the frame's graphics work, ends the frame and destroys the device of `kit`.
+    // Joins the compute and copy work into the frame's graphics work, then ends the frame and destroys the device.
     [[maybe_unused]] void close(PassKit& kit)
     {
         kit.joinQueues();
@@ -66,7 +56,6 @@ namespace {
     }
 } // namespace
 
-//======================================================================================================================
 TEST_CASE("a buffer written on Graphics is read on Compute after a fence wait", "[contract]")
 {
 #ifdef NDEBUG
@@ -86,7 +75,6 @@ TEST_CASE("a buffer written on Graphics is read on Compute after a fence wait", 
 #endif
 }
 
-//======================================================================================================================
 TEST_CASE("a buffer read on Compute is written on Graphics after a fence wait", "[contract]")
 {
 #ifdef NDEBUG
@@ -106,7 +94,6 @@ TEST_CASE("a buffer read on Compute is written on Graphics after a fence wait", 
 #endif
 }
 
-//======================================================================================================================
 TEST_CASE("placed buffers over the same bytes are used on two queues after a fence wait", "[contract]")
 {
 #ifdef NDEBUG
@@ -127,7 +114,6 @@ TEST_CASE("placed buffers over the same bytes are used on two queues after a fen
 #endif
 }
 
-//======================================================================================================================
 TEST_CASE("a submission is ordered through an earlier submission's wait on the same queue", "[contract]")
 {
 #ifdef NDEBUG
@@ -149,7 +135,6 @@ TEST_CASE("a submission is ordered through an earlier submission's wait on the s
 #endif
 }
 
-//======================================================================================================================
 TEST_CASE("a CPU wait that returns true orders the work before it ahead of a submission on another queue", "[contract]")
 {
 #ifdef NDEBUG
@@ -170,7 +155,6 @@ TEST_CASE("a CPU wait that returns true orders the work before it ahead of a sub
 #endif
 }
 
-//======================================================================================================================
 TEST_CASE("a completed value the CPU read orders the work before it ahead of a submission on another queue", "[contract]")
 {
 #ifdef NDEBUG
@@ -197,7 +181,6 @@ TEST_CASE("a completed value the CPU read orders the work before it ahead of a s
 #endif
 }
 
-//======================================================================================================================
 TEST_CASE("a frame's graphics work is complete for a submission on another queue once beginFrame retires its slot", "[contract]")
 {
 #ifdef NDEBUG
@@ -225,7 +208,6 @@ TEST_CASE("a frame's graphics work is complete for a submission on another queue
 #endif
 }
 
-//======================================================================================================================
 TEST_CASE("a fence round trip through another queue orders a same-queue pair with no barrier", "[contract]")
 {
 #ifdef NDEBUG
@@ -246,7 +228,6 @@ TEST_CASE("a fence round trip through another queue orders a same-queue pair wit
 #endif
 }
 
-//======================================================================================================================
 TEST_CASE("reads of a buffer on two queues need no fence", "[contract]")
 {
 #ifdef NDEBUG
@@ -265,7 +246,6 @@ TEST_CASE("reads of a buffer on two queues need no fence", "[contract]")
 #endif
 }
 
-//======================================================================================================================
 TEST_CASE("one fence signalled from two queues orders a wait after every value at least it", "[contract]")
 {
 #ifdef NDEBUG
@@ -297,7 +277,6 @@ TEST_CASE("one fence signalled from two queues orders a wait after every value a
 #endif
 }
 
-//======================================================================================================================
 TEST_CASE("three queues submit while another thread waits on and reads their fences", "[contract]")
 {
 #ifdef NDEBUG
@@ -374,7 +353,6 @@ TEST_CASE("three queues submit while another thread waits on and reads their fen
 #endif
 }
 
-//======================================================================================================================
 TEST_CASE("a placed buffer's first use after another buffer's use the CPU observed complete needs no barrier", "[contract]")
 {
 #ifdef NDEBUG
@@ -396,7 +374,6 @@ TEST_CASE("a placed buffer's first use after another buffer's use the CPU observ
 #endif
 }
 
-//======================================================================================================================
 TEST_CASE("a placed texture's discard after a use a fence orders before it needs no source covering that use", "[contract]")
 {
 #ifdef NDEBUG
@@ -431,7 +408,6 @@ TEST_CASE("a placed texture's discard after a use a fence orders before it needs
 #endif
 }
 
-//======================================================================================================================
 TEST_CASE("a new texture uploaded on Copy is read on Graphics after a fence wait", "[contract]")
 {
 #ifdef NDEBUG
@@ -462,7 +438,6 @@ TEST_CASE("a new texture uploaded on Copy is read on Graphics after a fence wait
 #endif
 }
 
-//======================================================================================================================
 TEST_CASE("a texture is moved on Compute after a fence orders the Graphics reads before it", "[contract]")
 {
 #ifdef NDEBUG
@@ -498,7 +473,6 @@ TEST_CASE("a texture is moved on Compute after a fence orders the Graphics reads
 #endif
 }
 
-//======================================================================================================================
 TEST_CASE("a buffer is filled on Compute over a placed texture Graphics moved, after a fence wait", "[contract]")
 {
 #ifdef NDEBUG

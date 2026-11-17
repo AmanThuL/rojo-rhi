@@ -25,9 +25,7 @@
 
 namespace rojoRHI {
     namespace {
-        //==============================================================================================================
-        /// Returns the bytes and alignment a texture of `desc` occupies in a heap on `device`. The caller holds an autorelease
-        /// pool.
+        // The caller holds an autorelease pool.
         PlacementRequirements placedRequirements(MTL::Device* device, const TextureDesc& desc)
         {
             MTL::TextureDescriptor* descriptor = metal4::textureDescriptor(desc, true);
@@ -36,9 +34,7 @@ namespace rojoRHI {
             return PlacementRequirements{ answer.size, answer.align };
         }
 
-        //==============================================================================================================
-        /// Undoes a texture creation that failed after `texture` was made: it leaves the device residency set unless it is
-        /// placed, and is released. The caller holds an autorelease pool.
+        // The caller holds an autorelease pool.
         void discardTexture(DeviceImpl& impl, MTL::Texture* texture, bool placed)
         {
             if (!placed)
@@ -48,8 +44,6 @@ namespace rojoRHI {
             texture->release();
         }
 
-        //==============================================================================================================
-        /// Returns the name of `type` as `TextureType` spells it.
         const char* typeName(TextureType type)
         {
             switch (type)
@@ -67,7 +61,6 @@ namespace rojoRHI {
     } // namespace
 
     namespace metal4 {
-        //==============================================================================================================
         void retireTexture(void* context, core::TextureRecord& record)
         {
             auto* texture = static_cast<MTL::Texture*>(record.native);
@@ -88,7 +81,6 @@ namespace rojoRHI {
         }
     } // namespace metal4
 
-    //==================================================================================================================
     PlacementRequirements Device::placementRequirements(const TextureDesc& desc)
     {
         DeviceImpl& impl = DeviceImpl::of(*this);
@@ -97,7 +89,6 @@ namespace rojoRHI {
         return placedRequirements(impl.device, desc);
     }
 
-    //==================================================================================================================
     Result<Texture> Device::createTexture(const TextureDesc& desc, std::span<const TextureData> initial, Placement placement)
     {
         DeviceImpl& impl = DeviceImpl::of(*this);
@@ -163,7 +154,6 @@ namespace rojoRHI {
         return handle;
     }
 
-    //==================================================================================================================
     void Device::destroy(Texture texture)
     {
         core::destroyTexture(DeviceImpl::of(*this).core, texture);

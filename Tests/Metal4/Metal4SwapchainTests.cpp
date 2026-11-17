@@ -31,9 +31,8 @@
 using namespace rojoRHI;
 
 namespace {
-    //==================================================================================================================
-    /// A new layer of `width` by `height` drawable pixels, retained; the caller releases it with `releaseLayer`. Each case
-    /// takes layers of its own, so a resize leaves the shared test surfaces alone.
+    // Retained; the caller releases it with `releaseLayer`. Each case takes layers of its own, so a resize leaves the shared
+    // test surfaces alone.
     CA::MetalLayer* newLayer(double width, double height)
     {
         const metal4::AutoreleasePool pool;
@@ -42,24 +41,19 @@ namespace {
         return layer;
     }
 
-    //==================================================================================================================
-    /// Releases a layer `newLayer` returned.
     void releaseLayer(CA::MetalLayer* layer)
     {
         const metal4::AutoreleasePool pool;
         layer->release();
     }
 
-    //==================================================================================================================
-    /// The residency set `layer` vends, read inside a pool because the getter may autorelease.
+    // Read inside a pool because the getter may autorelease.
     MTL::ResidencySet* residencySetOf(CA::MetalLayer* layer)
     {
         const metal4::AutoreleasePool pool;
         return layer->residencySet();
     }
 
-    //==================================================================================================================
-    /// True when the color space of `layer` is the one named `name`.
     bool hasColorSpace(CA::MetalLayer* layer, CFStringRef name)
     {
         const metal4::AutoreleasePool pool;
@@ -77,8 +71,7 @@ namespace {
         return same;
     }
 
-    //==================================================================================================================
-    /// Reads the layer's `wantsExtendedDynamicRangeContent`, which metal-cpp does not wrap.
+    // metal-cpp does not wrap `wantsExtendedDynamicRangeContent`.
     bool wantsExtendedDynamicRange(CA::MetalLayer* layer)
     {
         static const SEL selector = sel_registerName("wantsExtendedDynamicRangeContent");
@@ -86,8 +79,6 @@ namespace {
         return reinterpret_cast<Getter>(&objc_msgSend)(layer, selector) != NO;
     }
 
-    //==================================================================================================================
-    /// The number of native queue calls `queue` makes for a submission of no list, measured on `device`.
     uint64_t submitCalls(Device device, Queue queue)
     {
         const uint64_t before = device.counters().nativeSubmitCalls;
@@ -95,8 +86,6 @@ namespace {
         return device.counters().nativeSubmitCalls - before;
     }
 
-    //==================================================================================================================
-    /// Opens and ends `count` frames with no work.
     void runFrames(Device device, uint32_t count)
     {
         for (uint32_t i = 0; i < count; ++i)
@@ -106,15 +95,12 @@ namespace {
         }
     }
 
-    //==================================================================================================================
-    /// The native texture the texture handle `image` of `device` carries.
     MTL::Texture* nativeTexture(Device device, Texture image)
     {
         return static_cast<MTL::Texture*>(core::coreOf(device).pool<Texture>().native(image));
     }
 
-    //==================================================================================================================
-    /// The texture of the drawable `swapchain` holds, read inside a pool because the getter may autorelease.
+    // Read inside a pool because the getter may autorelease.
     MTL::Texture* drawableTexture(Swapchain swapchain)
     {
         const metal4::AutoreleasePool pool;
@@ -122,8 +108,6 @@ namespace {
         return drawable != nullptr ? drawable->texture() : nullptr;
     }
 
-    //==================================================================================================================
-    /// Waits up to two seconds for the pending presents of `swapchain` to reach zero and returns how many are left.
     uint32_t settledPresents(Swapchain swapchain)
     {
         const metal4::PresentLatency& latency = *SwapchainImpl::of(swapchain).native.latency;
@@ -135,7 +119,7 @@ namespace {
         return latency.count.load();
     }
 
-    /// One color space with the format chapter 11 lists for it, the layer color space it maps to and whether it turns EDR on.
+    // A color space with the format chapter 11 lists for it, the layer color space it maps to and whether it turns EDR on.
     struct SpaceCase
     {
         ColorSpace colorSpace;
@@ -145,7 +129,6 @@ namespace {
     };
 } // namespace
 
-//======================================================================================================================
 TEST_CASE("each color space with every image count and present mode configures the layer", "[metal4]")
 {
     Device device = *createDevice();
@@ -185,7 +168,6 @@ TEST_CASE("each color space with every image count and present mode configures t
     releaseLayer(layer);
 }
 
-//======================================================================================================================
 TEST_CASE("a swapchain takes its extent from the layer's drawable size", "[metal4]")
 {
     Device device = *createDevice();
@@ -208,7 +190,6 @@ TEST_CASE("a swapchain takes its extent from the layer's drawable size", "[metal
     releaseLayer(sized);
 }
 
-//======================================================================================================================
 TEST_CASE("resize sets the layer's drawable size after waiting for the last ended frame", "[metal4]")
 {
     Device device = *createDevice({ .framesInFlight = 2 });
@@ -234,7 +215,6 @@ TEST_CASE("resize sets the layer's drawable size after waiting for the last ende
     releaseLayer(layer);
 }
 
-//======================================================================================================================
 TEST_CASE("a swapchain's residency set is attached by the next graphics submission", "[metal4]")
 {
     Device device = *createDevice();
@@ -260,7 +240,6 @@ TEST_CASE("a swapchain's residency set is attached by the next graphics submissi
     releaseLayer(layer);
 }
 
-//======================================================================================================================
 TEST_CASE("two swapchains on two layers attach two residency sets", "[metal4]")
 {
     Device device = *createDevice();
@@ -283,7 +262,6 @@ TEST_CASE("two swapchains on two layers attach two residency sets", "[metal4]")
     releaseLayer(first);
 }
 
-//======================================================================================================================
 TEST_CASE("a new swapchain on a layer whose old swapchain has not retired keeps the set attached", "[metal4]")
 {
     Device device = *createDevice({ .framesInFlight = 2 });
@@ -314,7 +292,6 @@ TEST_CASE("a new swapchain on a layer whose old swapchain has not retired keeps 
     releaseLayer(layer);
 }
 
-//======================================================================================================================
 TEST_CASE("a destroyed swapchain retires framesInFlight frames later", "[metal4]")
 {
     Device device = *createDevice({ .framesInFlight = 2 });
@@ -335,7 +312,6 @@ TEST_CASE("a destroyed swapchain retires framesInFlight frames later", "[metal4]
     releaseLayer(layer);
 }
 
-//======================================================================================================================
 TEST_CASE("destroyDevice frees a live swapchain and one not yet retired", "[metal4]")
 {
     Device device = *createDevice({ .framesInFlight = 2 });
@@ -351,7 +327,6 @@ TEST_CASE("destroyDevice frees a live swapchain and one not yet retired", "[meta
     releaseLayer(live);
 }
 
-//======================================================================================================================
 TEST_CASE("an acquired image carries the drawable's texture at the swapchain's extent and format", "[metal4]")
 {
     Device device = *createDevice();
@@ -378,7 +353,6 @@ TEST_CASE("an acquired image carries the drawable's texture at the swapchain's e
     releaseLayer(layer);
 }
 
-//======================================================================================================================
 TEST_CASE("the next graphics submission after an acquire waits for the drawable, and present signals and presents it", "[metal4]")
 {
     Device device = *createDevice();
@@ -409,7 +383,6 @@ TEST_CASE("the next graphics submission after an acquire waits for the drawable,
     releaseLayer(layer);
 }
 
-//======================================================================================================================
 TEST_CASE("present with no submission since the acquire waits for the drawable first", "[metal4]")
 {
     Device device = *createDevice();
@@ -432,7 +405,6 @@ TEST_CASE("present with no submission since the acquire waits for the drawable f
     releaseLayer(layer);
 }
 
-//======================================================================================================================
 TEST_CASE("acquire returns null after about one second while maxLatency presents are pending, and changes nothing", "[metal4]")
 {
     Device device = *createDevice();
@@ -467,7 +439,6 @@ TEST_CASE("acquire returns null after about one second while maxLatency presents
     releaseLayer(layer);
 }
 
-//======================================================================================================================
 TEST_CASE("after resize the next acquired image has the new extent", "[metal4]")
 {
     Device device = *createDevice();
@@ -491,7 +462,6 @@ TEST_CASE("after resize the next acquired image has the new extent", "[metal4]")
     releaseLayer(layer);
 }
 
-//======================================================================================================================
 TEST_CASE("a swapchain of zero extent acquires null without asking the layer", "[metal4]")
 {
     Device device = *createDevice();
@@ -508,7 +478,6 @@ TEST_CASE("a swapchain of zero extent acquires null without asking the layer", "
     releaseLayer(layer);
 }
 
-//======================================================================================================================
 TEST_CASE("a swapchain destroyed with an image acquired hands its drawable back to the layer when it retires", "[metal4]")
 {
     Device device = *createDevice({ .framesInFlight = 2 });
@@ -540,7 +509,6 @@ TEST_CASE("a swapchain destroyed with an image acquired hands its drawable back 
     releaseLayer(layer);
 }
 
-//======================================================================================================================
 TEST_CASE("a swapchain destroyed with an image acquired leaves no drawable wait for the next graphics submission", "[metal4]")
 {
     Device device = *createDevice({ .framesInFlight = 2 });
@@ -561,7 +529,6 @@ TEST_CASE("a swapchain destroyed with an image acquired leaves no drawable wait 
     releaseLayer(layer);
 }
 
-//======================================================================================================================
 TEST_CASE("destroyDevice releases a drawable a live swapchain still holds", "[metal4]")
 {
     Device device = *createDevice();
@@ -575,7 +542,6 @@ TEST_CASE("destroyDevice releases a drawable a live swapchain still holds", "[me
     releaseLayer(layer);
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-core-0002 an image handle is stale after present", "[metal4][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-core-0002", [] {
@@ -589,7 +555,6 @@ TEST_CASE("VU-rojo-core-0002 an image handle is stale after present", "[metal4][
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-present-0002 a swapchain is created on an object that is not a Metal layer", "[metal4][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-present-0002", [] {

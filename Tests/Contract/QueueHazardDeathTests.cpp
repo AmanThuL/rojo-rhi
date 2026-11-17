@@ -16,11 +16,8 @@ using namespace rojoRHI;
 using test::PassKit;
 
 namespace {
-    /// The bytes every test writes and reads.
     constexpr uint64_t kBytes = 256;
 
-    //==================================================================================================================
-    /// Ends `list` and submits it alone to the queue of `type` of `device`, waiting on `wait` and signalling `signal`.
     void submitTo(Device device, CommandList list, QueueType type, std::span<const FenceValue> wait = {}, std::span<const FenceValue> signal = {})
     {
         list.end();
@@ -28,24 +25,18 @@ namespace {
         device.queue(type).submit(lists, wait, signal);
     }
 
-    //==================================================================================================================
-    /// Creates a buffer of `kBytes` bytes that a fill may write.
     Buffer storage(PassKit& kit)
     {
         return kit.buffer(BufferUsage::ShaderWrite, kBytes);
     }
 
-    //==================================================================================================================
-    /// Creates a `PassKit::kSize` square texture with `usage`, placed at the start of `heap` when it is not null.
     Texture texture(PassKit& kit, TextureUsage usage, Heap heap = {})
     {
         const TextureDesc desc{ .format = Format::RGBA8Unorm, .extent = { PassKit::kSize, PassKit::kSize, 1 }, .usage = usage, .label = "test.texture" };
         return *kit.device.createTexture(desc, {}, Placement{ .heap = heap });
     }
 
-    //==================================================================================================================
-    /// Records the barrier that moves every subresource of `texture` from `oldLayout` to `newLayout`, ordering every stage on
-    /// both sides and making `access` visible.
+    // Orders every stage on both sides.
     void move(CommandList list, Texture texture, Layout oldLayout, Layout newLayout, Access access = Access::CopyRead | Access::CopyWrite)
     {
         const std::array<TextureBarrier, 1> barriers{ TextureBarrier{
@@ -53,8 +44,6 @@ namespace {
         list.barrier({}, {}, barriers);
     }
 
-    //==================================================================================================================
-    /// Creates a buffer of `kBytes` bytes that a fill may write, placed at the start of `heap`.
     Buffer placedBuffer(PassKit& kit, Heap heap)
     {
         const BufferDesc desc{ .size = kBytes, .usage = BufferUsage::ShaderWrite, .label = "test.placed.buffer" };
@@ -62,7 +51,6 @@ namespace {
     }
 } // namespace
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-queue-0005 a buffer written on Graphics is read on Compute with no fence", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-queue-0005", [] {
@@ -77,7 +65,6 @@ TEST_CASE("VU-rojo-queue-0005 a buffer written on Graphics is read on Compute wi
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-queue-0005 a buffer read on Compute is written on Graphics with no fence", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-queue-0005", [] {
@@ -92,7 +79,6 @@ TEST_CASE("VU-rojo-queue-0005 a buffer read on Compute is written on Graphics wi
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-queue-0005 a wait on a fence's initial value orders nothing", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-queue-0005", [] {
@@ -110,7 +96,6 @@ TEST_CASE("VU-rojo-queue-0005 a wait on a fence's initial value orders nothing",
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-queue-0005 placed buffers over the same bytes are used on two queues with no fence", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-queue-0005", [] {
@@ -126,7 +111,6 @@ TEST_CASE("VU-rojo-queue-0005 placed buffers over the same bytes are used on two
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-queue-0005 a buffer is written on Graphics and on Compute with no fence", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-queue-0005", [] {
@@ -140,7 +124,6 @@ TEST_CASE("VU-rojo-queue-0005 a buffer is written on Graphics and on Compute wit
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-queue-0005 a texture written on Copy is read on Graphics with no fence", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-queue-0005", [] {
@@ -158,7 +141,6 @@ TEST_CASE("VU-rojo-queue-0005 a texture written on Copy is read on Graphics with
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-queue-0005 a texture is moved on Compute while Graphics reads it with no fence", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-queue-0005", [] {
@@ -182,7 +164,6 @@ TEST_CASE("VU-rojo-queue-0005 a texture is moved on Compute while Graphics reads
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-queue-0005 a placed texture is discarded on Compute over bytes a buffer wrote on Graphics with no fence", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-queue-0005", [] {
@@ -198,7 +179,6 @@ TEST_CASE("VU-rojo-queue-0005 a placed texture is discarded on Compute over byte
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-queue-0005 a placed texture is used on Compute over bytes a buffer wrote on Graphics with no fence", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-queue-0005", [] {
@@ -225,7 +205,6 @@ TEST_CASE("VU-rojo-queue-0005 a placed texture is used on Compute over bytes a b
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-queue-0005 a buffer is filled on Compute over a placed texture Graphics moved, with no fence", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-queue-0005", [] {

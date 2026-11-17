@@ -20,27 +20,21 @@
 using namespace rojoRHI;
 
 namespace {
-    /// The oracle's threadgroup size.
     constexpr uint32_t kGroupX = 8;
     constexpr uint32_t kGroupY = 4;
     constexpr uint32_t kGroupZ = 2;
 
-    /// The bytes of one `uint4` the oracle stores.
     constexpr uint64_t kCell = 16;
 
-    /// The oracle's root.
     struct GridRoot
     {
-        Addr output;     ///< Where the entry stores a `uint4` per thread.
-        uint32_t width;  ///< The grid's width in threads.
-        uint32_t height; ///< The grid's height in threads.
+        Addr output;
+        uint32_t width;
+        uint32_t height;
     };
 
-    /// Four `uint32` words of one cell.
     using Cell = std::array<uint32_t, 4>;
 
-    //==================================================================================================================
-    /// Creates the oracle's compute pipeline on `device`.
     Pipeline oraclePipeline(Device device)
     {
         const std::vector<std::byte> blob = test::shaderLibraryFile("DispatchOracle");
@@ -48,8 +42,6 @@ namespace {
         return *device.createPipeline(ComputePipelineDesc{ .compute = { library, "gridMain" }, .label = "test.gridMain" });
     }
 
-    //==================================================================================================================
-    /// The bytes of `cells`.
     std::vector<std::byte> bytesOf(std::span<const Cell> cells)
     {
         std::vector<std::byte> bytes(cells.size() * kCell);
@@ -57,9 +49,7 @@ namespace {
         return bytes;
     }
 
-    //==================================================================================================================
-    /// What the oracle stores for a grid of `groups` groups: the thread's identifier and a one at its linear index, and the
-    /// cells of `rest` elsewhere, `cells` cells in all.
+    // Each thread stores its identifier and a one at its linear index; every other cell holds `rest`.
     std::vector<Cell> expectedGrid(uint32_t groupsX, uint32_t groupsY, uint32_t groupsZ, const Cell& rest, uint64_t cells)
     {
         const uint32_t width = groupsX * kGroupX;
@@ -78,26 +68,20 @@ namespace {
         return grid;
     }
 
-    //==================================================================================================================
-    /// Creates a Gpu buffer of `cells` cells, each `fill`, that a shader may write.
     Buffer outputBuffer(test::GpuKit& kit, uint64_t cells, const Cell& fill)
     {
         const std::vector<Cell> initial(cells, fill);
         return kit.buffer(cells * kCell, Memory::Gpu, BufferUsage::ShaderWrite, bytesOf(initial));
     }
 
-    //==================================================================================================================
-    /// The grid root for `groups` groups writing to `output`.
     GridRoot rootOf(Device device, Buffer output, uint32_t groupsX, uint32_t groupsY)
     {
         return GridRoot{ device.address(output), groupsX * kGroupX, groupsY * kGroupY };
     }
 
-    /// The cell an untouched output holds.
     constexpr Cell kUntouched{ 0xDEADBEEFu, 0xDEADBEEFu, 0xDEADBEEFu, 0xDEADBEEFu };
 } // namespace
 
-//======================================================================================================================
 TEST_CASE("dispatch covers groups times the library's threadgroup size, every thread once", "[conformance]")
 {
     test::requireGpu();
@@ -114,7 +98,6 @@ TEST_CASE("dispatch covers groups times the library's threadgroup size, every th
     CHECK(kit.readBuffer(output) == bytesOf(expectedGrid(3, 2, 2, kUntouched, cells + 16)));
 }
 
-//======================================================================================================================
 TEST_CASE("dispatchIndirect reads its group counts from a GPU-written record", "[conformance]")
 {
     test::requireGpu();
@@ -152,7 +135,6 @@ TEST_CASE("dispatchIndirect reads its group counts from a GPU-written record", "
     CHECK(kit.readBuffer(output) == bytesOf(expected));
 }
 
-//======================================================================================================================
 TEST_CASE("a root changed between dispatches reaches each its own", "[conformance]")
 {
     test::requireGpu();
@@ -173,7 +155,6 @@ TEST_CASE("a root changed between dispatches reaches each its own", "[conformanc
     CHECK(kit.readBuffer(second) == expected);
 }
 
-//======================================================================================================================
 TEST_CASE("a fill between two dispatches leaves the second with the caller's pipeline and root", "[conformance]")
 {
     test::requireGpu();
@@ -204,7 +185,6 @@ TEST_CASE("a fill between two dispatches leaves the second with the caller's pip
     CHECK(kit.readBuffer(output) == bytesOf(expectedGrid(1, 1, 1, filled, cells)));
 }
 
-//======================================================================================================================
 TEST_CASE("dispatches record on Compute lists as on Graphics lists", "[conformance]")
 {
     test::requireGpu();

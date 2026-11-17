@@ -25,9 +25,7 @@
 
 namespace rojoRHI::metal4 {
     namespace {
-        //==============================================================================================================
-        /// Applies the queued changes of `presentation` to `queue` in order and releases each change's reference to its set. A
-        /// native call is counted on `calls` when it is not null. The caller holds `presentation.mutex` and an autorelease pool.
+        // The caller holds `presentation.mutex` and an autorelease pool; `calls` may be null.
         void applyChanges(Presentation& presentation, MTL4::CommandQueue* queue, std::atomic<uint64_t>* calls)
         {
             for (const ResidencySetChange& change : presentation.changes)
@@ -72,9 +70,8 @@ namespace rojoRHI::metal4 {
             presentation.pending.store(false, std::memory_order_relaxed);
         }
 
-        //==============================================================================================================
-        /// Releases the native objects of `swapchain` and queues the detach of its layer's set, which takes over the
-        /// swapchain's reference to it. The caller holds an autorelease pool and not `presentation.mutex`.
+        // The detach of the layer's set takes over the swapchain's reference to it. The caller holds an autorelease
+        // pool and not `presentation.mutex`.
         void freeSwapchain(Presentation& presentation, SwapchainImpl& swapchain)
         {
             SwapchainNative& native = swapchain.native;
@@ -100,7 +97,6 @@ namespace rojoRHI::metal4 {
         }
     } // namespace
 
-    //==================================================================================================================
     void fileSwapchain(Presentation& presentation, std::unique_ptr<SwapchainImpl> swapchain)
     {
         std::lock_guard lock(presentation.mutex);
@@ -112,7 +108,6 @@ namespace rojoRHI::metal4 {
         presentation.swapchains.push_back(std::move(swapchain));
     }
 
-    //==================================================================================================================
     void retireSwapchain(DeviceImpl& impl, SwapchainImpl& swapchain)
     {
         Presentation& presentation = impl.presentation;
@@ -137,7 +132,6 @@ namespace rojoRHI::metal4 {
         presentation.swapchains.erase(found);
     }
 
-    //==================================================================================================================
     void fileDrawable(Presentation& presentation, MTL::Drawable* drawable)
     {
         std::lock_guard lock(presentation.mutex);
@@ -145,7 +139,6 @@ namespace rojoRHI::metal4 {
         presentation.pending.store(true, std::memory_order_release);
     }
 
-    //==================================================================================================================
     void flushPresentation(QueueImpl& queue)
     {
         if (queue.type != QueueType::Graphics)
@@ -174,7 +167,6 @@ namespace rojoRHI::metal4 {
         applyChanges(presentation, queue.native, &calls);
     }
 
-    //==================================================================================================================
     void freeSlotSwapchains(DeviceImpl& impl, uint32_t slot)
     {
         Presentation& presentation = impl.presentation;
@@ -198,7 +190,6 @@ namespace rojoRHI::metal4 {
         freed.clear();
     }
 
-    //==================================================================================================================
     void releaseSwapchains(DeviceImpl& impl)
     {
         Presentation& presentation = impl.presentation;
@@ -231,7 +222,6 @@ namespace rojoRHI::metal4 {
         ROJORHI_INTERNAL_ASSERT(presentation.attachments.empty(), "a residency set is still attached after every swapchain was freed");
     }
 
-    //==================================================================================================================
     uint32_t attachmentCount(Presentation& presentation, const MTL::ResidencySet* set)
     {
         std::lock_guard lock(presentation.mutex);

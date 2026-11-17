@@ -17,28 +17,26 @@
 
 namespace rojoRHI::metal4 {
     namespace {
-        /// The floor's `maxSamplers`, chapter 15 part 2.
+        // Chapter 15 part 2.
         constexpr uint64_t kFloorSamplers = 996;
 
-        /// The Metal 4 floor of `maxBufferLength` in bytes, chapter 02; `maxAddrOffset`, one less, stays above the portable floor.
+        // Chapter 02; `maxAddrOffset`, one less, stays above the portable floor.
         constexpr uint64_t kFloorBufferLength = uint64_t{ 1 } << 32;
 
-        /// The floor's `maxGroupSize` on each axis, chapter 15 part 2; the x axis is also the floor's `maxThreadsPerGroup`.
+        // Chapter 15 part 2; the x axis is also the floor's `maxThreadsPerGroup`.
         constexpr uint64_t kFloorGroupWidth = 1'024;
         constexpr uint64_t kFloorGroupHeight = 1'024;
         constexpr uint64_t kFloorGroupDepth = 64;
 
-        /// The floor's `maxGroupSharedMemory` in bytes, chapter 15 part 2.
+        // Chapter 15 part 2.
         constexpr uint64_t kFloorGroupSharedMemory = 32'768;
 
-        //==============================================================================================================
         Result<void> unsupported(std::string message)
         {
             return std::unexpected(Error{ ErrorCategory::Unsupported, std::move(message) });
         }
     } // namespace
 
-    //==================================================================================================================
     FloorReport floorReport(MTL::Device* device)
     {
         FloorReport report;
@@ -53,7 +51,6 @@ namespace rojoRHI::metal4 {
         return report;
     }
 
-    //==================================================================================================================
     Result<void> checkFloor(const FloorReport& report)
     {
         if (!report.metal4Family)
@@ -106,46 +103,43 @@ namespace rojoRHI::metal4 {
         return {};
     }
 
-    //==================================================================================================================
     Result<void> checkFloor(MTL::Device* device)
     {
         return checkFloor(floorReport(device));
     }
 
-    //==================================================================================================================
     Limits metalLimits(MTL::Device* device)
     {
         const MTL::Size threads = device->maxThreadsPerThreadgroup();
         Limits limits;
-        limits.maxViews = kMaxViews;                                                         // Metal 4 column.
-        limits.maxSamplers = static_cast<uint32_t>(device->maxArgumentBufferSamplerCount()); // Device.
-        limits.maxRootBlockSize = 65'536;                                                    // Floor: the Metal 4 column bounds it by maxBufferLength alone.
-        limits.rootAlignment = 256;                                                          // Metal 4 column: 4, raised to 256.
-        limits.frameDataAlignment = 256;                                                     // Metal 4 column.
-        limits.maxBufferSize = device->maxBufferLength();                                    // Device.
-        limits.maxAddrOffset = limits.maxBufferSize - 1;                                     // Device: no byte lies further into a buffer.
-        limits.maxTextureDimension1D = 16'384;                                               // Metal 4 column.
-        limits.maxTextureDimension2D = 16'384;                                               // Metal 4 column.
-        limits.maxTextureDimension3D = 2'048;                                                // Metal 4 column.
-        limits.maxTextureDimensionCube = 16'384;                                             // Metal 4 column.
-        limits.maxTextureLayers = 2'048;                                                     // Metal 4 column.
-        limits.maxColorAttachments = 8;                                                      // Metal 4 column.
-        limits.maxColorBytesPerSample = 64;                                                  // Floor: the Metal 4 column is unverified.
-        limits.maxSamplerAnisotropy = 16;                                                    // Metal 4 column.
-        limits.maxStorageClearsPerFrame = UINT32_MAX;                                        // No descriptor per clear.
-        limits.maxDrawIndirectCount = 65'536;                                                // Metal 4 column.
-        limits.maxDispatchGroups = 65'535;                                                   // Floor: the Metal 4 column is unverified.
-        limits.maxThreadsPerGroup = static_cast<uint32_t>(threads.width);                    // Device.
-        limits.maxGroupSize[0] = static_cast<uint32_t>(threads.width);                       // Device.
-        limits.maxGroupSize[1] = static_cast<uint32_t>(threads.height);                      // Device.
-        limits.maxGroupSize[2] = static_cast<uint32_t>(threads.depth);                       // Device.
-        limits.maxGroupSharedMemory = static_cast<uint32_t>(device->maxThreadgroupMemoryLength()); // Device.
-        limits.maxMeshTaskGroups = 65'535;                                                         // Floor: the Metal 4 column is unverified.
-        limits.maxMeshTaskGroupsTotal = 4'194'304;                                                 // Floor: the Metal 4 column is unverified.
+        limits.maxViews = kMaxViews; // Metal 4 column.
+        limits.maxSamplers = static_cast<uint32_t>(device->maxArgumentBufferSamplerCount());
+        limits.maxRootBlockSize = 65'536; // Floor: the Metal 4 column bounds it by maxBufferLength alone.
+        limits.rootAlignment = 256;       // Metal 4 column: 4, raised to 256.
+        limits.frameDataAlignment = 256;  // Metal 4 column.
+        limits.maxBufferSize = device->maxBufferLength();
+        limits.maxAddrOffset = limits.maxBufferSize - 1; // Device: no byte lies further into a buffer.
+        limits.maxTextureDimension1D = 16'384;           // Metal 4 column.
+        limits.maxTextureDimension2D = 16'384;           // Metal 4 column.
+        limits.maxTextureDimension3D = 2'048;            // Metal 4 column.
+        limits.maxTextureDimensionCube = 16'384;         // Metal 4 column.
+        limits.maxTextureLayers = 2'048;                 // Metal 4 column.
+        limits.maxColorAttachments = 8;                  // Metal 4 column.
+        limits.maxColorBytesPerSample = 64;              // Floor: the Metal 4 column is unverified.
+        limits.maxSamplerAnisotropy = 16;                // Metal 4 column.
+        limits.maxStorageClearsPerFrame = UINT32_MAX;    // No descriptor per clear.
+        limits.maxDrawIndirectCount = 65'536;            // Metal 4 column.
+        limits.maxDispatchGroups = 65'535;               // Floor: the Metal 4 column is unverified.
+        limits.maxThreadsPerGroup = static_cast<uint32_t>(threads.width);
+        limits.maxGroupSize[0] = static_cast<uint32_t>(threads.width);
+        limits.maxGroupSize[1] = static_cast<uint32_t>(threads.height);
+        limits.maxGroupSize[2] = static_cast<uint32_t>(threads.depth);
+        limits.maxGroupSharedMemory = static_cast<uint32_t>(device->maxThreadgroupMemoryLength());
+        limits.maxMeshTaskGroups = 65'535;         // Floor: the Metal 4 column is unverified.
+        limits.maxMeshTaskGroupsTotal = 4'194'304; // Floor: the Metal 4 column is unverified.
         return limits;
     }
 
-    //==================================================================================================================
     std::string floorName(MTL::Device* device)
     {
         constexpr std::array<std::pair<MTL::GPUFamily, const char*>, 4> families = { {

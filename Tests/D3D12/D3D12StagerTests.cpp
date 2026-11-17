@@ -25,23 +25,19 @@
 using namespace rojoRHI;
 
 namespace {
-    /// The rows and depth slices of one subresource's staged bytes.
     struct Subresource
     {
-        std::vector<std::byte> bytes; ///< The staged bytes, rows `bytesPerRow` apart and slices `bytesPerImage` apart.
-        uint64_t bytesPerRow = 0;     ///< The distance between rows of `bytes`.
-        uint64_t bytesPerImage = 0;   ///< The distance between depth slices of `bytes`; 0 outside a 3D texture.
-        std::vector<std::byte> tight; ///< The same texels in tight rows and slices, as `readNativeTexture` returns them.
+        std::vector<std::byte> bytes; // Rows `bytesPerRow` apart, slices `bytesPerImage` apart.
+        uint64_t bytesPerRow = 0;
+        uint64_t bytesPerImage = 0;   // 0 outside a 3D texture.
+        std::vector<std::byte> tight; // The same texels in tight rows and slices, as `readNativeTexture` returns them.
     };
 
-    /// Guards `g_messages`, which the message callback may fill from any thread.
+    // The message callback may fill `g_messages` from any thread.
     std::mutex g_messagesMutex;
 
-    /// The messages at `Warning` or above the library reported while a case collected them.
     std::vector<std::string> g_messages;
 
-    //==================================================================================================================
-    /// Keeps `message` when it is a warning or an error. It may run on any thread.
     void collectMessage(MessageSeverity severity, std::string_view message, void*)
     {
         if (severity == MessageSeverity::Info)
@@ -52,22 +48,18 @@ namespace {
         g_messages.emplace_back(message);
     }
 
-    /// Collects the library's warnings and errors into `g_messages`, emptied first, while it lives, and removes the callback
-    /// when it goes, however the case ends.
+    // Removes the callback when it goes, however the case ends.
     class MessageCollection
     {
       public:
         MessageCollection();
         ~MessageCollection();
 
-        //==============================================================================================================
         MessageCollection(const MessageCollection&) = delete;
 
-        //==============================================================================================================
         MessageCollection& operator=(const MessageCollection&) = delete;
     };
 
-    //==================================================================================================================
     MessageCollection::MessageCollection()
     {
         {
@@ -77,14 +69,11 @@ namespace {
         setMessageCallback(collectMessage, nullptr);
     }
 
-    //==================================================================================================================
     MessageCollection::~MessageCollection()
     {
         setMessageCallback(nullptr, nullptr);
     }
 
-    //==================================================================================================================
-    /// Returns `size` bytes counting up from `seed`, wrapping at 256.
     std::vector<std::byte> pattern(size_t size, uint32_t seed)
     {
         std::vector<std::byte> bytes(size);
@@ -95,9 +84,8 @@ namespace {
         return bytes;
     }
 
-    //==================================================================================================================
-    /// Returns a subresource of `slices` slices of `rows` rows of `rowSize` bytes, staged with rows `bytesPerRow` apart and,
-    /// when `bytesPerImage` is not 0, slices `bytesPerImage` apart. Every staged byte, padding included, comes from `seed`.
+    // Rows `bytesPerRow` apart and, when `bytesPerImage` is not 0, slices `bytesPerImage` apart. Every staged byte,
+    // padding included, comes from `seed`.
     Subresource stagedRows(uint64_t rowSize, uint64_t rows, uint64_t slices, uint64_t bytesPerRow, uint64_t bytesPerImage, uint32_t seed)
     {
         Subresource result;
@@ -117,15 +105,11 @@ namespace {
         return result;
     }
 
-    //==================================================================================================================
-    /// Returns the stager's view of `staged`.
     d3d12::SubresourceData dataOf(const Subresource& staged)
     {
         return d3d12::SubresourceData{ .bytes = staged.bytes, .bytesPerRow = staged.bytesPerRow, .bytesPerImage = staged.bytesPerImage };
     }
 
-    //==================================================================================================================
-    /// Returns a new committed `DEFAULT` buffer of `size` bytes on `impl`'s device, labelled `test.destination`.
     d3d12::Com<ID3D12Resource> createBuffer(DeviceImpl& impl, uint64_t size)
     {
         D3D12_HEAP_PROPERTIES heap = {};
@@ -147,9 +131,7 @@ namespace {
         return buffer;
     }
 
-    //==================================================================================================================
-    /// Returns a new committed `DEFAULT` texture of `dimension` and `format` on `impl`'s device, `depthOrLayers` deep or
-    /// layered and with `mips` mips, created in `D3D12_BARRIER_LAYOUT_COPY_DEST` and labelled `test.destination`.
+    // Created in `D3D12_BARRIER_LAYOUT_COPY_DEST`.
     d3d12::Com<ID3D12Resource> createTexture(
         DeviceImpl& impl, D3D12_RESOURCE_DIMENSION dimension, DXGI_FORMAT format, uint32_t width, uint32_t height, uint16_t depthOrLayers, uint16_t mips
     )
@@ -174,7 +156,6 @@ namespace {
     }
 } // namespace
 
-//======================================================================================================================
 TEST_CASE("staged buffer data is in the buffer when uploadBuffer returns", "[d3d12]")
 {
     Result<Device> created = createDevice();
@@ -191,7 +172,6 @@ TEST_CASE("staged buffer data is in the buffer when uploadBuffer returns", "[d3d
     destroyDevice(*created);
 }
 
-//======================================================================================================================
 TEST_CASE("staged data shorter than the buffer fills only its prefix", "[d3d12]")
 {
     Result<Device> created = createDevice();
@@ -208,7 +188,6 @@ TEST_CASE("staged data shorter than the buffer fills only its prefix", "[d3d12]"
     destroyDevice(*created);
 }
 
-//======================================================================================================================
 TEST_CASE("every mip and layer of a texture reads back its staged rows", "[d3d12]")
 {
     constexpr uint32_t kMips = 3;
@@ -245,7 +224,6 @@ TEST_CASE("every mip and layer of a texture reads back its staged rows", "[d3d12
     destroyDevice(*created);
 }
 
-//======================================================================================================================
 TEST_CASE("a volume's slices read back their staged rows", "[d3d12]")
 {
     Result<Device> created = createDevice();
@@ -262,7 +240,6 @@ TEST_CASE("a volume's slices read back their staged rows", "[d3d12]")
     destroyDevice(*created);
 }
 
-//======================================================================================================================
 TEST_CASE("a BC1 texture's block rows read back", "[d3d12]")
 {
     Result<Device> created = createDevice();
@@ -279,7 +256,6 @@ TEST_CASE("a BC1 texture's block rows read back", "[d3d12]")
     destroyDevice(*created);
 }
 
-//======================================================================================================================
 TEST_CASE("an empty subresource is skipped and the texture still leaves COPY_DEST", "[d3d12]")
 {
     const MessageCollection collecting;
@@ -307,7 +283,6 @@ TEST_CASE("an empty subresource is skipped and the texture still leaves COPY_DES
     CHECK(g_messages.empty());
 }
 
-//======================================================================================================================
 TEST_CASE("a texture whose entries are all empty leaves COPY_DEST without a staging buffer or a debug-layer message", "[d3d12]")
 {
     const MessageCollection collecting;
@@ -335,7 +310,6 @@ TEST_CASE("a texture whose entries are all empty leaves COPY_DEST without a stag
     CHECK(g_messages.empty());
 }
 
-//======================================================================================================================
 TEST_CASE("a staged upload counts one staging buffer, two queue calls and its host calls", "[d3d12]")
 {
     Result<Device> created = createDevice();
@@ -355,7 +329,6 @@ TEST_CASE("a staged upload counts one staging buffer, two queue calls and its ho
     destroyDevice(*created);
 }
 
-//======================================================================================================================
 TEST_CASE("uploads from two threads are serialized and both complete", "[d3d12]")
 {
     constexpr size_t kSize = 64 * 1024;

@@ -13,7 +13,6 @@
 
 using namespace rojoRHI;
 
-//======================================================================================================================
 TEST_CASE("a value signalled by a submission with no lists completes on the GPU and Device::wait sees it", "[conformance]")
 {
     test::requireGpu();
@@ -26,7 +25,6 @@ TEST_CASE("a value signalled by a submission with no lists completes on the GPU 
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("two queues waiting on each other's fence values both reach their last values on the GPU", "[conformance]")
 {
     test::requireGpu();
@@ -48,7 +46,6 @@ TEST_CASE("two queues waiting on each other's fence values both reach their last
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("a chain of waits and signals through the three queues reaches its last value on the GPU", "[conformance]")
 {
     test::requireGpu();

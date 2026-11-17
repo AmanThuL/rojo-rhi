@@ -13,12 +13,10 @@
 #include <utility>
 
 namespace rojoRHI::core {
-    //==================================================================================================================
     ByteSegments::ByteSegments(uint64_t size) : m_segments{ ByteSegment{ .begin = 0, .end = size } }
     {
     }
 
-    //==================================================================================================================
     std::span<ByteSegment> ByteSegments::isolate(uint64_t begin, uint64_t end)
     {
         ROJORHI_INTERNAL_ASSERT(begin < end && end <= m_segments.back().end, "a byte range outside its buffer was isolated");
@@ -27,7 +25,6 @@ namespace rojoRHI::core {
         return std::span(m_segments).subspan(first, last - first);
     }
 
-    //==================================================================================================================
     void ByteSegments::merge(uint64_t begin, uint64_t end, const std::array<uint64_t, 3>& floor)
     {
         // The segments holding `begin` and `end - 1`, widened by one neighbour on each side.
@@ -54,19 +51,16 @@ namespace rojoRHI::core {
         m_segments.erase(m_segments.begin() + static_cast<std::ptrdiff_t>(kept) + 1, m_segments.begin() + static_cast<std::ptrdiff_t>(last) + 1);
     }
 
-    //==================================================================================================================
     std::span<ByteSegment> ByteSegments::segments()
     {
         return m_segments;
     }
 
-    //==================================================================================================================
     std::span<const ByteSegment> ByteSegments::segments() const
     {
         return m_segments;
     }
 
-    //==================================================================================================================
     size_t ByteSegments::splitAt(uint64_t offset)
     {
         // The first segment that ends after `offset` holds it.

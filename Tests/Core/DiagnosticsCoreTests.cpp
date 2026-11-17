@@ -23,19 +23,16 @@ using namespace rojoRHI;
 using rojoRHI::test::PassKit;
 
 namespace {
-    //==================================================================================================================
     Result<void> captureAvailable(std::string_view)
     {
         return {};
     }
 
-    //==================================================================================================================
     Result<void> captureRefused(std::string_view)
     {
         return std::unexpected(Error{ ErrorCategory::Unsupported, "no capture tool" });
     }
 
-    //==================================================================================================================
     void submit(Device device, CommandList list, QueueType type = QueueType::Graphics)
     {
         list.end();
@@ -43,7 +40,6 @@ namespace {
         device.queue(type).submit(lists);
     }
 
-    /// One call of a scope-time hook: the slot, and the labels and timestamps of the records and the report entries it saw.
     struct ScopeTimesCall
     {
         uint32_t slot = 0;
@@ -53,34 +49,28 @@ namespace {
         std::vector<QueueType> reportQueues;
     };
 
-    /// The calls the hook below saw, held by the live `ScopeTimesRecorder`; null when none is live.
     std::vector<ScopeTimesCall>* scopeTimesCalls = nullptr;
 
-    /// Collects the calls of `recordScopeTimes` for its lifetime, so a case that ends early leaves no dangling pointer.
+    // Points `scopeTimesCalls` at its calls for its lifetime, so a case that ends early leaves no dangling pointer.
     struct ScopeTimesRecorder
     {
-        std::vector<ScopeTimesCall> calls; ///< The calls seen, in order.
+        std::vector<ScopeTimesCall> calls;
 
-        /// Points `scopeTimesCalls` at `calls`.
         ScopeTimesRecorder();
-        /// Resets `scopeTimesCalls` to null.
         ~ScopeTimesRecorder();
     };
 
-    //==================================================================================================================
     ScopeTimesRecorder::ScopeTimesRecorder()
     {
         scopeTimesCalls = &calls;
     }
 
-    //==================================================================================================================
     ScopeTimesRecorder::~ScopeTimesRecorder()
     {
         scopeTimesCalls = nullptr;
     }
 
-    //==================================================================================================================
-    /// Records the call and writes each record's timestamp plus a half as its duration, so each duration is distinct.
+    // Writes each record's timestamp plus a half as its duration, so each duration is distinct.
     void recordScopeTimes(void*, uint32_t slot, std::span<const core::ScopeRecord> records, std::span<ScopeTiming> report)
     {
         ScopeTimesCall call{ .slot = slot };
@@ -95,8 +85,7 @@ namespace {
         scopeTimesCalls->push_back(std::move(call));
     }
 
-    //==================================================================================================================
-    /// Adds `recordScopeTimes` to the hooks the backend registered on `device`; the backend's context stays.
+    // Adds to the backend's hooks; its context stays.
     void hookScopeTimes(Device device)
     {
         core::RetireHooks hooks = core::coreOf(device).retireHooks();
@@ -104,8 +93,7 @@ namespace {
         core::coreOf(device).setRetireHooks(hooks);
     }
 
-    //==================================================================================================================
-    /// Opens and closes a scope named `label` on `list` and gives its record `timestamp`, as a backend that times it does.
+    // Gives the scope's record `timestamp`, as a backend that times it does.
     void timedScope(CommandList list, std::string_view label, uint32_t timestamp)
     {
         list.beginScope(label);
@@ -113,8 +101,6 @@ namespace {
         list.endScope();
     }
 
-    //==================================================================================================================
-    /// Retires frame 1 of a two-slot device: runs frame 2 and begins frame 3.
     void retireFirstFrame(Device device)
     {
         device.beginFrame();
@@ -123,7 +109,6 @@ namespace {
     }
 } // namespace
 
-//======================================================================================================================
 TEST_CASE("a declaration on a validating device waits in the list's core until the next draw", "[core]")
 {
 #ifndef NDEBUG
@@ -142,7 +127,6 @@ TEST_CASE("a declaration on a validating device waits in the list's core until t
 #endif
 }
 
-//======================================================================================================================
 TEST_CASE("a device without validation keeps no declaration", "[core]")
 {
     PassKit kit;
@@ -153,7 +137,6 @@ TEST_CASE("a device without validation keeps no declaration", "[core]")
     kit.finish();
 }
 
-//======================================================================================================================
 TEST_CASE("a declaration no longer waits once the list is acquired again", "[core]")
 {
 #ifndef NDEBUG
@@ -178,7 +161,6 @@ TEST_CASE("a declaration no longer waits once the list is acquired again", "[cor
 #endif
 }
 
-//======================================================================================================================
 TEST_CASE("a scope's label is copied while recording on a device with scope timings", "[core]")
 {
     Device device = *createDevice(DeviceDesc{ .scopeTimings = true });
@@ -197,7 +179,6 @@ TEST_CASE("a scope's label is copied while recording on a device with scope timi
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("a scope that repeats the list's last label shares its copy", "[core]")
 {
     Device device = *createDevice(DeviceDesc{ .scopeTimings = true });
@@ -223,7 +204,6 @@ TEST_CASE("a scope that repeats the list's last label shares its copy", "[core]"
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("a device without scope timings keeps the caller's label and copies none", "[core]")
 {
     Device device = *createDevice();
@@ -242,7 +222,6 @@ TEST_CASE("a device without scope timings keeps the caller's label and copies no
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("the reported labels live in device storage that outlives the frame arena until the next beginFrame", "[core]")
 {
     Device device = *createDevice(DeviceDesc{ .scopeTimings = true, .framesInFlight = 2 });
@@ -269,7 +248,6 @@ TEST_CASE("the reported labels live in device storage that outlives the frame ar
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("a scope recorded on a list of each queue type is reported with that queue", "[core]")
 {
     Device device = *createDevice(DeviceDesc{ .scopeTimings = true, .framesInFlight = 2 });
@@ -296,7 +274,6 @@ TEST_CASE("a scope recorded on a list of each queue type is reported with that q
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("a scope record carries no timestamp until a backend sets one", "[core]")
 {
     CHECK(core::ScopeRecord{}.timestamp == core::kNoTimestamp);
@@ -313,7 +290,6 @@ TEST_CASE("a scope record carries no timestamp until a backend sets one", "[core
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("the scope-time hook sees each queue's records with the report entries made for them, in order", "[core]")
 {
     const ScopeTimesRecorder recorder;
@@ -358,7 +334,6 @@ TEST_CASE("the scope-time hook sees each queue's records with the report entries
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("without a scope-time hook every duration is zero", "[core]")
 {
     core::ScopeLog log(2);
@@ -373,7 +348,6 @@ TEST_CASE("without a scope-time hook every duration is zero", "[core]")
     CHECK(report[1].frame == 7);
 }
 
-//======================================================================================================================
 TEST_CASE("a frame with scopes on no queue calls no scope-time hook", "[core]")
 {
     const ScopeTimesRecorder recorder;
@@ -391,7 +365,6 @@ TEST_CASE("a frame with scopes on no queue calls no scope-time hook", "[core]")
     CHECK(log.report()[0].gpuMilliseconds == 6.5);
 }
 
-//======================================================================================================================
 TEST_CASE("the hook runs before the slot's arena is rewound", "[core]")
 {
     const ScopeTimesRecorder recorder;
@@ -413,7 +386,6 @@ TEST_CASE("the hook runs before the slot's arena is rewound", "[core]")
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("a device without scope timings still records its lists' scopes but calls no scope-time hook", "[core]")
 {
     const ScopeTimesRecorder recorder;
@@ -437,7 +409,6 @@ TEST_CASE("a device without scope timings still records its lists' scopes but ca
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("a capture the hook accepts is in progress until endCapture", "[core]")
 {
     Device device = *createDevice();
@@ -451,7 +422,6 @@ TEST_CASE("a capture the hook accepts is in progress until endCapture", "[core]"
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("a capture the hook refuses returns its error and starts nothing", "[core]")
 {
     Device device = *createDevice();
@@ -464,7 +434,6 @@ TEST_CASE("a capture the hook refuses returns its error and starts nothing", "[c
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("without a hook beginCapture is unsupported", "[core]")
 {
     Device device = *createDevice();
@@ -474,7 +443,6 @@ TEST_CASE("without a hook beginCapture is unsupported", "[core]")
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-diag-0008 a capture starts while this device's capture is in progress", "[core][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-diag-0008", [] {

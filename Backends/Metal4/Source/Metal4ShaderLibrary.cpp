@@ -21,15 +21,12 @@
 
 namespace rojoRHI::metal4 {
     namespace {
-        //==============================================================================================================
-        /// Builds the error of a malformed library.
         std::unexpected<Error> malformed(size_t line, std::string_view why)
         {
             return std::unexpected(Error{ ErrorCategory::DriverFailure, std::format("malformed Metal 4 shader library: line {} {}", line, why) });
         }
 
-        //==============================================================================================================
-        /// Reads a canonical unsigned decimal: digits only, no leading zero except for 0 itself.
+        // Canonical: digits only, no leading zero except for 0 itself.
         std::optional<uint64_t> canonicalNumber(std::string_view text)
         {
             if (text.empty() || (text.size() > 1 && text.front() == '0'))
@@ -45,8 +42,6 @@ namespace rojoRHI::metal4 {
             return value;
         }
 
-        //==============================================================================================================
-        /// Whether `name` is `[A-Za-z_][A-Za-z0-9_]*`.
         bool validName(std::string_view name)
         {
             const auto letter = [](char c) { return (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || c == '_'; };
@@ -54,8 +49,6 @@ namespace rojoRHI::metal4 {
             return !name.empty() && letter(name.front()) && std::ranges::all_of(name, [&](char c) { return letter(c) || digit(c); });
         }
 
-        //==============================================================================================================
-        /// Maps a stage word to its stage.
         std::optional<core::ShaderStage> stageOf(std::string_view word)
         {
             for (core::ShaderStage stage :
@@ -69,8 +62,7 @@ namespace rojoRHI::metal4 {
             return std::nullopt;
         }
 
-        //==============================================================================================================
-        /// Splits `line` at single spaces; empty tokens are kept.
+        // Empty tokens are kept.
         std::vector<std::string_view> splitSpaces(std::string_view line)
         {
             std::vector<std::string_view> tokens;
@@ -86,16 +78,14 @@ namespace rojoRHI::metal4 {
             }
         }
 
-        /// A blob read one line at a time; nothing past the line last asked for is looked at.
+        // Nothing past the line last asked for is looked at, so the metallib bytes are never read as text.
         struct LineReader
         {
-            std::span<const std::byte> blob; ///< The whole blob.
-            size_t offset = 0;               ///< The first byte not yet returned.
-            size_t line = 0;                 ///< The 1-based number of the line returned last.
+            std::span<const std::byte> blob;
+            size_t offset = 0;
+            size_t line = 0; // 1-based.
         };
 
-        //==============================================================================================================
-        /// Returns the next line of `reader` without its newline, or nothing at the end of the blob.
         std::optional<std::string_view> nextLine(LineReader& reader)
         {
             if (reader.offset >= reader.blob.size())
@@ -111,8 +101,6 @@ namespace rojoRHI::metal4 {
             return std::string_view(begin, length);
         }
 
-        //==============================================================================================================
-        /// Reads an `entry <name> <stage> <x> <y> <z>` line, or returns why it is a breach.
         std::expected<LibraryEntry, std::string> readEntry(std::string_view line)
         {
             const std::vector<std::string_view> tokens = splitSpaces(line);
@@ -160,7 +148,6 @@ namespace rojoRHI::metal4 {
         }
     } // namespace
 
-    //==================================================================================================================
     Result<LibraryHeader> parseShaderLibrary(std::span<const std::byte> blob)
     {
         LineReader reader{ blob };
@@ -223,7 +210,6 @@ namespace rojoRHI::metal4 {
         }
     }
 
-    //==================================================================================================================
     void LibraryPayload::release()
     {
         if (library != nullptr)
@@ -233,7 +219,6 @@ namespace rojoRHI::metal4 {
         }
     }
 
-    //==================================================================================================================
     void retireShaderLibrary([[maybe_unused]] void* context, core::ShaderLibraryRecord& record)
     {
         const AutoreleasePool pool;

@@ -27,35 +27,28 @@
 using namespace rojoRHI;
 
 namespace {
-    //==================================================================================================================
     std::vector<std::byte> bytesOf(std::string_view text)
     {
         const auto* bytes = reinterpret_cast<const std::byte*>(text.data());
         return { bytes, bytes + text.size() };
     }
 
-    //==================================================================================================================
-    /// A fake DXIL container of `size` bytes: `DXBC`, then `fill` repeated.
+    // `DXBC`, then `fill` repeated.
     std::string fakeDxil(size_t size, char fill)
     {
         return std::string("DXBC").append(size - 4, fill);
     }
 
-    //==================================================================================================================
     std::string goodAbi()
     {
         return std::to_string(core::kShaderAbiVersion);
     }
 
-    //==================================================================================================================
-    /// Returns a library with the ABI stamp `abi`, the entry lines `entries`, the declared total `total` and `payload` after.
     std::vector<std::byte> blobOf(std::string_view abi, std::string_view entries, std::string_view total, std::string_view payload)
     {
         return bytesOf(std::format("rojorhi.d3d12.shaderlibrary\nabi {}\n{}dxil {}\n{}", abi, entries, total, payload));
     }
 
-    //==================================================================================================================
-    /// Checks that parsing `blob` fails with `category` and a message containing `text`.
     void checkRefused(const std::vector<std::byte>& blob, ErrorCategory category, std::string_view text)
     {
         const Result<d3d12::LibraryHeader> result = d3d12::parseShaderLibrary(blob);
@@ -64,8 +57,6 @@ namespace {
         CHECK_THAT(result.error().message, Catch::Matchers::ContainsSubstring(std::string(text)));
     }
 
-    //==================================================================================================================
-    /// Checks that a library with `entries` over `payload` and the matching total is a `DriverFailure` with `text`.
     void checkEntries(std::string_view entries, std::string_view payload, std::string_view text)
     {
         checkRefused(blobOf(goodAbi(), entries, std::to_string(payload.size()), payload), ErrorCategory::DriverFailure, text);
@@ -74,7 +65,6 @@ namespace {
     const std::string kDxil = fakeDxil(8, 'a');
 } // namespace
 
-//======================================================================================================================
 TEST_CASE("parseShaderLibrary reads entries, stages, sizes and each entry's DXIL slice", "[d3d12]")
 {
     const std::string vertex = fakeDxil(8, 'v');
@@ -97,14 +87,12 @@ TEST_CASE("parseShaderLibrary reads entries, stages, sizes and each entry's DXIL
     CHECK(result->entries[0].dxil.data() == blob.data() + blob.size() - 20);
 }
 
-//======================================================================================================================
 TEST_CASE("a library stamped with another ABI is ShaderAbiMismatch before a malformed entry line", "[d3d12]")
 {
     const std::string wrongAbi = std::to_string(core::kShaderAbiVersion + 1);
     checkRefused(blobOf(wrongAbi, "entry a vertex 0 0 0 8 extra\n", "8", kDxil), ErrorCategory::ShaderAbiMismatch, "ABI version " + wrongAbi);
 }
 
-//======================================================================================================================
 TEST_CASE("a Metal 4 library, a Null library and a bare DXIL container are DriverFailure, not built for the D3D12 backend", "[d3d12]")
 {
     const std::string_view text = "not built for the D3D12 backend";
@@ -114,28 +102,24 @@ TEST_CASE("a Metal 4 library, a Null library and a bare DXIL container are Drive
     checkRefused({}, ErrorCategory::DriverFailure, text);
 }
 
-//======================================================================================================================
 TEST_CASE("entry byte counts that do not sum to the dxil line are DriverFailure naming the line", "[d3d12]")
 {
     checkRefused(blobOf(goodAbi(), "entry a vertex 0 0 0 8\n", "16", kDxil + kDxil), ErrorCategory::DriverFailure, "line 4");
     checkRefused(blobOf(goodAbi(), "entry a vertex 0 0 0 8\n", "16", kDxil + kDxil), ErrorCategory::DriverFailure, "add up to 8");
 }
 
-//======================================================================================================================
 TEST_CASE("a dxil count past the end of the blob is DriverFailure, and so is one short of it", "[d3d12]")
 {
     checkRefused(blobOf(goodAbi(), "entry a vertex 0 0 0 16\n", "16", kDxil), ErrorCategory::DriverFailure, "but 8 follow");
     checkRefused(blobOf(goodAbi(), "entry a vertex 0 0 0 8\n", "8", kDxil + "x"), ErrorCategory::DriverFailure, "but 9 follow");
 }
 
-//======================================================================================================================
 TEST_CASE("an entry whose bytes do not start DXBC is DriverFailure naming the entry", "[d3d12]")
 {
     checkEntries("entry good vertex 0 0 0 8\nentry bad fragment 0 0 0 8\n", kDxil + "DXBX....", "\"bad\"");
     checkEntries("entry tiny vertex 0 0 0 3\n", "DXB", "\"tiny\"");
 }
 
-//======================================================================================================================
 TEST_CASE(
     "six-token entry lines, an unknown stage, a repeated name, a non-canonical number, a zero compute size and a nonzero "
     "vertex size are each DriverFailure",
@@ -150,7 +134,6 @@ TEST_CASE(
     checkEntries("entry a vertex 1 0 0 8\n", kDxil, "to be 0 0 0");
 }
 
-//======================================================================================================================
 TEST_CASE("no entry line, and no dxil line, are DriverFailure", "[d3d12]")
 {
     checkRefused(bytesOf(std::format("rojorhi.d3d12.shaderlibrary\nabi {}\ndxil 0\n", goodAbi())), ErrorCategory::DriverFailure, "no entry line");
@@ -159,7 +142,6 @@ TEST_CASE("no entry line, and no dxil line, are DriverFailure", "[d3d12]")
     );
 }
 
-//======================================================================================================================
 TEST_CASE("a malformed or missing second line is DriverFailure naming line 2", "[d3d12]")
 {
     checkRefused(bytesOf("rojorhi.d3d12.shaderlibrary\nabi 01\n"), ErrorCategory::DriverFailure, "line 2");
@@ -167,7 +149,6 @@ TEST_CASE("a malformed or missing second line is DriverFailure naming line 2", "
     checkRefused(bytesOf("rojorhi.d3d12.shaderlibrary\n"), ErrorCategory::DriverFailure, "line 2");
 }
 
-//======================================================================================================================
 TEST_CASE("loadShaderLibrary keeps each entry's DXIL from Standard.d3d12lib and the library retires with its frame", "[d3d12]")
 {
     REQUIRE(kD3D12LibrariesBuilt);

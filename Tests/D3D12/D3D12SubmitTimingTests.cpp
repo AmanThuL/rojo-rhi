@@ -21,32 +21,25 @@
 using namespace rojoRHI;
 
 namespace {
-    /// The frames in flight of every case's device.
     constexpr uint32_t kFramesInFlight = 2;
 
-    /// The bytes each list fills: long enough to take measurable GPU time.
+    // Long enough to take measurable GPU time.
     constexpr uint64_t kRegion = uint64_t{ 1 } << 20;
 
-    /// A fill pattern whose bytes differ.
     constexpr uint32_t kPattern = 0x01020304u;
 
-    /// How far, in seconds, a span may reach outside the CPU's window around it: the calibration's error, which is far
-    /// below a millisecond on hardware.
+    // In seconds: the calibration's error, which is far below a millisecond on hardware.
     constexpr double kWindowSlack = 0.01;
 
-    /// How far, in seconds, a list that waited for another queue's list may appear to start before that list ended: the
-    /// difference of the two queues' calibrations.
+    // In seconds: the difference of the two queues' calibrations.
     constexpr double kQueueSlack = 0.005;
 
-    /// The reports a callback received and the thread each arrived on.
     struct Recorder
     {
         std::vector<d3d12::SubmitTime> times;
         std::vector<std::thread::id> threads;
     };
 
-    //==================================================================================================================
-    /// The seam's callback: appends `time` and the calling thread to the `Recorder` at `user`.
     void record(void* user, const d3d12::SubmitTime& time)
     {
         auto& recorder = *static_cast<Recorder*>(user);
@@ -54,8 +47,7 @@ namespace {
         recorder.threads.push_back(std::this_thread::get_id());
     }
 
-    //==================================================================================================================
-    /// Returns the CPU's QueryPerformanceCounter in seconds, the time base of the seam's reports.
+    // The time base of the seam's reports.
     double cpuSeconds()
     {
         LARGE_INTEGER ticks = {};
@@ -65,8 +57,7 @@ namespace {
         return static_cast<double>(ticks.QuadPart) / static_cast<double>(frequency.QuadPart);
     }
 
-    //==================================================================================================================
-    /// Returns a list of `type` acquired on `device` in the open frame that fills region `region` of `target`, ended.
+    // The returned list is already ended.
     CommandList filled(Device device, QueueType type, Buffer target, uint64_t region)
     {
         CommandList list = device.acquireCommandList(type, "test.list");
@@ -75,15 +66,12 @@ namespace {
         return list;
     }
 
-    //==================================================================================================================
-    /// Returns a buffer of `regions` regions that fills can write.
     Buffer fillTarget(Device device, uint64_t regions)
     {
         return *device.createBuffer({ .size = regions * kRegion, .usage = BufferUsage::ShaderWrite, .label = "test.target" });
     }
 } // namespace
 
-//======================================================================================================================
 TEST_CASE("a timed queue reports one span per submission that names lists, with serials from 1", "[d3d12]")
 {
     Device device = *createDevice({ .framesInFlight = kFramesInFlight });
@@ -127,7 +115,6 @@ TEST_CASE("a timed queue reports one span per submission that names lists, with 
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("a submission without lists reports nothing", "[d3d12]")
 {
     Device device = *createDevice({ .framesInFlight = kFramesInFlight });
@@ -155,7 +142,6 @@ TEST_CASE("a submission without lists reports nothing", "[d3d12]")
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("submission spans start no later than they end and share the CPU time base across queues", "[d3d12]")
 {
     Device device = *createDevice({ .framesInFlight = kFramesInFlight });
@@ -205,7 +191,6 @@ TEST_CASE("submission spans start no later than they end and share the CPU time 
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("the seam's timestamps count no native call", "[d3d12]")
 {
     Device device = *createDevice({ .framesInFlight = kFramesInFlight });
@@ -262,7 +247,6 @@ TEST_CASE("the seam's timestamps count no native call", "[d3d12]")
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("a detached queue reports nothing and its lists write no timestamp", "[d3d12]")
 {
     Device device = *createDevice({ .framesInFlight = kFramesInFlight });
@@ -312,7 +296,6 @@ TEST_CASE("a detached queue reports nothing and its lists write no timestamp", "
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("drainSubmitTiming reports on the calling thread", "[d3d12]")
 {
     Device device = *createDevice({ .framesInFlight = kFramesInFlight });
@@ -340,7 +323,6 @@ TEST_CASE("drainSubmitTiming reports on the calling thread", "[d3d12]")
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("a submission past the seam's ring or whose queries were claimed again reports failed, with contiguous serials", "[d3d12]")
 {
     Device device = *createDevice({ .framesInFlight = kFramesInFlight });

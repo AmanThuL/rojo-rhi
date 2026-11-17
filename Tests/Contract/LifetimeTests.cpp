@@ -16,8 +16,7 @@ using namespace rojoRHI;
 using test::PassKit;
 
 namespace {
-    //==================================================================================================================
-    /// Records, on `list`, one command of each kind that references an object: a root, an address, a handle and a pipeline.
+    // One command of each kind that references an object: a root, an address, a handle and a pipeline.
     [[maybe_unused]] void referenceEverything(PassKit& kit, Buffer root, Buffer args, Buffer source, Buffer target)
     {
         kit.list.setPipeline(kit.compute());
@@ -27,7 +26,6 @@ namespace {
     }
 } // namespace
 
-//======================================================================================================================
 TEST_CASE("objects are destroyed after the list that referenced them is submitted", "[contract]")
 {
 #ifdef NDEBUG
@@ -51,7 +49,6 @@ TEST_CASE("objects are destroyed after the list that referenced them is submitte
 #endif
 }
 
-//======================================================================================================================
 TEST_CASE("objects a list submitted in an earlier frame referenced are destroyed in a later one", "[contract]")
 {
 #ifdef NDEBUG
@@ -75,7 +72,6 @@ TEST_CASE("objects a list submitted in an earlier frame referenced are destroyed
 #endif
 }
 
-//======================================================================================================================
 TEST_CASE("a list that references an object twice releases it with one submission", "[contract]")
 {
 #ifdef NDEBUG
@@ -95,7 +91,6 @@ TEST_CASE("a list that references an object twice releases it with one submissio
 #endif
 }
 
-//======================================================================================================================
 TEST_CASE("a buffer a root named and no dispatch read is destroyed before the submission", "[contract]")
 {
 #ifdef NDEBUG
@@ -113,7 +108,6 @@ TEST_CASE("a buffer a root named and no dispatch read is destroyed before the su
 #endif
 }
 
-//======================================================================================================================
 TEST_CASE("a frame-data root does not hold any buffer", "[contract]")
 {
 #ifdef NDEBUG
@@ -130,7 +124,6 @@ TEST_CASE("a frame-data root does not hold any buffer", "[contract]")
 #endif
 }
 
-//======================================================================================================================
 TEST_CASE("a device without validation never reports these rules", "[contract]")
 {
     PassKit kit(QueueType::Graphics, false);
@@ -148,7 +141,6 @@ TEST_CASE("a device without validation never reports these rules", "[contract]")
     kit.finish();
 }
 
-//======================================================================================================================
 TEST_CASE("a recycled list does not keep the swapchain images of its earlier frame", "[contract]")
 {
 #ifdef NDEBUG

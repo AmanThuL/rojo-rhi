@@ -25,33 +25,25 @@
 using namespace rojoRHI;
 
 namespace {
-    /// Every stage a copy names, on either side.
     constexpr MTL::Stages kCopyStages = MTL::StageBlit | MTL::StageDispatch | MTL::StageFragment;
 
-    //==================================================================================================================
-    /// The encoders of `list`.
     const metal4::Encoders& encodersOf(CommandList list)
     {
         return CommandListImpl::of(list).encoders;
     }
 
-    //==================================================================================================================
-    /// The barrier state of `list`.
     const metal4::BarrierState& barriersOf(CommandList list)
     {
         return CommandListImpl::of(list).encoders.barriers();
     }
 
-    //==================================================================================================================
-    /// What `list` has counted so far; fails the case when a scope it recorded holds no timestamp pair, since the pinned
-    /// counts include both timestamp writes.
+    // Fails the case when a scope `list` recorded holds no timestamp pair, since the pinned counts include both
+    // timestamp writes.
     const core::RecordCounts& countsOf(CommandList list)
     {
         return test::timedCounts(list);
     }
 
-    //==================================================================================================================
-    /// A global barrier from copy writes to copy reads and writes.
     GlobalBarrier copyToCopy()
     {
         return GlobalBarrier{
@@ -59,8 +51,6 @@ namespace {
         };
     }
 
-    //==================================================================================================================
-    /// Submits the ended `lists` to the queue of `type`, waits for them on the host and ends the frame.
     void submitAndWait(Device device, std::span<const CommandList> lists, QueueType type = QueueType::Graphics)
     {
         const Fence fence = *device.createFence(0, "test.done");
@@ -71,7 +61,6 @@ namespace {
     }
 } // namespace
 
-//======================================================================================================================
 TEST_CASE("every Stage bit lowers to chapter 09's Metal stages", "[metal4]")
 {
     CHECK(metal4::metalStages(Stage::None) == 0);
@@ -93,7 +82,6 @@ TEST_CASE("every Stage bit lowers to chapter 09's Metal stages", "[metal4]")
     CHECK(metal4::metalStages(Stage::TaskShader | Stage::Copy) == (MTL::StageObject | kCopyStages));
 }
 
-//======================================================================================================================
 TEST_CASE("the compute encoder runs its copies in a stage the lowering gives it", "[metal4]")
 {
     Device device = *createDevice({ .scopeTimings = true });
@@ -113,7 +101,6 @@ TEST_CASE("the compute encoder runs its copies in a stage the lowering gives it"
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("a barrier at the start of a list is emitted by the first encoder at queue level", "[metal4]")
 {
     Device device = *createDevice({ .scopeTimings = true });
@@ -151,7 +138,6 @@ TEST_CASE("a barrier at the start of a list is emitted by the first encoder at q
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("a barrier whose sources the opening barrier covered stays in the open encoder", "[metal4]")
 {
     Device device = *createDevice({ .scopeTimings = true });
@@ -189,7 +175,6 @@ TEST_CASE("a barrier whose sources the opening barrier covered stays in the open
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("an encoder-level barrier with no command after it is carried at end by its encoder", "[metal4]")
 {
     Device device = *createDevice({ .scopeTimings = true });
@@ -215,7 +200,6 @@ TEST_CASE("an encoder-level barrier with no command after it is carried at end b
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("an encoder-level barrier closed by a scope boundary is emitted by the next encoder at queue level", "[metal4]")
 {
     Device device = *createDevice({ .scopeTimings = true });
@@ -246,7 +230,6 @@ TEST_CASE("an encoder-level barrier closed by a scope boundary is emitted by the
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("a barrier after uncovered work closes the encoder and the next encoder emits it", "[metal4]")
 {
     Device device = *createDevice({ .scopeTimings = true });
@@ -279,7 +262,6 @@ TEST_CASE("a barrier after uncovered work closes the encoder and the next encode
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("a graphics list owes the fragment part of a Copy barrier and emits it at end on a closing encoder", "[metal4]")
 {
     Device device = *createDevice({ .scopeTimings = true });
@@ -322,7 +304,6 @@ TEST_CASE("a graphics list owes the fragment part of a Copy barrier and emits it
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("Compute and Copy lists owe no render stage", "[metal4]")
 {
     const QueueType type = GENERATE(QueueType::Compute, QueueType::Copy);
@@ -361,7 +342,6 @@ TEST_CASE("Compute and Copy lists owe no render stage", "[metal4]")
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("Stage::All on a graphics list names only the stages of compute and render encoders", "[metal4]")
 {
     Device device = *createDevice({ .scopeTimings = true });
@@ -375,7 +355,6 @@ TEST_CASE("Stage::All on a graphics list names only the stages of compute and re
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("an encoder that ran no command in a stage its opening barrier held returns that stage to the pending barrier", "[metal4]")
 {
     Device device = *createDevice({ .scopeTimings = true });
@@ -406,7 +385,6 @@ TEST_CASE("an encoder that ran no command in a stage its opening barrier held re
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("an encoder-level barrier waits for a command in its destination stages", "[metal4]")
 {
     Device device = *createDevice({ .scopeTimings = true });
@@ -434,7 +412,6 @@ TEST_CASE("an encoder-level barrier waits for a command in its destination stage
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("a batch with a None source records no native barrier, and an empty batch records nothing", "[metal4]")
 {
     Device device = *createDevice({ .scopeTimings = true });
@@ -468,7 +445,6 @@ TEST_CASE("a batch with a None source records no native barrier, and an empty ba
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("visibility is Device for named accesses and none for an execution-only batch", "[metal4]")
 {
     Device device = *createDevice({ .scopeTimings = true });
@@ -507,7 +483,6 @@ TEST_CASE("visibility is Device for named accesses and none for an execution-onl
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("a discard of a Sparse texture carries alias visibility", "[metal4]")
 {
     Device device = *createDevice({ .scopeTimings = true });
@@ -548,7 +523,6 @@ TEST_CASE("a discard of a Sparse texture carries alias visibility", "[metal4]")
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("a global barrier adds ResourceAlias only while placed memory aliases", "[metal4]")
 {
     Device device = *createDevice({ .scopeTimings = true });
@@ -591,7 +565,6 @@ TEST_CASE("a global barrier adds ResourceAlias only while placed memory aliases"
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("a resource placed where a destroyed one was is aliased with no other live resource", "[metal4]")
 {
     Device device = *createDevice({ .scopeTimings = true });
@@ -631,7 +604,6 @@ TEST_CASE("a resource placed where a destroyed one was is aliased with no other 
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("a global barrier adds ResourceAlias while a sparse buffer lives", "[metal4]")
 {
     Device device = *createDevice({ .scopeTimings = true });
@@ -661,7 +633,6 @@ TEST_CASE("a global barrier adds ResourceAlias while a sparse buffer lives", "[m
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("a texture barrier from Undefined adds ResourceAlias only for a placed texture whose memory aliases", "[metal4]")
 {
     Device device = *createDevice({ .scopeTimings = true });
@@ -718,7 +689,6 @@ TEST_CASE("a texture barrier from Undefined adds ResourceAlias only for a placed
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("an encoder-level barrier keeps the destination stages no command has run in yet for later encoders", "[metal4]")
 {
     Device device = *createDevice({ .scopeTimings = true });
@@ -760,7 +730,6 @@ TEST_CASE("an encoder-level barrier keeps the destination stages no command has 
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("an IndirectArgs barrier is emitted in its dispatch part by a counted draw's kernel and the rest by the pass", "[metal4]")
 {
     test::PassKit kit(QueueType::Graphics, false, true);
@@ -852,7 +821,6 @@ TEST_CASE("an IndirectArgs barrier is emitted in its dispatch part by a counted 
     destroyDevice(kit.device);
 }
 
-//======================================================================================================================
 TEST_CASE("a barrier from a pass into Copy followed only by copies owes its fragment part until end", "[metal4]")
 {
     test::PassKit kit(QueueType::Graphics, false, true);
@@ -901,7 +869,6 @@ TEST_CASE("a barrier from a pass into Copy followed only by copies owes its frag
     destroyDevice(kit.device);
 }
 
-//======================================================================================================================
 TEST_CASE("a barrier after a fill stays on the open compute encoder for the dispatches that follow", "[metal4]")
 {
     test::PassKit kit(QueueType::Graphics, false, true);
@@ -957,7 +924,6 @@ TEST_CASE("a barrier after a fill stays on the open compute encoder for the disp
     destroyDevice(kit.device);
 }
 
-//======================================================================================================================
 TEST_CASE("a barrier after a dispatch whose sources lie outside the encoder still ends it", "[metal4]")
 {
     test::PassKit kit(QueueType::Graphics, false, true);
@@ -979,7 +945,6 @@ TEST_CASE("a barrier after a dispatch whose sources lie outside the encoder stil
     destroyDevice(kit.device);
 }
 
-//======================================================================================================================
 TEST_CASE("each batch of one global barrier lowers its own record, whether or not it repeats the last", "[metal4]")
 {
     Device device = *createDevice({ .scopeTimings = true });
@@ -1015,7 +980,6 @@ TEST_CASE("each batch of one global barrier lowers its own record, whether or no
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("a batch of one global barrier that names IndirectArgs after one that does not marks the list as naming it", "[metal4]")
 {
     Device device = *createDevice({ .scopeTimings = true });

@@ -19,15 +19,11 @@
 #include <string_view>
 
 namespace rojoRHI {
-    //==================================================================================================================
     void CommandList::beginScope(std::string_view label)
     {
         CommandListImpl& list = CommandListImpl::of(*this);
-        // The core records the scope with its label in the list's arena page, or its default label, which the record keeps.
         core::beginScope(list.core, label);
         metal4::ListState& state = list.state;
-        // The pair is claimed with one atomic add on the frame slot's cursor, or is `core::kNoTimestamp` on a device without
-        // scope timings; the record keeps it for the frame wait's resolve.
         const uint32_t pair = metal4::claimPair(list);
         // A scope with no debug marker (ADR 0034) and no timestamp sends Metal nothing, and leaves the open encoder open.
         if (!state.markers && pair == core::kNoTimestamp)
@@ -69,7 +65,6 @@ namespace rojoRHI {
         metal4::writeBetweenEncoders(list, pair);
     }
 
-    //==================================================================================================================
     void CommandList::endScope()
     {
         CommandListImpl& list = CommandListImpl::of(*this);

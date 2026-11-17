@@ -23,9 +23,7 @@
 
 namespace rojoRHI {
     namespace {
-        //==============================================================================================================
-        /// Binds the device's zero record at `buffer(3)` of the list's table unless it holds it: a direct draw's drawId is 0.
-        /// One compare when the table holds it, as it does unless an indirect draw of the recording bound its record.
+        // A direct draw's drawId is 0. One compare when the table already holds the zero record.
         void bindZeroRecord(CommandListImpl& list)
         {
             const metal4::DrawState& draw = list.draw;
@@ -35,10 +33,8 @@ namespace rojoRHI {
             }
         }
 
-        //==============================================================================================================
-        /// Sends a direct draw of `instances` instances, with base instance 0, inside the pool the device asks for: the form
-        /// with the instance count. Out of line, so the common draw, one instance and no pool, stays small enough for link-time
-        /// optimization to inline into the caller.
+        // Out of line, so the common draw, one instance and no pool, stays small enough for link-time optimization to
+        // inline.
         [[gnu::noinline]] void sendDraw(CommandListImpl& list, MTL4::RenderCommandEncoder* encoder, uint32_t vertices, uint32_t instances, uint32_t firstVertex)
         {
             // The Metal validation layer autoreleases in a draw it checks, so the draw holds a pool, as a kernel dispatch does.
@@ -53,10 +49,7 @@ namespace rojoRHI {
             }
         }
 
-        //==============================================================================================================
-        /// Sends an indexed draw of `count` indices of `type` at `address`, `length` bytes, inside the pool the device asks for,
-        /// in the shortest form that says the same with base instance 0: both values with a base vertex other than 0, the
-        /// instance count for several instances, else neither. Out of line, as `sendDraw` is.
+        // The shortest form that says the same with base instance 0. Out of line, as `sendDraw` is.
         [[gnu::noinline]] void sendIndexed(
             CommandListImpl& list,
             MTL4::RenderCommandEncoder* encoder,
@@ -85,7 +78,6 @@ namespace rojoRHI {
         }
     } // namespace
 
-    //==================================================================================================================
     void CommandList::setRoot(Addr root)
     {
         CommandListImpl& list = CommandListImpl::of(*this);
@@ -105,7 +97,6 @@ namespace rojoRHI {
         metal4::applyRoot(list, address);
     }
 
-    //==================================================================================================================
     void CommandList::draw(uint32_t vertices, uint32_t instances, uint32_t firstVertex, [[maybe_unused]] uint32_t firstInstance)
     {
         CommandListImpl& list = CommandListImpl::of(*this);
@@ -132,7 +123,6 @@ namespace rojoRHI {
         list.encoders.markRan(MTL::StageVertex | MTL::StageFragment);
     }
 
-    //==================================================================================================================
     void CommandList::drawIndexed(
         Buffer indices, IndexType type, uint32_t count, uint32_t instances, uint32_t firstIndex, int32_t baseVertex, [[maybe_unused]] uint32_t firstInstance
     )
@@ -165,7 +155,6 @@ namespace rojoRHI {
         list.encoders.markRan(MTL::StageVertex | MTL::StageFragment);
     }
 
-    //==================================================================================================================
     void CommandList::drawMeshTasks(uint32_t x, uint32_t y, uint32_t z)
     {
         CommandListImpl& list = CommandListImpl::of(*this);

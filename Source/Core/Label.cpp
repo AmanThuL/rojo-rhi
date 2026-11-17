@@ -10,7 +10,6 @@
 #include <cstdint>
 
 namespace rojoRHI::core {
-    //==================================================================================================================
     bool isValidUtf8(std::string_view text)
     {
         size_t i = 0;
@@ -69,14 +68,12 @@ namespace rojoRHI::core {
         return true;
     }
 
-    //==================================================================================================================
     void checkLabel([[maybe_unused]] std::string_view label)
     {
         ROJORHI_VU(label.find('\0') == std::string_view::npos, "VU-rojo-core-0007", "a label contains a NUL character");
         ROJORHI_VU(isValidUtf8(label), "VU-rojo-core-0006", "a label is not valid UTF-8");
     }
 
-    //==================================================================================================================
     std::string resolveLabel(std::string_view label, std::string_view defaultLabel)
     {
         checkLabel(label);

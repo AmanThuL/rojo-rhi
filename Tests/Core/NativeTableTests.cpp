@@ -12,7 +12,6 @@
 
 using rojoRHI::core::NativeTable;
 
-//======================================================================================================================
 TEST_CASE("a published payload loads back from its slot", "[core]")
 {
     NativeTable table;
@@ -23,7 +22,6 @@ TEST_CASE("a published payload loads back from its slot", "[core]")
     CHECK(table.load(7) == nullptr);
 }
 
-//======================================================================================================================
 TEST_CASE("an unpublished slot and a slot of an absent chunk load null", "[core]")
 {
     NativeTable table;
@@ -34,7 +32,6 @@ TEST_CASE("an unpublished slot and a slot of an absent chunk load null", "[core]
     CHECK(table.load(NativeTable::kCapacity - 1) == nullptr);
 }
 
-//======================================================================================================================
 TEST_CASE("slots in two chunks keep separate payloads", "[core]")
 {
     NativeTable table;
@@ -46,7 +43,6 @@ TEST_CASE("slots in two chunks keep separate payloads", "[core]")
     CHECK(table.load(NativeTable::kChunkSlots + 5) == &second);
 }
 
-//======================================================================================================================
 TEST_CASE("a reader on another thread sees a payload published before the handle reached it", "[core]")
 {
     NativeTable table;
@@ -67,7 +63,6 @@ TEST_CASE("a reader on another thread sees a payload published before the handle
     CHECK(seen == &payload);
 }
 
-//======================================================================================================================
 TEST_CASE("a table reports the capacity it was created with", "[core]")
 {
     CHECK(NativeTable::kCapacity == (1u << 22));
@@ -75,7 +70,6 @@ TEST_CASE("a table reports the capacity it was created with", "[core]")
     CHECK(NativeTable(3).capacity() == 3);
 }
 
-//======================================================================================================================
 TEST_CASE("a load past the capacity stays inside the directory", "[core]")
 {
     NativeTable table;

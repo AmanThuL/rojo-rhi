@@ -20,7 +20,6 @@ using namespace rojoRHI;
 namespace {
     constexpr std::array<std::byte, 16> kBytes = {};
 
-    //==================================================================================================================
     Device makeDevice(uint32_t framesInFlight = 2)
     {
         Result<Device> created = createDevice(DeviceDesc{ .framesInFlight = framesInFlight });
@@ -28,20 +27,16 @@ namespace {
         return *created;
     }
 
-    //==================================================================================================================
     bool isNull(Addr address)
     {
         return address.lo == 0 && address.hi == 0;
     }
 
-    //==================================================================================================================
     bool sameAddress(Addr a, Addr b)
     {
         return a.lo == b.lo && a.hi == b.hi;
     }
 
-    //==================================================================================================================
-    /// Ends `list` and submits it to the queue of its type, signalling `signal`.
     void endAndSubmit(Device device, CommandList list, QueueType type = QueueType::Graphics, std::span<const FenceValue> signal = {})
     {
         list.end();
@@ -50,7 +45,6 @@ namespace {
     }
 } // namespace
 
-//======================================================================================================================
 TEST_CASE("a list acquired for each queue type ends and submits to that queue", "[contract]")
 {
     Device device = makeDevice();
@@ -68,7 +62,6 @@ TEST_CASE("a list acquired for each queue type ends and submits to that queue", 
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("one submission takes several lists and signals its fence", "[contract]")
 {
     Device device = makeDevice();
@@ -88,7 +81,6 @@ TEST_CASE("one submission takes several lists and signals its fence", "[contract
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("a list acquired without a label is accepted", "[contract]")
 {
     Device device = makeDevice();
@@ -98,7 +90,6 @@ TEST_CASE("a list acquired without a label is accepted", "[contract]")
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("a frame with no lists ends", "[contract]")
 {
     Device device = makeDevice();
@@ -107,7 +98,6 @@ TEST_CASE("a frame with no lists ends", "[contract]")
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("lists are acquired again in every frame across slot reuse", "[contract]")
 {
     for (const uint32_t framesInFlight : { 2u, 3u })
@@ -133,7 +123,6 @@ TEST_CASE("lists are acquired again in every frame across slot reuse", "[contrac
     }
 }
 
-//======================================================================================================================
 TEST_CASE("frame data returns a non-null address for every upload", "[contract]")
 {
     Device device = makeDevice();
@@ -146,7 +135,6 @@ TEST_CASE("frame data returns a non-null address for every upload", "[contract]"
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("two uploads of one frame return different addresses", "[contract]")
 {
     Device device = makeDevice();
@@ -160,7 +148,6 @@ TEST_CASE("two uploads of one frame return different addresses", "[contract]")
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("lists of one frame never receive the same address", "[contract]")
 {
     Device device = makeDevice();
@@ -178,7 +165,6 @@ TEST_CASE("lists of one frame never receive the same address", "[contract]")
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("an upload larger than any standard arena page is accepted", "[contract]")
 {
     Device device = makeDevice();
@@ -191,7 +177,6 @@ TEST_CASE("an upload larger than any standard arena page is accepted", "[contrac
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("frame data is uploaded in every frame across slot reuse", "[contract]")
 {
     Device device = makeDevice();
@@ -209,7 +194,6 @@ TEST_CASE("frame data is uploaded in every frame across slot reuse", "[contract]
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("an address from frame data accepts offset arithmetic", "[contract]")
 {
     Device device = makeDevice();
@@ -222,7 +206,6 @@ TEST_CASE("an address from frame data accepts offset arithmetic", "[contract]")
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("two lists of one frame upload from two threads and never share an address", "[contract]")
 {
     Device device = makeDevice();

@@ -15,11 +15,8 @@ using namespace rojoRHI;
 using test::PassKit;
 
 namespace {
-    /// The bytes every test copies.
     constexpr uint64_t kBytes = 256;
 
-    //==================================================================================================================
-    /// Ends `list` and submits it alone to the queue of `type` of `device`.
     void submitTo(Device device, CommandList list, QueueType type)
     {
         list.end();
@@ -28,7 +25,6 @@ namespace {
     }
 } // namespace
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-device-0006 compute work submitted in the frame is not joined into its graphics work", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-device-0006", [] {
@@ -42,7 +38,6 @@ TEST_CASE("VU-rojo-device-0006 compute work submitted in the frame is not joined
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-device-0006 copy work submitted in the frame is not joined into its graphics work", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-device-0006", [] {

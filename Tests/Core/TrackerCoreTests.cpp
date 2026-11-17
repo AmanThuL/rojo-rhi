@@ -22,18 +22,14 @@ using test::PassKit;
 using test::UpscaleKit;
 
 namespace {
-    /// A stand-in for a native surface: the Null backend never dereferences it.
+    // A stand-in for a native surface: the Null backend never dereferences it.
     [[maybe_unused]] int g_surface = 0;
 
-    //==================================================================================================================
-    /// Records the barrier that moves every subresource of `texture` from `oldLayout` to `newLayout`, ordering the uses after it.
     void move(CommandList list, Texture texture, Layout oldLayout, Layout newLayout)
     {
         test::transition(list, texture, oldLayout, newLayout);
     }
 
-    //==================================================================================================================
-    /// Returns the use event at `index` of `list`'s log; the test fails when it is another kind of event.
     [[maybe_unused]] core::UseEvent useAt(CommandList list, size_t index)
     {
         const core::TrackerEvent& event = core::coreOf(list).trackerLog.events.at(index);
@@ -42,7 +38,6 @@ namespace {
     }
 } // namespace
 
-//======================================================================================================================
 TEST_CASE("a device without validation logs no tracker event", "[core]")
 {
     PassKit kit;
@@ -60,7 +55,6 @@ TEST_CASE("a device without validation logs no tracker event", "[core]")
     kit.finish();
 }
 
-//======================================================================================================================
 TEST_CASE("a copy on a validating device logs each endpoint with its stage, access, layouts and rule", "[core]")
 {
 #ifndef NDEBUG
@@ -92,7 +86,6 @@ TEST_CASE("a copy on a validating device logs each endpoint with its stage, acce
 #endif
 }
 
-//======================================================================================================================
 TEST_CASE("a clear on a validating device logs its range in CopyDst alone under its rule", "[core]")
 {
 #ifndef NDEBUG
@@ -112,7 +105,6 @@ TEST_CASE("a clear on a validating device logs its range in CopyDst alone under 
 #endif
 }
 
-//======================================================================================================================
 TEST_CASE("a buffer copy on a Copy list logs byte ranges", "[core]")
 {
 #ifndef NDEBUG
@@ -136,7 +128,6 @@ TEST_CASE("a buffer copy on a Copy list logs byte ranges", "[core]")
 #endif
 }
 
-//======================================================================================================================
 TEST_CASE("a loaded color attachment reads, and a cleared one does not unless a draw blends", "[core]")
 {
 #ifndef NDEBUG
@@ -150,7 +141,6 @@ TEST_CASE("a loaded color attachment reads, and a cleared one does not unless a 
 #endif
 }
 
-//======================================================================================================================
 TEST_CASE("a draw whose pipeline blends a color target adds the read to that attachment only", "[core]")
 {
 #ifndef NDEBUG
@@ -170,7 +160,6 @@ TEST_CASE("a draw whose pipeline blends a color target adds the read to that att
 #endif
 }
 
-//======================================================================================================================
 TEST_CASE("a depth test pass writes depth only when a draw's pipeline writes depth or a stencil operation", "[core]")
 {
 #ifndef NDEBUG
@@ -200,7 +189,6 @@ TEST_CASE("a depth test pass writes depth only when a draw's pipeline writes dep
 #endif
 }
 
-//======================================================================================================================
 TEST_CASE("the load and store operations of a depth attachment decide whether the pass writes it", "[core]")
 {
 #ifndef NDEBUG
@@ -241,7 +229,6 @@ TEST_CASE("the load and store operations of a depth attachment decide whether th
 #endif
 }
 
-//======================================================================================================================
 TEST_CASE("a stencil operation with the stencil test off adds no write", "[core]")
 {
 #ifndef NDEBUG
@@ -264,7 +251,6 @@ TEST_CASE("a stencil operation with the stencil test off adds no write", "[core]
 #endif
 }
 
-//======================================================================================================================
 TEST_CASE("a resolve target between two blended color attachments does not shift the color index", "[core]")
 {
 #ifndef NDEBUG
@@ -291,7 +277,6 @@ TEST_CASE("a resolve target between two blended color attachments does not shift
 #endif
 }
 
-//======================================================================================================================
 TEST_CASE("a render pass logs one use per attachment, which the draws of the pass may complete", "[core]")
 {
 #ifndef NDEBUG
@@ -323,7 +308,6 @@ TEST_CASE("a render pass logs one use per attachment, which the draws of the pas
 #endif
 }
 
-//======================================================================================================================
 TEST_CASE("a barrier batch logs each of its records", "[core]")
 {
 #ifndef NDEBUG
@@ -348,7 +332,6 @@ TEST_CASE("a barrier batch logs each of its records", "[core]")
 #endif
 }
 
-//======================================================================================================================
 TEST_CASE("the tracker follows a texture from creation through submission to destruction", "[core]")
 {
 #ifndef NDEBUG
@@ -375,7 +358,6 @@ TEST_CASE("the tracker follows a texture from creation through submission to des
 #endif
 }
 
-//======================================================================================================================
 TEST_CASE("the tracker follows a swapchain image from acquire to present", "[core]")
 {
 #ifndef NDEBUG
@@ -398,7 +380,6 @@ TEST_CASE("the tracker follows a swapchain image from acquire to present", "[cor
 #endif
 }
 
-//======================================================================================================================
 TEST_CASE("indexed draws log their index reads", "[core]")
 {
 #ifndef NDEBUG
@@ -425,7 +406,6 @@ TEST_CASE("indexed draws log their index reads", "[core]")
 #endif
 }
 
-//======================================================================================================================
 TEST_CASE("indirect commands log their arguments and count", "[core]")
 {
 #ifndef NDEBUG
@@ -457,7 +437,6 @@ TEST_CASE("indirect commands log their arguments and count", "[core]")
 #endif
 }
 
-//======================================================================================================================
 TEST_CASE("a declared access becomes a use at the draw or dispatch that consumes it", "[core]")
 {
 #ifndef NDEBUG
@@ -503,7 +482,6 @@ TEST_CASE("a declared access becomes a use at the draw or dispatch that consumes
 #endif
 }
 
-//======================================================================================================================
 TEST_CASE("an upscale logs mip 0 of layer 0 of each texture it reads and writes", "[core]")
 {
 #ifndef NDEBUG
@@ -542,7 +520,6 @@ TEST_CASE("an upscale logs mip 0 of layer 0 of each texture it reads and writes"
 #endif
 }
 
-//======================================================================================================================
 TEST_CASE("every logging entry gives its events one command ordinal, distinct from the command before", "[core]")
 {
 #ifndef NDEBUG
@@ -620,7 +597,6 @@ TEST_CASE("every logging entry gives its events one command ordinal, distinct fr
 #endif
 }
 
-//======================================================================================================================
 TEST_CASE("the tracker numbers commands whatever the backend counts as native calls", "[core]")
 {
 #ifndef NDEBUG

@@ -27,22 +27,17 @@
 
 namespace rojoRHI::d3d12 {
     namespace {
-        //==============================================================================================================
-        /// Logs the warning of a blob that is discarded because `reason`.
         void discard(std::string_view reason)
         {
             ROJORHI_LOG_WARN("the pipeline cache blob {} and is discarded; every pipeline is compiled", reason);
         }
 
-        //==============================================================================================================
-        /// Names the library of `impl`'s device after the device.
         void nameLibrary(DeviceImpl& impl, ID3D12PipelineLibrary1* library)
         {
             setName(library, std::format("{}.pipelinecache", impl.core.label()));
         }
     } // namespace
 
-    //==================================================================================================================
     void PipelineCache::open(DeviceImpl& impl, std::span<const std::byte> blob)
     {
         ID3D12Device12* device = impl.device();
@@ -95,7 +90,6 @@ namespace rojoRHI::d3d12 {
         }
     }
 
-    //==================================================================================================================
     Result<ID3D12PipelineState*> PipelineCache::create(
         DeviceImpl& impl, const PipelineStream& stream, const std::wstring& name, std::string_view label, bool& hit
     )
@@ -141,7 +135,6 @@ namespace rojoRHI::d3d12 {
         return pso.detach();
     }
 
-    //==================================================================================================================
     Result<std::vector<std::byte>> PipelineCache::data(DeviceImpl& impl)
     {
         std::vector<std::byte> blob;
@@ -165,7 +158,6 @@ namespace rojoRHI::d3d12 {
         return blob;
     }
 
-    //==================================================================================================================
     void PipelineCache::release()
     {
         const std::lock_guard lock(m_mutex);

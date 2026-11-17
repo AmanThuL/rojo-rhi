@@ -32,77 +32,61 @@
 using namespace rojoRHI;
 
 namespace {
-    /// The viewport and scissor that cover the 16-texel square targets of these cases.
     constexpr Viewport kViewport{ .width = 16.0f, .height = 16.0f };
     constexpr Rect2D kScissor{ 0, 0, 16, 16 };
 
-    //==================================================================================================================
-    /// The calls a pass's render encoder makes when it opens with no barrier owed: the factory, the label when
-    /// `list`'s encoders carry one, and the list's table.
+    // What a pass's render encoder calls when it opens with no barrier owed: the factory, the label when `list`'s
+    // encoders carry one, and the list's table.
     uint64_t openCalls(CommandList list)
     {
         return 2 + test::encoderLabel(list);
     }
 
-    //==================================================================================================================
-    /// The calls the compute encoder of a pass's counted draws makes when it opens with no barrier owed: the factory and the
-    /// label when `list`'s encoders carry one. It runs only kernels, which bind the kernel table, so it binds no list table.
+    // What the compute encoder of a pass's counted draws calls when it opens with no barrier owed: the factory and the
+    // label when `list`'s encoders carry one. It runs only kernels, which bind the kernel table, so it binds no list table.
     uint64_t batchOpenCalls(CommandList list)
     {
         return 1 + test::encoderLabel(list);
     }
 
-    /// The calls a pass's render encoder makes for a pipeline of the standard library and the viewport and scissor: the
-    /// pipeline with its counter-clockwise winding, the viewport and the scissor.
+    // A standard-library pipeline with its counter-clockwise winding, the viewport and the scissor.
     constexpr uint64_t kStateCalls = 4;
 
-    /// The call of the begin timestamp a pass's first render encoder writes right after it opens; the kernels' encoder of
-    /// counted draws ahead of it writes none.
+    // The begin timestamp a pass's first render encoder writes right after it opens; the kernels' encoder of counted
+    // draws ahead of it writes none.
     constexpr uint64_t kPassBegin = 1;
 
-    /// The records each counted draw of these cases reads.
     constexpr uint32_t kRecords = 16;
 
     using Kind = metal4::PrefixKind;
 
-    //==================================================================================================================
-    /// The encoders of `list`.
     const metal4::Encoders& encodersOf(CommandList list)
     {
         return CommandListImpl::of(list).encoders;
     }
 
-    //==================================================================================================================
-    /// The graphics state of `list`.
     const metal4::DrawState& drawOf(CommandList list)
     {
         return CommandListImpl::of(list).draw;
     }
 
-    //==================================================================================================================
-    /// What `list` has counted so far; fails the case when a scope it recorded holds no timestamp pair, since the pinned
-    /// counts include both timestamp writes.
+    // Fails the case when a scope `list` recorded holds no timestamp pair, since the pinned counts include both
+    // timestamp writes.
     const core::RecordCounts& countsOf(CommandList list)
     {
         return test::timedCounts(list);
     }
 
-    //==================================================================================================================
-    /// The native calls `list` has recorded so far.
     uint64_t callsOf(CommandList list)
     {
         return countsOf(list).nativeRecordCalls;
     }
 
-    //==================================================================================================================
-    /// The backend kernels of `device`.
     const metal4::Kernels& kernelsOf(Device device)
     {
         return DeviceImpl::of(device).kernels;
     }
 
-    //==================================================================================================================
-    /// The kinds of `list`'s prefix, in order.
     std::vector<Kind> prefixKinds(CommandList list)
     {
         std::vector<Kind> kinds;
@@ -113,15 +97,11 @@ namespace {
         return kinds;
     }
 
-    //==================================================================================================================
-    /// The GPU address `address` names.
     uint64_t gpuAddressOf(Addr address)
     {
         return uint64_t{ address.lo } | uint64_t{ address.hi } << 32;
     }
 
-    //==================================================================================================================
-    /// Creates a vertex pipeline of the standard library over one `RGBA8Unorm` target.
     Pipeline vertexPipeline(Device device, ShaderLibrary library)
     {
         const std::array colors{ ColorTarget{ .format = Format::RGBA8Unorm } };
@@ -130,8 +110,6 @@ namespace {
         );
     }
 
-    //==================================================================================================================
-    /// Creates a 16-texel square `RGBA8Unorm` render target.
     Texture makeTarget(Device device)
     {
         return *device.createTexture(
@@ -140,19 +118,13 @@ namespace {
         );
     }
 
-    //==================================================================================================================
-    /// A pass over `colors` that renders to the whole 16-texel square.
     RenderPassDesc passOf(std::span<const ColorAttachment> colors)
     {
         return RenderPassDesc{ .colors = colors, .area = { 0, 0, 16, 16 }, .label = "test.pass" };
     }
 
-    /// What a case draws with: the standard library's pipeline, a target, records of each kind and an index buffer, all on
-    /// one device.
     struct Fixture
     {
-        //==============================================================================================================
-        /// Creates the objects on `created`.
         explicit Fixture(Device created) : device(created)
         {
             const std::vector<std::byte> blob = test::standardLibrary();
@@ -185,8 +157,6 @@ namespace {
             );
         }
 
-        //==============================================================================================================
-        /// Begins a pass over the target on `list`, cleared, with `store`, and binds the pipeline, the viewport and the scissor.
         void begin(CommandList list, StoreOp store = StoreOp::Store) const
         {
             const std::array colors{ ColorAttachment{ .texture = target, .load = LoadOp::Clear, .store = store } };
@@ -196,51 +166,41 @@ namespace {
             list.setScissor(kScissor);
         }
 
-        //==============================================================================================================
-        /// Records a counted draw of `maxCount` of the fixture's records on `list`.
         void drawIndirect(CommandList list, uint32_t maxCount = kRecords) const
         {
             list.drawIndirect(Device(device).address(records), maxCount);
         }
 
-        //==============================================================================================================
-        /// Records a counted indexed draw of `maxCount` of the fixture's indexed records on `list`, with `UInt32` indices.
         void drawIndexedIndirect(CommandList list, uint32_t maxCount = kRecords) const
         {
             list.drawIndexedIndirect(indices, IndexType::UInt32, Device(device).address(indexedRecords), maxCount);
         }
 
-        //==============================================================================================================
-        /// Records a draw of the fixture's first record on `list` with the count of 1: `maxCount` 1 with a count, the writer
-        /// kernel's path.
+        // `maxCount` 1 with a count: the writer kernel's path.
         void drawWritten(CommandList list) const
         {
             list.drawIndirect(Device(device).address(records), 1, Device(device).address(count));
         }
 
-        //==============================================================================================================
-        /// Records an indexed draw of the fixture's first indexed record on `list` with the count of 1, as `drawWritten` does.
         void drawIndexedWritten(CommandList list) const
         {
             list.drawIndexedIndirect(indices, IndexType::UInt32, Device(device).address(indexedRecords), 1, Device(device).address(count));
         }
 
-        Device device;         ///< The device.
-        ShaderLibrary library; ///< The standard library.
-        Pipeline pipeline;     ///< A vertex pipeline over one `RGBA8Unorm` target.
-        Pipeline other;        ///< A second pipeline like `pipeline`.
-        Texture target;        ///< The pass's target.
-        Buffer records;        ///< `kRecords` draw records of three vertices and one instance.
-        Buffer indexedRecords; ///< `kRecords` indexed records of three indices and one instance.
-        Buffer indices;        ///< Three `UInt32` indices.
-        Buffer count;          ///< A draw count of 1.
+        Device device;
+        ShaderLibrary library;
+        Pipeline pipeline;
+        Pipeline other;
+        Texture target;
+        Buffer records;
+        Buffer indexedRecords;
+        Buffer indices;
+        Buffer count;
     };
 
-    /// The edge of the draw oracle's targets, in pixels.
     constexpr uint32_t kOracleEdge = 256;
 
-    //==================================================================================================================
-    /// The half-precision bits of `value`, which is zero or a normal half-precision value held exactly.
+    // `value` is zero or a normal half-precision value held exactly.
     uint16_t halfOf(float value)
     {
         if (value == 0.0f)
@@ -253,11 +213,8 @@ namespace {
         return static_cast<uint16_t>(sign | (exponent << 10) | ((bits >> 13) & 0x3FFu));
     }
 
-    /// The draw oracle over one `kOracleEdge` square target of a format, cleared by the pass the case begins.
     struct OracleTarget
     {
-        //==============================================================================================================
-        /// Loads the draw oracle on `kit`'s device and creates its pipeline and target of `targetFormat`.
         OracleTarget(test::GpuKit& kit, Format targetFormat) : format(targetFormat)
         {
             const std::vector<std::byte> blob = test::shaderLibraryFile("DrawOracle");
@@ -276,8 +233,6 @@ namespace {
             );
         }
 
-        //==============================================================================================================
-        /// Begins a pass on `list` that clears the target to zero, and binds the pipeline, a full viewport and a full scissor.
         void begin(CommandList list) const
         {
             const std::array colors{ ColorAttachment{ .texture = target, .load = LoadOp::Clear } };
@@ -287,20 +242,16 @@ namespace {
             list.setScissor(Rect2D{ 0, 0, kOracleEdge, kOracleEdge });
         }
 
-        //==============================================================================================================
-        /// Reads the target back.
         std::vector<std::byte> read(test::GpuKit& kit) const
         {
             return kit.readTexture(target, TextureRegion{ .extent = { kOracleEdge, kOracleEdge, 1 } }, format);
         }
 
-        Format format;     ///< The target's format.
-        Pipeline pipeline; ///< The oracle's vertex and fragment pipeline.
-        Texture target;    ///< The target.
+        Format format;
+        Pipeline pipeline;
+        Texture target;
     };
 
-    //==================================================================================================================
-    /// Counts the texels of `size` bytes each where `actual` differs from `expected`.
     size_t texelsDiffering(const std::vector<std::byte>& actual, const std::vector<std::byte>& expected, size_t size)
     {
         REQUIRE(actual.size() == expected.size());
@@ -312,8 +263,6 @@ namespace {
         return differing;
     }
 
-    //==================================================================================================================
-    /// Ends `list`, submits it to the graphics queue, waits for it on the host and ends the frame.
     void finish(Device device, CommandList list)
     {
         list.end();
@@ -325,7 +274,6 @@ namespace {
     }
 } // namespace
 
-//======================================================================================================================
 TEST_CASE("a counted draw before the pass's first direct draw runs its kernel ahead of the render encoder", "[metal4]")
 {
     test::GpuKit kit(2, true);
@@ -358,7 +306,6 @@ TEST_CASE("a counted draw before the pass's first direct draw runs its kernel ah
     kit.run(std::array{ list });
 }
 
-//======================================================================================================================
 TEST_CASE("the kernels of a pass's leading counted draws share one compute encoder", "[metal4]")
 {
     test::GpuKit kit(2, true);
@@ -381,7 +328,6 @@ TEST_CASE("the kernels of a pass's leading counted draws share one compute encod
     kit.run(std::array{ list });
 }
 
-//======================================================================================================================
 TEST_CASE("a counted draw after a direct draw splits the pass", "[metal4]")
 {
     test::GpuKit kit(2, true);
@@ -403,7 +349,6 @@ TEST_CASE("a counted draw after a direct draw splits the pass", "[metal4]")
     kit.run(std::array{ list });
 }
 
-//======================================================================================================================
 TEST_CASE("a split orders the ended encoder's stores before the resumed encoder's loads", "[metal4]")
 {
     test::GpuKit kit(2, true);
@@ -428,7 +373,6 @@ TEST_CASE("a split orders the ended encoder's stores before the resumed encoder'
     kit.run(std::array{ list });
 }
 
-//======================================================================================================================
 TEST_CASE("a kernel makes four calls on a new encoder, two once the encoder holds its pipeline, and its execute one", "[metal4]")
 {
     test::GpuKit kit(2, true, false, true);
@@ -458,7 +402,6 @@ TEST_CASE("a kernel makes four calls on a new encoder, two once the encoder hold
     kit.run(std::array{ list });
 }
 
-//======================================================================================================================
 TEST_CASE("maxCount 1 with a count runs the writer kernel and binds the record for one native indirect draw", "[metal4]")
 {
     test::GpuKit kit(2, true, false, true);
@@ -494,7 +437,6 @@ TEST_CASE("maxCount 1 with a count runs the writer kernel and binds the record f
     kit.run(std::array{ list });
 }
 
-//======================================================================================================================
 TEST_CASE("a lone record with no count is drawn natively on the render encoder with its record bound, and no kernel", "[metal4]")
 {
     test::GpuKit kit(2, true);
@@ -529,7 +471,6 @@ TEST_CASE("a lone record with no count is drawn natively on the render encoder w
     kit.run(std::array{ list });
 }
 
-//======================================================================================================================
 TEST_CASE("a lone record with no count after a direct draw does not split the pass", "[metal4]")
 {
     test::GpuKit kit(2, true);
@@ -550,7 +491,6 @@ TEST_CASE("a lone record with no count after a direct draw does not split the pa
     kit.run(std::array{ list });
 }
 
-//======================================================================================================================
 TEST_CASE("a list acquired again holds the zero record after a recording that left a draw's record bound", "[metal4]")
 {
     Device device = *createDevice({ .scopeTimings = true });
@@ -574,7 +514,6 @@ TEST_CASE("a list acquired again holds the zero record after a recording that le
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("consecutive writer kernels of one kind run as one dispatch, and an encode kernel ends the run", "[metal4]")
 {
     test::GpuKit kit(2, true, false, true);
@@ -603,7 +542,6 @@ TEST_CASE("consecutive writer kernels of one kind run as one dispatch, and an en
     kit.run(std::array{ list });
 }
 
-//======================================================================================================================
 TEST_CASE("an execute replays after the root, pipeline and state recorded before it", "[metal4]")
 {
     test::GpuKit kit(2, true);
@@ -644,7 +582,6 @@ TEST_CASE("an execute replays after the root, pipeline and state recorded before
     kit.run(std::array{ list });
 }
 
-//======================================================================================================================
 TEST_CASE("a counted draw after a scope opened in the pass splits it and the resumed encoder pushes the group again", "[metal4]")
 {
     test::GpuKit kit(2, true, false, true);
@@ -672,7 +609,6 @@ TEST_CASE("a counted draw after a scope opened in the pass splits it and the res
     kit.run(std::array{ list });
 }
 
-//======================================================================================================================
 TEST_CASE("ICBs are made once per list and reused when its slot comes round; a larger maxCount replaces one", "[metal4]")
 {
     Device device = *createDevice({ .scopeTimings = true });
@@ -729,7 +665,6 @@ TEST_CASE("ICBs are made once per list and reused when its slot comes round; a l
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("a list's indirect command buffers join the device's residency set at submission, and a replaced one leaves it", "[metal4]")
 {
     Device device = *createDevice({ .scopeTimings = true });
@@ -795,7 +730,6 @@ TEST_CASE("a list's indirect command buffers join the device's residency set at 
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("a counted draw that claims a new frame-arena page reads its kernel's parameters from that page", "[metal4]")
 {
     test::GpuKit kit(2, true);
@@ -831,7 +765,6 @@ TEST_CASE("a counted draw that claims a new frame-arena page reads its kernel's 
     CHECK(texelsDiffering(oracle.read(kit), { bytes.begin(), bytes.end() }, sizeof(float)) == 0);
 }
 
-//======================================================================================================================
 TEST_CASE("counted indexed draws read the index buffer each names", "[metal4]")
 {
     test::GpuKit kit(2, true);
@@ -842,7 +775,6 @@ TEST_CASE("counted indexed draws read the index buffer each names", "[metal4]")
     const std::array<uint16_t, 6> second{ 9, 9, 9, 3, 4, 5 };
     const Buffer firstIndices = kit.buffer(sizeof(first), Memory::Gpu, BufferUsage::Index, std::as_bytes(std::span(first)));
     const Buffer secondIndices = kit.buffer(sizeof(second), Memory::Gpu, BufferUsage::Index, std::as_bytes(std::span(second)));
-    // Records of drawIds from `firstDrawId`, reading three indices from `firstIndex`.
     const auto recordsOf = [&kit](uint32_t firstDrawId, uint32_t count, uint32_t firstIndex) {
         std::vector<DrawIndexedIndirectArgs> records;
         for (uint32_t i = 0; i < count; ++i)

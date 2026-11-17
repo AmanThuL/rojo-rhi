@@ -27,21 +27,17 @@ namespace {
     constexpr bool kValidation = true;
 #endif
 
-    /// The display and offscreen target edge, in pixels.
     constexpr uint32_t kDisplaySize = 128;
 
-    /// A device, an ImGui context and an offscreen `RGBA8Unorm` target the frames render into.
     class Fixture
     {
       public:
-        /// Creates the device (validating in Debug builds), the context and the target.
         Fixture();
 
-        /// Destroys the target, the context and the device.
         ~Fixture();
 
-        /// Runs one host frame in the documented order: the first callback between `ImGui::NewFrame` and `ImGui::Render`, then
-        /// the second on the draw data unless it is empty, then a device frame that prepares and renders it into `target`.
+        // Runs one host frame in the documented order: the first callback between `ImGui::NewFrame` and `ImGui::Render`, then
+        // the second on the draw data unless it is empty, then a device frame that prepares and renders it into `target`.
         void frame(const std::function<void()>&, const std::function<void(ImDrawData*)>&);
 
         Device device;
@@ -49,7 +45,6 @@ namespace {
         Texture target;
     };
 
-    //==================================================================================================================
     Fixture::Fixture()
     {
         device = *createDevice(DeviceDesc{ .validation = kValidation, .label = "imgui.device" });
@@ -66,7 +61,6 @@ namespace {
         );
     }
 
-    //==================================================================================================================
     Fixture::~Fixture()
     {
         device.destroy(target);
@@ -74,7 +68,6 @@ namespace {
         destroyDevice(device);
     }
 
-    //==================================================================================================================
     void Fixture::frame(const std::function<void()>& draw, const std::function<void(ImDrawData*)>& beforePrepare)
     {
         imgui::newFrame();
@@ -106,7 +99,6 @@ namespace {
         device.endFrame();
     }
 
-    //==================================================================================================================
     void drawWindow()
     {
         ImGui::Begin("adapter");
@@ -115,7 +107,6 @@ namespace {
     }
 } // namespace
 
-//======================================================================================================================
 TEST_CASE("three writing frames use three buffers and the fourth reuses the first", "[imgui]")
 {
     Device device = *createDevice(DeviceDesc{ .validation = kValidation, .label = "imgui.device" });
@@ -136,7 +127,6 @@ TEST_CASE("three writing frames use three buffers and the fourth reuses the firs
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("a frame that writes nothing does not advance the ring", "[imgui]")
 {
     Device device = *createDevice(DeviceDesc{ .validation = kValidation, .label = "imgui.device" });
@@ -158,7 +148,6 @@ TEST_CASE("a frame that writes nothing does not advance the ring", "[imgui]")
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("a request that does not fit moves to a larger buffer at offset 0", "[imgui]")
 {
     Device device = *createDevice(DeviceDesc{ .validation = kValidation, .label = "imgui.device" });
@@ -172,7 +161,6 @@ TEST_CASE("a request that does not fit moves to a larger buffer at offset 0", "[
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("init, three frames and shutdown", "[imgui]")
 {
     Fixture fixture;
@@ -201,7 +189,6 @@ TEST_CASE("init, three frames and shutdown", "[imgui]")
     CHECK(atlas->Status == ImTextureStatus_WantCreate);
 }
 
-//======================================================================================================================
 TEST_CASE("textureId names view 0 with a valid ImTextureID", "[imgui]")
 {
     CHECK(imgui::textureId(ViewIndex{ 0 }) != ImTextureID_Invalid);
@@ -209,7 +196,6 @@ TEST_CASE("textureId names view 0 with a valid ImTextureID", "[imgui]")
     CHECK(imgui::viewIndex(imgui::textureId(ViewIndex{ 7 })) == ViewIndex{ 7 });
 }
 
-//======================================================================================================================
 TEST_CASE("a draw list larger than the frame buffer grows it within the frame", "[imgui]")
 {
     Fixture fixture;
@@ -243,7 +229,6 @@ TEST_CASE("a draw list larger than the frame buffer grows it within the frame", 
     imgui::shutdown();
 }
 
-//======================================================================================================================
 TEST_CASE("a registered texture is created, updated and destroyed as ImGui asks", "[imgui]")
 {
     Fixture fixture;
@@ -282,7 +267,6 @@ TEST_CASE("a registered texture is created, updated and destroyed as ImGui asks"
     imgui::shutdown();
 }
 
-//======================================================================================================================
 TEST_CASE("an update of several rectangles records valid usage on a validating device", "[imgui]")
 {
     // ImGui queues several rectangles in one update when it adds glyphs or rebuilds the atlas at a new density; copying

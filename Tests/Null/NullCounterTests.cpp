@@ -19,11 +19,9 @@
 using namespace rojoRHI;
 
 namespace {
-    /// Stand-ins for native surfaces: the Null backend never dereferences them.
+    // Stand-ins for native surfaces: the Null backend never dereferences them.
     std::array<int, 1> g_surface = {};
 
-    //==================================================================================================================
-    /// Returns the field-by-field difference `after - before`.
     Counters delta(const Counters& before, const Counters& after)
     {
         Counters d;
@@ -51,7 +49,6 @@ namespace {
     }
 } // namespace
 
-//======================================================================================================================
 TEST_CASE("the scripted sequence changes every counter by its exact Null delta", "[null]")
 {
     Device device = *createDevice(DeviceDesc{ .scopeTimings = true, .framesInFlight = 2 });
@@ -179,7 +176,6 @@ TEST_CASE("the scripted sequence changes every counter by its exact Null delta",
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("a Null device without scope timings counts no timestamp read after a frame with a scope", "[null]")
 {
     Device device = *createDevice(DeviceDesc{ .framesInFlight = 2 });
@@ -200,7 +196,6 @@ TEST_CASE("a Null device without scope timings counts no timestamp read after a 
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("a Null swapchain counts its creation, each image acquire, each present and its deferred release", "[null]")
 {
     Device device = *createDevice(DeviceDesc{ .framesInFlight = 2 });
@@ -229,7 +224,6 @@ TEST_CASE("a Null swapchain counts its creation, each image acquire, each presen
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("a Null tile mapping counts one native queue call", "[null]")
 {
     Device device = *createDevice();
@@ -239,7 +233,6 @@ TEST_CASE("a Null tile mapping counts one native queue call", "[null]")
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("a Null buffer with host memory counts its allocation", "[null]")
 {
     Device device = *createDevice();
@@ -252,31 +245,29 @@ TEST_CASE("a Null buffer with host memory counts its allocation", "[null]")
 }
 
 namespace {
-    /// The objects the per-entry cases record against, created before any measured command.
+    // Created before any measured command.
     struct Fixture
     {
-        Buffer args;     ///< An `IndirectArgs` buffer.
-        Buffer index;    ///< An `Index` buffer.
-        Buffer first;    ///< A plain buffer.
-        Buffer second;   ///< Another plain buffer.
-        Buffer writable; ///< A `ShaderWrite` buffer.
-        Texture sampled; ///< A sampled texture.
-        Texture other;   ///< Another sampled texture.
-        Texture color;   ///< A render target.
+        Buffer args;
+        Buffer index;
+        Buffer first;
+        Buffer second;
+        Buffer writable;
+        Texture sampled;
+        Texture other;
+        Texture color;
     };
 
-    /// One recording entry measured on its own.
     struct EntryCase
     {
-        const char* name;                                    ///< What the case records.
-        QueueType type;                                      ///< The queue type of the list.
-        bool inPass;                                         ///< `setup` leaves a render pass open, which the case ends.
-        uint64_t calls;                                      ///< The `nativeRecordCalls` the entry adds.
-        std::function<void(test::PassKit&, Fixture&)> setup; ///< Records what the entry needs, in both runs.
-        std::function<void(test::PassKit&, Fixture&)> entry; ///< Records the entry, in the measured run only.
+        const char* name;
+        QueueType type;
+        bool inPass;                                         // `setup` leaves a render pass open, which the case ends.
+        uint64_t calls;                                      // The `nativeRecordCalls` the entry adds.
+        std::function<void(test::PassKit&, Fixture&)> setup; // Records what the entry needs, in both runs.
+        std::function<void(test::PassKit&, Fixture&)> entry; // Records the entry, in the measured run only.
     };
 
-    //==================================================================================================================
     Fixture makeFixture(test::PassKit& kit)
     {
         Fixture fx;
@@ -291,8 +282,6 @@ namespace {
         return fx;
     }
 
-    //==================================================================================================================
-    /// Records the case's setup, and its entry when `withEntry`, submits the list and returns the device's counters.
     Counters runCase(const EntryCase& entryCase, bool withEntry)
     {
         test::PassKit kit(entryCase.type);
@@ -315,12 +304,10 @@ namespace {
         return counters;
     }
 
-    //==================================================================================================================
     void noSetup(test::PassKit&, Fixture&)
     {
     }
 
-    //==================================================================================================================
     std::vector<EntryCase> entryCases()
     {
         constexpr std::array<Format, 1> kRgba8 = { Format::RGBA8Unorm };
@@ -413,7 +400,6 @@ namespace {
     }
 } // namespace
 
-//======================================================================================================================
 TEST_CASE("each recording entry adds its own nativeRecordCalls and no other recorded count", "[null]")
 {
     for (const EntryCase& entryCase : entryCases())
@@ -429,7 +415,6 @@ TEST_CASE("each recording entry adds its own nativeRecordCalls and no other reco
     }
 }
 
-//======================================================================================================================
 TEST_CASE("uploadFrameData adds an upload and no native call, and pushRoot adds the root bind as well", "[null]")
 {
     const std::array<std::byte, 8> bytes{};
@@ -450,7 +435,6 @@ TEST_CASE("uploadFrameData adds an upload and no native call, and pushRoot adds 
     CHECK(pushed.frameArenaBytes == base.frameArenaBytes + 16);
 }
 
-//======================================================================================================================
 TEST_CASE("an upscale adds one nativeRecordCalls", "[null]")
 {
     Counters counters[2];
@@ -471,7 +455,6 @@ TEST_CASE("an upscale adds one nativeRecordCalls", "[null]")
     CHECK(counters[1].nativeRecordCalls - counters[0].nativeRecordCalls == 1);
 }
 
-//======================================================================================================================
 TEST_CASE("on a device with debug markers a render pass and an upscale each count two native calls more", "[null]")
 {
     // Each marker boundary, a group's push and its pop, counts one call (ADR 0034).
@@ -504,7 +487,6 @@ TEST_CASE("on a device with debug markers a render pass and an upscale each coun
     CHECK(upscale(true) == upscale(false) + 2);
 }
 
-//======================================================================================================================
 TEST_CASE("a submission counts one native call and one for each wait it carries", "[null]")
 {
     Device device = *createDevice();

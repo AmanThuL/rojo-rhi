@@ -11,8 +11,6 @@
 #include <string_view>
 
 namespace rojoRHI::test {
-    /// Skips the running case when the compiled backend executes no work on a GPU, because a conformance case observes what
-    /// the GPU did.
     inline void requireGpu()
     {
         if (!runsOnGpu())
@@ -21,8 +19,6 @@ namespace rojoRHI::test {
         }
     }
 
-    /// Skips the running case, with the reason, when the compiled backend's device never completes a submitted upscale, because
-    /// the case waits for one.
     inline void requireUpscaleCompletion()
     {
         const std::string_view reason = upscalesNeverComplete();

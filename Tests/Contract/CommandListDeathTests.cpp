@@ -16,7 +16,6 @@ using namespace rojoRHI;
 namespace {
     constexpr std::array<std::byte, 16> kBytes = {};
 
-    //==================================================================================================================
     void submit(Device device, CommandList list, QueueType type = QueueType::Graphics)
     {
         const std::array<CommandList, 1> lists{ list };
@@ -24,7 +23,6 @@ namespace {
     }
 } // namespace
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-cmd-0001 a list is acquired with no frame open", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-cmd-0001", [] {
@@ -33,7 +31,6 @@ TEST_CASE("VU-rojo-cmd-0001 a list is acquired with no frame open", "[contract][
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-cmd-0001 a list is acquired after the frame ended", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-cmd-0001", [] {
@@ -44,7 +41,6 @@ TEST_CASE("VU-rojo-cmd-0001 a list is acquired after the frame ended", "[contrac
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-cmd-0002 a list ends twice", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-cmd-0002", [] {
@@ -56,7 +52,6 @@ TEST_CASE("VU-rojo-cmd-0002 a list ends twice", "[contract][death]")
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-core-0004 a default-constructed CommandList ends", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-core-0004", [] {
@@ -65,7 +60,6 @@ TEST_CASE("VU-rojo-core-0004 a default-constructed CommandList ends", "[contract
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-core-0004 a default-constructed CommandList uploads frame data", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-core-0004", [] {
@@ -74,7 +68,6 @@ TEST_CASE("VU-rojo-core-0004 a default-constructed CommandList uploads frame dat
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-core-0004 a default-constructed CommandList is submitted", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-core-0004", [] {
@@ -84,7 +77,6 @@ TEST_CASE("VU-rojo-core-0004 a default-constructed CommandList is submitted", "[
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-core-0005 a list of another device is submitted", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-core-0005", [] {
@@ -98,7 +90,6 @@ TEST_CASE("VU-rojo-core-0005 a list of another device is submitted", "[contract]
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-queue-0001 a list that has not ended is submitted", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-queue-0001", [] {
@@ -108,7 +99,6 @@ TEST_CASE("VU-rojo-queue-0001 a list that has not ended is submitted", "[contrac
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-queue-0001 a list is submitted twice", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-queue-0001", [] {
@@ -121,7 +111,6 @@ TEST_CASE("VU-rojo-queue-0001 a list is submitted twice", "[contract][death]")
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-queue-0001 a list is submitted in a later frame", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-queue-0001", [] {
@@ -136,7 +125,6 @@ TEST_CASE("VU-rojo-queue-0001 a list is submitted in a later frame", "[contract]
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-queue-0001 a list is submitted with no frame open", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-queue-0001", [] {
@@ -150,7 +138,6 @@ TEST_CASE("VU-rojo-queue-0001 a list is submitted with no frame open", "[contrac
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-queue-0002 a Graphics list is submitted to the Compute queue", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-queue-0002", [] {
@@ -162,7 +149,6 @@ TEST_CASE("VU-rojo-queue-0002 a Graphics list is submitted to the Compute queue"
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-device-0005 a frame ends with a list not submitted", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-device-0005", [] {
@@ -174,7 +160,6 @@ TEST_CASE("VU-rojo-device-0005 a frame ends with a list not submitted", "[contra
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-buffer-0015 frame data of no bytes is uploaded", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-buffer-0015", [] {
@@ -185,7 +170,6 @@ TEST_CASE("VU-rojo-buffer-0015 frame data of no bytes is uploaded", "[contract][
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-buffer-0016 frame data is uploaded at a non-power-of-two alignment", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-buffer-0016", [] {
@@ -196,7 +180,6 @@ TEST_CASE("VU-rojo-buffer-0016 frame data is uploaded at a non-power-of-two alig
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-buffer-0016 frame data is uploaded at an alignment of zero", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-buffer-0016", [] {
@@ -207,7 +190,6 @@ TEST_CASE("VU-rojo-buffer-0016 frame data is uploaded at an alignment of zero", 
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-buffer-0017 frame data is uploaded after the frame ended", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-buffer-0017", [] {
@@ -221,7 +203,6 @@ TEST_CASE("VU-rojo-buffer-0017 frame data is uploaded after the frame ended", "[
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-cmd-0063 a submitted list records in the next frame", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-cmd-0063", [] {

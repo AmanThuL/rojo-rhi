@@ -19,7 +19,6 @@ namespace {
     constexpr std::array<Format, 1> kRgba8 = { Format::RGBA8Unorm };
 } // namespace
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-cmd-0003 a list ends with a render pass open", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-cmd-0003", [] {
@@ -29,7 +28,6 @@ TEST_CASE("VU-rojo-cmd-0003 a list ends with a render pass open", "[contract][de
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-cmd-0004 a list ends with a scope open", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-cmd-0004", [] {
@@ -39,7 +37,6 @@ TEST_CASE("VU-rojo-cmd-0004 a list ends with a scope open", "[contract][death]")
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-cmd-0063 a scope begins on a list that has ended", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-cmd-0063", [] {
@@ -49,7 +46,6 @@ TEST_CASE("VU-rojo-cmd-0063 a scope begins on a list that has ended", "[contract
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-cmd-0063 a command is recorded on a list that was submitted", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-cmd-0063", [] {
@@ -61,7 +57,6 @@ TEST_CASE("VU-rojo-cmd-0063 a command is recorded on a list that was submitted",
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-cmd-0005 a color attachment is not a RenderTarget texture", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-cmd-0005", [] {
@@ -72,7 +67,6 @@ TEST_CASE("VU-rojo-cmd-0005 a color attachment is not a RenderTarget texture", "
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-cmd-0005 a color attachment names a layer the texture lacks", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-cmd-0005", [] {
@@ -82,7 +76,6 @@ TEST_CASE("VU-rojo-cmd-0005 a color attachment names a layer the texture lacks",
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-cmd-0071 a resolve target is given for a single-sample attachment", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-cmd-0071", [] {
@@ -92,7 +85,6 @@ TEST_CASE("VU-rojo-cmd-0071 a resolve target is given for a single-sample attach
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-cmd-0071 a resolve target has another format", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-cmd-0071", [] {
@@ -103,7 +95,6 @@ TEST_CASE("VU-rojo-cmd-0071 a resolve target has another format", "[contract][de
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-format-0003 a resolve target's format cannot resolve", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-format-0003", [] {
@@ -117,7 +108,6 @@ TEST_CASE("VU-rojo-format-0003 a resolve target's format cannot resolve", "[cont
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-cmd-0008 a depth attachment is not a DepthStencil texture", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-cmd-0008", [] {
@@ -126,7 +116,6 @@ TEST_CASE("VU-rojo-cmd-0008 a depth attachment is not a DepthStencil texture", "
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-cmd-0009 the depth clear value is above one", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-cmd-0009", [] {
@@ -137,7 +126,6 @@ TEST_CASE("VU-rojo-cmd-0009 the depth clear value is above one", "[contract][dea
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-cmd-0011 a pass has more color attachments than the limit", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-cmd-0011", [] {
@@ -151,7 +139,6 @@ TEST_CASE("VU-rojo-cmd-0011 a pass has more color attachments than the limit", "
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-cmd-0011 a pass has no attachment", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-cmd-0011", [] {
@@ -160,7 +147,6 @@ TEST_CASE("VU-rojo-cmd-0011 a pass has no attachment", "[contract][death]")
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-cmd-0012 attachments differ in extent", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-cmd-0012", [] {
@@ -171,7 +157,6 @@ TEST_CASE("VU-rojo-cmd-0012 attachments differ in extent", "[contract][death]")
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-cmd-0012 attachments differ in sample count", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-cmd-0012", [] {
@@ -182,7 +167,6 @@ TEST_CASE("VU-rojo-cmd-0012 attachments differ in sample count", "[contract][dea
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-cmd-0013 the pass area is empty", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-cmd-0013", [] {
@@ -192,7 +176,6 @@ TEST_CASE("VU-rojo-cmd-0013 the pass area is empty", "[contract][death]")
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-cmd-0013 the pass area exceeds the attachments", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-cmd-0013", [] {
@@ -202,7 +185,6 @@ TEST_CASE("VU-rojo-cmd-0013 the pass area exceeds the attachments", "[contract][
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-cmd-0014 a subresource appears twice among the attachments", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-cmd-0014", [] {
@@ -213,7 +195,6 @@ TEST_CASE("VU-rojo-cmd-0014 a subresource appears twice among the attachments", 
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-cmd-0015 the color formats take more bytes per sample than the limit", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-cmd-0015", [] {
@@ -226,7 +207,6 @@ TEST_CASE("VU-rojo-cmd-0015 the color formats take more bytes per sample than th
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-cmd-0016 a render pass begins on a Compute list", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-cmd-0016", [] {
@@ -235,7 +215,6 @@ TEST_CASE("VU-rojo-cmd-0016 a render pass begins on a Compute list", "[contract]
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-cmd-0016 a render pass begins inside a render pass", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-cmd-0016", [] {
@@ -245,7 +224,6 @@ TEST_CASE("VU-rojo-cmd-0016 a render pass begins inside a render pass", "[contra
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-cmd-0018 a render pass ends with none open", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-cmd-0018", [] {
@@ -254,7 +232,6 @@ TEST_CASE("VU-rojo-cmd-0018 a render pass ends with none open", "[contract][deat
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-cmd-0019 a render pass ends with a scope begun inside it open", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-cmd-0019", [] {
@@ -265,7 +242,6 @@ TEST_CASE("VU-rojo-cmd-0019 a render pass ends with a scope begun inside it open
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-cmd-0020 the null pipeline is bound", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-cmd-0020", [] {
@@ -274,7 +250,6 @@ TEST_CASE("VU-rojo-cmd-0020 the null pipeline is bound", "[contract][death]")
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-cmd-0020 a destroyed pipeline is bound", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-cmd-0020", [] {
@@ -285,7 +260,6 @@ TEST_CASE("VU-rojo-cmd-0020 a destroyed pipeline is bound", "[contract][death]")
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-cmd-0021 a graphics pipeline is bound outside a render pass", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-cmd-0021", [] {
@@ -294,7 +268,6 @@ TEST_CASE("VU-rojo-cmd-0021 a graphics pipeline is bound outside a render pass",
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-cmd-0021 a graphics pipeline with other color formats is bound", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-cmd-0021", [] {
@@ -305,7 +278,6 @@ TEST_CASE("VU-rojo-cmd-0021 a graphics pipeline with other color formats is boun
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-cmd-0021 a graphics pipeline with another depth format is bound", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-cmd-0021", [] {
@@ -315,7 +287,6 @@ TEST_CASE("VU-rojo-cmd-0021 a graphics pipeline with another depth format is bou
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-cmd-0021 a graphics pipeline with another sample count is bound", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-cmd-0021", [] {
@@ -325,7 +296,6 @@ TEST_CASE("VU-rojo-cmd-0021 a graphics pipeline with another sample count is bou
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-cmd-0022 a compute pipeline is bound inside a render pass", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-cmd-0022", [] {
@@ -335,7 +305,6 @@ TEST_CASE("VU-rojo-cmd-0022 a compute pipeline is bound inside a render pass", "
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-cmd-0022 a compute pipeline is bound on a Copy list", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-cmd-0022", [] {
@@ -344,7 +313,6 @@ TEST_CASE("VU-rojo-cmd-0022 a compute pipeline is bound on a Copy list", "[contr
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-cmd-0032 a scope ends with none open", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-cmd-0032", [] {
@@ -353,7 +321,6 @@ TEST_CASE("VU-rojo-cmd-0032 a scope ends with none open", "[contract][death]")
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-cmd-0033 a scope begun outside a render pass ends inside one", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-cmd-0033", [] {
@@ -364,7 +331,6 @@ TEST_CASE("VU-rojo-cmd-0033 a scope begun outside a render pass ends inside one"
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-pipeline-0015 a viewport is set outside a render pass", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-pipeline-0015", [] {
@@ -373,7 +339,6 @@ TEST_CASE("VU-rojo-pipeline-0015 a viewport is set outside a render pass", "[con
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-pipeline-0016 a viewport has no width", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-pipeline-0016", [] {
@@ -383,7 +348,6 @@ TEST_CASE("VU-rojo-pipeline-0016 a viewport has no width", "[contract][death]")
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-pipeline-0017 a viewport depth range leaves zero to one", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-pipeline-0017", [] {
@@ -393,7 +357,6 @@ TEST_CASE("VU-rojo-pipeline-0017 a viewport depth range leaves zero to one", "[c
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-pipeline-0018 a scissor is set outside a render pass", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-pipeline-0018", [] {
@@ -402,7 +365,6 @@ TEST_CASE("VU-rojo-pipeline-0018 a scissor is set outside a render pass", "[cont
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-pipeline-0019 a scissor leaves the pass area", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-pipeline-0019", [] {
@@ -413,7 +375,6 @@ TEST_CASE("VU-rojo-pipeline-0019 a scissor leaves the pass area", "[contract][de
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-pipeline-0020 a stencil reference is set outside a render pass", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-pipeline-0020", [] {
@@ -422,7 +383,6 @@ TEST_CASE("VU-rojo-pipeline-0020 a stencil reference is set outside a render pas
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-pipeline-0021 blend constants are set outside a render pass", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-pipeline-0021", [] {
@@ -431,7 +391,6 @@ TEST_CASE("VU-rojo-pipeline-0021 blend constants are set outside a render pass",
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-pipeline-0022 a topology is set with no pipeline bound", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-pipeline-0022", [] {
@@ -441,7 +400,6 @@ TEST_CASE("VU-rojo-pipeline-0022 a topology is set with no pipeline bound", "[co
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-pipeline-0022 a topology is set with a mesh pipeline bound", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-pipeline-0022", [] {
@@ -452,7 +410,6 @@ TEST_CASE("VU-rojo-pipeline-0022 a topology is set with a mesh pipeline bound", 
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-pipeline-0023 a topology of another class is set", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-pipeline-0023", [] {
@@ -463,7 +420,6 @@ TEST_CASE("VU-rojo-pipeline-0023 a topology of another class is set", "[contract
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-pipeline-0024 a depth bias is set outside a render pass", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-pipeline-0024", [] {
@@ -472,7 +428,6 @@ TEST_CASE("VU-rojo-pipeline-0024 a depth bias is set outside a render pass", "[c
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-pipeline-0025 a depth bias is set with a pipeline created without it", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-pipeline-0025", [] {

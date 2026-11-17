@@ -23,37 +23,29 @@
 
 namespace rojoRHI::d3d12 {
     namespace {
-        /// A debug-layer message the router drops, with the reason it is not worth reporting.
         struct FilteredMessage
         {
-            D3D12_MESSAGE_ID id;     ///< The runtime's message identifier.
-            std::string_view reason; ///< One line on why the message is dropped.
+            D3D12_MESSAGE_ID id;
+            std::string_view reason;
         };
 
-        /// Why the notices of object creation and destruction are dropped.
         constexpr std::string_view kObjectNotice = "one notice per native object's creation or destruction, not a diagnosis";
 
-        /// Why the pipeline library's outcomes are dropped.
         constexpr std::string_view kCacheOutcome =
             "an outcome the pipeline cache reads from the call's HRESULT: a name not stored yet, a name another creation stored "
             "first, or a refused blob, which the cache reports as its one warning";
 
-        /// Why the clear-value mismatches of render-target and depth-stencil clears are dropped.
         constexpr std::string_view kNoClearValue = "RojoRHI creates textures with no optimized clear value: `TextureDesc` carries none";
 
-        /// Why the hint on lists that record only barriers is dropped.
         constexpr std::string_view kBarrierOnly =
             "a list that records only barriers is valid usage: the caller states there the dependencies its later lists rely on";
 
-        /// The messages the router never forwards. A message is dropped only with a reason that holds for every use of
-        /// the library: the per-object notices the runtime raises at information severity, which a run creating
-        /// thousands of objects would otherwise bury every diagnosis under; the outcomes of the pipeline library's
-        /// calls, which only the pipeline cache makes and which it handles; the warning that a clear's value differs
-        /// from the optimized clear value, which no texture has; and the hint that a list recording only barriers should
-        /// name no sync or access, which a caller's barrier-only list need not follow. A look-up whose stored description
-        /// differs from the one passed (`LOADPIPELINE_INVALIDDESC`) is not dropped: the cache's key covers the whole
-        /// description, so it shows a defect. Every other error, warning and application message passes, and so does a
-        /// live-object report, which diagnoses a leak.
+        // Each message is dropped for a reason that holds for every use of the library: per-object notices at
+        // information severity, which would bury a diagnosis in a run creating thousands of objects; the outcomes of
+        // the pipeline library's calls, which the pipeline cache alone makes and handles; clear-value mismatches, since
+        // no texture has an optimized clear value; and the hint that a barrier-only list should name no sync or access.
+        // LOADPIPELINE_INVALIDDESC is not dropped: the cache's key covers the whole description, so it shows a defect.
+        // Live-object reports pass.
         constexpr std::array<FilteredMessage, 77> kFiltered = { {
             { D3D12_MESSAGE_ID_CREATEPIPELINELIBRARY_INVALIDLIBRARYBLOB, kCacheOutcome },
             { D3D12_MESSAGE_ID_CREATEPIPELINELIBRARY_DRIVERVERSIONMISMATCH, kCacheOutcome },
@@ -134,20 +126,16 @@ namespace rojoRHI::d3d12 {
             { D3D12_MESSAGE_ID_NON_OPTIMAL_BARRIER_ONLY_EXECUTE_COMMAND_LISTS, kBarrierOnly },
         } };
 
-        /// The most nodes of one list that a removal report prints, so a long history cannot flood the log.
+        // So a long history cannot flood the log.
         constexpr size_t kMaxReportedNodes = 32;
 
-        //==============================================================================================================
-        /// Logs that the native call `call` failed with `result` and aborts, in every build: a layer that was asked for and
-        /// cannot route its messages must not run silently.
+        // In every build: a layer that was asked for and cannot route its messages must not run silently.
         [[noreturn]] void abortOn(std::string_view call, HRESULT result)
         {
             ROJORHI_LOG_FATAL("{} failed with HRESULT 0x{:08x}", call, hresultBits(result));
             std::abort();
         }
 
-        //==============================================================================================================
-        /// Returns the name of a message category, for the text of a message.
         std::string_view categoryName(D3D12_MESSAGE_CATEGORY category)
         {
             switch (category)
@@ -167,9 +155,8 @@ namespace rojoRHI::d3d12 {
             return "UNKNOWN";
         }
 
-        //==============================================================================================================
-        /// Receives one debug-layer message on whatever thread the runtime raises it from and forwards it with the matching
-        /// severity; an error or corruption message also goes to stderr, and then it aborts the process.
+        // Runs on whatever thread the runtime raises the message from. An error or corruption message also goes to
+        // stderr, and then the process aborts.
         void __stdcall onMessage(D3D12_MESSAGE_CATEGORY category, D3D12_MESSAGE_SEVERITY severity, D3D12_MESSAGE_ID id, LPCSTR description, void*)
         {
             MessageSeverity mapped = MessageSeverity::Info;
@@ -195,8 +182,6 @@ namespace rojoRHI::d3d12 {
             base::emitMessage(mapped, text);
         }
 
-        //==============================================================================================================
-        /// Returns the name of a breadcrumb or allocation, narrow when the runtime gives one and wide otherwise, or "unnamed".
         std::string nameOf(const char* narrow, const wchar_t* wide)
         {
             if (narrow != nullptr)
@@ -210,8 +195,6 @@ namespace rojoRHI::d3d12 {
             return "unnamed";
         }
 
-        //==============================================================================================================
-        /// Reports each node of one allocation list as one error message headed by `heading`.
         void reportAllocations(std::string_view heading, const D3D12_DRED_ALLOCATION_NODE1* head)
         {
             size_t count = 0;
@@ -232,8 +215,6 @@ namespace rojoRHI::d3d12 {
             }
         }
 
-        //==============================================================================================================
-        /// Reports the auto-breadcrumb nodes of `data`, one message each.
         void reportBreadcrumbs(ID3D12DeviceRemovedExtendedData2& data)
         {
             D3D12_DRED_AUTO_BREADCRUMBS_OUTPUT1 output = {};
@@ -275,8 +256,6 @@ namespace rojoRHI::d3d12 {
             }
         }
 
-        //==============================================================================================================
-        /// Reports the page fault of `data`, if the device recorded one.
         void reportPageFault(ID3D12DeviceRemovedExtendedData2& data)
         {
             D3D12_DRED_PAGE_FAULT_OUTPUT2 fault = {};
@@ -290,13 +269,11 @@ namespace rojoRHI::d3d12 {
         }
     } // namespace
 
-    //==================================================================================================================
     MessageRouter::~MessageRouter()
     {
         detach();
     }
 
-    //==================================================================================================================
     void MessageRouter::attach(ID3D12Device12* device, bool layer)
     {
         if (!layer)
@@ -341,7 +318,6 @@ namespace rojoRHI::d3d12 {
         m_cookie = cookie;
     }
 
-    //==================================================================================================================
     void MessageRouter::detach()
     {
         if (!m_queue)
@@ -356,13 +332,11 @@ namespace rojoRHI::d3d12 {
         m_cookie = 0;
     }
 
-    //==================================================================================================================
     bool deviceRemoved(HRESULT result)
     {
         return result == DXGI_ERROR_DEVICE_REMOVED || result == DXGI_ERROR_DEVICE_RESET || result == DXGI_ERROR_DEVICE_HUNG;
     }
 
-    //==================================================================================================================
     void reportRemoval(DeviceImpl& impl, std::string_view entry)
     {
         ID3D12Device12* device = impl.device();
@@ -382,7 +356,6 @@ namespace rojoRHI::d3d12 {
         reportPageFault(*data.get());
     }
 
-    //==================================================================================================================
     Error failure(DeviceImpl& impl, HRESULT result, std::string_view what)
     {
         if (deviceRemoved(result))

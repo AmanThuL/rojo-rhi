@@ -27,14 +27,11 @@
 using namespace rojoRHI;
 
 namespace {
-    /// Guards `g_messages`, which the message callback may fill from any thread.
+    // The message callback may fill `g_messages` from any thread.
     std::mutex g_messagesMutex;
 
-    /// The messages at `Warning` or above the library reported while a case collected them.
     std::vector<std::string> g_messages;
 
-    //==================================================================================================================
-    /// Keeps `message` when it is a warning or an error. It may run on any thread.
     void collectMessage(MessageSeverity severity, std::string_view message, void*)
     {
         if (severity == MessageSeverity::Info)
@@ -45,25 +42,20 @@ namespace {
         g_messages.emplace_back(message);
     }
 
-    /// Collects the library's warnings and errors, the debug layer's included, into `g_messages`, emptied first, while it
-    /// lives, and removes the callback when it goes, however the case ends.
+    // Removes the callback when it goes, however the case ends.
     class MessageCollection
     {
       public:
         MessageCollection();
         ~MessageCollection();
 
-        //==============================================================================================================
         MessageCollection(const MessageCollection&) = delete;
 
-        //==============================================================================================================
         MessageCollection& operator=(const MessageCollection&) = delete;
 
-        /// Returns the messages collected so far, and lists them for the log.
         size_t count() const;
     };
 
-    //==================================================================================================================
     MessageCollection::MessageCollection()
     {
         {
@@ -73,13 +65,11 @@ namespace {
         setMessageCallback(collectMessage, nullptr);
     }
 
-    //==================================================================================================================
     MessageCollection::~MessageCollection()
     {
         setMessageCallback(nullptr, nullptr);
     }
 
-    //==================================================================================================================
     size_t MessageCollection::count() const
     {
         const std::lock_guard lock(g_messagesMutex);
@@ -90,8 +80,6 @@ namespace {
         return g_messages.size();
     }
 
-    //==================================================================================================================
-    /// Returns a new device with the default description, three frames in flight.
     Device makeDevice()
     {
         Result<Device> created = createDevice();
@@ -99,8 +87,6 @@ namespace {
         return *created;
     }
 
-    //==================================================================================================================
-    /// Returns a new swapchain of `desc` on `device`.
     Swapchain makeSwapchain(Device device, const SwapchainDesc& desc)
     {
         Result<Swapchain> created = device.createSwapchain(desc);
@@ -108,15 +94,11 @@ namespace {
         return *created;
     }
 
-    //==================================================================================================================
-    /// Returns the native state of `swapchain`.
     d3d12::SwapchainNative& nativeOf(Swapchain swapchain)
     {
         return SwapchainImpl::of(swapchain).native;
     }
 
-    //==================================================================================================================
-    /// Returns the name `object` carries, without a terminating null.
     std::wstring objectName(ID3D12Object* object)
     {
         wchar_t name[128] = {};
@@ -134,9 +116,8 @@ namespace {
         return read;
     }
 
-    //==================================================================================================================
-    /// Checks that every image payload of `swapchain` holds the back buffer DXGI returns for its index, named
-    /// `<label>.image<i>`. The buffers fetched here are released before the call returns.
+    // Each image payload must hold the back buffer DXGI returns for its index, named `<label>.image<i>`. The buffers
+    // fetched here are released before the call returns.
     void checkBackBuffers(Swapchain swapchain, std::wstring_view label)
     {
         d3d12::SwapchainNative& native = nativeOf(swapchain);
@@ -149,8 +130,6 @@ namespace {
         }
     }
 
-    //==================================================================================================================
-    /// Runs one frame on `device` that acquires an image of `swapchain` and presents it with no work.
     void presentFrame(Device device, Swapchain swapchain)
     {
         device.beginFrame();
@@ -160,7 +139,6 @@ namespace {
     }
 } // namespace
 
-//======================================================================================================================
 TEST_CASE("a swapchain's back buffers carry the format, count and flags of its descriptor", "[d3d12]")
 {
     const MessageCollection messages;
@@ -194,7 +172,6 @@ TEST_CASE("a swapchain's back buffers carry the format, count and flags of its d
     CHECK(messages.count() == 0);
 }
 
-//======================================================================================================================
 TEST_CASE("each color space sets its DXGI color space", "[d3d12]")
 {
     CHECK(d3d12::colorSpaceOf(ColorSpace::SRGB) == DXGI_COLOR_SPACE_RGB_FULL_G22_NONE_P709);
@@ -232,7 +209,6 @@ TEST_CASE("each color space sets its DXGI color space", "[d3d12]")
     CHECK(messages.count() == 0);
 }
 
-//======================================================================================================================
 TEST_CASE("presentFlags maps each mode and refuses Immediate without tearing", "[d3d12]")
 {
     const auto waitable = static_cast<UINT>(DXGI_SWAP_CHAIN_FLAG_FRAME_LATENCY_WAITABLE_OBJECT);
@@ -261,7 +237,6 @@ TEST_CASE("presentFlags maps each mode and refuses Immediate without tearing", "
     CHECK(refused.error().message.find("DXGI_FEATURE_PRESENT_ALLOW_TEARING") != std::string::npos);
 }
 
-//======================================================================================================================
 TEST_CASE("acquire returns the current back buffer and present counts one submit call", "[d3d12]")
 {
     const MessageCollection messages;
@@ -300,7 +275,6 @@ TEST_CASE("acquire returns the current back buffer and present counts one submit
     CHECK(messages.count() == 0);
 }
 
-//======================================================================================================================
 TEST_CASE("an occluded present succeeds", "[d3d12]")
 {
     CHECK(d3d12::presentSucceeded(S_OK));
@@ -342,7 +316,6 @@ TEST_CASE("an occluded present succeeds", "[d3d12]")
     CHECK(messages.count() == 0);
 }
 
-//======================================================================================================================
 TEST_CASE("resize drops every back-buffer reference before ResizeBuffers", "[d3d12]")
 {
     const MessageCollection messages;
@@ -394,7 +367,6 @@ TEST_CASE("resize drops every back-buffer reference before ResizeBuffers", "[d3d
     CHECK(messages.count() == 0);
 }
 
-//======================================================================================================================
 TEST_CASE("a swapchain destroyed between frames stays until its last frame is waited for", "[d3d12]")
 {
     const MessageCollection messages;
@@ -423,7 +395,6 @@ TEST_CASE("a swapchain destroyed between frames stays until its last frame is wa
     CHECK(messages.count() == 0);
 }
 
-//======================================================================================================================
 TEST_CASE("a swapchain destroyed while beginFrame opens a frame outlives that call's free", "[d3d12]")
 {
     const MessageCollection messages;
@@ -458,7 +429,6 @@ TEST_CASE("a swapchain destroyed while beginFrame opens a frame outlives that ca
     CHECK(messages.count() == 0);
 }
 
-//======================================================================================================================
 TEST_CASE("a destroyed swapchain's window takes a new swapchain before the old one retires", "[d3d12]")
 {
     const MessageCollection messages;
@@ -485,7 +455,6 @@ TEST_CASE("a destroyed swapchain's window takes a new swapchain before the old o
     CHECK(messages.count() == 0);
 }
 
-//======================================================================================================================
 TEST_CASE("two swapchains acquire and present in one frame", "[d3d12]")
 {
     const MessageCollection messages;

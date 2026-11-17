@@ -1,7 +1,7 @@
 # B. Reserved: ray tracing
 
 **Status**: Accepted
-**API version**: 1.0.0
+**API version**: 1.0.1
 **Entries**: none
 
 This version contains no ray-tracing interface: no acceleration-structure type, no build

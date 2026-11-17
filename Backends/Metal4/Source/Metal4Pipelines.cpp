@@ -35,10 +35,8 @@
 
 namespace rojoRHI {
     namespace {
-        //==============================================================================================================
-        /// Returns a new function descriptor (+1) for `entry`, or null for an absent stage, and writes the entry's threadgroup
-        /// size to `size` when it is given. The library's payload comes through `native`; its entries are read under the pool's
-        /// lock, because a record outlives no lookup in a Release build.
+        // Returns +1, or null for an absent stage. The entries are read under the pool's lock, because a record
+        // outlives no lookup in a Release build.
         MTL4::LibraryFunctionDescriptor* newFunction(core::DeviceCore& core, const ShaderEntry& entry, core::ShaderStage stage, MTL::Size* size)
         {
             if (entry.library.bits == 0)
@@ -67,8 +65,6 @@ namespace rojoRHI {
             return function;
         }
 
-        //==============================================================================================================
-        /// Releases each descriptor of `functions` that is not null.
         void releaseFunctions(std::initializer_list<MTL4::LibraryFunctionDescriptor*> functions)
         {
             for (MTL4::LibraryFunctionDescriptor* function : functions)
@@ -80,18 +76,15 @@ namespace rojoRHI {
             }
         }
 
-        //==============================================================================================================
-        /// True when a graphics pipeline is first compiled with rasterization on: nothing it rasterizes is observable without
-        /// a fragment entry or a depth attachment, and a vertex entry that returns nothing needs rasterization off.
+        // Nothing rasterized is observable without a fragment entry or a depth attachment, and a vertex entry that
+        // returns nothing needs rasterization off.
         bool rasterizes(const GraphicsPipelineDesc& desc)
         {
             return desc.fragment.library.bits != 0 || desc.depthFormat != Format::Undefined;
         }
 
-        //==============================================================================================================
-        /// Compiles a vertex pipeline from `descriptor`, adding the probe and compile time to the device's counter, and sets
-        /// `hit` when the device's pipeline cache holds the pipeline. Every pipeline compiles through the compiler, which
-        /// serves a cached one from the archive, so the serializer records each pipeline, hit or miss.
+        // Every pipeline compiles through the compiler, which serves a cached one from the archive, so the serializer
+        // records each pipeline, hit or miss.
         MTL::RenderPipelineState* compileRender(DeviceImpl& impl, const MTL4::RenderPipelineDescriptor* descriptor, NS::Error** error, bool& hit)
         {
             const core::ScopedNanoseconds timer(impl.core.counts().pipelineCompileNanoseconds);
@@ -102,8 +95,6 @@ namespace rojoRHI {
             return impl.compiler->newRenderPipelineState(descriptor, options, error);
         }
 
-        //==============================================================================================================
-        /// Compiles a mesh pipeline from `descriptor` as `compileRender` compiles a vertex pipeline.
         MTL::RenderPipelineState* compileMesh(DeviceImpl& impl, const MTL4::MeshRenderPipelineDescriptor* descriptor, NS::Error** error, bool& hit)
         {
             const core::ScopedNanoseconds timer(impl.core.counts().pipelineCompileNanoseconds);
@@ -114,8 +105,6 @@ namespace rojoRHI {
             return impl.compiler->newRenderPipelineState(descriptor, options, error);
         }
 
-        //==============================================================================================================
-        /// Compiles a compute pipeline from `descriptor` as `compileRender` compiles a vertex pipeline.
         MTL::ComputePipelineState* compileCompute(DeviceImpl& impl, const MTL4::ComputePipelineDescriptor* descriptor, NS::Error** error, bool& hit)
         {
             const core::ScopedNanoseconds timer(impl.core.counts().pipelineCompileNanoseconds);
@@ -126,10 +115,7 @@ namespace rojoRHI {
             return impl.compiler->newComputePipelineState(descriptor, options, error);
         }
 
-        //==============================================================================================================
-        /// Builds and compiles the vertex pipeline `desc` labelled `label` into `state.render`, sets `hit` when the pipeline
-        /// cache held the descriptor it was compiled from, and returns why Metal refused it, or an empty string. The caller
-        /// holds a pool.
+        // Returns why Metal refused it, or an empty string. The caller holds an autorelease pool.
         std::string buildVertex(DeviceImpl& impl, const GraphicsPipelineDesc& desc, const std::string& label, metal4::PipelineState& state, bool& hit)
         {
             MTL4::LibraryFunctionDescriptor* vertex = newFunction(impl.core, desc.vertex, core::ShaderStage::Vertex, nullptr);
@@ -169,10 +155,7 @@ namespace rojoRHI {
             return failure;
         }
 
-        //==============================================================================================================
-        /// Builds and compiles the mesh pipeline `desc` labelled `label` into `state.render`, with the object and mesh
-        /// threadgroup sizes of its libraries, sets `hit` when the pipeline cache held it, and returns why Metal refused it, or
-        /// an empty string. The caller holds a pool.
+        // The caller holds an autorelease pool.
         std::string buildMesh(DeviceImpl& impl, const GraphicsPipelineDesc& desc, const std::string& label, metal4::PipelineState& state, bool& hit)
         {
             MTL4::LibraryFunctionDescriptor* object = newFunction(impl.core, desc.task, core::ShaderStage::Task, &state.objectThreads);
@@ -201,7 +184,6 @@ namespace rojoRHI {
         }
     } // namespace
 
-    //==================================================================================================================
     Result<ShaderLibrary> Device::loadShaderLibrary(std::span<const std::byte> blob, std::string_view label)
     {
         DeviceImpl& impl = DeviceImpl::of(*this);
@@ -276,7 +258,6 @@ namespace rojoRHI {
         return library;
     }
 
-    //==================================================================================================================
     Result<Pipeline> Device::createPipeline(const GraphicsPipelineDesc& desc)
     {
         DeviceImpl& impl = DeviceImpl::of(*this);
@@ -337,7 +318,6 @@ namespace rojoRHI {
         return pipeline;
     }
 
-    //==================================================================================================================
     Result<Pipeline> Device::createPipeline(const ComputePipelineDesc& desc)
     {
         DeviceImpl& impl = DeviceImpl::of(*this);
@@ -377,20 +357,17 @@ namespace rojoRHI {
         return pipeline;
     }
 
-    //==================================================================================================================
     Result<std::vector<std::byte>> Device::pipelineCacheData()
     {
         DeviceImpl& impl = DeviceImpl::of(*this);
         return impl.pipelineCache.data(impl.device);
     }
 
-    //==================================================================================================================
     void Device::destroy(Pipeline pipeline)
     {
         DeviceImpl::of(*this).core.destroy(pipeline);
     }
 
-    //==================================================================================================================
     void Device::destroy(ShaderLibrary library)
     {
         DeviceImpl::of(*this).core.destroy(library);

@@ -11,6 +11,8 @@
 using namespace rojoRHI;
 using example::check;
 
+// The root block, matching SaxpyRoot in HelloCompute.slang byte for byte. It carries addresses, not buffers:
+// there are no binding slots, so the shader reaches every buffer through an Addr the root holds.
 struct SaxpyRoot
 {
     Addr x;
@@ -47,13 +49,16 @@ int main()
     Buffer readback = check(device.createBuffer({ .size = kBytes, .memory = Memory::Readback, .label = "readback" }), "createBuffer");
     Fence done = check(device.createFence(0, "done"), "createFence");
 
+    // Even headless work runs inside a frame, which owns the command list and the upload memory pushRoot takes.
     device.beginFrame();
 
     CommandList list = device.acquireCommandList(QueueType::Compute, "saxpy");
     list.setPipeline(saxpy);
+    // Copies the root into the frame's upload memory and binds its address, valid only until this frame retires.
     list.pushRoot(SaxpyRoot{ .x = device.address(xs), .y = device.address(ys), .result = device.address(result), .a = kA, .count = kCount });
     list.dispatch((kCount + 63) / 64, 1, 1);
 
+    // Only barriers order commands within a list: the copy must wait for the dispatch's writes to `result`.
     const std::array toCopy{ BufferBarrier{
         .buffer = result, .srcStage = Stage::ComputeShader, .srcAccess = Access::ShaderWrite, .dstStage = Stage::Copy, .dstAccess = Access::CopyRead } };
     list.barrier({}, toCopy);
@@ -62,10 +67,13 @@ int main()
 
     const std::array signal{ FenceValue{ done, 1 } };
     device.queue(QueueType::Compute).submit(std::array{ list }, {}, signal);
+    // A frame retires on the graphics queue alone, so the graphics queue waits on `done` (here `signal` is the wait
+    // list) to join the frame's compute work into it before endFrame.
     device.queue(QueueType::Graphics).submit({}, signal);
 
     device.endFrame();
 
+    // The copy is visible to the CPU once `done` reaches 1; endFrame does not wait for it.
     device.wait({ done, 1 }, UINT64_MAX);
 
     std::vector<float> output(kCount);

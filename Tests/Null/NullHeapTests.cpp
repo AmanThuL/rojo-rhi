@@ -11,7 +11,6 @@
 
 using namespace rojoRHI;
 
-//======================================================================================================================
 TEST_CASE("the Null device places a buffer at 256 bytes and rounds its size up to 256", "[null]")
 {
     Device device = *createDevice();
@@ -23,7 +22,6 @@ TEST_CASE("the Null device places a buffer at 256 bytes and rounds its size up t
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("the Null device's placement requirements do not depend on the memory class", "[null]")
 {
     Device device = *createDevice();
@@ -34,7 +32,6 @@ TEST_CASE("the Null device's placement requirements do not depend on the memory 
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("the Null device's heap is exactly the size requested", "[null]")
 {
     Device device = *createDevice();

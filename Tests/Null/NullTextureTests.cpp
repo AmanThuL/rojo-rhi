@@ -10,7 +10,6 @@
 
 using namespace rojoRHI;
 
-//======================================================================================================================
 TEST_CASE("the Null device places a texture at 1024 bytes and rounds its size up to 1024", "[null]")
 {
     Device device = *createDevice();
@@ -24,7 +23,6 @@ TEST_CASE("the Null device places a texture at 1024 bytes and rounds its size up
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("the Null placement size sums the mips, layers and samples", "[null]")
 {
     Device device = *createDevice();
@@ -41,7 +39,6 @@ TEST_CASE("the Null placement size sums the mips, layers and samples", "[null]")
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("the Null placement size counts block-compressed blocks and volume slices", "[null]")
 {
     Device device = *createDevice();
@@ -55,7 +52,6 @@ TEST_CASE("the Null placement size counts block-compressed blocks and volume sli
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("the Null view heap hands out slots from zero", "[null]")
 {
     Device device = *createDevice();

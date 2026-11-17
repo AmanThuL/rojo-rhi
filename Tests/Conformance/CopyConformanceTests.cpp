@@ -22,9 +22,6 @@
 using namespace rojoRHI;
 
 namespace {
-    //==================================================================================================================
-    /// Records a barrier on `list` that moves every subresource of `texture` from `from` to `to`, each side holding the uses its
-    /// layout permits.
     void move(CommandList list, Texture texture, Layout from, Layout to)
     {
         const auto use = [](Layout layout) -> std::pair<Stage, Access> {
@@ -48,9 +45,6 @@ namespace {
         list.barrier({}, {}, barriers);
     }
 
-    //==================================================================================================================
-    /// Copies `rows` rows of `rowBytes` bytes from `source`, rows `sourcePitch` apart from `sourceOffset`, into `target`, rows
-    /// `targetPitch` apart from `targetOffset`.
     void blit(
         std::vector<std::byte>& target,
         uint64_t targetOffset,
@@ -68,9 +62,8 @@ namespace {
         }
     }
 
-    //==================================================================================================================
-    /// Creates a texture of `desc` whose every subresource holds tight rows of `texelBytes`-byte texels (or blocks of
-    /// `blockEdge` texels), seeded by its index from `seed`, and returns the bytes of each subresource in `TextureData` order.
+    // Every subresource holds distinct tight rows of texels (or of blocks of `blockEdge` texels), returned in `TextureData`
+    // order.
     std::vector<std::vector<std::byte>> fillTexture(
         Device device, const TextureDesc& desc, uint32_t texelBytes, uint32_t seed, Texture& texture, uint32_t blockEdge = 1
     )
@@ -94,8 +87,6 @@ namespace {
         return bytes;
     }
 
-    //==================================================================================================================
-    /// The whole of mip `mip` of every layer of a `width` by `height` (by `depth`) texture.
     TextureRegion wholeMip(uint32_t mip, uint32_t layers, uint32_t width, uint32_t height, uint32_t depth = 1)
     {
         return TextureRegion{
@@ -103,8 +94,6 @@ namespace {
         };
     }
 
-    //==================================================================================================================
-    /// The subresources `bytes` of mip `mip` for layers `0` to `layers - 1`, one after the other, of a texture of `mips` mips.
     std::vector<std::byte> layersOf(const std::vector<std::vector<std::byte>>& bytes, uint32_t mip, uint32_t mips, uint32_t layers)
     {
         std::vector<std::byte> joined;
@@ -117,7 +106,6 @@ namespace {
     }
 } // namespace
 
-//======================================================================================================================
 TEST_CASE("copyBuffer moves bytes between buffers on the Graphics, Compute and Copy queues", "[conformance]")
 {
     test::requireGpu();
@@ -140,7 +128,6 @@ TEST_CASE("copyBuffer moves bytes between buffers on the Graphics, Compute and C
     CHECK(kit.read(readback) == source);
 }
 
-//======================================================================================================================
 TEST_CASE("copyBuffer within one buffer copies between disjoint ranges", "[conformance]")
 {
     test::requireGpu();
@@ -155,7 +142,6 @@ TEST_CASE("copyBuffer within one buffer copies between disjoint ranges", "[confo
     CHECK(kit.readBuffer(buffer) == expected);
 }
 
-//======================================================================================================================
 TEST_CASE("copyBufferToTexture writes a region of one mip with rows rowPitch apart from a 512-byte offset", "[conformance]")
 {
     test::requireGpu();
@@ -179,7 +165,6 @@ TEST_CASE("copyBufferToTexture writes a region of one mip with rows rowPitch apa
     CHECK(kit.readTexture(texture, wholeMip(2, 1, 16, 16), Format::RGBA8Unorm) == initial[2]);
 }
 
-//======================================================================================================================
 TEST_CASE("copyBufferToTexture writes array layers, cube faces and 3D slices with rowsPerImage padding", "[conformance]")
 {
     test::requireGpu();
@@ -227,7 +212,6 @@ TEST_CASE("copyBufferToTexture writes array layers, cube faces and 3D slices wit
     CHECK(kit.readTexture(texture, wholeMip(0, layers, 8, 8, volume ? 4 : 1), Format::RGBA8Unorm) == expected);
 }
 
-//======================================================================================================================
 TEST_CASE("copyBufferToTexture writes BC1 blocks", "[conformance]")
 {
     test::requireGpu();
@@ -261,7 +245,6 @@ TEST_CASE("copyBufferToTexture writes BC1 blocks", "[conformance]")
     CHECK(kit.readTexture(texture, wholeMip(1, 1, 12, 12), Format::BC1Unorm) == mip1);
 }
 
-//======================================================================================================================
 TEST_CASE("copyTextureToBuffer leaves the padding between rows and images untouched", "[conformance]")
 {
     test::requireGpu();
@@ -292,7 +275,6 @@ TEST_CASE("copyTextureToBuffer leaves the padding between rows and images untouc
     CHECK(kit.read(readback) == expected);
 }
 
-//======================================================================================================================
 TEST_CASE("copyTexture copies regions between mips and layers of two textures", "[conformance]")
 {
     test::requireGpu();
@@ -333,7 +315,6 @@ TEST_CASE("copyTexture copies regions between mips and layers of two textures", 
     CHECK(kit.readTexture(source, wholeMip(1, 2, 16, 16), Format::RGBA8Unorm) == layersOf(sourceBytes, 1, 2, 2));
 }
 
-//======================================================================================================================
 TEST_CASE("copyTexture copies between an sRGB format and its linear partner bit for bit", "[conformance]")
 {
     test::requireGpu();
@@ -365,10 +346,8 @@ TEST_CASE("copyTexture copies between an sRGB format and its linear partner bit 
 }
 
 namespace {
-    //==================================================================================================================
-    /// Creates the two BC1 textures of the edge cases: `interior`, 16 by 16 texels (4 by 4 blocks of 32 bytes a row), and
-    /// `edged`, 12 by 12 with a second mip of 6 by 6 texels (2 by 2 blocks of 16 bytes a row, the last ones partly outside).
-    /// Returns false when the device does not sample BC1Unorm.
+    // `interior` is 16 by 16 texels (4 by 4 blocks, 32 bytes a row); `edged` is 12 by 12 with a 6 by 6 second mip (2 by 2
+    // blocks, 16 bytes a row, the last ones partly outside). False when the device does not sample BC1Unorm.
     bool bc1Pair(
         test::GpuKit& kit,
         Texture& interior,
@@ -401,7 +380,6 @@ namespace {
     }
 } // namespace
 
-//======================================================================================================================
 TEST_CASE("copyTexture copies BC1 blocks from an interior region to a region reaching a mip's edge", "[conformance]")
 {
     test::requireGpu();
@@ -428,7 +406,6 @@ TEST_CASE("copyTexture copies BC1 blocks from an interior region to a region rea
     CHECK(kit.readTexture(edged, wholeMip(0, 1, 12, 12), Format::BC1Unorm) == edgedBytes[0]);
 }
 
-//======================================================================================================================
 TEST_CASE("copyTexture copies BC1 blocks from a region reaching a mip's edge to an interior region", "[conformance]")
 {
     test::requireGpu();

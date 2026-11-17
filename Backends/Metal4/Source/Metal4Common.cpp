@@ -19,21 +19,18 @@
 #include <string_view>
 
 namespace rojoRHI::metal4 {
-    //==================================================================================================================
     bool commandsMayAutorelease(const MTL::Device* device)
     {
         const char* name = object_getClassName(reinterpret_cast<id>(const_cast<MTL::Device*>(device)));
         return name == nullptr || std::strncmp(name, "AGX", 3) != 0;
     }
 
-    //==================================================================================================================
     NS::String* makeString(std::string_view text)
     {
         const std::string owned(text);
         return NS::String::string(owned.c_str(), NS::UTF8StringEncoding);
     }
 
-    //==================================================================================================================
     std::string toStdString(NS::String* string)
     {
         if (string == nullptr)
@@ -44,7 +41,6 @@ namespace rojoRHI::metal4 {
         return utf8 != nullptr ? std::string(utf8) : std::string();
     }
 
-    //==================================================================================================================
     std::string describe(NS::Error* error)
     {
         if (error == nullptr)
@@ -54,7 +50,6 @@ namespace rojoRHI::metal4 {
         return std::format("{} ({} {})", toStdString(error->localizedDescription()), toStdString(error->domain()), error->code());
     }
 
-    //==================================================================================================================
     void waitUntilSignaled(MTL::SharedEvent* event, uint64_t value, std::string_view what, std::string_view label)
     {
         uint64_t waitedSeconds = 0;
@@ -66,7 +61,7 @@ namespace rojoRHI::metal4 {
                 ROJORHI_LOG_WARN("still waiting after {} s for {} \"{}\" to reach {}", waitedSeconds, what, label, value);
                 continue;
             }
-            // The event's own label is read only for a warning.
+            // `label()` autoreleases; the pool is opened only on this warning path.
             const AutoreleasePool pool;
             ROJORHI_LOG_WARN("still waiting after {} s for {} \"{}\" to reach {}", waitedSeconds, what, toStdString(event->label()), value);
         }

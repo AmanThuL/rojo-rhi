@@ -1,7 +1,7 @@
 # 09. Synchronization
 
 **Status**: Accepted
-**API version**: 1.0.0
+**API version**: 1.0.1
 
 Barriers are explicit and batched. Nothing is tracked in Release builds: the caller, usually a
 render graph, states every dependency, and RojoRHI lowers it without inspecting resource state.

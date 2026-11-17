@@ -16,28 +16,24 @@ using namespace rojoRHI;
 using test::PassKit;
 
 namespace {
-    //==================================================================================================================
     GlobalBarrier global(Stage src, Access srcAccess, Stage dst, Access dstAccess)
     {
         return GlobalBarrier{ .srcStage = src, .srcAccess = srcAccess, .dstStage = dst, .dstAccess = dstAccess };
     }
 
-    //==================================================================================================================
     void recordGlobal(PassKit& kit, const GlobalBarrier& barrier)
     {
         const std::array<GlobalBarrier, 1> globals{ barrier };
         kit.list.barrier(globals);
     }
 
-    //==================================================================================================================
     void recordBuffer(PassKit& kit, const BufferBarrier& barrier)
     {
         const std::array<BufferBarrier, 1> buffers{ barrier };
         kit.list.barrier({}, buffers);
     }
 
-    //==================================================================================================================
-    /// Returns a barrier of `range` of `texture` that obeys every rule but the range rules.
+    // Obeys every rule but the range rules.
     TextureBarrier rangeBarrier(Texture texture, const SubresourceRange& range)
     {
         return TextureBarrier{ .texture = texture,
@@ -48,7 +44,6 @@ namespace {
                                .newLayout = Layout::General };
     }
 
-    //==================================================================================================================
     void recordTexture(PassKit& kit, const TextureBarrier& barrier)
     {
         const std::array<TextureBarrier, 1> textures{ barrier };
@@ -56,7 +51,6 @@ namespace {
     }
 } // namespace
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-sync-0001 a barrier on a Copy list names a compute stage", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-sync-0001", [] {
@@ -65,7 +59,6 @@ TEST_CASE("VU-rojo-sync-0001 a barrier on a Copy list names a compute stage", "[
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-sync-0002 an access is not performed by the stages of its side", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-sync-0002", [] {
@@ -74,7 +67,6 @@ TEST_CASE("VU-rojo-sync-0002 an access is not performed by the stages of its sid
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-sync-0003 a side with stage None names an access", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-sync-0003", [] {
@@ -83,7 +75,6 @@ TEST_CASE("VU-rojo-sync-0003 a side with stage None names an access", "[contract
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-sync-0007 a barrier on a Compute list uses a layout the queue lacks", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-sync-0007", [] {
@@ -92,7 +83,6 @@ TEST_CASE("VU-rojo-sync-0007 a barrier on a Compute list uses a layout the queue
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-sync-0026 a barrier on a Copy list moves a texture out of General", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-sync-0026", [] {
@@ -101,7 +91,6 @@ TEST_CASE("VU-rojo-sync-0026 a barrier on a Copy list moves a texture out of Gen
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-sync-0026 a barrier on a Copy list discards a texture from Undefined", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-sync-0026", [] {
@@ -110,7 +99,6 @@ TEST_CASE("VU-rojo-sync-0026 a barrier on a Copy list discards a texture from Un
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-sync-0008 a global barrier has no stage on either side", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-sync-0008", [] {
@@ -119,7 +107,6 @@ TEST_CASE("VU-rojo-sync-0008 a global barrier has no stage on either side", "[co
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-sync-0010 a buffer barrier starts at the end of its buffer", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-sync-0010", [] {
@@ -128,7 +115,6 @@ TEST_CASE("VU-rojo-sync-0010 a buffer barrier starts at the end of its buffer", 
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-sync-0010 a buffer barrier range wraps past 64 bits", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-sync-0010", [] {
@@ -137,7 +123,6 @@ TEST_CASE("VU-rojo-sync-0010 a buffer barrier range wraps past 64 bits", "[contr
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-sync-0011 a buffer barrier names a texture access", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-sync-0011", [] {
@@ -152,7 +137,6 @@ TEST_CASE("VU-rojo-sync-0011 a buffer barrier names a texture access", "[contrac
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-sync-0014 a texture barrier moves to Undefined", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-sync-0014", [] {
@@ -161,7 +145,6 @@ TEST_CASE("VU-rojo-sync-0014 a texture barrier moves to Undefined", "[contract][
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-sync-0015 a texture barrier moves to a layout the usage lacks", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-sync-0015", [] {
@@ -170,7 +153,6 @@ TEST_CASE("VU-rojo-sync-0015 a texture barrier moves to a layout the usage lacks
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-sync-0027 a texture barrier moves a depth texture without Sampled to DepthStencilRead", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-sync-0027", [] {
@@ -179,7 +161,6 @@ TEST_CASE("VU-rojo-sync-0027 a texture barrier moves a depth texture without Sam
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-sync-0016 an access is not permitted by the layout it follows", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-sync-0016", [] {
@@ -196,7 +177,6 @@ TEST_CASE("VU-rojo-sync-0016 an access is not permitted by the layout it follows
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-sync-0019 a barrier is recorded inside a render pass", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-sync-0019", [] {
@@ -206,7 +186,6 @@ TEST_CASE("VU-rojo-sync-0019 a barrier is recorded inside a render pass", "[cont
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-sync-0020 two texture barriers of a batch cover one subresource", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-sync-0020", [] {
@@ -220,7 +199,6 @@ TEST_CASE("VU-rojo-sync-0020 two texture barriers of a batch cover one subresour
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-sync-0001 a barrier on a Compute list names a render stage", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-sync-0001", [] {
@@ -229,7 +207,6 @@ TEST_CASE("VU-rojo-sync-0001 a barrier on a Compute list names a render stage", 
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-sync-0016 a destination access is not permitted by the new layout", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-sync-0016", [] {
@@ -246,7 +223,6 @@ TEST_CASE("VU-rojo-sync-0016 a destination access is not permitted by the new la
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-texture-0016 a texture barrier range has no mips", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-texture-0016", [] {
@@ -255,7 +231,6 @@ TEST_CASE("VU-rojo-texture-0016 a texture barrier range has no mips", "[contract
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-texture-0017 a texture barrier range ends past the last mip", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-texture-0017", [] {
@@ -264,7 +239,6 @@ TEST_CASE("VU-rojo-texture-0017 a texture barrier range ends past the last mip",
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-texture-0041 a texture barrier range with all counts starts past the last mip", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-texture-0041", [] {

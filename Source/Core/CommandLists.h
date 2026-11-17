@@ -20,77 +20,71 @@
 #include <vector>
 
 namespace rojoRHI::core {
-    /// Where a command list is in its life: recording from acquisition, ended by `CommandList::end`, then submitted.
     enum class ListState : uint8_t
     {
-        Recording, ///< Acquired and not yet ended.
-        Ended,     ///< Ended and not yet submitted.
-        Submitted  ///< Handed to a queue; it records nothing further.
+        Recording,
+        Ended,
+        Submitted
     };
 
-    /// The render pass open on a list: what `setPipeline` and the dynamic-state setters compare against.
     struct PassState
     {
-        std::vector<Format> colors;             ///< The format of each color attachment, in order.
-        Format depthFormat = Format::Undefined; ///< The depth attachment's format; `Undefined` for none.
-        uint32_t samples = 1;                   ///< Samples per texel of every attachment other than a resolve target.
-        Rect2D area;                            ///< The area the pass renders to.
-        bool viewportSet = false;               ///< `setViewport` was recorded since the pass began.
-        bool scissorSet = false;                ///< `setScissor` was recorded since the pass began.
+        std::vector<Format> colors;
+        Format depthFormat = Format::Undefined; // `Undefined` for none.
+        uint32_t samples = 1;                   // Of every attachment except a resolve target.
+        Rect2D area;
+        bool viewportSet = false; // Since the pass began.
+        bool scissorSet = false;  // Since the pass began.
     };
 
-    /// The pipeline bound on a list: the fields the dynamic-state and draw checks compare against.
     struct BoundPipeline
     {
-        bool bound = false;                                  ///< A pipeline is bound.
-        PipelineKind kind = PipelineKind::Graphics;          ///< Graphics or compute.
-        uint32_t stages = 0;                                 ///< Bit `1 << ShaderStage` for each stage the pipeline has.
-        PrimitiveClass primitive = PrimitiveClass::Triangle; ///< The topology class of a vertex pipeline.
-        bool depthBias = false;                              ///< The pipeline was created with `RasterState::depthBias`.
-        uint32_t blendMask = 0;                              ///< Bit `i` is set when color target `i` blends.
-        bool depthWrite = false;                             ///< The pipeline writes depth.
-        bool stencilWrite = false;                           ///< The pipeline has a stencil operation other than `Keep`.
+        bool bound = false;
+        PipelineKind kind = PipelineKind::Graphics;
+        uint32_t stages = 0;                                 // Bit `1 << ShaderStage` per stage the pipeline has.
+        PrimitiveClass primitive = PrimitiveClass::Triangle; // Of a vertex pipeline.
+        bool depthBias = false;
+        uint32_t blendMask = 0; // Bit `i` is set when color target `i` blends.
+        bool depthWrite = false;
+        bool stencilWrite = false; // Some stencil operation is not `Keep`.
     };
 
-    /// The fields of a command list that hold no container and no string. `beginList` resets them all with one assignment of
-    /// `ListFields{}`, so a field added here starts afresh on every acquisition; a field that owns memory belongs in
-    /// `CommandListCore` instead, which clears each of its own by name.
+    // The fields that hold no container and no string: `beginList` resets them all with one assignment of
+    // `ListFields{}`. A field that owns memory belongs in `CommandListCore`, which clears each of its own by name.
     struct ListFields
     {
-        DeviceCore* device = nullptr;           ///< The device that acquired the list.
-        QueueType type = QueueType::Graphics;   ///< The queue type the list was acquired for.
-        uint64_t frame = 0;                     ///< The frame the list was acquired in.
-        Addr root = {};                         ///< The root `setRoot` bound; null until one is.
-        Buffer rootBuffer = {};                 ///< The buffer `root` resolved to; written in Debug on a validating device only.
-        ListState state = ListState::Recording; ///< Where the list is in its life.
-        bool passOpen = false;                  ///< A render pass is open on the list.
-        BoundPipeline pipeline;                 ///< The bound pipeline; cleared by `beginRenderPass` and `endRenderPass`.
-        size_t passScopeBase = 0;               ///< The number of open scopes when the open pass began.
-        ArenaPage page;                         ///< The arena page the list uploads into; null until its first upload.
-        /// The list's last scope label copied into the frame arena this frame, which a scope of the same text shares; empty
-        /// until the list copies one.
+        DeviceCore* device = nullptr;
+        QueueType type = QueueType::Graphics;
+        uint64_t frame = 0;
+        Addr root = {};         // Null until `setRoot`.
+        Buffer rootBuffer = {}; // Written in Debug on a validating device only.
+        ListState state = ListState::Recording;
+        bool passOpen = false;
+        BoundPipeline pipeline;   // Cleared by `beginRenderPass` and `endRenderPass`.
+        size_t passScopeBase = 0; // Open scopes when the open pass began.
+        ArenaPage page;           // Null until the first upload.
+        // The list's last scope label copied into this frame's arena, shared by a scope of the same text.
         std::string_view scopeCopy;
-        std::byte* cursor = nullptr; ///< The next free byte of `page`: its bump cursor, which takes no lock.
-        std::byte* limit = nullptr;  ///< One past the last byte of `page` an `Addr` reaches; null until the list has a page.
-        RecordCounts counts;         ///< What the list recorded for `Device::counters`; folded into the device at submission.
+        std::byte* cursor = nullptr; // The bump cursor; takes no lock.
+        std::byte* limit = nullptr;  // One past the last byte of `page` an `Addr` reaches.
+        RecordCounts counts;         // Folded into the device at submission.
     };
 
-    /// What the core keeps about one command list: the state machine the recording rules read. A backend's `CommandListImpl`
-    /// embeds one. Its plain fields are those of `ListFields`; each field declared here owns memory that a recycled list
-    /// keeps, and `beginList` clears it by name, so a field added here is added there too.
+    // A backend's `CommandListImpl` embeds one. Each field declared here owns memory a recycled list keeps, and
+    // `beginList` clears it by name, so a field added here is added there too.
     struct CommandListCore : ListFields
     {
-        PassState pass;                              ///< The open pass; meaningful while `passOpen`.
-        std::vector<bool> scopes;                    ///< One entry per open scope, innermost last: true when it began inside a render pass.
-        std::string label;                           ///< The label the list was acquired with.
-        std::vector<ScopeRecord> scopeLog;           ///< The scopes recorded on the list in the order they began, for `Device::scopeTimings`.
-        std::string scopeCopySource;                 ///< The text of `scopeCopy`, in ordinary memory, to compare against.
-        std::vector<ResourceAccess> pendingAccesses; ///< Declared accesses no draw or dispatch has consumed; kept only on a validating device.
-        TrackerLog trackerLog;                       ///< The uses and barriers the list recorded; kept only on a validating device, in Debug.
+        PassState pass;           // Meaningful while `passOpen`.
+        std::vector<bool> scopes; // Innermost last: true when the scope began inside a render pass.
+        std::string label;
+        std::vector<ScopeRecord> scopeLog;           // In begin order, for `Device::scopeTimings`.
+        std::string scopeCopySource;                 // The text of `scopeCopy`, in ordinary memory, to compare against.
+        std::vector<ResourceAccess> pendingAccesses; // Not yet consumed by a draw or dispatch; validating devices only.
+        TrackerLog trackerLog;                       // Validating devices only, in Debug.
     };
 
-    /// Counts one recorded command for the validation tracker, which names each event's command by it. Every recording entry
-    /// whose command the tracker may see calls it right after `checkRecording`. Compiles to nothing in Release.
+    // The tracker names each event's command by this count. Every recording entry the tracker may see calls it right
+    // after `checkRecording`. Nothing in Release.
     inline void noteCommand([[maybe_unused]] CommandListCore& list)
     {
 #ifndef NDEBUG
@@ -98,74 +92,62 @@ namespace rojoRHI::core {
 #endif
     }
 
-    /// Counts one native call a backend records, on the list's own plain counter: no lock and no atomic operation. A backend
-    /// calls it at each native call it records into the command buffer; the core never calls it, and backends count their own
-    /// native calls.
+    // A plain counter on the list: no lock, no atomic. Only a backend calls it, at each native call it records.
     inline void noteNativeCall(CommandListCore& list)
     {
         ++list.counts.nativeRecordCalls;
     }
 
-    /// Returns the core of the command list `list` wraps (VU-rojo-core-0004). Each backend defines it, as it does for a
-    /// device.
+    // Each backend defines it.
     CommandListCore& coreOf(CommandList list);
 
-    /// Checks that a frame is open (VU-rojo-cmd-0001); a backend calls it first in `Device::acquireCommandList`.
+    // A backend calls it first in `Device::acquireCommandList`.
     void checkAcquire(const DeviceCore& core);
 
-    /// Starts `list`, which a backend took from its pool, as a recording list of `type` in the open frame: it checks the label
-    /// (VU-rojo-core-0006, VU-rojo-core-0007), resets every field while keeping the capacity of its containers, and counts
-    /// the list as unsubmitted for VU-rojo-device-0005.
+    // Resets every field while keeping the capacity of its containers, and counts the list as unsubmitted for
+    // VU-rojo-device-0005.
     void beginList(CommandListCore& list, DeviceCore& core, QueueType type, std::string_view label);
 
-    /// Checks that a command other than `end` is recorded on a list that is recording (VU-rojo-cmd-0063): the one site every
-    /// recording entry calls first, except `allocateFrameData`, which checks the upload's own rules before it.
+    // VU-rojo-cmd-0063: the one check every recording entry but `end` calls first, except `allocateFrameData`, which
+    // checks the upload's own rules before it.
     void checkRecording(const CommandListCore& list);
 
-    /// Checks that `list` can end (VU-rojo-cmd-0002 to 0004) and marks it ended.
     void endList(CommandListCore& list);
 
-    /// Checks every list of a submission to a queue of `type` on the device `core` (VU-rojo-core-0004, VU-rojo-core-0005,
-    /// VU-rojo-queue-0001, VU-rojo-queue-0002) and marks each one submitted. A backend calls it first in `Queue::submit`.
+    // A backend calls it first in `Queue::submit`.
     void submitLists(DeviceCore& core, QueueType type, std::span<const CommandList> lists);
 
-    /// Where an upload landed: the page's buffer, the byte offset inside it, the memory to copy the bytes to and its GPU
-    /// address.
     struct ArenaAllocation
     {
-        Buffer page;       ///< The page's buffer.
-        uint64_t offset;   ///< Bytes from the start of the page, a multiple of the requested alignment.
-        std::byte* memory; ///< The host address of that offset.
-        /// The page's `ArenaPage::address` plus `offset`; meaningful only where `ArenaPage::address` is, so on Null, whose pages
-        /// have none, it holds just the offset.
+        Buffer page;
+        uint64_t offset; // A multiple of the requested alignment.
+        std::byte* memory;
+        // Meaningful only where `ArenaPage::address` is: on Null, whose pages have none, it holds just the offset.
         uint64_t address;
     };
 
-    /// Claims a page of at least `size` bytes from the arena slot of `list`'s frame, through `source`, stamps its record with
-    /// the list's frame for VU-rojo-buffer-0020 in a Debug build and makes it the list's page, with its cursor at zero and its
-    /// limit at the page's size or `Limits::maxAddrOffset`, whichever is smaller. The claim is the one place Release recording
-    /// takes a lock (ADR 0020), so it stays out of line.
+    // Stamps the page's record with the list's frame for VU-rojo-buffer-0020 in Debug, and sets the list's limit to the
+    // smaller of the page's size and `Limits::maxAddrOffset`. The claim is the one place Release recording takes a lock
+    // (ADR 0020), so it stays out of line.
     void claimArenaPage(DeviceCore& core, CommandListCore& list, uint64_t size, ArenaPageSource source, void* context);
 
-    /// The alignment every arena page's host memory has, so rounding the cursor up to an alignment up to this one rounds
-    /// the page offset up to it too.
+    // Every arena page's host memory has this alignment, so rounding the cursor up to an alignment up to this one
+    // rounds the page offset up to it too.
     inline constexpr uint32_t kArenaPageAlignment = 256;
 
-    /// Bytes of `list`'s page that are used: zero before the list has a page.
+    // Zero before the list has a page.
     inline uint64_t pageUsedBytes(const CommandListCore& list)
     {
         return static_cast<uint64_t>(list.cursor - list.page.host);
     }
 
-    /// Reserves `size` bytes at `alignment` in `list`'s own page, claiming a page when it has none or the bytes do not fit
-    /// below its limit, through `source`; the slow path of `bumpArenaPage`, out of line. An upload larger than the limit
-    /// allows lands at offset zero of a new page, past that page's limit, so the next upload claims again.
+    // The slow path of `bumpArenaPage`, out of line. An upload larger than the limit allows lands at offset zero of a
+    // new page, past that page's limit, so the next upload claims again.
     ArenaAllocation bumpArenaPageSlow(DeviceCore& core, CommandListCore& list, uint64_t size, uint32_t alignment, ArenaPageSource source, void* context);
 
-    /// Reserves `size` bytes at `alignment` in `list`'s own page, claiming a page when it has none or the bytes do not fit,
-    /// through `source`. Only claiming takes a lock; the bump into a page with room and an alignment up to
-    /// `kArenaPageAlignment` is inline and makes no call. It checks nothing: `allocateFrameData` and the scope recorder
-    /// call it after their own checks.
+    // Only claiming takes a lock; the bump into a page with room, at an alignment up to `kArenaPageAlignment`, is
+    // inline and makes no call. It checks nothing: `allocateFrameData` and the scope recorder call it after their own
+    // checks.
     inline ArenaAllocation bumpArenaPage(DeviceCore& core, CommandListCore& list, uint64_t size, uint32_t alignment, ArenaPageSource source, void* context)
     {
         const uintptr_t mask = uintptr_t{ alignment } - 1;
@@ -179,15 +161,12 @@ namespace rojoRHI::core {
         return ArenaAllocation{ list.page.buffer, offset, place, list.page.address + offset };
     }
 
-    /// Checks an upload of `bytes` at `alignment` (VU-rojo-buffer-0015 to 0017, then VU-rojo-cmd-0063) and bumps the cursor of
-    /// `list`'s own page; only a list with no page, or whose page is full, claims a page from the arena, which takes a lock
-    /// and may grow it through `source`. The backend copies `bytes` to `memory` and encodes the address. The upload's own
-    /// rules come before VU-rojo-cmd-0063 on purpose: a list used after its frame ended is a submitted list, and the closed
-    /// frame (VU-rojo-buffer-0017) is what the caller got wrong.
+    // The upload's own rules come before VU-rojo-cmd-0063 on purpose: a list used after its frame ended is a submitted
+    // list, and the closed frame (VU-rojo-buffer-0017) is what the caller got wrong. The backend copies `bytes` to `memory`
+    // and encodes the address.
     ArenaAllocation allocateFrameData(
         DeviceCore& core, CommandListCore& list, std::span<const std::byte> bytes, uint32_t alignment, ArenaPageSource source, void* context
     );
 
-    /// Issues VU-rojo-core-0005 when `other`, the device an object of kind `kind` belongs to, is not `owner`.
     void checkSameDevice(const DeviceCore& owner, const DeviceCore& other, std::string_view kind);
 } // namespace rojoRHI::core

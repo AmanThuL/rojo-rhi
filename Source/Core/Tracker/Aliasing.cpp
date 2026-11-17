@@ -9,7 +9,6 @@
 #include <cstddef>
 
 namespace rojoRHI::core {
-    //==================================================================================================================
     void noteHeapUse(HeapUses& uses, QueueType queue, HeapOwner owner, uint64_t position, Scope scope, bool transition)
     {
         std::optional<HeapUse>& last = uses[static_cast<size_t>(queue)];
@@ -22,7 +21,6 @@ namespace rojoRHI::core {
         last = HeapUse{ .owner = owner, .use = TrackedUse{ .position = position, .scope = scope, .transition = transition } };
     }
 
-    //==================================================================================================================
     void reachHeapUse(HeapUses& uses, QueueType queue, uint64_t position, Scope source, Scope destination)
     {
         std::optional<HeapUse>& last = uses[static_cast<size_t>(queue)];
@@ -46,7 +44,6 @@ namespace rojoRHI::core {
         }
     }
 
-    //==================================================================================================================
     bool aliasOrdered(const HeapUse& other, Scope use)
     {
         const bool writes = other.use.transition || hasWrite(other.use.scope.access);
@@ -55,7 +52,6 @@ namespace rojoRHI::core {
         });
     }
 
-    //==================================================================================================================
     void markAlias(std::optional<AliasMark>& mark, HeapOwner owner, uint64_t position, Scope scope)
     {
         if (mark.has_value() && mark->owner == owner && mark->position == position)
@@ -69,7 +65,6 @@ namespace rojoRHI::core {
         }
     }
 
-    //==================================================================================================================
     void markAlias(AliasMarks& marks, uint64_t begin, uint64_t end, HeapOwner owner, uint64_t position, Scope scope)
     {
         for (AliasMarks::Range& range : marks.isolate(begin, end))
@@ -79,7 +74,6 @@ namespace rojoRHI::core {
         marks.merge(begin, end);
     }
 
-    //==================================================================================================================
     void clearCovered(AliasMarks& marks, uint64_t begin, uint64_t end, QueueType queue, const Clock& ordered)
     {
         for (AliasMarks::Range& range : marks.ranges())

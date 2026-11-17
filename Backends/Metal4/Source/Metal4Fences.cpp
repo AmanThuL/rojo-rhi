@@ -30,16 +30,11 @@
 
 namespace rojoRHI {
     namespace {
-        //==============================================================================================================
-        /// Returns `timeoutNs` in whole milliseconds, rounded up.
         uint64_t roundUpToMilliseconds(uint64_t timeoutNs)
         {
             return timeoutNs / 1'000'000 + (timeoutNs % 1'000'000 != 0 ? 1 : 0);
         }
 
-        //==============================================================================================================
-        /// Waits up to `milliseconds` for `event` to reach `value`, in slices of at most `metal4::kWaitSliceMilliseconds`;
-        /// returns true when it reached it.
         bool waitFor(MTL::SharedEvent* event, uint64_t value, uint64_t milliseconds)
         {
             while (milliseconds > 0)
@@ -56,7 +51,6 @@ namespace rojoRHI {
     } // namespace
 
     namespace metal4 {
-        //==============================================================================================================
         void releasePassedFences(DeviceImpl& impl)
         {
             std::lock_guard lock(impl.retiringMutex);
@@ -94,7 +88,6 @@ namespace rojoRHI {
             });
         }
 
-        //==============================================================================================================
         void releaseRetiringFences(DeviceImpl& impl)
         {
             std::lock_guard lock(impl.retiringMutex);
@@ -105,7 +98,6 @@ namespace rojoRHI {
             impl.retiringEvents.clear();
         }
 
-        //==============================================================================================================
         void retireFence([[maybe_unused]] void* context, core::FenceRecord& record)
         {
             auto* event = static_cast<MTL::SharedEvent*>(record.native);
@@ -119,7 +111,6 @@ namespace rojoRHI {
         }
     } // namespace metal4
 
-    //==================================================================================================================
     Result<Fence> Device::createFence(uint64_t initial, std::string_view label)
     {
         DeviceImpl& impl = DeviceImpl::of(*this);
@@ -142,7 +133,6 @@ namespace rojoRHI {
         return fence;
     }
 
-    //==================================================================================================================
     uint64_t Device::completedValue(Fence fence)
     {
         DeviceImpl& impl = DeviceImpl::of(*this);
@@ -150,11 +140,9 @@ namespace rojoRHI {
         (void)impl.core.pool<Fence>().checked(fence, false);
         const auto* event = static_cast<const MTL::SharedEvent*>(impl.core.pool<Fence>().native(fence));
         core::completeFence(impl.core, FenceValue{ fence, event->signaledValue() });
-        // The core counts the call and tells the validation tracker what the value orders complete.
         return core::completedValue(impl.core, fence);
     }
 
-    //==================================================================================================================
     bool Device::wait(FenceValue value, uint64_t timeoutNs)
     {
         DeviceImpl& impl = DeviceImpl::of(*this);
@@ -188,7 +176,6 @@ namespace rojoRHI {
         return core::checkWait(impl.core, value, timeoutNs);
     }
 
-    //==================================================================================================================
     void Device::destroy(Fence fence)
     {
         DeviceImpl& impl = DeviceImpl::of(*this);

@@ -20,11 +20,10 @@
 
 namespace rojoRHI::test {
     namespace {
-        /// Stand-ins for native surfaces: the Null backend never dereferences them.
+        // Stand-ins for native surfaces: the Null backend never dereferences them.
         std::array<int, 8> g_surfaces = {};
 
-        //==============================================================================================================
-        /// Reads the library file `path`, failing the running case when it is missing or empty.
+        // Fails the running case when the file is missing or empty.
         std::vector<std::byte> readLibrary(const std::filesystem::path& path)
         {
             std::ifstream file(path, std::ios::binary);
@@ -41,8 +40,7 @@ namespace rojoRHI::test {
             return { begin, begin + text.size() };
         }
 
-        //==============================================================================================================
-        /// The packaged standard library, read on first use and kept for the process.
+        // Read on first use and kept for the process.
         const std::vector<std::byte>& standardBytes()
         {
             static const std::vector<std::byte> bytes = readLibrary("Shaders/Standard.nulllib");
@@ -50,13 +48,11 @@ namespace rojoRHI::test {
         }
     } // namespace
 
-    //==================================================================================================================
     std::vector<std::byte> standardLibrary()
     {
         return standardBytes();
     }
 
-    //==================================================================================================================
     // The library's second line is `abi <N>`; the entry lines after it are kept as they are.
     std::vector<std::byte> libraryStampedWith(uint32_t abi)
     {
@@ -74,7 +70,6 @@ namespace rojoRHI::test {
         return bytes;
     }
 
-    //==================================================================================================================
     std::vector<std::byte> foreignLibrary()
     {
         const std::string_view text = "rojorhi.metal4.shaderlibrary\nabi 1\nentry vsMain vertex 0 0 0\nmetallib 0\n";
@@ -82,14 +77,12 @@ namespace rojoRHI::test {
         return { bytes, bytes + text.size() };
     }
 
-    //==================================================================================================================
     // Fails the running case through Catch2, so it is called from a test thread.
     std::vector<std::byte> shaderLibraryFile(std::string_view name)
     {
         return readLibrary(std::filesystem::path("Shaders") / (std::string(name) + ".nulllib"));
     }
 
-    //==================================================================================================================
     // Fails the running case through Catch2, so it is called from a test thread.
     void* surface(uint32_t index)
     {
@@ -100,37 +93,31 @@ namespace rojoRHI::test {
         return &g_surfaces[index];
     }
 
-    //==================================================================================================================
     bool runsOnGpu()
     {
         return false;
     }
 
-    //==================================================================================================================
     bool multisampleReadsSize()
     {
         return false;
     }
 
-    //==================================================================================================================
     std::string_view misplacedClearEndsRecording()
     {
         return {};
     }
 
-    //==================================================================================================================
     bool layoutsAreNative()
     {
         return false;
     }
 
-    //==================================================================================================================
     std::string_view upscalesNeverComplete()
     {
         return {};
     }
 
-    //==================================================================================================================
     std::string_view fusesPreciseArithmetic()
     {
         return {};

@@ -5,134 +5,126 @@
 #include <metal_stdlib>
 
 namespace rojoRHI {
-    /// The parameters of one counted draw's kernel, laid out as `metal4::DrawParams` writes them.
+    // Matches the layout `metal4::DrawParams` writes.
     struct DrawParams
     {
-        ulong icb;          ///< The address of the indirect command buffer's resource ID; 0 for the writer kernels.
-        ulong records;      ///< The first record.
-        ulong count;        ///< The draw count, or 0 for none, which means `maxCount`.
-        ulong output;       ///< The execution range, or the native record the writer kernels write.
-        ulong indices;      ///< The index buffer of an indexed draw.
-        ulong root;         ///< What each encoded command binds at `buffer(0)`: the root.
-        ulong views;        ///< What each encoded command binds at `buffer(1)`: the view table.
-        ulong samplers;     ///< What each encoded command binds at `buffer(2)`: the sampler table.
-        uint maxCount;      ///< The most records drawn.
-        uint primitive;     ///< The `MTL::PrimitiveType` value of the draws.
-        uint indexType;     ///< The `MTL::IndexType` value of an indexed draw: 0 for 16-bit indices, 1 for 32-bit ones.
-        uint reserved[5];   ///< Pads the struct to the size of its C++ counterpart.
+        ulong icb; // 0 for the writer kernels.
+        ulong records;
+        ulong count;  // 0 means `maxCount`.
+        ulong output; // The execution range, or the native record the writer kernels write.
+        ulong indices;
+        ulong root;
+        ulong views;
+        ulong samplers;
+        uint maxCount;
+        uint primitive;   // An `MTL::PrimitiveType` value.
+        uint indexType;   // An `MTL::IndexType` value: 0 for 16-bit indices, 1 for 32-bit ones.
+        uint reserved[5]; // Pads the struct to the size of its C++ counterpart.
     };
     static_assert(sizeof(DrawParams) == 96, "DrawParams must match metal4::DrawParams in Metal4Kernels.h");
 
-    /// The parameters of one counted mesh draw's kernel, laid out as `metal4::MeshParams` writes them.
+    // Matches the layout `metal4::MeshParams` writes.
     struct MeshParams
     {
-        ulong icb;               ///< The address of the indirect command buffer's resource ID; 0 for the writer kernel.
-        ulong records;           ///< The first record.
-        ulong count;             ///< The draw count, or 0 for none, which means `maxCount`.
-        ulong output;            ///< The execution range, or the native record the writer kernel writes.
-        ulong root;              ///< What each command binds at `buffer(0)`: the root.
-        ulong views;             ///< What each command binds at `buffer(1)`: the view table.
-        ulong samplers;          ///< What each command binds at `buffer(2)`: the sampler table.
-        uint maxCount;           ///< The most records drawn.
-        uint objectThreads[3];   ///< The pipeline's task threadgroup size; zero without a task entry.
-        uint meshThreads[3];     ///< The pipeline's mesh threadgroup size.
-        uint reserved[3];        ///< Pads the struct to the size of its C++ counterpart.
+        ulong icb; // 0 for the writer kernel.
+        ulong records;
+        ulong count;  // 0 means `maxCount`.
+        ulong output; // The execution range, or the native record the writer kernel writes.
+        ulong root;
+        ulong views;
+        ulong samplers;
+        uint maxCount;
+        uint objectThreads[3]; // Zero without a task entry.
+        uint meshThreads[3];
+        uint reserved[3]; // Pads the struct to the size of its C++ counterpart.
     };
     static_assert(sizeof(MeshParams) == 96, "MeshParams must match metal4::MeshParams in Metal4Kernels.h");
 
-    /// Chapter 08's `DrawMeshTasksIndirectArgs`.
+    // Chapter 08's `DrawMeshTasksIndirectArgs`.
     struct MeshArgs
     {
-        uint drawId; ///< Read by the task and mesh entries from offset 0 of the record bound at `buffer(3)`.
-        uint x;      ///< Threadgroups of the first stage along x.
-        uint y;      ///< Along y.
-        uint z;      ///< Along z.
+        uint drawId; // Read by the task and mesh entries from offset 0 of the record bound at `buffer(3)`.
+        uint x;
+        uint y;
+        uint z;
     };
 
-    /// `MTL::DispatchThreadgroupsIndirectArguments`.
+    // `MTL::DispatchThreadgroupsIndirectArguments`.
     struct NativeMesh
     {
-        uint x; ///< Threadgroups along x.
-        uint y; ///< Along y.
-        uint z; ///< Along z.
+        uint x;
+        uint y;
+        uint z;
     };
 
-    /// Chapter 08's `DrawIndirectArgs`.
+    // Chapter 08's `DrawIndirectArgs`.
     struct DrawArgs
     {
-        uint drawId;        ///< Read by the vertex entry from offset 0 of the record bound at `buffer(3)`.
-        uint vertexCount;   ///< Vertices per instance.
-        uint instanceCount; ///< Instances.
-        uint firstVertex;   ///< The first vertex.
-        uint firstInstance; ///< Not visible to shaders, so not passed.
+        uint drawId; // Read by the vertex entry from offset 0 of the record bound at `buffer(3)`.
+        uint vertexCount;
+        uint instanceCount;
+        uint firstVertex;
+        uint firstInstance; // Not visible to shaders, so not passed.
     };
 
-    /// Chapter 08's `DrawIndexedIndirectArgs`.
+    // Chapter 08's `DrawIndexedIndirectArgs`.
     struct IndexedArgs
     {
-        uint drawId;        ///< Read by the vertex entry from offset 0 of the record bound at `buffer(3)`.
-        uint indexCount;    ///< Indices per instance.
-        uint instanceCount; ///< Instances.
-        uint firstIndex;    ///< The first index read.
-        int baseVertex;     ///< Added to each index.
-        uint firstInstance; ///< Not visible to shaders, so not passed.
+        uint drawId; // Read by the vertex entry from offset 0 of the record bound at `buffer(3)`.
+        uint indexCount;
+        uint instanceCount;
+        uint firstIndex;
+        int baseVertex;
+        uint firstInstance; // Not visible to shaders, so not passed.
     };
 
-    /// `MTL::DrawPrimitivesIndirectArguments`.
+    // `MTL::DrawPrimitivesIndirectArguments`.
     struct NativeDraw
     {
-        uint vertexCount;   ///< Vertices per instance.
-        uint instanceCount; ///< Instances.
-        uint vertexStart;   ///< The first vertex.
-        uint baseInstance;  ///< The base instance: 0, since no shader sees it.
+        uint vertexCount;
+        uint instanceCount;
+        uint vertexStart;
+        uint baseInstance; // 0, since no shader sees it.
     };
 
-    /// `MTL::DrawIndexedPrimitivesIndirectArguments`.
+    // `MTL::DrawIndexedPrimitivesIndirectArguments`.
     struct NativeIndexed
     {
-        uint indexCount;    ///< Indices per instance.
-        uint instanceCount; ///< Instances.
-        uint indexStart;    ///< The first index read.
-        int baseVertex;     ///< Added to each index.
-        uint baseInstance;  ///< The base instance: 0, since no shader sees it.
+        uint indexCount;
+        uint instanceCount;
+        uint indexStart;
+        int baseVertex;
+        uint baseInstance; // 0, since no shader sees it.
     };
 
-    /// What the indirect command buffer's resource ID is read as.
     struct Icb
     {
-        metal::command_buffer commands; ///< The indirect command buffer.
+        metal::command_buffer commands;
     };
 
-    //==================================================================================================================
-    /// The draws a counted draw issues: its count, at most `maxCount`, or `maxCount` when it has none.
+    // `maxCount` when the draw has no count.
     template<typename Params> static uint drawCount(constant Params& p)
     {
         return p.count != 0 ? metal::min(*reinterpret_cast<const device uint*>(p.count), p.maxCount) : p.maxCount;
     }
 
-    //==================================================================================================================
-    /// The draws a counted draw whose parameters a writer kernel reads from its run issues, as `drawCount` above.
+    // For a writer kernel, which reads its parameters from its run.
     template<typename Params> static uint drawCount(const device Params& p)
     {
         return p.count != 0 ? metal::min(*reinterpret_cast<const device uint*>(p.count), p.maxCount) : p.maxCount;
     }
 
-    /// The bytes from one draw's parameters to the next's in a run of `rojorhi_write_draw` or `rojorhi_write_indexed`:
-    /// `metal4::kDrawReservation`.
+    // `metal4::kDrawReservation`.
     constant ulong kDrawStride = 128;
 
-    /// The bytes from one draw's parameters to the next's in a run of `rojorhi_write_mesh`: `metal4::kMeshReservation`.
+    // `metal4::kMeshReservation`.
     constant ulong kMeshStride = 128;
 
-    //==================================================================================================================
-    /// The parameters of draw `index` of a writer kernel's run, which starts at `params` and steps `stride` bytes a draw.
     template<typename Params> static const device Params& runParams(const device uchar* params, uint index, ulong stride)
     {
         return *reinterpret_cast<const device Params*>(params + index * stride);
     }
 
-    //==================================================================================================================
-    /// The primitive type `value`, an `MTL::PrimitiveType`, names.
     static metal::primitive_type primitiveOf(uint value)
     {
         switch (value)
@@ -145,8 +137,7 @@ namespace rojoRHI {
         }
     }
 
-    //==================================================================================================================
-    /// Returns the draws of the kernel's counted draw, and writes them as the execution range when `index` is 0.
+    // Thread 0 writes the execution range.
     template<typename Params> static uint writeRange(constant Params& p, uint index)
     {
         const uint count = drawCount(p);
@@ -157,9 +148,7 @@ namespace rojoRHI {
         return count;
     }
 
-    //==================================================================================================================
-    /// Binds the root, the view and sampler tables of `p` and the record `record` at `buffer(0)` to `buffer(3)` on the vertex
-    /// and fragment stages of `command`, which inherits no buffer, where an entry of the pipeline may read them.
+    // `command` inherits no buffer, so it binds them on every stage where an entry of the pipeline may read them.
     static void bindDrawBuffers(thread metal::render_command& command, constant DrawParams& p, const device void* record)
     {
         const device uchar* root = reinterpret_cast<const device uchar*>(p.root);
@@ -176,11 +165,8 @@ namespace rojoRHI {
     }
 } // namespace rojoRHI
 
-//======================================================================================================================
-/// Encodes record `index` of a counted draw as command `index` of the indirect command buffer, one thread per record;
-/// thread 0 writes the execution range. The command binds the reserved buffers, its own record at `buffer(3)` for the vertex
-/// entry's drawId, and draws with base instance 0. A record with no vertices or instances becomes an empty command, and
-/// threads at or past the count encode nothing, since the range ends before them.
+// Thread 0 writes the execution range. Each command binds its own record at `buffer(3)` for the vertex entry's drawId.
+// Threads at or past the count encode nothing, since the range ends before them.
 kernel void rojorhi_encode_draw(constant rojoRHI::DrawParams& p [[buffer(0)]], uint index [[thread_position_in_grid]])
 {
     if (index >= rojoRHI::writeRange(p, index))
@@ -198,10 +184,7 @@ kernel void rojorhi_encode_draw(constant rojoRHI::DrawParams& p [[buffer(0)]], u
     command.draw_primitives(rojoRHI::primitiveOf(p.primitive), args->firstVertex, args->vertexCount, args->instanceCount, 0u);
 }
 
-//======================================================================================================================
-/// Encodes record `index` of a counted indexed draw as `rojorhi_encode_draw` does, reading indices of the run-time index
-/// type from `firstIndex`. Metal takes the base vertex unsigned; the GPU adds it to each index modulo 2^32, which is the
-/// signed sum.
+// Metal takes the base vertex unsigned; the GPU adds it to each index modulo 2^32, which is the signed sum.
 kernel void rojorhi_encode_indexed(constant rojoRHI::DrawParams& p [[buffer(0)]], uint index [[thread_position_in_grid]])
 {
     if (index >= rojoRHI::writeRange(p, index))
@@ -231,10 +214,7 @@ kernel void rojorhi_encode_indexed(constant rojoRHI::DrawParams& p [[buffer(0)]]
     }
 }
 
-//======================================================================================================================
-/// Writes the one record of a counted draw of `maxCount` 1 as a native record, with base instance 0 and no instances when
-/// the count is 0; the draw binds the record itself at `buffer(3)`. One thread per draw of a run of consecutive such draws,
-/// whose parameters start at `params`.
+// The draw binds the record itself at `buffer(3)`. One thread per draw of a run of consecutive such draws.
 kernel void rojorhi_write_draw(const device uchar* params [[buffer(0)]], uint index [[thread_position_in_grid]])
 {
     const device rojoRHI::DrawParams& p = rojoRHI::runParams<rojoRHI::DrawParams>(params, index, rojoRHI::kDrawStride);
@@ -243,9 +223,6 @@ kernel void rojorhi_write_draw(const device uchar* params [[buffer(0)]], uint in
         args.vertexCount, rojoRHI::drawCount(p) != 0 ? args.instanceCount : 0u, args.firstVertex, 0u };
 }
 
-//======================================================================================================================
-/// Writes the one record of a counted indexed draw of `maxCount` 1 as a native record, as `rojorhi_write_draw` does, one
-/// thread per draw of a run.
 kernel void rojorhi_write_indexed(const device uchar* params [[buffer(0)]], uint index [[thread_position_in_grid]])
 {
     const device rojoRHI::DrawParams& p = rojoRHI::runParams<rojoRHI::DrawParams>(params, index, rojoRHI::kDrawStride);
@@ -254,11 +231,8 @@ kernel void rojorhi_write_indexed(const device uchar* params [[buffer(0)]], uint
         args.indexCount, rojoRHI::drawCount(p) != 0 ? args.instanceCount : 0u, args.firstIndex, args.baseVertex, 0u };
 }
 
-//======================================================================================================================
-/// Encodes mesh record `index` of a counted mesh draw as command `index` of a mesh indirect command buffer, one thread per
-/// record; thread 0 writes the execution range. The command inherits no buffer, so it binds the root, the view and sampler
-/// tables and its own record at `buffer(0)` to `buffer(3)` on the object, mesh and fragment stages, where an entry of the
-/// pipeline may read them. A record with a zero group count becomes an empty command.
+// Thread 0 writes the execution range. The command inherits no buffer, so it binds the reserved buffers on the object,
+// mesh and fragment stages.
 kernel void rojorhi_encode_mesh(constant rojoRHI::MeshParams& p [[buffer(0)]], uint index [[thread_position_in_grid]])
 {
     if (index >= rojoRHI::writeRange(p, index))
@@ -293,9 +267,7 @@ kernel void rojorhi_encode_mesh(constant rojoRHI::MeshParams& p [[buffer(0)]], u
         uint3(p.meshThreads[0], p.meshThreads[1], p.meshThreads[2]));
 }
 
-//======================================================================================================================
-/// Writes the one record of a counted mesh draw of `maxCount` 1 as a native record, with no groups when the count is 0. The
-/// draw binds the record itself at `buffer(3)`. One thread per draw of a run of consecutive such draws.
+// The draw binds the record itself at `buffer(3)`.
 kernel void rojorhi_write_mesh(const device uchar* params [[buffer(0)]], uint index [[thread_position_in_grid]])
 {
     const device rojoRHI::MeshParams& p = rojoRHI::runParams<rojoRHI::MeshParams>(params, index, rojoRHI::kMeshStride);

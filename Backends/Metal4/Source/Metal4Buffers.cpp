@@ -29,17 +29,13 @@
 
 namespace rojoRHI {
     namespace {
-        //==============================================================================================================
-        /// Returns the bytes and alignment a buffer of `desc` occupies in a heap of its memory class on `device`.
         PlacementRequirements placedRequirements(MTL::Device* device, const BufferDesc& desc)
         {
             const MTL::SizeAndAlign answer = device->heapBufferSizeAndAlign(desc.size, metal4::placedOptions(desc.memory));
             return PlacementRequirements{ answer.size, answer.align };
         }
 
-        //==============================================================================================================
-        /// Undoes a buffer creation that failed after `buffer` was made: it leaves the device residency set unless it is
-        /// placed, and is released. The caller holds an autorelease pool.
+        // The caller holds an autorelease pool.
         void discardBuffer(DeviceImpl& impl, MTL::Buffer* buffer, bool placed)
         {
             if (!placed)
@@ -51,7 +47,6 @@ namespace rojoRHI {
     } // namespace
 
     namespace metal4 {
-        //==============================================================================================================
         std::unique_ptr<BufferPayload> makeBufferPayload(core::DeviceCore& core, MTL::Buffer* buffer)
         {
             auto payload = std::make_unique<BufferPayload>(BufferPayload{ .buffer = buffer, .address = buffer->gpuAddress(), .length = buffer->length() });
@@ -59,7 +54,6 @@ namespace rojoRHI {
             return payload;
         }
 
-        //==============================================================================================================
         void retireBuffer(void* context, core::BufferRecord& record)
         {
             auto* payload = static_cast<BufferPayload*>(record.native);
@@ -83,7 +77,6 @@ namespace rojoRHI {
             record.native = nullptr;
         }
 
-        //==============================================================================================================
         void retireHeap(void* context, core::HeapRecord& record)
         {
             auto* heap = static_cast<MTL::Heap*>(record.native);
@@ -99,7 +92,6 @@ namespace rojoRHI {
         }
     } // namespace metal4
 
-    //==================================================================================================================
     Result<Buffer> Device::createBuffer(const BufferDesc& desc, std::span<const std::byte> initial, Placement placement)
     {
         DeviceImpl& impl = DeviceImpl::of(*this);
@@ -168,7 +160,6 @@ namespace rojoRHI {
         return handle;
     }
 
-    //==================================================================================================================
     Result<Heap> Device::createHeap(const HeapDesc& desc)
     {
         DeviceImpl& impl = DeviceImpl::of(*this);
@@ -206,7 +197,6 @@ namespace rojoRHI {
         return handle;
     }
 
-    //==================================================================================================================
     PlacementRequirements Device::placementRequirements(const BufferDesc& desc)
     {
         DeviceImpl& impl = DeviceImpl::of(*this);
@@ -214,7 +204,6 @@ namespace rojoRHI {
         return placedRequirements(impl.device, desc);
     }
 
-    //==================================================================================================================
     Addr Device::address(Buffer buffer, uint64_t offset)
     {
         DeviceImpl& impl = DeviceImpl::of(*this);
@@ -224,7 +213,6 @@ namespace rojoRHI {
         return Addr{ static_cast<uint32_t>(value), static_cast<uint32_t>(value >> 32) };
     }
 
-    //==================================================================================================================
     std::byte* Device::cpuPointer(Buffer buffer)
     {
         DeviceImpl& impl = DeviceImpl::of(*this);
@@ -233,7 +221,6 @@ namespace rojoRHI {
         return static_cast<std::byte*>(static_cast<const metal4::BufferPayload*>(record.native)->buffer->contents());
     }
 
-    //==================================================================================================================
     void Device::destroy(Buffer buffer)
     {
         DeviceImpl& impl = DeviceImpl::of(*this);
@@ -253,7 +240,6 @@ namespace rojoRHI {
 #endif
     }
 
-    //==================================================================================================================
     void Device::destroy(Heap heap)
     {
         core::destroyHeap(DeviceImpl::of(*this).core, heap);

@@ -46,10 +46,8 @@ extern char** environ;
 
 namespace rojoRHI::test {
     namespace {
-        //==============================================================================================================
-        /// Makes an abort, a failed CRT check or a crash end the process with its message on standard error, never with a
-        /// modal dialog, which would hang a runner until its step times out. Only Windows shows such dialogs; elsewhere it
-        /// does nothing.
+        // An abort, a failed CRT check or a crash ends the process with its message on standard error, never with a modal
+        // dialog, which would hang a runner until its step times out. Only Windows shows such dialogs.
         void quietAborts()
         {
 #if defined(_WIN32)
@@ -63,9 +61,9 @@ namespace rojoRHI::test {
 #endif
         }
 
-        /// Quiets aborts once the test run starts, so an abort outside a death test fails the run at once, its message in
-        /// the log; a death child quiets them again before it runs its body. On Windows it also leaves standard output and
-        /// standard error unbuffered: an abort flushes neither, and a pipe would hold back the report of every case before it.
+        // Quiets aborts once the test run starts, so an abort outside a death test fails the run at once, its message in
+        // the log; a death child quiets them again before it runs its body. On Windows it also leaves standard output and
+        // standard error unbuffered: an abort flushes neither, and a pipe would hold back the report of every case before it.
         class QuietAborts final : public Catch::EventListenerBase
         {
           public:
@@ -74,7 +72,6 @@ namespace rojoRHI::test {
             void testRunStarting(const Catch::TestRunInfo&) override;
         };
 
-        //==============================================================================================================
         void QuietAborts::testRunStarting(const Catch::TestRunInfo&)
         {
             quietAborts();
@@ -94,8 +91,6 @@ namespace rojoRHI::test {
             std::string status;
         };
 
-        //==============================================================================================================
-        /// Escapes the characters Catch2 treats specially in a test spec so the name selects exactly one case.
         std::string escapeTestSpec(const std::string& name)
         {
             std::string out;
@@ -112,17 +107,15 @@ namespace rojoRHI::test {
             return out;
         }
 
-        //==============================================================================================================
         std::string readFile(const std::filesystem::path& path)
         {
             std::ifstream in(path, std::ios::binary);
             return std::string(std::istreambuf_iterator<char>(in), std::istreambuf_iterator<char>());
         }
 
-        //==============================================================================================================
-        /// The first violation report in `text` (a `VU-rojo-` identifier directly followed by a colon) through the end of its
-        /// line, or an empty string. The default sink prefixes each line with "[RHI] [severity] ", and Catch2 echoes the test
-        /// name, which may itself begin with an identifier, so the colon is what marks a report.
+        // A report is a `VU-rojo-` identifier directly followed by a colon, through the end of its line. The default sink
+        // prefixes each line with "[RHI] [severity] ", and Catch2 echoes the test name, which may itself begin with an
+        // identifier, so the colon is what marks a report.
         std::string firstViolationLine(const std::string& text)
         {
             static const std::regex report("VU-rojo-[A-Za-z0-9-]+:[^\\n]*");
@@ -130,8 +123,6 @@ namespace rojoRHI::test {
             return std::regex_search(text, match, report) ? match.str() : std::string();
         }
 
-        //==============================================================================================================
-        /// Creates the empty capture file and returns its path, or an empty path with `reason` set.
         std::filesystem::path makeCapturePath(std::string& reason)
         {
             std::error_code error;
@@ -162,9 +153,7 @@ namespace rojoRHI::test {
 #endif
         }
 
-        //==============================================================================================================
-        /// Runs the current executable on `spec` with ROJORHI_DEATH_CHILD=1, standard error going to `capture` and standard
-        /// output to the null device, and waits for it.
+        // The child runs with ROJORHI_DEATH_CHILD=1, standard error going to `capture` and standard output to the null device.
         ChildResult runChild(const std::string& spec, const std::filesystem::path& capture)
         {
             ChildResult result;
@@ -346,7 +335,6 @@ namespace rojoRHI::test {
         }
     } // namespace
 
-    //==================================================================================================================
     std::string quoteWindowsArgument(std::string_view argument)
     {
         std::string out = "\"";
@@ -374,7 +362,6 @@ namespace rojoRHI::test {
         return out;
     }
 
-    //==================================================================================================================
     DeathRole deathRoleOf(const char* value)
     {
         if (value == nullptr)
@@ -385,10 +372,8 @@ namespace rojoRHI::test {
     }
 
     namespace {
-        //==============================================================================================================
-        /// Runs the current case again in a child process that runs `body`; in the child itself it runs `body` and exits 0 when
-        /// `body` returns. In the parent it requires the child to die with a non-zero status and `matches` to
-        /// accept its captured standard error.
+        // In the child itself it runs `body` and exits 0 when `body` returns. In the parent it requires the child to die with
+        // a non-zero status and `matches` to accept its captured standard error.
         void runDeathCase(const std::function<void()>& body, const std::function<bool(const std::string&)>& matches)
         {
 #ifdef NDEBUG
@@ -430,14 +415,12 @@ namespace rojoRHI::test {
         }
     } // namespace
 
-    //==================================================================================================================
     void expectDeath(std::string_view id, const std::function<void()>& body)
     {
         const std::string expected = std::string(id) + ":";
         runDeathCase(body, [&](const std::string& text) { return firstViolationLine(text).starts_with(expected); });
     }
 
-    //==================================================================================================================
     void expectAbort(std::string_view marker, const std::function<void()>& body)
     {
         runDeathCase(body, [&](const std::string& text) { return text.find(marker) != std::string::npos; });

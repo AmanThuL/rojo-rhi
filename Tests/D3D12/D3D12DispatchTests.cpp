@@ -32,39 +32,32 @@
 using namespace rojoRHI;
 
 namespace {
-    /// The dispatch oracle's threadgroup size.
+    // The dispatch oracle's threadgroup size.
     constexpr uint32_t kGroupX = 8;
     constexpr uint32_t kGroupY = 4;
     constexpr uint32_t kGroupZ = 2;
 
-    /// The bytes of one `uint4` the oracle stores.
     constexpr uint64_t kCell = 16;
 
-    /// The cells of one group's grid.
     constexpr uint64_t kGroupCells = uint64_t{ kGroupX } * kGroupY * kGroupZ;
 
-    /// The dispatch oracle's root.
+    // The dispatch oracle's root; `width` and `height` count threads.
     struct GridRoot
     {
-        Addr output;     ///< Where the entry stores a `uint4` per thread.
-        uint32_t width;  ///< The grid's width in threads.
-        uint32_t height; ///< The grid's height in threads.
+        Addr output;
+        uint32_t width;
+        uint32_t height;
     };
 
-    /// Four `uint32` words of one cell.
     using Cell = std::array<uint32_t, 4>;
 
-    /// The cell an untouched output holds.
     constexpr Cell kUntouched{ 0xDEADBEEFu, 0xDEADBEEFu, 0xDEADBEEFu, 0xDEADBEEFu };
 
-    /// Guards `g_messages`, which the message callback may fill from any thread.
+    // The message callback may fill `g_messages` from any thread.
     std::mutex g_messagesMutex;
 
-    /// The messages at `Warning` or above the library reported while a case collected them.
     std::vector<std::string> g_messages;
 
-    //==================================================================================================================
-    /// Keeps `message` when it is a warning or an error. It may run on any thread.
     void collectMessage(MessageSeverity severity, std::string_view message, void*)
     {
         if (severity == MessageSeverity::Info)
@@ -75,25 +68,22 @@ namespace {
         g_messages.emplace_back(message);
     }
 
-    /// Collects the library's warnings and errors, the debug layer's included, into `g_messages`, emptied first, while it
-    /// lives, and removes the callback when it goes, however the case ends.
+    // Collects the library's warnings and errors, the debug layer's included, into `g_messages` (emptied first) while it
+    // lives, and removes the callback however the case ends.
     class MessageCollection
     {
       public:
         MessageCollection();
         ~MessageCollection();
 
-        //==============================================================================================================
         MessageCollection(const MessageCollection&) = delete;
 
-        //==============================================================================================================
         MessageCollection& operator=(const MessageCollection&) = delete;
 
-        /// Returns the messages collected so far, and lists them for the log.
+        // Also lists the messages for the log.
         size_t count() const;
     };
 
-    //==================================================================================================================
     MessageCollection::MessageCollection()
     {
         {
@@ -103,13 +93,11 @@ namespace {
         setMessageCallback(collectMessage, nullptr);
     }
 
-    //==================================================================================================================
     MessageCollection::~MessageCollection()
     {
         setMessageCallback(nullptr, nullptr);
     }
 
-    //==================================================================================================================
     size_t MessageCollection::count() const
     {
         const std::lock_guard lock(g_messagesMutex);
@@ -120,8 +108,6 @@ namespace {
         return g_messages.size();
     }
 
-    //==================================================================================================================
-    /// Returns a new device that keeps two frames in flight.
     Device makeDevice()
     {
         DeviceDesc desc;
@@ -132,8 +118,6 @@ namespace {
         return *created;
     }
 
-    //==================================================================================================================
-    /// Returns a new fence at zero on `device`, labelled `label`.
     Fence makeFence(Device device, std::string_view label)
     {
         Result<Fence> created = device.createFence(0, label);
@@ -141,8 +125,6 @@ namespace {
         return *created;
     }
 
-    //==================================================================================================================
-    /// Returns a new buffer of `desc` on `device`, holding `initial` when it is not empty.
     Buffer makeBuffer(Device device, const BufferDesc& desc, std::span<const std::byte> initial = {})
     {
         Result<Buffer> created = device.createBuffer(desc, initial);
@@ -150,8 +132,6 @@ namespace {
         return *created;
     }
 
-    //==================================================================================================================
-    /// Creates the dispatch oracle's compute pipeline on `device`.
     Pipeline oraclePipeline(Device device)
     {
         const std::vector<std::byte> blob = test::shaderLibraryFile("DispatchOracle");
@@ -164,8 +144,7 @@ namespace {
         return *pipeline;
     }
 
-    //==================================================================================================================
-    /// Returns the payload of `pipeline`, read as recording reads it.
+    // Read as recording reads it.
     const d3d12::PipelineState& payloadOf(Device device, Pipeline pipeline)
     {
         const auto* state = static_cast<const d3d12::PipelineState*>(DeviceImpl::of(device).core.pool<Pipeline>().native(pipeline));
@@ -174,8 +153,6 @@ namespace {
         return *state;
     }
 
-    //==================================================================================================================
-    /// Returns the native buffer of `buffer`, a live buffer of `device`.
     ID3D12Resource* resourceOf(Device device, Buffer buffer)
     {
         const auto* payload = static_cast<const d3d12::BufferPayload*>(DeviceImpl::of(device).core.pool<Buffer>().native(buffer));
@@ -183,22 +160,16 @@ namespace {
         return payload->resource;
     }
 
-    //==================================================================================================================
-    /// Returns the native state of `list`.
     d3d12::ListState& stateOf(CommandList list)
     {
         return CommandListImpl::of(list).state;
     }
 
-    //==================================================================================================================
-    /// Returns the native calls `list` has recorded since its acquisition.
     uint64_t recordCalls(CommandList list)
     {
         return core::coreOf(list).counts.nativeRecordCalls;
     }
 
-    //==================================================================================================================
-    /// The bytes of `cells`.
     std::vector<std::byte> bytesOf(std::span<const Cell> cells)
     {
         std::vector<std::byte> bytes(cells.size() * kCell);
@@ -206,9 +177,8 @@ namespace {
         return bytes;
     }
 
-    //==================================================================================================================
-    /// What the oracle stores for a grid of `groupsX` by `groupsY` by `groupsZ` groups: the thread's identifier and a one at
-    /// its linear index, and `rest` elsewhere, `cells` cells in all.
+    // The thread's identifier and a one at its linear index for a grid of `groupsX` by `groupsY` by `groupsZ` groups, and
+    // `rest` elsewhere, `cells` cells in all.
     std::vector<Cell> expectedGrid(uint32_t groupsX, uint32_t groupsY, uint32_t groupsZ, const Cell& rest, uint64_t cells)
     {
         const uint32_t width = groupsX * kGroupX;
@@ -227,23 +197,17 @@ namespace {
         return grid;
     }
 
-    //==================================================================================================================
-    /// Creates a Gpu buffer of `cells` cells, each `kUntouched`, that a shader may write.
     Buffer outputBuffer(Device device, uint64_t cells)
     {
         const std::vector<Cell> initial(cells, kUntouched);
         return makeBuffer(device, { .size = cells * kCell, .usage = BufferUsage::ShaderWrite, .label = "test.output" }, bytesOf(initial));
     }
 
-    //==================================================================================================================
-    /// The oracle's root for a grid `groupsX` by `groupsY` groups wide writing to `output`.
     GridRoot rootOf(Device device, Buffer output, uint32_t groupsX, uint32_t groupsY)
     {
         return GridRoot{ device.address(output), groupsX * kGroupX, groupsY * kGroupY };
     }
 
-    //==================================================================================================================
-    /// Ends `list`, submits it on the Graphics queue signalling `done` to 1, ends the frame and waits for the signal.
     void run(Device device, CommandList list, Fence done)
     {
         list.end();
@@ -253,15 +217,12 @@ namespace {
         REQUIRE(device.wait({ done, 1 }, UINT64_MAX));
     }
 
-    //==================================================================================================================
-    /// Returns the cells of `output`, a buffer of `cells` cells on `device` that no queue is using, read natively.
     std::vector<std::byte> readCells(Device device, Buffer output, uint64_t cells)
     {
         return test::readNativeBuffer(DeviceImpl::of(device), resourceOf(device, output), cells * kCell);
     }
 } // namespace
 
-//======================================================================================================================
 TEST_CASE("setPipeline with a compute pipeline sets it at once and a dispatch after it costs one call", "[d3d12]")
 {
     REQUIRE(kD3D12LibrariesBuilt);
@@ -303,7 +264,6 @@ TEST_CASE("setPipeline with a compute pipeline sets it at once and a dispatch af
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("setRoot then dispatch writes the compute root once; a second dispatch writes nothing more", "[d3d12]")
 {
     REQUIRE(kD3D12LibrariesBuilt);
@@ -350,7 +310,6 @@ TEST_CASE("setRoot then dispatch writes the compute root once; a second dispatch
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("a fill between two dispatches sets the caller's pipeline and root again before the second, once", "[d3d12]")
 {
     REQUIRE(kD3D12LibrariesBuilt);
@@ -405,7 +364,6 @@ TEST_CASE("a fill between two dispatches sets the caller's pipeline and root aga
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("dispatchIndirect is one ExecuteIndirect after the flush", "[d3d12]")
 {
     REQUIRE(kD3D12LibrariesBuilt);
@@ -443,7 +401,6 @@ TEST_CASE("dispatchIndirect is one ExecuteIndirect after the flush", "[d3d12]")
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("a dispatch with a zero dimension records nothing", "[d3d12]")
 {
     REQUIRE(kD3D12LibrariesBuilt);

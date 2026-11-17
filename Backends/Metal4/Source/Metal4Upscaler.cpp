@@ -40,12 +40,9 @@
 
 namespace rojoRHI {
     namespace {
-        /// The narrowest and shortest output MetalFX creates a scaler for: below it, its creation aborts on an internal texture
-        /// of zero extent.
+        // Below it, MetalFX's creation aborts on an internal texture of zero extent.
         constexpr uint32_t kMinOutputExtent = 4;
 
-        //==============================================================================================================
-        /// Returns the smallest content extent, at most `input`, whose scale to `output` texels is at most `maxScale`.
         uint32_t smallestContent(uint32_t input, uint32_t output, float maxScale)
         {
             auto smallest = static_cast<uint32_t>(std::ceil(static_cast<float>(output) / maxScale));
@@ -57,8 +54,6 @@ namespace rojoRHI {
             return std::clamp(smallest, 1u, input);
         }
 
-        //==============================================================================================================
-        /// Returns the `Unsupported` error that names why MetalFX makes no scaler for `record`, with its extents and formats.
         Error refusal(const core::UpscalerRecord& record, std::string_view reason)
         {
             return Error{
@@ -79,19 +74,15 @@ namespace rojoRHI {
             };
         }
 
-        //==============================================================================================================
-        /// Returns the process-wide mutex that makes MetalFX create one temporal scaler at a time.
         std::mutex& scalerCreation()
         {
             static std::mutex mutex;
             return mutex;
         }
 
-        //==============================================================================================================
-        /// Makes the temporal scaler of `record` on `impl`'s device, or returns null when MetalFX makes none. Its range of
-        /// content scales runs from the whole input's, the smaller of the two axes', to the device's maximum, so every content
-        /// extent the core accepts down to that maximum fits it; the caller has refused a ratio beyond it. The caller holds an
-        /// autorelease pool.
+        // Content scales run from the whole input's, the smaller axis's, to the device's maximum, so every content the
+        // core accepts down to that maximum fits; the caller has refused a ratio beyond it. The caller holds an
+        // autorelease pool.
         MTL4FX::TemporalScaler* newScaler(DeviceImpl& impl, const core::UpscalerRecord& record, float minScale, float maxScale)
         {
             MTLFX::TemporalScalerDescriptor* descriptor = MTLFX::TemporalScalerDescriptor::alloc()->init();
@@ -121,9 +112,7 @@ namespace rojoRHI {
             return scaler;
         }
 
-        //==============================================================================================================
-        /// Makes the reactive mask of `record`: an `R8Unorm` Private texture of the input extent in the device residency set,
-        /// zeroed through the stager. Returns the texture, or the error that left none. The caller holds an autorelease pool.
+        // Zeroed through the stager and in the device residency set. The caller holds an autorelease pool.
         Result<MTL::Texture*> newMask(DeviceImpl& impl, const core::UpscalerRecord& record)
         {
             const TextureDesc desc{ .format = Format::R8Unorm, .extent = { record.input.width, record.input.height, 1 }, .usage = TextureUsage::Sampled };
@@ -152,8 +141,7 @@ namespace rojoRHI {
             return mask;
         }
 
-        //==============================================================================================================
-        /// Releases what `state` holds, after its mask leaves the device residency set. The caller holds an autorelease pool.
+        // The caller holds an autorelease pool.
         void releaseState(DeviceImpl& impl, metal4::UpscalerState& state)
         {
             if (state.mask != nullptr)
@@ -174,7 +162,6 @@ namespace rojoRHI {
     } // namespace
 
     namespace metal4 {
-        //==============================================================================================================
         std::span<const UpscalerSupport> metalUpscalers(MTL::Device* device, std::array<UpscalerSupport, 1>& storage)
         {
             if (!MTLFX::TemporalScalerDescriptor::supportsMetal4FX(device))
@@ -188,7 +175,6 @@ namespace rojoRHI {
             return storage;
         }
 
-        //==============================================================================================================
         void retireUpscaler(void* context, core::UpscalerRecord& record)
         {
             auto* state = static_cast<UpscalerState*>(record.native);
@@ -208,7 +194,6 @@ namespace rojoRHI {
         }
     } // namespace metal4
 
-    //==================================================================================================================
     Result<Upscaler> Device::createUpscaler(const UpscalerDesc& desc)
     {
         DeviceImpl& impl = DeviceImpl::of(*this);
@@ -273,13 +258,11 @@ namespace rojoRHI {
         return upscaler;
     }
 
-    //==================================================================================================================
     void Device::destroy(Upscaler upscaler)
     {
         DeviceImpl::of(*this).core.destroy(upscaler);
     }
 
-    //==================================================================================================================
     void CommandList::upscale(Upscaler upscaler, const UpscaleParams& params)
     {
         CommandListImpl& impl = CommandListImpl::of(*this);

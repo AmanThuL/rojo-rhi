@@ -17,7 +17,6 @@ namespace {
     constexpr std::array<Format, 1> kRgba8 = { Format::RGBA8Unorm };
 } // namespace
 
-//======================================================================================================================
 TEST_CASE("a render pass over one color attachment begins and ends", "[contract]")
 {
     PassKit kit;
@@ -26,7 +25,6 @@ TEST_CASE("a render pass over one color attachment begins and ends", "[contract]
     kit.finish();
 }
 
-//======================================================================================================================
 TEST_CASE("a render pass over depth alone begins and ends", "[contract]")
 {
     PassKit kit;
@@ -35,7 +33,6 @@ TEST_CASE("a render pass over depth alone begins and ends", "[contract]")
     kit.finish();
 }
 
-//======================================================================================================================
 TEST_CASE("a render pass takes the maximum number of color attachments of distinct textures", "[contract]")
 {
     PassKit kit;
@@ -49,7 +46,6 @@ TEST_CASE("a render pass takes the maximum number of color attachments of distin
     kit.finish();
 }
 
-//======================================================================================================================
 TEST_CASE("a render pass takes a mip and a layer of an attachment texture", "[contract]")
 {
     PassKit kit;
@@ -61,7 +57,6 @@ TEST_CASE("a render pass takes a mip and a layer of an attachment texture", "[co
     kit.finish();
 }
 
-//======================================================================================================================
 TEST_CASE("a multisampled attachment resolves into a single-sample texture", "[contract]")
 {
     PassKit kit;
@@ -72,7 +67,6 @@ TEST_CASE("a multisampled attachment resolves into a single-sample texture", "[c
     kit.finish();
 }
 
-//======================================================================================================================
 TEST_CASE("a pass takes color and depth attachments with every load and store operation", "[contract]")
 {
     PassKit kit;
@@ -93,7 +87,6 @@ TEST_CASE("a pass takes color and depth attachments with every load and store op
     kit.finish();
 }
 
-//======================================================================================================================
 TEST_CASE("a pass renders to a sub-area of its attachments", "[contract]")
 {
     PassKit kit;
@@ -103,7 +96,6 @@ TEST_CASE("a pass renders to a sub-area of its attachments", "[contract]")
     kit.finish();
 }
 
-//======================================================================================================================
 TEST_CASE("scopes nest outside and inside a render pass", "[contract]")
 {
     PassKit kit;
@@ -120,7 +112,6 @@ TEST_CASE("scopes nest outside and inside a render pass", "[contract]")
     kit.finish();
 }
 
-//======================================================================================================================
 TEST_CASE("scopes are valid on every queue type", "[contract]")
 {
     for (const QueueType type : { QueueType::Graphics, QueueType::Compute, QueueType::Copy })
@@ -132,7 +123,6 @@ TEST_CASE("scopes are valid on every queue type", "[contract]")
     }
 }
 
-//======================================================================================================================
 TEST_CASE("a graphics pipeline binds inside a pass that matches it", "[contract]")
 {
     PassKit kit;
@@ -146,7 +136,6 @@ TEST_CASE("a graphics pipeline binds inside a pass that matches it", "[contract]
     kit.finish();
 }
 
-//======================================================================================================================
 TEST_CASE("a depth-only pass binds a depth-only pipeline", "[contract]")
 {
     PassKit kit;
@@ -156,7 +145,6 @@ TEST_CASE("a depth-only pass binds a depth-only pipeline", "[contract]")
     kit.finish();
 }
 
-//======================================================================================================================
 TEST_CASE("a pass binds a pipeline again and a mesh pipeline", "[contract]")
 {
     PassKit kit;
@@ -167,7 +155,6 @@ TEST_CASE("a pass binds a pipeline again and a mesh pipeline", "[contract]")
     kit.finish();
 }
 
-//======================================================================================================================
 TEST_CASE("a compute pipeline binds outside a pass on a Graphics or Compute list and again after a pass", "[contract]")
 {
     for (const QueueType type : { QueueType::Graphics, QueueType::Compute })
@@ -185,7 +172,6 @@ TEST_CASE("a compute pipeline binds outside a pass on a Graphics or Compute list
     }
 }
 
-//======================================================================================================================
 TEST_CASE("dynamic state is set inside a pass", "[contract]")
 {
     PassKit kit;
@@ -200,7 +186,6 @@ TEST_CASE("dynamic state is set inside a pass", "[contract]")
     kit.finish();
 }
 
-//======================================================================================================================
 TEST_CASE("a scissor lies within the area of a pass that does not start at the origin", "[contract]")
 {
     PassKit kit;
@@ -212,7 +197,6 @@ TEST_CASE("a scissor lies within the area of a pass that does not start at the o
     kit.finish();
 }
 
-//======================================================================================================================
 TEST_CASE("every topology of the pipeline's class is set after a pipeline binds", "[contract]")
 {
     struct Case
@@ -239,7 +223,6 @@ TEST_CASE("every topology of the pipeline's class is set after a pipeline binds"
     kit.finish();
 }
 
-//======================================================================================================================
 TEST_CASE("a depth bias is set while the bound pipeline has depth bias", "[contract]")
 {
     PassKit kit;
@@ -251,7 +234,6 @@ TEST_CASE("a depth bias is set while the bound pipeline has depth bias", "[contr
     kit.finish();
 }
 
-//======================================================================================================================
 TEST_CASE("a list records a second pass after the first ends", "[contract]")
 {
     PassKit kit;

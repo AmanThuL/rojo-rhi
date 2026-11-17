@@ -26,13 +26,11 @@ namespace {
     };
     std::vector<Message> gMessages;
 
-    //==================================================================================================================
     void collectMessage(MessageSeverity severity, std::string_view message, void*)
     {
         gMessages.push_back({ severity, std::string(message) });
     }
 
-    //==================================================================================================================
     ShaderLibrary loadStandard(Device device)
     {
         const std::vector<std::byte> blob = test::standardLibrary();
@@ -42,7 +40,6 @@ namespace {
     }
 } // namespace
 
-//======================================================================================================================
 TEST_CASE("loadShaderLibrary returns a library that destroy accepts", "[contract]")
 {
     Device device = *createDevice();
@@ -52,7 +49,6 @@ TEST_CASE("loadShaderLibrary returns a library that destroy accepts", "[contract
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("loadShaderLibrary returns an error for a blob not built for the backend", "[contract]")
 {
     Device device = *createDevice();
@@ -61,7 +57,6 @@ TEST_CASE("loadShaderLibrary returns an error for a blob not built for the backe
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("loadShaderLibrary returns ShaderAbiMismatch for a library stamped with another ABI version", "[contract]")
 {
     Device device = *createDevice();
@@ -72,7 +67,6 @@ TEST_CASE("loadShaderLibrary returns ShaderAbiMismatch for a library stamped wit
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("a failed loadShaderLibrary creates nothing to destroy", "[contract]")
 {
     Device device = *createDevice();
@@ -83,7 +77,6 @@ TEST_CASE("a failed loadShaderLibrary creates nothing to destroy", "[contract]")
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("createPipeline creates a vertex pipeline with a fragment stage", "[contract]")
 {
     Device device = *createDevice();
@@ -97,7 +90,6 @@ TEST_CASE("createPipeline creates a vertex pipeline with a fragment stage", "[co
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("createPipeline creates a depth-only pipeline", "[contract]")
 {
     Device device = *createDevice();
@@ -109,7 +101,6 @@ TEST_CASE("createPipeline creates a depth-only pipeline", "[contract]")
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("createPipeline creates a mesh pipeline with and without a task stage", "[contract]")
 {
     Device device = *createDevice();
@@ -120,7 +111,6 @@ TEST_CASE("createPipeline creates a mesh pipeline with and without a task stage"
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("createPipeline creates a multisampled pipeline with depth and stencil", "[contract]")
 {
     Device device = *createDevice();
@@ -136,7 +126,6 @@ TEST_CASE("createPipeline creates a multisampled pipeline with depth and stencil
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("createPipeline creates a compute pipeline", "[contract]")
 {
     Device device = *createDevice();
@@ -147,7 +136,6 @@ TEST_CASE("createPipeline creates a compute pipeline", "[contract]")
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("createPipeline creates a compute pipeline from a rule-built library whose entry imports a shared module", "[contract]")
 {
     Device device = *createDevice();
@@ -161,7 +149,6 @@ TEST_CASE("createPipeline creates a compute pipeline from a rule-built library w
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("an embedded shader library loads and creates a compute pipeline", "[contract]")
 {
     Device device = *createDevice();
@@ -174,7 +161,6 @@ TEST_CASE("an embedded shader library loads and creates a compute pipeline", "[c
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("a pipeline is created from a name that need not outlive the call", "[contract]")
 {
     Device device = *createDevice();
@@ -186,7 +172,6 @@ TEST_CASE("a pipeline is created from a name that need not outlive the call", "[
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("pipelineCacheData returns a blob a later device accepts", "[contract]")
 {
     Device device = *createDevice();
@@ -205,7 +190,6 @@ TEST_CASE("pipelineCacheData returns a blob a later device accepts", "[contract]
     destroyDevice(*second);
 }
 
-//======================================================================================================================
 TEST_CASE("a foreign pipeline cache blob is discarded with a message and is not an error", "[contract]")
 {
     const std::array<std::byte, 4> foreign{ std::byte{ 1 }, std::byte{ 2 }, std::byte{ 3 }, std::byte{ 4 } };
@@ -219,7 +203,6 @@ TEST_CASE("a foreign pipeline cache blob is discarded with a message and is not 
     destroyDevice(*device);
 }
 
-//======================================================================================================================
 TEST_CASE("createDevice with an empty pipeline cache reports nothing", "[contract]")
 {
     gMessages.clear();

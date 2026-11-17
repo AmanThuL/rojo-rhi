@@ -11,8 +11,6 @@
 
 namespace rojoRHI::core {
     namespace {
-        //==============================================================================================================
-        /// Returns the count of `refs` that `kind` names.
         [[maybe_unused]] uint32_t& countOf(ListReferences& refs, RefKind kind)
         {
             switch (kind)
@@ -24,10 +22,8 @@ namespace rojoRHI::core {
             return refs.others;
         }
 
-        //==============================================================================================================
-        /// Adds `delta` to the count of `kind` in the record `handle` names, under the pool's lock. Returns false when the handle
-        /// is not live, or when it is a frame-arena page named by address: frame data resolves to no caller buffer. `image` is
-        /// set when the object is a swapchain image.
+        // Returns false when the handle is not live, or for a frame-arena page named by address: frame data resolves to no
+        // caller buffer.
         template<typename Handle> [[maybe_unused]] bool adjust(DeviceCore& core, Handle handle, RefKind kind, int delta, bool& image)
         {
             bool applied = false;
@@ -50,8 +46,6 @@ namespace rojoRHI::core {
             return applied;
         }
 
-        //==============================================================================================================
-        /// Applies `delta` to the object whose handle is `bits`, by the type tag in its top bits.
         [[maybe_unused]] bool adjustBits(DeviceCore& core, uint64_t bits, RefKind kind, int delta, bool& image)
         {
             const auto tag = static_cast<uint8_t>(bits >> 56);
@@ -74,8 +68,6 @@ namespace rojoRHI::core {
             return false; // A type no recorded command names.
         }
 
-        //==============================================================================================================
-        /// Returns the set of `list` that holds the references of `kind`.
         [[maybe_unused]] std::unordered_set<uint64_t>& setOf(TrackerLog& log, RefKind kind)
         {
             switch (kind)
@@ -87,8 +79,6 @@ namespace rojoRHI::core {
             return log.otherRefs;
         }
 
-        //==============================================================================================================
-        /// Removes the counts `bits` hold of `kind` and empties the set.
         [[maybe_unused]] void releaseSet(DeviceCore& core, std::unordered_set<uint64_t>& set, RefKind kind)
         {
             for (const uint64_t bits : set)
@@ -100,7 +90,6 @@ namespace rojoRHI::core {
         }
     } // namespace
 
-    //==================================================================================================================
     void noteReferenceChecked([[maybe_unused]] CommandListCore& list, [[maybe_unused]] RefKind kind, [[maybe_unused]] uint64_t handleBits)
     {
 #ifndef NDEBUG
@@ -126,7 +115,6 @@ namespace rojoRHI::core {
 #endif
     }
 
-    //==================================================================================================================
     void releaseReferencesChecked([[maybe_unused]] CommandListCore& list)
     {
 #ifndef NDEBUG
@@ -140,7 +128,6 @@ namespace rojoRHI::core {
 #endif
     }
 
-    //==================================================================================================================
     void releaseSubmittedChecked([[maybe_unused]] std::span<const CommandList> lists)
     {
 #ifndef NDEBUG
@@ -151,7 +138,6 @@ namespace rojoRHI::core {
 #endif
     }
 
-    //==================================================================================================================
     template<typename Handle> void checkUnreferencedChecked([[maybe_unused]] DeviceCore& core, [[maybe_unused]] Handle handle)
     {
 #ifndef NDEBUG

@@ -15,28 +15,25 @@
 
 namespace rojoRHI::imgui {
     namespace {
-        /// The renderer's data of one platform window, held in `ImGuiViewport::RendererUserData`.
+        // Owned through `ImGuiViewport::RendererUserData`.
         struct ViewportData
         {
             Swapchain swapchain;
             void* surface = nullptr;
-            Extent2D extent; ///< The extent last set with `Swapchain::resize`; zero while unknown.
-            Texture image;   ///< The image acquired this frame, null otherwise.
+            Extent2D extent; // The extent last set with `Swapchain::resize`; zero while unknown.
+            Texture image;   // Null outside `renderPlatformWindows` to `presentPlatformWindows`.
             bool acquired = false;
-            uint32_t presents = 0; ///< Presents since creation.
-            std::string passLabel; ///< The label of the window's render pass.
+            uint32_t presents = 0;
+            std::string passLabel;
         };
 
-        /// How long closing a platform window waits for the graphics queue, in nanoseconds.
         constexpr uint64_t kDestroyWaitNs = 5'000'000'000;
 
-        //==============================================================================================================
         ViewportData* dataOf(ImGuiViewport* viewport)
         {
             return static_cast<ViewportData*>(viewport->RendererUserData);
         }
 
-        //==============================================================================================================
         // The platform's own answer is fresher than the flag, which ImGui::NewFrame refreshes after newFrame runs.
         bool isMinimized(const ImGuiPlatformIO& platformIo, ImGuiViewport* viewport)
         {
@@ -47,8 +44,6 @@ namespace rojoRHI::imgui {
             return viewport->PlatformWindowCreated && platformIo.Platform_GetWindowMinimized != nullptr && platformIo.Platform_GetWindowMinimized(viewport);
         }
 
-        //==============================================================================================================
-        // The framebuffer size of a viewport in whole pixels, zero in a dimension that is not positive.
         Extent2D framebufferExtent(ImVec2 size, ImVec2 scale)
         {
             const long width = std::lround(size.x * scale.x);
@@ -56,11 +51,8 @@ namespace rojoRHI::imgui {
             return Extent2D{ .width = width > 0 ? static_cast<uint32_t>(width) : 0, .height = height > 0 ? static_cast<uint32_t>(height) : 0 };
         }
 
-        //==============================================================================================================
-        // The framebuffer size of a platform window as its platform reports it now. `viewport->Size` and its scale are
-        // refreshed by ImGui::NewFrame, after newFrame runs, while the OS may already have resized the window's surface, so
-        // a swapchain sized from them would lag the surface by a frame. Without the platform's callbacks the viewport's own
-        // values are used.
+        // Asks the platform, because ImGui::NewFrame refreshes `viewport->Size` and its scale only after newFrame runs, while
+        // the OS may already have resized the surface: a swapchain sized from them would lag it by a frame.
         Extent2D platformExtent(const ImGuiPlatformIO& platformIo, ImGuiViewport* viewport)
         {
             const bool created = viewport->PlatformWindowCreated;
@@ -70,7 +62,6 @@ namespace rojoRHI::imgui {
             return framebufferExtent(size, scale);
         }
 
-        //==============================================================================================================
         void createWindow(ImGuiViewport* viewport)
         {
             IM_ASSERT(detail::g_state != nullptr && "a platform window was created without rojoRHI::imgui::init");
@@ -95,7 +86,6 @@ namespace rojoRHI::imgui {
             viewport->RendererUserData = IM_NEW(ViewportData){ .swapchain = *swapchain, .surface = surface, .passLabel = std::format("{}.pass", label) };
         }
 
-        //==============================================================================================================
         // ImGui destroys the platform window, and with it the native surface, right after this call returns, while frames
         // that drew into the swapchain may still be in flight. The surface must outlive the swapchain's destroy and every
         // frame in flight at it, so a submission with no lists signals the fence behind all earlier graphics work, and the
@@ -125,7 +115,6 @@ namespace rojoRHI::imgui {
             viewport->RendererUserData = nullptr;
         }
 
-        //==============================================================================================================
         // Nothing to do: newFrame reconciles every swapchain's extent, because the OS also resizes platform windows without
         // ImGui calling this.
         void setWindowSize(ImGuiViewport*, ImVec2)
@@ -133,7 +122,6 @@ namespace rojoRHI::imgui {
         }
     } // namespace
 
-    //==================================================================================================================
     void detail::installPlatformWindowCallbacks()
     {
         ImGuiPlatformIO& platformIo = ImGui::GetPlatformIO();
@@ -142,7 +130,6 @@ namespace rojoRHI::imgui {
         platformIo.Renderer_SetWindowSize = setWindowSize;
     }
 
-    //==================================================================================================================
     void detail::removePlatformWindowCallbacks()
     {
         ImGuiPlatformIO& platformIo = ImGui::GetPlatformIO();
@@ -151,7 +138,6 @@ namespace rojoRHI::imgui {
         platformIo.Renderer_SetWindowSize = nullptr;
     }
 
-    //==================================================================================================================
     void detail::resizePlatformWindows()
     {
         const ImGuiPlatformIO& platformIo = ImGui::GetPlatformIO();
@@ -173,21 +159,18 @@ namespace rojoRHI::imgui {
         }
     }
 
-    //==================================================================================================================
     Extent2D detail::platformWindowExtent(ImGuiViewport* viewport)
     {
         const ViewportData* data = dataOf(viewport);
         return data != nullptr ? data->extent : Extent2D{};
     }
 
-    //==================================================================================================================
     uint32_t detail::platformWindowPresents(ImGuiViewport* viewport)
     {
         const ViewportData* data = dataOf(viewport);
         return data != nullptr ? data->presents : 0;
     }
 
-    //==================================================================================================================
     void renderPlatformWindows(CommandList& list)
     {
         IM_ASSERT(detail::g_state != nullptr && "rojoRHI::imgui::renderPlatformWindows before init");
@@ -232,7 +215,6 @@ namespace rojoRHI::imgui {
         }
     }
 
-    //==================================================================================================================
     void presentPlatformWindows(Queue queue)
     {
         IM_ASSERT(detail::g_state != nullptr && "rojoRHI::imgui::presentPlatformWindows before init");

@@ -12,13 +12,11 @@
 
 using namespace rojoRHI;
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-device-0001 framesInFlight is not 2 or 3", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-device-0001", [] { (void)createDevice({ .framesInFlight = 4 }); });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-device-0002 destroyDevice runs while a frame is open", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-device-0002", [] {
@@ -28,7 +26,6 @@ TEST_CASE("VU-rojo-device-0002 destroyDevice runs while a frame is open", "[cont
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-device-0003 beginFrame runs while a frame is open", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-device-0003", [] {
@@ -38,7 +35,6 @@ TEST_CASE("VU-rojo-device-0003 beginFrame runs while a frame is open", "[contrac
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-device-0004 endFrame runs with no frame open", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-device-0004", [] {
@@ -47,7 +43,6 @@ TEST_CASE("VU-rojo-device-0004 endFrame runs with no frame open", "[contract][de
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-core-0004 a default-constructed Device calls a member", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-core-0004", [] {
@@ -56,19 +51,16 @@ TEST_CASE("VU-rojo-core-0004 a default-constructed Device calls a member", "[con
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-core-0006 a label is not valid UTF-8", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-core-0006", [] { (void)createDevice({ .label = "bad\xFF" }); });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-core-0007 a label contains a NUL character", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-core-0007", [] { (void)createDevice({ .label = std::string_view("a\0b", 3) }); });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-core-0004 a default-constructed Swapchain is destroyed", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-core-0004", [] {
@@ -77,7 +69,6 @@ TEST_CASE("VU-rojo-core-0004 a default-constructed Swapchain is destroyed", "[co
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-core-0001 a null Buffer is destroyed", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-core-0001", [] {
@@ -86,7 +77,6 @@ TEST_CASE("VU-rojo-core-0001 a null Buffer is destroyed", "[contract][death]")
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-core-0002 a Buffer is destroyed twice", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-core-0002", [] {
@@ -97,7 +87,6 @@ TEST_CASE("VU-rojo-core-0002 a Buffer is destroyed twice", "[contract][death]")
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-core-0003 a Buffer's bits are destroyed as a Texture", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-core-0003", [] {
@@ -107,7 +96,6 @@ TEST_CASE("VU-rojo-core-0003 a Buffer's bits are destroyed as a Texture", "[cont
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-core-0001 a null Buffer is looked up", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-core-0001", [] {
@@ -116,7 +104,6 @@ TEST_CASE("VU-rojo-core-0001 a null Buffer is looked up", "[contract][death]")
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-core-0002 a destroyed Buffer is looked up", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-core-0002", [] {
@@ -127,7 +114,6 @@ TEST_CASE("VU-rojo-core-0002 a destroyed Buffer is looked up", "[contract][death
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-core-0003 a Texture's bits are looked up as a Buffer", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-core-0003", [] {

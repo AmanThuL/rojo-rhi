@@ -15,9 +15,7 @@
 
 namespace rojoRHI::core {
     namespace {
-        //==============================================================================================================
-        /// Finds the live record `fence` names (VU-rojo-core-0001 to 0003) and returns a copy taken under the pool's lock, so a
-        /// free-threaded reader never sees a record a submission is changing.
+        // A copy taken under the pool's lock, so a free-threaded reader never sees a record a submission is changing.
         FenceRecord snapshot(DeviceCore& core, Fence fence)
         {
             [[maybe_unused]] FenceRecord* found = core.pool<Fence>().checked(fence, false);
@@ -27,16 +25,13 @@ namespace rojoRHI::core {
             return copy;
         }
 
-        //==============================================================================================================
-        /// A value a fence can reach without further submissions: at most its initial value, or one already submitted for signal.
-        /// Submitted values only grow, so every value up to the greatest one is reachable.
+        // Submitted values only grow, and start at the initial value, so every value up to the greatest one is reachable.
         [[maybe_unused]] bool reachable(const FenceRecord& record, uint64_t value)
         {
             return value <= record.submitted;
         }
     } // namespace
 
-    //==================================================================================================================
     FenceRecord prepareFence(uint64_t initial, std::string_view label)
     {
         FenceRecord record;
@@ -47,10 +42,8 @@ namespace rojoRHI::core {
         return record;
     }
 
-    //==================================================================================================================
     void checkSubmit(DeviceCore& core, std::span<const FenceValue> wait, std::span<const FenceValue> signal)
     {
-        // One native call for each wait and signal; the backend counts the submissions it commits.
         DeviceCounts::add(core.counts().nativeSubmitCalls, wait.size() + signal.size());
 #ifndef NDEBUG
         // The records are read only for the checks, which Release leaves out, so Release takes no pool lock here (ADR 0020).
@@ -98,7 +91,6 @@ namespace rojoRHI::core {
 #endif
     }
 
-    //==================================================================================================================
     void recordSignals(DeviceCore& core, std::span<const FenceValue> signal, SignalCompletion completion)
     {
 #ifdef NDEBUG
@@ -121,13 +113,11 @@ namespace rojoRHI::core {
         }
     }
 
-    //==================================================================================================================
     void completeFence(DeviceCore& core, FenceValue value)
     {
         core.pool<Fence>().update(value.fence, [&](FenceRecord& record) { record.completed = std::max(record.completed, value.value); });
     }
 
-    //==================================================================================================================
     uint64_t completedValue(DeviceCore& core, Fence fence)
     {
         DeviceCounts::add(core.counts().nativeHostCalls);
@@ -137,7 +127,6 @@ namespace rojoRHI::core {
         return completed;
     }
 
-    //==================================================================================================================
     bool checkWait(DeviceCore& core, FenceValue value, [[maybe_unused]] uint64_t timeoutNs)
     {
         const FenceRecord record = snapshot(core, value.fence);
@@ -159,7 +148,6 @@ namespace rojoRHI::core {
         return reached;
     }
 
-    //==================================================================================================================
     void destroyFence(DeviceCore& core, Fence fence)
     {
         core.destroy(fence);

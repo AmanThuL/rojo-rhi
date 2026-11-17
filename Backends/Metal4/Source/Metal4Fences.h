@@ -11,15 +11,12 @@ namespace rojoRHI {
 }
 
 namespace rojoRHI::metal4 {
-    /// Releases the shared event of a retiring fence record. `context` is the `DeviceImpl`; a null payload is skipped. It runs
-    /// under the fence pool's lock.
+    // Runs under the fence pool's lock.
     void retireFence(void* context, core::FenceRecord& record);
 
-    /// Releases the events of destroyed fences that every queue's progress event has passed, reading a queue's progress
-    /// event, one counted native host call, only when a kept event waits for that queue. It runs when a frame slot is reused
-    /// and after a destroyed fence's event is kept.
+    // Reads a queue's progress event, one counted native host call, only when a kept event waits for that queue.
     void releasePassedFences(DeviceImpl& impl);
 
-    /// Releases every kept event of a destroyed fence, at teardown, once no queue holds work; the caller holds a pool.
+    // At teardown, once no queue holds work; the caller holds an autorelease pool.
     void releaseRetiringFences(DeviceImpl& impl);
 } // namespace rojoRHI::metal4

@@ -17,14 +17,12 @@
 #include "Core/Tracker/Tracker.h"
 
 namespace rojoRHI {
-    //==================================================================================================================
     QueueImpl& QueueImpl::of(Queue queue)
     {
         core::checkObject(queue.m_impl, "Queue");
         return *queue.m_impl;
     }
 
-    //==================================================================================================================
     Queue QueueImpl::wrap(QueueImpl* impl)
     {
         Queue queue;
@@ -32,7 +30,6 @@ namespace rojoRHI {
         return queue;
     }
 
-    //==================================================================================================================
     void Queue::submit(std::span<const CommandList> lists, std::span<const FenceValue> wait, std::span<const FenceValue> signal)
     {
         const QueueImpl& queue = QueueImpl::of(*this);
@@ -53,7 +50,6 @@ namespace rojoRHI {
         core::releaseSubmitted(lists);
     }
 
-    //==================================================================================================================
     void Queue::present(Swapchain swapchain)
     {
         const QueueImpl& queue = QueueImpl::of(*this);
@@ -62,7 +58,6 @@ namespace rojoRHI {
         core::DeviceCounts::add(queue.device->core.counts().nativeSubmitCalls);
     }
 
-    //==================================================================================================================
     void Queue::mapTiles(std::span<const TileMapping> mappings)
     {
         const QueueImpl& queue = QueueImpl::of(*this);

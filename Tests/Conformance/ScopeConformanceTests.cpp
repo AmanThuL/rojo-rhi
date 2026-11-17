@@ -20,18 +20,15 @@
 using namespace rojoRHI;
 
 namespace {
-    /// The frames in flight of every case's device.
     constexpr uint32_t kFramesInFlight = 2;
 
-    /// The size of the fill each timed scope encloses: long enough to take measurable GPU time.
+    // Long enough to take measurable GPU time.
     constexpr uint64_t kBig = uint64_t{ 64 } << 20;
 
-    /// A fill pattern whose bytes differ, so the fill runs as a kernel over the whole range.
+    // Bytes that differ, so the fill runs as a kernel over the whole range.
     constexpr uint32_t kUnequal = 0x01020304u;
 
-    //==================================================================================================================
-    /// Ends `lists`, submits each to the queue of its type, joins the compute lists into the frame's graphics queue through
-    /// a fence, and waits on the host for all of them.
+    // Joins the compute lists into the frame's graphics queue through a fence, then waits on the host for all of them.
     void submit(Device device, std::span<const CommandList> lists, std::span<const QueueType> types)
     {
         const Fence fence = *device.createFence(0, "test.done");
@@ -50,9 +47,8 @@ namespace {
         REQUIRE(device.wait({ fence, value + 1 }, UINT64_MAX));
     }
 
-    //==================================================================================================================
-    /// Ends the open frame and begins frames until the one `beginFrame` waits for is the frame that was open, so
-    /// `Device::scopeTimings` reports its scopes; a frame is open on return.
+    // Begins frames until the one `beginFrame` waits for is the frame that was open, so `Device::scopeTimings` reports its
+    // scopes; a frame is open on return.
     void retireOpenFrame(Device device)
     {
         device.endFrame();
@@ -64,22 +60,17 @@ namespace {
         device.beginFrame();
     }
 
-    /// The edge of the drawn target, in texels: large enough that drawing it takes measurable GPU time.
+    // Large enough that drawing it takes measurable GPU time.
     constexpr uint32_t kDrawnEdge = 1024;
 
-    /// The instances of the full-target triangle the timed pass draws, each covering every texel of the target.
+    // Each instance covers every texel of the target.
     constexpr uint32_t kInstances = 64;
 
-    /// The input and output extents of the upscaler, in texels.
     constexpr uint32_t kUpscaleInput = 64;
     constexpr uint32_t kUpscaleOutput = 128;
 
-    /// Every subresource of a single-mip, single-layer texture.
     constexpr SubresourceRange kWhole{ .baseMip = 0, .mipCount = 1, .baseLayer = 0, .layerCount = 1 };
 
-    //==================================================================================================================
-    /// Creates the pipeline that draws `DrawOracle.slang`'s full-target triangle in a solid color over one `RGBA16Float`
-    /// target, from `library`.
     Pipeline solidPipeline(Device device, ShaderLibrary library)
     {
         const std::array colors{ ColorTarget{ .format = Format::RGBA16Float } };
@@ -89,16 +80,11 @@ namespace {
         );
     }
 
-    //==================================================================================================================
-    /// Creates a 2D texture of `format`, `edge` texels square, with `usage`.
     Texture square(Device device, Format format, uint32_t edge, TextureUsage usage, const char* label)
     {
         return *device.createTexture(TextureDesc{ .format = format, .extent = { edge, edge, 1 }, .usage = usage, .label = label });
     }
 
-    //==================================================================================================================
-    /// Records a barrier that moves the whole of `texture` from `oldLayout` to `newLayout`, from `srcStage` and `srcAccess` to
-    /// `dstStage` and `dstAccess`.
     void transition(CommandList list, Texture texture, Layout oldLayout, Layout newLayout, Stage srcStage, Access srcAccess, Stage dstStage, Access dstAccess)
     {
         const std::array<TextureBarrier, 1> barriers{ TextureBarrier{ .texture = texture,
@@ -112,9 +98,6 @@ namespace {
         list.barrier({}, {}, barriers);
     }
 
-    //==================================================================================================================
-    /// Begins a render pass labelled `label` over the whole of `target`, an `RGBA16Float` texture `edge` texels square, cleared,
-    /// with `pipeline` bound and the viewport and scissor of the whole target.
     void beginDrawing(CommandList list, Texture target, uint32_t edge, Pipeline pipeline, std::string_view label)
     {
         const std::array colors{ ColorAttachment{ .texture = target, .load = LoadOp::Clear } };
@@ -124,8 +107,6 @@ namespace {
         list.setScissor(Rect2D{ 0, 0, edge, edge });
     }
 
-    //==================================================================================================================
-    /// Records the barrier that orders one pass's writes to `target` before the next pass's.
     void betweenPasses(CommandList list, Texture target)
     {
         transition(
@@ -140,8 +121,6 @@ namespace {
         );
     }
 
-    //==================================================================================================================
-    /// Creates an `IndirectArgs` buffer of `count` draw records of the full-target triangle, `instances` instances each.
     Buffer drawRecords(Device device, uint32_t count, uint32_t instances)
     {
         const std::vector<DrawIndirectArgs> records(count, DrawIndirectArgs{ .drawId = 0, .vertexCount = 3, .instanceCount = instances });
@@ -151,15 +130,12 @@ namespace {
         );
     }
 
-    //==================================================================================================================
-    /// Returns true when `timing` is finite and at least zero.
     bool finiteAndNonNegative(const ScopeTiming& timing)
     {
         return std::isfinite(timing.gpuMilliseconds) && timing.gpuMilliseconds >= 0.0;
     }
 } // namespace
 
-//======================================================================================================================
 TEST_CASE("a scope around GPU work reports a positive duration", "[conformance]")
 {
     test::requireGpu();
@@ -183,7 +159,6 @@ TEST_CASE("a scope around GPU work reports a positive duration", "[conformance]"
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("nested scopes report parents before children with finite non-negative durations", "[conformance]")
 {
     test::requireGpu();
@@ -225,7 +200,6 @@ TEST_CASE("nested scopes report parents before children with finite non-negative
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("scopes on the compute queue are timed and reported with their queue", "[conformance]")
 {
     test::requireGpu();
@@ -260,7 +234,6 @@ TEST_CASE("scopes on the compute queue are timed and reported with their queue",
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("an empty scope reports a finite duration of at least zero", "[conformance]")
 {
     test::requireGpu();
@@ -279,7 +252,6 @@ TEST_CASE("an empty scope reports a finite duration of at least zero", "[conform
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("a render pass that draws reports a positive duration", "[conformance]")
 {
     test::requireGpu();
@@ -308,7 +280,6 @@ TEST_CASE("a render pass that draws reports a positive duration", "[conformance]
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("a pass, a scope inside it and an upscale are each reported with their label, depth and a finite duration", "[conformance]")
 {
     test::requireGpu();
@@ -371,7 +342,6 @@ TEST_CASE("a pass, a scope inside it and an upscale are each reported with their
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("a render pass that draws reports more than an empty pass", "[conformance]")
 {
     test::requireGpu();
@@ -403,7 +373,6 @@ TEST_CASE("a render pass that draws reports more than an empty pass", "[conforma
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("a render pass of counted draws only reports a positive duration, more than an empty pass", "[conformance]")
 {
     test::requireGpu();
@@ -438,7 +407,6 @@ TEST_CASE("a render pass of counted draws only reports a positive duration, more
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("a scope inside a render pass reports no more than its pass", "[conformance]")
 {
     test::requireGpu();
@@ -473,7 +441,6 @@ TEST_CASE("a scope inside a render pass reports no more than its pass", "[confor
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("a render pass a counted draw splits reports one duration, no less than each scope inside it", "[conformance]")
 {
     test::requireGpu();
@@ -525,7 +492,6 @@ TEST_CASE("a render pass a counted draw splits reports one duration, no less tha
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("a device created without scopeTimings reports no scope of a frame that ran scopes and passes", "[conformance]")
 {
     test::requireGpu();

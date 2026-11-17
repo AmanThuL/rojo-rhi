@@ -25,17 +25,12 @@
 
 namespace rojoRHI::d3d12 {
     namespace {
-        /// The native list type of each queue type, indexed by `QueueType`.
         constexpr std::array<D3D12_COMMAND_LIST_TYPE, 3> kListTypes = { D3D12_COMMAND_LIST_TYPE_DIRECT,
                                                                         D3D12_COMMAND_LIST_TYPE_COMPUTE,
                                                                         D3D12_COMMAND_LIST_TYPE_COPY };
 
-        /// The name of each queue type in a pooled list's native name, indexed by `QueueType`.
         constexpr std::array<std::string_view, 3> kTypeNames = { "graphics", "compute", "copy" };
 
-        //==============================================================================================================
-        /// Creates the allocator and the closed native list of `list`, the list of `type` at `ordinal` in frame slot `slot`'s
-        /// pool on `impl`, names both and records where the list belongs.
         void createNative(DeviceImpl& impl, CommandListImpl& list, uint32_t slot, QueueType type, uint32_t ordinal)
         {
             const size_t index = static_cast<size_t>(type);
@@ -63,7 +58,6 @@ namespace rojoRHI::d3d12 {
         }
     } // namespace
 
-    //==================================================================================================================
     CommandListImpl& ListPools::acquire(DeviceImpl& impl, uint32_t slot, QueueType type)
     {
         ROJORHI_INTERNAL_ASSERT(slot < m_slots.size(), "a frame slot beyond the three a device may use has no list pool");
@@ -81,7 +75,6 @@ namespace rojoRHI::d3d12 {
         return *pool.lists[pool.used++];
     }
 
-    //==================================================================================================================
     void ListPools::reset(DeviceImpl& impl, uint32_t slot)
     {
         ROJORHI_INTERNAL_ASSERT(slot < m_slots.size(), "a frame slot beyond the three a device may use has no list pool");
@@ -98,7 +91,6 @@ namespace rojoRHI::d3d12 {
         }
     }
 
-    //==================================================================================================================
     CommandListImpl& ListPools::at(uint32_t slot, QueueType type, uint32_t ordinal)
     {
         ROJORHI_INTERNAL_ASSERT(slot < m_slots.size(), "a frame slot beyond the three a device may use has no list pool");
@@ -110,13 +102,11 @@ namespace rojoRHI::d3d12 {
         return *pool.lists[ordinal];
     }
 
-    //==================================================================================================================
     DeviceImpl& deviceOf(const CommandListImpl& list)
     {
         return *static_cast<DeviceImpl*>(list.core.device->retireHooks().context);
     }
 
-    //==================================================================================================================
     void resumeAfterVendorWork(CommandListImpl& list)
     {
         ListState& state = list.state;

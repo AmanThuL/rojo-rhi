@@ -15,20 +15,17 @@ namespace rojoRHI::core {
     namespace {
         constexpr Stage kShaderStages = Stage::VertexShader | Stage::TaskShader | Stage::MeshShader | Stage::FragmentShader | Stage::ComputeShader;
 
-        //==============================================================================================================
         [[maybe_unused]] bool any(Stage stages, Stage mask)
         {
             return (stages & mask) != Stage::None;
         }
 
-        //==============================================================================================================
         [[maybe_unused]] bool any(Access accesses, Access mask)
         {
             return (accesses & mask) != Access::None;
         }
 
-        //==============================================================================================================
-        /// Returns the stages that perform `access`: the access bits of the table of chapter 09 and where each is performed.
+        // Chapter 09's table of the stages that perform each access.
         [[maybe_unused]] Stage stagesPerforming(Access access)
         {
             Stage stages = Stage::None;
@@ -63,8 +60,6 @@ namespace rojoRHI::core {
             return stages;
         }
 
-        //==============================================================================================================
-        /// Returns true when every access bit of `access` is performed by some stage of `stages`.
         [[maybe_unused]] bool accessesPerformed(Stage stages, Access access)
         {
             constexpr Access kBits[] = { Access::IndirectArgs,
@@ -90,8 +85,6 @@ namespace rojoRHI::core {
                                Access::Resolve)) == Access::None;
         }
 
-        //==============================================================================================================
-        /// Returns the stages a barrier on a list of `type` may name besides `Stage::All`.
         [[maybe_unused]] Stage stagesOf(QueueType type)
         {
             switch (type)
@@ -102,8 +95,7 @@ namespace rojoRHI::core {
             }
         }
 
-        //==============================================================================================================
-        /// Returns true when `stages` names only stages `type` has, or is `Stage::All`, which stands for the whole queue.
+        // `Stage::All` stands for the whole queue, whatever its type.
         [[maybe_unused]] bool stagesFit(QueueType type, Stage stages)
         {
             if (type == QueueType::Graphics)
@@ -113,8 +105,6 @@ namespace rojoRHI::core {
             return stages == Stage::All || (stages & ~stagesOf(type)) == Stage::None;
         }
 
-        //==============================================================================================================
-        /// Checks the stage and access sets of one side of a barrier of any kind.
         [[maybe_unused]] void checkSide(
             [[maybe_unused]] const CommandListCore& list, [[maybe_unused]] Stage stage, [[maybe_unused]] Access access, [[maybe_unused]] const char* side
         )
@@ -145,14 +135,11 @@ namespace rojoRHI::core {
             );
         }
 
-        //==============================================================================================================
         [[maybe_unused]] bool rangeInside(uint64_t offset, uint64_t size, uint64_t bufferSize)
         {
             return size <= bufferSize && offset <= bufferSize - size;
         }
 
-        //==============================================================================================================
-        /// Returns true when a buffer barrier names a range inside a buffer of `bufferSize` bytes.
         [[maybe_unused]] bool bufferRangeFits(const BufferBarrier& barrier, uint64_t bufferSize)
         {
             if (barrier.offset >= bufferSize)
@@ -162,8 +149,6 @@ namespace rojoRHI::core {
             return barrier.size == kWholeSize || (barrier.size > 0 && rangeInside(barrier.offset, barrier.size, bufferSize));
         }
 
-        //==============================================================================================================
-        /// Returns the layouts a texture of `usage` may be moved to.
         [[maybe_unused]] bool usageAllowsLayout(TextureUsage usage, Layout layout)
         {
             auto has = [usage](TextureUsage flag) { return (usage & flag) != TextureUsage::None; };
@@ -178,8 +163,7 @@ namespace rojoRHI::core {
             }
         }
 
-        //==============================================================================================================
-        /// Returns the accesses a subresource in `layout` permits: the layout column of the table of chapter 09.
+        // The layout column of chapter 09's table.
         [[maybe_unused]] Access accessesOf(Layout layout)
         {
             switch (layout)
@@ -196,7 +180,6 @@ namespace rojoRHI::core {
             }
         }
 
-        //==============================================================================================================
         [[maybe_unused]] bool computeLayout(Layout layout)
         {
             switch (layout)
@@ -211,15 +194,12 @@ namespace rojoRHI::core {
             }
         }
 
-        //==============================================================================================================
-        /// Returns the number of mips `range` covers in a texture of `mips` mips; the range was checked to start inside.
+        // `base` was checked to lie inside `total`.
         [[maybe_unused]] uint64_t resolved(uint32_t base, uint32_t count, uint32_t total)
         {
             return count == kAllMips ? total - base : count;
         }
 
-        //==============================================================================================================
-        /// Returns true when two ranges of a texture of `a`'s record share a mip and a layer.
         [[maybe_unused]] bool rangesShare(const TextureRecord& texture, const SubresourceRange& a, const SubresourceRange& b)
         {
             const uint64_t aMipEnd = uint64_t{ a.baseMip } + resolved(a.baseMip, a.mipCount, texture.mips);
@@ -230,7 +210,6 @@ namespace rojoRHI::core {
         }
     } // namespace
 
-    //==================================================================================================================
     void barrier(
         CommandListCore& list, std::span<const GlobalBarrier> globals, std::span<const BufferBarrier> buffers, std::span<const TextureBarrier> textures
     )

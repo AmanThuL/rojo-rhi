@@ -15,7 +15,6 @@
 
 using namespace rojoRHI;
 
-//======================================================================================================================
 TEST_CASE("an Upload buffer reads its initial data and later CPU writes back through its CPU pointer", "[conformance]")
 {
     test::requireGpu();
@@ -42,7 +41,6 @@ TEST_CASE("an Upload buffer reads its initial data and later CPU writes back thr
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("a Readback buffer's CPU pointer is one stable pointer for the buffer's life", "[conformance]")
 {
     test::requireGpu();

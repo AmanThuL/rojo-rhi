@@ -22,8 +22,6 @@
 
 namespace rojoRHI {
     namespace {
-        //==============================================================================================================
-        /// Returns the D3D12 topology of `topology`.
         D3D_PRIMITIVE_TOPOLOGY topologyOf(PrimitiveTopology topology)
         {
             switch (topology)
@@ -37,23 +35,18 @@ namespace rojoRHI {
             return D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST;
         }
 
-        //==============================================================================================================
-        /// True when `a` and `b` are the same viewport.
         bool sameViewport(const D3D12_VIEWPORT& a, const D3D12_VIEWPORT& b)
         {
             return a.TopLeftX == b.TopLeftX && a.TopLeftY == b.TopLeftY && a.Width == b.Width && a.Height == b.Height && a.MinDepth == b.MinDepth &&
                    a.MaxDepth == b.MaxDepth;
         }
 
-        //==============================================================================================================
-        /// True when `a` and `b` are the same rectangle.
         bool sameRect(const D3D12_RECT& a, const D3D12_RECT& b)
         {
             return a.left == b.left && a.top == b.top && a.right == b.right && a.bottom == b.bottom;
         }
 
-        //==============================================================================================================
-        /// Sets `pso`, a graphics or mesh pipeline, in the one pipeline slot both sides of `list` share.
+        // Both sides of a D3D12 list share one pipeline slot.
         void setGraphicsPso(CommandListImpl& list, ID3D12PipelineState* pso)
         {
             list.state.list->SetPipelineState(pso);
@@ -63,8 +56,7 @@ namespace rojoRHI {
             binding.computePipeline = nullptr;
         }
 
-        //==============================================================================================================
-        /// Sends the depth bias `list` recorded. D3D12 takes the clamp before the slope-scaled term.
+        // D3D12 takes the clamp before the slope-scaled term.
         void sendDepthBias(CommandListImpl& list)
         {
             const std::array<float, 3>& bias = list.state.dynamic.depthBias;
@@ -72,8 +64,6 @@ namespace rojoRHI {
             core::noteNativeCall(list.core);
         }
 
-        //==============================================================================================================
-        /// Sets `topology` unless the native list of `list` holds it.
         void applyTopology(CommandListImpl& list, D3D_PRIMITIVE_TOPOLOGY topology)
         {
             D3D_PRIMITIVE_TOPOLOGY& held = list.state.dynamic.topology;
@@ -88,7 +78,6 @@ namespace rojoRHI {
     } // namespace
 
     namespace d3d12 {
-        //==============================================================================================================
         void flushGraphics(CommandListImpl& list)
         {
             Binding& binding = list.state.binding;
@@ -145,7 +134,6 @@ namespace rojoRHI {
         }
     } // namespace d3d12
 
-    //==================================================================================================================
     void CommandList::setPipeline(Pipeline pipeline)
     {
         CommandListImpl& list = CommandListImpl::of(*this);
@@ -182,7 +170,6 @@ namespace rojoRHI {
         }
     }
 
-    //==================================================================================================================
     void CommandList::setViewport(const Viewport& viewport)
     {
         CommandListImpl& list = CommandListImpl::of(*this);
@@ -198,7 +185,6 @@ namespace rojoRHI {
         held = native;
     }
 
-    //==================================================================================================================
     void CommandList::setScissor(const Rect2D& rect)
     {
         CommandListImpl& list = CommandListImpl::of(*this);
@@ -217,7 +203,6 @@ namespace rojoRHI {
         held = native;
     }
 
-    //==================================================================================================================
     void CommandList::setStencilReference(uint8_t reference)
     {
         CommandListImpl& list = CommandListImpl::of(*this);
@@ -240,7 +225,6 @@ namespace rojoRHI {
         held = reference;
     }
 
-    //==================================================================================================================
     void CommandList::setBlendConstants(float r, float g, float b, float a)
     {
         CommandListImpl& list = CommandListImpl::of(*this);
@@ -263,7 +247,6 @@ namespace rojoRHI {
         held = factor;
     }
 
-    //==================================================================================================================
     void CommandList::setPrimitiveTopology(PrimitiveTopology topology)
     {
         CommandListImpl& list = CommandListImpl::of(*this);
@@ -271,7 +254,6 @@ namespace rojoRHI {
         applyTopology(list, topologyOf(topology));
     }
 
-    //==================================================================================================================
     void CommandList::setDepthBias(float constant, float slopeScaled, float clamp)
     {
         CommandListImpl& list = CommandListImpl::of(*this);

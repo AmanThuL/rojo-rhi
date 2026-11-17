@@ -19,7 +19,6 @@
 #include <cstdint>
 
 namespace rojoRHI {
-    //==================================================================================================================
     void CommandList::dispatch(uint32_t x, uint32_t y, uint32_t z)
     {
         CommandListImpl& list = CommandListImpl::of(*this);
@@ -38,7 +37,6 @@ namespace rojoRHI {
         list.encoders.markWork();
     }
 
-    //==================================================================================================================
     void CommandList::dispatchIndirect(Addr args)
     {
         CommandListImpl& list = CommandListImpl::of(*this);

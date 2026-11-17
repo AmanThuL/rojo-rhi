@@ -18,7 +18,7 @@ using namespace rojoRHI;
 using test::PassKit;
 
 namespace {
-    /// A root block in the flat layout of chapter 05.
+    // The flat root layout of chapter 05.
     struct Root
     {
         Addr vertices;
@@ -30,7 +30,6 @@ namespace {
     constexpr std::array<std::byte, 16> kBytes = {};
 } // namespace
 
-//======================================================================================================================
 TEST_CASE("setRoot binds an address 256 bytes into a buffer and again after a pass", "[contract]")
 {
     PassKit kit;
@@ -42,7 +41,6 @@ TEST_CASE("setRoot binds an address 256 bytes into a buffer and again after a pa
     kit.finish();
 }
 
-//======================================================================================================================
 TEST_CASE("pushRoot returns the address of its copy, which setRoot binds again", "[contract]")
 {
     PassKit kit;
@@ -54,7 +52,6 @@ TEST_CASE("pushRoot returns the address of its copy, which setRoot binds again",
     kit.finish();
 }
 
-//======================================================================================================================
 TEST_CASE("frame data of the open frame is a valid root, in the list that uploaded it and in another", "[contract]")
 {
     PassKit kit;
@@ -70,7 +67,6 @@ TEST_CASE("frame data of the open frame is a valid root, in the list that upload
     destroyDevice(kit.device);
 }
 
-//======================================================================================================================
 TEST_CASE("every direct draw and dispatch records in the state its entry requires", "[contract]")
 {
     PassKit kit;
@@ -91,7 +87,6 @@ TEST_CASE("every direct draw and dispatch records in the state its entry require
     kit.finish();
 }
 
-//======================================================================================================================
 TEST_CASE("an indexed draw may read the last index of a buffer sized to the byte", "[contract]")
 {
     PassKit kit;
@@ -101,7 +96,6 @@ TEST_CASE("an indexed draw may read the last index of a buffer sized to the byte
     kit.finish();
 }
 
-//======================================================================================================================
 TEST_CASE("indirect draws take records and an optional count from IndirectArgs buffers", "[contract]")
 {
     PassKit kit;
@@ -122,7 +116,6 @@ TEST_CASE("indirect draws take records and an optional count from IndirectArgs b
     kit.finish();
 }
 
-//======================================================================================================================
 TEST_CASE("frame data serves as the records and count of indirect commands", "[contract]")
 {
     PassKit kit;
@@ -140,7 +133,6 @@ TEST_CASE("frame data serves as the records and count of indirect commands", "[c
     kit.finish();
 }
 
-//======================================================================================================================
 TEST_CASE("an indirect draw of the largest allowed maxCount names a sufficiently large buffer", "[contract]")
 {
     PassKit kit;
@@ -159,7 +151,6 @@ TEST_CASE("an indirect draw of the largest allowed maxCount names a sufficiently
     kit.finish();
 }
 
-//======================================================================================================================
 TEST_CASE("pushRoot accepts the roots chapter 05 allows and returns an address", "[contract]")
 {
     static_assert(std::is_same_v<decltype(std::declval<CommandList&>().pushRoot(Root{})), Addr>);

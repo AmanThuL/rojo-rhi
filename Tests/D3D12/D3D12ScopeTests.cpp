@@ -29,20 +29,16 @@
 using namespace rojoRHI;
 
 namespace {
-    /// The scopes one query heap times: two queries each.
+    // Two queries per scope.
     constexpr uint32_t kHeapScopes = d3d12::ListTimestamps::kHeapQueries / 2;
 
-    /// The scopes each list of the threaded case records.
     constexpr uint32_t kThreadScopes = 3;
 
-    /// Guards `g_messages`, which the message callback may fill from any thread.
+    // The message callback may fill `g_messages` from any thread.
     std::mutex g_messagesMutex;
 
-    /// The messages at `Warning` or above the library reported while a case collected them.
     std::vector<std::string> g_messages;
 
-    //==================================================================================================================
-    /// Keeps `message` when it is a warning or an error. It may run on any thread.
     void collectMessage(MessageSeverity severity, std::string_view message, void*)
     {
         if (severity == MessageSeverity::Info)
@@ -53,25 +49,21 @@ namespace {
         g_messages.emplace_back(message);
     }
 
-    /// Collects the library's warnings and errors, the debug layer's included, into `g_messages`, emptied first, while it
-    /// lives, and removes the callback when it goes, however the case ends.
+    // Collects warnings and errors, the debug layer's included, into `g_messages`, emptied first, while it lives, and
+    // removes the callback when it goes, however the case ends.
     class MessageCollection
     {
       public:
         MessageCollection();
         ~MessageCollection();
 
-        //==============================================================================================================
         MessageCollection(const MessageCollection&) = delete;
 
-        //==============================================================================================================
         MessageCollection& operator=(const MessageCollection&) = delete;
 
-        /// Returns the messages collected so far, and lists them for the log.
         std::vector<std::string> all() const;
     };
 
-    //==================================================================================================================
     MessageCollection::MessageCollection()
     {
         {
@@ -81,13 +73,11 @@ namespace {
         setMessageCallback(collectMessage, nullptr);
     }
 
-    //==================================================================================================================
     MessageCollection::~MessageCollection()
     {
         setMessageCallback(nullptr, nullptr);
     }
 
-    //==================================================================================================================
     std::vector<std::string> MessageCollection::all() const
     {
         const std::lock_guard lock(g_messagesMutex);
@@ -98,8 +88,7 @@ namespace {
         return g_messages;
     }
 
-    //==================================================================================================================
-    /// Returns a new device that keeps `framesInFlight` frames in flight, times scopes and emits their events (ADR 0034).
+    // Times scopes and emits their events (ADR 0034).
     Device makeDevice(uint32_t framesInFlight = 3)
     {
         DeviceDesc desc;
@@ -111,8 +100,6 @@ namespace {
         return *created;
     }
 
-    //==================================================================================================================
-    /// Returns a new fence at zero on `device`, labelled `label`.
     Fence makeFence(Device device, std::string_view label)
     {
         Result<Fence> created = device.createFence(0, label);
@@ -120,23 +107,17 @@ namespace {
         return *created;
     }
 
-    //==================================================================================================================
-    /// Returns the native state of `list`. A case keeps the reference past the list's submission rather than asking the
-    /// handle again.
+    // A case keeps the reference past the list's submission rather than asking the handle again.
     d3d12::ListState& stateOf(CommandList list)
     {
         return CommandListImpl::of(list).state;
     }
 
-    //==================================================================================================================
-    /// Returns the native calls `list` has recorded since its acquisition.
     uint64_t recordCalls(CommandList list)
     {
         return core::coreOf(list).counts.nativeRecordCalls;
     }
 
-    //==================================================================================================================
-    /// Returns the scope `list` recorded last.
     const core::ScopeRecord& lastScope(CommandList list)
     {
         const std::vector<core::ScopeRecord>& log = core::coreOf(list).scopeLog;
@@ -144,16 +125,13 @@ namespace {
         return log.back();
     }
 
-    //==================================================================================================================
-    /// Returns the `ScopeRecord::timestamp` of the pair at query `pair` of the list at `ordinal` in its pool.
+    // The `ScopeRecord::timestamp` of query pair `pair` of the list at `ordinal` in its pool.
     uint32_t stamp(uint32_t ordinal, uint32_t pair)
     {
         return (ordinal << 16) | pair;
     }
 
-    //==================================================================================================================
-    /// Records `count` scopes with the core's default label, one after another, on `list`; a default label takes no
-    /// frame-arena page, so the scopes create nothing but query heaps.
+    // A default label takes no frame-arena page, so the scopes create nothing but query heaps.
     void recordScopes(CommandList list, uint32_t count)
     {
         for (uint32_t scope = 0; scope < count; ++scope)
@@ -163,10 +141,8 @@ namespace {
         }
     }
 
-    //==================================================================================================================
-    /// Ends every list of `lists` and submits it to the queue of its type, joined into the open frame: the Compute lists
-    /// signal value `value` of `computeDone` and the Copy lists of `copyDone`, and one Graphics submission, with the
-    /// Graphics lists, waits for what they signalled.
+    // Joined into the open frame: the Compute lists signal `value` on `computeDone` and the Copy lists on `copyDone`,
+    // and one Graphics submission, with the Graphics lists, waits for what they signalled.
     void submitJoined(Device device, std::span<const CommandList> lists, Fence computeDone, Fence copyDone, uint64_t value)
     {
         std::vector<CommandList> graphics;
@@ -198,9 +174,8 @@ namespace {
         device.queue(QueueType::Graphics).submit(graphics, joins, {});
     }
 
-    //==================================================================================================================
-    /// Ends the open frame and runs empty frames until the next `beginFrame` waits for it, then begins that frame, so
-    /// `Device::scopeTimings` reports the scopes of the frame that was open.
+    // Runs empty frames until the next `beginFrame` waits for the frame that was open, then begins it, so
+    // `Device::scopeTimings` reports that frame's scopes.
     void retireOpenFrame(Device device)
     {
         device.endFrame();
@@ -212,8 +187,6 @@ namespace {
         device.beginFrame();
     }
 
-    //==================================================================================================================
-    /// Checks that `timing` reports a duration a GPU can measure: finite and not negative.
     void checkDuration(const ScopeTiming& timing)
     {
         INFO("scope " << std::string(timing.label));
@@ -221,9 +194,8 @@ namespace {
         CHECK(timing.gpuMilliseconds >= 0.0);
     }
 
-    //==================================================================================================================
-    /// Records a global barrier natively on `list`, a Graphics or Compute list: unordered-access writes of compute shaders
-    /// before it complete ahead of those after it. It is work the GPU orders, recorded without a RojoRHI entry.
+    // Unordered-access writes of compute shaders before it complete ahead of those after it: work the GPU orders,
+    // recorded without a RojoRHI entry.
     void nativeBarrier(CommandList list)
     {
         D3D12_GLOBAL_BARRIER barrier = {};
@@ -239,7 +211,6 @@ namespace {
     }
 } // namespace
 
-//======================================================================================================================
 TEST_CASE("the device reads the timestamp frequency of each queue that writes timestamps", "[d3d12]")
 {
     Device device = makeDevice();
@@ -263,7 +234,6 @@ TEST_CASE("the device reads the timestamp frequency of each queue that writes ti
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("a scope records an event and a timestamp at each end", "[d3d12]")
 {
     Device device = makeDevice();
@@ -290,7 +260,6 @@ TEST_CASE("a scope records an event and a timestamp at each end", "[d3d12]")
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("end resolves each query heap the recording used, once", "[d3d12]")
 {
     Device device = makeDevice();
@@ -338,7 +307,6 @@ TEST_CASE("end resolves each query heap the recording used, once", "[d3d12]")
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("a list that records no scope resolves nothing", "[d3d12]")
 {
     Device device = makeDevice();
@@ -356,7 +324,6 @@ TEST_CASE("a list that records no scope resolves nothing", "[d3d12]")
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("a device without scopeTimings records each scope's event alone, makes no query heap and resolves nothing", "[d3d12]")
 {
     Result<Device> created = createDevice({ .framesInFlight = 2, .debugMarkers = true });
@@ -392,7 +359,6 @@ TEST_CASE("a device without scopeTimings records each scope's event alone, makes
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("nested scopes stamp pairs in order and end each at its own odd index", "[d3d12]")
 {
     Device device = makeDevice();
@@ -440,7 +406,6 @@ TEST_CASE("nested scopes stamp pairs in order and end each at its own odd index"
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("scopes report finite non-negative durations with their labels, depths and queue", "[d3d12]")
 {
     Device device = makeDevice();
@@ -495,7 +460,6 @@ TEST_CASE("scopes report finite non-negative durations with their labels, depths
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("a Copy list's scope is untimed when the device has no copy-queue timestamps, else timed", "[d3d12]")
 {
     // The second pass clears the feature before the first Copy list exists, so the untimed path runs on a device that
@@ -552,7 +516,6 @@ TEST_CASE("a Copy list's scope is untimed when the device has no copy-queue time
     }
 }
 
-//======================================================================================================================
 TEST_CASE("a list reused in the next frame of its slot starts its pairs from zero", "[d3d12]")
 {
     constexpr uint32_t kFramesInFlight = 2;
@@ -599,7 +562,6 @@ TEST_CASE("a list reused in the next frame of its slot starts its pairs from zer
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("a non-ASCII label reaches the event intact and an empty label uses the core's default", "[d3d12]")
 {
     // "test." followed by U+00E9, U+6F22 and U+1F600 in UTF-8.
@@ -633,7 +595,6 @@ TEST_CASE("a non-ASCII label reaches the event intact and an empty label uses th
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("lists on four threads time their scopes in query heaps of their own", "[d3d12]")
 {
     Device device = makeDevice();
@@ -685,7 +646,6 @@ TEST_CASE("lists on four threads time their scopes in query heaps of their own",
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("a list past 2^16 queries records its further scopes untimed and its frame warns once", "[d3d12]")
 {
     constexpr uint32_t kCapacity = d3d12::ListTimestamps::kMaxQueries / 2;

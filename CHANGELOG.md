@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.0.1 (2026-11-17)
+
+- `ROJORHI_VERSION_*` is 1.0.1. The interface and its behaviour are unchanged.
+- The public repository's continuous integration runs again. Its workflow named the Null backend's
+  job `null`, which YAML reads as a null key, so GitHub rejected the file and the 1.0.0 snapshot
+  started no job. The job is now `null-backend`, shown as `null (<os>)`, and still builds the Null
+  backend and runs its contract cases on macOS and Windows.
+- Documentation: the README gives the supported platforms and the API features per backend, the
+  examples explain their key steps, and source comments are cut to the contracts they state. No
+  code changes.
+
 ## 1.0.0 (2026-11-16)
 
 - `ROJORHI_VERSION_*` is 1.0.0 (ADR 0022):

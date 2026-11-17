@@ -34,31 +34,23 @@
 
 namespace rojoRHI::metal4 {
     namespace {
-        /// The label of every staging buffer.
         constexpr std::string_view kStagingLabel = "rojorhi.staging";
 
-        /// How long one slice of a wait for a copy lasts before it logs a warning.
         constexpr std::chrono::seconds kWaitSlice{ 10 };
 
-        /// What the feedback handler of one commit reports back to the thread that waits for it.
         struct Completion
         {
-            std::mutex mutex;                 ///< Guards the members below.
-            std::condition_variable reported; ///< Notified when `finished` turns true.
-            bool finished = false;            ///< True once Metal ran the feedback handler.
-            std::string error;                ///< The execution error Metal reported; empty when there was none.
+            std::mutex mutex; // Guards the members below.
+            std::condition_variable reported;
+            bool finished = false;
+            std::string error; // Empty when Metal reported none.
         };
 
-        //==============================================================================================================
-        /// Returns the `DriverFailure` of a Metal object `what` that was not created, with `error`'s description.
         Error notCreated(std::string_view what, NS::Error* error = nullptr)
         {
             return Error{ ErrorCategory::DriverFailure, std::format("{} was not created: {}", what, describe(error)) };
         }
 
-        //==============================================================================================================
-        /// Waits up to `slice` for every reference to `completion` but the caller's to be dropped, yielding at first and then
-        /// sleeping between checks; returns true once the caller holds the last one.
         bool releasedWithin(const std::shared_ptr<Completion>& completion, std::chrono::steady_clock::duration slice)
         {
             // The release follows the handler's return closely, so the first checks only yield.
@@ -84,9 +76,7 @@ namespace rojoRHI::metal4 {
             return true;
         }
 
-        //==============================================================================================================
-        /// Blocks until Metal ran the feedback handler that shares `completion` and then released the handler, on queue
-        /// `label`. Logs a warning after each slice of `kWaitSlice` that passes. Returns the reported error.
+        // Waits both for the handler's report and for Metal's release of the handler.
         std::string waitForCompletion(std::shared_ptr<Completion>& completion, std::string_view label)
         {
             uint64_t waitedSeconds = 0;
@@ -109,7 +99,6 @@ namespace rojoRHI::metal4 {
         }
     } // namespace
 
-    //==================================================================================================================
     std::string commitAndWait(MTL4::CommandQueue* queue, std::span<const MTL4::CommandBuffer* const> buffers, std::string_view label)
     {
         auto completion = std::make_shared<Completion>();
@@ -128,7 +117,6 @@ namespace rojoRHI::metal4 {
         return waitForCompletion(completion, label);
     }
 
-    //==================================================================================================================
     Result<void> Stager::create(MTL::Device* device)
     {
         MTL4::CommandQueueDescriptor* descriptor = MTL4::CommandQueueDescriptor::alloc()->init();
@@ -162,7 +150,6 @@ namespace rojoRHI::metal4 {
         return {};
     }
 
-    //==================================================================================================================
     Result<void> Stager::uploadBuffer(DeviceImpl& device, std::span<const std::byte> bytes, MTL::Buffer* destination)
     {
         std::lock_guard lock(m_mutex);
@@ -189,7 +176,6 @@ namespace rojoRHI::metal4 {
         return {};
     }
 
-    //==================================================================================================================
     Result<void> Stager::copy(DeviceImpl& device, MTL::Buffer* source, MTL::Buffer* destination, uint64_t size)
     {
         std::lock_guard lock(m_mutex);
@@ -219,7 +205,6 @@ namespace rojoRHI::metal4 {
         return copied;
     }
 
-    //==================================================================================================================
     Result<void> Stager::uploadTexture(DeviceImpl& device, const core::TextureRecord& shape, std::span<const TextureData> initial, MTL::Texture* destination)
     {
         // Each subresource starts at a 256-byte boundary, a multiple of every texel and block size.
@@ -300,7 +285,6 @@ namespace rojoRHI::metal4 {
         return {};
     }
 
-    //==================================================================================================================
     Result<void> Stager::copyTexture(
         DeviceImpl& device,
         const MTL::Texture* source,
@@ -327,14 +311,12 @@ namespace rojoRHI::metal4 {
         return copied;
     }
 
-    //==================================================================================================================
     void Stager::commitSet(DeviceImpl& device)
     {
         m_set->commit();
         core::DeviceCounts::add(device.core.counts().nativeHostCalls);
     }
 
-    //==================================================================================================================
     Result<void> Stager::submitCopy(DeviceImpl& device, MTL::Buffer* source, MTL::Buffer* destination, uint64_t size)
     {
         MTL4::ComputeCommandEncoder* encoder = begin(device);
@@ -345,7 +327,6 @@ namespace rojoRHI::metal4 {
         return finish(device, encoder);
     }
 
-    //==================================================================================================================
     MTL4::ComputeCommandEncoder* Stager::begin(DeviceImpl& device)
     {
         // The destination, or the heap it lies in, may have joined the device set, which the upload queue keeps attached.
@@ -359,7 +340,6 @@ namespace rojoRHI::metal4 {
         return m_commands->computeCommandEncoder();
     }
 
-    //==================================================================================================================
     Result<void> Stager::finish(DeviceImpl& device, MTL4::ComputeCommandEncoder* encoder)
     {
         if (encoder != nullptr)
@@ -381,13 +361,11 @@ namespace rojoRHI::metal4 {
         return {};
     }
 
-    //==================================================================================================================
     MTL4::CommandQueue* Stager::queue() const
     {
         return m_queue;
     }
 
-    //==================================================================================================================
     void Stager::release()
     {
         if (m_set != nullptr)

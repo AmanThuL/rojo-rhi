@@ -12,7 +12,6 @@
 
 using namespace rojoRHI;
 
-//======================================================================================================================
 TEST_CASE("a buffer without a label is recorded as rojorhi.buffer.unnamed", "[core]")
 {
     Device device = *createDevice();
@@ -23,7 +22,6 @@ TEST_CASE("a buffer without a label is recorded as rojorhi.buffer.unnamed", "[co
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("a buffer's record keeps its label, size, memory and usage", "[core]")
 {
     Device device = *createDevice();
@@ -37,7 +35,6 @@ TEST_CASE("a buffer's record keeps its label, size, memory and usage", "[core]")
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("a buffer's record keeps the length of its initial data, also for a Gpu buffer", "[core]")
 {
     Device device = *createDevice();

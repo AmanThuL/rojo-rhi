@@ -18,7 +18,6 @@
 #include <atomic>
 
 namespace rojoRHI::metal4 {
-    //==================================================================================================================
     MTL4::ComputeCommandEncoder* Encoders::prepareCompute(core::CommandListCore& list, ListState& state, MTL::Stages command, bool kernelsOnly)
     {
         if (m_lingering)
@@ -81,7 +80,6 @@ namespace rojoRHI::metal4 {
         return m_compute;
     }
 
-    //==================================================================================================================
     void Encoders::queueKernel(core::CommandListCore& list, const ListState& state, const MTL::ComputePipelineState* kernel, uint64_t params, uint64_t stride)
     {
         ROJORHI_INTERNAL_ASSERT(m_kind == EncoderKind::Compute && m_kernelsOnly, "a writer kernel is queued with no kernels-only encoder open");
@@ -94,7 +92,6 @@ namespace rojoRHI::metal4 {
         m_run = KernelRun{ .kernel = kernel, .state = &state, .params = params, .stride = stride, .count = 1 };
     }
 
-    //==================================================================================================================
     void Encoders::dispatchRun(core::CommandListCore& list)
     {
         if (m_run.count == 0)
@@ -105,7 +102,6 @@ namespace rojoRHI::metal4 {
         m_run = KernelRun{};
     }
 
-    //==================================================================================================================
     void Encoders::waitCarry(core::CommandListCore& list, MTL::Stages command)
     {
         if (!owesCarryWait(command))
@@ -120,7 +116,6 @@ namespace rojoRHI::metal4 {
         m_carryWaited = true;
     }
 
-    //==================================================================================================================
     bool Encoders::barrierInOpen(core::CommandListCore& list, MTL::Stages source, MTL::Stages destination, MTL4::VisibilityOptions visibility)
     {
         if (m_kind != EncoderKind::Compute || m_kernelsOnly || m_barriers.openDestination != 0)
@@ -145,7 +140,6 @@ namespace rojoRHI::metal4 {
         return true;
     }
 
-    //==================================================================================================================
     MTL4::RenderCommandEncoder* Encoders::openRender(core::CommandListCore& list, ListState& state, const MTL4::RenderPassDescriptor* descriptor)
     {
         if (m_lingering)
@@ -177,7 +171,6 @@ namespace rojoRHI::metal4 {
         return m_render;
     }
 
-    //==================================================================================================================
     MTL4::RenderCommandEncoder* Encoders::openPass(core::CommandListCore& list, ListState& state, const MTL4::RenderPassDescriptor* descriptor)
     {
         if (m_lingering)
@@ -210,7 +203,6 @@ namespace rojoRHI::metal4 {
         return m_render;
     }
 
-    //==================================================================================================================
     void Encoders::carry(core::CommandListCore& list, ListState& state, MTL::Fence* fence)
     {
         if (m_lingering)
@@ -255,7 +247,6 @@ namespace rojoRHI::metal4 {
         m_barriers.clearOpen();
     }
 
-    //==================================================================================================================
     void Encoders::settle()
     {
         // An encoder-level barrier still held back orders nothing in later encoders, so it waits for them at queue level.
@@ -263,7 +254,6 @@ namespace rojoRHI::metal4 {
         m_barriers.returnUnrun(ranStages());
     }
 
-    //==================================================================================================================
     MTL::Stages Encoders::ranStages() const
     {
         // stages() reads the stages the compute encoder's commands ran in; it records nothing. A render encoder has no stages
@@ -272,7 +262,6 @@ namespace rojoRHI::metal4 {
         return m_kind == EncoderKind::Compute ? m_compute->stages() : m_ran;
     }
 
-    //==================================================================================================================
     void Encoders::linger()
     {
         ROJORHI_INTERNAL_ASSERT(m_kind == EncoderKind::Render && !m_lingering, "a render pass's encoder lingers with none open");
@@ -280,7 +269,6 @@ namespace rojoRHI::metal4 {
         m_lingering = true;
     }
 
-    //==================================================================================================================
     void Encoders::finish(core::CommandListCore& list)
     {
         if (m_kind == EncoderKind::None)
@@ -331,7 +319,6 @@ namespace rojoRHI::metal4 {
         close(list);
     }
 
-    //==================================================================================================================
     void Encoders::close(core::CommandListCore& list)
     {
         if (m_kind == EncoderKind::None)
@@ -377,7 +364,6 @@ namespace rojoRHI::metal4 {
         m_barriers.clearOpen();
     }
 
-    //==================================================================================================================
     void Encoders::releaseEnded()
     {
         for (MTL4::CommandEncoder* encoder : m_ended)
@@ -387,7 +373,6 @@ namespace rojoRHI::metal4 {
         m_ended.clear();
     }
 
-    //==================================================================================================================
     void Encoders::release()
     {
         if (m_compute != nullptr || m_render != nullptr || !m_ended.empty())

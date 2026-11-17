@@ -32,11 +32,11 @@
 
 namespace rojoRHI {
     namespace {
-        /// The capturer's module name, which also identifies it once loaded.
+        // Also the name the loaded capturer is found by.
         constexpr const wchar_t* kCapturerModule = L"WinPixGpuCapturer.dll";
 
-        /// What `BeginProgrammaticGpuCapture` reads: the first member of PIX's `PIXCaptureParameters` union, padded to the size
-        /// of the union's largest member so the capturer never reads past it.
+        // The first member of PIX's `PIXCaptureParameters` union, padded to the union's largest member so the capturer
+        // never reads past it.
         struct CaptureParameters
         {
             PCWSTR fileName = nullptr;
@@ -49,16 +49,12 @@ namespace rojoRHI {
         using BeginCaptureFn = HRESULT(WINAPI*)(const CaptureParameters*);
         using EndCaptureFn = HRESULT(WINAPI*)();
 
-        //==============================================================================================================
-        /// Returns the capturer's export `name` as a `Function`, or null while the capturer is not loaded or lacks it.
         template<class Function> Function capturerExport(const char* name)
         {
             const HMODULE module = GetModuleHandleW(kCapturerModule);
             return module != nullptr ? reinterpret_cast<Function>(GetProcAddress(module, name)) : nullptr;
         }
 
-        //==============================================================================================================
-        /// Returns the numbers in the runs of digits of `name`, in order.
         std::vector<uint64_t> versionParts(const std::wstring& name)
         {
             std::vector<uint64_t> parts;
@@ -84,7 +80,6 @@ namespace rojoRHI {
     } // namespace
 
     namespace d3d12 {
-        //==============================================================================================================
         std::optional<size_t> newestVersion(std::span<const std::wstring> names)
         {
             std::optional<size_t> newest;
@@ -101,7 +96,6 @@ namespace rojoRHI {
             return newest;
         }
 
-        //==============================================================================================================
         std::wstring wide(std::string_view text)
         {
             if (text.empty())
@@ -118,7 +112,6 @@ namespace rojoRHI {
             return converted;
         }
 
-        //==============================================================================================================
         bool loadCapturer()
         {
             if (GetModuleHandleW(kCapturerModule) != nullptr)
@@ -159,7 +152,6 @@ namespace rojoRHI {
             return true;
         }
 
-        //==============================================================================================================
         Result<void> startCapture(std::string_view path)
         {
             const auto begin = capturerExport<BeginCaptureFn>("BeginProgrammaticGpuCapture");
@@ -192,7 +184,6 @@ namespace rojoRHI {
             return {};
         }
 
-        //==============================================================================================================
         Result<void> refuseCapture(std::string_view)
         {
             return std::unexpected(
@@ -200,7 +191,6 @@ namespace rojoRHI {
             );
         }
 
-        //==============================================================================================================
         Result<void> refuseWithoutCapturer(std::string_view)
         {
             return std::unexpected(
@@ -212,7 +202,6 @@ namespace rojoRHI {
         }
     } // namespace d3d12
 
-    //==================================================================================================================
     Result<void> Device::beginCapture(std::string_view path)
     {
         DeviceImpl& impl = DeviceImpl::of(*this);
@@ -224,7 +213,6 @@ namespace rojoRHI {
         return started;
     }
 
-    //==================================================================================================================
     void Device::endCapture()
     {
         DeviceImpl& impl = DeviceImpl::of(*this);

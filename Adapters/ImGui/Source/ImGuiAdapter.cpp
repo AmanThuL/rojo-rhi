@@ -29,7 +29,6 @@ namespace rojoRHI::imgui {
 
     detail::State* detail::g_state = nullptr;
 
-    //==================================================================================================================
     void detail::fatal(const std::string& message)
     {
         std::fprintf(stderr, "rojoRHI::imgui: %s\n", message.c_str());
@@ -37,7 +36,7 @@ namespace rojoRHI::imgui {
     }
 
     namespace {
-        /// The GPU objects behind one ImGui texture this adapter created, held in `ImTextureData::BackendUserData`.
+        // Owned through `ImTextureData::BackendUserData`.
         struct TextureRecord
         {
             Texture texture;
@@ -50,19 +49,16 @@ namespace rojoRHI::imgui {
         constexpr uint64_t kRowPitchAlignment = 256;
         constexpr uint32_t kBytesPerTexel = 4;
 
-        //==============================================================================================================
         constexpr uint64_t alignUp(uint64_t value, uint64_t alignment)
         {
             return (value + alignment - 1) & ~(alignment - 1);
         }
 
-        //==============================================================================================================
         // An identifier the draw loop compares callbacks against; never called.
         void resetRenderState(const ImDrawList*, const ImDrawCmd*)
         {
         }
 
-        //==============================================================================================================
         Result<Pipeline> createPipeline(Device device, ShaderLibrary library, Format format, const std::string& label)
         {
             const std::array<ColorTarget, 1> colors{ ColorTarget{ .format = format,
@@ -82,8 +78,7 @@ namespace rojoRHI::imgui {
             );
         }
 
-        //==============================================================================================================
-        // Destroys every object `state` holds; each handle may still be null after a failed init.
+        // Each handle may still be null after a failed init.
         void destroyObjects(State& state)
         {
             state.ring.destroy();
@@ -109,7 +104,6 @@ namespace rojoRHI::imgui {
             }
         }
 
-        //==============================================================================================================
         void destroyTexture(Device device, ImTextureData* tex)
         {
             auto* record = static_cast<TextureRecord*>(tex->BackendUserData);
@@ -122,7 +116,6 @@ namespace rojoRHI::imgui {
             tex->SetStatus(ImTextureStatus_Destroyed);
         }
 
-        //==============================================================================================================
         void createTexture(State& state, ImTextureData* tex)
         {
             IM_ASSERT(tex->TexID == ImTextureID_Invalid && tex->BackendUserData == nullptr);
@@ -149,11 +142,9 @@ namespace rojoRHI::imgui {
             tex->SetStatus(ImTextureStatus_OK);
         }
 
-        //==============================================================================================================
-        // Copies the bounding rectangle of the queued updates through the frame buffer, in one copy; the texture is in
-        // ShaderRead before and after. Copies of the individual rectangles would write one subresource several times, which
-        // needs a barrier between each write; the pixels between the rectangles are current in the texture data, so copying
-        // them again is correct.
+        // One copy of the updates' bounding rectangle, with the texture in ShaderRead before and after. A copy per rectangle
+        // would write one subresource several times, needing a barrier between writes; the pixels between the rectangles
+        // are current in the texture data, so copying them again is correct.
         void updateTexture(State& state, CommandList& list, ImTextureData* tex)
         {
             const auto* record = static_cast<const TextureRecord*>(tex->BackendUserData);
@@ -196,7 +187,6 @@ namespace rojoRHI::imgui {
             tex->SetStatus(ImTextureStatus_OK);
         }
 
-        //==============================================================================================================
         void setRenderState(CommandList& list, Pipeline pipeline, float width, float height)
         {
             list.setPipeline(pipeline);
@@ -205,7 +195,6 @@ namespace rojoRHI::imgui {
         }
     } // namespace
 
-    //==================================================================================================================
     Result<void> init(const InitDesc& desc)
     {
         IM_ASSERT(ImGui::GetCurrentContext() != nullptr && "rojoRHI::imgui::init needs a current ImGui context");
@@ -273,7 +262,6 @@ namespace rojoRHI::imgui {
         return {};
     }
 
-    //==================================================================================================================
     void shutdown()
     {
         IM_ASSERT(g_state != nullptr && "rojoRHI::imgui::shutdown before init");
@@ -302,7 +290,6 @@ namespace rojoRHI::imgui {
         g_state = nullptr;
     }
 
-    //==================================================================================================================
     void newFrame()
     {
         IM_ASSERT(g_state != nullptr && "rojoRHI::imgui::newFrame before init");
@@ -310,7 +297,6 @@ namespace rojoRHI::imgui {
         detail::resizePlatformWindows();
     }
 
-    //==================================================================================================================
     void prepare(CommandList& list, ImDrawData* drawData)
     {
         IM_ASSERT(g_state != nullptr && "rojoRHI::imgui::prepare before init");
@@ -348,7 +334,6 @@ namespace rojoRHI::imgui {
         }
     }
 
-    //==================================================================================================================
     void render(CommandList& list, ImDrawData* drawData)
     {
         IM_ASSERT(g_state != nullptr && "rojoRHI::imgui::render before init");
@@ -367,19 +352,16 @@ namespace rojoRHI::imgui {
         );
     }
 
-    //==================================================================================================================
     ImTextureID textureId(ViewIndex view)
     {
         return ImTextureID(static_cast<uint32_t>(view)) + 1;
     }
 
-    //==================================================================================================================
     ViewIndex viewIndex(ImTextureID id)
     {
         return ViewIndex(static_cast<uint32_t>(id - 1));
     }
 
-    //==================================================================================================================
     void detail::renderDrawData(CommandList& list, ImDrawData* drawData, Pipeline pipeline, Extent2D target)
     {
         IM_ASSERT(g_state != nullptr && "rojoRHI::imgui::render before init");

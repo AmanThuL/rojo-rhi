@@ -42,20 +42,16 @@
 using namespace rojoRHI;
 
 namespace {
-    /// How long a case that calls into FidelityFX may run before its watchdog ends the process.
     constexpr std::chrono::seconds kFidelityFxLimit{ 300 };
 
-    //==================================================================================================================
-    /// Returns the milliseconds since `start` on the steady clock.
     long long millisecondsSince(std::chrono::steady_clock::time_point start)
     {
         return static_cast<long long>(std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - start).count());
     }
 
-    //==================================================================================================================
-    /// Runs `body` on the calling thread while a watchdog thread waits at most `limit` for it, and prints how long it took.
-    /// When the limit passes first, the watchdog prints `what` and the time elapsed and ends the process with exit code 3, so
-    /// a FidelityFX call that never returns fails the run at once instead of holding the step until its timeout.
+    // Runs `body` while a watchdog thread waits at most `limit` for it. When the limit passes first, the watchdog
+    // prints `what` and ends the process with exit code 3, so a FidelityFX call that never returns fails the run at
+    // once instead of holding the step until its timeout.
     template<typename Body> void within(std::chrono::seconds limit, const char* what, Body&& body)
     {
         const std::chrono::steady_clock::time_point start = std::chrono::steady_clock::now();
@@ -91,8 +87,6 @@ namespace {
         std::fflush(stdout);
     }
 
-    //==================================================================================================================
-    /// Returns a new empty directory under the temporary directory, named for this process.
     std::filesystem::path makeEmptyDirectory()
     {
         const std::filesystem::path directory = std::filesystem::temp_directory_path() / std::format("rojorhi-fsr-empty-{}", GetCurrentProcessId());
@@ -101,63 +95,52 @@ namespace {
         return directory;
     }
 
-    //==================================================================================================================
-    /// Returns the references `device` holds, read with an `AddRef` and `Release` pair.
+    // Read with an `AddRef` and `Release` pair.
     ULONG references(ID3D12Device12* device)
     {
         device->AddRef();
         return device->Release();
     }
 
-    //==================================================================================================================
-    /// Returns the description of a 64x64 to 128x128 upscaler of `kind` with the default formats.
     UpscalerDesc upscalerOf(UpscalerKind kind)
     {
         return UpscalerDesc{ .kind = kind, .input = { 64, 64 }, .output = { 128, 128 }, .label = "test.upscaler" };
     }
 
-    /// The dispatch oracle's threadgroup size; one group writes `kGroupCells` cells.
+    // The dispatch oracle's threadgroup size; one group writes `kGroupCells` cells.
     constexpr uint32_t kGroupX = 8;
     constexpr uint32_t kGroupY = 4;
     constexpr uint64_t kGroupCells = uint64_t{ kGroupX } * kGroupY * 2;
 
-    /// The dispatch oracle's root.
     struct GridRoot
     {
-        Addr output;     ///< Where the entry stores a `uint4` per thread.
-        uint32_t width;  ///< The grid's width in threads.
-        uint32_t height; ///< The grid's height in threads.
+        Addr output;     // A `uint4` per thread.
+        uint32_t width;  // In threads.
+        uint32_t height; // In threads.
     };
 
-    /// Four `uint32` words of one cell the oracle stores.
     using Cell = std::array<uint32_t, 4>;
 
-    /// The cell an untouched output holds.
     constexpr Cell kUntouched{ 0xDEADBEEFu, 0xDEADBEEFu, 0xDEADBEEFu, 0xDEADBEEFu };
 
-    /// The width and height of the target the draw renders to.
     constexpr uint32_t kTargetSize = 4;
 
-    /// The target's format, which holds the standard fragment entry's color exactly.
+    // Holds the standard fragment entry's color exactly.
     constexpr std::array<ColorTarget, 1> kTargetFormat = { ColorTarget{ .format = Format::RGBA16Float } };
 
-    /// The half-precision bits of the color the standard fragment entry writes, (0.25, 0.5, 0.75, 1).
+    // The half-precision bits of (0.25, 0.5, 0.75, 1), the color the standard fragment entry writes.
     constexpr std::array<uint16_t, 4> kDrawnColor{ 0x3400u, 0x3800u, 0x3A00u, 0x3C00u };
 
-    /// What the pass clears the target to before the draw; each channel differs from the drawn color's.
+    // Each channel differs from the drawn color's.
     constexpr ClearColor kCleared{ 1.0f, 0.0f, 0.0f, 0.0f };
 
-    /// Every subresource of a single-mip, single-layer texture.
     constexpr SubresourceRange kWhole{ .baseMip = 0, .mipCount = 1, .baseLayer = 0, .layerCount = 1 };
 
-    /// Guards `g_messages`, which the message callback may fill from any thread.
+    // The message callback may fill `g_messages` from any thread.
     std::mutex g_messagesMutex;
 
-    /// The messages at `Warning` or above the library reported while a case collected them.
     std::vector<std::string> g_messages;
 
-    //==================================================================================================================
-    /// Keeps `message` when it is a warning or an error. It may run on any thread.
     void collectMessage(MessageSeverity severity, std::string_view message, void*)
     {
         if (severity == MessageSeverity::Info)
@@ -168,25 +151,20 @@ namespace {
         g_messages.emplace_back(message);
     }
 
-    /// Collects the library's warnings and errors, the debug layer's included, into `g_messages`, emptied first, while it
-    /// lives, and removes the callback when it goes, however the case ends.
+    // Removes the callback when it goes, however the case ends.
     class MessageCollection
     {
       public:
         MessageCollection();
         ~MessageCollection();
 
-        //==============================================================================================================
         MessageCollection(const MessageCollection&) = delete;
 
-        //==============================================================================================================
         MessageCollection& operator=(const MessageCollection&) = delete;
 
-        /// Returns how many messages were collected, and lists them for the log.
         size_t count() const;
     };
 
-    //==================================================================================================================
     MessageCollection::MessageCollection()
     {
         {
@@ -196,13 +174,11 @@ namespace {
         setMessageCallback(collectMessage, nullptr);
     }
 
-    //==================================================================================================================
     MessageCollection::~MessageCollection()
     {
         setMessageCallback(nullptr, nullptr);
     }
 
-    //==================================================================================================================
     size_t MessageCollection::count() const
     {
         const std::lock_guard lock(g_messagesMutex);
@@ -213,21 +189,18 @@ namespace {
         return g_messages.size();
     }
 
-    /// The device, the objects and the recording list of a case that restores list state after vendor work.
     struct Scene
     {
-        Device device;    ///< Keeps two frames in flight.
-        Pipeline grid;    ///< The dispatch oracle's compute pipeline.
-        Pipeline draw;    ///< The standard vertex and fragment pipeline over `kTargetFormat`.
-        Buffer cells;     ///< `kGroupCells` cells the oracle writes, each `kUntouched` at creation.
-        Buffer pristine;  ///< `kGroupCells` cells of `kUntouched` that `cells` is reset from.
-        Texture target;   ///< The `kTargetSize` square target the draw renders to.
-        Fence done;       ///< Signalled when the list completes.
-        CommandList list; ///< A Graphics list of the open frame.
+        Device device;
+        Pipeline grid;
+        Pipeline draw;
+        Buffer cells;    // Each `kUntouched` at creation.
+        Buffer pristine; // `cells` is reset from these.
+        Texture target;
+        Fence done;
+        CommandList list;
     };
 
-    //==================================================================================================================
-    /// Creates the objects of a scene on a new device, opens a frame and acquires its Graphics list.
     Scene makeScene()
     {
         Scene scene;
@@ -272,23 +245,16 @@ namespace {
         return scene;
     }
 
-    //==================================================================================================================
-    /// Returns the native state of `list`.
     d3d12::ListState& stateOf(CommandList list)
     {
         return CommandListImpl::of(list).state;
     }
 
-    //==================================================================================================================
-    /// Returns the native calls `list` has recorded since its acquisition.
     uint64_t recordCalls(CommandList list)
     {
         return core::coreOf(list).counts.nativeRecordCalls;
     }
 
-    //==================================================================================================================
-    /// Records a barrier on `list` that moves the whole of `texture` from `oldLayout` to `newLayout`, from `srcStage` and
-    /// `srcAccess` to `dstStage` and `dstAccess`.
     void transition(CommandList list, Texture texture, Layout oldLayout, Layout newLayout, Stage srcStage, Access srcAccess, Stage dstStage, Access dstAccess)
     {
         const std::array<TextureBarrier, 1> barriers{ TextureBarrier{ .texture = texture,
@@ -302,9 +268,8 @@ namespace {
         list.barrier({}, {}, barriers);
     }
 
-    //==================================================================================================================
-    /// Creates a `width` by `height` texture of `format` and `usage` on `device`, and records on `list` its clear to `value`
-    /// and the barrier that leaves it in `layout` for compute `access`, as an upscale reads or writes it.
+    // Records its clear to `value` and the barrier that leaves it in `layout` for compute `access`, as an upscale reads
+    // or writes it.
     Texture prepared(
         Device device,
         CommandList list,
@@ -326,9 +291,7 @@ namespace {
         return *texture;
     }
 
-    //==================================================================================================================
-    /// Creates an FSR upscaler of `upscalerOf(Auto)` on `device`, and its inputs and output, and records on `list` the clears
-    /// and barriers that leave the inputs in `ShaderRead` and the output in `ShaderWrite`. Returns the upscale's arguments.
+    // Records the clears and barriers that leave the inputs in `ShaderRead` and the output in `ShaderWrite`.
     UpscaleParams prepareUpscale(Device device, CommandList list, Upscaler& upscaler)
     {
         const Result<Upscaler> created = device.createUpscaler(upscalerOf(UpscalerKind::Auto));
@@ -367,10 +330,9 @@ namespace {
         return params;
     }
 
-    //==================================================================================================================
-    /// Binds the oracle and its root, one group wide, on the scene's list and dispatches it once, so the compute side holds
-    /// the caller's pipeline, the global root signature and the root. Then it copies `kUntouched` over the cells again, so only
-    /// a later dispatch can leave the grid in them.
+    // Binds the oracle and its root, one group wide, and dispatches it once, so the compute side holds the caller's
+    // pipeline, the global root signature and the root. Then copies `kUntouched` over the cells again, so only a later
+    // dispatch can leave the grid in them.
     void bindCompute(Scene& scene)
     {
         CommandList list = scene.list;
@@ -388,18 +350,16 @@ namespace {
         );
     }
 
-    /// The native calls the commands after an upscale, or the restore that stands for one, recorded.
+    // The native calls of the commands after an upscale, or after the restore that stands for one.
     struct RestoreCalls
     {
-        uint64_t dispatch = 0;    ///< The dispatch, with no setPipeline before it.
-        uint64_t setPipeline = 0; ///< The graphics pipeline's bind in the pass after it.
-        uint64_t draw = 0;        ///< The draw in that pass.
+        uint64_t dispatch = 0; // With no setPipeline before it.
+        uint64_t setPipeline = 0;
+        uint64_t draw = 0;
     };
 
-    //==================================================================================================================
-    /// Records on the scene's list, whose compute side `bindCompute` bound, a dispatch of the oracle without binding it again,
-    /// then a pass that clears the target to `kCleared` and draws the standard pipeline over all of it, and the barrier that
-    /// readies the target for its copy. Returns the native calls of the dispatch, the bind and the draw.
+    // Dispatches the oracle without binding it again (`bindCompute` bound it), then clears the target to `kCleared`,
+    // draws the standard pipeline over all of it and readies the target for its copy.
     RestoreCalls recordAfter(Scene& scene)
     {
         CommandList list = scene.list;
@@ -427,8 +387,6 @@ namespace {
         return calls;
     }
 
-    //==================================================================================================================
-    /// Ends the scene's list, submits it on the Graphics queue signalling `done` to 1, ends the frame and waits for the signal.
     void run(Scene& scene)
     {
         scene.list.end();
@@ -438,8 +396,7 @@ namespace {
         REQUIRE(scene.device.wait({ scene.done, 1 }, UINT64_MAX));
     }
 
-    //==================================================================================================================
-    /// Checks what the scene's GPU work left: the oracle's cells of one group and the drawn color in every texel of the target.
+    // The oracle's cells of one group and the drawn color in every texel of the target.
     void checkWritten(Scene& scene)
     {
         DeviceImpl& impl = DeviceImpl::of(scene.device);
@@ -475,7 +432,6 @@ namespace {
     }
 } // namespace
 
-//======================================================================================================================
 TEST_CASE("loadFidelityFx finds nothing in an empty directory", "[d3d12]")
 {
     const std::filesystem::path empty = makeEmptyDirectory();
@@ -484,7 +440,6 @@ TEST_CASE("loadFidelityFx finds nothing in an empty directory", "[d3d12]")
     std::filesystem::remove_all(empty);
 }
 
-//======================================================================================================================
 TEST_CASE("upscalers lists FSR when the runtime sits beside the executable", "[d3d12]")
 {
     const std::filesystem::path beside = std::filesystem::path(d3d12::executableDirectory()) / "amd_fidelityfx_loader_dx12.dll";
@@ -506,7 +461,6 @@ TEST_CASE("upscalers lists FSR when the runtime sits beside the executable", "[d
     destroyDevice(*created);
 }
 
-//======================================================================================================================
 TEST_CASE("the FSR input scale range the device lists is the one an FSR context reports for its quality modes", "[d3d12]")
 {
     within(kFidelityFxLimit, "the FSR input scale range the device lists is the one an FSR context reports for its quality modes", [] {
@@ -549,7 +503,6 @@ TEST_CASE("the FSR input scale range the device lists is the one an FSR context 
     });
 }
 
-//======================================================================================================================
 TEST_CASE("createUpscaler with Auto creates an FSR context and destroy retires it", "[d3d12]")
 {
     // The device's creation queries the runtime and its destruction frees it, so both run under the watchdog too.
@@ -595,7 +548,6 @@ TEST_CASE("createUpscaler with Auto creates an FSR context and destroy retires i
     });
 }
 
-//======================================================================================================================
 TEST_CASE("createUpscaler refuses DLSS, XeSS and MetalFX with Unsupported", "[d3d12]")
 {
     Result<Device> created = createDevice();
@@ -612,7 +564,6 @@ TEST_CASE("createUpscaler refuses DLSS, XeSS and MetalFX with Unsupported", "[d3
     destroyDevice(*created);
 }
 
-//======================================================================================================================
 TEST_CASE("createUpscaler refuses an input under two texels in an axis with Unsupported", "[d3d12]")
 {
     // FidelityFX would make a zero-sized surface for such an input, an error the debug layer reports and the backend aborts on,
@@ -630,7 +581,6 @@ TEST_CASE("createUpscaler refuses an input under two texels in an axis with Unsu
     destroyDevice(*created);
 }
 
-//======================================================================================================================
 TEST_CASE("a device whose runtime is absent refuses Auto with Unsupported", "[d3d12]")
 {
     Result<Device> created = createDevice();
@@ -658,7 +608,6 @@ TEST_CASE("a device whose runtime is absent refuses Auto with Unsupported", "[d3
     destroyDevice(*created);
 }
 
-//======================================================================================================================
 TEST_CASE("the restore after vendor work sets the heaps at once and the rest at the next dispatch, bind and draw", "[d3d12]")
 {
     REQUIRE(kD3D12LibrariesBuilt);
@@ -694,7 +643,6 @@ TEST_CASE("the restore after vendor work sets the heaps at once and the rest at 
     destroyDevice(scene.device);
 }
 
-//======================================================================================================================
 TEST_CASE("an upscale sets the heaps again and marks the root signatures, roots, b1, pipeline and topology dirty", "[d3d12]")
 {
     if (const std::string_view never = test::upscalesNeverComplete(); !never.empty())
@@ -734,7 +682,6 @@ TEST_CASE("an upscale sets the heaps again and marks the root signatures, roots,
     });
 }
 
-//======================================================================================================================
 TEST_CASE("a dispatch and a draw after an upscale rebind their state and write the expected values", "[d3d12]")
 {
     if (const std::string_view never = test::upscalesNeverComplete(); !never.empty())
@@ -760,7 +707,6 @@ TEST_CASE("a dispatch and a draw after an upscale rebind their state and write t
     });
 }
 
-//======================================================================================================================
 TEST_CASE("an upscale counts one native call and the next dispatch, bind and draw count their restore", "[d3d12]")
 {
     if (const std::string_view never = test::upscalesNeverComplete(); !never.empty())
@@ -774,7 +720,8 @@ TEST_CASE("an upscale counts one native call and the next dispatch, bind and dra
         Upscaler upscaler;
         const UpscaleParams params = prepareUpscale(scene.device, scene.list, upscaler);
         bindCompute(scene);
-        // An empty scope costs what the upscale's own scope costs: a PIX event, and a timestamp pair when the list is timed.
+        // An empty scope costs what the upscale's own scope costs: an event pair with debugMarkers or enableCapture,
+        // and a timestamp pair when the list is timed.
         uint64_t before = recordCalls(scene.list);
         scene.list.beginScope("test.scope");
         scene.list.endScope();

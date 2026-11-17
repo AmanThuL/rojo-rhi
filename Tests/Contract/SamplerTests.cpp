@@ -13,7 +13,6 @@
 using namespace rojoRHI;
 
 namespace {
-    //==================================================================================================================
     Device makeDevice()
     {
         Result<Device> created = createDevice();
@@ -21,7 +20,6 @@ namespace {
         return *created;
     }
 
-    //==================================================================================================================
     Texture makeTexture(Device device)
     {
         Result<Texture> created = device.createTexture({ .format = Format::RGBA8Unorm, .extent = { 4, 4, 1 }, .usage = TextureUsage::Sampled });
@@ -29,7 +27,6 @@ namespace {
         return *created;
     }
 
-    //==================================================================================================================
     IndexRange reserveViews(Device device, uint32_t count)
     {
         Result<IndexRange> range = device.reserveViews(count);
@@ -37,7 +34,6 @@ namespace {
         return *range;
     }
 
-    //==================================================================================================================
     IndexRange reserveSamplers(Device device, uint32_t count)
     {
         Result<IndexRange> range = device.reserveSamplers(count);
@@ -45,14 +41,12 @@ namespace {
         return *range;
     }
 
-    //==================================================================================================================
     bool overlaps(IndexRange a, IndexRange b)
     {
         return a.base < b.base + b.count && b.base < a.base + a.count;
     }
 } // namespace
 
-//======================================================================================================================
 TEST_CASE("createSampler returns distinct indices for live samplers", "[contract]")
 {
     Device device = makeDevice();
@@ -66,7 +60,6 @@ TEST_CASE("createSampler returns distinct indices for live samplers", "[contract
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("createSampler accepts the defaults, a comparison sampler and the anisotropy bounds", "[contract]")
 {
     Device device = makeDevice();
@@ -79,7 +72,6 @@ TEST_CASE("createSampler accepts the defaults, a comparison sampler and the anis
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("a full sampler heap is an error result and a destroyed slot returns after its frame retires", "[contract]")
 {
     Device device = makeDevice();
@@ -107,7 +99,6 @@ TEST_CASE("a full sampler heap is an error result and a destroyed slot returns a
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("reserved ranges are contiguous, carry their kind and do not overlap", "[contract]")
 {
     Device device = makeDevice();
@@ -123,7 +114,6 @@ TEST_CASE("reserved ranges are contiguous, carry their kind and do not overlap",
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("a range does not overlap the slots createView and createSampler hand out", "[contract]")
 {
     Device device = makeDevice();
@@ -139,7 +129,6 @@ TEST_CASE("a range does not overlap the slots createView and createSampler hand 
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("a reservation larger than the heap is an error result", "[contract]")
 {
     Device device = makeDevice();
@@ -153,7 +142,6 @@ TEST_CASE("a reservation larger than the heap is an error result", "[contract]")
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("a released range is not handed out again before its frame retires", "[contract]")
 {
     Device device = makeDevice();
@@ -175,7 +163,6 @@ TEST_CASE("a released range is not handed out again before its frame retires", "
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("a released view range is not handed out again before its frame retires", "[contract]")
 {
     Device device = makeDevice();
@@ -196,7 +183,6 @@ TEST_CASE("a released view range is not handed out again before its frame retire
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("a view written into a range keeps its texture alive until the slot is replaced or the range is released", "[contract]")
 {
     Device device = makeDevice();
@@ -212,7 +198,6 @@ TEST_CASE("a view written into a range keeps its texture alive until the slot is
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("every slot of a range accepts a write and a rewrite", "[contract]")
 {
     Device device = makeDevice();

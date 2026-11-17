@@ -15,7 +15,6 @@
 using namespace rojoRHI;
 using test::PassKit;
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-indirect-0013 drawMeshTasksIndirect is recorded on a device without meshTasksIndirect", "[core][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-indirect-0013", [] {

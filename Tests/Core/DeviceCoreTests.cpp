@@ -25,26 +25,22 @@ namespace {
     static_assert(std::is_same_v<core::RecordFor<Buffer>, core::BufferRecord>);
     static_assert(std::is_same_v<core::RecordFor<Upscaler>, core::UpscalerRecord>);
 
-    /// What the hooks saw: the labels of retired buffers and textures, in order.
     struct Seen
     {
         std::vector<std::string> buffers;
         std::vector<std::string> textures;
     };
 
-    //==================================================================================================================
     void onBuffer(void* context, core::BufferRecord& record)
     {
         static_cast<Seen*>(context)->buffers.push_back(record.label);
     }
 
-    //==================================================================================================================
     void onTexture(void* context, core::TextureRecord& record)
     {
         static_cast<Seen*>(context)->textures.push_back(record.label);
     }
 
-    //==================================================================================================================
     core::RetireHooks hooksFor(Seen& seen)
     {
         core::RetireHooks hooks;
@@ -54,46 +50,39 @@ namespace {
         return hooks;
     }
 
-    /// What the frame-wait and buffer hooks saw: each waited frame with the buffers retired by then, and the retired total.
     struct Waits
     {
         std::vector<std::pair<uint64_t, uint64_t>> frames;
         uint64_t retired = 0;
     };
 
-    //==================================================================================================================
     void onWaitFrame(void* context, uint64_t frame)
     {
         Waits& waits = *static_cast<Waits*>(context);
         waits.frames.emplace_back(frame, waits.retired);
     }
 
-    //==================================================================================================================
     void onRetiredBuffer(void* context, core::BufferRecord&)
     {
         ++static_cast<Waits*>(context)->retired;
     }
 
-    /// The slot payloads the view and sampler hooks received, in order.
     struct Payloads
     {
         std::vector<void*> views;
         std::vector<void*> samplers;
     };
 
-    //==================================================================================================================
     void onView(void* context, void* native)
     {
         static_cast<Payloads*>(context)->views.push_back(native);
     }
 
-    //==================================================================================================================
     void onSampler(void* context, void* native)
     {
         static_cast<Payloads*>(context)->samplers.push_back(native);
     }
 
-    //==================================================================================================================
     void runFrames(core::DeviceCore& core, int count)
     {
         for (int i = 0; i < count; ++i)
@@ -103,7 +92,6 @@ namespace {
         }
     }
 
-    //==================================================================================================================
     void runFrames(Device& device, int count)
     {
         for (int i = 0; i < count; ++i)
@@ -114,7 +102,6 @@ namespace {
     }
 } // namespace
 
-//======================================================================================================================
 TEST_CASE("the record of a Buffer and of a Texture are separate types a backend fills", "[core]")
 {
     core::BufferRecord buffer{ "a" };
@@ -127,7 +114,6 @@ TEST_CASE("the record of a Buffer and of a Texture are separate types a backend 
     CHECK(buffer.native == &payload);
 }
 
-//======================================================================================================================
 TEST_CASE("the retire hook sees each released record exactly once, at the frame it retires", "[core]")
 {
     Seen seen;
@@ -143,7 +129,7 @@ TEST_CASE("the retire hook sees each released record exactly once, at the frame 
     device.beginFrame();
     device.endFrame();
     CHECK(seen.buffers.empty());
-    device.beginFrame(); // Frame 3.
+    device.beginFrame();
     REQUIRE(seen.buffers.size() == 1);
     CHECK(seen.buffers[0] == "test.buffer");
     device.endFrame();
@@ -156,7 +142,6 @@ TEST_CASE("the retire hook sees each released record exactly once, at the frame 
     CHECK(seen.textures.size() == 1);
 }
 
-//======================================================================================================================
 TEST_CASE("destroying a device drains live and pending records through the hook once", "[core]")
 {
     Seen seen;
@@ -172,7 +157,6 @@ TEST_CASE("destroying a device drains live and pending records through the hook 
     CHECK(seen.textures == std::vector<std::string>{ "live.texture" });
 }
 
-//======================================================================================================================
 TEST_CASE("a type with no hook retires its record without one", "[core]")
 {
     Seen seen;
@@ -187,7 +171,6 @@ TEST_CASE("a type with no hook retires its record without one", "[core]")
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("the core is empty by the time it is destroyed", "[core]")
 {
     Seen seen;
@@ -199,7 +182,6 @@ TEST_CASE("the core is empty by the time it is destroyed", "[core]")
     CHECK(seen.buffers.size() == 1);
 }
 
-//======================================================================================================================
 TEST_CASE("a type with no hook is released without one", "[core]")
 {
     Device device = *createDevice();
@@ -210,7 +192,6 @@ TEST_CASE("a type with no hook is released without one", "[core]")
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("capability and format queries read the tables the core keeps", "[core]")
 {
     Device device = *createDevice();
@@ -224,7 +205,6 @@ TEST_CASE("capability and format queries read the tables the core keeps", "[core
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("destroying a core that was never drained calls no hook", "[core]")
 {
 #ifdef NDEBUG
@@ -241,7 +221,6 @@ TEST_CASE("destroying a core that was never drained calls no hook", "[core]")
 #endif
 }
 
-//======================================================================================================================
 TEST_CASE("beginFrame waits for the frame whose slot it reuses before it retires anything", "[core]")
 {
     Waits waits;
@@ -258,7 +237,6 @@ TEST_CASE("beginFrame waits for the frame whose slot it reuses before it retires
     core.beginDestroy();
 }
 
-//======================================================================================================================
 TEST_CASE("the view and sampler hooks receive slot payloads at retirement and at destruction", "[core]")
 {
     std::array<int, 4> payload{};
@@ -285,7 +263,6 @@ TEST_CASE("the view and sampler hooks receive slot payloads at retirement and at
     CHECK(seen.samplers == std::vector<void*>{ &payload[2], &payload[3] });
 }
 
-//======================================================================================================================
 TEST_CASE("a placement into a range a racing release took writes nothing and moves no count", "[core]")
 {
     core::DeviceCore core{ DeviceDesc{ .framesInFlight = 2 } };

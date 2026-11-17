@@ -11,7 +11,6 @@
 
 using namespace rojoRHI;
 
-//======================================================================================================================
 TEST_CASE("Auto on Null resolves to MetalFX and the record stores the resolved kind", "[null]")
 {
     Device device = *createDevice();
@@ -20,7 +19,6 @@ TEST_CASE("Auto on Null resolves to MetalFX and the record stores the resolved k
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("Null creates every concrete upscaler kind", "[null]")
 {
     Device device = *createDevice();

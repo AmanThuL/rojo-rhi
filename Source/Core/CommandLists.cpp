@@ -14,13 +14,11 @@
 #include <utility>
 
 namespace rojoRHI::core {
-    //==================================================================================================================
     void checkAcquire([[maybe_unused]] const DeviceCore& core)
     {
         ROJORHI_VU(core.frameOpen(), "VU-rojo-cmd-0001", "a command list was acquired with no frame open");
     }
 
-    //==================================================================================================================
     void beginList(CommandListCore& list, DeviceCore& core, QueueType type, std::string_view label)
     {
         checkLabel(label);
@@ -44,13 +42,11 @@ namespace rojoRHI::core {
         core.noteListAcquired();
     }
 
-    //==================================================================================================================
     void checkRecording([[maybe_unused]] const CommandListCore& list)
     {
         ROJORHI_VU(list.state == ListState::Recording, "VU-rojo-cmd-0063", "a command was recorded on the list \"{}\", which is not recording", list.label);
     }
 
-    //==================================================================================================================
     void endList(CommandListCore& list)
     {
         ROJORHI_VU(list.state == ListState::Recording, "VU-rojo-cmd-0002", "end was called on the list \"{}\", which is not recording", list.label);
@@ -60,13 +56,11 @@ namespace rojoRHI::core {
         list.state = ListState::Ended;
     }
 
-    //==================================================================================================================
     void checkSameDevice([[maybe_unused]] const DeviceCore& owner, [[maybe_unused]] const DeviceCore& other, [[maybe_unused]] std::string_view kind)
     {
         ROJORHI_VU(&owner == &other, "VU-rojo-core-0005", "a {} of device \"{}\" was used with device \"{}\"", kind, other.label(), owner.label());
     }
 
-    //==================================================================================================================
     void submitLists(DeviceCore& core, [[maybe_unused]] QueueType type, std::span<const CommandList> lists)
     {
         for (const CommandList& handle : lists)
@@ -100,7 +94,6 @@ namespace rojoRHI::core {
             core.noteListSubmitted();
         }
     }
-    //==================================================================================================================
     ArenaAllocation allocateFrameData(
         DeviceCore& core, CommandListCore& list, std::span<const std::byte> bytes, uint32_t alignment, ArenaPageSource source, void* context
     )
@@ -114,7 +107,6 @@ namespace rojoRHI::core {
         return bumpArenaPage(core, list, bytes.size(), alignment, source, context);
     }
 
-    //==================================================================================================================
     void claimArenaPage(DeviceCore& core, CommandListCore& list, uint64_t size, ArenaPageSource source, void* context)
     {
         const uint32_t slot = static_cast<uint32_t>(list.frame % core.framesInFlight());
@@ -135,7 +127,6 @@ namespace rojoRHI::core {
         list.limit = list.page.host + (list.page.size < maxAddrOffset ? list.page.size : maxAddrOffset);
     }
 
-    //==================================================================================================================
     ArenaAllocation bumpArenaPageSlow(DeviceCore& core, CommandListCore& list, uint64_t size, uint32_t alignment, ArenaPageSource source, void* context)
     {
         uint64_t offset = list.page.host == nullptr ? 0 : (pageUsedBytes(list) + alignment - 1) & ~(uint64_t{ alignment } - 1);

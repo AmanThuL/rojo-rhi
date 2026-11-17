@@ -16,14 +16,12 @@
 
 namespace rojoRHI::core {
     namespace {
-        //==============================================================================================================
         [[maybe_unused]] bool hasUsage(BufferUsage usage, BufferUsage flag)
         {
             return (usage & flag) != BufferUsage::None;
         }
     } // namespace
 
-    //==================================================================================================================
     void checkBufferDesc(const DeviceCore& core, [[maybe_unused]] const BufferDesc& desc)
     {
         [[maybe_unused]] const Capabilities& capabilities = core.capabilities();
@@ -51,7 +49,6 @@ namespace rojoRHI::core {
         );
     }
 
-    //==================================================================================================================
     BufferRecord prepareBuffer(
         DeviceCore& core, const BufferDesc& desc, std::span<const std::byte> initial, const Placement& placement, const PlacementRequirements& requirements
     )
@@ -80,7 +77,6 @@ namespace rojoRHI::core {
         return record;
     }
 
-    //==================================================================================================================
     Result<Buffer> addBuffer(DeviceCore& core, BufferRecord record)
     {
         const Heap heap = record.heap;
@@ -118,7 +114,6 @@ namespace rojoRHI::core {
         return buffer;
     }
 
-    //==================================================================================================================
     Result<Buffer> addFrameArenaPage(DeviceCore& core, BufferRecord record)
     {
         const Buffer page = core.pool<Buffer>().allocate(std::move(record));
@@ -129,7 +124,6 @@ namespace rojoRHI::core {
         return page;
     }
 
-    //==================================================================================================================
     void destroyBuffer(DeviceCore& core, Buffer buffer)
     {
         // A bad handle is left to the destroy below, which reports VU-rojo-core-0001 to 0003 and releases nothing.
@@ -156,7 +150,6 @@ namespace rojoRHI::core {
         }
     }
 
-    //==================================================================================================================
     BufferRecord& checkedBuffer(DeviceCore& core, Buffer buffer)
     {
         BufferRecord* record = core.pool<Buffer>().checked(buffer, false);
@@ -164,13 +157,11 @@ namespace rojoRHI::core {
         return *record;
     }
 
-    //==================================================================================================================
     void checkAddrOffset([[maybe_unused]] uint64_t offset, [[maybe_unused]] uint64_t maxAddrOffset)
     {
         ROJORHI_VU(offset < maxAddrOffset, "VU-rojo-buffer-0011", "offset {} reaches maxAddrOffset {}", offset, maxAddrOffset);
     }
 
-    //==================================================================================================================
     void checkBufferAddress([[maybe_unused]] const BufferRecord& record, [[maybe_unused]] uint64_t offset, [[maybe_unused]] uint64_t maxAddrOffset)
     {
         ROJORHI_VU(offset < record.size, "VU-rojo-buffer-0012", "offset {} is not inside the buffer \"{}\" of {} bytes", offset, record.label, record.size);
@@ -178,13 +169,11 @@ namespace rojoRHI::core {
         checkAddrOffset(offset, maxAddrOffset);
     }
 
-    //==================================================================================================================
     void checkCpuAccess([[maybe_unused]] const BufferRecord& record)
     {
         ROJORHI_VU(record.memory != Memory::Gpu, "VU-rojo-buffer-0014", "the buffer \"{}\" is a Gpu buffer and is not mapped", record.label);
     }
 
-    //==================================================================================================================
     void checkCopySource([[maybe_unused]] const BufferRecord& record)
     {
         ROJORHI_VU(
@@ -195,7 +184,6 @@ namespace rojoRHI::core {
         );
     }
 
-    //==================================================================================================================
     void checkCopyDestination([[maybe_unused]] const BufferRecord& record)
     {
         ROJORHI_VU(

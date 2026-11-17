@@ -33,13 +33,10 @@
 
 namespace rojoRHI {
     namespace {
-        /// How long `Swapchain::acquire` waits for the latency limit, and after which it asks the layer for no further
-        /// drawable; chapter 11's one second. `nextDrawable` keeps Core Animation's own one-second timeout on top of it.
+        // Chapter 11's one second; `nextDrawable` keeps Core Animation's own one-second timeout on top of it.
         constexpr std::chrono::seconds kAcquireDeadline{ 1 };
 
-        //==============================================================================================================
-        /// Returns the name of the Core Graphics color space chapter 11 maps `colorSpace` to, or null for a value that is no
-        /// enumerator.
+        // Null for a value that is no enumerator.
         CFStringRef colorSpaceName(ColorSpace colorSpace)
         {
             switch (colorSpace)
@@ -51,8 +48,7 @@ namespace rojoRHI {
             return nullptr;
         }
 
-        //==============================================================================================================
-        /// Sets the layer's `wantsExtendedDynamicRangeContent`, which metal-cpp does not wrap, through the Objective-C runtime.
+        // metal-cpp does not wrap `wantsExtendedDynamicRangeContent`, so it is set through the Objective-C runtime.
         void setWantsExtendedDynamicRange(CA::MetalLayer* layer, bool wants)
         {
             static const SEL selector = sel_registerName("setWantsExtendedDynamicRangeContent:");
@@ -60,10 +56,7 @@ namespace rojoRHI {
             reinterpret_cast<Setter>(&objc_msgSend)(layer, selector, wants ? YES : NO);
         }
 
-        //==============================================================================================================
-        /// Configures `layer` for a swapchain of `desc` on `device`: device, pixel format, the color space `colorSpace` and EDR,
-        /// drawable count, display sync and framebuffer-only drawables. The caller holds an autorelease pool and keeps its
-        /// reference to `colorSpace`.
+        // The caller holds an autorelease pool and keeps its reference to `colorSpace`.
         void configureLayer(CA::MetalLayer* layer, MTL::Device* device, CGColorSpaceRef colorSpace, const SwapchainDesc& desc)
         {
             layer->setDevice(device);
@@ -78,23 +71,17 @@ namespace rojoRHI {
             layer->setAllowsNextDrawableTimeout(true);
         }
 
-        //==============================================================================================================
-        /// Returns `size` in whole pixels, rounded to the nearest.
         Extent2D wholePixels(CGSize size)
         {
             return { static_cast<uint32_t>(std::lround(size.width)), static_cast<uint32_t>(std::lround(size.height)) };
         }
 
-        //==============================================================================================================
-        /// Returns the device that created `swapchain`.
         DeviceImpl& deviceOf(const SwapchainImpl& swapchain)
         {
             return *static_cast<DeviceImpl*>(swapchain.core.device->retireHooks().context);
         }
 
-        //==============================================================================================================
-        /// Waits until fewer than `maxLatency` presents of `latency` are pending or `deadline` passes. Returns false when the
-        /// deadline passed first. A count already below the limit is read without the lock.
+        // A count already below the limit is read without the lock.
         bool waitForLatency(metal4::PresentLatency& latency, uint32_t maxLatency, std::chrono::steady_clock::time_point deadline)
         {
             const auto below = [&] { return latency.count.load(std::memory_order_acquire) < maxLatency; };
@@ -106,10 +93,8 @@ namespace rojoRHI {
             return latency.presented.wait_until(lock, deadline, below);
         }
 
-        //==============================================================================================================
-        /// Takes drawables from `layer` until one has the extent `extent`, and returns it retained; null when the layer gives
-        /// none or `deadline` passes first. Each `nextDrawable` is one native host call of `device`. A drawable of another
-        /// extent, queued across a resize, goes back to the layer unpresented.
+        // Each `nextDrawable` is one native host call. A drawable of another extent, queued across a resize, goes back
+        // to the layer unpresented.
         CA::MetalDrawable* nextDrawable(DeviceImpl& device, CA::MetalLayer* layer, Extent2D extent, std::chrono::steady_clock::time_point deadline)
         {
             for (;;)
@@ -134,9 +119,7 @@ namespace rojoRHI {
             }
         }
 
-        //==============================================================================================================
-        /// Lowers the pending presents of `latency` after Core Animation presented or dropped one of its drawables, and wakes
-        /// the acquires that wait for the limit. The count changes under the mutex, so a waiter cannot miss the notification.
+        // The count changes under the mutex, so a waiter cannot miss the notification.
         void lowerPending(metal4::PresentLatency& latency)
         {
             {
@@ -148,7 +131,6 @@ namespace rojoRHI {
     } // namespace
 
     namespace metal4 {
-        //==============================================================================================================
         bool isMetalLayer(const void* surface)
         {
             if (surface == nullptr)
@@ -162,7 +144,6 @@ namespace rojoRHI {
             return reinterpret_cast<KindOf>(&objc_msgSend)(surface, selector, layerClass) != NO;
         }
 
-        //==============================================================================================================
         void presentSwapchain(QueueImpl& queue, SwapchainImpl& swapchain)
         {
             DeviceImpl& device = *queue.device;
@@ -184,14 +165,12 @@ namespace rojoRHI {
         }
     } // namespace metal4
 
-    //==================================================================================================================
     SwapchainImpl& SwapchainImpl::of(Swapchain swapchain)
     {
         core::checkObject(swapchain.m_impl, "Swapchain");
         return *swapchain.m_impl;
     }
 
-    //==================================================================================================================
     Swapchain SwapchainImpl::wrap(SwapchainImpl* impl)
     {
         Swapchain swapchain;
@@ -199,7 +178,6 @@ namespace rojoRHI {
         return swapchain;
     }
 
-    //==================================================================================================================
     Result<Swapchain> Device::createSwapchain(const SwapchainDesc& desc)
     {
         DeviceImpl& impl = DeviceImpl::of(*this);
@@ -242,7 +220,6 @@ namespace rojoRHI {
         return SwapchainImpl::wrap(raw);
     }
 
-    //==================================================================================================================
     void Swapchain::resize(Extent2D extent)
     {
         SwapchainImpl& impl = SwapchainImpl::of(*this);
@@ -261,7 +238,6 @@ namespace rojoRHI {
         impl.native.layer->setDrawableSize(CGSize{ static_cast<CGFloat>(extent.width), static_cast<CGFloat>(extent.height) });
     }
 
-    //==================================================================================================================
     Texture Swapchain::acquire()
     {
         SwapchainImpl& impl = SwapchainImpl::of(*this);
@@ -294,7 +270,6 @@ namespace rojoRHI {
         return image;
     }
 
-    //==================================================================================================================
     void Device::destroy(Swapchain swapchain)
     {
         DeviceImpl& impl = DeviceImpl::of(*this);

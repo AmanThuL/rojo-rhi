@@ -19,7 +19,6 @@ using namespace rojoRHI;
 namespace {
     std::vector<std::string> g_warnings;
 
-    //==================================================================================================================
     [[maybe_unused]] void collectWarning(MessageSeverity severity, std::string_view message, void*)
     {
         if (severity == MessageSeverity::Warning)
@@ -28,7 +27,6 @@ namespace {
         }
     }
 
-    //==================================================================================================================
     Swapchain makeSwapchain(Device device, uint32_t index = 0)
     {
         Result<Swapchain> created = device.createSwapchain(SwapchainDesc{ .nativeSurface = test::surface(index), .label = "test.swapchain" });
@@ -36,8 +34,6 @@ namespace {
         return *created;
     }
 
-    //==================================================================================================================
-    /// Records the barrier that moves the whole image from `oldLayout` to `newLayout`.
     void moveImage(CommandList list, Texture image, Layout oldLayout, Layout newLayout)
     {
         const std::array<TextureBarrier, 1> barriers{ TextureBarrier{ .texture = image,
@@ -49,8 +45,7 @@ namespace {
         list.barrier({}, {}, barriers);
     }
 
-    //==================================================================================================================
-    /// Runs one frame of the order chapter 11 gives: acquire, render, present.
+    // One frame in chapter 11's order: acquire, render, present.
     void presentFrame(Device device, Swapchain swapchain)
     {
         device.beginFrame();
@@ -71,7 +66,6 @@ namespace {
     }
 } // namespace
 
-//======================================================================================================================
 TEST_CASE("a swapchain is created from a description with every default", "[contract]")
 {
     Device device = *createDevice();
@@ -79,7 +73,6 @@ TEST_CASE("a swapchain is created from a description with every default", "[cont
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("each color space is created with its format", "[contract]")
 {
     Device device = *createDevice();
@@ -92,7 +85,6 @@ TEST_CASE("each color space is created with its format", "[contract]")
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("every image count and present mode is accepted", "[contract]")
 {
     Device device = *createDevice();
@@ -105,7 +97,6 @@ TEST_CASE("every image count and present mode is accepted", "[contract]")
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("acquire returns a texture a frame can draw to and present", "[contract]")
 {
     Device device = *createDevice();
@@ -114,7 +105,6 @@ TEST_CASE("acquire returns a texture a frame can draw to and present", "[contrac
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("a swapchain presents frame after frame", "[contract]")
 {
     Device device = *createDevice();
@@ -126,7 +116,6 @@ TEST_CASE("a swapchain presents frame after frame", "[contract]")
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("an acquired image is a new texture in each frame", "[contract]")
 {
     Device device = *createDevice();
@@ -143,7 +132,6 @@ TEST_CASE("an acquired image is a new texture in each frame", "[contract]")
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("an image acquired and presented without work is accepted", "[contract]")
 {
     Device device = *createDevice();
@@ -155,7 +143,6 @@ TEST_CASE("an image acquired and presented without work is accepted", "[contract
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("resize outside a frame lets the next acquire and present proceed", "[contract]")
 {
     Device device = *createDevice();
@@ -168,7 +155,6 @@ TEST_CASE("resize outside a frame lets the next acquire and present proceed", "[
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("a destroyed swapchain's surface takes a new swapchain", "[contract]")
 {
     Device device = *createDevice();
@@ -178,7 +164,6 @@ TEST_CASE("a destroyed swapchain's surface takes a new swapchain", "[contract]")
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("two swapchains of one device present on their own surfaces", "[contract]")
 {
     Device device = *createDevice();
@@ -195,7 +180,6 @@ TEST_CASE("two swapchains of one device present on their own surfaces", "[contra
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("a swapchain destroyed after many frames releases its slot", "[contract]")
 {
     Device device = *createDevice();
@@ -213,7 +197,6 @@ TEST_CASE("a swapchain destroyed after many frames releases its slot", "[contrac
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("a swapchain still live, with an image acquired, is drained by destroyDevice", "[contract]")
 {
     Device device = *createDevice();
@@ -224,7 +207,6 @@ TEST_CASE("a swapchain still live, with an image acquired, is drained by destroy
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("destroyDevice warns of a live swapchain once, not again for its acquired image", "[contract]")
 {
 #ifdef NDEBUG

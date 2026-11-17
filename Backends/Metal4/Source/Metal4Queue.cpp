@@ -23,10 +23,8 @@
 
 namespace rojoRHI {
     namespace {
-        //==============================================================================================================
-        /// Commits the buffers in `queue.commitBuffers` in one native call. With a commit timing callback set, the commit carries
-        /// feedback that reports the GPU span of this commit and then releases the commit's options; commit options are not
-        /// native calls and count nothing.
+        // With a commit timing callback set, the commit carries feedback that reports its GPU span and then releases
+        // the options; commit options count nothing.
         void commit(QueueImpl& queue)
         {
             if (queue.commitCallback == nullptr)
@@ -54,14 +52,12 @@ namespace rojoRHI {
         }
     } // namespace
 
-    //==================================================================================================================
     QueueImpl& QueueImpl::of(Queue queue)
     {
         core::checkObject(queue.m_impl, "Queue");
         return *queue.m_impl;
     }
 
-    //==================================================================================================================
     Queue QueueImpl::wrap(QueueImpl* impl)
     {
         Queue queue;
@@ -69,7 +65,6 @@ namespace rojoRHI {
         return queue;
     }
 
-    //==================================================================================================================
     void Queue::submit(std::span<const CommandList> lists, std::span<const FenceValue> wait, std::span<const FenceValue> signal)
     {
         QueueImpl& queue = QueueImpl::of(*this);
@@ -138,14 +133,12 @@ namespace rojoRHI {
         core::releaseSubmitted(lists);
     }
 
-    //==================================================================================================================
     void Queue::present(Swapchain swapchain)
     {
         QueueImpl& queue = QueueImpl::of(*this);
         metal4::presentSwapchain(queue, SwapchainImpl::of(swapchain));
     }
 
-    //==================================================================================================================
     void Queue::mapTiles(std::span<const TileMapping> mappings)
     {
         metal4::mapTiles(QueueImpl::of(*this), mappings);

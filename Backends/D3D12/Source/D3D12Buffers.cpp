@@ -35,26 +35,21 @@
 
 namespace rojoRHI {
     namespace {
-        /// The label of every frame-arena page.
         constexpr std::string_view kArenaLabel = "rojorhi.frame-arena";
 
-        /// What a buffer is made of natively: its size, memory, whether shaders write it and whether it has raw views, and
-        /// the heap and offset it is placed at, or no heap for a committed buffer.
         struct NativeBufferDesc
         {
-            uint64_t size = 0;           ///< The size the caller asked for, in bytes.
-            Memory memory = Memory::Gpu; ///< The memory class.
-            bool writable = false;       ///< Shaders write it: unordered access and a raw UAV.
-            bool views = false;          ///< It takes raw views; a Readback buffer takes none.
-            bool sparse = false;         ///< A Sparse buffer: a reserved resource whose tiles are mapped later.
-            ID3D12Heap* heap = nullptr;  ///< The heap it is placed in; null for a committed or reserved buffer.
-            uint64_t offset = 0;         ///< The byte offset in `heap`.
-            std::string_view label;      ///< The resolved label.
+            uint64_t size = 0;
+            Memory memory = Memory::Gpu;
+            bool writable = false;      // Unordered access and a raw UAV.
+            bool views = false;         // A Readback buffer takes none.
+            bool sparse = false;        // A reserved resource whose tiles are mapped later.
+            ID3D12Heap* heap = nullptr; // Null for a committed or reserved buffer.
+            uint64_t offset = 0;
+            std::string_view label;
         };
 
-        //==============================================================================================================
-        /// Returns the resource description of a buffer of `size` bytes: its width rounded up to a multiple of 4 so the raw
-        /// views cover every byte, and unordered access when shaders write it.
+        // The width is rounded up to a multiple of 4 so the raw views cover every byte.
         D3D12_RESOURCE_DESC1 resourceDesc(uint64_t size, bool writable)
         {
             D3D12_RESOURCE_DESC1 desc = {};
@@ -70,8 +65,6 @@ namespace rojoRHI {
             return desc;
         }
 
-        //==============================================================================================================
-        /// Returns the heap properties of `memory` on `impl`'s device.
         D3D12_HEAP_PROPERTIES heapProperties(const DeviceImpl& impl, Memory memory)
         {
             D3D12_HEAP_PROPERTIES properties = {};
@@ -79,10 +72,8 @@ namespace rojoRHI {
             return properties;
         }
 
-        //==============================================================================================================
-        /// Returns the bytes and alignment a buffer described by `desc` occupies in a heap of `impl`'s device. The runtime
-        /// answers `UINT64_MAX` bytes for a description it refuses, which the core's checks rule out: it is logged and aborts,
-        /// in every build.
+        // The runtime answers UINT64_MAX bytes for a description it refuses, which the core's checks rule out: it is
+        // logged and aborts, in every build.
         PlacementRequirements bufferRequirements(const DeviceImpl& impl, const D3D12_RESOURCE_DESC1& desc)
         {
             const D3D12_RESOURCE_ALLOCATION_INFO info = impl.device()->GetResourceAllocationInfo3(0, 1, &desc, nullptr, nullptr, nullptr);
@@ -94,18 +85,14 @@ namespace rojoRHI {
             return PlacementRequirements{ info.SizeInBytes, info.Alignment };
         }
 
-        //==============================================================================================================
-        /// Unmaps `resource`, a mapped buffer in `memory`: an Upload buffer may have been written anywhere, a Readback buffer
-        /// nowhere.
+        // An Upload buffer may have been written anywhere, a Readback buffer nowhere.
         void unmap(ID3D12Resource* resource, Memory memory)
         {
             const D3D12_RANGE none = { 0, 0 };
             resource->Unmap(0, memory == Memory::Readback ? &none : nullptr);
         }
 
-        //==============================================================================================================
-        /// Releases what `payload`, a buffer in `memory`, holds: its raw views, its mapping and its resource, then the payload
-        /// itself. The caller has cleared its directory entry, if it was published.
+        // The caller has cleared the payload's directory entry, if it was published.
         void discardPayload(DeviceImpl& impl, d3d12::BufferPayload* payload, Memory memory)
         {
             if (payload->viewCount > 0)
@@ -120,11 +107,7 @@ namespace rojoRHI {
             delete payload;
         }
 
-        //==============================================================================================================
-        /// Creates the native half of a buffer on `impl`'s device: the committed, placed or reserved resource, named
-        /// `desc.label`, the mapping of an Upload or Readback buffer, `initial` copied through the mapping or staged for a Gpu
-        /// buffer, and the raw views. Returns the payload that owns them, or the error of the failing call with nothing left
-        /// behind.
+        // On failure, returns the failing call's error with nothing left behind.
         Result<d3d12::BufferPayload*> createPayload(DeviceImpl& impl, const NativeBufferDesc& desc, std::span<const std::byte> initial)
         {
             const D3D12_RESOURCE_DESC1 native = resourceDesc(desc.size, desc.writable);
@@ -211,10 +194,8 @@ namespace rojoRHI {
             return payload;
         }
 
-        //==============================================================================================================
-        /// Stamps `payload`, which the record of `buffer` now owns, with the handle's bits and publishes it in the heap
-        /// directory, so an address of the buffer decodes before the handle is returned. A buffer with no raw view is not
-        /// published.
+        // Published before the handle is returned, so an address of the buffer decodes at once. A buffer with no raw
+        // view is not published.
         void publish(DeviceImpl& impl, d3d12::BufferPayload* payload, Buffer buffer)
         {
             payload->bufferBits = buffer.bits;
@@ -224,8 +205,6 @@ namespace rojoRHI {
             }
         }
 
-        //==============================================================================================================
-        /// Returns the payload of `record`, the record of a live buffer that a checked lookup found.
         const d3d12::BufferPayload& payloadOf(const core::BufferRecord& record)
         {
             return *static_cast<const d3d12::BufferPayload*>(record.native);
@@ -233,7 +212,6 @@ namespace rojoRHI {
     } // namespace
 
     namespace d3d12 {
-        //==============================================================================================================
         void retireBuffer(void* context, core::BufferRecord& record)
         {
             auto* payload = static_cast<BufferPayload*>(record.native);
@@ -251,7 +229,6 @@ namespace rojoRHI {
             record.native = nullptr;
         }
 
-        //==============================================================================================================
         void retireHeap(void*, core::HeapRecord& record)
         {
             auto* heap = static_cast<ID3D12Heap*>(record.native);
@@ -263,7 +240,6 @@ namespace rojoRHI {
             record.native = nullptr;
         }
 
-        //==============================================================================================================
         Result<core::ArenaPage> createArenaPage(void* context, uint64_t size)
         {
             core::DeviceCore& core = *static_cast<core::DeviceCore*>(context);
@@ -291,7 +267,6 @@ namespace rojoRHI {
         }
     } // namespace d3d12
 
-    //==================================================================================================================
     Result<Buffer> Device::createBuffer(const BufferDesc& desc, std::span<const std::byte> initial, Placement placement)
     {
         DeviceImpl& impl = DeviceImpl::of(*this);
@@ -332,7 +307,6 @@ namespace rojoRHI {
         return handle;
     }
 
-    //==================================================================================================================
     Result<Heap> Device::createHeap(const HeapDesc& desc)
     {
         DeviceImpl& impl = DeviceImpl::of(*this);
@@ -369,7 +343,6 @@ namespace rojoRHI {
         return handle;
     }
 
-    //==================================================================================================================
     PlacementRequirements Device::placementRequirements(const BufferDesc& desc)
     {
         DeviceImpl& impl = DeviceImpl::of(*this);
@@ -377,7 +350,6 @@ namespace rojoRHI {
         return bufferRequirements(impl, resourceDesc(desc.size, (desc.usage & BufferUsage::ShaderWrite) != BufferUsage::None));
     }
 
-    //==================================================================================================================
     Addr Device::address(Buffer buffer, uint64_t offset)
     {
         DeviceImpl& impl = DeviceImpl::of(*this);
@@ -386,7 +358,6 @@ namespace rojoRHI {
         return d3d12::encodeAddr(payloadOf(record), offset);
     }
 
-    //==================================================================================================================
     std::byte* Device::cpuPointer(Buffer buffer)
     {
         DeviceImpl& impl = DeviceImpl::of(*this);
@@ -395,13 +366,11 @@ namespace rojoRHI {
         return payloadOf(record).host;
     }
 
-    //==================================================================================================================
     void Device::destroy(Buffer buffer)
     {
         core::destroyBuffer(DeviceImpl::of(*this).core, buffer);
     }
 
-    //==================================================================================================================
     void Device::destroy(Heap heap)
     {
         core::destroyHeap(DeviceImpl::of(*this).core, heap);

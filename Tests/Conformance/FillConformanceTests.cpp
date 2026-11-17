@@ -18,14 +18,12 @@
 using namespace rojoRHI;
 
 namespace {
-    /// The size of a slow write: long enough that a later write left unordered would finish first.
+    // Long enough that a later write left unordered would finish first.
     constexpr uint64_t kBig = uint64_t{ 32 } << 20;
 
-    /// The bytes each ordering case writes second and reads back, at the end of the slow write's range.
     constexpr uint64_t kTail = 256;
 
-    //==================================================================================================================
-    /// A global barrier from copy writes to copy reads and writes; fills are copy writes.
+    // Fills are copy writes.
     GlobalBarrier copyToCopy()
     {
         return GlobalBarrier{
@@ -33,8 +31,6 @@ namespace {
         };
     }
 
-    //==================================================================================================================
-    /// Returns the last `kTail` bytes of the `kBig`-byte `source`, copied into a new Readback buffer by a list of its own.
     std::vector<std::byte> readTail(test::GpuKit& kit, Buffer source)
     {
         const Buffer readback = kit.buffer(kTail, Memory::Readback);
@@ -44,9 +40,7 @@ namespace {
         return kit.read(readback);
     }
 
-    //==================================================================================================================
-    /// Returns `bytes` with `pattern` written in little-endian byte order over `size` bytes from `offset`, as `fillBuffer`
-    /// writes it.
+    // Little-endian, as `fillBuffer` writes the pattern.
     std::vector<std::byte> filled(std::vector<std::byte> bytes, uint64_t offset, uint64_t size, uint32_t pattern)
     {
         for (uint64_t i = 0; i < size; ++i)
@@ -57,7 +51,6 @@ namespace {
     }
 } // namespace
 
-//======================================================================================================================
 TEST_CASE("fillBuffer with four equal bytes writes them over exactly the range", "[conformance]")
 {
     test::requireGpu();
@@ -70,7 +63,6 @@ TEST_CASE("fillBuffer with four equal bytes writes them over exactly the range",
     CHECK(kit.readBuffer(buffer) == filled(background, 64, 256, 0x7E7E7E7Eu));
 }
 
-//======================================================================================================================
 TEST_CASE("fillBuffer with an unequal pattern writes it in little-endian order over exactly the range", "[conformance]")
 {
     test::requireGpu();
@@ -89,7 +81,6 @@ TEST_CASE("fillBuffer with an unequal pattern writes it in little-endian order o
     CHECK(kit.readBuffer(placed) == filled(background, 512, 260, 0x00FF10EFu));
 }
 
-//======================================================================================================================
 TEST_CASE("two unequal fills in one encoder keep their own patterns and ranges", "[conformance]")
 {
     test::requireGpu();
@@ -108,7 +99,6 @@ TEST_CASE("two unequal fills in one encoder keep their own patterns and ranges",
     CHECK(kit.readBuffer(second) == filled(background, 256, 512, 0x090A0B0Cu));
 }
 
-//======================================================================================================================
 TEST_CASE("fills of one word and of a range not a multiple of 64 words", "[conformance]")
 {
     test::requireGpu();
@@ -123,7 +113,6 @@ TEST_CASE("fills of one word and of a range not a multiple of 64 words", "[confo
     CHECK(kit.readBuffer(buffer) == filled(filled(background, 8, 4, 0xCAFEF00Du), 400, 400, 0x13579BDFu));
 }
 
-//======================================================================================================================
 TEST_CASE("fills record on Compute lists as on Graphics lists", "[conformance]")
 {
     test::requireGpu();
@@ -139,7 +128,6 @@ TEST_CASE("fills record on Compute lists as on Graphics lists", "[conformance]")
     CHECK(kit.readBuffer(buffer, type) == filled(filled(background, 0, 128, 0x42424242u), 256, 192, 0x89ABCDEFu));
 }
 
-//======================================================================================================================
 TEST_CASE("a barrier orders a copy before an unequal fill over the same range", "[conformance]")
 {
     test::requireGpu();
@@ -166,7 +154,6 @@ TEST_CASE("a barrier orders a copy before an unequal fill over the same range", 
     CHECK(readTail(kit, target) == filled(std::vector<std::byte>(kTail), 0, kTail, 0xA5B6C7D8u));
 }
 
-//======================================================================================================================
 TEST_CASE("a barrier orders an unequal fill before a copy over the same range", "[conformance]")
 {
     test::requireGpu();
@@ -194,7 +181,6 @@ TEST_CASE("a barrier orders an unequal fill before a copy over the same range", 
     CHECK(readTail(kit, target) == tail);
 }
 
-//======================================================================================================================
 TEST_CASE("a barrier orders a kernel fill before a copy that reads its result", "[conformance]")
 {
     test::requireGpu();
@@ -221,7 +207,6 @@ TEST_CASE("a barrier orders a kernel fill before a copy that reads its result", 
     CHECK(kit.read(readback) == filled(std::vector<std::byte>(kTail), 0, kTail, 0x1A2B3C4Du));
 }
 
-//======================================================================================================================
 TEST_CASE("a barrier after a kernel fill holds back every later encoder on the queue, not only the first", "[conformance]")
 {
     test::requireGpu();

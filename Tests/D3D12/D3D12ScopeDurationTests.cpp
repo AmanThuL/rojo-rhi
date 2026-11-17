@@ -16,18 +16,14 @@
 using namespace rojoRHI;
 
 namespace {
-    /// The frames in flight of every case's device.
     constexpr uint32_t kFramesInFlight = 2;
 
-    /// The size of the fill each timed scope encloses: long enough to take measurable GPU time.
+    // Long enough to take measurable GPU time.
     constexpr uint64_t kBig = uint64_t{ 64 } << 20;
 
-    /// A fill pattern whose bytes differ.
     constexpr uint32_t kUnequal = 0x01020304u;
 
-    //==================================================================================================================
-    /// Ends `lists`, submits each to the queue of its type, joins the compute lists into the frame's graphics queue through
-    /// a fence, waits on the host for all of them and destroys the fence.
+    // Joins the compute lists into the frame's graphics queue through a fence and waits on the host for all of them.
     void submit(Device device, std::span<const CommandList> lists, std::span<const QueueType> types)
     {
         const Fence fence = *device.createFence(0, "test.done");
@@ -47,9 +43,8 @@ namespace {
         device.destroy(fence);
     }
 
-    //==================================================================================================================
-    /// Ends the open frame and begins frames until the one `beginFrame` waits for is the frame that was open, so
-    /// `Device::scopeTimings` reports its scopes; a frame is open on return.
+    // Begins frames until the one `beginFrame` waits for is the frame that was open, so `Device::scopeTimings` reports
+    // its scopes; a frame is open on return.
     void retireOpenFrame(Device device)
     {
         device.endFrame();
@@ -61,15 +56,12 @@ namespace {
         device.beginFrame();
     }
 
-    //==================================================================================================================
-    /// Returns true when `timing` is finite and at least zero.
     bool finiteAndNonNegative(const ScopeTiming& timing)
     {
         return std::isfinite(timing.gpuMilliseconds) && timing.gpuMilliseconds >= 0.0;
     }
 } // namespace
 
-//======================================================================================================================
 TEST_CASE("a scope around fills reports a positive duration", "[d3d12]")
 {
     Device device = *createDevice({ .scopeTimings = true, .framesInFlight = kFramesInFlight });
@@ -93,7 +85,6 @@ TEST_CASE("a scope around fills reports a positive duration", "[d3d12]")
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("nested scopes around fills report parents before children with finite non-negative durations", "[d3d12]")
 {
     Device device = *createDevice({ .scopeTimings = true, .framesInFlight = kFramesInFlight });
@@ -135,7 +126,6 @@ TEST_CASE("nested scopes around fills report parents before children with finite
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("scopes around fills on the Compute queue are timed and reported with their queue", "[d3d12]")
 {
     Device device = *createDevice({ .scopeTimings = true, .framesInFlight = kFramesInFlight });
@@ -150,7 +140,7 @@ TEST_CASE("scopes around fills on the Compute queue are timed and reported with 
     lists[1].endScope();
     submit(device, lists, std::array{ QueueType::Graphics, QueueType::Compute });
     retireOpenFrame(device);
-    // Chapter 14: `queue` is the queue type of the list that recorded the scope; records are in submission order per queue.
+    // Chapter 14: `queue` is the queue type of the list that recorded the scope.
     const std::span<const ScopeTiming> report = device.scopeTimings();
     REQUIRE(report.size() == 2);
     const ScopeTiming* compute = nullptr;
@@ -170,7 +160,6 @@ TEST_CASE("scopes around fills on the Compute queue are timed and reported with 
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("an empty scope reports a finite duration of at least zero on D3D12", "[d3d12]")
 {
     Device device = *createDevice({ .scopeTimings = true, .framesInFlight = kFramesInFlight });

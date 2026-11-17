@@ -18,11 +18,8 @@ using namespace rojoRHI;
 using test::PassKit;
 
 namespace {
-    /// The first row of a `PassKit::kSize` square texture, which every copy names.
     [[maybe_unused]] constexpr TextureRegion kRow{ .extent = { PassKit::kSize, 1, 1 } };
 
-    //==================================================================================================================
-    /// Ends `list` and submits it alone to the queue of `type` of `device`, waiting on `wait` and signalling `signal`.
     [[maybe_unused]] void submitTo(
         Device device, CommandList list, QueueType type, std::span<const FenceValue> wait = {}, std::span<const FenceValue> signal = {}
     )
@@ -32,8 +29,6 @@ namespace {
         device.queue(type).submit(lists, wait, signal);
     }
 
-    //==================================================================================================================
-    /// Records a dispatch in `list` that declares `access` of every subresource of `texture` from the compute shader.
     [[maybe_unused]] void dispatchWith(PassKit& kit, CommandList list, Texture texture, Access access)
     {
         const std::array<ResourceAccess, 1> accesses{ ResourceAccess{ .texture = texture, .stage = Stage::ComputeShader, .access = access } };
@@ -42,8 +37,7 @@ namespace {
         list.dispatch(1, 1, 1);
     }
 
-    //==================================================================================================================
-    /// Joins the compute and copy work into the frame's graphics work, ends the frame and destroys the device of `kit`.
+    // Joins the compute and copy work into the frame's graphics work, then ends the frame and destroys the device.
     [[maybe_unused]] void close(PassKit& kit)
     {
         kit.joinQueues();
@@ -52,7 +46,6 @@ namespace {
     }
 } // namespace
 
-//======================================================================================================================
 TEST_CASE("a texture handed from Graphics to Compute in ShaderRead is read there with no barrier", "[contract]")
 {
 #ifdef NDEBUG
@@ -71,7 +64,6 @@ TEST_CASE("a texture handed from Graphics to Compute in ShaderRead is read there
 #endif
 }
 
-//======================================================================================================================
 TEST_CASE("a texture created with data and sampled on Graphics is read on Compute with no barrier", "[contract]")
 {
 #ifdef NDEBUG
@@ -96,7 +88,6 @@ TEST_CASE("a texture created with data and sampled on Graphics is read on Comput
 #endif
 }
 
-//======================================================================================================================
 TEST_CASE("a texture handed from Graphics to Compute in ShaderWrite is moved there from ShaderWrite", "[contract]")
 {
 #ifdef NDEBUG
@@ -117,7 +108,6 @@ TEST_CASE("a texture handed from Graphics to Compute in ShaderWrite is moved the
 #endif
 }
 
-//======================================================================================================================
 TEST_CASE("a new texture uploaded on Copy is read on Graphics in General and then moved from General", "[contract]")
 {
 #ifdef NDEBUG
@@ -141,7 +131,6 @@ TEST_CASE("a new texture uploaded on Copy is read on Graphics in General and the
 #endif
 }
 
-//======================================================================================================================
 TEST_CASE("Compute discards a texture handed over from Graphics before writing it", "[contract]")
 {
 #ifdef NDEBUG
@@ -162,7 +151,6 @@ TEST_CASE("Compute discards a texture handed over from Graphics before writing i
 #endif
 }
 
-//======================================================================================================================
 TEST_CASE("a texture handed to Compute and back to Graphics follows the handoff rules both ways", "[contract]")
 {
 #ifdef NDEBUG
@@ -188,7 +176,6 @@ TEST_CASE("a texture handed to Compute and back to Graphics follows the handoff 
 #endif
 }
 
-//======================================================================================================================
 TEST_CASE("a swapchain image handed to Compute in General and back is presented", "[contract]")
 {
 #ifndef NDEBUG
@@ -215,7 +202,6 @@ TEST_CASE("a swapchain image handed to Compute in General and back is presented"
 #endif
 }
 
-//======================================================================================================================
 TEST_CASE("Compute discards a texture handed over from Graphics in ColorAttachment", "[contract]")
 {
 #ifdef NDEBUG
@@ -239,7 +225,6 @@ TEST_CASE("Compute discards a texture handed over from Graphics in ColorAttachme
 #endif
 }
 
-//======================================================================================================================
 TEST_CASE("Compute discards a placed render target after a buffer used its memory there", "[contract]")
 {
 #ifdef NDEBUG

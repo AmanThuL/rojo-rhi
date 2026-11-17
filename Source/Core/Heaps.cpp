@@ -11,7 +11,6 @@
 #include "Core/Tracker/Tracker.h"
 
 namespace rojoRHI::core {
-    //==================================================================================================================
     HeapRecord prepareHeap(const HeapDesc& desc)
     {
         ROJORHI_VU(desc.size > 0, "VU-rojo-heap-0001", "a heap has size zero");
@@ -22,7 +21,6 @@ namespace rojoRHI::core {
         return record;
     }
 
-    //==================================================================================================================
     HeapRecord& checkedHeap(DeviceCore& core, Heap heap)
     {
         HeapRecord* record = core.pool<Heap>().checked(heap, false);
@@ -30,14 +28,12 @@ namespace rojoRHI::core {
         return *record;
     }
 
-    //==================================================================================================================
     void checkBufferRequirementsQuery(const DeviceCore& core, const BufferDesc& desc)
     {
         checkBufferDesc(core, desc);
         ROJORHI_VU((desc.usage & BufferUsage::Sparse) == BufferUsage::None, "VU-rojo-heap-0002", "placement requirements are requested for a Sparse buffer");
     }
 
-    //==================================================================================================================
     void checkPlacement(
         [[maybe_unused]] const HeapRecord& heap,
         [[maybe_unused]] const Placement& placement,
@@ -74,14 +70,12 @@ namespace rojoRHI::core {
         ROJORHI_VU(!resource.sparse, "VU-rojo-heap-0006", "a Sparse resource is placed in the heap \"{}\"", heap.label);
     }
 
-    //==================================================================================================================
     void addPlacedResource(DeviceCore& core, Heap heap)
     {
         [[maybe_unused]] const LookupStatus status = core.pool<Heap>().update(heap, [](HeapRecord& record) { ++record.placedResources; });
         ROJORHI_INTERNAL_ASSERT(status == LookupStatus::Ok, "a resource is placed in a heap that is gone");
     }
 
-    //==================================================================================================================
     void removePlacedResource(DeviceCore& core, Heap heap)
     {
         // The heap may already be gone when its resource is destroyed after the heap was misused; that is VU-rojo-device-0008's.
@@ -91,7 +85,6 @@ namespace rojoRHI::core {
         });
     }
 
-    //==================================================================================================================
     void destroyHeap(DeviceCore& core, Heap heap)
     {
         // A null, stale or foreign handle reaches the destroy below, which reports VU-rojo-core-0001 to 0003.

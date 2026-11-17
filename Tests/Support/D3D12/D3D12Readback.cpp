@@ -18,21 +18,18 @@
 
 namespace rojoRHI::test {
     namespace {
-        /// The label of every object a readback makes.
         constexpr std::string_view kLabel = "test.readback";
 
-        /// A DIRECT queue with one allocator, one list and one fence, made for one copy and released after it.
+        // Made for one copy and released after it.
         struct OneShot
         {
-            d3d12::Com<ID3D12CommandQueue> queue;         ///< The queue the copy runs on.
-            d3d12::Com<ID3D12CommandAllocator> allocator; ///< The allocator `list` records into.
-            d3d12::Com<ID3D12GraphicsCommandList9> list;  ///< The list, open for recording once `open` returns.
-            d3d12::Com<ID3D12Fence> fence;                ///< Signalled with 1 when the copy has run.
+            d3d12::Com<ID3D12CommandQueue> queue;
+            d3d12::Com<ID3D12CommandAllocator> allocator;
+            d3d12::Com<ID3D12GraphicsCommandList9> list;
+            d3d12::Com<ID3D12Fence> fence; // Signalled with 1 when the copy has run.
         };
 
-        //==============================================================================================================
-        /// Returns a new queue, allocator, fence and list on `device`, the list open for recording. A failed native call fails
-        /// the running case.
+        // The list is open for recording on return. A failed native call fails the running case.
         OneShot open(ID3D12Device12* device)
         {
             OneShot shot;
@@ -50,9 +47,7 @@ namespace rojoRHI::test {
             return shot;
         }
 
-        //==============================================================================================================
-        /// Closes the list of `shot`, executes it, signals its fence with 1 and waits for the value, then requires that
-        /// `device`, which a removal would complete the wait for at once, was not removed.
+        // A removal would complete the wait at once, so it then requires that `device` was not removed.
         void runAndWait(ID3D12Device12* device, OneShot& shot)
         {
             REQUIRE(SUCCEEDED(shot.list->Close()));
@@ -63,8 +58,6 @@ namespace rojoRHI::test {
             REQUIRE(SUCCEEDED(device->GetDeviceRemovedReason()));
         }
 
-        //==============================================================================================================
-        /// Returns a new committed `READBACK` buffer of `size` bytes on `device`.
         d3d12::Com<ID3D12Resource> createReadback(ID3D12Device12* device, uint64_t size)
         {
             D3D12_HEAP_PROPERTIES heap = {};
@@ -86,9 +79,7 @@ namespace rojoRHI::test {
             return buffer;
         }
 
-        //==============================================================================================================
-        /// Returns the accesses a subresource in `layout` admits, the ones a barrier out of it names; none for an undefined
-        /// layout.
+        // The accesses a barrier out of `layout` names; none for an undefined layout.
         D3D12_BARRIER_ACCESS layoutAccess(D3D12_BARRIER_LAYOUT layout)
         {
             switch (layout)
@@ -105,12 +96,10 @@ namespace rojoRHI::test {
             }
         }
 
-        //==============================================================================================================
-        /// Returns a barrier on subresource `subresource` of `texture` from `before` to `after`: one that makes the subresource
-        /// a copy source when `after` is `D3D12_BARRIER_LAYOUT_COPY_SOURCE`, else one that waits for the copy and leaves no
-        /// access behind. The first waits on every scope for the accesses `before` admits: GPU-based validation rejects
-        /// `SYNC_NONE` before a subresource an earlier command list touched, and the layer accepts no access in a defined
-        /// layout only with `SYNC_NONE`.
+        // Makes the subresource a copy source when `after` is `D3D12_BARRIER_LAYOUT_COPY_SOURCE`, else waits for the
+        // copy and leaves no access behind. The first waits on every scope for the accesses `before` admits: GPU-based
+        // validation rejects `SYNC_NONE` before a subresource an earlier command list touched, and the layer accepts no
+        // access in a defined layout only with `SYNC_NONE`.
         D3D12_TEXTURE_BARRIER layoutBarrier(ID3D12Resource* texture, uint32_t subresource, D3D12_BARRIER_LAYOUT before, D3D12_BARRIER_LAYOUT after)
         {
             const bool toCopy = after == D3D12_BARRIER_LAYOUT_COPY_SOURCE;
@@ -128,8 +117,6 @@ namespace rojoRHI::test {
             return barrier;
         }
 
-        //==============================================================================================================
-        /// Records `barrier` into `list` as one barrier group.
         void recordBarrier(ID3D12GraphicsCommandList9* list, const D3D12_TEXTURE_BARRIER& barrier)
         {
             D3D12_BARRIER_GROUP group = {};
@@ -140,7 +127,6 @@ namespace rojoRHI::test {
         }
     } // namespace
 
-    //==================================================================================================================
     std::vector<std::byte> readNativeBuffer(DeviceImpl& impl, ID3D12Resource* buffer, uint64_t size)
     {
         REQUIRE(buffer != nullptr);
@@ -159,7 +145,6 @@ namespace rojoRHI::test {
         return bytes;
     }
 
-    //==================================================================================================================
     std::vector<std::byte> readNativeTexture(DeviceImpl& impl, ID3D12Resource* texture, uint32_t subresource, D3D12_BARRIER_LAYOUT layout)
     {
         REQUIRE(texture != nullptr);

@@ -19,6 +19,8 @@ struct TerrainRoot
     float time;
     float patchSize;
     uint32_t patchesPerSide;
+    // C++ rounds the struct to 80 bytes through Mat4's 16-byte alignment; Slang's natural layout ends it at 76
+    // without the pad, so the pad makes both 80.
     uint32_t pad;
 };
 
@@ -70,6 +72,8 @@ int main()
     Swapchain swapchain = check(device.createSwapchain({ .nativeSurface = window.surface(), .label = "mesh-shaders" }), "createSwapchain");
 
     ShaderLibrary geometry = check(device.loadShaderLibrary(embedded::kMeshShadersLibrary, "geometry"), "loadShaderLibrary");
+    // The fragment entry has a library of its own: Metal rejects MeshShaders.slang's file-wide groupshared
+    // declarations in a fragment function.
     ShaderLibrary shading = check(device.loadShaderLibrary(embedded::kShadingLibrary, "shading"), "loadShaderLibrary");
     const std::array colors{ ColorTarget{ .format = Format::BGRA8Unorm } };
     Pipeline terrain = check(
@@ -106,6 +110,7 @@ int main()
         if (size.width != extent.width || size.height != extent.height)
         {
             swapchain.resize(size);
+            // Deferred: the old texture is released once the frames that used it retire.
             device.destroy(depth);
             depth = createDepth(size);
             extent = size;
@@ -124,6 +129,7 @@ int main()
         const float target[3] = { 0.0f, 0.0f, 0.0f };
 
         CommandList list = device.acquireCommandList(QueueType::Graphics, "frame");
+        // The depth barrier's srcStage orders this frame's clear after the last frame's depth test.
         const std::array toRender{ TextureBarrier{ .texture = image,
                                                    .dstStage = Stage::ColorAttachment,
                                                    .dstAccess = Access::ColorAttachmentWrite,
@@ -138,6 +144,7 @@ int main()
         list.barrier({}, {}, toRender);
 
         const std::array attachments{ ColorAttachment{ .texture = image, .load = LoadOp::Clear, .clear = { 0.6f, 0.75f, 0.95f, 1.0f } } };
+        // Reverse Z: depth clears to 0, the far end, and the pipeline keeps its default GreaterOrEqual compare.
         list.beginRenderPass(
             { .colors = attachments,
               .depth = { .texture = depth, .load = LoadOp::Clear, .store = StoreOp::DontCare, .clearDepth = 0.0f },
@@ -147,12 +154,14 @@ int main()
         list.setPipeline(terrain);
         list.setViewport({ .width = float(extent.width), .height = float(extent.height) });
         list.setScissor({ 0, 0, extent.width, extent.height });
+        // The root is the only input: the task and mesh shaders generate the terrain from it, with no vertex or index buffer.
         list.pushRoot(
             TerrainRoot{ .viewProj = viewProjection(eye, target, float(extent.width) / float(extent.height)),
                          .time = time,
                          .patchSize = kPatchSize,
                          .patchesPerSide = kPatchesPerSide }
         );
+        // One task group per kTaskThreads patches, which must match the shader; each launches a mesh group per patch it keeps.
         list.drawMeshTasks(kPatchesPerSide * kPatchesPerSide / kTaskThreads, 1, 1);
         list.endRenderPass();
 

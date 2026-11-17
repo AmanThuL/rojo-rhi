@@ -18,7 +18,6 @@
 using namespace rojoRHI;
 using test::PassKit;
 
-//======================================================================================================================
 TEST_CASE("an address resolves to its buffer, record and byte offset", "[core]")
 {
     PassKit kit;
@@ -32,7 +31,6 @@ TEST_CASE("an address resolves to its buffer, record and byte offset", "[core]")
     kit.finish();
 }
 
-//======================================================================================================================
 TEST_CASE("the null address resolves to no buffer and issues no rule", "[core]")
 {
     PassKit kit;
@@ -42,7 +40,6 @@ TEST_CASE("the null address resolves to no buffer and issues no rule", "[core]")
     kit.finish();
 }
 
-//======================================================================================================================
 TEST_CASE("frame data resolves on a list of the frame that produced it", "[core]")
 {
     PassKit kit;
@@ -55,7 +52,6 @@ TEST_CASE("frame data resolves on a list of the frame that produced it", "[core]
     kit.finish();
 }
 
-//======================================================================================================================
 TEST_CASE("an arena page's record holds the frame of the list that claimed it in Debug builds", "[core]")
 {
     PassKit kit;

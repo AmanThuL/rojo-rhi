@@ -17,7 +17,6 @@
 using namespace rojoRHI;
 using rojoRHI::test::UpscaleKit;
 
-//======================================================================================================================
 TEST_CASE("an upscaler is created from the default description with Auto", "[contract]")
 {
     Device device = *createDevice();
@@ -27,7 +26,6 @@ TEST_CASE("an upscaler is created from the default description with Auto", "[con
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("every kind the device lists can be created", "[contract]")
 {
     Device device = *createDevice();
@@ -39,7 +37,6 @@ TEST_CASE("every kind the device lists can be created", "[contract]")
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("an upscaler at a listed kind's smallest input scale is created", "[contract]")
 {
     Device device = *createDevice();
@@ -53,7 +50,6 @@ TEST_CASE("an upscaler at a listed kind's smallest input scale is created", "[co
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("a kind the device does not list is an error, never a substitution", "[contract]")
 {
     Device device = *createDevice();
@@ -70,7 +66,6 @@ TEST_CASE("a kind the device does not list is an error, never a substitution", "
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("an upscaler with every flag and an equal output extent is created", "[contract]")
 {
     Device device = *createDevice();
@@ -79,7 +74,6 @@ TEST_CASE("an upscaler with every flag and an equal output extent is created", "
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("a valid upscale records on a graphics list", "[contract]")
 {
     UpscaleKit kit;
@@ -87,7 +81,6 @@ TEST_CASE("a valid upscale records on a graphics list", "[contract]")
     kit.kit.finish();
 }
 
-//======================================================================================================================
 TEST_CASE("an upscale with the optional inputs, a content rectangle and a label records", "[contract]")
 {
     UpscaleKit kit;
@@ -104,7 +97,6 @@ TEST_CASE("an upscale with the optional inputs, a content rectangle and a label 
     kit.kit.finish();
 }
 
-//======================================================================================================================
 TEST_CASE("an upscale takes a content rectangle equal to the whole input", "[contract]")
 {
     UpscaleKit kit;
@@ -113,7 +105,6 @@ TEST_CASE("an upscale takes a content rectangle equal to the whole input", "[con
     kit.kit.finish();
 }
 
-//======================================================================================================================
 TEST_CASE("two upscalers each upscale once in the same frame", "[contract]")
 {
     UpscaleKit kit;
@@ -123,7 +114,6 @@ TEST_CASE("two upscalers each upscale once in the same frame", "[contract]")
     kit.kit.finish();
 }
 
-//======================================================================================================================
 TEST_CASE("an upscaler upscales again in a later frame", "[contract]")
 {
     UpscaleKit kit;
@@ -133,7 +123,6 @@ TEST_CASE("an upscaler upscales again in a later frame", "[contract]")
     kit.kit.finish();
 }
 
-//======================================================================================================================
 TEST_CASE("a destroyed upscaler is gone after its frame slot retires", "[contract]")
 {
     UpscaleKit kit;

@@ -18,30 +18,25 @@ using namespace rojoRHI;
 using rojoRHI::test::SparseKit;
 
 namespace {
-    //==================================================================================================================
     uint64_t mappedFrom(Device device, Heap heap)
     {
         return core::coreOf(device).pool<Heap>().lookup(heap).record->mappedTiles;
     }
 
-    //==================================================================================================================
     size_t tilesOf(Device device, Texture texture)
     {
         return core::coreOf(device).pool<Texture>().lookup(texture).record->mapped.size();
     }
 
-    //==================================================================================================================
     size_t tilesOf(Device device, Buffer buffer)
     {
         return core::coreOf(device).pool<Buffer>().lookup(buffer).record->mapped.size();
     }
 
-    /// A tile shape unlike the standard one of `measuredTexture`: its tail starts a mip earlier and spans two tiles, as a 3D
-    /// texture's tail can on a backend that measures it.
+    // Unlike the standard shape, the tail starts a mip earlier and spans two tiles, as a 3D texture's tail can on a
+    // backend that measures it.
     constexpr TileShape kMeasuredShape = { .width = 32, .height = 32, .depth = 16, .bytes = 65536, .mipTailFirst = 2, .mipTailBytes = 2 * 65536 };
 
-    //==================================================================================================================
-    /// Creates a sparse 3D texture on `device` and records `kMeasuredShape` as the shape its backend measured.
     Texture measuredTexture(Device device)
     {
         const Texture texture = *device.createTexture(
@@ -57,14 +52,11 @@ namespace {
         return texture;
     }
 
-    //==================================================================================================================
-    /// Returns a mapping of the mip tail of `texture` onto `heap` at `heapOffset`.
     TileMapping measuredTail(Texture texture, Heap heap, uint64_t heapOffset)
     {
         return TileMapping{ .texture = texture, .region = { .mip = kMeasuredShape.mipTailFirst }, .mipTail = true, .heap = heap, .heapOffset = heapOffset };
     }
 
-    //==================================================================================================================
     bool sameShape(const TileShape& left, const TileShape& right)
     {
         return left.width == right.width && left.height == right.height && left.depth == right.depth && left.bytes == right.bytes &&
@@ -72,7 +64,6 @@ namespace {
     }
 } // namespace
 
-//======================================================================================================================
 TEST_CASE("a region maps one tile per heap tile and each tile counts against the heap", "[core]")
 {
     SparseKit kit;
@@ -83,7 +74,6 @@ TEST_CASE("a region maps one tile per heap tile and each tile counts against the
     destroyDevice(kit.device);
 }
 
-//======================================================================================================================
 TEST_CASE("a mip tail is one tile per layer in the region", "[core]")
 {
     SparseKit kit;
@@ -95,7 +85,6 @@ TEST_CASE("a mip tail is one tile per layer in the region", "[core]")
     destroyDevice(kit.device);
 }
 
-//======================================================================================================================
 TEST_CASE("mapping a tile again moves its count and unmapping removes it", "[core]")
 {
     SparseKit kit;
@@ -113,7 +102,6 @@ TEST_CASE("mapping a tile again moves its count and unmapping removes it", "[cor
     destroyDevice(kit.device);
 }
 
-//======================================================================================================================
 TEST_CASE("a buffer range maps one tile per heap tile", "[core]")
 {
     SparseKit kit;
@@ -123,7 +111,6 @@ TEST_CASE("a buffer range maps one tile per heap tile", "[core]")
     destroyDevice(kit.device);
 }
 
-//======================================================================================================================
 TEST_CASE("destroying a sparse resource drops its tiles from the heap count at the call", "[core]")
 {
     SparseKit kit;
@@ -137,7 +124,6 @@ TEST_CASE("destroying a sparse resource drops its tiles from the heap count at t
     destroyDevice(kit.device);
 }
 
-//======================================================================================================================
 TEST_CASE("a partial unmap leaves the other tiles mapped", "[core]")
 {
     SparseKit kit;
@@ -149,7 +135,6 @@ TEST_CASE("a partial unmap leaves the other tiles mapped", "[core]")
     destroyDevice(kit.device);
 }
 
-//======================================================================================================================
 TEST_CASE("a texture record with a measured tile shape reports it unchanged", "[core]")
 {
     Device device = *createDevice();
@@ -163,7 +148,6 @@ TEST_CASE("a texture record with a measured tile shape reports it unchanged", "[
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-sparse-0008 a measured tail of two tiles does not fit the last tile of a heap", "[core][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-sparse-0008", [] {

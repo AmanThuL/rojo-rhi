@@ -30,14 +30,12 @@
 
 namespace rojoRHI {
     namespace core {
-        //==============================================================================================================
         CommandListCore& coreOf(CommandList list)
         {
             return CommandListImpl::of(list).core;
         }
     } // namespace core
 
-    //==================================================================================================================
     CommandList Device::acquireCommandList(QueueType type, std::string_view label)
     {
         DeviceImpl& impl = DeviceImpl::of(*this);
@@ -83,11 +81,9 @@ namespace rojoRHI {
         return CommandListImpl::wrap(&list);
     }
 
-    //==================================================================================================================
     void CommandList::end()
     {
         CommandListImpl& list = CommandListImpl::of(*this);
-        // The core's checks run before any native call.
         core::endList(list.core);
         d3d12::endSubmitTiming(list);
         d3d12::resolveTimestamps(list);
@@ -95,7 +91,6 @@ namespace rojoRHI {
         core::noteNativeCall(list.core);
     }
 
-    //==================================================================================================================
     Addr CommandList::uploadFrameData(std::span<const std::byte> bytes, uint32_t alignment)
     {
         CommandListImpl& impl = CommandListImpl::of(*this);
@@ -115,7 +110,6 @@ namespace rojoRHI {
         return last.address;
     }
 
-    //==================================================================================================================
     void CommandList::setRoot(Addr root)
     {
         CommandListImpl& list = CommandListImpl::of(*this);
@@ -130,7 +124,6 @@ namespace rojoRHI {
         binding.computeRootDirty = true;
     }
 
-    //==================================================================================================================
     void CommandList::declareAccessChecked(std::span<const ResourceAccess> accesses)
     {
         // A record for the validation tracker only: no native call.

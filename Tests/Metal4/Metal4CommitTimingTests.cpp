@@ -20,23 +20,20 @@
 using namespace rojoRHI;
 
 namespace {
-    /// The commits one queue reported, pushed from Metal's completion thread.
+    // Pushed from Metal's completion thread.
     struct Reports
     {
         std::mutex mutex;
         std::condition_variable arrived;
         std::vector<metal4::CommitTime> times;
 
-        //==============================================================================================================
-        /// Waits up to 10 seconds for `count` reports; feedback can arrive after the fence the work signals.
+        // Feedback can arrive after the fence the work signals.
         bool waitFor(size_t count)
         {
             std::unique_lock lock(mutex);
             return arrived.wait_for(lock, std::chrono::seconds(10), [&] { return times.size() >= count; });
         }
 
-        //==============================================================================================================
-        /// Returns how many reports have arrived.
         size_t size()
         {
             const std::lock_guard lock(mutex);
@@ -44,8 +41,6 @@ namespace {
         }
     };
 
-    //==================================================================================================================
-    /// The callback every case attaches; `user` is a `Reports`.
     void collect(void* user, const metal4::CommitTime& time)
     {
         auto& reports = *static_cast<Reports*>(user);
@@ -54,15 +49,13 @@ namespace {
         reports.arrived.notify_all();
     }
 
-    //==================================================================================================================
-    /// Gives feedback that should not arrive time to do so. It only bounds a negative check: it cannot prove a report never comes.
+    // Gives feedback that should not arrive time to do so. It only bounds a negative check: it cannot prove a report
+    // never comes.
     void settle()
     {
         std::this_thread::sleep_for(std::chrono::milliseconds(200));
     }
 
-    //==================================================================================================================
-    /// Records one copy in a list of `type`, submits it alone to the queue of `type` and waits for the GPU on the host.
     void submitCopy(Device device, QueueType type, Buffer from, Buffer to)
     {
         CommandList list = device.acquireCommandList(type, "test.list");
@@ -75,7 +68,6 @@ namespace {
     }
 } // namespace
 
-//======================================================================================================================
 TEST_CASE("a queue with a sink reports one GPU span per commit, each starting before it ends", "[metal4]")
 {
     Device device = *createDevice();
@@ -107,7 +99,6 @@ TEST_CASE("a queue with a sink reports one GPU span per commit, each starting be
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("a sink on one queue reports nothing of another queue's commits", "[metal4]")
 {
     Device device = *createDevice();
@@ -130,7 +121,6 @@ TEST_CASE("a sink on one queue reports nothing of another queue's commits", "[me
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("a queue whose sink was removed reports nothing more", "[metal4]")
 {
     Device device = *createDevice();
@@ -149,7 +139,6 @@ TEST_CASE("a queue whose sink was removed reports nothing more", "[metal4]")
     CHECK(graphics.size() == 1);
 }
 
-//======================================================================================================================
 TEST_CASE("a sink set again counts its serials from one", "[metal4]")
 {
     Device device = *createDevice();
@@ -174,7 +163,6 @@ TEST_CASE("a sink set again counts its serials from one", "[metal4]")
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("a submission with no lists commits nothing, so the next commit reports serial one and alone", "[metal4]")
 {
     Device device = *createDevice();
@@ -200,7 +188,6 @@ TEST_CASE("a submission with no lists commits nothing, so the next commit report
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("detaching after a commit delivers that commit's report at most once and reports no later commit", "[metal4]")
 {
     Device device = *createDevice();
@@ -229,7 +216,6 @@ TEST_CASE("detaching after a commit delivers that commit's report at most once a
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("a sink leaves the device counters as they are for the same work", "[metal4]")
 {
     Device device = *createDevice();
@@ -257,7 +243,6 @@ TEST_CASE("a sink leaves the device counters as they are for the same work", "[m
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("a sink on a caller queue leaves stager uploads untimed", "[metal4]")
 {
     Device device = *createDevice();

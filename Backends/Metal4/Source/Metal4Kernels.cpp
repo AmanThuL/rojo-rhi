@@ -28,10 +28,7 @@
 
 namespace rojoRHI::metal4 {
     namespace {
-        //==============================================================================================================
-        /// Makes the compute pipeline of the function `name` of `library` with `compiler`, labelled `label`, specialised by
-        /// `constants` when they are not null. Returns null with `error` set when Metal refuses it. The caller holds an
-        /// autorelease pool.
+        // Returns null with `error` set when Metal refuses it. The caller holds an autorelease pool.
         MTL::ComputePipelineState* newKernelPipeline(
             MTL4::Compiler* compiler,
             MTL::Library* library,
@@ -65,15 +62,14 @@ namespace rojoRHI::metal4 {
             return pipeline;
         }
 
-        /// The function and the label of one clear pipeline.
         struct ClearPipeline
         {
-            std::string_view function; ///< The kernel function the pipeline specialises.
-            std::string_view label;    ///< The pipeline's label.
+            std::string_view function;
+            std::string_view label;
         };
 
-        /// The clear pipelines, indexed by `ClearKernel`. The 1D and 2D functions take the type as a function constant; the 3D
-        /// function serves one type and takes none.
+        // Indexed by `ClearKernel`. The 1D and 2D functions take the type as a function constant; the 3D function
+        // serves one type and takes none.
         constexpr std::array<ClearPipeline, kClearKernelCount> kClearPipelines{
             ClearPipeline{ "rojorhi_clear_1d", "rojorhi.kernel.clear.1D" },        ClearPipeline{ "rojorhi_clear_1d", "rojorhi.kernel.clear.1DArray" },
             ClearPipeline{ "rojorhi_clear_2d", "rojorhi.kernel.clear.2D" },        ClearPipeline{ "rojorhi_clear_2d", "rojorhi.kernel.clear.2DArray" },
@@ -81,16 +77,14 @@ namespace rojoRHI::metal4 {
             ClearPipeline{ "rojorhi_clear_2d", "rojorhi.kernel.clear.CubeArray" },
         };
 
-        /// Where a counted draw's kernel pipeline goes, its function and its label.
         struct DrawPipeline
         {
-            MTL::ComputePipelineState** pipeline; ///< The member of `Kernels` that keeps it.
-            std::string_view function;            ///< The kernel function.
-            std::string_view label;               ///< The pipeline's label.
+            MTL::ComputePipelineState** pipeline; // The member of `Kernels` that keeps it.
+            std::string_view function;
+            std::string_view label;
         };
     } // namespace
 
-    //==================================================================================================================
     Result<void> Kernels::create(MTL::Device* device, MTL4::Compiler* compiler)
     {
         // The default destructor makes the data copy the bytes, so the library owns what it was made from.
@@ -157,7 +151,6 @@ namespace rojoRHI::metal4 {
         return {};
     }
 
-    //==================================================================================================================
     void Kernels::release()
     {
         for (MTL::ComputePipelineState** pipeline : std::array{ &encodeDraw, &encodeIndexed, &writeDraw, &writeIndexed, &encodeMesh, &writeMesh })
@@ -188,13 +181,11 @@ namespace rojoRHI::metal4 {
         }
     }
 
-    //==================================================================================================================
     uint32_t fillDispatchCount(uint64_t words)
     {
         return static_cast<uint32_t>((words + kFillDispatchWords - 1) / kFillDispatchWords);
     }
 
-    //==================================================================================================================
     void bindKernel(core::CommandListCore& list, const ListState& state, Encoders& encoders, const MTL::ComputePipelineState* pipeline)
     {
         MTL4::ComputeCommandEncoder* encoder = encoders.computeEncoder();
@@ -210,7 +201,6 @@ namespace rojoRHI::metal4 {
         core::noteNativeCall(list);
     }
 
-    //==================================================================================================================
     void bindKernelBatch(core::CommandListCore& list, const ListState& state, Encoders& encoders, const MTL::ComputePipelineState* pipeline)
     {
         MTL4::ComputeCommandEncoder* encoder = encoders.computeEncoder();
@@ -231,7 +221,6 @@ namespace rojoRHI::metal4 {
         }
     }
 
-    //==================================================================================================================
     void dispatchKernelBatch(core::CommandListCore& list, const ListState& state, MTL4::ComputeCommandEncoder* encoder, MTL::Size groups, MTL::Size threads)
     {
         {
@@ -242,7 +231,6 @@ namespace rojoRHI::metal4 {
         core::noteNativeCall(list);
     }
 
-    //==================================================================================================================
     void dispatchKernelRun(core::CommandListCore& list, Encoders& encoders, const KernelRun& run)
     {
         MTL4::ComputeCommandEncoder* encoder = encoders.computeEncoder();
@@ -258,7 +246,6 @@ namespace rojoRHI::metal4 {
         core::noteNativeCall(list);
     }
 
-    //==================================================================================================================
     ClearKernel clearKernelOf(MTL::TextureType type)
     {
         switch (type)
@@ -276,7 +263,6 @@ namespace rojoRHI::metal4 {
         return ClearKernel::Tex2D;
     }
 
-    //==================================================================================================================
     void dispatchKernel(core::CommandListCore& list, const ListState& state, MTL4::ComputeCommandEncoder* encoder, MTL::Size groups, MTL::Size threads)
     {
         {

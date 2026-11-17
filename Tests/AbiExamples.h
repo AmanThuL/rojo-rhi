@@ -10,31 +10,26 @@
 #include <cstdint>
 
 namespace rojoRHI::test {
-    /// The `DrawRoot` of the shader ABI chapter: a flat 32-byte root block.
+    // The shader ABI chapter's `DrawRoot`: a flat 32-byte root block.
     struct DrawRoot
     {
-        /// Address of the vertex data.
         Addr vertices;
-        /// Address of the instance data.
         Addr instances;
-        /// Heap index of the albedo texture.
+        // Heap indices of the albedo texture and the linear-clamp sampler.
         uint32_t albedo;
-        /// Heap index of the linear-clamp sampler.
         uint32_t linearClamp;
-        /// Identifier of the draw.
         uint32_t drawId;
-        /// Explicit padding up to 32 bytes.
         uint32_t pad;
     };
-    /// The flat root shared by the atomic-add entries and the reflection probe.
+    // Shared by the atomic-add entries and the reflection probe.
     struct alignas(16) AtomicRoot
     {
-        Addr target;    ///< The target base, or the address of the two-base table for the divergent entry.
-        Addr output;    ///< One returned old value per invocation.
-        uint32_t count; ///< Participating invocations.
-        uint32_t index; ///< Target uint index relative to the base.
-        uint32_t value; ///< Amount added by each invocation.
-        uint32_t pad;   ///< Explicit padding to 32 bytes.
+        Addr target; // The target base, or the address of the two-base table for the divergent entry.
+        Addr output; // One returned old value per invocation.
+        uint32_t count;
+        uint32_t index; // Target uint index relative to the base.
+        uint32_t value;
+        uint32_t pad;
     };
 
     static_assert(alignof(AtomicRoot) == 16);
@@ -46,11 +41,11 @@ namespace rojoRHI::test {
     static_assert(offsetof(AtomicRoot, value) == 24);
     static_assert(offsetof(AtomicRoot, pad) == 28);
 
-    /// The flat root of the precise multiply-add entry and the reflection probe.
+    // Shared by the precise multiply-add entry and the reflection probe.
     struct alignas(16) PreciseRoot
     {
-        Addr input;  ///< Four floats: the factors x and y, the addend z and an unused word.
-        Addr output; ///< One float, x * y + z.
+        Addr input;  // Four floats: the factors x and y, the addend z and an unused word.
+        Addr output; // One float, x * y + z.
     };
 
     static_assert(alignof(PreciseRoot) == 16);

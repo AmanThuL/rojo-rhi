@@ -15,8 +15,6 @@ using namespace rojoRHI;
 using rojoRHI::test::UpscaleKit;
 
 namespace {
-    //==================================================================================================================
-    /// Creates an upscaler on a device with `desc` changed by `change`.
     template<typename Change> void createWith(Change change)
     {
         Device device = *createDevice();
@@ -26,55 +24,46 @@ namespace {
     }
 } // namespace
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-upscale-0001 the input width is zero", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-upscale-0001", [] { createWith([](UpscalerDesc& desc) { desc.input.width = 0; }); });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-upscale-0001 the input height is zero", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-upscale-0001", [] { createWith([](UpscalerDesc& desc) { desc.input.height = 0; }); });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-upscale-0002 the output is narrower than the input", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-upscale-0002", [] { createWith([](UpscalerDesc& desc) { desc.output.width = desc.input.width - 1; }); });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-upscale-0002 the output is shorter than the input", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-upscale-0002", [] { createWith([](UpscalerDesc& desc) { desc.output.height = desc.input.height - 1; }); });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-upscale-0003 the color format is a depth format", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-upscale-0003", [] { createWith([](UpscalerDesc& desc) { desc.color = Format::D32Float; }); });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-upscale-0003 the output format is a block-compressed format", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-upscale-0003", [] { createWith([](UpscalerDesc& desc) { desc.outputFormat = Format::BC1Unorm; }); });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-upscale-0003 the depth format is a color format", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-upscale-0003", [] { createWith([](UpscalerDesc& desc) { desc.depth = Format::RGBA16Float; }); });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-upscale-0003 the motion format has four channels", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-upscale-0003", [] { createWith([](UpscalerDesc& desc) { desc.motion = Format::RGBA16Float; }); });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-upscale-0004 preExposure is zero", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-upscale-0004", [] {
@@ -84,7 +73,6 @@ TEST_CASE("VU-rojo-upscale-0004 preExposure is zero", "[contract][death]")
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-upscale-0004 preExposure is negative", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-upscale-0004", [] {
@@ -94,7 +82,6 @@ TEST_CASE("VU-rojo-upscale-0004 preExposure is negative", "[contract][death]")
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-upscale-0005 sharpness is below zero", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-upscale-0005", [] {
@@ -104,7 +91,6 @@ TEST_CASE("VU-rojo-upscale-0005 sharpness is below zero", "[contract][death]")
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-upscale-0005 sharpness is above one", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-upscale-0005", [] {
@@ -114,7 +100,6 @@ TEST_CASE("VU-rojo-upscale-0005 sharpness is above one", "[contract][death]")
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-upscale-0006 the list is a Compute list", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-upscale-0006", [] {
@@ -123,7 +108,6 @@ TEST_CASE("VU-rojo-upscale-0006 the list is a Compute list", "[contract][death]"
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-upscale-0006 the list is a Copy list", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-upscale-0006", [] {
@@ -132,7 +116,6 @@ TEST_CASE("VU-rojo-upscale-0006 the list is a Copy list", "[contract][death]")
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-upscale-0007 a render pass is open", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-upscale-0007", [] {
@@ -142,7 +125,6 @@ TEST_CASE("VU-rojo-upscale-0007 a render pass is open", "[contract][death]")
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-upscale-0008 one upscaler upscales twice in a frame", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-upscale-0008", [] {
@@ -152,7 +134,6 @@ TEST_CASE("VU-rojo-upscale-0008 one upscaler upscales twice in a frame", "[contr
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-upscale-0009 the color texture is null", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-upscale-0009", [] {
@@ -162,7 +143,6 @@ TEST_CASE("VU-rojo-upscale-0009 the color texture is null", "[contract][death]")
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-upscale-0009 the depth texture is null", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-upscale-0009", [] {
@@ -172,7 +152,6 @@ TEST_CASE("VU-rojo-upscale-0009 the depth texture is null", "[contract][death]")
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-upscale-0009 the motion texture is null", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-upscale-0009", [] {
@@ -182,7 +161,6 @@ TEST_CASE("VU-rojo-upscale-0009 the motion texture is null", "[contract][death]"
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-upscale-0009 the output texture is null", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-upscale-0009", [] {
@@ -192,7 +170,6 @@ TEST_CASE("VU-rojo-upscale-0009 the output texture is null", "[contract][death]"
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-upscale-0010 the color format differs from the descriptor's", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-upscale-0010", [] {
@@ -202,7 +179,6 @@ TEST_CASE("VU-rojo-upscale-0010 the color format differs from the descriptor's",
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-upscale-0010 the depth format differs from the descriptor's", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-upscale-0010", [] {
@@ -212,7 +188,6 @@ TEST_CASE("VU-rojo-upscale-0010 the depth format differs from the descriptor's",
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-upscale-0010 the motion format differs from the descriptor's", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-upscale-0010", [] {
@@ -222,7 +197,6 @@ TEST_CASE("VU-rojo-upscale-0010 the motion format differs from the descriptor's"
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-upscale-0010 the color extent is not the input extent", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-upscale-0010", [] {
@@ -232,7 +206,6 @@ TEST_CASE("VU-rojo-upscale-0010 the color extent is not the input extent", "[con
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-upscale-0010 the depth extent is not the input extent", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-upscale-0010", [] {
@@ -242,7 +215,6 @@ TEST_CASE("VU-rojo-upscale-0010 the depth extent is not the input extent", "[con
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-upscale-0010 the motion extent is not the input extent", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-upscale-0010", [] {
@@ -252,7 +224,6 @@ TEST_CASE("VU-rojo-upscale-0010 the motion extent is not the input extent", "[co
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-upscale-0011 the output format differs from the descriptor's", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-upscale-0011", [] {
@@ -262,7 +233,6 @@ TEST_CASE("VU-rojo-upscale-0011 the output format differs from the descriptor's"
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-upscale-0011 the output extent is not the descriptor's output extent", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-upscale-0011", [] {
@@ -272,7 +242,6 @@ TEST_CASE("VU-rojo-upscale-0011 the output extent is not the descriptor's output
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-upscale-0011 the output is also the color input", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-upscale-0011", [] {
@@ -285,7 +254,6 @@ TEST_CASE("VU-rojo-upscale-0011 the output is also the color input", "[contract]
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-upscale-0011 the output is also the reactive input", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-upscale-0011", [] {
@@ -299,7 +267,6 @@ TEST_CASE("VU-rojo-upscale-0011 the output is also the reactive input", "[contra
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-upscale-0012 the exposure texture has another format", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-upscale-0012", [] {
@@ -309,7 +276,6 @@ TEST_CASE("VU-rojo-upscale-0012 the exposure texture has another format", "[cont
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-upscale-0012 the exposure texture is larger than one texel", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-upscale-0012", [] {
@@ -319,7 +285,6 @@ TEST_CASE("VU-rojo-upscale-0012 the exposure texture is larger than one texel", 
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-upscale-0012 the reactive texture has another format", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-upscale-0012", [] {
@@ -329,7 +294,6 @@ TEST_CASE("VU-rojo-upscale-0012 the reactive texture has another format", "[cont
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-upscale-0012 the reactive texture is not the input extent", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-upscale-0012", [] {
@@ -339,7 +303,6 @@ TEST_CASE("VU-rojo-upscale-0012 the reactive texture is not the input extent", "
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-upscale-0013 the color input is not sampled", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-upscale-0013", [] {
@@ -349,7 +312,6 @@ TEST_CASE("VU-rojo-upscale-0013 the color input is not sampled", "[contract][dea
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-upscale-0013 the depth input is not sampled", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-upscale-0013", [] {
@@ -359,7 +321,6 @@ TEST_CASE("VU-rojo-upscale-0013 the depth input is not sampled", "[contract][dea
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-upscale-0013 the motion input is not sampled", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-upscale-0013", [] {
@@ -369,7 +330,6 @@ TEST_CASE("VU-rojo-upscale-0013 the motion input is not sampled", "[contract][de
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-upscale-0013 the exposure input is not sampled", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-upscale-0013", [] {
@@ -379,7 +339,6 @@ TEST_CASE("VU-rojo-upscale-0013 the exposure input is not sampled", "[contract][
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-upscale-0013 the reactive input is not sampled", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-upscale-0013", [] {
@@ -389,7 +348,6 @@ TEST_CASE("VU-rojo-upscale-0013 the reactive input is not sampled", "[contract][
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-upscale-0014 the output has no storage usage", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-upscale-0014", [] {
@@ -399,7 +357,6 @@ TEST_CASE("VU-rojo-upscale-0014 the output has no storage usage", "[contract][de
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-upscale-0014 the output has no render target usage", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-upscale-0014", [] {
@@ -409,7 +366,6 @@ TEST_CASE("VU-rojo-upscale-0014 the output has no render target usage", "[contra
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-upscale-0015 the content width is zero and its height is not", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-upscale-0015", [] {
@@ -419,7 +375,6 @@ TEST_CASE("VU-rojo-upscale-0015 the content width is zero and its height is not"
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-upscale-0015 the content height is zero and its width is not", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-upscale-0015", [] {
@@ -429,7 +384,6 @@ TEST_CASE("VU-rojo-upscale-0015 the content height is zero and its width is not"
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-upscale-0015 the content is wider than the input", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-upscale-0015", [] {
@@ -439,7 +393,6 @@ TEST_CASE("VU-rojo-upscale-0015 the content is wider than the input", "[contract
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-upscale-0015 the content is taller than the input", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-upscale-0015", [] {
@@ -449,7 +402,6 @@ TEST_CASE("VU-rojo-upscale-0015 the content is taller than the input", "[contrac
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-present-0012 a swapchain image is the upscale color", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-present-0012", [] {
@@ -459,7 +411,6 @@ TEST_CASE("VU-rojo-present-0012 a swapchain image is the upscale color", "[contr
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-present-0012 a swapchain image is the upscale depth", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-present-0012", [] {
@@ -469,7 +420,6 @@ TEST_CASE("VU-rojo-present-0012 a swapchain image is the upscale depth", "[contr
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-present-0012 a swapchain image is the upscale motion", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-present-0012", [] {
@@ -479,7 +429,6 @@ TEST_CASE("VU-rojo-present-0012 a swapchain image is the upscale motion", "[cont
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-present-0012 a swapchain image is the upscale output", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-present-0012", [] {
@@ -489,7 +438,6 @@ TEST_CASE("VU-rojo-present-0012 a swapchain image is the upscale output", "[cont
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-present-0012 a swapchain image is the upscale exposure", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-present-0012", [] {
@@ -499,7 +447,6 @@ TEST_CASE("VU-rojo-present-0012 a swapchain image is the upscale exposure", "[co
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-present-0012 a swapchain image is the upscale reactive", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-present-0012", [] {
@@ -509,7 +456,6 @@ TEST_CASE("VU-rojo-present-0012 a swapchain image is the upscale reactive", "[co
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-upscale-0008 two lists of one frame each upscale the same upscaler", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-upscale-0008", [] {
@@ -521,7 +467,6 @@ TEST_CASE("VU-rojo-upscale-0008 two lists of one frame each upscale the same ups
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-upscale-0011 the output is also the exposure input", "[contract][death]")
 {
     UpscalerDesc desc = UpscaleKit::defaultDesc();
@@ -547,7 +492,6 @@ TEST_CASE("VU-rojo-upscale-0011 the output is also the exposure input", "[contra
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-upscale-0010 the color height is not the input height", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-upscale-0010", [] {
@@ -557,7 +501,6 @@ TEST_CASE("VU-rojo-upscale-0010 the color height is not the input height", "[con
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-upscale-0010 the depth width is not the input width", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-upscale-0010", [] {
@@ -567,7 +510,6 @@ TEST_CASE("VU-rojo-upscale-0010 the depth width is not the input width", "[contr
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-upscale-0010 the motion width is not the input width", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-upscale-0010", [] {
@@ -577,7 +519,6 @@ TEST_CASE("VU-rojo-upscale-0010 the motion width is not the input width", "[cont
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-upscale-0010 the motion height is not the input height", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-upscale-0010", [] {
@@ -587,7 +528,6 @@ TEST_CASE("VU-rojo-upscale-0010 the motion height is not the input height", "[co
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-upscale-0011 the output width is not the descriptor's output width", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-upscale-0011", [] {
@@ -598,7 +538,6 @@ TEST_CASE("VU-rojo-upscale-0011 the output width is not the descriptor's output 
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-upscale-0011 the output height is not the descriptor's output height", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-upscale-0011", [] {
@@ -609,7 +548,6 @@ TEST_CASE("VU-rojo-upscale-0011 the output height is not the descriptor's output
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-upscale-0012 the exposure texture is taller than one texel", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-upscale-0012", [] {
@@ -619,7 +557,6 @@ TEST_CASE("VU-rojo-upscale-0012 the exposure texture is taller than one texel", 
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-upscale-0012 the reactive width is not the input width", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-upscale-0012", [] {
@@ -629,7 +566,6 @@ TEST_CASE("VU-rojo-upscale-0012 the reactive width is not the input width", "[co
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-upscale-0012 the reactive height is not the input height", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-upscale-0012", [] {

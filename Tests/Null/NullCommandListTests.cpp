@@ -20,15 +20,12 @@ using namespace rojoRHI;
 namespace {
     constexpr std::array<std::byte, 16> kBytes = {};
 
-    //==================================================================================================================
-    /// Opens a frame and returns a Graphics list of it.
     CommandList beginFrameWithList(Device device)
     {
         device.beginFrame();
         return device.acquireCommandList(QueueType::Graphics, "null.list");
     }
 
-    //==================================================================================================================
     void endFrameWithList(Device device, CommandList list)
     {
         list.end();
@@ -37,7 +34,6 @@ namespace {
         device.endFrame();
     }
 
-    //==================================================================================================================
     size_t arenaPageCount(Device device)
     {
         size_t count = 0;
@@ -45,8 +41,7 @@ namespace {
         return count;
     }
 
-    //==================================================================================================================
-    /// Returns the host memory of the arena page whose slot index is `lo`, the word the Null encoding puts the slot in.
+    // `lo` is the word the Null encoding puts the page's slot index in.
     std::byte* pageMemory(Device device, uint32_t lo)
     {
         for (const Buffer page : core::coreOf(device).arena().pageBuffers())
@@ -61,7 +56,6 @@ namespace {
 
     [[maybe_unused]] std::vector<std::string> gWarnings;
 
-    //==================================================================================================================
     [[maybe_unused]] void collectWarning(MessageSeverity severity, std::string_view message, void*)
     {
         if (severity == MessageSeverity::Warning)
@@ -71,7 +65,6 @@ namespace {
     }
 } // namespace
 
-//======================================================================================================================
 TEST_CASE("the first upload of a frame lands at offset zero of an arena page", "[null]")
 {
     Device device = *createDevice();
@@ -81,7 +74,6 @@ TEST_CASE("the first upload of a frame lands at offset zero of an arena page", "
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("uploads of one page share the slot word and advance by their alignment", "[null]")
 {
     Device device = *createDevice();
@@ -99,7 +91,6 @@ TEST_CASE("uploads of one page share the slot word and advance by their alignmen
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("uploaded bytes are copied to the page", "[null]")
 {
     Device device = *createDevice();
@@ -114,7 +105,6 @@ TEST_CASE("uploaded bytes are copied to the page", "[null]")
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("an arena page is a live buffer of the device", "[null]")
 {
     Device device = *createDevice();
@@ -126,7 +116,6 @@ TEST_CASE("an arena page is a live buffer of the device", "[null]")
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("a slot's arena rewinds when the slot is reused", "[null]")
 {
     Device device = *createDevice(DeviceDesc{ .framesInFlight = 2 });
@@ -148,7 +137,6 @@ TEST_CASE("a slot's arena rewinds when the slot is reused", "[null]")
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("a full page is followed by a new page and a rewound slot keeps both", "[null]")
 {
     Device device = *createDevice(DeviceDesc{ .framesInFlight = 2 });
@@ -166,7 +154,6 @@ TEST_CASE("a full page is followed by a new page and a rewound slot keeps both",
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("an upload above the page size gets a page of its own", "[null]")
 {
     Device device = *createDevice();
@@ -180,7 +167,6 @@ TEST_CASE("an upload above the page size gets a page of its own", "[null]")
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("destroyDevice with validation does not warn of arena pages", "[null]")
 {
 #ifdef NDEBUG

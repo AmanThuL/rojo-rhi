@@ -20,34 +20,27 @@
 
 namespace rojoRHI::core {
     namespace {
-        //==============================================================================================================
-        /// A color format of the format tables: one a color attachment can use (chapter 15).
         [[maybe_unused]] bool isColorFormat(Format format)
         {
             return formatCeiling(format).colorAttachment;
         }
 
-        //==============================================================================================================
-        /// A two-channel floating-point format: `RG16Float` is the only one `Format` has.
+        // `RG16Float` is the only two-channel floating-point `Format`.
         [[maybe_unused]] bool isMotionFormat(Format format)
         {
             return format == Format::RG16Float;
         }
 
-        //==============================================================================================================
         [[maybe_unused]] bool hasUsage(TextureUsage usage, TextureUsage flag)
         {
             return (usage & flag) != TextureUsage::None;
         }
 
-        //==============================================================================================================
         [[maybe_unused]] bool sameExtent(const TextureRecord& texture, Extent2D extent)
         {
             return texture.extent.width == extent.width && texture.extent.height == extent.height;
         }
 
-        //==============================================================================================================
-        /// Names the kind for diagnostics.
         [[maybe_unused]] const char* kindName(UpscalerKind kind)
         {
             switch (kind)
@@ -62,7 +55,6 @@ namespace rojoRHI::core {
         }
     } // namespace
 
-    //==================================================================================================================
     Result<UpscalerRecord> prepareUpscaler(DeviceCore& core, const UpscalerDesc& desc)
     {
         ROJORHI_VU(
@@ -116,7 +108,6 @@ namespace rojoRHI::core {
         return record;
     }
 
-    //==================================================================================================================
     void upscale(CommandListCore& list, [[maybe_unused]] Upscaler upscaler, const UpscaleParams& params)
     {
         checkRecording(list);
@@ -203,7 +194,7 @@ namespace rojoRHI::core {
             scaler->input.width,
             scaler->input.height
         );
-        // The upscaler's last frame is exchanged without a lock, after the other checks so a rejected upscale does not count; a second upscale in one frame
+        // Exchanged without a lock, after the other checks so a rejected upscale does not count; a second upscale in one frame
         // reads the same frame back.
         const uint64_t previous = scaler->lastFrame.frame.exchange(list.frame, std::memory_order_relaxed);
         ROJORHI_VU(previous != list.frame, "VU-rojo-upscale-0008", "the upscaler \"{}\" was already used by an upscale in frame {}", scaler->label, list.frame);

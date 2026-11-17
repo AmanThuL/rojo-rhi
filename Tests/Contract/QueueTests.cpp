@@ -12,7 +12,6 @@
 using namespace rojoRHI;
 
 namespace {
-    //==================================================================================================================
     Device makeDevice()
     {
         Result<Device> created = createDevice();
@@ -20,7 +19,6 @@ namespace {
         return *created;
     }
 
-    //==================================================================================================================
     Fence makeFence(Device device, uint64_t initial)
     {
         Result<Fence> created = device.createFence(initial, "test.fence");
@@ -29,7 +27,6 @@ namespace {
     }
 } // namespace
 
-//======================================================================================================================
 TEST_CASE("Device::queue returns the same queue for a type on every call", "[contract]")
 {
     Device device = makeDevice();
@@ -50,7 +47,6 @@ TEST_CASE("Device::queue returns the same queue for a type on every call", "[con
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("a new fence reports its initial value", "[contract]")
 {
     Device device = makeDevice();
@@ -59,7 +55,6 @@ TEST_CASE("a new fence reports its initial value", "[contract]")
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("createFence accepts an empty label", "[contract]")
 {
     Device device = makeDevice();
@@ -67,7 +62,6 @@ TEST_CASE("createFence accepts an empty label", "[contract]")
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("a submission with no lists signals its fences", "[contract]")
 {
     Device device = makeDevice();
@@ -83,7 +77,6 @@ TEST_CASE("a submission with no lists signals its fences", "[contract]")
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("a submission with no lists is valid with no frame open", "[contract]")
 {
     Device device = makeDevice();
@@ -104,7 +97,6 @@ TEST_CASE("a submission with no lists is valid with no frame open", "[contract]"
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("a submission may wait for a value at most the initial value", "[contract]")
 {
     Device device = makeDevice();
@@ -116,7 +108,6 @@ TEST_CASE("a submission may wait for a value at most the initial value", "[contr
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("a submission may wait for a value an earlier submission signals", "[contract]")
 {
     Device device = makeDevice();
@@ -130,7 +121,6 @@ TEST_CASE("a submission may wait for a value an earlier submission signals", "[c
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("a fence value may be signalled again with a greater value", "[contract]")
 {
     Device device = makeDevice();
@@ -146,7 +136,6 @@ TEST_CASE("a fence value may be signalled again with a greater value", "[contrac
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("Device::wait polls with a zero timeout", "[contract]")
 {
     Device device = makeDevice();
@@ -156,7 +145,6 @@ TEST_CASE("Device::wait polls with a zero timeout", "[contract]")
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("Device::wait returns true for a value that was signalled", "[contract]")
 {
     Device device = makeDevice();
@@ -168,7 +156,6 @@ TEST_CASE("Device::wait returns true for a value that was signalled", "[contract
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("Device::wait times out on a value that is never signalled", "[contract]")
 {
     Device device = makeDevice();
@@ -177,7 +164,6 @@ TEST_CASE("Device::wait times out on a value that is never signalled", "[contrac
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("a destroyed fence's handle is released like any resource", "[contract]")
 {
     Device device = makeDevice();

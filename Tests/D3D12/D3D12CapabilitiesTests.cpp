@@ -23,8 +23,6 @@
 using namespace rojoRHI;
 
 namespace {
-    //==================================================================================================================
-    /// Returns the format support `device` reports for `format`.
     D3D12_FEATURE_DATA_FORMAT_SUPPORT supportOf(ID3D12Device12* device, DXGI_FORMAT format)
     {
         D3D12_FEATURE_DATA_FORMAT_SUPPORT support = {};
@@ -34,7 +32,6 @@ namespace {
     }
 } // namespace
 
-//======================================================================================================================
 TEST_CASE("the floor name gives feature level 12_2 and the highest shader model", "[d3d12]")
 {
     Result<Device> created = createDevice();
@@ -53,7 +50,6 @@ TEST_CASE("the floor name gives feature level 12_2 and the highest shader model"
     destroyDevice(*created);
 }
 
-//======================================================================================================================
 TEST_CASE("the adapter name is the adapter's description", "[d3d12]")
 {
     Result<Device> created = createDevice();
@@ -69,7 +65,6 @@ TEST_CASE("the adapter name is the adapter's description", "[d3d12]")
     destroyDevice(*created);
 }
 
-//======================================================================================================================
 TEST_CASE("the limits are the D3D12 column of the reference", "[d3d12]")
 {
     Result<Device> created = createDevice();
@@ -105,7 +100,6 @@ TEST_CASE("the limits are the D3D12 column of the reference", "[d3d12]")
     destroyDevice(*created);
 }
 
-//======================================================================================================================
 TEST_CASE("maxAddrOffset is the raw-view reach", "[d3d12]")
 {
     Result<Device> created = createDevice();
@@ -114,7 +108,6 @@ TEST_CASE("maxAddrOffset is the raw-view reach", "[d3d12]")
     destroyDevice(*created);
 }
 
-//======================================================================================================================
 TEST_CASE("capabilities report the features the device has", "[d3d12]")
 {
     Result<Device> created = createDevice();
@@ -127,7 +120,6 @@ TEST_CASE("capabilities report the features the device has", "[d3d12]")
     destroyDevice(*created);
 }
 
-//======================================================================================================================
 TEST_CASE("uploadInDeviceMemory follows GPUUploadHeapSupported", "[d3d12]")
 {
     Result<Device> created = createDevice();
@@ -138,7 +130,6 @@ TEST_CASE("uploadInDeviceMemory follows GPUUploadHeapSupported", "[d3d12]")
     destroyDevice(*created);
 }
 
-//======================================================================================================================
 TEST_CASE("every format the table reports as sampled is sampleable by D3D12", "[d3d12]")
 {
     Result<Device> created = createDevice();
@@ -161,7 +152,6 @@ TEST_CASE("every format the table reports as sampled is sampleable by D3D12", "[
     destroyDevice(*created);
 }
 
-//======================================================================================================================
 TEST_CASE("the format table never exceeds the core's ceilings", "[d3d12]")
 {
     Result<Device> created = createDevice();
@@ -186,7 +176,6 @@ TEST_CASE("the format table never exceeds the core's ceilings", "[d3d12]")
     destroyDevice(*created);
 }
 
-//======================================================================================================================
 TEST_CASE("an sRGB format is created castable or typeless", "[d3d12]")
 {
     CHECK(d3d12::resourceFormat(Format::RGBA8Unorm_sRGB, TextureUsage::Sampled, false) == DXGI_FORMAT_R8G8B8A8_TYPELESS);
@@ -199,7 +188,6 @@ TEST_CASE("an sRGB format is created castable or typeless", "[d3d12]")
     CHECK(d3d12::castableFormats(Format::RGBA16Float).empty());
 }
 
-//======================================================================================================================
 TEST_CASE("a sampled depth texture is created typeless and viewed per aspect", "[d3d12]")
 {
     CHECK(d3d12::resourceFormat(Format::D32Float, TextureUsage::Sampled | TextureUsage::DepthStencil, false) == DXGI_FORMAT_R32_TYPELESS);
@@ -214,7 +202,6 @@ TEST_CASE("a sampled depth texture is created typeless and viewed per aspect", "
     CHECK(d3d12::viewFormat(Format::RGBA8Unorm_sRGB, Format::Undefined, TextureAspect::Color, TextureUsage::Storage) == DXGI_FORMAT_R8G8B8A8_UNORM);
 }
 
-//======================================================================================================================
 TEST_CASE("Upload memory maps to the GPU upload heap only when reported", "[d3d12]")
 {
     CHECK(d3d12::heapType(Memory::Upload, true) == D3D12_HEAP_TYPE_GPU_UPLOAD);

@@ -11,14 +11,12 @@
 using namespace rojoRHI;
 
 namespace {
-    //==================================================================================================================
     Texture makeTexture(Device device)
     {
         return *device.createTexture({ .format = Format::RGBA8Unorm, .extent = { 4, 4, 1 }, .usage = TextureUsage::Sampled });
     }
 } // namespace
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-texture-0029 a sampler has anisotropy zero", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-texture-0029", [] {
@@ -27,7 +25,6 @@ TEST_CASE("VU-rojo-texture-0029 a sampler has anisotropy zero", "[contract][deat
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-texture-0029 a sampler has anisotropy above 16", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-texture-0029", [] {
@@ -36,7 +33,6 @@ TEST_CASE("VU-rojo-texture-0029 a sampler has anisotropy above 16", "[contract][
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-texture-0030 an anisotropic sampler has a Nearest filter", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-texture-0030", [] {
@@ -45,7 +41,6 @@ TEST_CASE("VU-rojo-texture-0030 an anisotropic sampler has a Nearest filter", "[
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-texture-0030 an anisotropic sampler has a Nearest mip filter", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-texture-0030", [] {
@@ -54,7 +49,6 @@ TEST_CASE("VU-rojo-texture-0030 an anisotropic sampler has a Nearest mip filter"
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-texture-0032 zero view slots are reserved", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-texture-0032", [] {
@@ -63,7 +57,6 @@ TEST_CASE("VU-rojo-texture-0032 zero view slots are reserved", "[contract][death
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-texture-0033 a view is written past the end of its range", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-texture-0033", [] {
@@ -74,7 +67,6 @@ TEST_CASE("VU-rojo-texture-0033 a view is written past the end of its range", "[
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-texture-0033 a view is written into a sampler range", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-texture-0033", [] {
@@ -85,7 +77,6 @@ TEST_CASE("VU-rojo-texture-0033 a view is written into a sampler range", "[contr
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-texture-0034 a view is written with a usage the texture lacks", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-texture-0034", [] {
@@ -96,7 +87,6 @@ TEST_CASE("VU-rojo-texture-0034 a view is written with a usage the texture lacks
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-texture-0035 zero sampler slots are reserved", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-texture-0035", [] {
@@ -105,7 +95,6 @@ TEST_CASE("VU-rojo-texture-0035 zero sampler slots are reserved", "[contract][de
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-texture-0036 a sampler is written past the end of its range", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-texture-0036", [] {
@@ -115,7 +104,6 @@ TEST_CASE("VU-rojo-texture-0036 a sampler is written past the end of its range",
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-texture-0036 a sampler is written into a view range", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-texture-0036", [] {
@@ -125,7 +113,6 @@ TEST_CASE("VU-rojo-texture-0036 a sampler is written into a view range", "[contr
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-texture-0037 a sampler is written with anisotropy above 16", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-texture-0037", [] {
@@ -135,7 +122,6 @@ TEST_CASE("VU-rojo-texture-0037 a sampler is written with anisotropy above 16", 
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-texture-0037 a sampler is written with anisotropy and a Nearest filter", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-texture-0037", [] {
@@ -145,7 +131,6 @@ TEST_CASE("VU-rojo-texture-0037 a sampler is written with anisotropy and a Neare
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-texture-0038 a view range is released twice", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-texture-0038", [] {
@@ -156,7 +141,6 @@ TEST_CASE("VU-rojo-texture-0038 a view range is released twice", "[contract][dea
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-texture-0038 a sampler range is released with a modified count", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-texture-0038", [] {
@@ -167,7 +151,6 @@ TEST_CASE("VU-rojo-texture-0038 a sampler range is released with a modified coun
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-device-0010 a sampler index that createSampler never returned is destroyed", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-device-0010", [] {
@@ -176,7 +159,6 @@ TEST_CASE("VU-rojo-device-0010 a sampler index that createSampler never returned
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-device-0010 a slot written into a reserved range is destroyed as a single", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-device-0010", [] {
@@ -186,7 +168,6 @@ TEST_CASE("VU-rojo-device-0010 a slot written into a reserved range is destroyed
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-texture-0028 a texture is destroyed while a view of it sits in a range", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-texture-0028", [] {
@@ -198,7 +179,6 @@ TEST_CASE("VU-rojo-texture-0028 a texture is destroyed while a view of it sits i
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-texture-0031 a view is written into a released range", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-texture-0031", [] {
@@ -210,7 +190,6 @@ TEST_CASE("VU-rojo-texture-0031 a view is written into a released range", "[cont
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-texture-0031 a view is written into a range with a modified base", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-texture-0031", [] {
@@ -223,7 +202,6 @@ TEST_CASE("VU-rojo-texture-0031 a view is written into a range with a modified b
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-texture-0031 a sampler is written into a released range", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-texture-0031", [] {
@@ -234,7 +212,6 @@ TEST_CASE("VU-rojo-texture-0031 a sampler is written into a released range", "[c
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-texture-0031 a sampler is written into a range that was never reserved", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-texture-0031", [] {
@@ -243,7 +220,6 @@ TEST_CASE("VU-rojo-texture-0031 a sampler is written into a range that was never
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-texture-0031 a view is written into a range that was never reserved", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-texture-0031", [] {

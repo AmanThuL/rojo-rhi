@@ -29,22 +29,17 @@
 using namespace rojoRHI;
 
 namespace {
-    //==================================================================================================================
-    /// The encoders of `list`.
     const metal4::Encoders& encodersOf(CommandList list)
     {
         return CommandListImpl::of(list).encoders;
     }
 
-    //==================================================================================================================
-    /// What `list` has counted so far.
     const core::RecordCounts& countsOf(CommandList list)
     {
         return core::coreOf(list).counts;
     }
 
-    //==================================================================================================================
-    /// A global barrier from copy writes to copy reads and writes; clears are copy writes.
+    // Clears are copy writes.
     GlobalBarrier copyToCopy()
     {
         return GlobalBarrier{
@@ -52,8 +47,6 @@ namespace {
         };
     }
 
-    //==================================================================================================================
-    /// Submits the ended `lists` to the queue of `type`, waits for them on the host and ends the frame.
     void submitAndWait(Device device, std::span<const CommandList> lists, QueueType type = QueueType::Graphics)
     {
         const Fence fence = *device.createFence(0, "test.done");
@@ -63,8 +56,6 @@ namespace {
         device.endFrame();
     }
 
-    //==================================================================================================================
-    /// Creates a texture of `type` and `format` with `usage`, `extent`, `mips`, `layers` and `samples`.
     Texture makeTexture(
         Device device, TextureType type, Format format, TextureUsage usage, Extent3D extent, uint32_t mips = 1, uint32_t layers = 1, uint32_t samples = 1
     )
@@ -76,7 +67,6 @@ namespace {
     }
 } // namespace
 
-//======================================================================================================================
 TEST_CASE("the render encoder has every stage the lowering assumes", "[metal4]")
 {
     CHECK(metal4::kRenderStages == (MTL::StageVertex | MTL::StageObject | MTL::StageMesh | MTL::StageFragment));
@@ -105,7 +95,6 @@ TEST_CASE("the render encoder has every stage the lowering assumes", "[metal4]")
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("a clear of many subresources emits a pending barrier's render part once", "[metal4]")
 {
     Device device = *createDevice({ .scopeTimings = true });
@@ -126,7 +115,6 @@ TEST_CASE("a clear of many subresources emits a pending barrier's render part on
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("a render-target clear opens one render encoder per subresource and closes the compute encoder", "[metal4]")
 {
     Device device = *createDevice({ .scopeTimings = true });
@@ -161,7 +149,6 @@ TEST_CASE("a render-target clear opens one render encoder per subresource and cl
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("a Storage-only clear dispatches one kernel per mip on the compute encoder", "[metal4]")
 {
     Device device = *createDevice({ .scopeTimings = true });
@@ -192,7 +179,6 @@ TEST_CASE("a Storage-only clear dispatches one kernel per mip on the compute enc
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("a clear's render encoder emits the render part of a pending barrier and leaves none at end", "[metal4]")
 {
     Device device = *createDevice({ .scopeTimings = true });
@@ -224,7 +210,6 @@ TEST_CASE("a clear's render encoder emits the render part of a pending barrier a
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("a D32FloatS8 clear runs under the validation layer with depth and stencil attachments", "[metal4]")
 {
     Device device = *createDevice({ .scopeTimings = true });
@@ -245,7 +230,6 @@ TEST_CASE("a D32FloatS8 clear runs under the validation layer with depth and ste
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("the kernel set holds one clear pipeline per Storage texture type, from at most three functions", "[metal4]")
 {
     Device device = *createDevice({ .scopeTimings = true });

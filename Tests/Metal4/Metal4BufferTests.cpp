@@ -27,36 +27,26 @@
 using namespace rojoRHI;
 
 namespace {
-    //==================================================================================================================
-    /// The native buffer `buffer` wraps.
     MTL::Buffer* nativeOf(Device device, Buffer buffer)
     {
         return metal4::bufferPayload(DeviceImpl::of(device).core, buffer)->buffer;
     }
 
-    //==================================================================================================================
-    /// The native heap `heap` wraps.
     MTL::Heap* nativeOf(Device device, Heap heap)
     {
         return static_cast<MTL::Heap*>(DeviceImpl::of(device).core.pool<Heap>().native(heap));
     }
 
-    //==================================================================================================================
-    /// The slot index `buffer` names in the buffer pool.
     uint32_t slotOf(Buffer buffer)
     {
         return core::HandlePool<Buffer, core::BufferRecord>::slotIndex(buffer);
     }
 
-    //==================================================================================================================
-    /// The 64-bit value an address encodes.
     uint64_t valueOf(Addr addr)
     {
         return uint64_t{ addr.lo } | uint64_t{ addr.hi } << 32;
     }
 
-    //==================================================================================================================
-    /// `count` bytes counting up from `first`, wrapping at 256.
     std::vector<std::byte> pattern(size_t count, uint8_t first)
     {
         std::vector<std::byte> bytes(count);
@@ -67,8 +57,6 @@ namespace {
         return bytes;
     }
 
-    //==================================================================================================================
-    /// Runs `count` empty frames on `device`.
     void runFrames(Device device, uint32_t count)
     {
         for (uint32_t i = 0; i < count; ++i)
@@ -79,7 +67,6 @@ namespace {
     }
 } // namespace
 
-//======================================================================================================================
 TEST_CASE("a Gpu buffer's initial data is in its memory when createBuffer returns", "[metal4]")
 {
     Device device = *createDevice();
@@ -92,7 +79,6 @@ TEST_CASE("a Gpu buffer's initial data is in its memory when createBuffer return
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("a placed Gpu buffer's initial data is in its memory when createBuffer returns", "[metal4]")
 {
     Device device = *createDevice();
@@ -107,7 +93,6 @@ TEST_CASE("a placed Gpu buffer's initial data is in its memory when createBuffer
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("Gpu memory is Private and Upload memory is Shared with the default CPU cache mode", "[metal4]")
 {
     Device device = *createDevice();
@@ -137,7 +122,6 @@ TEST_CASE("Gpu memory is Private and Upload memory is Shared with the default CP
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("Device::address is the buffer's GPU address plus the offset, split into lo and hi", "[metal4]")
 {
     Device device = *createDevice();
@@ -154,7 +138,6 @@ TEST_CASE("Device::address is the buffer's GPU address plus the offset, split in
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("a buffer's payload holds the GPU address and length Metal reports, which Device::address adds to", "[metal4]")
 {
     Device device = *createDevice();
@@ -181,7 +164,6 @@ TEST_CASE("a buffer's payload holds the GPU address and length Metal reports, wh
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("an address decodes to its buffer and offset, and an address outside every buffer to slot 0", "[metal4]")
 {
 #ifdef NDEBUG
@@ -206,7 +188,6 @@ TEST_CASE("an address decodes to its buffer and offset, and an address outside e
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("a destroyed buffer's address decodes to its slot until the frame it was destroyed in retires", "[metal4]")
 {
 #ifdef NDEBUG
@@ -225,7 +206,6 @@ TEST_CASE("a destroyed buffer's address decodes to its slot until the frame it w
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("an address inside aliased placed buffers decodes to one that is not destroyed", "[metal4]")
 {
 #ifdef NDEBUG
@@ -258,7 +238,6 @@ TEST_CASE("an address inside aliased placed buffers decodes to one that is not d
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("a dedicated buffer is resident until its frame retires; a placed one never joins, its heap does", "[metal4]")
 {
     Device device = *createDevice({ .framesInFlight = 2 });
@@ -284,7 +263,6 @@ TEST_CASE("a dedicated buffer is resident until its frame retires; a placed one 
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("placement requirements are the device's size and alignment for the placed options", "[metal4]")
 {
     Device device = *createDevice();
@@ -303,7 +281,6 @@ TEST_CASE("placement requirements are the device's size and alignment for the pl
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("a staged creation counts one staging buffer and one submission", "[metal4]")
 {
     Device device = *createDevice();
@@ -323,7 +300,6 @@ TEST_CASE("a staged creation counts one staging buffer and one submission", "[me
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("operator+ adds 64-bit offsets across the lo word", "[metal4]")
 {
     Device device = *createDevice();
@@ -340,7 +316,6 @@ TEST_CASE("operator+ adds 64-bit offsets across the lo word", "[metal4]")
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("devices that stage initial data are created and destroyed a hundred times", "[metal4]")
 {
     // A device destroyed straight after a staged creation must not leave its last release to Metal's notification thread.

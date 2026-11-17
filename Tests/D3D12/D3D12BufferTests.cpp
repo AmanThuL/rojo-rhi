@@ -33,14 +33,11 @@
 using namespace rojoRHI;
 
 namespace {
-    /// Guards `g_messages`, which the message callback may fill from any thread.
+    // The message callback may fill `g_messages` from any thread.
     std::mutex g_messagesMutex;
 
-    /// The messages at `Warning` or above the library reported while a case collected them.
     std::vector<std::string> g_messages;
 
-    //==================================================================================================================
-    /// Keeps `message` when it is a warning or an error. It may run on any thread.
     void collectMessage(MessageSeverity severity, std::string_view message, void*)
     {
         if (severity == MessageSeverity::Info)
@@ -51,25 +48,22 @@ namespace {
         g_messages.emplace_back(message);
     }
 
-    /// Collects the library's warnings and errors, the debug layer's among them, into `g_messages`, emptied first, while it
-    /// lives, and removes the callback when it goes, however the case ends.
+    // Collects the library's warnings and errors, the debug layer's included, into `g_messages` (emptied first) while it
+    // lives, and removes the callback however the case ends.
     class MessageCollection
     {
       public:
         MessageCollection();
         ~MessageCollection();
 
-        //==============================================================================================================
         MessageCollection(const MessageCollection&) = delete;
 
-        //==============================================================================================================
         MessageCollection& operator=(const MessageCollection&) = delete;
 
-        /// Returns the messages collected so far, listing them for the log.
+        // Also lists the messages for the log.
         size_t count() const;
     };
 
-    //==================================================================================================================
     MessageCollection::MessageCollection()
     {
         {
@@ -79,13 +73,11 @@ namespace {
         setMessageCallback(collectMessage, nullptr);
     }
 
-    //==================================================================================================================
     MessageCollection::~MessageCollection()
     {
         setMessageCallback(nullptr, nullptr);
     }
 
-    //==================================================================================================================
     size_t MessageCollection::count() const
     {
         const std::lock_guard lock(g_messagesMutex);
@@ -96,8 +88,6 @@ namespace {
         return g_messages.size();
     }
 
-    //==================================================================================================================
-    /// Returns `size` bytes counting up from `seed`, wrapping at 256.
     std::vector<std::byte> pattern(size_t size, uint32_t seed)
     {
         std::vector<std::byte> bytes(size);
@@ -108,8 +98,6 @@ namespace {
         return bytes;
     }
 
-    //==================================================================================================================
-    /// Returns the payload of `buffer`, a live buffer of `device`.
     const d3d12::BufferPayload& payloadOf(Device device, Buffer buffer)
     {
         const auto* payload = static_cast<const d3d12::BufferPayload*>(DeviceImpl::of(device).core.pool<Buffer>().native(buffer));
@@ -117,8 +105,6 @@ namespace {
         return *payload;
     }
 
-    //==================================================================================================================
-    /// Creates a buffer on `device`, failing the case when it cannot.
     Buffer makeBuffer(Device device, const BufferDesc& desc, std::span<const std::byte> initial = {}, Placement placement = {})
     {
         Result<Buffer> created = device.createBuffer(desc, initial, placement);
@@ -127,15 +113,12 @@ namespace {
         return *created;
     }
 
-    //==================================================================================================================
-    /// Returns the slot index of `buffer` in the buffer pool.
     uint32_t slotOf(Buffer buffer)
     {
         return core::HandlePool<Buffer, core::BufferRecord>::slotIndex(buffer);
     }
 } // namespace
 
-//======================================================================================================================
 TEST_CASE("a Gpu buffer's initial data is in its memory when createBuffer returns", "[d3d12]")
 {
     Result<Device> created = createDevice();
@@ -147,7 +130,6 @@ TEST_CASE("a Gpu buffer's initial data is in its memory when createBuffer return
     destroyDevice(*created);
 }
 
-//======================================================================================================================
 TEST_CASE("a placed Gpu buffer's initial data is in its memory when createBuffer returns", "[d3d12]")
 {
     Result<Device> created = createDevice();
@@ -162,7 +144,6 @@ TEST_CASE("a placed Gpu buffer's initial data is in its memory when createBuffer
     destroyDevice(*created);
 }
 
-//======================================================================================================================
 TEST_CASE("memory classes map to the D3D12 heap types", "[d3d12]")
 {
     Result<Device> created = createDevice();
@@ -185,7 +166,6 @@ TEST_CASE("memory classes map to the D3D12 heap types", "[d3d12]")
     destroyDevice(*created);
 }
 
-//======================================================================================================================
 TEST_CASE("Device::address is the raw SRV index and the offset", "[d3d12]")
 {
     Result<Device> created = createDevice();
@@ -204,7 +184,6 @@ TEST_CASE("Device::address is the raw SRV index and the offset", "[d3d12]")
     destroyDevice(*created);
 }
 
-//======================================================================================================================
 TEST_CASE("an address decodes to its buffer", "[d3d12]")
 {
     Result<Device> created = createDevice();
@@ -216,7 +195,6 @@ TEST_CASE("an address decodes to its buffer", "[d3d12]")
     destroyDevice(*created);
 }
 
-//======================================================================================================================
 TEST_CASE("a Readback buffer takes no heap slot", "[d3d12]")
 {
     Result<Device> created = createDevice();
@@ -228,7 +206,6 @@ TEST_CASE("a Readback buffer takes no heap slot", "[d3d12]")
     destroyDevice(*created);
 }
 
-//======================================================================================================================
 TEST_CASE("a 3-byte buffer and a (2^29 + 4)-byte buffer get raw views with no debug-layer message", "[d3d12]")
 {
     Result<Device> created = createDevice();
@@ -252,7 +229,6 @@ TEST_CASE("a 3-byte buffer and a (2^29 + 4)-byte buffer get raw views with no de
     destroyDevice(*created);
 }
 
-//======================================================================================================================
 TEST_CASE("a destroyed buffer's raw view pair is not reused before its frame retires", "[d3d12]")
 {
     Result<Device> created = createDevice();
@@ -286,7 +262,6 @@ TEST_CASE("a destroyed buffer's raw view pair is not reused before its frame ret
     destroyDevice(*created);
 }
 
-//======================================================================================================================
 TEST_CASE("buffers created on four threads decode to their own slots", "[d3d12]")
 {
     Result<Device> created = createDevice();
@@ -334,7 +309,6 @@ TEST_CASE("buffers created on four threads decode to their own slots", "[d3d12]"
     destroyDevice(*created);
 }
 
-//======================================================================================================================
 TEST_CASE("frame data addresses name the arena page's raw view", "[d3d12]")
 {
     Result<Device> created = createDevice();
@@ -355,7 +329,6 @@ TEST_CASE("frame data addresses name the arena page's raw view", "[d3d12]")
     destroyDevice(*created);
 }
 
-//======================================================================================================================
 TEST_CASE("a buffer creation counts its raw views as descriptor writes", "[d3d12]")
 {
     Result<Device> created = createDevice();

@@ -10,7 +10,6 @@
 
 using namespace rojoRHI;
 
-//======================================================================================================================
 TEST_CASE("Null reports every scope with a duration of zero", "[null]")
 {
     Device device = *createDevice(DeviceDesc{ .scopeTimings = true, .framesInFlight = 2 });
@@ -31,7 +30,6 @@ TEST_CASE("Null reports every scope with a duration of zero", "[null]")
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("Null has no capture tool: beginCapture is Unsupported and starts nothing", "[null]")
 {
     Device device = *createDevice();

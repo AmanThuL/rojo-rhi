@@ -25,11 +25,9 @@
 
 namespace rojoRHI::d3d12 {
     namespace {
-        /// The bytes one raw view reaches: 2^27 four-byte elements (`D3D12_REQ_BUFFER_RESOURCE_TEXEL_COUNT_2_TO_EXP`).
+        // D3D12_REQ_BUFFER_RESOURCE_TEXEL_COUNT_2_TO_EXP: 2^27 four-byte elements.
         constexpr uint64_t kRawViewBytes = 1ull << 29;
 
-        //==============================================================================================================
-        /// Returns the raw SRV description of a buffer `width` bytes wide.
         D3D12_SHADER_RESOURCE_VIEW_DESC rawSrv(uint64_t width)
         {
             D3D12_SHADER_RESOURCE_VIEW_DESC desc = {};
@@ -43,8 +41,6 @@ namespace rojoRHI::d3d12 {
             return desc;
         }
 
-        //==============================================================================================================
-        /// Returns the raw UAV description, with no counter, of a buffer `width` bytes wide.
         D3D12_UNORDERED_ACCESS_VIEW_DESC rawUav(uint64_t width)
         {
             D3D12_UNORDERED_ACCESS_VIEW_DESC desc = {};
@@ -58,9 +54,6 @@ namespace rojoRHI::d3d12 {
             return desc;
         }
 
-        //==============================================================================================================
-        /// Creates a heap of `count` descriptors of `type` on `impl`'s device, shader-visible when `shaderVisible`, named
-        /// `label`.
         Result<Com<ID3D12DescriptorHeap>> createHeap(
             DeviceImpl& impl, D3D12_DESCRIPTOR_HEAP_TYPE type, uint32_t count, bool shaderVisible, std::string_view label
         )
@@ -79,9 +72,7 @@ namespace rojoRHI::d3d12 {
             return heap;
         }
 
-        //==============================================================================================================
-        /// Returns the view-heap size `device` reports, the `D3D12_FEATURE_D3D12_OPTIONS19` maximum capped at `kMaxViewHeap`,
-        /// or nothing when the device does not report that feature.
+        // The OPTIONS19 maximum capped at `kMaxViewHeap`; nothing when the device does not report OPTIONS19.
         std::optional<uint32_t> reportedViewHeap(ID3D12Device12* device)
         {
             D3D12_FEATURE_DATA_D3D12_OPTIONS19 options = {};
@@ -93,7 +84,6 @@ namespace rojoRHI::d3d12 {
         }
     } // namespace
 
-    //==================================================================================================================
     Result<void> DescriptorHeaps::create(DeviceImpl& impl)
     {
         const uint32_t blocks = impl.core.framesInFlight();
@@ -170,58 +160,49 @@ namespace rojoRHI::d3d12 {
         return {};
     }
 
-    //==================================================================================================================
     uint32_t DescriptorHeaps::viewCapacity() const
     {
         return m_viewCapacity;
     }
 
-    //==================================================================================================================
     uint32_t DescriptorHeaps::viewSlots() const
     {
         return m_viewSlots;
     }
 
-    //==================================================================================================================
     uint32_t DescriptorHeaps::samplerCapacity() const
     {
         return kSamplerHeap;
     }
 
-    //==================================================================================================================
     ID3D12DescriptorHeap* DescriptorHeaps::views() const
     {
         return m_views.get();
     }
 
-    //==================================================================================================================
     ID3D12DescriptorHeap* DescriptorHeaps::samplers() const
     {
         return m_samplers.get();
     }
 
-    //==================================================================================================================
     D3D12_CPU_DESCRIPTOR_HANDLE DescriptorHeaps::viewCpu(uint32_t index) const
     {
         ROJORHI_INTERNAL_ASSERT(index < m_viewCapacity, "a view-heap index past the heap");
         return D3D12_CPU_DESCRIPTOR_HANDLE{ m_viewCpu.ptr + static_cast<SIZE_T>(index) * m_viewIncrement };
     }
 
-    //==================================================================================================================
     D3D12_GPU_DESCRIPTOR_HANDLE DescriptorHeaps::viewGpu(uint32_t index) const
     {
         ROJORHI_INTERNAL_ASSERT(index < m_viewCapacity, "a view-heap index past the heap");
         return D3D12_GPU_DESCRIPTOR_HANDLE{ m_viewGpu.ptr + static_cast<UINT64>(index) * m_viewIncrement };
     }
 
-    //==================================================================================================================
     D3D12_CPU_DESCRIPTOR_HANDLE DescriptorHeaps::samplerCpu(uint32_t index) const
     {
         ROJORHI_INTERNAL_ASSERT(index < kSamplerHeap, "a sampler-heap index past the heap");
         return D3D12_CPU_DESCRIPTOR_HANDLE{ m_samplerCpu.ptr + static_cast<SIZE_T>(index) * m_samplerIncrement };
     }
 
-    //==================================================================================================================
     TransientSlot DescriptorHeaps::claimTransient(uint32_t frameSlot)
     {
         ROJORHI_INTERNAL_ASSERT(frameSlot < m_ringBlocks, "a transient claim for a frame slot the device does not have");
@@ -240,14 +221,12 @@ namespace rojoRHI::d3d12 {
         return slot;
     }
 
-    //==================================================================================================================
     void DescriptorHeaps::resetTransient(uint32_t frameSlot)
     {
         ROJORHI_INTERNAL_ASSERT(frameSlot < m_ringBlocks, "a transient reset for a frame slot the device does not have");
         m_ringClaims[frameSlot].store(0, std::memory_order_relaxed);
     }
 
-    //==================================================================================================================
     Result<uint32_t> createRawViews(DeviceImpl& impl, ID3D12Resource* resource, uint64_t width, bool writable)
     {
         ROJORHI_INTERNAL_ASSERT(resource != nullptr, "raw views of no resource");
@@ -274,13 +253,11 @@ namespace rojoRHI::d3d12 {
         return *base;
     }
 
-    //==================================================================================================================
     uint64_t rawViewElements(uint64_t width)
     {
         return std::min(width, kRawViewBytes) / 4;
     }
 
-    //==================================================================================================================
     void releaseRawViews(DeviceImpl& impl, uint32_t base, uint32_t count)
     {
         // The core's teardown passes buffers to their hooks before it drains the view allocator, so the range is held then

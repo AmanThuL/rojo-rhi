@@ -11,17 +11,16 @@
 
 namespace rojoRHI::core {
     namespace {
-        /// The classes whose rules differ: chapter 15 lets each have the capabilities below and forbids the rest.
+        // Chapter 15 grants each class the capabilities `formatCeiling` sets and forbids the rest.
         enum class FormatClass
         {
-            None,            ///< Undefined: nothing.
-            Color,           ///< Color formats: sampled, filtered, storage, color attachment, blend, resolve, multisampled.
-            ColorNoStorage,  ///< sRGB color formats: as Color, without shader storage access.
-            BlockCompressed, ///< BC formats: sampled and filtered only.
-            Depth,           ///< Depth and depth-stencil formats: sampled, filtered, depth attachment, multisampled.
+            None,
+            Color,
+            ColorNoStorage,
+            BlockCompressed,
+            Depth,
         };
 
-        //==============================================================================================================
         FormatClass classOf(Format format)
         {
             switch (format)
@@ -37,7 +36,6 @@ namespace rojoRHI::core {
         }
     } // namespace
 
-    //==================================================================================================================
     FormatCapabilities formatCeiling(Format format)
     {
         FormatCapabilities caps;
@@ -70,7 +68,6 @@ namespace rojoRHI::core {
         return caps;
     }
 
-    //==================================================================================================================
     FormatTable formatCeilings()
     {
         FormatTable table;
@@ -81,7 +78,6 @@ namespace rojoRHI::core {
         return table;
     }
 
-    //==================================================================================================================
     FormatLayout formatLayout(Format format)
     {
         switch (format)
@@ -104,32 +100,27 @@ namespace rojoRHI::core {
         return {};
     }
 
-    //==================================================================================================================
     bool isBlockCompressed(Format format)
     {
         return classOf(format) == FormatClass::BlockCompressed;
     }
 
-    //==================================================================================================================
     bool isDepthFormat(Format format)
     {
         return classOf(format) == FormatClass::Depth;
     }
 
-    //==================================================================================================================
     bool samplesSupported(uint32_t samples, const FormatCapabilities& capabilities)
     {
         const bool valid = samples == 1 || samples == 2 || samples == 4 || samples == 8;
         return valid && ((capabilities.sampleCounts >> std::countr_zero(samples)) & 1) != 0;
     }
 
-    //==================================================================================================================
     bool hasStencilPlane(Format format)
     {
         return format == Format::D32FloatS8;
     }
 
-    //==================================================================================================================
     Format srgbCounterpart(Format format)
     {
         switch (format)
@@ -142,7 +133,6 @@ namespace rojoRHI::core {
         }
     }
 
-    //==================================================================================================================
     TileExtent standardTileExtent(Format format, TextureType type)
     {
         // D3D12 standard tile shapes, D3D12_TILED_RESOURCES_TIER standard swizzle, indexed by bits per texel (per block for a
@@ -165,7 +155,6 @@ namespace rojoRHI::core {
         return extent;
     }
 
-    //==================================================================================================================
     void checkQueryFormat([[maybe_unused]] Format format)
     {
         ROJORHI_VU(static_cast<uint32_t>(format) < kFormatCount, "VU-rojo-format-0001", "{} is not a Format enumerator", static_cast<uint32_t>(format));

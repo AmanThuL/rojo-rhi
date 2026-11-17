@@ -15,15 +15,10 @@ using namespace rojoRHI;
 using test::PassKit;
 
 namespace {
-    /// The bytes every buffer test writes and reads.
     constexpr uint64_t kBytes = 256;
-    /// The region of the 4 by 4 texels every texture test copies.
     constexpr TextureRegion kRegion{ .extent = { 4, 4, 1 } };
-    /// The buffer layout of `kRegion`.
     constexpr BufferTextureLayout kLayout{ .rowPitch = 256 };
 
-    //==================================================================================================================
-    /// Records one global barrier from `srcStage` and `srcAccess` to `dstStage` and `dstAccess`.
     void global(CommandList list, Stage srcStage, Access srcAccess, Stage dstStage, Access dstAccess)
     {
         const std::array<GlobalBarrier, 1> globals{ GlobalBarrier{
@@ -32,7 +27,6 @@ namespace {
     }
 } // namespace
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-sync-0021 a buffer is written twice with no barrier between", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-sync-0021", [] {
@@ -44,7 +38,6 @@ TEST_CASE("VU-rojo-sync-0021 a buffer is written twice with no barrier between",
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-sync-0021 a texture is written after a read with no barrier between", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-sync-0021", [] {
@@ -66,7 +59,6 @@ TEST_CASE("VU-rojo-sync-0021 a texture is written after a read with no barrier b
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-sync-0021 a buffer barrier on another range leaves the written range without a barrier", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-sync-0021", [] {
@@ -87,7 +79,6 @@ TEST_CASE("VU-rojo-sync-0021 a buffer barrier on another range leaves the writte
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-sync-0024 a barrier's source misses the earlier write", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-sync-0024", [] {
@@ -101,7 +92,6 @@ TEST_CASE("VU-rojo-sync-0024 a barrier's source misses the earlier write", "[con
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-sync-0024 a barrier's destination misses the later use", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-sync-0024", [] {
@@ -115,7 +105,6 @@ TEST_CASE("VU-rojo-sync-0024 a barrier's destination misses the later use", "[co
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-sync-0024 a transition's source misses an earlier read", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-sync-0024", [] {
@@ -142,7 +131,6 @@ TEST_CASE("VU-rojo-sync-0024 a transition's source misses an earlier read", "[co
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-sync-0024 only a barrier's source access misses the earlier write", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-sync-0024", [] {
@@ -157,7 +145,6 @@ TEST_CASE("VU-rojo-sync-0024 only a barrier's source access misses the earlier w
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-sync-0024 only a barrier's destination access misses a use after a write", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-sync-0024", [] {
@@ -172,7 +159,6 @@ TEST_CASE("VU-rojo-sync-0024 only a barrier's destination access misses a use af
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-sync-0024 a barrier after a transition does not chain from the transition's destination stage", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-sync-0024", [] {
@@ -194,7 +180,6 @@ TEST_CASE("VU-rojo-sync-0024 a barrier after a transition does not chain from th
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-sync-0024 a transition whose source has no stage follows an earlier read", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-sync-0024", [] {
@@ -221,10 +206,8 @@ TEST_CASE("VU-rojo-sync-0024 a transition whose source has no stage follows an e
 }
 
 namespace {
-    //==================================================================================================================
-    /// Records, in one barrier call, a global barrier from fragment work to copies and the transition of `texture` from
-    /// `oldLayout` to `CopyDst` that waits for copies only: the global would chain the transition after fragment work if
-    /// records of one call ordered each other.
+    // One call records a global barrier from fragment work to copies and a transition that waits for copies only. The
+    // global would chain the transition after fragment work only if records of one call ordered each other.
     void sameCallChain(CommandList list, Texture texture, Layout oldLayout)
     {
         const std::array<GlobalBarrier, 1> globals{ GlobalBarrier{ .srcStage = Stage::FragmentShader, .dstStage = Stage::Copy } };
@@ -237,8 +220,6 @@ namespace {
         list.barrier(globals, {}, textures);
     }
 
-    //==================================================================================================================
-    /// Begins a pass, draws once with a fragment read of `texture` declared and ends the pass.
     void fragmentRead(PassKit& kit, Texture texture)
     {
         kit.readyToDraw();
@@ -249,7 +230,6 @@ namespace {
     }
 } // namespace
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-sync-0024 a global barrier of the same call does not chain a transition after a read", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-sync-0024", [] {
@@ -267,7 +247,6 @@ TEST_CASE("VU-rojo-sync-0024 a global barrier of the same call does not chain a 
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-sync-0024 a global barrier of the same call does not chain a transition after the last write through a read", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-sync-0024", [] {
@@ -291,7 +270,6 @@ TEST_CASE("VU-rojo-sync-0024 a global barrier of the same call does not chain a 
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-sync-0024 a later barrier whose source shares no stage with the earlier destination does not chain", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-sync-0024", [] {

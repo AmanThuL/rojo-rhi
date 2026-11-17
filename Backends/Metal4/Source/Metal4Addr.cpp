@@ -15,7 +15,6 @@
 
 namespace rojoRHI {
     namespace core {
-        //==============================================================================================================
         DecodedAddr decodeAddr(DeviceCore& core, Addr addr)
         {
             // The retire hooks' context is the device that owns the core. Only the address map's mutex is taken.
@@ -24,7 +23,6 @@ namespace rojoRHI {
         }
     } // namespace core
 
-    //==================================================================================================================
     Addr operator+(Addr base, uint64_t offset)
     {
         // A sum past the buffer is VU-rojo-buffer-0009 where the address is used; here only the offset is checked.

@@ -26,33 +26,27 @@
 
 namespace rojoRHI::d3d12 {
     namespace {
-        /// The name of each queue type in native names, indexed by `QueueType`.
         constexpr std::array<std::string_view, 3> kTypeNames = { "graphics", "compute", "copy" };
 
-        /// How long a drain waits for one submission before it reports it and every later one `failed`: sixty seconds, the
-        /// benchmark harness's frame wait.
+        // Sixty seconds, the benchmark harness's frame wait; past it a drain reports the submission and every later one
+        // `failed`.
         constexpr uint64_t kDrainTimeoutNs = 60'000'000'000;
 
-        //==============================================================================================================
-        /// Returns the first query of `pair`, the even one, in the attachment's heap.
         UINT firstQuery(uint64_t pair)
         {
             return static_cast<UINT>(pair % SubmitTimingState::kPairs) * 2;
         }
 
-        //==============================================================================================================
-        /// Returns `ticks`, a timestamp of the attachment's queue, in seconds of the CPU's `QueryPerformanceCounter`: the CPU
-        /// time of the calibration pair plus the GPU ticks since its GPU time.
+        // In seconds of the CPU's `QueryPerformanceCounter`: the CPU time of the calibration pair plus the GPU ticks
+        // since its GPU time.
         double cpuSeconds(const SubmitTimingState& timing, uint64_t ticks)
         {
             const auto sinceCalibration = static_cast<int64_t>(ticks - timing.gpuCalibration);
             return static_cast<double>(timing.cpuCalibration) / timing.cpuTicksPerSecond + static_cast<double>(sinceCalibration) / timing.gpuTicksPerSecond;
         }
 
-        //==============================================================================================================
-        /// Makes the query heap, the mapped readback buffer and the fence of an attachment of `queue`, named after the queue,
-        /// and reads the queue's calibration pair. A Copy queue on a device without copy-queue timestamps gets no heap and no
-        /// buffer. A refused call logs and aborts, in every build. Counts nothing.
+        // A Copy queue on a device without copy-queue timestamps gets no heap and no buffer. A refused call logs and
+        // aborts, in every build. Counts nothing.
         std::unique_ptr<SubmitTimingState> createState(QueueImpl& queue, SubmitTimingCallback callback, void* user)
         {
             DeviceImpl& impl = *queue.device;
@@ -119,10 +113,9 @@ namespace rojoRHI::d3d12 {
             return timing;
         }
 
-        //==============================================================================================================
-        /// Makes the report of `entry` of `timing` through its callback: its two timestamps in seconds when `reached`, the
-        /// seam's fence having shown every pending submission complete, its lists both wrote into this attachment and no
-        /// later list has claimed their pairs again; otherwise `failed` with zero times.
+        // Times in seconds when `reached`, the seam's fence having shown every pending submission complete, its lists
+        // both wrote into this attachment and no later list has claimed their pairs again; otherwise `failed` with zero
+        // times.
         void report(const SubmitTimingState& timing, const PendingSubmission& entry, bool reached)
         {
             SubmitTime time{ .queue = timing.queue, .serial = entry.serial, .gpuStartSeconds = 0.0, .gpuEndSeconds = 0.0, .failed = true };
@@ -143,7 +136,6 @@ namespace rojoRHI::d3d12 {
         }
     } // namespace
 
-    //==================================================================================================================
     void setSubmitTiming(Queue queue, SubmitTimingCallback callback, void* user)
     {
         QueueImpl& impl = QueueImpl::of(queue);
@@ -157,7 +149,6 @@ namespace rojoRHI::d3d12 {
         impl.timing.store(impl.timings.back().get(), std::memory_order_release);
     }
 
-    //==================================================================================================================
     void drainSubmitTiming(Queue queue)
     {
         QueueImpl& impl = QueueImpl::of(queue);
@@ -189,7 +180,6 @@ namespace rojoRHI::d3d12 {
         }
     }
 
-    //==================================================================================================================
     void beginSubmitTiming(CommandListImpl& list)
     {
         ListState& state = list.state;
@@ -210,7 +200,6 @@ namespace rojoRHI::d3d12 {
         state.list->EndQuery(timing->queries.get(), D3D12_QUERY_TYPE_TIMESTAMP, firstQuery(state.submitPair));
     }
 
-    //==================================================================================================================
     void endSubmitTiming(CommandListImpl& list)
     {
         const ListState& state = list.state;
@@ -224,7 +213,6 @@ namespace rojoRHI::d3d12 {
         state.list->ResolveQueryData(timing->queries.get(), D3D12_QUERY_TYPE_TIMESTAMP, first, 2, timing->readback.get(), uint64_t{ first } * sizeof(uint64_t));
     }
 
-    //==================================================================================================================
     void noteSubmitTiming(QueueImpl& queue, std::span<const CommandList> lists)
     {
         SubmitTimingState* timing = queue.timing.load(std::memory_order_relaxed);

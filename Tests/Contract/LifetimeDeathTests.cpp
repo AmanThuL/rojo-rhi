@@ -18,15 +18,12 @@ using test::PassKit;
 using test::UpscaleKit;
 
 namespace {
-    //==================================================================================================================
-    /// Records a barrier on `texture` that moves it from `oldLayout` to `newLayout`: a command that names the texture and uses nothing else.
+    // A barrier is a command that names the texture and uses nothing else.
     void move(CommandList list, Texture texture, Layout oldLayout, Layout newLayout)
     {
         test::transition(list, texture, oldLayout, newLayout);
     }
 
-    //==================================================================================================================
-    /// Ends `list` and submits it alone to the graphics queue.
     void submit(Device device, CommandList list)
     {
         list.end();
@@ -35,7 +32,6 @@ namespace {
     }
 } // namespace
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-abi-0003 a buffer is destroyed while an unsubmitted list's root names it", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-abi-0003", [] {
@@ -48,7 +44,6 @@ TEST_CASE("VU-rojo-abi-0003 a buffer is destroyed while an unsubmitted list's ro
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-abi-0003 is reported before the address and handle rules", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-abi-0003", [] {
@@ -64,7 +59,6 @@ TEST_CASE("VU-rojo-abi-0003 is reported before the address and handle rules", "[
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-buffer-0019 a buffer is destroyed while an unsubmitted list was passed an address in it", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-buffer-0019", [] {
@@ -76,7 +70,6 @@ TEST_CASE("VU-rojo-buffer-0019 a buffer is destroyed while an unsubmitted list w
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-buffer-0019 is reported before the handle rule", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-buffer-0019", [] {
@@ -90,7 +83,6 @@ TEST_CASE("VU-rojo-buffer-0019 is reported before the handle rule", "[contract][
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-device-0007 a buffer is destroyed while an unsubmitted list copies it", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-device-0007", [] {
@@ -102,7 +94,6 @@ TEST_CASE("VU-rojo-device-0007 a buffer is destroyed while an unsubmitted list c
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-device-0007 a texture is destroyed while an unsubmitted list names it", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-device-0007", [] {
@@ -113,7 +104,6 @@ TEST_CASE("VU-rojo-device-0007 a texture is destroyed while an unsubmitted list 
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-device-0007 a pipeline is destroyed while an unsubmitted list binds it", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-device-0007", [] {
@@ -124,7 +114,6 @@ TEST_CASE("VU-rojo-device-0007 a pipeline is destroyed while an unsubmitted list
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-device-0007 an upscaler is destroyed while an unsubmitted list upscales with it", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-device-0007", [] {
@@ -134,7 +123,6 @@ TEST_CASE("VU-rojo-device-0007 an upscaler is destroyed while an unsubmitted lis
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-present-0019 a list recorded before a present is submitted after it", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-present-0019", [] {
@@ -152,7 +140,6 @@ TEST_CASE("VU-rojo-present-0019 a list recorded before a present is submitted af
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-abi-0003 a buffer is destroyed after a dispatch read it as the root and the root moved on", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-abi-0003", [] {
@@ -168,7 +155,6 @@ TEST_CASE("VU-rojo-abi-0003 a buffer is destroyed after a dispatch read it as th
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-device-0007 a buffer is destroyed while an unsubmitted list's drawIndexed names it as indices", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-device-0007", [] {
@@ -181,7 +167,6 @@ TEST_CASE("VU-rojo-device-0007 a buffer is destroyed while an unsubmitted list's
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-buffer-0019 a buffer is destroyed while an unsubmitted list's indirect count address names it", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-buffer-0019", [] {
@@ -194,7 +179,6 @@ TEST_CASE("VU-rojo-buffer-0019 a buffer is destroyed while an unsubmitted list's
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-device-0007 a buffer is destroyed while an unsubmitted list's buffer barrier names it", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-device-0007", [] {
@@ -207,7 +191,6 @@ TEST_CASE("VU-rojo-device-0007 a buffer is destroyed while an unsubmitted list's
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-device-0007 a buffer is destroyed while one of two lists that copy it is not submitted", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-device-0007", [] {

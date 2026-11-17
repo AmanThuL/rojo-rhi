@@ -22,45 +22,37 @@
 using namespace rojoRHI;
 
 namespace {
-    /// True when the build selects the debug layer: `layer` and `gbv` always, `mode` in Debug builds only.
+    // `layer` and `gbv` always select the debug layer, `mode` in Debug builds only.
 #if defined(ROJORHI_D3D12_DEBUG_LAYER) || defined(ROJORHI_D3D12_DEBUG_GBV) || (defined(ROJORHI_D3D12_DEBUG_MODE) && !defined(NDEBUG))
     constexpr bool kDebugLayer = true;
 #else
     constexpr bool kDebugLayer = false;
 #endif
 
-    /// One message the callback saw.
     struct Seen
     {
         MessageSeverity severity;
         std::string text;
     };
 
-    /// Records every message while it is installed as the message callback, and restores the default sink when it goes out of
-    /// scope.
+    // Restores the default sink when it goes out of scope.
     class Recorder
     {
       public:
-        //==============================================================================================================
         Recorder()
         {
             setMessageCallback(&Recorder::record, this);
         }
 
-        //==============================================================================================================
         Recorder(const Recorder&) = delete;
 
-        //==============================================================================================================
         Recorder& operator=(const Recorder&) = delete;
 
-        //==============================================================================================================
         ~Recorder()
         {
             setMessageCallback(nullptr, nullptr);
         }
 
-        //==============================================================================================================
-        /// Returns how many messages of `severity` contain `needle`.
         size_t count(MessageSeverity severity, std::string_view needle)
         {
             const std::lock_guard lock(m_mutex);
@@ -75,8 +67,6 @@ namespace {
             return found;
         }
 
-        //==============================================================================================================
-        /// Returns every message seen, one per line, for a failure message.
         std::string dump()
         {
             const std::lock_guard lock(m_mutex);
@@ -89,7 +79,6 @@ namespace {
         }
 
       private:
-        //==============================================================================================================
         static void record(MessageSeverity severity, std::string_view message, void* user)
         {
             auto& self = *static_cast<Recorder*>(user);
@@ -101,8 +90,7 @@ namespace {
         std::vector<Seen> m_seen;
     };
 
-    //==================================================================================================================
-    /// Returns the message queue of `impl`'s device, which only a device with the debug layer on has.
+    // Only a device with the debug layer on has one.
     d3d12::Com<ID3D12InfoQueue> infoQueue(DeviceImpl& impl)
     {
         d3d12::Com<ID3D12InfoQueue> queue;
@@ -111,7 +99,6 @@ namespace {
     }
 } // namespace
 
-//======================================================================================================================
 TEST_CASE("a debug-layer warning reaches the message callback as Warning", "[d3d12]")
 {
     if (!kDebugLayer)
@@ -130,7 +117,6 @@ TEST_CASE("a debug-layer warning reaches the message callback as Warning", "[d3d
     destroyDevice(*created);
 }
 
-//======================================================================================================================
 TEST_CASE("a debug-layer info message reaches the message callback as Info", "[d3d12]")
 {
     if (!kDebugLayer)
@@ -149,7 +135,6 @@ TEST_CASE("a debug-layer info message reaches the message callback as Info", "[d
     destroyDevice(*created);
 }
 
-//======================================================================================================================
 TEST_CASE("a debug-layer error aborts after reaching the callback", "[d3d12][death]")
 {
     if (!kDebugLayer)
@@ -164,7 +149,6 @@ TEST_CASE("a debug-layer error aborts after reaching the callback", "[d3d12][dea
     });
 }
 
-//======================================================================================================================
 TEST_CASE("a removed device is reported with its reason before the entry fails", "[d3d12]")
 {
     if (!kDebugLayer)
@@ -187,7 +171,6 @@ TEST_CASE("a removed device is reported with its reason before the entry fails",
     destroyDevice(*created);
 }
 
-//======================================================================================================================
 TEST_CASE("detaching the router twice is harmless", "[d3d12]")
 {
     Result<Device> created = createDevice();

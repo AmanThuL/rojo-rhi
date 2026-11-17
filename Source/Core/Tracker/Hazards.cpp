@@ -12,19 +12,13 @@
 
 namespace rojoRHI::core {
     namespace {
-        /// Every access bit that writes.
         constexpr Access kWrites = Access::ShaderWrite | Access::ColorAttachmentWrite | Access::DepthStencilWrite | Access::CopyWrite | Access::Resolve;
 
-        //==============================================================================================================
-        /// Returns true when `earlier` is a write, a layout transition included.
         bool isWrite(const TrackedUse& earlier)
         {
             return earlier.transition || hasWrite(earlier.scope.access);
         }
 
-        //==============================================================================================================
-        /// Returns true when a barrier since `earlier` orders it before `later`: one reach that orders `earlier`, its source
-        /// covering it or chaining from a barrier that does, and whose destination covers `later`.
         bool ordered(const TrackedUse& earlier, Scope later)
         {
             const bool writes = isWrite(earlier);
@@ -33,9 +27,6 @@ namespace rojoRHI::core {
             });
         }
 
-        //==============================================================================================================
-        /// Returns the hazard of the pair `earlier`, `later` when it is not ordered: no barrier between, or barriers none of
-        /// which orders it.
         Hazard unordered(const TrackedUse& earlier)
         {
             return Hazard{ .kind = earlier.reaches.empty() ? HazardKind::NoBarrier : HazardKind::Unordered,
@@ -43,17 +34,13 @@ namespace rojoRHI::core {
                            .earlierTransition = earlier.transition };
         }
 
-        //==============================================================================================================
-        /// Returns true when `a` and `b` are reaches of the same kind: the same destination and source coverage.
         bool sameKind(const Reach& a, const Reach& b)
         {
             return a.destination == b.destination && a.sourceCovers == b.sourceCovers;
         }
 
-        //==============================================================================================================
-        /// Returns true when `a` and `b` hold the same reaches in any order, each list holding a kind once. A reach's position
-        /// matters only when it is at least `fresh`, the position of a barrier call still being replayed, whose records never
-        /// order a transition of the same call; positions below it compare alike.
+        // A reach's position matters only when it is at least `fresh`, a barrier call still being replayed, whose records never
+        // order a transition of the same call; positions below it compare alike.
         bool sameReaches(const std::vector<Reach>& a, const std::vector<Reach>& b, uint64_t fresh)
         {
             return a.size() == b.size() && std::ranges::all_of(a, [&](const Reach& reach) {
@@ -63,18 +50,13 @@ namespace rojoRHI::core {
                    });
         }
 
-        //==============================================================================================================
-        /// Returns true when `a` and `b` are judged alike by every later use, transition and barrier: all but their positions
-        /// are equal, and their reaches are alike as `sameReaches` reads them from `fresh`. Positions only tell a later use of
-        /// the same command apart, and an earlier use alike to it with no barrier since conflicts with that later use as the
-        /// dropped one would.
+        // Positions are ignored: they only tell a later use of the same command apart, and an alike earlier use with no barrier
+        // since conflicts with that later use as the dropped one would.
         bool alike(const TrackedUse& a, const TrackedUse& b, uint64_t fresh)
         {
             return a.scope == b.scope && a.transition == b.transition && a.afterWrite == b.afterWrite && sameReaches(a.reaches, b.reaches, fresh);
         }
 
-        //==============================================================================================================
-        /// Returns true when the states `a` and `b` of one queue are alike and every use in them is below `floor`.
         bool mergeable(const QueueHazards& a, const QueueHazards& b, uint64_t floor)
         {
             const auto older = [floor](const TrackedUse& use) { return use.position < floor; };
@@ -93,17 +75,12 @@ namespace rojoRHI::core {
                    std::ranges::all_of(a.reads, [&](const TrackedUse& read) { return contains(b.reads, read); });
         }
 
-        //==============================================================================================================
-        /// Returns the union of `a` and `b`.
         Scope merged(Scope a, Scope b)
         {
             return Scope{ .stage = a.stage | b.stage, .access = a.access | b.access };
         }
 
-        //==============================================================================================================
-        /// Returns true when a barrier from `source` recorded at `position` extends the execution chain of an earlier barrier
-        /// over `use`: one that orders the use, its source covering it or chaining in turn, and whose destination stage shares a
-        /// stage with `source`. A record of the same barrier call, at `position`, never chains.
+        // A record of the same barrier call, at `position`, never chains.
         bool chains(const TrackedUse& use, uint64_t position, Scope source)
         {
             return std::ranges::any_of(use.reaches, [&](const Reach& reach) {
@@ -111,42 +88,34 @@ namespace rojoRHI::core {
             });
         }
 
-        //==============================================================================================================
-        /// Returns true when a layout transition's own `source` orders `earlier` before the transition: it covers a use, or,
-        /// for an earlier transition, shares a stage with its destination.
+        // An earlier transition is ordered by sharing a stage with its destination, not by coverage.
         bool transitionOrders(Scope source, bool discard, const TrackedUse& earlier)
         {
             return earlier.transition ? sharesStage(source.stage, earlier.scope.stage) : sourceCovers(source, earlier.scope, discard);
         }
     } // namespace
 
-    //==================================================================================================================
     bool sourceCovers(Scope source, Scope use, bool discard)
     {
-        // A source with no stage waits for nothing, so it covers no use.
         const Access writes = use.access & kWrites;
         return source.stage != Stage::None && (source.stage & use.stage) == use.stage && (discard || (source.access & writes) == writes);
     }
 
-    //==================================================================================================================
     bool destinationCovers(Scope destination, Scope use, bool earlierWrites)
     {
         return (destination.stage & use.stage) == use.stage && (!earlierWrites || (destination.access & use.access) == use.access);
     }
 
-    //==================================================================================================================
     bool sharesStage(Stage a, Stage b)
     {
         return (a & b) != Stage::None;
     }
 
-    //==================================================================================================================
     bool hasWrite(Access access)
     {
         return (access & kWrites) != Access::None;
     }
 
-    //==================================================================================================================
     Hazard checkUse(const QueueHazards& state, uint64_t position, Scope use, uint64_t fenced)
     {
         // A fence wait or the CPU's observation orders a use with full visibility, as a barrier covering it would.
@@ -173,7 +142,6 @@ namespace rojoRHI::core {
         return chained ? Hazard{} : unordered(*state.write);
     }
 
-    //==================================================================================================================
     void recordUse(QueueHazards& state, uint64_t position, Scope use, uint64_t fenced)
     {
         if (!hasWrite(use.access))
@@ -215,7 +183,6 @@ namespace rojoRHI::core {
         state.reads.clear();
     }
 
-    //==================================================================================================================
     void recordBarrier(QueueHazards& state, uint64_t position, Scope source, Scope destination)
     {
         const auto reach = [&](TrackedUse& use) {
@@ -223,9 +190,7 @@ namespace rojoRHI::core {
             {
                 return;
             }
-            // A barrier orders the use when its source covers it, or through an execution chain: its source stage shares a stage
-            // with the destination stage of an earlier barrier that orders the use. A transition is ordered only through a chain,
-            // from its own destination, its first reach.
+            // A transition is ordered only through a chain, from its own destination, its first reach.
             const bool orders = (!use.transition && sourceCovers(source, use.scope)) || chains(use, position, source);
             // The first barrier of each kind is kept: an earlier one orders whatever a later one of its kind would.
             const Reach added{ .destination = destination, .sourceCovers = orders, .position = position };
@@ -252,13 +217,9 @@ namespace rojoRHI::core {
         state.reads = std::move(distinct);
     }
 
-    //==================================================================================================================
     Hazard checkTransition(const QueueHazards& state, uint64_t position, Scope source, bool discard, uint64_t fenced)
     {
-        // The transition waits only through an execution chain: its own source covers an earlier use, or shares a stage with
-        // the destination of an earlier barrier that orders it. A source with no stage waits for nothing, and the records of
-        // the transition's own barrier call, at its position, never order it. A fence wait or the CPU's observation orders an
-        // earlier use as a chain would.
+        // A fence wait or the CPU's observation orders an earlier use as a chain would.
         const auto chained = [&](const TrackedUse& earlier) { return earlier.position <= fenced || chains(earlier, position, source); };
         const auto orderedBefore = [&](const TrackedUse& earlier) { return transitionOrders(source, discard, earlier) || chained(earlier); };
         const auto missed = [](const TrackedUse& use) {
@@ -290,7 +251,6 @@ namespace rojoRHI::core {
         return throughRead ? Hazard{} : missed(*state.write);
     }
 
-    //==================================================================================================================
     void recordTransition(QueueHazards& state, uint64_t position, Scope destination)
     {
         state.write = TrackedUse{ .position = position,
@@ -300,7 +260,6 @@ namespace rojoRHI::core {
         state.reads.clear();
     }
 
-    //==================================================================================================================
     std::optional<QueueHazard> checkOtherQueues(const UnitHazards& unit, QueueType queue, Scope use, const Clock& ordered, bool transition)
     {
         const bool writes = transition || hasWrite(use.access);
@@ -327,7 +286,6 @@ namespace rojoRHI::core {
         return std::nullopt;
     }
 
-    //==================================================================================================================
     WriteOrder lastWriteOrder(const QueueHazards& state, Scope use, uint64_t fenced)
     {
         if (!state.write.has_value())
@@ -343,7 +301,6 @@ namespace rojoRHI::core {
         return reached ? WriteOrder::Unordered : WriteOrder::Missing;
     }
 
-    //==================================================================================================================
     bool mergeable(const UnitHazards& a, const UnitHazards& b, const std::array<uint64_t, 3>& floor)
     {
         for (size_t queue = 0; queue < a.queues.size(); ++queue)

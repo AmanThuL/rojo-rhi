@@ -11,24 +11,20 @@
 #include <cstdint>
 
 namespace rojoRHI::test {
-    /// Fails the running case, naming the reason, when a scope `list` has recorded so far (its own scopes, its render
-    /// passes and its upscales) holds no timestamp pair. A count pin that includes timestamp writes calls it before it reads
-    /// the counts, and before `Queue::submit`, which takes the list's scopes: without a pair the count is two calls short,
-    /// because the device was created without `DeviceDesc::scopeTimings`, Metal refused a counter heap (its limit holds per
-    /// process or on the system) or the slot's capacity was passed.
+    // Fails the case when a scope the list recorded (its scopes, passes and upscales) holds no timestamp pair. A count pin
+    // that includes timestamp writes calls it before reading the counts and before `Queue::submit`, which takes the scopes.
+    // A pair is missing without `DeviceDesc::scopeTimings`, when Metal refused a counter heap, or past the slot's capacity.
     void requireTimed(CommandList list);
 
-    /// Returns the counts `list` has recorded, after `requireTimed(list)`.
     const core::RecordCounts& timedCounts(CommandList list);
 
-    /// Returns 1 when the encoders `list` opens carry a label, one `setLabel` call each (on a device created with validation
-    /// or capture, or under the validation layer), else 0, so a count pin holds with and without the layer.
+    // 1 when the list's encoders carry a label, one `setLabel` each (validation, capture or the validation layer), else 0,
+    // so a count pin holds with and without the layer.
     uint64_t encoderLabel(CommandList list);
 
-    /// Returns 1 when the encoders the lists of `device` open carry a label, else 0, as `encoderLabel(CommandList)`.
     uint64_t encoderLabel(Device device);
 
-    /// Returns 1 when `list`'s scopes, passes and upscales push and pop a debug group, each a native call, else 0: the list's
-    /// device was created with `DeviceDesc::debugMarkers` or `DeviceDesc::enableCapture` (ADR 0034).
+    // 1 when the device was created with `DeviceDesc::debugMarkers` or `DeviceDesc::enableCapture` (ADR 0034): scopes,
+    // passes and upscales then push and pop a debug group, each a native call.
     uint64_t debugGroup(CommandList list);
 } // namespace rojoRHI::test

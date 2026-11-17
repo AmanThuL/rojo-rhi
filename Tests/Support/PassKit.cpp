@@ -11,7 +11,6 @@
 #include <vector>
 
 namespace rojoRHI::test {
-    //==================================================================================================================
     PassKit::PassKit(QueueType listType, bool validation, bool scopeTimings, bool debugMarkers)
         : type(listType), m_validation(validation), m_moveTargets(!validation && layoutsAreNative())
     {
@@ -20,7 +19,6 @@ namespace rojoRHI::test {
         list = device.acquireCommandList(type, "kit.list");
     }
 
-    //==================================================================================================================
     ShaderLibrary PassKit::ensureLibrary()
     {
         if (library.bits == 0)
@@ -31,7 +29,6 @@ namespace rojoRHI::test {
         return library;
     }
 
-    //==================================================================================================================
     Texture PassKit::target(Format format, uint32_t samples, uint32_t mips, uint32_t layers)
     {
         const Texture texture = *device.createTexture(
@@ -53,7 +50,6 @@ namespace rojoRHI::test {
         return texture;
     }
 
-    //==================================================================================================================
     Texture PassKit::depthTarget(Format format, uint32_t samples)
     {
         const Texture texture = *device.createTexture(
@@ -66,7 +62,6 @@ namespace rojoRHI::test {
         return texture;
     }
 
-    //==================================================================================================================
     Pipeline PassKit::graphics(std::span<const Format> colors, Format depth, uint32_t samples, PrimitiveClass primitive, bool depthBias, bool mesh)
     {
         const ShaderLibrary loaded = ensureLibrary();
@@ -88,7 +83,6 @@ namespace rojoRHI::test {
         return *device.createPipeline(desc);
     }
 
-    //==================================================================================================================
     Pipeline PassKit::graphicsWith(std::span<const ColorTarget> targets, Format depth, const DepthStencilState& depthStencil, uint32_t samples)
     {
         const ShaderLibrary loaded = ensureLibrary();
@@ -98,14 +92,12 @@ namespace rojoRHI::test {
         return *device.createPipeline(desc);
     }
 
-    //==================================================================================================================
     Pipeline PassKit::compute()
     {
         const ShaderLibrary loaded = ensureLibrary();
         return *device.createPipeline(ComputePipelineDesc{ .compute = { loaded, "csMain" }, .label = "kit.compute" });
     }
 
-    //==================================================================================================================
     void PassKit::beginSimplePass()
     {
         if (m_moveTargets && m_simpleTarget.bits == 0)
@@ -123,13 +115,11 @@ namespace rojoRHI::test {
         list.beginRenderPass(fullPass(colors));
     }
 
-    //==================================================================================================================
     Buffer PassKit::buffer(BufferUsage usage, uint64_t size, Memory memory)
     {
         return *device.createBuffer(BufferDesc{ .size = size, .memory = memory, .usage = usage, .label = "kit.buffer" });
     }
 
-    //==================================================================================================================
     Texture PassKit::texture(Format format, TextureUsage usage, uint32_t mips, uint32_t layers)
     {
         return *device.createTexture(
@@ -143,7 +133,6 @@ namespace rojoRHI::test {
         );
     }
 
-    //==================================================================================================================
     void PassKit::readyToDraw(bool mesh)
     {
         constexpr std::array<Format, 1> colors = { Format::RGBA8Unorm };
@@ -153,7 +142,6 @@ namespace rojoRHI::test {
         list.setScissor({ 0, 0, kSize, kSize });
     }
 
-    //==================================================================================================================
     void PassKit::joinQueues()
     {
         if (m_join.bits == 0)
@@ -168,7 +156,6 @@ namespace rojoRHI::test {
         }
     }
 
-    //==================================================================================================================
     void PassKit::finish()
     {
         list.end();
@@ -182,13 +169,11 @@ namespace rojoRHI::test {
         destroyDevice(device);
     }
 
-    //==================================================================================================================
     RenderPassDesc fullPass(std::span<const ColorAttachment> colors)
     {
         return RenderPassDesc{ .colors = colors, .area = { 0, 0, PassKit::kSize, PassKit::kSize }, .label = "kit.pass" };
     }
 
-    //==================================================================================================================
     Access accessesOf(Layout layout)
     {
         switch (layout)
@@ -205,7 +190,6 @@ namespace rojoRHI::test {
         }
     }
 
-    //==================================================================================================================
     void transition(CommandList list, Texture texture, Layout oldLayout, Layout newLayout, const SubresourceRange& range)
     {
         // A source makes earlier writes available; reads before the barrier need its stage only.

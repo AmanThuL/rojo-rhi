@@ -28,23 +28,18 @@
 using namespace rojoRHI;
 
 namespace {
-    /// The number of lines of a blob's header.
     constexpr size_t kHeaderLines = 4;
 
-    /// The one colour target the render pipelines draw to.
     constexpr std::array<ColorTarget, 1> kColor = { ColorTarget{ .format = Format::RGBA8Unorm } };
 
-    //==================================================================================================================
-    /// Returns the bytes of `text`.
     std::vector<std::byte> bytesOf(std::string_view text)
     {
         const auto* bytes = reinterpret_cast<const std::byte*>(text.data());
         return std::vector<std::byte>(bytes, bytes + text.size());
     }
 
-    //==================================================================================================================
-    /// Returns 24 bytes standing in for a DXIL container: `DXBC`, a 16-byte digest of `seed` repeated, then four bytes of
-    /// `tail`, which lie past the digest.
+    // 24 bytes standing in for a DXIL container: `DXBC`, a 16-byte digest of `seed` repeated, then four bytes of
+    // `tail`, which lie past the digest.
     std::array<std::byte, 24> fakeDxil(uint8_t seed, uint8_t tail = 0)
     {
         std::array<std::byte, 24> bytes = {};
@@ -57,31 +52,25 @@ namespace {
         return bytes;
     }
 
-    /// The stand-in DXIL of each stage of the key cases.
     const std::array<std::byte, 24> kVertexDxil = fakeDxil(1);
     const std::array<std::byte, 24> kFragmentDxil = fakeDxil(2);
     const std::array<std::byte, 24> kOtherDxil = fakeDxil(3);
     const std::array<std::byte, 24> kVertexTailDxil = fakeDxil(1, 9);
 
-    /// One graphics description of the key cases, with storage for its colour targets.
     struct KeyVariant
     {
-        GraphicsPipelineDesc desc;         ///< The description; `colors` is set from the fields below.
-        std::array<ColorTarget, 2> colors; ///< The colour targets' storage.
-        size_t colorCount = 1;             ///< The colour targets in use.
-        d3d12::StageDxil dxil;             ///< The stages' DXIL.
+        GraphicsPipelineDesc desc; // `colors` is set from the fields below.
+        std::array<ColorTarget, 2> colors;
+        size_t colorCount = 1;
+        d3d12::StageDxil dxil;
     };
 
-    //==================================================================================================================
-    /// Returns the key of `variant`.
     std::array<uint64_t, 2> keyOf(KeyVariant variant)
     {
         variant.desc.colors = std::span<const ColorTarget>(variant.colors).first(variant.colorCount);
         return d3d12::pipelineKey(d3d12::canonicalKey(variant.desc, variant.dxil));
     }
 
-    //==================================================================================================================
-    /// The base vertex and fragment pipeline of the key cases.
     KeyVariant baseVariant()
     {
         KeyVariant variant;
@@ -93,14 +82,13 @@ namespace {
         return variant;
     }
 
-    /// One single-field edit of the base pipeline.
     struct KeyEdit
     {
-        std::string_view name;              ///< What the edit changes.
-        void (*apply)(KeyVariant& variant); ///< Makes the change.
+        std::string_view name;
+        void (*apply)(KeyVariant& variant);
     };
 
-    /// Every single-field edit of the base pipeline, each of which reaches the pipeline state stream.
+    // Each edit reaches the pipeline state stream.
     const std::array<KeyEdit, 39> kEdits = { {
         { "primitive", [](KeyVariant& v) { v.desc.primitive = PrimitiveClass::Line; } },
         { "raster.cull", [](KeyVariant& v) { v.desc.raster.cull = CullMode::Back; } },
@@ -147,9 +135,8 @@ namespace {
           } },
     } };
 
-    //==================================================================================================================
-    /// Returns a DXIL container holding a `SFI0` part and, with `psv`, a `PSV0` part whose runtime information is
-    /// `infoSize` bytes with the shader kind `kind` at byte 24 and the mesh output topology `topology` at byte 27.
+    // With `psv`, the `PSV0` part's runtime information is `infoSize` bytes, with the shader kind `kind` at byte 24 and
+    // the mesh output topology `topology` at byte 27.
     std::vector<std::byte> psvContainer(uint8_t kind, uint8_t topology, uint32_t infoSize = 52, bool psv = true)
     {
         const auto le32 = [](std::vector<std::byte>& bytes, size_t at, uint32_t value) {
@@ -197,19 +184,15 @@ namespace {
         return bytes;
     }
 
-    std::mutex gMessageMutex;               ///< Guards `gMessages`; the callback may run on any thread.
-    std::vector<MessageSeverity> gMessages; ///< The severities of the messages `messagesOf` collected.
+    std::mutex gMessageMutex; // Guards `gMessages`; the callback may run on any thread.
+    std::vector<MessageSeverity> gMessages;
 
-    //==================================================================================================================
-    /// Collects the severity of every message delivered to the message callback.
     void collectMessage(MessageSeverity severity, std::string_view, void*)
     {
         const std::lock_guard lock(gMessageMutex);
         gMessages.push_back(severity);
     }
 
-    //==================================================================================================================
-    /// Loads the standard library on `device`.
     ShaderLibrary loadStandard(Device& device)
     {
         const Result<ShaderLibrary> library = device.loadShaderLibrary(test::standardLibrary(), "test.standard");
@@ -217,8 +200,6 @@ namespace {
         return *library;
     }
 
-    //==================================================================================================================
-    /// Creates the standard vertex and fragment pipeline, failing the case when creation fails.
     Pipeline createRender(Device& device, ShaderLibrary library)
     {
         const Result<Pipeline> pipeline = device.createPipeline(
@@ -229,8 +210,6 @@ namespace {
         return *pipeline;
     }
 
-    //==================================================================================================================
-    /// Creates the standard compute pipeline, failing the case when creation fails.
     Pipeline createCompute(Device& device, ShaderLibrary library)
     {
         const Result<Pipeline> pipeline = device.createPipeline(ComputePipelineDesc{ .compute = { library, "csMain" }, .label = "test.compute" });
@@ -239,8 +218,6 @@ namespace {
         return *pipeline;
     }
 
-    //==================================================================================================================
-    /// Creates the task, mesh and fragment pipeline of the packaged `AbiMesh` library, failing the case when creation fails.
     Pipeline createMesh(Device& device)
     {
         const Result<ShaderLibrary> library = device.loadShaderLibrary(test::shaderLibraryFile("AbiMesh"), "test.AbiMesh");
@@ -253,8 +230,6 @@ namespace {
         return *pipeline;
     }
 
-    //==================================================================================================================
-    /// Returns the cache blob of `device`, failing the case when it cannot be serialized.
     std::vector<std::byte> harvest(Device& device)
     {
         Result<std::vector<std::byte>> data = device.pipelineCacheData();
@@ -263,9 +238,6 @@ namespace {
         return std::move(*data);
     }
 
-    //==================================================================================================================
-    /// Creates a device with `blob` as its pipeline cache, failing the case when creation fails, and writes the severities of
-    /// the messages its creation delivered to `messages`.
     Device deviceWith(std::span<const std::byte> blob, std::vector<MessageSeverity>& messages)
     {
         {
@@ -282,8 +254,6 @@ namespace {
         return *device;
     }
 
-    //==================================================================================================================
-    /// The blob of a device that created the standard render pipeline.
     std::vector<std::byte> renderBlob()
     {
         std::vector<MessageSeverity> messages;
@@ -294,8 +264,6 @@ namespace {
         return blob;
     }
 
-    //==================================================================================================================
-    /// The header lines of `blob`, without their line feeds, and the offset of the bytes after them.
     std::pair<std::vector<std::string>, size_t> headerOf(const std::vector<std::byte>& blob)
     {
         const std::string_view text(reinterpret_cast<const char*>(blob.data()), blob.size());
@@ -311,8 +279,6 @@ namespace {
         return { lines, at };
     }
 
-    //==================================================================================================================
-    /// Returns `lines`, each followed by a line feed, and then `payload`.
     std::vector<std::byte> joined(const std::vector<std::string>& lines, std::span<const std::byte> payload)
     {
         std::string header;
@@ -326,8 +292,6 @@ namespace {
         return blob;
     }
 
-    //==================================================================================================================
-    /// Returns `blob` with header line `index` replaced by `line`.
     std::vector<std::byte> withLine(const std::vector<std::byte>& blob, size_t index, std::string line)
     {
         auto [lines, at] = headerOf(blob);
@@ -336,7 +300,6 @@ namespace {
     }
 } // namespace
 
-//======================================================================================================================
 TEST_CASE("pipelineKey of the empty input is the FNV-1a 128 offset basis", "[d3d12]")
 {
     const std::array<uint64_t, 2> key = d3d12::pipelineKey({});
@@ -345,7 +308,6 @@ TEST_CASE("pipelineKey of the empty input is the FNV-1a 128 offset basis", "[d3d
     CHECK(d3d12::keyName(key) == L"6c62272e07bb014262b821756295c58d");
 }
 
-//======================================================================================================================
 TEST_CASE("pipelineKey of \"a\" and of \"foobar\" match FNV-1a 128", "[d3d12]")
 {
     CHECK(d3d12::keyName(d3d12::pipelineKey(bytesOf("a"))) == L"d228cb696f1a8caf78912b704e4a8964");
@@ -353,7 +315,6 @@ TEST_CASE("pipelineKey of \"a\" and of \"foobar\" match FNV-1a 128", "[d3d12]")
     CHECK(d3d12::keyName({ 0, 1 }) == L"00000000000000000000000000000001");
 }
 
-//======================================================================================================================
 TEST_CASE("equal descriptions give one key; changing any stream field or a stage's DXIL changes it", "[d3d12]")
 {
     const std::array<uint64_t, 2> base = keyOf(baseVariant());
@@ -379,7 +340,6 @@ TEST_CASE("equal descriptions give one key; changing any stream field or a stage
     CHECK(std::ranges::adjacent_find(keys) == keys.end());
 }
 
-//======================================================================================================================
 TEST_CASE("a mesh pipeline's key leaves out the class, and a compute key differs from every graphics key", "[d3d12]")
 {
     KeyVariant mesh = baseVariant();
@@ -404,7 +364,6 @@ TEST_CASE("a mesh pipeline's key leaves out the class, and a compute key differs
     CHECK(d3d12::pipelineKey(d3d12::canonicalKey(renamed, kVertexDxil)) != computeKey);
 }
 
-//======================================================================================================================
 TEST_CASE("libraryOf reads the header blobHeader writes and names the reason it refuses another", "[d3d12]")
 {
     const std::string header = d3d12::blobHeader(3);
@@ -448,7 +407,6 @@ TEST_CASE("libraryOf reads the header blobHeader writes and names the reason it 
     }
 }
 
-//======================================================================================================================
 TEST_CASE("meshOutputTopology reads the mesh output topology from PSV0 and is Unknown for anything else", "[d3d12]")
 {
     CHECK(d3d12::meshOutputTopology(psvContainer(13, 2)) == d3d12::MeshTopology::Triangle);
@@ -475,7 +433,6 @@ TEST_CASE("meshOutputTopology reads the mesh output topology from PSV0 and is Un
     CHECK(d3d12::meshOutputTopology(magic) == d3d12::MeshTopology::Unknown);
 }
 
-//======================================================================================================================
 TEST_CASE("the packaged mesh entry declares triangles and its amplification entry no mesh output", "[d3d12]")
 {
     REQUIRE(kD3D12LibrariesBuilt);
@@ -500,7 +457,6 @@ TEST_CASE("the packaged mesh entry declares triangles and its amplification entr
     CHECK(checked == 2);
 }
 
-//======================================================================================================================
 TEST_CASE("a second device loaded from pipelineCacheData hits every pipeline the first created", "[d3d12]")
 {
     REQUIRE(kD3D12LibrariesBuilt);
@@ -543,7 +499,6 @@ TEST_CASE("a second device loaded from pipelineCacheData hits every pipeline the
     destroyDevice(second);
 }
 
-//======================================================================================================================
 TEST_CASE("a pipeline created twice on one device is a hit the second time, mesh pipelines included", "[d3d12]")
 {
     REQUIRE(kD3D12LibrariesBuilt);
@@ -564,7 +519,6 @@ TEST_CASE("a pipeline created twice on one device is a hit the second time, mesh
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE(
     "a blob of another backend, another RojoRHI version, a bad library count or garbage library bytes is one warning and every creation a miss", "[d3d12]"
 )
@@ -610,7 +564,6 @@ TEST_CASE(
     }
 }
 
-//======================================================================================================================
 TEST_CASE("pipelineCacheData with no new pipeline returns a blob that loads with the same hits", "[d3d12]")
 {
     std::vector<MessageSeverity> messages;
@@ -648,7 +601,6 @@ TEST_CASE("pipelineCacheData with no new pipeline returns a blob that loads with
     destroyDevice(third);
 }
 
-//======================================================================================================================
 TEST_CASE("concurrent createPipeline calls on two threads each count a hit or a miss, never both", "[d3d12]")
 {
     constexpr size_t kRounds = 8;

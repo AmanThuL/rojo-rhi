@@ -29,20 +29,14 @@
 
 namespace rojoRHI::d3d12 {
     namespace {
-        /// The name of each queue type in messages and native names, indexed by `QueueType`.
         constexpr std::array<std::string_view, 3> kTypeNames = { "graphics", "compute", "copy" };
 
-        //==============================================================================================================
-        /// Returns whether a list of `type` on `impl` writes timestamps: every Graphics and Compute list, and a Copy list when
-        /// the device reports copy-queue timestamps.
+        // Every Graphics and Compute list, and a Copy list when the device reports copy-queue timestamps.
         bool writesTimestamps(const DeviceImpl& impl, QueueType type)
         {
             return type != QueueType::Copy || impl.features.copyQueueTimestamps;
         }
 
-        //==============================================================================================================
-        /// Makes heap number `number` of `list`'s timestamps and its readback buffer on `impl`, names both after the list's
-        /// pool entry, maps the buffer and returns them.
         ListTimestamps::Heap createHeap(DeviceImpl& impl, const ListState& state, size_t number)
         {
             const std::string name =
@@ -88,7 +82,6 @@ namespace rojoRHI::d3d12 {
         }
     } // namespace
 
-    //==================================================================================================================
     Result<void> Timestamps::create(DeviceImpl& impl)
     {
         for (size_t i = 0; i < m_frequency.size(); ++i)
@@ -107,18 +100,15 @@ namespace rojoRHI::d3d12 {
         return {};
     }
 
-    //==================================================================================================================
     void Timestamps::release()
     {
     }
 
-    //==================================================================================================================
     double Timestamps::frequency(QueueType type) const
     {
         return m_frequency[static_cast<size_t>(type)];
     }
 
-    //==================================================================================================================
     void Timestamps::resolve(DeviceImpl& impl, uint32_t slot, std::span<const core::ScopeRecord> records, std::span<ScopeTiming> report)
     {
         const QueueType queue = report.front().queue;
@@ -162,7 +152,6 @@ namespace rojoRHI::d3d12 {
         );
     }
 
-    //==================================================================================================================
     uint32_t ListTimestamps::claimPair(CommandListImpl& list)
     {
         const ListState& state = list.state;
@@ -188,7 +177,6 @@ namespace rojoRHI::d3d12 {
         return pair;
     }
 
-    //==================================================================================================================
     void ListTimestamps::reset()
     {
         next = 0;
@@ -196,7 +184,6 @@ namespace rojoRHI::d3d12 {
         open.clear();
     }
 
-    //==================================================================================================================
     double ListTimestamps::milliseconds(uint32_t pair, double frequency) const
     {
         const size_t number = pair / kHeapQueries;
@@ -204,7 +191,7 @@ namespace rojoRHI::d3d12 {
         {
             return 0.0;
         }
-        // The buffer stays mapped: READBACK memory is coherent for CPU reads once the frame fence shows the resolve complete.
+        // READBACK memory is coherent for CPU reads once the frame fence shows the resolve complete.
         const uint64_t* ticks = heaps[number].mapped + pair % kHeapQueries;
         const uint64_t begin = ticks[0];
         const uint64_t end = ticks[1];
@@ -215,7 +202,6 @@ namespace rojoRHI::d3d12 {
         return static_cast<double>(end - begin) * 1000.0 / frequency;
     }
 
-    //==================================================================================================================
     void resolveTimestamps(CommandListImpl& list)
     {
         const ListTimestamps& timestamps = list.state.timestamps;
@@ -229,7 +215,6 @@ namespace rojoRHI::d3d12 {
         }
     }
 
-    //==================================================================================================================
     void scopeTimes(void* context, uint32_t slot, std::span<const core::ScopeRecord> records, std::span<ScopeTiming> report)
     {
         DeviceImpl& impl = *static_cast<DeviceImpl*>(context);

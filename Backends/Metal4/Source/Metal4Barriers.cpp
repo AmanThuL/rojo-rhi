@@ -23,15 +23,11 @@
 namespace rojoRHI {
     namespace metal4 {
         namespace {
-            //==========================================================================================================
-            /// Returns true when `stages` and `mask` share a bit.
             bool any(Stage stages, Stage mask)
             {
                 return (stages & mask) != Stage::None;
             }
 
-            //==========================================================================================================
-            /// Adds one barrier's sides to `lowered`.
             void addSides(BatchLowering& lowered, Stage srcStage, Access srcAccess, Stage dstStage, Access dstAccess)
             {
                 lowered.source |= metalStages(srcStage);
@@ -43,8 +39,6 @@ namespace rojoRHI {
                 lowered.args = lowered.args || any(dstStage, Stage::IndirectArgs);
             }
 
-            //==========================================================================================================
-            /// Returns the lowering of a batch of any shape, the alias visibility included.
             BatchLowering lowerBatch(
                 core::CommandListCore& list,
                 std::span<const GlobalBarrier> globals,
@@ -92,12 +86,10 @@ namespace rojoRHI {
                 return lowered;
             }
 
-            //==========================================================================================================
-            /// Places a batch lowered to a barrier from `source` to `destination` with `visibility`, already intersected with
-            /// the queue's stages, that the open encoder does not hold back as it stands: on a lingering encoder it joins the
-            /// pending barrier; on an open compute encoder with work it may stay in the encoder as a queue-level
-            /// barrier with the encoder-level part held back; otherwise the open encoder ends and the batch joins the
-            /// pending barrier. Kept out of line, so the barrier entry that holds a batch back calls nothing and saves no register.
+            // Places a batch the open encoder does not hold back: on a lingering encoder it joins the pending barrier;
+            // on an open compute encoder with work it may stay as a queue-level barrier with the encoder-level part
+            // held back; otherwise the open encoder ends and the batch joins the pending barrier. Out of line, so the
+            // entry that holds a batch back calls nothing.
             [[clang::noinline]] void placeBatch(
                 core::CommandListCore& list, Encoders& encoders, MTL::Stages source, MTL::Stages destination, MTL4::VisibilityOptions visibility
             )
@@ -131,11 +123,8 @@ namespace rojoRHI {
                 barriers.merge(source, destination, visibility);
             }
 
-            //==========================================================================================================
-            /// Records a batch lowered to a barrier from `source` to `destination` with `visibility` on `impl`: drops the
-            /// stages no encoder of the list's queue runs, then holds the batch back in the open encoder or places it as
-            /// `placeBatch` does. `args` says whether a destination names `Stage::IndirectArgs`. Inlined into both callers, so
-            /// the batch of one global barrier makes no call it does not need.
+            // Drops the stages no encoder of the list's queue runs. Inlined into both callers, so the batch of one
+            // global barrier makes no call it does not need.
             [[clang::always_inline]] inline void recordBatch(
                 CommandListImpl& impl, MTL::Stages source, MTL::Stages destination, MTL4::VisibilityOptions visibility, bool args
             )
@@ -160,9 +149,7 @@ namespace rojoRHI {
                 placeBatch(impl.core, encoders, source, destination, visibility);
             }
 
-            //==========================================================================================================
-            /// Checks, counts and records a batch of any shape but one global barrier that repeats the list's last such batch.
-            /// Kept out of line, as `placeBatch` is.
+            // Out of line, as `placeBatch` is.
             [[clang::noinline]] void recordAnyBatch(
                 CommandListImpl& impl, std::span<const GlobalBarrier> globals, std::span<const BufferBarrier> buffers, std::span<const TextureBarrier> textures
             )
@@ -185,7 +172,6 @@ namespace rojoRHI {
             }
         } // namespace
 
-        //==============================================================================================================
         MTL::Stages metalStages(Stage stages)
         {
             if (stages == Stage::All)
@@ -226,7 +212,6 @@ namespace rojoRHI {
             return lowered;
         }
 
-        //==============================================================================================================
         void emitAtOpen(core::CommandListCore& list, BarrierState& barriers, MTL4::CommandEncoder* encoder, MTL::Stages stages)
         {
             // A render encoder emits for its fragment stage alone, a compute encoder for its own stages; the wait names every
@@ -260,7 +245,6 @@ namespace rojoRHI {
             }
         }
 
-        //==============================================================================================================
         void emitDeferred(core::CommandListCore& list, BarrierState& barriers, MTL4::CommandEncoder* encoder, MTL::Stages stages, MTL::Stages command)
         {
             const MTL::Stages held = barriers.deferredDestination & command;
@@ -285,7 +269,6 @@ namespace rojoRHI {
             }
         }
 
-        //==============================================================================================================
         void emitTrailing(core::CommandListCore& list, ListState& state, BarrierState& barriers, MTL::Fence* carry)
         {
             // A list that upscaled ends with a wait on the last upscale's fence even when no barrier is pending: later lists see
@@ -348,7 +331,6 @@ namespace rojoRHI {
         }
     } // namespace metal4
 
-    //==================================================================================================================
     [[clang::always_inline]] void CommandList::barrier(
         std::span<const GlobalBarrier> globals, std::span<const BufferBarrier> buffers, std::span<const TextureBarrier> textures
     )

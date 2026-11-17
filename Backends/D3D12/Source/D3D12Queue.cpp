@@ -22,7 +22,6 @@
 #include <span>
 
 namespace rojoRHI {
-    //==================================================================================================================
     void Queue::submit(std::span<const CommandList> lists, std::span<const FenceValue> wait, std::span<const FenceValue> signal)
     {
         QueueImpl& queue = QueueImpl::of(*this);

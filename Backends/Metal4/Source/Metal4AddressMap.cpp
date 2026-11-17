@@ -17,11 +17,9 @@
 
 namespace rojoRHI::metal4 {
     namespace {
-        /// The value `maxAddrOffset` returns.
         std::atomic<uint64_t> g_maxAddrOffset = 0;
     } // namespace
 
-    //==================================================================================================================
     void AddressMap::insert(uint64_t base, uint64_t size, uint32_t slot, const MTL::Buffer* buffer)
     {
         std::lock_guard lock(m_mutex);
@@ -29,7 +27,6 @@ namespace rojoRHI::metal4 {
         m_sizes.insert(size);
     }
 
-    //==================================================================================================================
     void AddressMap::markDestroyed(uint64_t base, const MTL::Buffer* buffer)
     {
         std::lock_guard lock(m_mutex);
@@ -44,7 +41,6 @@ namespace rojoRHI::metal4 {
         }
     }
 
-    //==================================================================================================================
     void AddressMap::erase(uint64_t base, const MTL::Buffer* buffer)
     {
         std::lock_guard lock(m_mutex);
@@ -60,7 +56,6 @@ namespace rojoRHI::metal4 {
         }
     }
 
-    //==================================================================================================================
     core::DecodedAddr AddressMap::find(uint64_t address) const
     {
         std::lock_guard lock(m_mutex);
@@ -95,13 +90,11 @@ namespace rojoRHI::metal4 {
         return destroyed.value_or(core::DecodedAddr{ 0, 0 });
     }
 
-    //==================================================================================================================
     uint64_t maxAddrOffset()
     {
         return g_maxAddrOffset.load(std::memory_order_relaxed);
     }
 
-    //==================================================================================================================
     void setMaxAddrOffset(uint64_t value)
     {
         g_maxAddrOffset.store(value, std::memory_order_relaxed);

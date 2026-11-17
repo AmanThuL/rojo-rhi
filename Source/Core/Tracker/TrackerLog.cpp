@@ -14,10 +14,8 @@
 
 namespace rojoRHI::core {
     namespace {
-        //==============================================================================================================
-        /// Returns true when the depth-stencil attachment `depth`, of `format`, writes: its depth or stencil load clears or
-        /// discards, or its depth or stencil store discards. The stencil operations count only for a format with stencil,
-        /// as chapter 07 ignores them otherwise. Whether a draw writes is the draw's to add.
+        // A load that clears or discards, or a store that discards, writes. Stencil operations count only for a format with
+        // stencil, as chapter 07 ignores them otherwise; a draw's writes are `logDraw`'s to add.
         [[maybe_unused]] bool depthWrites(const DepthAttachment& depth, Format format)
         {
             const bool depthWrite = depth.load != LoadOp::Load || depth.store == StoreOp::DontCare;
@@ -25,15 +23,11 @@ namespace rojoRHI::core {
             return depthWrite || stencilWrite;
         }
 
-        //==============================================================================================================
-        /// Returns the single subresource at `mip` and `layer`.
         [[maybe_unused]] SubresourceRange subresource(uint32_t mip, uint32_t layer)
         {
             return SubresourceRange{ .baseMip = mip, .mipCount = 1, .baseLayer = layer, .layerCount = 1 };
         }
 
-        //==============================================================================================================
-        /// Appends `use` to the log of `list` as an attachment use of the open pass.
         [[maybe_unused]] void logAttachment(CommandListCore& list, const UseEvent& use)
         {
             list.trackerLog.passUses.push_back(static_cast<uint32_t>(list.trackerLog.events.size()));
@@ -41,7 +35,6 @@ namespace rojoRHI::core {
         }
     } // namespace
 
-    //==================================================================================================================
     void logUseChecked([[maybe_unused]] CommandListCore& list, [[maybe_unused]] const UseEvent& use)
     {
 #ifndef NDEBUG
@@ -64,7 +57,6 @@ namespace rojoRHI::core {
 #endif
     }
 
-    //==================================================================================================================
     void logBarriersChecked(
         [[maybe_unused]] CommandListCore& list,
         [[maybe_unused]] std::span<const GlobalBarrier> globals,
@@ -93,7 +85,6 @@ namespace rojoRHI::core {
 #endif
     }
 
-    //==================================================================================================================
     void logPassChecked([[maybe_unused]] CommandListCore& list, [[maybe_unused]] const RenderPassDesc& desc)
     {
 #ifndef NDEBUG
@@ -131,7 +122,6 @@ namespace rojoRHI::core {
 #endif
     }
 
-    //==================================================================================================================
     void logDrawChecked([[maybe_unused]] CommandListCore& list)
     {
 #ifndef NDEBUG
@@ -160,7 +150,6 @@ namespace rojoRHI::core {
 #endif
     }
 
-    //==================================================================================================================
     void endPassLogChecked([[maybe_unused]] CommandListCore& list)
     {
 #ifndef NDEBUG

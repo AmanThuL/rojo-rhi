@@ -28,29 +28,21 @@
 using namespace rojoRHI;
 
 namespace {
-    //==================================================================================================================
-    /// The 64-bit value an address encodes.
     uint64_t valueOf(Addr addr)
     {
         return uint64_t{ addr.lo } | uint64_t{ addr.hi } << 32;
     }
 
-    //==================================================================================================================
-    /// The arena page `list` uploads into.
     Buffer pageOf(CommandList list)
     {
         return core::coreOf(list).page.buffer;
     }
 
-    //==================================================================================================================
-    /// The native buffer `buffer` wraps.
     MTL::Buffer* nativeOf(Device device, Buffer buffer)
     {
         return metal4::bufferPayload(DeviceImpl::of(device).core, buffer)->buffer;
     }
 
-    //==================================================================================================================
-    /// `count` bytes counting up from `first`, wrapping at 256.
     std::vector<std::byte> pattern(size_t count, uint8_t first)
     {
         std::vector<std::byte> bytes(count);
@@ -61,8 +53,6 @@ namespace {
         return bytes;
     }
 
-    //==================================================================================================================
-    /// Ends `list` and submits it to the graphics queue.
     void endAndSubmit(Device device, CommandList list)
     {
         list.end();
@@ -71,7 +61,6 @@ namespace {
     }
 } // namespace
 
-//======================================================================================================================
 TEST_CASE("frame data lands in a resident Shared page at the address uploadFrameData returns", "[metal4]")
 {
     Device device = *createDevice();
@@ -111,7 +100,6 @@ TEST_CASE("frame data lands in a resident Shared page at the address uploadFrame
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("a page is reused, not recreated, when its slot comes round again", "[metal4]")
 {
     Device device = *createDevice({ .framesInFlight = 2 });
@@ -138,7 +126,6 @@ TEST_CASE("a page is reused, not recreated, when its slot comes round again", "[
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("an upload larger than a standard page gets a page of its own size", "[metal4]")
 {
     Device device = *createDevice();
@@ -154,7 +141,6 @@ TEST_CASE("an upload larger than a standard page gets a page of its own size", "
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("each upload is its page's GPU address plus its offset, across the pages a list claims", "[metal4]")
 {
     Device device = *createDevice();
@@ -185,7 +171,6 @@ TEST_CASE("each upload is its page's GPU address plus its offset, across the pag
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("an upload's address is aligned to the alignment asked, from 16 bytes to above a page's host alignment", "[metal4]")
 {
     Device device = *createDevice();

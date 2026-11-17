@@ -21,7 +21,7 @@ using rojoRHI::test::PassKit;
 using rojoRHI::test::UpscaleKit;
 
 namespace {
-    /// A scope timing with its label copied, so it outlives the next `beginFrame`.
+    // The label is copied, so a row outlives the next beginFrame.
     struct Seen
     {
         std::string label;
@@ -31,7 +31,6 @@ namespace {
         double gpuMilliseconds;
     };
 
-    //==================================================================================================================
     std::vector<Seen> seenBy(Device device)
     {
         std::vector<Seen> seen;
@@ -42,7 +41,6 @@ namespace {
         return seen;
     }
 
-    //==================================================================================================================
     void submit(Device device, CommandList list, QueueType type = QueueType::Graphics)
     {
         list.end();
@@ -50,8 +48,6 @@ namespace {
         device.queue(type).submit(lists);
     }
 
-    //==================================================================================================================
-    /// Runs `frames` empty frames.
     void idleFrames(Device device, uint32_t frames)
     {
         for (uint32_t i = 0; i < frames; ++i)
@@ -61,13 +57,10 @@ namespace {
         }
     }
 
-    /// The edge of the empty passes' target, in texels.
     constexpr uint32_t kEmptyEdge = 256;
 
-    /// The warnings `collectWarning` saw since the case cleared them.
     std::vector<std::string> g_warnings;
 
-    //==================================================================================================================
     void collectWarning(MessageSeverity severity, std::string_view message, void*)
     {
         if (severity == MessageSeverity::Warning)
@@ -76,14 +69,12 @@ namespace {
         }
     }
 
-    //==================================================================================================================
     ResourceAccess fragmentRead(Buffer buffer)
     {
         return ResourceAccess{ .buffer = buffer, .stage = Stage::FragmentShader, .access = Access::ShaderRead };
     }
 } // namespace
 
-//======================================================================================================================
 TEST_CASE("declareAccess before a draw is accepted on a device without validation", "[contract]")
 {
     PassKit kit;
@@ -96,7 +87,6 @@ TEST_CASE("declareAccess before a draw is accepted on a device without validatio
     kit.finish();
 }
 
-//======================================================================================================================
 TEST_CASE("declareAccess calls accumulate and the next draw consumes them", "[contract]")
 {
 #ifndef NDEBUG
@@ -118,7 +108,6 @@ TEST_CASE("declareAccess calls accumulate and the next draw consumes them", "[co
 #endif
 }
 
-//======================================================================================================================
 TEST_CASE("declareAccess names a compute stage for a dispatch and an empty span is a no-op", "[contract]")
 {
 #ifndef NDEBUG
@@ -134,7 +123,6 @@ TEST_CASE("declareAccess names a compute stage for a dispatch and an empty span 
 #endif
 }
 
-//======================================================================================================================
 TEST_CASE("declareAccess accepts a read of a Storage-only texture after its producer", "[contract]")
 {
 #ifndef NDEBUG
@@ -158,7 +146,6 @@ TEST_CASE("declareAccess accepts a read of a Storage-only texture after its prod
 #endif
 }
 
-//======================================================================================================================
 TEST_CASE("scopeTimings is empty until a frame has retired", "[contract]")
 {
     Device device = *createDevice(DeviceDesc{ .scopeTimings = true, .framesInFlight = 2 });
@@ -178,7 +165,6 @@ TEST_CASE("scopeTimings is empty until a frame has retired", "[contract]")
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("scopeTimings reports the scopes of the frame beginFrame waited for, parents first", "[contract]")
 {
     Device device = *createDevice(DeviceDesc{ .scopeTimings = true, .framesInFlight = 2 });
@@ -212,7 +198,6 @@ TEST_CASE("scopeTimings reports the scopes of the frame beginFrame waited for, p
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("scopeTimings is empty again for the next retired frame when it had no scopes", "[contract]")
 {
     Device device = *createDevice(DeviceDesc{ .scopeTimings = true, .framesInFlight = 2 });
@@ -232,7 +217,6 @@ TEST_CASE("scopeTimings is empty again for the next retired frame when it had no
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("every render pass forms a scope labeled with the pass label, defaulted when empty", "[contract]")
 {
     Device device = *createDevice(DeviceDesc{ .scopeTimings = true, .framesInFlight = 2 });
@@ -265,7 +249,6 @@ TEST_CASE("every render pass forms a scope labeled with the pass label, defaulte
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("an empty render pass, an empty scope inside it and an empty scope outside a pass report a time and no warning", "[contract]")
 {
     g_warnings.clear();
@@ -313,7 +296,6 @@ TEST_CASE("an empty render pass, an empty scope inside it and an empty scope out
     CHECK(g_warnings.empty());
 }
 
-//======================================================================================================================
 TEST_CASE("an empty scope label is replaced by the scope default", "[contract]")
 {
     Device device = *createDevice(DeviceDesc{ .scopeTimings = true, .framesInFlight = 2 });
@@ -332,7 +314,6 @@ TEST_CASE("an empty scope label is replaced by the scope default", "[contract]")
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("an upscale forms a scope named params.label, defaulted to rojorhi.upscale.unnamed", "[contract]")
 {
     test::requireUpscaleCompletion();
@@ -358,7 +339,6 @@ TEST_CASE("an upscale forms a scope named params.label, defaulted to rojorhi.ups
     CHECK(seen[0].frame == 2);
 }
 
-//======================================================================================================================
 TEST_CASE("a device created without scopeTimings reports no scope after frames with scopes, passes and upscales", "[contract]")
 {
     test::requireUpscaleCompletion();
@@ -381,7 +361,6 @@ TEST_CASE("a device created without scopeTimings reports no scope after frames w
     }
 }
 
-//======================================================================================================================
 TEST_CASE("beginCapture with a path either starts a capture or returns an error, and endCapture ends one", "[contract]")
 {
     Device device = *createDevice();
@@ -393,7 +372,6 @@ TEST_CASE("beginCapture with a path either starts a capture or returns an error,
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("a device that reports no capture refuses beginCapture and starts nothing", "[contract]")
 {
     Device device = *createDevice();

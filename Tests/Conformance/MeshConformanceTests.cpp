@@ -26,25 +26,20 @@
 using namespace rojoRHI;
 
 namespace {
-    /// The edge of the oracle targets, in pixels.
     constexpr uint32_t kEdge = 256;
 
-    /// The cells one step of a task group's x advances in the oracle, and those one step of `y + 2 z` advances: group
-    /// `(x, y, z)` of a draw lands on cell `drawId + kGroupCells * x + kPlaneCells * (y + 2 z)`.
+    // Group `(x, y, z)` of a draw lands on cell `drawId + kGroupCells * x + kPlaneCells * (y + 2 z)`.
     constexpr uint32_t kGroupCells = 16384;
     constexpr uint32_t kPlaneCells = 4096;
 
-    /// The task groups each record of these cases launches.
     constexpr uint32_t kGroups = 2;
 
-    /// The most records whose oracle values an `RGBA16Float` target holds exactly: every drawId plus one is at most 2048.
+    // An RGBA16Float target holds every oracle value exactly while each drawId plus one is at most 2048.
     constexpr uint32_t kHalfExact = 2047;
 
-    /// The viewport and scissor of the whole target.
     constexpr Viewport kFull{ .width = static_cast<float>(kEdge), .height = static_cast<float>(kEdge) };
     constexpr Rect2D kFullRect{ 0, 0, kEdge, kEdge };
 
-    /// The cases' count variants: a null count, a count equal to `maxCount`, a quarter of it, zero, and one above it.
     enum class CountKind : uint8_t
     {
         Null,
@@ -54,8 +49,6 @@ namespace {
         Above,
     };
 
-    //==================================================================================================================
-    /// The name of `kind`, for the case's capture.
     std::string_view nameOf(CountKind kind)
     {
         switch (kind)
@@ -69,8 +62,6 @@ namespace {
         return "";
     }
 
-    //==================================================================================================================
-    /// The count `kind` names for `maxCount` records.
     uint32_t countOf(CountKind kind, uint32_t maxCount)
     {
         switch (kind)
@@ -84,16 +75,13 @@ namespace {
         return 0;
     }
 
-    //==================================================================================================================
-    /// The drawId of record `i` of `maxCount`, a power of two: a permutation of the records that no record keeps in place
-    /// above one record.
+    // For `maxCount` a power of two above one, a permutation of the records that no record keeps in place.
     uint32_t drawIdOf(uint32_t i, uint32_t maxCount)
     {
         return static_cast<uint32_t>((uint64_t{ 7919 } * i + 13) % maxCount);
     }
 
-    //==================================================================================================================
-    /// The half-precision bits of `value`, which is zero or a normal half-precision value held exactly.
+    // `value` must be zero or a normal half-precision value held exactly.
     uint16_t halfOf(float value)
     {
         if (value == 0.0f)
@@ -106,31 +94,23 @@ namespace {
         return static_cast<uint16_t>(sign | (exponent << 10) | ((bits >> 13) & 0x3FFu));
     }
 
-    /// An oracle target's image: four channels per texel as floats, of which an `R32Float` target keeps the first.
+    // Four float channels per texel; an `R32Float` target keeps only the first.
     struct Image
     {
-        //==============================================================================================================
-        /// Creates a zero image of a target of `format`.
         explicit Image(Format targetFormat) : format(targetFormat)
         {
         }
 
-        //==============================================================================================================
-        /// Sets the cell task group `(group, y, z)` of a draw with `drawId` covers to what the oracle's fragment entry writes.
         void draw(uint32_t drawId, uint32_t group, uint32_t y = 0, uint32_t z = 0)
         {
             set(drawId + kGroupCells * group + kPlaneCells * (y + 2 * z), { static_cast<float>(drawId + 1), static_cast<float>(group + 1), 0.0f, 1.0f });
         }
 
-        //==============================================================================================================
-        /// Sets the texel at cell `cell` to `value`.
         void set(uint32_t cell, const std::array<float, 4>& value)
         {
             texels[cell] = value;
         }
 
-        //==============================================================================================================
-        /// The bytes a target of `format` holds for this image.
         std::vector<std::byte> bytes() const
         {
             std::vector<std::byte> out;
@@ -152,13 +132,10 @@ namespace {
             return out;
         }
 
-        Format format;                                                                                         ///< The target's format.
-        std::vector<std::array<float, 4>> texels = std::vector<std::array<float, 4>>(size_t{ kEdge } * kEdge); ///< In texel order.
+        Format format;
+        std::vector<std::array<float, 4>> texels = std::vector<std::array<float, 4>>(size_t{ kEdge } * kEdge);
     };
 
-    //==================================================================================================================
-    /// Describes where `actual`, the bytes of an oracle target, differs from `expected`, the first eight texels; empty when
-    /// they are equal.
     std::string differences(const std::vector<std::byte>& actual, const Image& expected)
     {
         const std::vector<std::byte> want = expected.bytes();
@@ -192,27 +169,26 @@ namespace {
         return text;
     }
 
-    //==================================================================================================================
-    /// Returns the bytes of `values`.
     template<class T> std::vector<std::byte> bytesOf(std::span<T> values)
     {
         const std::span<const std::byte> bytes = std::as_bytes(values);
         return { bytes.begin(), bytes.end() };
     }
 
-    /// The root of `MeshRootOracle`, which each of its stages reads.
+    // The root of `MeshRootOracle`, which each of its stages reads. `view` is a 16 by 1 `R32Float` view read through the
+    // nearest `sampler`; the task entry adds `taskBias` to the sampled value, the mesh entry `meshShift` to the cell and the
+    // fragment entry `fragmentBias` to the group.
     struct MeshRoot
     {
-        uint32_t view;         ///< A 16 by 1 `R32Float` view.
-        uint32_t sampler;      ///< A nearest sampler.
-        uint32_t taskBias;     ///< Added by the task entry to the sampled value.
-        uint32_t meshShift;    ///< Added by the mesh entry to the cell.
-        uint32_t fragmentBias; ///< Added by the fragment entry to the group.
-        uint32_t pad[3];       ///< Padding.
+        uint32_t view;
+        uint32_t sampler;
+        uint32_t taskBias;
+        uint32_t meshShift;
+        uint32_t fragmentBias;
+        uint32_t pad[3];
     };
 
-    //==================================================================================================================
-    /// Skips the running case when the device draws no indirect mesh tasks: the core refuses the call there.
+    // The core refuses indirect mesh tasks on a device that draws none, so the case skips there.
     void requireMeshTasksIndirect(Device device)
     {
         if (!device.capabilities().meshTasksIndirect)
@@ -221,20 +197,15 @@ namespace {
         }
     }
 
-    /// The mesh oracle on one kit: its library, pipelines over a target of a format, and the passes the cases record.
     struct Oracle
     {
-        //==============================================================================================================
-        /// Loads the mesh oracle library on `kit`'s device.
         explicit Oracle(test::GpuKit& created) : kit(created)
         {
             const std::vector<std::byte> blob = test::shaderLibraryFile("MeshOracle");
             library = *kit.device.loadShaderLibrary(blob, "MeshOracle");
         }
 
-        //==============================================================================================================
-        /// The oracle's task, mesh and fragment pipeline over one target of `format`; without the task entry, and with the
-        /// mesh entry that reads the drawId itself, when `taskless` is set.
+        // `taskless` drops the task entry and takes the mesh entry that reads the drawId itself.
         Pipeline pipeline(Format format, bool taskless = false) const
         {
             const std::array targets{ ColorTarget{ .format = format } };
@@ -252,8 +223,6 @@ namespace {
             return *made;
         }
 
-        //==============================================================================================================
-        /// Creates a `kEdge` square render target of `format`.
         Texture target(Format format) const
         {
             return *kit.device.createTexture(
@@ -262,9 +231,6 @@ namespace {
             );
         }
 
-        //==============================================================================================================
-        /// Moves `texture`, a new oracle target, to `ColorAttachment` on `list` and begins a pass that clears it to zero, then
-        /// binds `bound`, the full viewport and the full scissor.
         static void begin(CommandList list, Texture texture, Pipeline bound)
         {
             test::transition(list, texture, Layout::Undefined, Layout::ColorAttachment);
@@ -275,27 +241,22 @@ namespace {
             list.setScissor(kFullRect);
         }
 
-        //==============================================================================================================
-        /// Reads `texture`, an oracle target of `format`, back.
         std::vector<std::byte> read(Texture texture, Format format) const
         {
             return kit.readTexture(texture, TextureRegion{ .extent = { kEdge, kEdge, 1 } }, format);
         }
 
-        //==============================================================================================================
-        /// Creates an `IndirectArgs` buffer holding the `uint32` count `value`.
         Buffer count(uint32_t value) const
         {
             return kit.buffer(sizeof(value), Memory::Gpu, BufferUsage::IndirectArgs, std::as_bytes(std::span(&value, 1)));
         }
 
-        test::GpuKit& kit;     ///< The kit.
-        ShaderLibrary library; ///< The mesh oracle library.
+        test::GpuKit& kit;
+        ShaderLibrary library;
     };
 
-    //==================================================================================================================
-    /// `maxCount` records of `kGroups` task groups, record `i` with `drawIdOf(i, maxCount)` plus `firstDrawId`. When `varied`
-    /// is set, record `i` also has 1 + bit 0 of `i` groups in y and 1 + bit 1 of `i` in z.
+    // Record i launches `kGroups` task groups with drawId `drawIdOf(i, maxCount)` plus `firstDrawId`; when `varied` is set,
+    // it also has 1 + bit 0 of i groups in y and 1 + bit 1 of i in z.
     std::vector<DrawMeshTasksIndirectArgs> meshRecords(uint32_t maxCount, uint32_t firstDrawId = 0, bool varied = false)
     {
         std::vector<DrawMeshTasksIndirectArgs> records;
@@ -309,8 +270,6 @@ namespace {
         return records;
     }
 
-    //==================================================================================================================
-    /// `image` with what `records` draw when the first `drawn` of them run.
     Image drawnImage(std::span<const DrawMeshTasksIndirectArgs> records, uint32_t drawn, Image image)
     {
         for (uint32_t i = 0; i < drawn; ++i)
@@ -330,16 +289,14 @@ namespace {
         return image;
     }
 
-    //==================================================================================================================
-    /// The format of an oracle target for drawIds below `maxCount`: `RGBA16Float`, which also shows the group, while it holds
-    /// every value exactly, else `R32Float`, which holds the drawId alone; the cell still names the group.
+    // `RGBA16Float` also shows the group while it holds every value exactly; past that, `R32Float` holds the drawId alone,
+    // and the cell still names the group.
     Format formatFor(uint32_t maxCount)
     {
         return maxCount <= kHalfExact ? Format::RGBA16Float : Format::R32Float;
     }
 } // namespace
 
-//======================================================================================================================
 TEST_CASE("a lone mesh record draws with its drawId", "[conformance]")
 {
     test::requireGpu();
@@ -362,7 +319,6 @@ TEST_CASE("a lone mesh record draws with its drawId", "[conformance]")
     CHECK(difference.empty());
 }
 
-//======================================================================================================================
 TEST_CASE("drawMeshTasksIndirect draws min(count, maxCount) records of groups varying in x, y and z", "[conformance]")
 {
     test::requireGpu();
@@ -390,7 +346,6 @@ TEST_CASE("drawMeshTasksIndirect draws min(count, maxCount) records of groups va
     CHECK(difference.empty());
 }
 
-//======================================================================================================================
 TEST_CASE("mesh records written by the GPU earlier in the list are read after the barrier", "[conformance]")
 {
     test::requireGpu();
@@ -436,7 +391,6 @@ TEST_CASE("mesh records written by the GPU earlier in the list are read after th
     CHECK(difference.empty());
 }
 
-//======================================================================================================================
 TEST_CASE("a direct mesh draw after a counted one in the same pass keeps drawId 0", "[conformance]")
 {
     test::requireGpu();
@@ -478,7 +432,6 @@ TEST_CASE("a direct mesh draw after a counted one in the same pass keeps drawId 
     CHECK(difference.empty());
 }
 
-//======================================================================================================================
 TEST_CASE("each stage of an indirect mesh draw reads the root recorded before it and the view and sampler it names", "[conformance]")
 {
     test::requireGpu();
@@ -575,7 +528,6 @@ TEST_CASE("each stage of an indirect mesh draw reads the root recorded before it
     CHECK(difference.empty());
 }
 
-//======================================================================================================================
 TEST_CASE("a mesh pipeline without a task entry draws its counted records", "[conformance]")
 {
     test::requireGpu();
@@ -605,7 +557,6 @@ TEST_CASE("a mesh pipeline without a task entry draws its counted records", "[co
     CHECK(difference.empty());
 }
 
-//======================================================================================================================
 TEST_CASE("a mesh record with no groups in x, y or z draws nothing where the list drew one before", "[conformance]")
 {
     test::requireGpu();

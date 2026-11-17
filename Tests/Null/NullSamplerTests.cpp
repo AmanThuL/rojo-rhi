@@ -10,7 +10,6 @@
 
 using namespace rojoRHI;
 
-//======================================================================================================================
 TEST_CASE("the Null sampler heap holds maxSamplers slots, handed out from zero", "[null]")
 {
     Device device = *createDevice();
@@ -23,7 +22,6 @@ TEST_CASE("the Null sampler heap holds maxSamplers slots, handed out from zero",
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("the Null view heap reserves ranges after the single slots and fills at maxViews", "[null]")
 {
     Device device = *createDevice();

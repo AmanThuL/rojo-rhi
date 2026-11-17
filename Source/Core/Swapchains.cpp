@@ -18,8 +18,7 @@
 
 namespace rojoRHI::core {
     namespace {
-        //==============================================================================================================
-        /// Returns the one format chapter 11 lists for `colorSpace`.
+        // The one format chapter 11 lists for each color space.
         [[maybe_unused]] Format formatOf(ColorSpace colorSpace)
         {
             switch (colorSpace)
@@ -31,8 +30,6 @@ namespace rojoRHI::core {
             return Format::Undefined;
         }
 
-        //==============================================================================================================
-        /// Ends the hold on the acquired image of `swapchain`: its texture is released, deferred, and the image is available.
         void releaseAcquired(DeviceCore& core, SwapchainCore& swapchain)
         {
             SwapchainImage& image = swapchain.images[swapchain.acquired];
@@ -43,7 +40,6 @@ namespace rojoRHI::core {
         }
     } // namespace
 
-    //==================================================================================================================
     SwapchainCore prepareSwapchain(DeviceCore& core, const SwapchainDesc& desc, Extent2D extent)
     {
         ROJORHI_VU(desc.nativeSurface != nullptr, "VU-rojo-present-0001", "a swapchain is created with a null nativeSurface");
@@ -77,7 +73,6 @@ namespace rojoRHI::core {
         return swapchain;
     }
 
-    //==================================================================================================================
     void checkSurface([[maybe_unused]] const DeviceCore& core, [[maybe_unused]] const void* surface)
     {
         ROJORHI_VU(
@@ -88,7 +83,6 @@ namespace rojoRHI::core {
         );
     }
 
-    //==================================================================================================================
     void checkAcquireImage([[maybe_unused]] const SwapchainCore& swapchain)
     {
         ROJORHI_VU(swapchain.device->frameOpen(), "VU-rojo-present-0010", "acquire was called on the swapchain \"{}\" with no frame open", swapchain.label);
@@ -101,7 +95,6 @@ namespace rojoRHI::core {
         );
     }
 
-    //==================================================================================================================
     Texture acquireImage(SwapchainCore& swapchain, void* native)
     {
         DeviceCore& core = *swapchain.device;
@@ -138,7 +131,6 @@ namespace rojoRHI::core {
         return image.texture;
     }
 
-    //==================================================================================================================
     void presentImage(DeviceCore& core, [[maybe_unused]] QueueType type, SwapchainCore& swapchain)
     {
         checkSameDevice(core, *swapchain.device, "Swapchain");
@@ -165,7 +157,6 @@ namespace rojoRHI::core {
         releaseAcquired(core, swapchain);
     }
 
-    //==================================================================================================================
     void resizeSwapchain(SwapchainCore& swapchain, Extent2D extent)
     {
         ROJORHI_VU(!swapchain.device->frameOpen(), "VU-rojo-present-0007", "resize was called on the swapchain \"{}\" while a frame is open", swapchain.label);
@@ -179,7 +170,6 @@ namespace rojoRHI::core {
         swapchain.extent = extent;
     }
 
-    //==================================================================================================================
     void destroySwapchain(DeviceCore& core, SwapchainCore& swapchain)
     {
         checkSameDevice(core, *swapchain.device, "Swapchain");

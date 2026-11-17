@@ -23,16 +23,13 @@
 using namespace rojoRHI;
 
 namespace {
-    //==================================================================================================================
-    /// Loads the conformance library `name` on `device`.
     ShaderLibrary loadLibrary(Device device, std::string_view name)
     {
         const std::vector<std::byte> blob = test::shaderLibraryFile(name);
         return *device.loadShaderLibrary(blob, name);
     }
 
-    //==================================================================================================================
-    /// The half-precision bits of `value`, which is zero or a normal half-precision value held exactly.
+    // `value` is zero or a normal half-precision value held exactly.
     uint16_t halfOf(float value)
     {
         if (value == 0.0f)
@@ -45,25 +42,24 @@ namespace {
         return static_cast<uint16_t>(sign | (exponent << 10) | ((bits >> 13) & 0x3FFu));
     }
 
-    /// AbiVertex's root.
+    // The entry stores one `uint4` per vertex; vertex v of instance i lands at i * verticesPerInstance + v - lowestVertex,
+    // lowestVertex being the smallest vertexIndex the draw yields.
     struct VertexRoot
     {
-        Addr output;                  ///< Where the entry stores what it observed, one `uint4` per vertex.
-        uint32_t lowestVertex;        ///< The smallest vertexIndex the draw yields; vertex v lands at instance * verticesPerInstance + v - lowestVertex.
-        uint32_t verticesPerInstance; ///< The vertices of each instance.
+        Addr output;
+        uint32_t lowestVertex;
+        uint32_t verticesPerInstance;
     };
 
-    /// AbiFragment's root.
     struct FragmentRoot
     {
-        uint32_t view;    ///< The sampled view.
-        uint32_t sampler; ///< The sampler.
-        uint32_t pad0;    ///< Padding.
-        uint32_t pad1;    ///< Padding.
+        uint32_t view;
+        uint32_t sampler;
+        uint32_t pad0;
+        uint32_t pad1;
     };
 } // namespace
 
-//======================================================================================================================
 TEST_CASE("AbiVertex stores vertexIndex, a zero-based instanceIndex and drawId 0 for draw and drawIndexed", "[conformance]")
 {
     test::requireGpu();
@@ -120,7 +116,6 @@ TEST_CASE("AbiVertex stores vertexIndex, a zero-based instanceIndex and drawId 0
     CHECK(observed == expected);
 }
 
-//======================================================================================================================
 TEST_CASE("AbiFragment samples a view and adds drawId 0 through the oracle vertex", "[conformance]")
 {
     test::requireGpu();
@@ -175,7 +170,6 @@ TEST_CASE("AbiFragment samples a view and adds drawId 0 through the oracle verte
     CHECK(wrong == 0);
 }
 
-//======================================================================================================================
 TEST_CASE("AbiVertex reads the record's drawId through drawIndirect, firstInstance invisible", "[conformance]")
 {
     test::requireGpu();
@@ -263,7 +257,6 @@ TEST_CASE("AbiVertex reads the record's drawId through drawIndirect, firstInstan
     CHECK(observed == expected);
 }
 
-//======================================================================================================================
 TEST_CASE("AbiFragment adds the record's drawId", "[conformance]")
 {
     test::requireGpu();
@@ -326,7 +319,6 @@ TEST_CASE("AbiFragment adds the record's drawId", "[conformance]")
     CHECK(wrong == 0);
 }
 
-//======================================================================================================================
 TEST_CASE("AbiMesh runs its task and mesh entries directly and indirectly under the validation layer", "[conformance]")
 {
     test::requireGpu();

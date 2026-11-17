@@ -15,11 +15,8 @@ using namespace rojoRHI;
 using test::PassKit;
 
 namespace {
-    /// The bytes every test writes.
     [[maybe_unused]] constexpr uint64_t kBytes = 256;
 
-    //==================================================================================================================
-    /// Ends `list` and submits it alone to the queue of `type` of `device`, waiting on `wait` and signalling `signal`.
     [[maybe_unused]] void submitTo(
         Device device, CommandList list, QueueType type, std::span<const FenceValue> wait = {}, std::span<const FenceValue> signal = {}
     )
@@ -29,8 +26,6 @@ namespace {
         device.queue(type).submit(lists, wait, signal);
     }
 
-    //==================================================================================================================
-    /// Acquires a compute list that fills a fresh buffer.
     [[maybe_unused]] CommandList computeWork(PassKit& kit)
     {
         const Buffer buffer = kit.buffer(BufferUsage::ShaderWrite, kBytes);
@@ -39,8 +34,6 @@ namespace {
         return compute;
     }
 
-    //==================================================================================================================
-    /// Acquires a copy list that copies between two fresh buffers.
     [[maybe_unused]] CommandList copyWork(PassKit& kit)
     {
         const Buffer source = kit.buffer(BufferUsage::None, kBytes);
@@ -51,7 +44,6 @@ namespace {
     }
 } // namespace
 
-//======================================================================================================================
 TEST_CASE("compute work of a frame is joined into its graphics work by a fence wait", "[contract]")
 {
 #ifdef NDEBUG
@@ -67,7 +59,6 @@ TEST_CASE("compute work of a frame is joined into its graphics work by a fence w
 #endif
 }
 
-//======================================================================================================================
 TEST_CASE("an earlier graphics submission's wait joins compute work into the frame", "[contract]")
 {
 #ifdef NDEBUG
@@ -85,7 +76,6 @@ TEST_CASE("an earlier graphics submission's wait joins compute work into the fra
 #endif
 }
 
-//======================================================================================================================
 TEST_CASE("the graphics submissions of a frame together join its compute and copy work", "[contract]")
 {
 #ifdef NDEBUG
@@ -107,7 +97,6 @@ TEST_CASE("the graphics submissions of a frame together join its compute and cop
 #endif
 }
 
-//======================================================================================================================
 TEST_CASE("compute work is joined into the frame through a wait of the copy queue", "[contract]")
 {
 #ifdef NDEBUG
@@ -125,7 +114,6 @@ TEST_CASE("compute work is joined into the frame through a wait of the copy queu
 #endif
 }
 
-//======================================================================================================================
 TEST_CASE("a submission with no lists to the compute queue is joined into the frame like any other", "[contract]")
 {
 #ifdef NDEBUG
@@ -141,7 +129,6 @@ TEST_CASE("a submission with no lists to the compute queue is joined into the fr
 #endif
 }
 
-//======================================================================================================================
 TEST_CASE("a frame with no compute or copy work ends, after a frame whose work was joined", "[contract]")
 {
 #ifdef NDEBUG
@@ -163,7 +150,6 @@ TEST_CASE("a frame with no compute or copy work ends, after a frame whose work w
 #endif
 }
 
-//======================================================================================================================
 TEST_CASE("a submission with no lists made between frames belongs to no frame", "[contract]")
 {
 #ifdef NDEBUG

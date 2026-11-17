@@ -32,45 +32,35 @@
 using namespace rojoRHI;
 
 namespace {
-    //==================================================================================================================
-    /// The encoders of `list`.
     const metal4::Encoders& encodersOf(CommandList list)
     {
         return CommandListImpl::of(list).encoders;
     }
 
-    //==================================================================================================================
-    /// The native state of `list`.
     const metal4::ListState& stateOf(CommandList list)
     {
         return CommandListImpl::of(list).state;
     }
 
-    //==================================================================================================================
-    /// The pass state of `list`.
     const metal4::DrawState& drawOf(CommandList list)
     {
         return CommandListImpl::of(list).draw;
     }
 
-    //==================================================================================================================
-    /// What `list` has counted so far; fails the case when a scope it recorded holds no timestamp pair, since the pinned
-    /// counts include both timestamp writes.
+    // Fails the case when a scope the list recorded holds no timestamp pair, since the pinned counts include both
+    // timestamp writes.
     const core::RecordCounts& countsOf(CommandList list)
     {
         return test::timedCounts(list);
     }
 
-    //==================================================================================================================
-    /// The UTF-8 text of `string`, read inside a pool because a getter may autorelease.
+    // The Metal getters these helpers call may autorelease, so each reads inside a pool.
     std::string textOf(NS::String* string)
     {
         const metal4::AutoreleasePool pool;
         return metal4::toStdString(string);
     }
 
-    //==================================================================================================================
-    /// The label of the render encoder `list` has open, read inside a pool because the getter autoreleases.
     std::string renderLabel(CommandList list)
     {
         MTL4::RenderCommandEncoder* encoder = encodersOf(list).renderEncoder();
@@ -79,65 +69,49 @@ namespace {
         return metal4::toStdString(encoder->label());
     }
 
-    //==================================================================================================================
-    /// Color attachment `index` of `list`'s render pass descriptor, read inside a pool because the getters autorelease; the
-    /// descriptor keeps it.
+    // The descriptor keeps the attachment alive past the pool.
     const MTL::RenderPassColorAttachmentDescriptor* colorOf(CommandList list, NS::UInteger index)
     {
         const metal4::AutoreleasePool pool;
         return drawOf(list).descriptor->colorAttachments()->object(index);
     }
 
-    //==================================================================================================================
-    /// The depth attachment of `list`'s render pass descriptor, read inside a pool.
     const MTL::RenderPassDepthAttachmentDescriptor* depthOf(CommandList list)
     {
         const metal4::AutoreleasePool pool;
         return drawOf(list).descriptor->depthAttachment();
     }
 
-    //==================================================================================================================
-    /// The stencil attachment of `list`'s render pass descriptor, read inside a pool.
     const MTL::RenderPassStencilAttachmentDescriptor* stencilOf(CommandList list)
     {
         const metal4::AutoreleasePool pool;
         return drawOf(list).descriptor->stencilAttachment();
     }
 
-    //==================================================================================================================
-    /// True when `attachment` names a texture, read inside a pool.
     bool holdsTexture(const MTL::RenderPassAttachmentDescriptor* attachment)
     {
         const metal4::AutoreleasePool pool;
         return attachment->texture() != nullptr;
     }
 
-    //==================================================================================================================
-    /// The texture `attachment` names, read inside a pool.
     const MTL::Texture* textureOf(const MTL::RenderPassAttachmentDescriptor* attachment)
     {
         const metal4::AutoreleasePool pool;
         return attachment->texture();
     }
 
-    //==================================================================================================================
-    /// The resolve texture of color attachment `index` of `list`'s render pass descriptor, read inside a pool.
     const MTL::Texture* resolveOf(CommandList list, NS::UInteger index)
     {
         const metal4::AutoreleasePool pool;
         return drawOf(list).descriptor->colorAttachments()->object(index)->resolveTexture();
     }
 
-    //==================================================================================================================
-    /// True when `attachment` names a resolve texture, read inside a pool.
     bool holdsResolve(const MTL::RenderPassAttachmentDescriptor* attachment)
     {
         const metal4::AutoreleasePool pool;
         return attachment->resolveTexture() != nullptr;
     }
 
-    //==================================================================================================================
-    /// Creates a 16-texel square 2D texture of `format` with `usage` and `samples`.
     Texture makeTexture(Device device, Format format, TextureUsage usage = TextureUsage::RenderTarget, uint32_t samples = 1)
     {
         return *device.createTexture(
@@ -145,15 +119,11 @@ namespace {
         );
     }
 
-    //==================================================================================================================
-    /// A pass over `colors` and `depth` that renders to the whole 16-texel square.
     RenderPassDesc passOf(std::span<const ColorAttachment> colors, const DepthAttachment& depth = {}, std::string_view label = {})
     {
         return RenderPassDesc{ .colors = colors, .depth = depth, .area = { 0, 0, 16, 16 }, .label = label };
     }
 
-    //==================================================================================================================
-    /// Ends `list`, submits it to the graphics queue, waits for it on the host and ends the frame.
     void finish(Device device, CommandList list)
     {
         list.end();
@@ -164,8 +134,6 @@ namespace {
         device.endFrame();
     }
 
-    //==================================================================================================================
-    /// The native calls `endRenderPass` records on `list`.
     uint64_t endPassCalls(CommandList list)
     {
         const uint64_t before = countsOf(list).nativeRecordCalls;
@@ -174,7 +142,6 @@ namespace {
     }
 } // namespace
 
-//======================================================================================================================
 TEST_CASE("beginRenderPass closes the compute encoder, pushes the pass's debug group and opens no encoder", "[metal4]")
 {
     Device device = *createDevice({ .scopeTimings = true, .debugMarkers = true });
@@ -205,7 +172,6 @@ TEST_CASE("beginRenderPass closes the compute encoder, pushes the pass's debug g
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("a pass with no command opens its render encoder at endRenderPass", "[metal4]")
 {
     Device device = *createDevice({ .scopeTimings = true, .debugMarkers = true });
@@ -232,7 +198,6 @@ TEST_CASE("a pass with no command opens its render encoder at endRenderPass", "[
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("a Store attachment costs no store-action call; DontCare and resolve attachments set theirs at the end", "[metal4]")
 {
     Device device = *createDevice({ .scopeTimings = true, .debugMarkers = true });
@@ -314,7 +279,6 @@ TEST_CASE("a Store attachment costs no store-action call; DontCare and resolve a
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("the render encoder is labelled after the pass, or after the innermost scope open inside it", "[metal4]")
 {
     Device device = *createDevice({ .scopeTimings = true });
@@ -345,7 +309,6 @@ TEST_CASE("the render encoder is labelled after the pass, or after the innermost
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("a scope inside a pass opens the render encoder and its debug group goes on the encoder", "[metal4]")
 {
     Device device = *createDevice({ .scopeTimings = true, .debugMarkers = true });
@@ -379,7 +342,6 @@ TEST_CASE("a scope inside a pass opens the render encoder and its debug group go
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("a split stores, ends and resumes with Load, re-pushing the open in-pass groups", "[metal4]")
 {
     Device device = *createDevice({ .scopeTimings = true, .debugMarkers = true });
@@ -425,7 +387,6 @@ TEST_CASE("a split stores, ends and resumes with Load, re-pushing the open in-pa
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("a barrier pending before the pass is emitted by the render encoder for the render stages", "[metal4]")
 {
     Device device = *createDevice({ .scopeTimings = true });
@@ -462,7 +423,6 @@ TEST_CASE("a barrier pending before the pass is emitted by the render encoder fo
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("a second pass reuses the list's descriptor and clears attachments the first had", "[metal4]")
 {
     Device device = *createDevice({ .scopeTimings = true });
@@ -510,7 +470,6 @@ TEST_CASE("a second pass reuses the list's descriptor and clears attachments the
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("a split keeps the attachment's cleared and drawn contents across the resumed encoder", "[metal4]")
 {
     test::GpuKit kit(2, true);
@@ -588,7 +547,6 @@ TEST_CASE("a split keeps the attachment's cleared and drawn contents across the 
     CHECK(kit.readTexture(read, TextureRegion{ .extent = { 16, 16, 1 } }, Format::RGBA8Unorm) == expected);
 }
 
-//======================================================================================================================
 TEST_CASE("the descriptor takes each pass's attachment values though it is set only where they change", "[metal4]")
 {
     Device device = *createDevice({ .scopeTimings = true });
@@ -690,7 +648,6 @@ TEST_CASE("the descriptor takes each pass's attachment values though it is set o
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("end empties the list's descriptor so it keeps no texture alive in the pool", "[metal4]")
 {
     Device device = *createDevice({ .scopeTimings = true });

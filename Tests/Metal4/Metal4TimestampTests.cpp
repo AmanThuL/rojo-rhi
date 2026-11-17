@@ -35,11 +35,8 @@
 using namespace rojoRHI;
 
 namespace {
-    /// The warnings the message callback collected.
     std::vector<std::string> g_warnings;
 
-    //==================================================================================================================
-    /// Collects every warning into `g_warnings`.
     void collectWarning(MessageSeverity severity, std::string_view message, void*)
     {
         if (severity == MessageSeverity::Warning)
@@ -48,22 +45,16 @@ namespace {
         }
     }
 
-    //==================================================================================================================
-    /// The timestamp storage of `device`.
     const metal4::Timestamps& timestampsOf(Device device)
     {
         return DeviceImpl::of(device).timestamps;
     }
 
-    //==================================================================================================================
-    /// The frame slot `list` records into.
     uint32_t slotOf(Device device, CommandList list)
     {
         return static_cast<uint32_t>(core::coreOf(list).frame % core::coreOf(device).framesInFlight());
     }
 
-    //==================================================================================================================
-    /// Returns true when no frame slot of `device` holds a counter heap.
     bool holdsNoHeap(Device device)
     {
         for (uint32_t slot = 0; slot < core::coreOf(device).framesInFlight(); ++slot)
@@ -79,17 +70,14 @@ namespace {
         return true;
     }
 
-    //==================================================================================================================
-    /// The label of `heap`, read inside a pool because the getter autoreleases.
+    // Read inside a pool because the getter autoreleases.
     std::string heapLabel(MTL4::CounterHeap* heap)
     {
         const metal4::AutoreleasePool pool;
         return metal4::toStdString(heap->label());
     }
 
-    //==================================================================================================================
-    /// Ends every list of `lists` and submits each to the queue of its type; the compute lists signal a fence the frame's
-    /// graphics queue waits on, which joins them into the frame. Waits on the host until all of them completed.
+    // The compute lists signal a fence the frame's graphics queue waits on, which joins them into the frame.
     void submitFrame(Device device, std::span<const CommandList> lists)
     {
         const Fence fence = *device.createFence(0, "test.done");
@@ -112,17 +100,14 @@ namespace {
         REQUIRE(device.wait({ fence, value + 1 }, UINT64_MAX));
     }
 
-    //==================================================================================================================
-    /// Gives `list` its frame-arena page, which a scope's label is copied into, so the page's creation is not counted with a
-    /// scope's.
+    // A scope's label is copied into the list's frame-arena page; claiming the page first keeps its creation out of a
+    // scope's counts.
     void claimArenaPage(CommandList list)
     {
         const std::array<std::byte, 16> bytes{};
         list.uploadFrameData(bytes);
     }
 
-    //==================================================================================================================
-    /// Records `count` scopes, one after another, on `list`.
     void recordScopes(CommandList list, uint32_t count)
     {
         for (uint32_t scope = 0; scope < count; ++scope)
@@ -132,9 +117,8 @@ namespace {
         }
     }
 
-    //==================================================================================================================
-    /// Ends the open frame and runs empty frames until the next `beginFrame` waits for it, then begins that frame, so
-    /// `Device::scopeTimings` reports the scopes of the frame that was open.
+    // Runs empty frames until the next `beginFrame` waits for the open frame, so `Device::scopeTimings` reports its
+    // scopes.
     void retireOpenFrame(Device device)
     {
         device.endFrame();
@@ -146,21 +130,16 @@ namespace {
         device.beginFrame();
     }
 
-    /// The edge of the drawing cases' target, in texels.
     constexpr uint32_t kEdge = 64;
 
-    /// What the drawing cases draw with: the standard library's vertex and fragment pipeline over an `RGBA8Unorm` target, and
-    /// one draw record of three vertices with a count of one, for a counted draw.
     struct Drawing
     {
-        ShaderLibrary library; ///< The standard library.
-        Pipeline pipeline;     ///< The vertex and fragment pipeline over the target.
-        Texture target;        ///< A `kEdge` square `RGBA8Unorm` render target.
-        Buffer records;        ///< One draw record of three vertices.
-        Buffer counts;         ///< A count of one.
+        ShaderLibrary library;
+        Pipeline pipeline;
+        Texture target;
+        Buffer records;
+        Buffer counts;
 
-        //==============================================================================================================
-        /// Creates the objects on `device`.
         explicit Drawing(Device device)
         {
             library = *device.loadShaderLibrary(test::standardLibrary(), "test.library");
@@ -181,8 +160,6 @@ namespace {
             );
         }
 
-        //==============================================================================================================
-        /// Begins a pass labelled `label` over the target, cleared, binds the pipeline and sets the viewport and scissor.
         void begin(CommandList list, std::string_view label) const
         {
             const std::array colors{ ColorAttachment{ .texture = target, .load = LoadOp::Clear } };
@@ -192,16 +169,13 @@ namespace {
             list.setScissor(Rect2D{ 0, 0, kEdge, kEdge });
         }
 
-        //==============================================================================================================
-        /// Records a counted draw of the one record, whose kernel runs on a compute encoder ahead of the render encoder.
+        // The counted draw's kernel runs on a compute encoder ahead of the render encoder.
         void counted(Device device, CommandList list) const
         {
             list.drawIndirect(device.address(records), 1, device.address(counts));
         }
     };
 
-    //==================================================================================================================
-    /// Returns the growth of `nativeHostCalls` across `device.beginFrame()`.
     uint64_t hostCallsOfBeginFrame(Device device)
     {
         const uint64_t before = device.counters().nativeHostCalls;
@@ -210,7 +184,6 @@ namespace {
     }
 } // namespace
 
-//======================================================================================================================
 TEST_CASE("a scope outside a pass writes two timestamps on the command buffer", "[metal4]")
 {
     Device device = *createDevice({ .scopeTimings = true, .debugMarkers = true });
@@ -240,7 +213,6 @@ TEST_CASE("a scope outside a pass writes two timestamps on the command buffer", 
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("a device that records no scope creates no counter heap", "[metal4]")
 {
     Device device = *createDevice({ .scopeTimings = true, .framesInFlight = 2 });
@@ -258,7 +230,6 @@ TEST_CASE("a device that records no scope creates no counter heap", "[metal4]")
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("the first scope of a frame slot creates its heap once, a second does not", "[metal4]")
 {
     Device device = *createDevice({ .scopeTimings = true, .framesInFlight = 2 });
@@ -268,7 +239,6 @@ TEST_CASE("the first scope of a frame slot creates its heap once, a second does 
     claimArenaPage(list);
     const uint64_t before = device.counters().nativeCreateCalls;
     list.beginScope("test.first");
-    // The pinned counts include the timestamp writes, so every scope must hold a pair.
     test::requireTimed(list);
     CHECK(device.counters().nativeCreateCalls == before + 1);
     MTL4::CounterHeap* heap = timestampsOf(device).heap(slot, 0);
@@ -304,7 +274,6 @@ TEST_CASE("the first scope of a frame slot creates its heap once, a second does 
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("pairs are claimed without overlap by lists recording on several threads", "[metal4]")
 {
     constexpr uint32_t kThreads = 8;
@@ -356,7 +325,6 @@ TEST_CASE("pairs are claimed without overlap by lists recording on several threa
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("a frame with more scopes than the heaps hold reports zero for the rest and warns once", "[metal4]")
 {
     // Recorded in full rather than through a smaller capacity: the slot's eight heaps of 4,096 timestamps hold 16,384 pairs.
@@ -400,7 +368,6 @@ TEST_CASE("a frame with more scopes than the heaps hold reports zero for the res
     setMessageCallback(nullptr, nullptr);
 }
 
-//======================================================================================================================
 TEST_CASE("scopeTimings counts one host call per used heap resolve", "[metal4]")
 {
     // A heap holds 2,048 pairs, so 2,049 scopes use two heaps. Each used heap is resolved once at the frame wait and its used
@@ -429,7 +396,6 @@ TEST_CASE("scopeTimings counts one host call per used heap resolve", "[metal4]")
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("scopes on two queue types in one frame resolve their slot's heap once", "[metal4]")
 {
     Device device = *createDevice({ .scopeTimings = true, .framesInFlight = 2 });
@@ -466,7 +432,6 @@ TEST_CASE("scopes on two queue types in one frame resolve their slot's heap once
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("a scope on a Copy list claims a pair and reports a duration of at least zero", "[metal4]")
 {
     Device device = *createDevice({ .scopeTimings = true, .framesInFlight = 2 });
@@ -491,7 +456,6 @@ TEST_CASE("a scope on a Copy list claims a pair and reports a duration of at lea
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("two live devices each time a scope in heaps of their own", "[metal4]")
 {
     std::array<Device, 2> devices{ *createDevice({ .scopeTimings = true, .framesInFlight = 2 }), *createDevice({ .scopeTimings = true, .framesInFlight = 2 }) };
@@ -533,7 +497,6 @@ TEST_CASE("two live devices each time a scope in heaps of their own", "[metal4]"
     }
 }
 
-//======================================================================================================================
 TEST_CASE("a pair no timestamp was written into reports zero", "[metal4]")
 {
     // Metal resolves an unwritten entry of a new heap to zero, and so does an invalidated one; neither is a time.
@@ -566,7 +529,6 @@ TEST_CASE("a pair no timestamp was written into reports zero", "[metal4]")
     }
 }
 
-//======================================================================================================================
 TEST_CASE("a claimed pair no timestamp was written into is counted apart in the frame's warning", "[metal4]")
 {
     g_warnings.clear();
@@ -603,7 +565,6 @@ TEST_CASE("a claimed pair no timestamp was written into is counted apart in the 
     setMessageCallback(nullptr, nullptr);
 }
 
-//======================================================================================================================
 TEST_CASE("a frame whose scopes were all written warns nothing", "[metal4]")
 {
     g_warnings.clear();
@@ -625,7 +586,6 @@ TEST_CASE("a frame whose scopes were all written warns nothing", "[metal4]")
     CHECK(g_warnings.empty());
 }
 
-//======================================================================================================================
 TEST_CASE("a heap Metal refuses is asked for again after its slot's reuse, and created once there is room", "[metal4]")
 {
     // Metal limits the counter heaps of a process or of the system: storages fill slot 0 until Metal refuses a heap.
@@ -680,7 +640,6 @@ TEST_CASE("a heap Metal refuses is asked for again after its slot's reuse, and c
     setMessageCallback(nullptr, nullptr);
 }
 
-//======================================================================================================================
 TEST_CASE("a render pass with a counted draw writes both its timestamps on its render encoder and none on the kernels' encoder", "[metal4]")
 {
     Device device = *createDevice({ .scopeTimings = true, .framesInFlight = 2, .debugMarkers = true });
@@ -696,7 +655,6 @@ TEST_CASE("a render pass with a counted draw writes both its timestamps on its r
     const uint64_t encoders = state.counts.encodersOpened;
     const std::array colors{ ColorAttachment{ .texture = drawing.target, .load = LoadOp::Clear } };
     list.beginRenderPass(RenderPassDesc{ .colors = colors, .area = { 0, 0, kEdge, kEdge }, .label = "test.pass" });
-    // The pinned counts include the timestamp writes, so every scope must hold a pair.
     test::requireTimed(list);
     // The pass's debug group alone: the pass claims its pair, and no encoder of the pass is open to write it on.
     CHECK(state.counts.nativeRecordCalls == calls + 1);
@@ -751,7 +709,6 @@ TEST_CASE("a render pass with a counted draw writes both its timestamps on its r
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("a pass whose encoder opens at endRenderPass writes both its timestamps on that encoder", "[metal4]")
 {
     Device device = *createDevice({ .scopeTimings = true, .framesInFlight = 2, .debugMarkers = true });
@@ -764,7 +721,6 @@ TEST_CASE("a pass whose encoder opens at endRenderPass writes both its timestamp
     const uint64_t calls = state.counts.nativeRecordCalls;
     const std::array colors{ ColorAttachment{ .texture = drawing.target, .load = LoadOp::Clear } };
     list.beginRenderPass(RenderPassDesc{ .colors = colors, .area = { 0, 0, kEdge, kEdge }, .label = "test.empty" });
-    // The pinned counts include the timestamp writes, so every scope must hold a pair.
     test::requireTimed(list);
     CHECK(state.counts.nativeRecordCalls == calls + 1);
     // No encoder opened, so the begin entry still waits.
@@ -787,7 +743,6 @@ TEST_CASE("a pass whose encoder opens at endRenderPass writes both its timestamp
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("a pass that splits writes two timestamps, the begin on its first render encoder and the end on its last", "[metal4]")
 {
     Device device = *createDevice({ .scopeTimings = true, .framesInFlight = 2, .debugMarkers = true });
@@ -800,7 +755,6 @@ TEST_CASE("a pass that splits writes two timestamps, the begin on its first rend
     const uint64_t encoders = state.counts.encodersOpened;
     const metal4::DrawState& draw = CommandListImpl::of(list).draw;
     drawing.begin(list, "test.pass");
-    // The pinned counts include the timestamp writes, so every scope must hold a pair.
     test::requireTimed(list);
     CHECK(draw.passBegin == state.scopeLog.back().timestamp);
     // The first draw opens the pass's render encoder: the factory, the label and the table, the begin timestamp, the
@@ -835,7 +789,6 @@ TEST_CASE("a pass that splits writes two timestamps, the begin on its first rend
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("a scope that opens a pass's render encoder writes after the pass's begin timestamp, on the same encoder", "[metal4]")
 {
     Device device = *createDevice({ .scopeTimings = true, .framesInFlight = 2, .debugMarkers = true });
@@ -849,7 +802,6 @@ TEST_CASE("a scope that opens a pass's render encoder writes after the pass's be
     const uint32_t passPair = state.scopeLog.back().timestamp;
     uint64_t calls = state.counts.nativeRecordCalls;
     list.beginScope("test.inner");
-    // The pinned counts include the timestamp writes, so every scope must hold a pair.
     test::requireTimed(list);
     // The scope opened the render encoder (factory, label, table), which wrote the pass's begin timestamp and replayed the
     // pipeline with its winding, the viewport and the scissor before the scope's group and begin timestamp.
@@ -880,7 +832,6 @@ TEST_CASE("a scope that opens a pass's render encoder writes after the pass's be
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("a scope inside a pass writes its timestamps on the render encoder; a split writes none", "[metal4]")
 {
     Device device = *createDevice({ .scopeTimings = true, .framesInFlight = 2, .debugMarkers = true });
@@ -898,7 +849,6 @@ TEST_CASE("a scope inside a pass writes its timestamps on the render encoder; a 
     const uint64_t encoders = state.counts.encodersOpened;
     uint64_t calls = state.counts.nativeRecordCalls;
     list.beginScope("test.inner");
-    // The pinned counts include the timestamp writes, so every scope must hold a pair.
     test::requireTimed(list);
     // pushDebugGroup and the begin timestamp, both on the open render encoder, which stays open.
     CHECK(state.counts.nativeRecordCalls == calls + 2);
@@ -948,7 +898,6 @@ TEST_CASE("a scope inside a pass writes its timestamps on the render encoder; a 
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("an upscale writes its two timestamps around the carrier and the MetalFX encode", "[metal4]")
 {
     test::UpscaleKit kit(QueueType::Graphics, test::UpscaleKit::defaultDesc(), false, true);
@@ -960,7 +909,6 @@ TEST_CASE("an upscale writes its two timestamps around the carrier and the Metal
     const uint64_t calls = state.counts.nativeRecordCalls;
     kit.params.label = "test.upscale";
     kit.upscale();
-    // The pinned counts include the timestamp writes, so every scope must hold a pair.
     test::requireTimed(list);
     // pushDebugGroup with debug markers, the begin timestamp, the carrier's five calls, the scaler's fourteen setters,
     // encodeToCommandBuffer, the end timestamp and popDebugGroup with debug markers.
@@ -981,7 +929,6 @@ TEST_CASE("an upscale writes its two timestamps around the carrier and the Metal
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("a frame of passes, scopes inside them and upscales leaves no scope untimed", "[metal4]")
 {
     g_warnings.clear();
@@ -1007,7 +954,6 @@ TEST_CASE("a frame of passes, scopes inside them and upscales leaves no scope un
     CHECK(g_warnings.empty());
 }
 
-//======================================================================================================================
 TEST_CASE("nested scopes inside a pass end on the encoder a split resumed, inner then outer", "[metal4]")
 {
     Device device = *createDevice({ .scopeTimings = true, .framesInFlight = 2, .debugMarkers = true });
@@ -1022,7 +968,6 @@ TEST_CASE("nested scopes inside a pass end on the encoder a split resumed, inner
     list.beginScope("test.outer");
     const uint32_t outer = state.scopeLog.back().timestamp;
     list.beginScope("test.inner");
-    // The pinned counts include the timestamp writes, so every scope must hold a pair.
     test::requireTimed(list);
     const uint32_t inner = state.scopeLog.back().timestamp;
     REQUIRE(outer != core::kNoTimestamp);
@@ -1063,7 +1008,6 @@ TEST_CASE("nested scopes inside a pass end on the encoder a split resumed, inner
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("a pass, a scope inside it and an upscale past the slot's capacity write no timestamp, report zero and warn once", "[metal4]")
 {
     constexpr uint32_t kCapacity = metal4::Timestamps::kSlotHeaps * metal4::Timestamps::kHeapEntries / 2;
@@ -1158,7 +1102,6 @@ TEST_CASE("a pass, a scope inside it and an upscale past the slot's capacity wri
     setMessageCallback(nullptr, nullptr);
 }
 
-//======================================================================================================================
 TEST_CASE("a device without scopeTimings sends the same debug groups and encoders with no timestamp and no counter heap", "[metal4]")
 {
     // One list records a scope, a pass with a scope inside it, a pass whose counted draw opens a kernels' encoder first, and
@@ -1222,7 +1165,6 @@ TEST_CASE("a device without scopeTimings sends the same debug groups and encoder
     }
 }
 
-//======================================================================================================================
 TEST_CASE("a device without scopeTimings resolves and invalidates nothing at the frame wait", "[metal4]")
 {
     // On a timed device the frame wait of a frame with scopes adds a resolve and an invalidation per used heap.
@@ -1249,7 +1191,6 @@ TEST_CASE("a device without scopeTimings resolves and invalidates nothing at the
     }
 }
 
-//======================================================================================================================
 TEST_CASE("requireTimed fails a case whose list recorded a scope without a timestamp pair", "[metal4][!shouldfail]")
 {
     // The guard of the count pins must fail, not pass, when a pair is missing: past the slot's capacity none is claimed.

@@ -30,10 +30,8 @@
 
 namespace rojoRHI {
     namespace {
-        //==============================================================================================================
-        /// Returns the DXIL of `entry`, the entry of stage `stage`, or empty bytecode for an absent stage. The library's
-        /// payload comes through `native`; its entries are searched under the pool's lock, since creation is not recording. A
-        /// library that holds no such entry, which only a Release build lets through, is `DriverFailure`.
+        // The library's entries are searched under the pool's lock, since creation is not recording. A library that
+        // holds no such entry, which only a Release build lets through, is `DriverFailure`.
         Result<D3D12_SHADER_BYTECODE> bytecodeOf(core::DeviceCore& core, const ShaderEntry& entry, core::ShaderStage stage)
         {
             if (entry.library.bits == 0)
@@ -64,13 +62,12 @@ namespace rojoRHI {
             return D3D12_SHADER_BYTECODE{ dxil.data(), dxil.size() };
         }
 
-        //==============================================================================================================
-        /// Returns the output topology the mesh entry `dxil` declares in its `PSV0` part, `DXIL::MeshOutputTopology`: 1 for
-        /// lines, 2 for triangles, and 0 when the container holds no such part. The container header is "DXBC", a 16-byte
-        /// digest, two 16-bit version fields, its size and its part count, then one offset per part; a part is its four
-        /// characters and size, then its data. `PSV0`'s data starts with the size of its `PSVRuntimeInfo`, whose version 1
-        /// holds the mesh topology at byte 27, after version 0's 24 bytes, the stage, the view-ID flag and the mesh
-        /// shader's primitive-signature vectors.
+        // The mesh entry's output topology from its `PSV0` part, `DXIL::MeshOutputTopology`: 1 for lines, 2 for
+        // triangles, 0 when the container holds no such part. The container header is "DXBC", a 16-byte digest, two
+        // 16-bit version fields, its size and its part count, then one offset per part; a part is its four characters
+        // and size, then its data. `PSV0`'s data starts with the size of its `PSVRuntimeInfo`, whose version 1 holds
+        // the mesh topology at byte 27, after version 0's 24 bytes, the stage, the view-ID flag and the mesh shader's
+        // primitive-signature vectors.
         uint32_t meshOutputTopology(std::span<const std::byte> dxil)
         {
             const auto word = [&](size_t at) -> uint32_t {
@@ -102,8 +99,6 @@ namespace rojoRHI {
             return 0;
         }
 
-        //==============================================================================================================
-        /// Returns the DXIL of each stage `desc` names, or the error of the first stage its library does not hold.
         Result<d3d12::PipelineShaders> shadersOf(core::DeviceCore& core, const GraphicsPipelineDesc& desc)
         {
             const Result<D3D12_SHADER_BYTECODE> vertex = bytecodeOf(core, desc.vertex, core::ShaderStage::Vertex);
@@ -120,18 +115,14 @@ namespace rojoRHI {
             return d3d12::PipelineShaders{ .vertex = *vertex, .task = *task, .mesh = *mesh, .fragment = *fragment };
         }
 
-        //==============================================================================================================
-        /// Returns the bytes of `bytecode`, empty for an absent stage.
         std::span<const std::byte> dxilOf(const D3D12_SHADER_BYTECODE& bytecode)
         {
             return { static_cast<const std::byte*>(bytecode.pShaderBytecode), bytecode.BytecodeLength };
         }
 
-        //==============================================================================================================
-        /// Takes the pipeline state `stream` describes from the device's pipeline cache under the name of `canonical`, the
-        /// key bytes of its description, or creates it on the calling thread, adding the time to the device's counter; names
-        /// it with `record`'s label and publishes `state` with it in `record`. The pool counts the creation, and a pipeline the
-        /// cache served counts a hit once it is published; the core counts every other creation as a miss.
+        // A miss is created on the calling thread; the look-up and any creation add their time to the device's counter.
+        // The pool counts the creation, and a pipeline the cache served counts a hit once it is published; the core
+        // counts every other creation as a miss.
         Result<Pipeline> publish(
             DeviceImpl& impl,
             core::PipelineRecord&& record,
@@ -172,7 +163,6 @@ namespace rojoRHI {
         }
     } // namespace
 
-    //==================================================================================================================
     Result<ShaderLibrary> Device::loadShaderLibrary(std::span<const std::byte> blob, std::string_view label)
     {
         DeviceImpl& impl = DeviceImpl::of(*this);
@@ -199,7 +189,6 @@ namespace rojoRHI {
         return library;
     }
 
-    //==================================================================================================================
     Result<Pipeline> Device::createPipeline(const GraphicsPipelineDesc& desc)
     {
         DeviceImpl& impl = DeviceImpl::of(*this);
@@ -240,7 +229,6 @@ namespace rojoRHI {
         return publish(impl, std::move(record), d3d12::graphicsStream(impl.roots.global(), desc, *shaders), key, std::move(state));
     }
 
-    //==================================================================================================================
     Result<Pipeline> Device::createPipeline(const ComputePipelineDesc& desc)
     {
         DeviceImpl& impl = DeviceImpl::of(*this);
@@ -256,7 +244,6 @@ namespace rojoRHI {
         return publish(impl, std::move(record), d3d12::computeStream(impl.roots.global(), *compute), key, std::move(state));
     }
 
-    //==================================================================================================================
     Result<std::vector<std::byte>> Device::pipelineCacheData()
     {
         DeviceImpl& impl = DeviceImpl::of(*this);

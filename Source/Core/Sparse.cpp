@@ -19,35 +19,30 @@
 
 namespace rojoRHI::core {
     namespace {
-        /// The rule an element of a mapping call breaks, as the last four digits of its identifier, and what is wrong; rule 0 is
-        /// no violation.
+        // `rule` is the number of the `VU-rojo-sparse-` identifier an element breaks; 0 is none.
         struct Violation
         {
-            uint32_t rule = 0; ///< The number of the `VU-rojo-sparse-` identifier, or 0.
-            std::string text;  ///< What the element does.
+            uint32_t rule = 0;
+            std::string text;
         };
 
-        //==============================================================================================================
         [[maybe_unused]] bool isSparse(TextureUsage usage)
         {
             return (usage & TextureUsage::Sparse) != TextureUsage::None;
         }
 
-        //==============================================================================================================
         [[maybe_unused]] bool isSparse(BufferUsage usage)
         {
             return (usage & BufferUsage::Sparse) != BufferUsage::None;
         }
 
-        //==============================================================================================================
         uint64_t ceilDiv(uint64_t value, uint64_t unit)
         {
             return (value + unit - 1) / unit;
         }
 
-        //==============================================================================================================
-        /// Calls `visit` with the key of each tile `mapping` names, in the order the reference maps them onto heap tiles: x, then
-        /// y, then z, then layer; a mip tail is one tile per layer; a buffer range is one tile per `shape.bytes`.
+        // Visits in the order the reference maps tiles onto heap tiles: x, then y, then z, then layer. A mip tail is one tile
+        // per layer.
         template<typename Visit> void forEachTile(const TileMapping& mapping, const TileShape& shape, Visit&& visit)
         {
             if (mapping.buffer.bits != 0)
@@ -93,8 +88,6 @@ namespace rojoRHI::core {
             }
         }
 
-        //==============================================================================================================
-        /// Returns the heap bytes the tiles of `mapping` need: a tile each, or `mipTailBytes` for each mip tail.
         [[maybe_unused]] uint64_t heapBytesOf(const TileMapping& mapping, const TileShape& shape)
         {
             uint64_t tiles = 0;
@@ -102,9 +95,6 @@ namespace rojoRHI::core {
             return tiles * (mapping.mipTail ? shape.mipTailBytes : shape.bytes);
         }
 
-        //==============================================================================================================
-        /// Returns the first rule `mapping` breaks, given the records it names: `texture` or `buffer` and `heap`, each null when
-        /// the handle is null. Debug builds only; Release reports none.
         [[maybe_unused]] Violation findViolation(
             [[maybe_unused]] const DeviceCore& core,
             [[maybe_unused]] const TileMapping& mapping,
@@ -223,8 +213,6 @@ namespace rojoRHI::core {
             return {};
         }
 
-        //==============================================================================================================
-        /// Reports `violation`, the rule an element breaks, with the identifier of that rule.
         [[maybe_unused]] void reportViolation([[maybe_unused]] const Violation& violation)
         {
             ROJORHI_VU(violation.rule != 2, "VU-rojo-sparse-0002", "{}", violation.text);
@@ -238,8 +226,6 @@ namespace rojoRHI::core {
             ROJORHI_VU(violation.rule != 10, "VU-rojo-sparse-0010", "{}", violation.text);
         }
 
-        //==============================================================================================================
-        /// Checks every element of `mappings`, and that no two name the same tile (VU-rojo-sparse-0012). Debug builds only.
         void checkMappings([[maybe_unused]] DeviceCore& core, [[maybe_unused]] std::span<const TileMapping> mappings)
         {
 #ifndef NDEBUG
@@ -280,10 +266,7 @@ namespace rojoRHI::core {
 #endif
         }
 
-        //==============================================================================================================
-        /// Passes the changes `mappings` make on a queue of `queue` to the tracker of a validating device: the subresources and
-        /// texels of each texture region, every tail mip of each layer of a mip tail, and each buffer byte range. The records
-        /// are read here, so the tracker's lock is never held with a pool's. Debug builds only.
+        // The records are read here, so the tracker's lock is never held with a pool's.
         void orderMappings([[maybe_unused]] DeviceCore& core, [[maybe_unused]] QueueType queue, [[maybe_unused]] std::span<const TileMapping> mappings)
         {
 #ifndef NDEBUG
@@ -332,8 +315,6 @@ namespace rojoRHI::core {
 #endif
         }
 
-        //==============================================================================================================
-        /// Adds each delta of `deltas`, keyed by heap handle bits, to the mapped-tile count of its heap.
         void applyHeapDeltas(DeviceCore& core, const std::map<uint64_t, int64_t>& deltas)
         {
             for (const auto& [bits, delta] : deltas)
@@ -350,9 +331,6 @@ namespace rojoRHI::core {
             }
         }
 
-        //==============================================================================================================
-        /// Applies `mapping` to `tiles`, the mapping of the resource it names, and adds the change of each heap's tile count to
-        /// `deltas`.
         void applyElement(const TileMapping& mapping, const TileShape& shape, TileMap& tiles, std::map<uint64_t, int64_t>& deltas)
         {
             forEachTile(mapping, shape, [&](const TileKey& key) {
@@ -378,7 +356,6 @@ namespace rojoRHI::core {
         }
     } // namespace
 
-    //==================================================================================================================
     TileShape textureTileShape(const DeviceCore& core, const TextureRecord& record)
     {
         if (record.tiles.bytes != 0)
@@ -409,13 +386,11 @@ namespace rojoRHI::core {
         return shape;
     }
 
-    //==================================================================================================================
     TileShape bufferTileShape()
     {
         return TileShape{ .width = kTileBytes, .height = 1, .depth = 1, .bytes = kTileBytes, .mipTailFirst = 0, .mipTailBytes = 0 };
     }
 
-    //==================================================================================================================
     TileShape tileShape(DeviceCore& core, Texture texture)
     {
         const TextureRecord* record = core.pool<Texture>().checked(texture, false);
@@ -425,7 +400,6 @@ namespace rojoRHI::core {
         return textureTileShape(core, *record);
     }
 
-    //==================================================================================================================
     TileShape tileShape(DeviceCore& core, Buffer buffer)
     {
         [[maybe_unused]] const BufferRecord* record = core.pool<Buffer>().checked(buffer, false);
@@ -434,7 +408,6 @@ namespace rojoRHI::core {
         return bufferTileShape();
     }
 
-    //==================================================================================================================
     void mapTiles(DeviceCore& core, QueueType queue, std::span<const TileMapping> mappings)
     {
         checkMappings(core, mappings);
@@ -463,7 +436,6 @@ namespace rojoRHI::core {
         applyHeapDeltas(core, deltas);
     }
 
-    //==================================================================================================================
     void releaseTiles(DeviceCore& core, const TileMap& tiles)
     {
         std::map<uint64_t, int64_t> deltas;

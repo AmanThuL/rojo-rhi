@@ -74,9 +74,12 @@ int main()
 
     const std::vector<Particle> initial = seed();
     const BufferDesc particleDesc{ .size = kParticleCount * sizeof(Particle), .usage = BufferUsage::ShaderWrite, .label = "particles" };
+    // Ping-pong: each frame's step reads one buffer and writes the other, so the draw reads the last frame's
+    // result while the compute queue writes this frame's.
     const std::array buffers{ check(device.createBuffer(particleDesc, std::as_bytes(std::span(initial))), "createBuffer"),
                               check(device.createBuffer(particleDesc), "createBuffer") };
 
+    // Timeline fences: `simulated` reaches N when frame N's step is done, `drawn` when frame N's draw is.
     Fence simulated = check(device.createFence(0, "simulated"), "createFence");
     Fence drawn = check(device.createFence(0, "drawn"), "createFence");
 
@@ -108,6 +111,7 @@ int main()
         const Buffer next = buffers[frame % 2];
 
         CommandList step = device.acquireCommandList(QueueType::Compute, "simulate");
+        // The last step on this queue wrote `previous` and read `next`; this one reads the first and overwrites the second.
         const std::array afterLastStep{ GlobalBarrier{ .srcStage = Stage::ComputeShader,
                                                        .srcAccess = Access::ShaderWrite,
                                                        .dstStage = Stage::ComputeShader,
@@ -118,15 +122,18 @@ int main()
             SimulateRoot{
                 .source = device.address(previous), .target = device.address(next), .time = float(window.time()), .dt = 1.0f / 60.0f, .count = kParticleCount }
         );
+        // Address accesses are invisible to the tracker; declared, they let it check the cross-queue ordering.
         const std::array stepAccesses{ ResourceAccess{ .buffer = previous, .stage = Stage::ComputeShader, .access = Access::ShaderRead },
                                        ResourceAccess{ .buffer = next, .stage = Stage::ComputeShader, .access = Access::ShaderWrite } };
         step.declareAccess(stepAccesses);
         step.dispatch(kParticleCount / 256, 1, 1);
         step.end();
 
+        // Waits for frame N-1's draw, which read `next`, before overwriting it; frame 1 waits on 0, the initial value.
         compute.submit(std::array{ step }, std::array{ FenceValue{ drawn, frame - 1 } }, std::array{ FenceValue{ simulated, frame } });
 
         CommandList draw = device.acquireCommandList(QueueType::Graphics, "draw");
+        // Read as well as write: additive blending reads the attachment.
         const std::array toRender{ TextureBarrier{ .texture = image,
                                                    .dstStage = Stage::ColorAttachment,
                                                    .dstAccess = Access::ColorAttachmentRead | Access::ColorAttachmentWrite,
@@ -153,8 +160,11 @@ int main()
         draw.barrier({}, {}, toPresent);
         draw.end();
 
+        // The draw waits only for the step that wrote `previous`, frame N-1's, so it overlaps this frame's step.
         graphics.submit(std::array{ draw }, std::array{ FenceValue{ simulated, frame - 1 } }, std::array{ FenceValue{ drawn, frame } });
         graphics.present(swapchain);
+        // A frame retires on the graphics queue alone, so its step is joined into graphics work before endFrame;
+        // otherwise beginFrame could recycle the step's list while it still runs.
         graphics.submit({}, std::array{ FenceValue{ simulated, frame } });
         device.endFrame();
     }

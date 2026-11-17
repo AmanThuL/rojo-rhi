@@ -33,19 +33,14 @@
 
 namespace rojoRHI {
     namespace {
-        /// How long `Swapchain::acquire` waits on the frame-latency waitable object, in milliseconds: chapter 11's one second.
+        // In milliseconds: chapter 11's one second.
         constexpr DWORD kAcquireDeadlineMs = 1'000;
 
-        //==============================================================================================================
-        /// Returns the device that created `swapchain`.
         DeviceImpl& deviceOf(const SwapchainImpl& swapchain)
         {
             return *static_cast<DeviceImpl*>(swapchain.core.device->retireHooks().context);
         }
 
-        //==============================================================================================================
-        /// Reports the removal of `impl`'s device, found by `entry`, then logs and aborts, in every build, when the device was
-        /// removed; does nothing otherwise.
         void abortIfRemoved(DeviceImpl& impl, std::string_view entry)
         {
             if (const HRESULT reason = impl.device()->GetDeviceRemovedReason(); reason != S_OK)
@@ -56,8 +51,6 @@ namespace rojoRHI {
             }
         }
 
-        //==============================================================================================================
-        /// Returns the name of `colorSpace` and of the DXGI color space it maps to, for messages.
         std::string_view colorSpaceName(ColorSpace colorSpace)
         {
             switch (colorSpace)
@@ -69,22 +62,18 @@ namespace rojoRHI {
             return "a value that is no ColorSpace";
         }
 
-        //==============================================================================================================
-        /// Returns the frame whose completion frees a swapchain of `impl` destroyed now: the open frame, or the last ended one
-        /// between frames. Presents and the lists that use acquired images come only inside a frame, so none of the
-        /// swapchain's can come later, and they are complete once `Device::beginFrame` has waited for that frame. A
-        /// `Device::beginFrame` running meanwhile opens its frame before it frees, so a swapchain destroyed during it takes the
-        /// new frame, or the one before it, and either is later than the frame that call waited for.
+        // The open frame, or the last ended one between frames. Presents and the lists that use acquired images come
+        // only inside a frame, so they are complete once `Device::beginFrame` has waited for that frame. A
+        // `Device::beginFrame` running meanwhile opens its frame before it frees, so a swapchain destroyed during it
+        // takes the new frame, or the one before it, and either is later than the frame that call waited for.
         uint64_t retireFrame(const DeviceImpl& impl)
         {
             return impl.core.frameNumber();
         }
 
-        //==============================================================================================================
-        /// Fetches every back buffer of `native`'s swapchain, whose core is `state`, with `GetBuffer`, names it
-        /// `<label>.image<i>` and writes its render-target view into the swapchain's heap, each write one
-        /// `descriptorWrites`; the image's payload then holds the one reference to its buffer and the core's extent, which
-        /// render passes read. The caller holds `native.mutex`. Returns the error of a refused `GetBuffer`.
+        // Fetches each back buffer and writes its render-target view; each image's payload then holds the one reference
+        // to its back buffer and the core's extent, which render passes read. Each view write is one
+        // `descriptorWrites`. The caller holds `native.mutex`.
         Result<void> fetchImages(DeviceImpl& impl, d3d12::SwapchainNative& native, const core::SwapchainCore& state)
         {
             const std::string& label = state.label;
@@ -111,9 +100,7 @@ namespace rojoRHI {
             return {};
         }
 
-        //==============================================================================================================
-        /// Releases every back-buffer reference `native` holds; the render-target views stay in the heap until fetched again.
-        /// The caller holds `native.mutex`.
+        // The render-target views stay in the heap until fetched again. The caller holds `native.mutex`.
         void dropImages(d3d12::SwapchainNative& native)
         {
             for (const std::unique_ptr<d3d12::TexturePayload>& image : native.images)
@@ -126,10 +113,9 @@ namespace rojoRHI {
             }
         }
 
-        //==============================================================================================================
-        /// Releases the native objects of `swapchain`, made in full or in part: its back buffers, its render-target heap, its
-        /// waitable object and the DXGI swapchain. No queue holds work that uses them. The texture records of its images may
-        /// still wait for their frame; their retirement never reads the payloads freed here.
+        // Releases the swapchain's native objects, made in full or in part; no queue holds work that uses them. The
+        // texture records of its images may still wait for their frame; their retirement never reads the payloads freed
+        // here.
         void freeSwapchain(SwapchainImpl& swapchain)
         {
             d3d12::SwapchainNative& native = swapchain.native;
@@ -147,9 +133,7 @@ namespace rojoRHI {
             native.swapchain.reset();
         }
 
-        //==============================================================================================================
-        /// Frees `freed`, swapchains destroyed on `impl` whose presents have completed, counting each as one retired deferred
-        /// destruction and one native release.
+        // Counts each as one retired deferred destruction and one native release.
         void freeRetired(DeviceImpl& impl, std::vector<std::unique_ptr<SwapchainImpl>>& freed)
         {
             if (freed.empty())
@@ -166,9 +150,7 @@ namespace rojoRHI {
             freed.clear();
         }
 
-        //==============================================================================================================
-        /// Creates the presentation fence of `impl` on first use, one counted `nativeCreateCalls`. The caller holds
-        /// `presentation.mutex`.
+        // On first use, one counted `nativeCreateCalls`. The caller holds `presentation.mutex`.
         Result<void> ensureFence(DeviceImpl& impl)
         {
             d3d12::Presentation& presentation = impl.presentation;
@@ -185,11 +167,10 @@ namespace rojoRHI {
             return {};
         }
 
-        //==============================================================================================================
-        /// Frees a swapchain of `impl` destroyed on the window `surface` that `Device::beginFrame` has not freed yet, since DXGI
-        /// binds one swapchain to a window: the graphics queue signals the presentation fence after its presents, one counted
-        /// `nativeSubmitCalls`, and the call waits for the fence, counting its host calls. Does nothing when no destroyed
-        /// swapchain holds the window. Returns the error of a device found removed while it waits.
+        // DXGI binds one swapchain to a window, so a destroyed swapchain still on `surface` is freed first: the
+        // graphics queue signals the presentation fence after its presents, one counted `nativeSubmitCalls`, and the
+        // call waits for the fence, counting its host calls. Returns the error of a device found removed while it
+        // waits.
         Result<void> reclaimSurface(DeviceImpl& impl, const void* surface)
         {
             d3d12::Presentation& presentation = impl.presentation;
@@ -232,9 +213,7 @@ namespace rojoRHI {
             return {};
         }
 
-        //==============================================================================================================
-        /// Returns whether the system reports `DXGI_FEATURE_PRESENT_ALLOW_TEARING` to `impl`'s DXGI factory; a query the factory
-        /// refuses reports none.
+        // A query the factory refuses reports none.
         bool systemAllowsTearing(DeviceImpl& impl)
         {
             BOOL allowed = FALSE;
@@ -242,12 +221,9 @@ namespace rojoRHI {
             return SUCCEEDED(checked) && allowed != FALSE;
         }
 
-        //==============================================================================================================
-        /// Makes the native objects of `swapchain`, whose core holds the checked description `desc`, on the graphics queue of
-        /// `impl`: the DXGI swapchain at the window's client extent, which becomes the core's extent, its color space, frame
-        /// latency and window association, its waitable object, its render-target heap and one payload per back buffer. A
-        /// mode or color space the system or output refuses is `Unsupported`; any other refusal is the native call's error.
-        /// Whatever was made before a failure stays in `swapchain.native` for `freeSwapchain`.
+        // The DXGI swapchain takes the window's client extent, which becomes the core's extent. A mode or color space
+        // the system or output refuses is `Unsupported`; any other refusal is the native call's error. Whatever was
+        // made before a failure stays in `swapchain.native` for `freeSwapchain`.
         Result<void> createNative(DeviceImpl& impl, SwapchainImpl& swapchain, const SwapchainDesc& desc)
         {
             const std::string& label = swapchain.core.label;
@@ -357,9 +333,6 @@ namespace rojoRHI {
             return fetchImages(impl, native, swapchain.core);
         }
 
-        //==============================================================================================================
-        /// Files the destroyed `swapchain` of `impl` with its `retireFrame`, which `Device::beginFrame` frees once it has waited
-        /// for that frame.
         void retireSwapchain(DeviceImpl& impl, SwapchainImpl& swapchain)
         {
             d3d12::Presentation& presentation = impl.presentation;
@@ -374,7 +347,6 @@ namespace rojoRHI {
     } // namespace
 
     namespace core {
-        //==============================================================================================================
         SwapchainCore& coreOf(Swapchain swapchain)
         {
             return SwapchainImpl::of(swapchain).core;
@@ -382,7 +354,6 @@ namespace rojoRHI {
     } // namespace core
 
     namespace d3d12 {
-        //==============================================================================================================
         Result<PresentFlags> presentFlags(PresentMode mode, bool tearingSupported)
         {
             const auto waitable = static_cast<UINT>(DXGI_SWAP_CHAIN_FLAG_FRAME_LATENCY_WAITABLE_OBJECT);
@@ -402,7 +373,6 @@ namespace rojoRHI {
             return std::unexpected(Error{ ErrorCategory::Unsupported, std::format("{} is no PresentMode", static_cast<int>(mode)) });
         }
 
-        //==============================================================================================================
         DXGI_COLOR_SPACE_TYPE colorSpaceOf(ColorSpace colorSpace)
         {
             switch (colorSpace)
@@ -414,13 +384,11 @@ namespace rojoRHI {
             return DXGI_COLOR_SPACE_RGB_FULL_G22_NONE_P709;
         }
 
-        //==============================================================================================================
         bool presentSucceeded(HRESULT result)
         {
             return result == S_OK || result == DXGI_STATUS_OCCLUDED;
         }
 
-        //==============================================================================================================
         void freePassedSwapchains(DeviceImpl& impl, uint64_t waited)
         {
             Presentation& presentation = impl.presentation;
@@ -444,7 +412,6 @@ namespace rojoRHI {
             freeRetired(impl, freed);
         }
 
-        //==============================================================================================================
         void releaseSwapchains(DeviceImpl& impl)
         {
             Presentation& presentation = impl.presentation;
@@ -469,7 +436,6 @@ namespace rojoRHI {
         }
     } // namespace d3d12
 
-    //==================================================================================================================
     Result<Swapchain> Device::createSwapchain(const SwapchainDesc& desc)
     {
         DeviceImpl& impl = DeviceImpl::of(*this);
@@ -492,7 +458,6 @@ namespace rojoRHI {
         return SwapchainImpl::wrap(raw);
     }
 
-    //==================================================================================================================
     void Device::destroy(Swapchain swapchain)
     {
         DeviceImpl& impl = DeviceImpl::of(*this);
@@ -503,7 +468,6 @@ namespace rojoRHI {
         retireSwapchain(impl, target);
     }
 
-    //==================================================================================================================
     void Swapchain::resize(Extent2D extent)
     {
         SwapchainImpl& impl = SwapchainImpl::of(*this);
@@ -542,7 +506,6 @@ namespace rojoRHI {
         }
     }
 
-    //==================================================================================================================
     Texture Swapchain::acquire()
     {
         SwapchainImpl& impl = SwapchainImpl::of(*this);
@@ -572,7 +535,6 @@ namespace rojoRHI {
         return core::acquireImage(impl.core, image);
     }
 
-    //==================================================================================================================
     void Queue::present(Swapchain swapchain)
     {
         QueueImpl& queue = QueueImpl::of(*this);

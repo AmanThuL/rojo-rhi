@@ -8,7 +8,6 @@
 #include "Base/Assert.h"
 
 namespace rojoRHI::core {
-    //==================================================================================================================
     ResolvedAddr resolveAddr(DeviceCore& core, [[maybe_unused]] const CommandListCore& list, Addr addr)
     {
         if (addr.lo == 0 && addr.hi == 0)

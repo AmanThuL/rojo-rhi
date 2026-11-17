@@ -40,25 +40,21 @@
 
 namespace rojoRHI::metal4 {
     namespace {
-        /// The first line of every blob.
         constexpr std::string_view kMagic = "rojorhi.metal4.pipelinecache";
 
-        /// The second line of every blob: the version of the blob's layout.
         constexpr std::string_view kFormatVersion = "version 1";
 
-        /// The prefix of every temporary file. Files of earlier versions, named `rojorhi-pipelines-<pid>-`, hold no lock, so
-        /// `removeAbandonedFiles` never matches them.
+        // Files of earlier versions, named `rojorhi-pipelines-<pid>-`, hold no lock, so `removeAbandonedFiles` never
+        // matches them.
         constexpr std::string_view kFilePrefix = "rojorhi-pipelines-locked-";
 
-        /// The age, in seconds, below which an unlocked file is kept: its maker may be between `mkostemps` and `flock`.
+        // Seconds. An unlocked file younger than this is kept: its maker may be between `mkostemps` and `flock`.
         constexpr time_t kAbandonedAge = 60;
 
-        /// The extension of every temporary file: an archive is a metallib, though Metal reads and writes it under any name.
+        // An archive is a metallib, though Metal reads and writes it under any name.
         constexpr std::string_view kFileSuffix = ".metallib";
 
-        //==============================================================================================================
-        /// Returns the header lines a blob for `device` starts with, before its first archive line, each ended by a line feed.
-        /// The caller holds an autorelease pool.
+        // Each line ends with a line feed. The caller holds an autorelease pool.
         std::string headerFor(MTL::Device* device)
         {
             return std::format(
@@ -73,23 +69,18 @@ namespace rojoRHI::metal4 {
             );
         }
 
-        //==============================================================================================================
-        /// Returns the system's text for the error number `code`.
         std::string systemMessage(int code)
         {
             return std::error_code(code, std::generic_category()).message();
         }
 
-        //==============================================================================================================
-        /// Returns `bytes` as text.
         std::string_view textOf(std::span<const std::byte> bytes)
         {
             return { reinterpret_cast<const char*>(bytes.data()), bytes.size() };
         }
 
-        //==============================================================================================================
-        /// True when `error`, from serializing, says the serializer recorded nothing since its last flush: the code of a
-        /// compilation failure alone is also what a real serialization failure reports, so the description must match too.
+        // A compilation failure's code alone is also what a real serialization failure reports, so the description must
+        // match too.
         bool nothingRecorded(NS::Error* error)
         {
             return error != nullptr && error->domain()->isEqualToString(MTL::BinaryArchiveDomain) &&
@@ -97,17 +88,13 @@ namespace rojoRHI::metal4 {
                    describe(error).find("Nothing to serialize") != std::string::npos;
         }
 
-        //==============================================================================================================
-        /// Logs the warning of a blob that is discarded because `reason`.
         void discard(std::string_view reason)
         {
             ROJORHI_LOG_WARN("the pipeline cache blob {} and is discarded; every pipeline is compiled", reason);
         }
 
-        //==============================================================================================================
-        /// Removes `path` when no process holds a lock on it, or keeps it; returns 0 then, or the error number of the step that
-        /// failed. The file is opened without following a link and removed only while the lock is held and the path still names
-        /// the file locked, so a file made again under the name after the directory was read is not removed.
+        // Opened without following a link and removed only while the lock is held and the path still names the file
+        // locked, so a file made again under the name after the directory was read is not removed.
         int removeIfUnlocked(const std::filesystem::path& path)
         {
             const int descriptor = open(path.c_str(), O_RDONLY | O_NOFOLLOW | O_NONBLOCK | O_CLOEXEC);
@@ -139,7 +126,6 @@ namespace rojoRHI::metal4 {
         }
     } // namespace
 
-    //==================================================================================================================
     std::vector<std::byte> writeBlob(MTL::Device* device, std::span<const std::vector<std::byte>> archives)
     {
         const std::string header = headerFor(device);
@@ -157,7 +143,6 @@ namespace rojoRHI::metal4 {
         return blob;
     }
 
-    //==================================================================================================================
     std::expected<std::vector<std::span<const std::byte>>, std::string_view> archivesOf(std::span<const std::byte> blob, MTL::Device* device)
     {
         const std::string expected = headerFor(device);
@@ -195,7 +180,6 @@ namespace rojoRHI::metal4 {
         return archives;
     }
 
-    //==================================================================================================================
     std::filesystem::path temporaryDirectory()
     {
         std::array<char, 1024> path = {};
@@ -207,7 +191,6 @@ namespace rojoRHI::metal4 {
         return std::filesystem::path(path.data());
     }
 
-    //==================================================================================================================
     Result<TemporaryFile> TemporaryFile::create()
     {
         const std::filesystem::path directory = temporaryDirectory();
@@ -240,35 +223,29 @@ namespace rojoRHI::metal4 {
         return TemporaryFile(std::filesystem::path(name), descriptor);
     }
 
-    //==================================================================================================================
     TemporaryFile::TemporaryFile(std::filesystem::path path, int descriptor) : m_path(std::move(path)), m_descriptor(descriptor)
     {
     }
 
-    //==================================================================================================================
     TemporaryFile::TemporaryFile(TemporaryFile&& other) noexcept : m_path(std::exchange(other.m_path, {})), m_descriptor(std::exchange(other.m_descriptor, -1))
     {
     }
 
-    //==================================================================================================================
     TemporaryFile::~TemporaryFile()
     {
         remove();
     }
 
-    //==================================================================================================================
     const std::filesystem::path& TemporaryFile::path() const
     {
         return m_path;
     }
 
-    //==================================================================================================================
     NS::URL* TemporaryFile::url() const
     {
         return NS::URL::fileURLWithPath(makeString(m_path.string()));
     }
 
-    //==================================================================================================================
     Result<void> TemporaryFile::write(std::span<const std::byte> bytes) const
     {
         std::ofstream stream(m_path, std::ios::binary | std::ios::trunc);
@@ -281,7 +258,6 @@ namespace rojoRHI::metal4 {
         return {};
     }
 
-    //==================================================================================================================
     Result<std::vector<std::byte>> TemporaryFile::read() const
     {
         std::error_code error;
@@ -296,7 +272,6 @@ namespace rojoRHI::metal4 {
         return bytes;
     }
 
-    //==================================================================================================================
     void TemporaryFile::remove()
     {
         // Removed before the lock is released, so no sweep finds the file unlocked under its name.
@@ -312,7 +287,6 @@ namespace rojoRHI::metal4 {
         }
     }
 
-    //==================================================================================================================
     void removeAbandonedFiles()
     {
         const std::filesystem::path directory = temporaryDirectory();
@@ -354,7 +328,6 @@ namespace rojoRHI::metal4 {
         }
     }
 
-    //==================================================================================================================
     Result<void> PipelineCache::create(MTL::Device* device)
     {
         MTL4::PipelineDataSetSerializerDescriptor* descriptor = MTL4::PipelineDataSetSerializerDescriptor::alloc()->init();
@@ -368,13 +341,11 @@ namespace rojoRHI::metal4 {
         return {};
     }
 
-    //==================================================================================================================
     MTL4::PipelineDataSetSerializer* PipelineCache::serializer() const
     {
         return m_serializer;
     }
 
-    //==================================================================================================================
     void PipelineCache::load(MTL::Device* device, std::span<const std::byte> blob)
     {
         if (blob.empty())
@@ -412,7 +383,6 @@ namespace rojoRHI::metal4 {
         );
     }
 
-    //==================================================================================================================
     Result<MTL4::Archive*> PipelineCache::open(MTL::Device* device, std::span<const std::byte> archive, std::vector<TemporaryFile>& files)
     {
         Result<TemporaryFile> file = TemporaryFile::create();
@@ -456,7 +426,6 @@ namespace rojoRHI::metal4 {
         return opened;
     }
 
-    //==================================================================================================================
     const MTL4::CompilerTaskOptions* PipelineCache::options()
     {
         if (m_options == nullptr || m_lost.load(std::memory_order_relaxed))
@@ -482,7 +451,6 @@ namespace rojoRHI::metal4 {
         return m_options;
     }
 
-    //==================================================================================================================
     bool PipelineCache::probe(const MTL4::PipelineDescriptor* descriptor) const
     {
         for (MTL4::Archive* archive : m_archives)
@@ -497,7 +465,6 @@ namespace rojoRHI::metal4 {
         return false;
     }
 
-    //==================================================================================================================
     bool PipelineCache::probe(const MTL4::ComputePipelineDescriptor* descriptor) const
     {
         for (MTL4::Archive* archive : m_archives)
@@ -512,13 +479,11 @@ namespace rojoRHI::metal4 {
         return false;
     }
 
-    //==================================================================================================================
     std::shared_lock<std::shared_mutex> PipelineCache::compiling()
     {
         return std::shared_lock(m_mutex);
     }
 
-    //==================================================================================================================
     Result<std::vector<std::byte>> PipelineCache::data(MTL::Device* device)
     {
         const AutoreleasePool pool;
@@ -550,7 +515,6 @@ namespace rojoRHI::metal4 {
         return writeBlob(device, m_written);
     }
 
-    //==================================================================================================================
     void PipelineCache::release()
     {
         if (m_options != nullptr)

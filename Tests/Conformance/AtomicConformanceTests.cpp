@@ -22,7 +22,6 @@
 using namespace rojoRHI;
 
 namespace {
-    /// All words other than the one atomic target retain this value.
     constexpr uint32_t kGuard = 0xDEADBEEFu;
     constexpr uint32_t kWords = 16;
     constexpr uint64_t kBaseOffset = 16;
@@ -36,7 +35,7 @@ namespace {
     constexpr bool kValidation = false;
 #endif
 
-    /// Retires the atomic case's own pipeline before its library, including assertion-unwind paths.
+    // Retires the case's own pipeline before its library, on assertion-unwind paths too.
     struct AtomicObjects
     {
         Device device;
@@ -46,7 +45,6 @@ namespace {
         ~AtomicObjects();
     };
 
-    //==================================================================================================================
     AtomicObjects::~AtomicObjects()
     {
         if (pipeline.bits != 0)
@@ -59,8 +57,6 @@ namespace {
         }
     }
 
-    //==================================================================================================================
-    /// Reads every uint word of a buffer through the kit's copy/readback path.
     std::vector<uint32_t> readWords(test::GpuKit& kit, Buffer buffer)
     {
         const std::vector<std::byte> bytes = kit.readBuffer(buffer);
@@ -70,8 +66,7 @@ namespace {
         return words;
     }
 
-    //==================================================================================================================
-    /// Copies an initialized word array to a new shader-write buffer in the tested list, before its initialization barrier.
+    // The copy is recorded on `list`, ahead of the buffer's initialization barrier.
     Buffer targetBuffer(test::GpuKit& kit, CommandList list, uint32_t initial)
     {
         std::array<uint32_t, kWords> words;
@@ -83,9 +78,7 @@ namespace {
         return target;
     }
 
-    //==================================================================================================================
-    /// Dispatches contended additions with declared accesses and explicit initialization/readback barriers. Checks all guard
-    /// words and returns one old word per invocation, in invocation order, for the permutation oracle in each case.
+    // Checks every guard word and returns the old word each invocation saw, in invocation order.
     std::vector<uint32_t> additions(test::GpuKit& kit, uint32_t count, uint32_t initial, uint32_t increment, uint32_t final, bool divergent)
     {
         const std::vector<std::byte> blob = test::shaderLibraryFile("AbiAtomic");
@@ -190,7 +183,6 @@ namespace {
     }
 } // namespace
 
-//======================================================================================================================
 TEST_CASE("atomicAdd preserves every contended old value at an offset", "[conformance][atomic]")
 {
     test::requireGpu();
@@ -207,7 +199,6 @@ TEST_CASE("atomicAdd preserves every contended old value at an offset", "[confor
     }
 }
 
-//======================================================================================================================
 TEST_CASE("atomicAdd wraps uint additions and returned values", "[conformance][atomic]")
 {
     test::requireGpu();
@@ -226,7 +217,6 @@ TEST_CASE("atomicAdd wraps uint additions and returned values", "[conformance][a
     }
 }
 
-//======================================================================================================================
 TEST_CASE("atomicAdd selects divergent buffers before contended additions", "[conformance][atomic]")
 {
     test::requireGpu();

@@ -15,61 +15,51 @@
 #include <vector>
 
 namespace rojoRHI::metal4 {
-    /// The native objects of one command list, created once when its frame slot's pool grows and kept while the pool hands the
-    /// list out again: its own allocator, the command buffer it records into, its argument table and its kernel table.
-    /// Everything recording touches is the list's own, so recording takes no lock. Each pointer is one retained reference.
+    // Created once when the frame slot's pool grows and kept while the pool hands the list out again. Everything
+    // recording touches is the list's own, so recording takes no lock. Each pointer is one retained reference.
     struct ListState
     {
-        MTL4::CommandAllocator* allocator = nullptr;  ///< The list's allocator, reset when its frame slot is reused.
-        MTL4::CommandBuffer* commandBuffer = nullptr; ///< Begun at each acquisition, ended by `CommandList::end`, committed by `Queue::submit`.
-        /// Four buffer bindings: `buffer(1)` and `buffer(2)` hold the view and sampler tables' GPU addresses from creation.
+        MTL4::CommandAllocator* allocator = nullptr;  // Reset when its frame slot is reused.
+        MTL4::CommandBuffer* commandBuffer = nullptr; // Begun at each acquisition, ended by `CommandList::end`, committed by `Queue::submit`.
+        // `buffer(1)` and `buffer(2)` hold the view and sampler tables' GPU addresses from creation.
         MTL4::ArgumentTable* table = nullptr;
-        /// Two buffer bindings and one texture binding, which a backend kernel binds before each dispatch.
+        // A backend kernel binds it before each dispatch.
         MTL4::ArgumentTable* kernelTable = nullptr;
-        /// The list's label as the command buffer carries it; kept while the next acquisition's label has the same text.
+        // Kept while the next acquisition's label has the same text.
         NS::String* label = nullptr;
-        std::string labelText; ///< The text `label` was made from.
-        /// True when the command buffer carries `label`: it keeps its label across recordings, so it is set only when it changes.
+        std::string labelText;
+        // The command buffer keeps its label across recordings, so it is set only when it changes.
         bool labelSet = false;
-        std::vector<NS::String*> scopeLabels; ///< The label of each open scope's debug group, innermost last.
-        /// The timestamp pair each open scope claimed, innermost last: the index of its begin entry, or `core::kNoTimestamp`.
+        std::vector<NS::String*> scopeLabels; // Innermost last.
+        // Innermost last: the index of each begin entry, or `core::kNoTimestamp`.
         std::vector<uint32_t> scopeTimestamps;
-        /// True when each native command the list records opens a `CommandPool`: the device's `commandPools`, copied at creation
-        /// so a recording entry reads it from the list's own state.
+        // Copied from the device at creation, so a recording entry reads the list's own state.
         bool commandPools = false;
-        bool markers = false; ///< True when the list emits debug groups and encoder labels: the device's `markers`.
-        std::string scratch;  ///< A NUL-terminated copy of a scope label, made before its string is.
+        bool markers = false; // The device's `markers`.
+        std::string scratch;  // NUL-terminated, made before its string is.
 
-        /// The debug-group string of one scope or pass of a recording, by the order in which they began, with the label text
-        /// it was made from, so the next recording reuses it while the text is the same. Each holds one reference.
+        // One per scope or pass of a recording, by the order in which they began, so the next recording reuses a string
+        // while its text is the same. Each holds one reference.
         struct GroupLabel
         {
-            std::string text;             ///< The scope's label.
-            NS::String* string = nullptr; ///< Its string, or the fallback's when the label made none.
+            std::string text;
+            NS::String* string = nullptr; // Or the fallback's when the label made none.
         };
 
-        std::vector<GroupLabel> groupLabels; ///< The strings of the scopes and passes of the recordings so far, in order.
-        size_t groupCursor = 0;              ///< How many scopes and passes the current recording has begun.
+        std::vector<GroupLabel> groupLabels;
+        size_t groupCursor = 0; // The scopes and passes the current recording has begun.
 
-        /// Creates the allocator, the command buffer, the argument table and the kernel table on `device`, binding the view
-        /// table at `viewTableAddress` to `buffer(1)`, the sampler table at `samplerTableAddress` to `buffer(2)` (ADR 0018)
-        /// and the device's zero record at `zeroRecordAddress` to `buffer(3)`. `perCommandPools` is stored as the list's
-        /// `commandPools` and `emitMarkers` as its `markers`. On failure it releases what it created and names the
-        /// object Metal did not make.
+        // On failure it releases what it created and names the object Metal did not make.
         Result<void> create(
             MTL::Device* device, uint64_t viewTableAddress, uint64_t samplerTableAddress, uint64_t zeroRecordAddress, bool perCommandPools, bool emitMarkers
         );
 
-        /// Releases every object that exists, in reverse order of creation, and clears each pointer. The caller holds an
-        /// autorelease pool and no queue holds work that uses them.
+        // The caller holds an autorelease pool and no queue holds work that uses them.
         void release();
 
-        /// Returns a string holding `label`, for the debug group of the recording's next scope or pass and the labels of the
-        /// encoders it encloses; the caller owns one reference. The string the previous recordings made for the scope or pass
-        /// that began in the same order is reused when its text is `label`; otherwise a new one replaces it, made with alloc
-        /// and init, so it is not autoreleased and needs no pool. The label is not NUL-terminated, so it is copied into
-        /// `scratch` first. A label that is not valid UTF-8 makes no string, and a debug group needs one, so the string then
-        /// holds `fallback`.
+        // The caller owns one reference. A string made with alloc and init is not autoreleased and needs no pool. A
+        // label that is not valid UTF-8 makes no string, and a debug group needs one, so the string then holds
+        // `fallback`.
         NS::String* makeGroupLabel(std::string_view label, const char* fallback);
     };
 } // namespace rojoRHI::metal4

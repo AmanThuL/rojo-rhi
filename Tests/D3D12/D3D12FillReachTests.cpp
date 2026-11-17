@@ -17,18 +17,14 @@
 using namespace rojoRHI;
 
 namespace {
-    /// The bytes a buffer's own raw view and an `Addr` reach, 2^29: a fill writes across it through one root view.
+    // The bytes a buffer's own raw view and an `Addr` reach: a fill writes across it through one root view.
     constexpr uint64_t kReach = uint64_t{ 1 } << 29;
 
-    //==================================================================================================================
-    /// Returns the native calls `list` has recorded since its acquisition.
     uint64_t recordCalls(CommandList list)
     {
         return core::coreOf(list).counts.nativeRecordCalls;
     }
 
-    //==================================================================================================================
-    /// Records on `list` a global barrier from the copy writes of fills to the copy-stage `access`.
     void afterFills(CommandList list, Access access)
     {
         const std::array<GlobalBarrier, 1> barriers{ GlobalBarrier{
@@ -36,10 +32,7 @@ namespace {
         list.barrier(barriers);
     }
 
-    //==================================================================================================================
-    /// Records on `list`, a Graphics list of `device`'s open frame, a barrier after its fills and a copy of `size` bytes of
-    /// `source` from `offset` into a new `Readback` buffer, submits it, ends the frame, waits for the list and returns the
-    /// bytes the copy wrote.
+    // Copies through a new `Readback` buffer after the list's fills, submits the list, ends the frame and waits.
     std::vector<std::byte> readBack(Device device, CommandList list, Buffer source, uint64_t offset, uint64_t size)
     {
         Result<Buffer> created = device.createBuffer({ .size = size, .memory = Memory::Readback, .label = "test.readback" });
@@ -63,8 +56,7 @@ namespace {
         return bytes;
     }
 
-    //==================================================================================================================
-    /// Writes `word` in little-endian byte order over the bytes of `bytes` from `offset`, `size` bytes, both multiples of 4.
+    // Little-endian; `offset` and `size` are multiples of 4.
     void writeWords(std::vector<std::byte>& bytes, uint64_t offset, uint64_t size, uint32_t word)
     {
         for (uint64_t at = offset; at < offset + size; ++at)
@@ -73,8 +65,7 @@ namespace {
         }
     }
 
-    //==================================================================================================================
-    /// Returns the index of the first byte where `read` and `expected` differ, or their size when they are equal.
+    // Their size when they are equal.
     size_t firstDifference(const std::vector<std::byte>& read, const std::vector<std::byte>& expected)
     {
         REQUIRE(read.size() == expected.size());
@@ -89,7 +80,6 @@ namespace {
     }
 } // namespace
 
-//======================================================================================================================
 TEST_CASE("a fill across the raw view's 512 MiB reach writes every word on both sides through one root view", "[d3d12]")
 {
     constexpr uint64_t kSize = kReach + (uint64_t{ 1 } << 16);
@@ -126,7 +116,6 @@ TEST_CASE("a fill across the raw view's 512 MiB reach writes every word on both 
     destroyDevice(*device);
 }
 
-//======================================================================================================================
 TEST_CASE("a fill after a fill reuses the bound kernel and both write their own ranges", "[d3d12]")
 {
     constexpr uint64_t kSize = 1024;

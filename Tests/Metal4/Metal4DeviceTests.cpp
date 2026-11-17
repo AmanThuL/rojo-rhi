@@ -23,15 +23,11 @@
 using namespace rojoRHI;
 
 namespace {
-    //==================================================================================================================
-    /// The native device a RojoRHI device wraps.
     MTL::Device* nativeOf(Device device)
     {
         return DeviceImpl::of(device).device;
     }
 
-    //==================================================================================================================
-    /// Runs `count` empty frames on `device`.
     void runFrames(Device device, uint32_t count)
     {
         for (uint32_t i = 0; i < count; ++i)
@@ -42,7 +38,6 @@ namespace {
     }
 } // namespace
 
-//======================================================================================================================
 TEST_CASE("a Metal 4 device names its adapter and its Apple family", "[metal4]")
 {
     Device device = *createDevice();
@@ -74,7 +69,6 @@ TEST_CASE("a Metal 4 device names its adapter and its Apple family", "[metal4]")
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("the limits a Metal 4 device reports come from the device", "[metal4]")
 {
     Device device = *createDevice();
@@ -98,7 +92,6 @@ TEST_CASE("the limits a Metal 4 device reports come from the device", "[metal4]"
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("the floor check refuses a device below any floor item it reports", "[metal4]")
 {
     Device device = *createDevice();
@@ -133,7 +126,6 @@ TEST_CASE("the floor check refuses a device below any floor item it reports", "[
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("the format table follows the device's BC, float-filtering and sample-count support", "[metal4]")
 {
     Device device = *createDevice();
@@ -161,7 +153,6 @@ TEST_CASE("the format table follows the device's BC, float-filtering and sample-
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("the format table narrows storage, R32Float resolve and depth filtering as the Apple family tables state", "[metal4]")
 {
     Device device = *createDevice();
@@ -181,7 +172,6 @@ TEST_CASE("the format table narrows storage, R32Float resolve and depth filterin
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("the device reports no conservative raster, upload in device memory and mesh tasks on Apple9", "[metal4]")
 {
     Device device = *createDevice();
@@ -193,7 +183,6 @@ TEST_CASE("the device reports no conservative raster, upload in device memory an
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("placementSparse follows the device, and a format is sparse when the device tiles its 2D textures at 64 KiB", "[metal4]")
 {
     Device device = *createDevice();
@@ -209,7 +198,6 @@ TEST_CASE("placementSparse follows the device, and a format is sparse when the d
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("frames past the first framesInFlight wait on the frame event", "[metal4]")
 {
     const uint32_t framesInFlight = GENERATE(2u, 3u);
@@ -237,7 +225,6 @@ TEST_CASE("frames past the first framesInFlight wait on the frame event", "[meta
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("two devices pace their frames independently", "[metal4]")
 {
     Device first = *createDevice({ .framesInFlight = 2 });
@@ -263,7 +250,6 @@ TEST_CASE("two devices pace their frames independently", "[metal4]")
     destroyDevice(first);
 }
 
-//======================================================================================================================
 TEST_CASE("the view and sampler tables are resident Shared buffers of maxViews and maxSamplers entries", "[metal4]")
 {
     Device device = *createDevice();

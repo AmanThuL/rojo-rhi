@@ -20,14 +20,11 @@
 using namespace rojoRHI;
 
 namespace {
-    /// The size of a slow copy: long enough that a later copy left unordered would overtake it.
+    // Long enough that a later copy left unordered would overtake it.
     constexpr uint64_t kBig = uint64_t{ 32 } << 20;
 
-    /// The bytes each case reads back from the end of a slow copy's destination.
     constexpr uint64_t kTail = 256;
 
-    //==================================================================================================================
-    /// A global barrier from copy writes to copy reads and writes.
     GlobalBarrier copyToCopy()
     {
         return GlobalBarrier{
@@ -35,8 +32,6 @@ namespace {
         };
     }
 
-    //==================================================================================================================
-    /// A barrier from copy writes of the last `kTail` bytes of a `kBig`-byte `buffer` to copy reads of them.
     BufferBarrier tailWrittenToRead(Buffer buffer)
     {
         return BufferBarrier{ .buffer = buffer,
@@ -48,15 +43,11 @@ namespace {
                               .dstAccess = Access::CopyRead };
     }
 
-    //==================================================================================================================
-    /// The last `kTail` bytes of `bytes`.
     std::vector<std::byte> tailOf(std::span<const std::byte> bytes)
     {
         return { bytes.end() - kTail, bytes.end() };
     }
 
-    //==================================================================================================================
-    /// Returns `size` bytes of `source` from `offset`, copied into a new Readback buffer by a list of `type` of its own.
     std::vector<std::byte> readRange(test::GpuKit& kit, Buffer source, uint64_t offset, uint64_t size, QueueType type = QueueType::Graphics)
     {
         const Buffer readback = kit.buffer(size, Memory::Readback);
@@ -66,8 +57,6 @@ namespace {
         return kit.read(readback);
     }
 
-    //==================================================================================================================
-    /// Writes `pattern(kBig, seed)` into the Upload buffer `upload` through its CPU pointer and returns its last `kTail` bytes.
     std::vector<std::byte> writeSlowSource(test::GpuKit& kit, Buffer upload, uint32_t seed)
     {
         const std::vector<std::byte> bytes = test::pattern(kBig, seed);
@@ -77,33 +66,29 @@ namespace {
         return tailOf(bytes);
     }
 
-    /// BarrierOracle's root.
+    // `mask` is always zero; it keeps the spin loop in the compiled entry.
     struct DelayRoot
     {
-        uint32_t view;                ///< The 2D storage view the entry stores into.
-        uint32_t spins;               ///< The steps each thread spins for before its store.
-        uint32_t mask = 0;            ///< Always zero; it keeps the spin loop in the compiled entry.
-        uint32_t pad = 0;             ///< Padding.
-        uint32_t width;               ///< The extent in texels.
-        uint32_t height;              ///< The extent in texels.
-        uint32_t pad0 = 0;            ///< Padding.
-        uint32_t pad1 = 0;            ///< Padding.
-        std::array<float, 4> value{}; ///< The value each thread stores.
+        uint32_t view;
+        uint32_t spins;
+        uint32_t mask = 0;
+        uint32_t pad = 0;
+        uint32_t width;
+        uint32_t height;
+        uint32_t pad0 = 0;
+        uint32_t pad1 = 0;
+        std::array<float, 4> value{};
     };
 
-    /// The edge of the delayed-fill target, in texels: 4,096 groups of 64 threads.
+    // 4,096 groups of 64 threads.
     constexpr uint32_t kDelayEdge = 512;
 
-    /// The steps each thread of the slow fill spins for: long enough that the slow fill's last groups still run when a fill
-    /// recorded after it, left unordered, has stored every texel.
+    // Long enough that the slow fill's last groups still run when a fill recorded after it, left unordered, has stored
+    // every texel.
     constexpr uint32_t kSlowSpins = 1u << 20;
 
-    /// The `RGBA8Unorm` texel bytes the fast fill stores, green.
     constexpr std::array<std::byte, 4> kFastTexel{ std::byte{ 0 }, std::byte{ 255 }, std::byte{ 0 }, std::byte{ 255 } };
 
-    //==================================================================================================================
-    /// Records on `list` a dispatch of BarrierOracle's `pipeline` that stores `value` into every texel of `view` after
-    /// `spins` steps per thread.
     void delayedFill(CommandList list, Pipeline pipeline, ViewIndex view, uint32_t spins, const std::array<float, 4>& value)
     {
         list.setPipeline(pipeline);
@@ -111,8 +96,6 @@ namespace {
         list.dispatch(kDelayEdge / 8, kDelayEdge / 8, 1);
     }
 
-    //==================================================================================================================
-    /// Returns how many of the `RGBA8Unorm` texels in `bytes` differ from `expected`, and reports the first of them.
     uint32_t texelsOtherThan(std::span<const std::byte> bytes, const std::array<std::byte, 4>& expected)
     {
         uint32_t wrong = 0;
@@ -135,7 +118,6 @@ namespace {
     }
 } // namespace
 
-//======================================================================================================================
 TEST_CASE("a global barrier orders two copies into one buffer within a list", "[conformance]")
 {
     test::requireGpu();
@@ -155,7 +137,6 @@ TEST_CASE("a global barrier orders two copies into one buffer within a list", "[
     CHECK(readRange(kit, target, 0, kTail) == std::vector<std::byte>(first.begin(), first.begin() + kTail));
 }
 
-//======================================================================================================================
 TEST_CASE("a buffer barrier orders a copy before a copy that reads its result", "[conformance]")
 {
     test::requireGpu();
@@ -172,7 +153,6 @@ TEST_CASE("a buffer barrier orders a copy before a copy that reads its result", 
     CHECK(kit.read(readback) == tailOf(source));
 }
 
-//======================================================================================================================
 TEST_CASE("a texture barrier orders a buffer-to-texture copy before a texture-to-buffer copy", "[conformance]")
 {
     test::requireGpu();
@@ -229,7 +209,6 @@ TEST_CASE("a texture barrier orders a buffer-to-texture copy before a texture-to
     CHECK(kit.read(readback) == std::vector<std::byte>(source.end() - uint64_t{ kRow } * kRows, source.end()));
 }
 
-//======================================================================================================================
 TEST_CASE("a barrier at the start of a list orders the previous list's copy on the queue", "[conformance]")
 {
     test::requireGpu();
@@ -248,7 +227,6 @@ TEST_CASE("a barrier at the start of a list orders the previous list's copy on t
     CHECK(kit.read(readback) == tailOf(source));
 }
 
-//======================================================================================================================
 TEST_CASE("a barrier at the end of a list orders the next list's copy on the queue", "[conformance]")
 {
     test::requireGpu();
@@ -266,7 +244,6 @@ TEST_CASE("a barrier at the end of a list orders the next list's copy on the que
     CHECK(kit.read(readback) == tailOf(source));
 }
 
-//======================================================================================================================
 TEST_CASE("barriers across a scope boundary order copies in two encoders", "[conformance]")
 {
     test::requireGpu();
@@ -295,7 +272,6 @@ TEST_CASE("barriers across a scope boundary order copies in two encoders", "[con
     CHECK(kit.read(readback) == tailOf(source));
 }
 
-//======================================================================================================================
 TEST_CASE("a chain of 64 copies with a barrier between each ends with the first source's bytes", "[conformance]")
 {
     test::requireGpu();
@@ -328,7 +304,6 @@ TEST_CASE("a chain of 64 copies with a barrier between each ends with the first 
     CHECK(kit.readBuffer(buffers.back()) == source);
 }
 
-//======================================================================================================================
 TEST_CASE("barriers order copies on the Compute and Copy queues as on Graphics", "[conformance]")
 {
     test::requireGpu();
@@ -359,7 +334,6 @@ TEST_CASE("barriers order copies on the Compute and Copy queues as on Graphics",
     CHECK(kit.read(readback) == tailOf(source));
 }
 
-//======================================================================================================================
 TEST_CASE("a barrier holds back every later encoder on the queue, not only the first", "[conformance]")
 {
     test::requireGpu();
@@ -430,7 +404,6 @@ TEST_CASE("a barrier holds back every later encoder on the queue, not only the f
     CHECK(readRange(kit, aside, 0, kTail) == unrelated);
 }
 
-//======================================================================================================================
 TEST_CASE("a barrier from Undefined waits for the writes of its source stage before a later write", "[conformance]")
 {
     test::requireGpu();

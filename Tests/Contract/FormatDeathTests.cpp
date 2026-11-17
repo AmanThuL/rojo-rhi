@@ -11,7 +11,6 @@
 
 using namespace rojoRHI;
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-format-0001 a Format value is not an enumerator", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-format-0001", [] {
@@ -20,7 +19,6 @@ TEST_CASE("VU-rojo-format-0001 a Format value is not an enumerator", "[contract]
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-format-0005 formatCapabilities is asked about Undefined", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-format-0005", [] {
@@ -29,7 +27,6 @@ TEST_CASE("VU-rojo-format-0005 formatCapabilities is asked about Undefined", "[c
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-format-0003 a Sampled texture is created in a format the device cannot sample", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-format-0003", [] {
@@ -41,7 +38,6 @@ TEST_CASE("VU-rojo-format-0003 a Sampled texture is created in a format the devi
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-format-0003 a Storage view reinterprets the format as one without storage", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-format-0003", [] {
@@ -51,7 +47,6 @@ TEST_CASE("VU-rojo-format-0003 a Storage view reinterprets the format as one wit
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-format-0004 a block-compressed texture is not a multiple of 4 wide", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-format-0004", [] {

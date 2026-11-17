@@ -11,7 +11,6 @@
 
 namespace rojoRHI {
     namespace core {
-        //==============================================================================================================
         DecodedAddr decodeAddr(DeviceCore&, Addr addr)
         {
             // The Null encoding is the address itself, so the decode needs no per-device state.
@@ -19,7 +18,6 @@ namespace rojoRHI {
         }
     } // namespace core
 
-    //==================================================================================================================
     Addr operator+(Addr base, uint64_t offset)
     {
         // The Null encoding keeps the byte offset in `hi`; the offset is checked alone first so the sum cannot wrap.

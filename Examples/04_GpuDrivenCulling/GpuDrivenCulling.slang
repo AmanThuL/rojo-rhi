@@ -20,6 +20,7 @@ struct MeshVertex
     float4 normal;
 };
 
+// Matches rojoRHI::DrawIndexedIndirectArgs; the leading drawId is what rojoRHI::drawId returns.
 struct DrawIndexedIndirectArgs
 {
     uint drawId;
@@ -76,9 +77,11 @@ void cull(uint3 thread : SV_DispatchThreadID)
 
     Instance instance = rojoRHI::load<Instance>(root.instances, thread.x);
     float3 center = instance.positionScale.xyz;
+    // sqrt(3)/2: the bounding sphere of a unit cube, scaled with the instance.
     float radius = 0.87 * instance.positionScale.w;
 
     Mat4 m = root.viewProj;
+    // The side and near planes, from the rows of viewProj; the infinite projection has no far plane.
     if (outside(m.r3 + m.r0, center, radius) || outside(m.r3 - m.r0, center, radius) ||
         outside(m.r3 + m.r1, center, radius) || outside(m.r3 - m.r1, center, radius) ||
         outside(m.r3 - m.r2, center, radius))
@@ -94,6 +97,7 @@ void cull(uint3 thread : SV_DispatchThreadID)
     record.baseVertex = 0;
     record.firstInstance = 0;
 
+    // The old count is a slot no other thread takes; the order of the records is unspecified.
     uint slot = rojoRHI::atomicAdd(root.count, 0, 1);
     rojoRHI::store<DrawIndexedIndirectArgs>(root.records, slot, record);
 }
@@ -102,6 +106,7 @@ void cull(uint3 thread : SV_DispatchThreadID)
 Varyings sceneVertex(rojoRHI::VertexIds ids)
 {
     DrawRoot root = rojoRHI::root<DrawRoot>();
+    // drawId comes from the bound record, so each indirect draw finds the instance the cull pass kept.
     Instance instance = rojoRHI::load<Instance>(root.instances, rojoRHI::drawId(ids));
     MeshVertex vertex = rojoRHI::load<MeshVertex>(root.vertices, rojoRHI::vertexIndex(ids));
 

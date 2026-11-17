@@ -15,17 +15,13 @@
 
 namespace rojoRHI::metal4 {
     namespace {
-        //==============================================================================================================
-        /// Packs a face's stencil operations and comparison into 12 bits.
         uint64_t packFace(const StencilFaceState& face)
         {
             return uint64_t{ static_cast<uint8_t>(face.fail) } | uint64_t{ static_cast<uint8_t>(face.depthFail) } << 3 |
                    uint64_t{ static_cast<uint8_t>(face.pass) } << 6 | uint64_t{ static_cast<uint8_t>(face.compare) } << 9;
         }
 
-        //==============================================================================================================
-        /// Packs what the descriptor of `state` receives: the depth comparison (`Always` when depth is untested), the depth
-        /// write and, when the stencil test is on, the masks and both faces. Two states with one key make equal objects.
+        // Two states with one key make equal objects.
         uint64_t keyOf(const DepthStencilState& state)
         {
             const CompareOp depthCompare = state.depthTest ? state.depthCompare : CompareOp::Always;
@@ -38,8 +34,7 @@ namespace rojoRHI::metal4 {
             return key;
         }
 
-        //==============================================================================================================
-        /// Returns a new stencil descriptor (+1) for `face` with the masks of `state`.
+        // Returns +1.
         MTL::StencilDescriptor* newStencil(const StencilFaceState& face, const DepthStencilState& state)
         {
             MTL::StencilDescriptor* stencil = MTL::StencilDescriptor::alloc()->init();
@@ -53,7 +48,6 @@ namespace rojoRHI::metal4 {
         }
     } // namespace
 
-    //==================================================================================================================
     void PipelineState::release()
     {
         if (render != nullptr)
@@ -69,7 +63,6 @@ namespace rojoRHI::metal4 {
         depthStencil = nullptr;
     }
 
-    //==================================================================================================================
     MTL::BlendFactor blendFactor(BlendFactor factor)
     {
         switch (factor)
@@ -91,7 +84,6 @@ namespace rojoRHI::metal4 {
         return MTL::BlendFactorZero;
     }
 
-    //==================================================================================================================
     MTL::BlendOperation blendOperation(BlendOp op)
     {
         switch (op)
@@ -105,7 +97,6 @@ namespace rojoRHI::metal4 {
         return MTL::BlendOperationAdd;
     }
 
-    //==================================================================================================================
     // RojoRHI numbers the channels R = 1 to A = 8; Metal numbers them A = 1 to R = 8, so each bit moves on its own.
     MTL::ColorWriteMask colorWriteMask(ColorWriteMask mask)
     {
@@ -118,7 +109,6 @@ namespace rojoRHI::metal4 {
         return static_cast<MTL::ColorWriteMask>(bits);
     }
 
-    //==================================================================================================================
     MTL::CompareFunction compareFunction(CompareOp compare)
     {
         switch (compare)
@@ -135,7 +125,6 @@ namespace rojoRHI::metal4 {
         return MTL::CompareFunctionAlways;
     }
 
-    //==================================================================================================================
     MTL::StencilOperation stencilOperation(StencilOp op)
     {
         switch (op)
@@ -152,7 +141,6 @@ namespace rojoRHI::metal4 {
         return MTL::StencilOperationKeep;
     }
 
-    //==================================================================================================================
     MTL::CullMode cullMode(CullMode cull)
     {
         switch (cull)
@@ -164,7 +152,6 @@ namespace rojoRHI::metal4 {
         return MTL::CullModeNone;
     }
 
-    //==================================================================================================================
     MTL::Winding winding(FrontFace face)
     {
         switch (face)
@@ -175,7 +162,6 @@ namespace rojoRHI::metal4 {
         return MTL::WindingCounterClockwise;
     }
 
-    //==================================================================================================================
     MTL::TriangleFillMode triangleFillMode(FillMode fill)
     {
         switch (fill)
@@ -186,7 +172,6 @@ namespace rojoRHI::metal4 {
         return MTL::TriangleFillModeFill;
     }
 
-    //==================================================================================================================
     MTL::PrimitiveTopologyClass topologyClass(PrimitiveClass primitive)
     {
         switch (primitive)
@@ -198,7 +183,6 @@ namespace rojoRHI::metal4 {
         return MTL::PrimitiveTopologyClassTriangle;
     }
 
-    //==================================================================================================================
     MTL::PrimitiveType listType(PrimitiveClass primitive)
     {
         switch (primitive)
@@ -210,7 +194,6 @@ namespace rojoRHI::metal4 {
         return MTL::PrimitiveTypeTriangle;
     }
 
-    //==================================================================================================================
     MTL::PrimitiveType primitiveType(PrimitiveTopology topology)
     {
         switch (topology)
@@ -224,7 +207,6 @@ namespace rojoRHI::metal4 {
         return MTL::PrimitiveTypeTriangle;
     }
 
-    //==================================================================================================================
     MTL::IndexType indexType(IndexType type)
     {
         switch (type)
@@ -235,7 +217,6 @@ namespace rojoRHI::metal4 {
         return MTL::IndexTypeUInt32;
     }
 
-    //==================================================================================================================
     void describeColors(MTL4::RenderPipelineColorAttachmentDescriptorArray* attachments, std::span<const ColorTarget> colors)
     {
         for (size_t i = 0; i < colors.size(); ++i)
@@ -257,13 +238,11 @@ namespace rojoRHI::metal4 {
         }
     }
 
-    //==================================================================================================================
     bool testsDepthOrStencil(const DepthStencilState& state)
     {
         return state.depthTest || state.stencilTest;
     }
 
-    //==================================================================================================================
     MTL::DepthStencilState* DepthStencilCache::get(MTL::Device* device, const DepthStencilState& state, core::DeviceCounts& counts)
     {
         if (!testsDepthOrStencil(state))
@@ -299,7 +278,6 @@ namespace rojoRHI::metal4 {
         return created;
     }
 
-    //==================================================================================================================
     Result<void> DepthStencilCache::create(MTL::Device* device, core::DeviceCounts& counts)
     {
         MTL::DepthStencilDescriptor* descriptor = MTL::DepthStencilDescriptor::alloc()->init();
@@ -316,14 +294,12 @@ namespace rojoRHI::metal4 {
         return {};
     }
 
-    //==================================================================================================================
     size_t DepthStencilCache::size()
     {
         std::lock_guard lock(m_mutex);
         return m_states.size();
     }
 
-    //==================================================================================================================
     void DepthStencilCache::release(core::DeviceCounts& counts)
     {
         std::lock_guard lock(m_mutex);
@@ -341,7 +317,6 @@ namespace rojoRHI::metal4 {
         }
     }
 
-    //==================================================================================================================
     void retirePipeline([[maybe_unused]] void* context, core::PipelineRecord& record)
     {
         const AutoreleasePool pool;

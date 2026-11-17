@@ -11,7 +11,6 @@
 
 using namespace rojoRHI;
 
-//======================================================================================================================
 TEST_CASE("a Null submission completes its signals before submit returns", "[null]")
 {
     Device device = *createDevice();
@@ -39,7 +38,6 @@ TEST_CASE("a Null submission completes its signals before submit returns", "[nul
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("a Null wait on a value below the signalled one returns at once", "[null]")
 {
     Device device = *createDevice();
@@ -50,7 +48,6 @@ TEST_CASE("a Null wait on a value below the signalled one returns at once", "[nu
     destroyDevice(device);
 }
 
-//======================================================================================================================
 TEST_CASE("a Null wait that cannot be satisfied returns false without blocking", "[null]")
 {
     Device device = *createDevice();

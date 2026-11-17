@@ -19,14 +19,12 @@ namespace {
     constexpr uint64_t kBig = 1 << 20;
     constexpr BufferTextureLayout kLayout{ .rowPitch = 256 };
 
-    //==================================================================================================================
     TextureRegion box(uint32_t width, uint32_t height)
     {
         return TextureRegion{ .extent = { width, height, 1 } };
     }
 } // namespace
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-buffer-0001 copyBuffer writes an Upload buffer", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-buffer-0001", [] {
@@ -35,7 +33,6 @@ TEST_CASE("VU-rojo-buffer-0001 copyBuffer writes an Upload buffer", "[contract][
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-buffer-0002 copyBuffer reads a Readback buffer", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-buffer-0002", [] {
@@ -44,7 +41,6 @@ TEST_CASE("VU-rojo-buffer-0002 copyBuffer reads a Readback buffer", "[contract][
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-cmd-0034 a layout offset is not a multiple of 512", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-cmd-0034", [] {
@@ -53,7 +49,6 @@ TEST_CASE("VU-rojo-cmd-0034 a layout offset is not a multiple of 512", "[contrac
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-cmd-0035 a layout row pitch is not a multiple of 256", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-cmd-0035", [] {
@@ -62,7 +57,6 @@ TEST_CASE("VU-rojo-cmd-0035 a layout row pitch is not a multiple of 256", "[cont
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-cmd-0036 a layout has fewer rows per image than the region", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-cmd-0036", [] {
@@ -71,7 +65,6 @@ TEST_CASE("VU-rojo-cmd-0036 a layout has fewer rows per image than the region", 
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-cmd-0037 images of a layout are not a multiple of 512 bytes apart", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-cmd-0037", [] {
@@ -83,7 +76,6 @@ TEST_CASE("VU-rojo-cmd-0037 images of a layout are not a multiple of 512 bytes a
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-cmd-0038 a region names a mip the texture lacks", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-cmd-0038", [] {
@@ -92,7 +84,6 @@ TEST_CASE("VU-rojo-cmd-0038 a region names a mip the texture lacks", "[contract]
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-cmd-0039 a region has no texels", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-cmd-0039", [] {
@@ -101,7 +92,6 @@ TEST_CASE("VU-rojo-cmd-0039 a region has no texels", "[contract][death]")
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-cmd-0040 a block-compressed region cuts a block", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-cmd-0040", [] {
@@ -110,7 +100,6 @@ TEST_CASE("VU-rojo-cmd-0040 a block-compressed region cuts a block", "[contract]
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-cmd-0041 a region names a texture with a stencil component", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-cmd-0041", [] {
@@ -119,7 +108,6 @@ TEST_CASE("VU-rojo-cmd-0041 a region names a texture with a stencil component", 
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-cmd-0042 copyBuffer is recorded inside a render pass", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-cmd-0042", [] {
@@ -130,7 +118,6 @@ TEST_CASE("VU-rojo-cmd-0042 copyBuffer is recorded inside a render pass", "[cont
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-cmd-0043 copyBuffer copies no bytes", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-cmd-0043", [] {
@@ -139,7 +126,6 @@ TEST_CASE("VU-rojo-cmd-0043 copyBuffer copies no bytes", "[contract][death]")
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-cmd-0043 copyBuffer range end wraps past 2^64", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-cmd-0043", [] {
@@ -148,7 +134,6 @@ TEST_CASE("VU-rojo-cmd-0043 copyBuffer range end wraps past 2^64", "[contract][d
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-cmd-0044 copyBuffer copies a range onto itself", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-cmd-0044", [] {
@@ -158,7 +143,6 @@ TEST_CASE("VU-rojo-cmd-0044 copyBuffer copies a range onto itself", "[contract][
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-cmd-0046 copyBufferToTexture is recorded inside a render pass", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-cmd-0046", [] {
@@ -170,7 +154,6 @@ TEST_CASE("VU-rojo-cmd-0046 copyBufferToTexture is recorded inside a render pass
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-cmd-0049 copyTextureToBuffer is recorded inside a render pass", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-cmd-0049", [] {
@@ -182,7 +165,6 @@ TEST_CASE("VU-rojo-cmd-0049 copyTextureToBuffer is recorded inside a render pass
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-cmd-0052 copyTexture is recorded inside a render pass", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-cmd-0052", [] {
@@ -194,7 +176,6 @@ TEST_CASE("VU-rojo-cmd-0052 copyTexture is recorded inside a render pass", "[con
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-cmd-0053 copyTexture copies between formats that are not copy-compatible", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-cmd-0053", [] {
@@ -203,7 +184,6 @@ TEST_CASE("VU-rojo-cmd-0053 copyTexture copies between formats that are not copy
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-cmd-0055 copyTexture copies regions that share a subresource", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-cmd-0055", [] {
@@ -213,7 +193,6 @@ TEST_CASE("VU-rojo-cmd-0055 copyTexture copies regions that share a subresource"
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-cmd-0056 fillBuffer is recorded on a Copy list", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-cmd-0056", [] {
@@ -222,7 +201,6 @@ TEST_CASE("VU-rojo-cmd-0056 fillBuffer is recorded on a Copy list", "[contract][
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-cmd-0057 fillBuffer fills no bytes", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-cmd-0057", [] {
@@ -231,7 +209,6 @@ TEST_CASE("VU-rojo-cmd-0057 fillBuffer fills no bytes", "[contract][death]")
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-cmd-0058 fillBuffer fills a buffer without ShaderWrite", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-cmd-0058", [] {
@@ -240,7 +217,6 @@ TEST_CASE("VU-rojo-cmd-0058 fillBuffer fills a buffer without ShaderWrite", "[co
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-cmd-0059 clearTexture clears to a depth above one", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-cmd-0059", [] {
@@ -249,7 +225,6 @@ TEST_CASE("VU-rojo-cmd-0059 clearTexture clears to a depth above one", "[contrac
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-cmd-0060 clearTexture is recorded on a Copy list", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-cmd-0060", [] {
@@ -258,7 +233,6 @@ TEST_CASE("VU-rojo-cmd-0060 clearTexture is recorded on a Copy list", "[contract
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-cmd-0061 clearTexture clears a texture that is neither attachment nor storage", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-cmd-0061", [] {
@@ -267,7 +241,6 @@ TEST_CASE("VU-rojo-cmd-0061 clearTexture clears a texture that is neither attach
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-cmd-0064 copyBufferToTexture reads past the end of the buffer", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-cmd-0064", [] {
@@ -276,7 +249,6 @@ TEST_CASE("VU-rojo-cmd-0064 copyBufferToTexture reads past the end of the buffer
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-cmd-0064 copyBufferToTexture addresses bytes past 2^64", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-cmd-0064", [] {
@@ -291,7 +263,6 @@ TEST_CASE("VU-rojo-cmd-0064 copyBufferToTexture addresses bytes past 2^64", "[co
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-cmd-0065 copyTextureToBuffer writes past the end of the buffer", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-cmd-0065", [] {
@@ -300,7 +271,6 @@ TEST_CASE("VU-rojo-cmd-0065 copyTextureToBuffer writes past the end of the buffe
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-cmd-0066 copyBufferToTexture writes a multisampled texture", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-cmd-0066", [] {
@@ -309,7 +279,6 @@ TEST_CASE("VU-rojo-cmd-0066 copyBufferToTexture writes a multisampled texture", 
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-cmd-0068 copyTextureToBuffer reads a multisampled texture", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-cmd-0068", [] {
@@ -318,7 +287,6 @@ TEST_CASE("VU-rojo-cmd-0068 copyTextureToBuffer reads a multisampled texture", "
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-buffer-0002 copyBufferToTexture reads a Readback buffer", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-buffer-0002", [] {
@@ -327,7 +295,6 @@ TEST_CASE("VU-rojo-buffer-0002 copyBufferToTexture reads a Readback buffer", "[c
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-buffer-0001 copyTextureToBuffer writes an Upload buffer", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-buffer-0001", [] {
@@ -336,7 +303,6 @@ TEST_CASE("VU-rojo-buffer-0001 copyTextureToBuffer writes an Upload buffer", "[c
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-cmd-0043 copyBuffer starts at an offset that is not a multiple of 4", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-cmd-0043", [] {
@@ -345,7 +311,6 @@ TEST_CASE("VU-rojo-cmd-0043 copyBuffer starts at an offset that is not a multipl
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-cmd-0043 copyBuffer writes past the end of the destination", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-cmd-0043", [] {
@@ -354,7 +319,6 @@ TEST_CASE("VU-rojo-cmd-0043 copyBuffer writes past the end of the destination", 
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-cmd-0053 copyTexture copies between multisampled textures", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-cmd-0053", [] {
@@ -363,7 +327,6 @@ TEST_CASE("VU-rojo-cmd-0053 copyTexture copies between multisampled textures", "
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-cmd-0053 copyTexture copies between regions of different extents", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-cmd-0053", [] {
@@ -372,7 +335,6 @@ TEST_CASE("VU-rojo-cmd-0053 copyTexture copies between regions of different exte
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-cmd-0053 copyTexture copies between regions of different layer counts", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-cmd-0053", [] {
@@ -384,7 +346,6 @@ TEST_CASE("VU-rojo-cmd-0053 copyTexture copies between regions of different laye
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-cmd-0056 fillBuffer is recorded inside a render pass", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-cmd-0056", [] {
@@ -395,7 +356,6 @@ TEST_CASE("VU-rojo-cmd-0056 fillBuffer is recorded inside a render pass", "[cont
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-cmd-0057 fillBuffer fills at an offset that is not a multiple of 4", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-cmd-0057", [] {
@@ -404,7 +364,6 @@ TEST_CASE("VU-rojo-cmd-0057 fillBuffer fills at an offset that is not a multiple
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-cmd-0057 fillBuffer fills past the end of the buffer", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-cmd-0057", [] {
@@ -413,7 +372,6 @@ TEST_CASE("VU-rojo-cmd-0057 fillBuffer fills past the end of the buffer", "[cont
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-cmd-0060 clearTexture is recorded inside a render pass", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-cmd-0060", [] {
@@ -424,7 +382,6 @@ TEST_CASE("VU-rojo-cmd-0060 clearTexture is recorded inside a render pass", "[co
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-cmd-0061 clearTexture on a Compute list clears a render target", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-cmd-0061", [] {
@@ -433,7 +390,6 @@ TEST_CASE("VU-rojo-cmd-0061 clearTexture on a Compute list clears a render targe
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-texture-0016 a clear range has no layers", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-texture-0016", [] {
@@ -442,7 +398,6 @@ TEST_CASE("VU-rojo-texture-0016 a clear range has no layers", "[contract][death]
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-texture-0017 a clear range ends past the last mip", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-texture-0017", [] {
@@ -451,7 +406,6 @@ TEST_CASE("VU-rojo-texture-0017 a clear range ends past the last mip", "[contrac
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-texture-0041 a clear range with all counts starts past the last layer", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-texture-0041", [] {
@@ -460,7 +414,6 @@ TEST_CASE("VU-rojo-texture-0041 a clear range with all counts starts past the la
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-cmd-0073 clearTexture clears more storage mips in a frame than maxStorageClearsPerFrame", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-cmd-0073", [] {

@@ -21,15 +21,11 @@
 using namespace rojoRHI;
 
 namespace {
-    /// Bytes of one tile of a buffer or heap on every backend that takes the placement path.
+    // One tile of a buffer or heap on every backend that takes the placement path.
     constexpr uint64_t kTile = 65536;
-    /// Tiles each test heap holds, enough for every mapping a case makes.
     constexpr uint64_t kHeapTiles = 8;
-    /// Edge of the sparse textures, in texels of `RGBA8Unorm`.
     constexpr uint32_t kEdge = 512;
 
-    //==================================================================================================================
-    /// Skips the running case when the device has no placement sparse resources.
     void requirePlacementSparse(const test::GpuKit& kit)
     {
         if (!kit.device.capabilities().placementSparse)
@@ -38,15 +34,11 @@ namespace {
         }
     }
 
-    //==================================================================================================================
-    /// Returns a `Memory::Gpu` heap of `kHeapTiles` tiles.
     Heap makeHeap(test::GpuKit& kit)
     {
         return *kit.device.createHeap(HeapDesc{ .size = kHeapTiles * kTile, .memory = Memory::Gpu, .label = "test.sparse.heap" });
     }
 
-    //==================================================================================================================
-    /// Returns a sparse buffer of `tiles` tiles.
     Buffer makeSparseBuffer(test::GpuKit& kit, uint64_t tiles)
     {
         return *kit.device.createBuffer(
@@ -54,8 +46,6 @@ namespace {
         );
     }
 
-    //==================================================================================================================
-    /// Returns a sparse `RGBA8Unorm` 2D array texture of `kEdge` square texels, a full mip chain and two layers.
     Texture makeSparseTexture(test::GpuKit& kit)
     {
         return *kit.device.createTexture(
@@ -69,22 +59,16 @@ namespace {
         );
     }
 
-    //==================================================================================================================
-    /// The access pair of a copy write followed by a copy read.
     GlobalBarrier copyWriteToRead()
     {
         return GlobalBarrier{ .srcStage = Stage::Copy, .srcAccess = Access::CopyWrite, .dstStage = Stage::Copy, .dstAccess = Access::CopyRead };
     }
 
-    //==================================================================================================================
-    /// Returns the `rowPitch` of a row of `width` texels of 4 bytes, padded to 256 bytes.
     uint32_t pitchOf(uint32_t width)
     {
         return (width * 4 + 255) / 256 * 256;
     }
-    //==================================================================================================================
-    /// Maps a sparse buffer onto the first tile of `heap` and fills the tile with a pattern, so the memory holds another
-    /// resource's data when a texture is mapped over it.
+    // Leaves another resource's data in the first tile of `heap`, so a texture mapped over it starts on dirty memory.
     void dirtyFirstTile(test::GpuKit& kit, Heap heap)
     {
         const Buffer sparse = makeSparseBuffer(kit, 1);
@@ -97,8 +81,6 @@ namespace {
         kit.run(std::array{ list });
     }
 
-    //==================================================================================================================
-    /// Returns a sparse 2D texture of `format`, `kEdge` square texels, one mip and one layer, with `usage` and `Sparse`.
     Texture makeSparseTarget(test::GpuKit& kit, Format format, TextureUsage usage)
     {
         return *kit.device.createTexture(
@@ -110,8 +92,6 @@ namespace {
         );
     }
 
-    //==================================================================================================================
-    /// Returns the draw oracle library on the kit's device.
     ShaderLibrary loadOracle(test::GpuKit& kit)
     {
         const std::vector<std::byte> blob = test::shaderLibraryFile("DrawOracle");
@@ -119,7 +99,6 @@ namespace {
     }
 } // namespace
 
-//======================================================================================================================
 TEST_CASE("a mapped sparse buffer tile holds what a copy wrote", "[conformance]")
 {
     test::requireGpu();
@@ -140,7 +119,6 @@ TEST_CASE("a mapped sparse buffer tile holds what a copy wrote", "[conformance]"
     CHECK(kit.read(readback) == bytes);
 }
 
-//======================================================================================================================
 TEST_CASE("a heap tile mapped into a second sparse buffer reads the first one's data", "[conformance]")
 {
     test::requireGpu();
@@ -167,7 +145,6 @@ TEST_CASE("a heap tile mapped into a second sparse buffer reads the first one's 
     CHECK(kit.read(readback) == bytes);
 }
 
-//======================================================================================================================
 TEST_CASE("a mapped texture region holds what copyBufferToTexture wrote", "[conformance]")
 {
     test::requireGpu();
@@ -198,7 +175,6 @@ TEST_CASE("a mapped texture region holds what copyBufferToTexture wrote", "[conf
     CHECK(equal);
 }
 
-//======================================================================================================================
 TEST_CASE("a mip tail maps and holds data", "[conformance]")
 {
     test::requireGpu();
@@ -242,7 +218,6 @@ TEST_CASE("a mip tail maps and holds data", "[conformance]")
     CHECK(std::equal(lastGot.begin(), lastGot.end(), lastRows.begin()));
 }
 
-//======================================================================================================================
 TEST_CASE("a mapping on the compute queue, ordered by a fence, is seen by a graphics copy", "[conformance]")
 {
     test::requireGpu();
@@ -267,7 +242,6 @@ TEST_CASE("a mapping on the compute queue, ordered by a fence, is seen by a grap
     CHECK(kit.read(readback) == bytes);
 }
 
-//======================================================================================================================
 TEST_CASE("a mapping applies after the work submitted before it on its queue", "[conformance]")
 {
     test::requireGpu();
@@ -335,7 +309,6 @@ TEST_CASE("a mapping applies after the work submitted before it on its queue", "
     CHECK(sameBytes);
 }
 
-//======================================================================================================================
 TEST_CASE("work submitted after a mapping on its queue writes the mapped tiles", "[conformance]")
 {
     test::requireGpu();
@@ -390,7 +363,6 @@ TEST_CASE("work submitted after a mapping on its queue writes the mapped tiles",
     CHECK(mismatches == 0);
 }
 
-//======================================================================================================================
 TEST_CASE("a render target tile newly mapped over another resource's memory renders after a discard", "[conformance]")
 {
     test::requireGpu();
@@ -453,7 +425,6 @@ TEST_CASE("a render target tile newly mapped over another resource's memory rend
     CHECK(wrong == 0);
 }
 
-//======================================================================================================================
 TEST_CASE("a depth tile newly mapped renders after a discard", "[conformance]")
 {
     test::requireGpu();

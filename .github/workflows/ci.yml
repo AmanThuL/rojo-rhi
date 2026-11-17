@@ -7,7 +7,9 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 jobs:
   # The Null backend, which needs no GPU: the build and the contract cases on each hosted OS.
-  null:
+  # The id is not `null`, which YAML reads as no key at all; the quoted name shows it.
+  null-backend:
+    name: "null (${{ matrix.os }})"
     strategy: {fail-fast: false, matrix: {os: [macos-26, windows-latest]}}
     runs-on: ${{ matrix.os }}
     steps:

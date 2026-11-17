@@ -16,20 +16,16 @@ using namespace rojoRHI;
 using test::PassKit;
 
 namespace {
-    /// The bytes every test copies into the sparse buffer.
     constexpr uint64_t kBytes = 256;
 
-    /// A `Memory::Gpu` heap, a sparse buffer of four tiles and a sparse 2D texture of two layers with a mip tail.
     struct SparseSet
     {
-        Heap heap;       ///< The heap tiles map onto.
-        Buffer buffer;   ///< The sparse buffer.
-        Texture texture; ///< The sparse texture.
-        TileShape shape; ///< The tile shape of `texture`.
+        Heap heap;
+        Buffer buffer;
+        Texture texture;
+        TileShape shape;
     };
 
-    //==================================================================================================================
-    /// Creates the sparse resources of a test on the device of `kit`.
     SparseSet sparse(PassKit& kit)
     {
         SparseSet set;
@@ -49,29 +45,21 @@ namespace {
         return set;
     }
 
-    //==================================================================================================================
-    /// Returns the mapping of the first tile of `set`'s buffer onto the heap's first tile.
     TileMapping bufferTile(const SparseSet& set)
     {
         return TileMapping{ .buffer = set.buffer, .bufferSize = 65536, .heap = set.heap };
     }
 
-    //==================================================================================================================
-    /// Returns the region of the first tile of mip 0, layer 0 of `set`'s texture.
     TextureRegion firstTile(const SparseSet& set)
     {
         return TextureRegion{ .extent = { set.shape.width, set.shape.height, 1 } };
     }
 
-    //==================================================================================================================
-    /// Returns the mapping of the first tile of mip 0, layer 0 of `set`'s texture onto the heap's first tile.
     TileMapping textureTile(const SparseSet& set)
     {
         return TileMapping{ .texture = set.texture, .region = firstTile(set), .heap = set.heap };
     }
 
-    //==================================================================================================================
-    /// Ends `list` and submits it alone to the queue of `type` of `device`, waiting on `wait` and signalling `signal`.
     void submitTo(Device device, CommandList list, QueueType type, std::span<const FenceValue> wait = {}, std::span<const FenceValue> signal = {})
     {
         list.end();
@@ -80,7 +68,6 @@ namespace {
     }
 } // namespace
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-sparse-0013 a sparse buffer copied to on Compute is remapped on Graphics with no fence", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-sparse-0013", [] {
@@ -94,7 +81,6 @@ TEST_CASE("VU-rojo-sparse-0013 a sparse buffer copied to on Compute is remapped 
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-sparse-0013 a sparse buffer remapped on Graphics is copied to on Compute with no fence", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-sparse-0013", [] {
@@ -108,7 +94,6 @@ TEST_CASE("VU-rojo-sparse-0013 a sparse buffer remapped on Graphics is copied to
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-sparse-0013 a sparse texture remapped on Graphics is moved on Compute with no fence", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-sparse-0013", [] {
@@ -122,7 +107,6 @@ TEST_CASE("VU-rojo-sparse-0013 a sparse texture remapped on Graphics is moved on
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-sparse-0013 a sparse texture copied on Compute is remapped on Graphics with no fence", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-sparse-0013", [] {
@@ -137,7 +121,6 @@ TEST_CASE("VU-rojo-sparse-0013 a sparse texture copied on Compute is remapped on
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-sparse-0013 a sparse buffer written and remapped on Graphics is written on Compute with no fence, not queue-0005", "[contract][death]")
 {
     // The Compute copy races both the Graphics copy (queue-0005) and the remap; the mapping rule reports first.
@@ -154,7 +137,6 @@ TEST_CASE("VU-rojo-sparse-0013 a sparse buffer written and remapped on Graphics 
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-sparse-0013 a sparse texture written and remapped on Graphics is written on Compute with no fence, not queue-0005", "[contract][death]")
 {
     // A fence hands the texture over in General before the Graphics copy, so only the copy and the remap race the Compute copy.
@@ -176,7 +158,6 @@ TEST_CASE("VU-rojo-sparse-0013 a sparse texture written and remapped on Graphics
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-sparse-0013 a copy on Compute targets a texture tile Graphics remapped with no fence", "[contract][death]")
 {
     // The move to General is ordered before the remap, so only the copy's tile meets it.
@@ -197,7 +178,6 @@ TEST_CASE("VU-rojo-sparse-0013 a copy on Compute targets a texture tile Graphics
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-sparse-0014 a newly mapped buffer tile is copied to with no global barrier", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-sparse-0014", [] {
@@ -210,7 +190,6 @@ TEST_CASE("VU-rojo-sparse-0014 a newly mapped buffer tile is copied to with no g
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-sparse-0014 a newly mapped texture tile is copied to without a discard", "[contract][death]")
 {
     // The texture holds defined contents in General before the mapping, so the move to CopyDst keeps them: no discard.
@@ -228,7 +207,6 @@ TEST_CASE("VU-rojo-sparse-0014 a newly mapped texture tile is copied to without 
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-sparse-0014 a texture tile remapped after a discard is used without another", "[contract][death]")
 {
     ROJORHI_EXPECT_DEATH("VU-rojo-sparse-0014", [] {
@@ -251,7 +229,6 @@ TEST_CASE("VU-rojo-sparse-0014 a texture tile remapped after a discard is used w
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-sparse-0014 a newly mapped buffer tile is first used on another queue, after a fence, with no global barrier", "[contract][death]")
 {
     // The fence orders the mapping before the copy (no sparse-0013); only the global barrier is missing.
@@ -270,9 +247,6 @@ TEST_CASE("VU-rojo-sparse-0014 a newly mapped buffer tile is first used on anoth
 }
 
 namespace {
-    //==================================================================================================================
-    /// Returns whether the device packs a mip tail for the texture of `sparse`, whose tile shape then names a level below the
-    /// mip count.
     bool packsMipTail()
     {
         Device device = *createDevice();
@@ -292,7 +266,6 @@ namespace {
     }
 } // namespace
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-sparse-0014 a newly mapped mip tail is moved from a defined layout and copied to", "[contract][death]")
 {
     if (!packsMipTail())
@@ -315,7 +288,6 @@ TEST_CASE("VU-rojo-sparse-0014 a newly mapped mip tail is moved from a defined l
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-sparse-0014 a shader read of a texture with a newly mapped tile reaches it", "[contract][death]")
 {
     // A declared shader access names no texel box, so it reaches every mark of the subresources it names.
@@ -335,7 +307,6 @@ TEST_CASE("VU-rojo-sparse-0014 a shader read of a texture with a newly mapped ti
     });
 }
 
-//======================================================================================================================
 TEST_CASE("VU-rojo-sync-0006 a newly mapped Sparse texture is first used on a Copy list", "[contract][death]")
 {
     // A Copy list finds only a texture that is neither placed nor Sparse in General, so the sparse texture is still in

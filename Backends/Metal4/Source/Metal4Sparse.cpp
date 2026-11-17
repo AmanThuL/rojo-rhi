@@ -28,15 +28,12 @@
 
 namespace rojoRHI::metal4 {
     namespace {
-        //==============================================================================================================
         NS::UInteger ceilDiv(uint64_t value, uint64_t unit)
         {
             return static_cast<NS::UInteger>((value + unit - 1) / unit);
         }
 
-        //==============================================================================================================
-        /// Returns the group of `groups` that updates the resource of `target` from its heap in the mode of `mapping`, adding it
-        /// at the end when no element named that resource, heap and mode before.
+        // Adds a group at the end when none names that resource, heap and mode.
         MappingGroup& groupFor(std::vector<MappingGroup>& groups, const TileMapping& mapping, const MappingTarget& target)
         {
             for (MappingGroup& group : groups)
@@ -54,8 +51,7 @@ namespace rojoRHI::metal4 {
             return group;
         }
 
-        //==============================================================================================================
-        /// Adds the operations of `mapping`, a texture region or mip tail of `target`, to `group`: one per layer.
+        // One operation per layer.
         void addTextureOperations(MappingGroup& group, const TileMapping& mapping, const MappingTarget& target)
         {
             const TileShape& shape = target.shape;
@@ -91,8 +87,6 @@ namespace rojoRHI::metal4 {
             }
         }
 
-        //==============================================================================================================
-        /// Adds the operation of `mapping`, a buffer range, to `group`.
         void addBufferOperation(MappingGroup& group, const TileMapping& mapping)
         {
             const MTL::SparseTextureMappingMode mode = mapping.unmap ? MTL::SparseTextureMappingModeUnmap : MTL::SparseTextureMappingModeMap;
@@ -102,9 +96,7 @@ namespace rojoRHI::metal4 {
             );
         }
 
-        //==============================================================================================================
-        /// Signals the progress event of `queue` with its next value and waits on the queue for that value: the queue's later
-        /// work, a native mapping update included, starts only once all its earlier work, a mapping update included, completes.
+        // The queue's later work, a native mapping update included, starts only once all its earlier work completes.
         void orderOnQueue(QueueImpl& queue, core::DeviceCore& core)
         {
             const uint64_t progress = queue.progressValue.load(std::memory_order_relaxed) + 1;
@@ -115,19 +107,16 @@ namespace rojoRHI::metal4 {
         }
     } // namespace
 
-    //==================================================================================================================
     MTL::Size sparseTileExtent(MTL::Device* device, MTL::TextureType type, MTL::PixelFormat format)
     {
         return device->sparseTileSize(type, format, 1, MTL::SparsePageSize64);
     }
 
-    //==================================================================================================================
     bool sparseFormat(MTL::Device* device, MTL::PixelFormat format)
     {
         return device->supportsPlacementSparse() && sparseTileExtent(device, MTL::TextureType2D, format).width != 0;
     }
 
-    //==================================================================================================================
     TileShape measureTiles(MTL::Device* device, const MTL::Texture* texture, uint32_t mips)
     {
         const MTL::Size extent = device->sparseTileSize(texture->textureType(), texture->pixelFormat(), texture->sampleCount(), MTL::SparsePageSize64);
@@ -142,7 +131,6 @@ namespace rojoRHI::metal4 {
         return shape;
     }
 
-    //==================================================================================================================
     std::vector<MappingTarget> resolveMappings(core::DeviceCore& core, std::span<const TileMapping> mappings)
     {
         std::vector<MappingTarget> targets(mappings.size());
@@ -177,7 +165,6 @@ namespace rojoRHI::metal4 {
         return targets;
     }
 
-    //==================================================================================================================
     std::vector<MappingGroup> groupMappings(std::span<const TileMapping> mappings, std::span<const MappingTarget> targets)
     {
         std::vector<MappingGroup> groups;
@@ -203,7 +190,6 @@ namespace rojoRHI::metal4 {
         return groups;
     }
 
-    //==================================================================================================================
     void mapTiles(QueueImpl& queue, std::span<const TileMapping> mappings)
     {
         core::DeviceCore& core = queue.device->core;

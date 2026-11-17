@@ -22,33 +22,27 @@
 using namespace rojoRHI;
 
 namespace {
-    /// The input extent of every upscaler of the cases, in texels.
     constexpr uint32_t kInput = 64;
 
-    /// The output extent: twice the input in each axis.
     constexpr uint32_t kOutput = 128;
 
-    /// The color every color input texel holds; each channel is exact in `RGBA16Float`.
+    // Each channel is exact in `RGBA16Float`.
     constexpr ClearColor kColor{ 0.25f, 0.5f, 0.75f, 1.0f };
 
-    /// A color an input holds before the write a case orders the upscale after; each channel differs from `kColor`'s.
+    // What an input holds before the write the upscale is ordered after; each channel differs from `kColor`'s.
     constexpr ClearColor kStale{ 1.0f, 0.0f, 0.25f, 1.0f };
 
-    /// What the output holds before the upscale, so a texel the upscale does not write fails the comparison; each channel
-    /// differs from `kColor`'s.
+    // What the output holds before the upscale, so a texel the upscale does not write fails the comparison; each channel
+    // differs from `kColor`'s.
     constexpr ClearColor kSentinel{ 0.0f, 1.0f, 0.0f, 0.0f };
 
-    /// The bound on the difference between an output channel and the input's. `RGBA16Float` keeps 11 significant bits, a
-    /// step of 2^-11 for values in [0.5, 1); a reconstruction that filters, tonemaps and accumulates history in that precision
-    /// rounds several times per texel, so the bound is eight such steps, 2^-8. Chapter 12 states no precision of its own; the
-    /// bound is fixed from the format and is never widened to fit a result (ADR 0009).
+    // `RGBA16Float` keeps 11 significant bits, a step of 2^-11 for values in [0.5, 1); a reconstruction that filters,
+    // tonemaps and accumulates history in that precision rounds several times per texel, so the bound is eight such steps,
+    // 2^-8. Chapter 12 states no precision of its own; the bound is fixed from the format, never widened to fit (ADR 0009).
     constexpr float kTolerance = 1.0f / 256.0f;
 
-    /// Every subresource of a single-mip, single-layer texture.
     constexpr SubresourceRange kWhole{ .baseMip = 0, .mipCount = 1, .baseLayer = 0, .layerCount = 1 };
 
-    //==================================================================================================================
-    /// Returns the value of the IEEE half-precision bits `bits`.
     float halfToFloat(uint16_t bits)
     {
         const uint32_t sign = (bits >> 15) & 1u;
@@ -70,9 +64,6 @@ namespace {
         return sign != 0 ? -magnitude : magnitude;
     }
 
-    //==================================================================================================================
-    /// Records a barrier that moves the whole of `texture` from `oldLayout` to `newLayout`, from `srcStage` and `srcAccess` to
-    /// `dstStage` and `dstAccess`.
     void transition(CommandList list, Texture texture, Layout oldLayout, Layout newLayout, Stage srcStage, Access srcAccess, Stage dstStage, Access dstAccess)
     {
         const std::array<TextureBarrier, 1> barriers{ TextureBarrier{ .texture = texture,
@@ -86,9 +77,7 @@ namespace {
         list.barrier({}, {}, barriers);
     }
 
-    //==================================================================================================================
-    /// Discards `texture`, clears it to `value` and moves it to `layout` for the upscale, which reads or writes it as compute
-    /// work.
+    // The upscale reads or writes `texture` as compute work.
     void clearFor(CommandList list, Texture texture, const ClearValue& value, Layout layout, Access access)
     {
         transition(list, texture, Layout::Undefined, Layout::CopyDst, Stage::None, Access::None, Stage::Copy, Access::CopyWrite);
@@ -96,27 +85,22 @@ namespace {
         transition(list, texture, Layout::CopyDst, layout, Stage::Copy, Access::CopyWrite, Stage::ComputeShader, access);
     }
 
-    /// The textures of one upscale of the cases.
+    // `exposure` and `reactive` exist only when a case asks for them.
     struct Inputs
     {
-        Texture color;    ///< `RGBA16Float`, the input extent.
-        Texture depth;    ///< `D32Float`, the input extent.
-        Texture motion;   ///< `RG16Float`, the input extent.
-        Texture exposure; ///< `R16Float`, 1x1; created only when a case asks for it.
-        Texture reactive; ///< `R8Unorm`, the input extent; created only when a case asks for it.
+        Texture color;
+        Texture depth;
+        Texture motion;
+        Texture exposure;
+        Texture reactive;
     };
 
-    //==================================================================================================================
-    /// Creates a 2D texture of `format`, `width` by `height` texels, with `usage`.
     Texture make(Device device, Format format, uint32_t width, uint32_t height, TextureUsage usage, const char* label)
     {
         return *device.createTexture(TextureDesc{ .format = format, .extent = { width, height, 1 }, .usage = usage, .label = label });
     }
 
-    //==================================================================================================================
-    /// Creates the inputs, the exposure and reactive textures when `optional` is set, and records on `list` the clears that
-    /// give them uniform values (the color `color`, depth 0.5, no motion, exposure 1, reactive 1) and the barriers that make
-    /// them readable by the upscale.
+    // The clears give uniform values: the color `color`, depth 0.5, no motion, exposure 1 and reactive 1.
     Inputs makeInputs(Device device, CommandList list, const ClearColor& color, bool optional)
     {
         constexpr TextureUsage kColorInput = TextureUsage::Sampled | TextureUsage::RenderTarget;
@@ -137,9 +121,6 @@ namespace {
         return inputs;
     }
 
-    //==================================================================================================================
-    /// Creates an output texture and records on `list` its clear to `kSentinel` and the barrier that makes it writable by the
-    /// upscale.
     Texture makeOutput(Device device, CommandList list)
     {
         const Texture output = make(device, Format::RGBA16Float, kOutput, kOutput, TextureUsage::Storage | TextureUsage::RenderTarget, "test.output");
@@ -147,8 +128,6 @@ namespace {
         return output;
     }
 
-    //==================================================================================================================
-    /// Returns the parameters of an upscale of `inputs` into `output`.
     UpscaleParams paramsOf(const Inputs& inputs, Texture output, bool reset)
     {
         return UpscaleParams{ .color = inputs.color,
@@ -161,16 +140,13 @@ namespace {
                               .label = "test.upscale" };
     }
 
-    //==================================================================================================================
-    /// Records the barrier that orders a copy of `output` after the upscale that wrote it.
     void readyToRead(CommandList list, Texture output)
     {
         transition(list, output, Layout::ShaderWrite, Layout::CopySrc, Stage::ComputeShader, Access::ShaderWrite, Stage::Copy, Access::CopyRead);
     }
 
-    //==================================================================================================================
-    /// Checks that every texel of `output` holds `kColor`'s red, green and blue within `kTolerance`. Alpha is not compared:
-    /// the implementations chapter 12 fronts reconstruct color, and none states what it writes to alpha.
+    // Alpha is not compared: the implementations chapter 12 fronts reconstruct color, and none states what it writes to
+    // alpha.
     void checkTexels(std::span<const std::byte> bytes)
     {
         REQUIRE(bytes.size() == size_t{ kOutput } * kOutput * 8);
@@ -196,16 +172,11 @@ namespace {
         CHECK(wrong == 0);
     }
 
-    //==================================================================================================================
-    /// Checks every texel of `output` as `checkTexels` does, read back on its own list after a host wait.
     void checkUniform(test::GpuKit& kit, Texture output)
     {
         checkTexels(kit.readTexture(output, TextureRegion{ .extent = { kOutput, kOutput, 1 } }, Format::RGBA16Float));
     }
 
-    //==================================================================================================================
-    /// Records on `list` the barrier that orders a copy of `output` after the upscale that wrote it, and that copy into
-    /// `readback`, in tight rows of `kOutput` texels.
     void copyOut(CommandList list, Texture output, Buffer readback)
     {
         readyToRead(list, output);
@@ -214,8 +185,7 @@ namespace {
         );
     }
 
-    //==================================================================================================================
-    /// Returns the IEEE half-precision bits of `value`, which is zero or a normal half-precision value held exactly.
+    // `value` must be zero or a normal half-precision value held exactly.
     uint16_t halfOf(float value)
     {
         if (value == 0.0f)
@@ -228,15 +198,12 @@ namespace {
         return static_cast<uint16_t>(sign | (exponent << 10) | ((bits >> 13) & 0x3FFu));
     }
 
-    /// The darker of the two shades a patterned color input holds; exact in `RGBA16Float`.
+    // Both shades of a patterned color input are exact in `RGBA16Float`.
     constexpr float kDark = 0.25f;
 
-    /// The lighter of the two shades a patterned color input holds; exact in `RGBA16Float`.
     constexpr float kLight = 0.75f;
 
-    //==================================================================================================================
-    /// Creates a color input of the input extent whose texel (x, y) holds `shade(x, y)` in red, green and blue and 1 in
-    /// alpha, left in `ShaderRead` by its initial data.
+    // Left in `ShaderRead` by its initial data.
     template<class Shade> Texture shadedColor(Device device, Shade shade)
     {
         std::vector<uint16_t> halves;
@@ -260,8 +227,6 @@ namespace {
         );
     }
 
-    //==================================================================================================================
-    /// Returns the red channel of each texel of `bytes`, an `RGBA16Float` output in tight rows.
     std::vector<float> redOf(std::span<const std::byte> bytes)
     {
         std::vector<float> red(bytes.size() / 8);
@@ -275,7 +240,6 @@ namespace {
     }
 } // namespace
 
-//======================================================================================================================
 TEST_CASE("an upscale of uniform inputs writes the input color to every output texel", "[conformance]")
 {
     test::requireGpu();
@@ -290,7 +254,6 @@ TEST_CASE("an upscale of uniform inputs writes the input color to every output t
     checkUniform(kit, output);
 }
 
-//======================================================================================================================
 TEST_CASE("an upscale with a content rectangle, exposure and reactive inputs writes every output texel", "[conformance]")
 {
     test::requireGpu();
@@ -310,7 +273,6 @@ TEST_CASE("an upscale with a content rectangle, exposure and reactive inputs wri
     checkUniform(kit, output);
 }
 
-//======================================================================================================================
 TEST_CASE("two upscalers upscale in one frame and a third frame reuses their history", "[conformance]")
 {
     test::requireGpu();
@@ -344,7 +306,6 @@ TEST_CASE("two upscalers upscale in one frame and a third frame reuses their his
     }
 }
 
-//======================================================================================================================
 TEST_CASE("an upscale on a list whose previous pass wrote the color input sees that write", "[conformance]")
 {
     test::requireGpu();
@@ -365,7 +326,6 @@ TEST_CASE("an upscale on a list whose previous pass wrote the color input sees t
     checkUniform(kit, output);
 }
 
-//======================================================================================================================
 TEST_CASE("upscales of two frames and the reads of their output on later lists are ordered without a host wait", "[conformance]")
 {
     test::requireGpu();
@@ -424,7 +384,6 @@ TEST_CASE("upscales of two frames and the reads of their output on later lists a
     }
 }
 
-//======================================================================================================================
 TEST_CASE("a positive jitter moves the reconstructed edge of a still frame left and up", "[conformance]")
 {
     test::requireGpu();
@@ -481,7 +440,6 @@ TEST_CASE("a positive jitter moves the reconstructed edge of a still frame left 
     CHECK(std::fabs(plus - (kOutput / 2.0 - kShift)) < kBound);
 }
 
-//======================================================================================================================
 TEST_CASE("a D32FloatS8 depth upscales as the same D32Float depth does, frame after frame", "[conformance]")
 {
     test::requireGpu();

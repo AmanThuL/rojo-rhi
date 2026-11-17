@@ -29,187 +29,172 @@ namespace rojoRHI::d3d12 {
     struct PipelineState;
     struct SubmitTimingState;
 
-    /// The root signature the compute side of a list holds: none yet, the global one of caller pipelines, the backend
-    /// kernels' one, or one vendor work set.
     enum class ComputeRoot : uint8_t
     {
-        None,   ///< None since acquisition: the first dispatch of a caller pipeline sets the global one.
-        Global, ///< The global root signature of caller pipelines.
-        Kernel, ///< The kernel root signature, set by a backend kernel.
-        Foreign ///< A root signature of vendor work recorded on the list, such as an upscale.
+        None, // The first dispatch of a caller pipeline sets the global one.
+        Global,
+        Kernel,
+        Foreign // Vendor work recorded on the list, such as an upscale.
     };
 
-    /// The root binding of a list, kept lazily: `setRoot` stores the address and marks both sides dirty, and the next draw or
-    /// dispatch binds it on its side. Reset at each acquisition.
+    // Kept lazily: `setRoot` stores the address and marks both sides dirty, and the next draw or dispatch binds it on
+    // its side. Reset at each acquisition.
     struct Binding
     {
-        D3D12_GPU_VIRTUAL_ADDRESS root = 0;              ///< The root block's GPU virtual address; 0 until `setRoot`.
-        bool graphicsRootDirty = false;                  ///< The graphics side has not bound `root` yet.
-        bool computeRootDirty = false;                   ///< The compute side has not bound `root` yet.
-        bool drawIdDirty = true;                         ///< The draw-record constant has not been set since acquisition.
-        bool graphicsSignatureDirty = false;             ///< The graphics side may hold a root signature vendor work set.
-        ComputeRoot computeRoot = ComputeRoot::None;     ///< The root signature the compute side holds.
-        ID3D12PipelineState* computePipeline = nullptr;  ///< The pipeline the compute side holds; null for none.
-        ID3D12PipelineState* graphicsPipeline = nullptr; ///< The pipeline the graphics side holds; null for none.
-        const PipelineState* pipeline = nullptr;         ///< The payload of the caller's bound pipeline; null for none.
+        D3D12_GPU_VIRTUAL_ADDRESS root = 0;
+        bool graphicsRootDirty = false;
+        bool computeRootDirty = false;
+        bool drawIdDirty = true;
+        bool graphicsSignatureDirty = false; // Vendor work may have set a root signature of its own.
+        ComputeRoot computeRoot = ComputeRoot::None;
+        ID3D12PipelineState* computePipeline = nullptr;
+        ID3D12PipelineState* graphicsPipeline = nullptr;
+        const PipelineState* pipeline = nullptr;
     };
 
-    /// The dynamic and input-assembler state the native list of a Graphics list holds, so a pass's starting values, the setters,
-    /// `setPipeline` and the indexed draws send a native call only for a change. Reset at each acquisition: the state a native
-    /// list keeps across its `Reset` is unknown. Render passes leave it as it is, so it carries from one pass to the next.
+    // What the native list of a Graphics list holds, so a pass's starting values, the setters, `setPipeline` and the
+    // indexed draws send a native call only for a change; an empty optional is unknown. Reset at each acquisition,
+    // since a native list's state across `Reset` is unknown; render passes leave it, so it carries from one pass to the
+    // next.
     struct DynamicState
     {
-        std::optional<uint8_t> stencilReference;         ///< The stencil reference `OMSetStencilRef` last set; empty while unknown.
-        std::optional<std::array<float, 4>> blendFactor; ///< The factors `OMSetBlendFactor` last set; empty while unknown.
-        /// The open pass's starting stencil reference, 0, is owed: the native list holds another or an unknown value and no
-        /// draw has read it since the pass began. The first draw whose pipeline reads it sends it; `setStencilReference`
-        /// settles it.
+        std::optional<uint8_t> stencilReference;
+        std::optional<std::array<float, 4>> blendFactor;
+        // The open pass's starting stencil reference, 0, is owed: the native list holds another or an unknown value and
+        // no draw has read it since the pass began. The first draw whose pipeline reads it sends it;
+        // `setStencilReference` settles it.
         bool stencilReferenceOwed = false;
-        bool blendFactorOwed = false; ///< As `stencilReferenceOwed`, for the starting blend factor of zeros.
-        /// The recorded constant, slope-scaled and clamp bias; zero at each pass. While the caller's bound pipeline has
-        /// `depthBias`, the native list holds these values.
+        bool blendFactorOwed = false; // As `stencilReferenceOwed`, for the starting blend factor of zeros.
+        // Constant, slope-scaled and clamp; zero at each pass. The native list holds them while the bound pipeline has
+        // `depthBias`.
         std::array<float, 3> depthBias = {};
-        std::optional<D3D12_VIEWPORT> viewport; ///< The viewport `RSSetViewports` last set; empty while unknown.
-        std::optional<D3D12_RECT> scissor;      ///< The scissor rectangle `RSSetScissorRects` last set; empty while unknown.
-        /// The topology `IASetPrimitiveTopology` last set; undefined while unknown.
+        std::optional<D3D12_VIEWPORT> viewport;
+        std::optional<D3D12_RECT> scissor;
+        // Undefined while unknown.
         D3D_PRIMITIVE_TOPOLOGY topology = D3D_PRIMITIVE_TOPOLOGY_UNDEFINED;
-        /// The index buffer `IASetIndexBuffer` last set; a zero location while unknown, which no buffer has.
+        // A zero location while unknown, which no buffer has.
         D3D12_INDEX_BUFFER_VIEW indexBuffer = {};
-        Buffer indexHandle;                      ///< The buffer `indexBuffer` views; null while unknown.
-        IndexType indexType = IndexType::UInt32; ///< The index type `indexBuffer` was set for.
+        Buffer indexHandle; // Null while unknown.
+        IndexType indexType = IndexType::UInt32;
     };
 
-    /// The address of the list's last `uploadFrameData` and what `setRoot` needs of it, so a root pushed with `pushRoot`
-    /// binds without a lookup in the heap directory. Reset at each acquisition.
+    // So a root pushed with `pushRoot` binds without a lookup in the heap directory. Reset at each acquisition.
     struct LastUpload
     {
-        Buffer page;                            ///< The arena page `payload` describes; null until the first upload.
-        const BufferPayload* payload = nullptr; ///< The payload of `page`, fixed while the page lives.
-        Addr address = {};                      ///< The address the upload returned; null until the first upload.
-        D3D12_GPU_VIRTUAL_ADDRESS gpu = 0;      ///< The GPU virtual address of `address`.
+        Buffer page;
+        const BufferPayload* payload = nullptr; // Fixed while the page lives.
+        Addr address = {};
+        D3D12_GPU_VIRTUAL_ADDRESS gpu = 0;
     };
 
-    /// The buffers of a list's last indirect command: its records and its count, each by the view-heap index of its raw SRV.
+    // Each by the view-heap index of its raw SRV.
     struct IndirectBuffers
     {
-        uint32_t recordsIndex = 0;              ///< The index of `records`; 0, the reserved slot, while unknown.
-        const BufferPayload* records = nullptr; ///< The payload of the records' buffer.
-        uint32_t countIndex = 0;                ///< The index of `count`; 0 also for a null count.
-        const BufferPayload* count = nullptr;   ///< The payload of the count's buffer; null for none.
+        uint32_t recordsIndex = 0; // 0, the reserved slot, while unknown.
+        const BufferPayload* records = nullptr;
+        uint32_t countIndex = 0; // 0 also for a null count.
+        const BufferPayload* count = nullptr;
     };
 
-    /// The native description of the render pass a list began last, the list's own, so recording allocates nothing and the
-    /// resolve parameters `BeginRenderPass` points at stay where they are until `EndRenderPass`. Rewritten at each pass.
+    // The list's own, so recording allocates nothing and the resolve parameters `BeginRenderPass` points at stay where
+    // they are until `EndRenderPass`. Rewritten at each pass.
     struct PassStorage
     {
-        /// The pass's render targets, the first `targetCount` used.
+        // The first `targetCount` used.
         std::array<D3D12_RENDER_PASS_RENDER_TARGET_DESC, D3D12_SIMULTANEOUS_RENDER_TARGET_COUNT> targets = {};
-        /// The resolve of each target that names a resolve target, the first `resolveCount` used, in target order.
+        // The first `resolveCount` used, in target order.
         std::array<D3D12_RENDER_PASS_ENDING_ACCESS_RESOLVE_SUBRESOURCE_PARAMETERS, D3D12_SIMULTANEOUS_RENDER_TARGET_COUNT> resolves = {};
-        /// The barrier of each resolve target, moving it to `LAYOUT_RESOLVE_DEST` before the pass; `EndRenderPass` reverses it
-        /// in place, so after the pass it holds the barrier back to `LAYOUT_RENDER_TARGET`.
+        // Moves each resolve target to LAYOUT_RESOLVE_DEST before the pass; `EndRenderPass` reverses it in place, so
+        // after the pass it holds the barrier back to LAYOUT_RENDER_TARGET.
         std::array<D3D12_TEXTURE_BARRIER, D3D12_SIMULTANEOUS_RENDER_TARGET_COUNT> resolveBarriers = {};
-        D3D12_RENDER_PASS_DEPTH_STENCIL_DESC depth = {}; ///< The depth-stencil attachment, when `hasDepth`.
-        uint32_t targetCount = 0;                        ///< The render targets of the pass.
-        uint32_t resolveCount = 0;                       ///< The resolve targets of the pass.
-        bool hasDepth = false;                           ///< The pass has a depth-stencil attachment.
-        /// The caller's attachments the description above was made from, the first `targetCount` used, so a pass that
-        /// repeats them reuses it.
+        D3D12_RENDER_PASS_DEPTH_STENCIL_DESC depth = {};
+        uint32_t targetCount = 0;
+        uint32_t resolveCount = 0;
+        bool hasDepth = false;
+        // The caller's attachments the description was made from, so a pass that repeats them reuses it.
         std::array<ColorAttachment, D3D12_SIMULTANEOUS_RENDER_TARGET_COUNT> colors = {};
-        DepthAttachment depthAttachment = {}; ///< The caller's depth attachment, when `hasDepth`.
-        /// The description may be reused: false after acquisition, and after a pass with a resolve, whose barriers
-        /// `EndRenderPass` reverses in place.
+        DepthAttachment depthAttachment = {};
+        // False after acquisition, and after a pass with a resolve, whose barriers `EndRenderPass` reverses in place.
         bool reusable = false;
     };
 
-    /// The native objects and recording state of one command list, created when its frame slot's pool grows and kept while
-    /// the pool hands the list out again. Everything recording touches is the list's own, so recording takes no lock.
+    // Created when its frame slot's pool grows and kept while the pool hands the list out again. Everything recording
+    // touches is the list's own, so recording takes no lock.
     struct ListState
     {
-        Com<ID3D12CommandAllocator> allocator; ///< The list's own allocator, reset when its frame slot is reused.
-        Com<ID3D12GraphicsCommandList9> list;  ///< Reset at each acquisition, closed by `CommandList::end`.
-        QueueType type = QueueType::Graphics;  ///< The queue type of the pool the list belongs to.
-        uint32_t frameSlot = 0;                ///< The frame slot of the pool the list belongs to.
-        uint32_t ordinal = 0;                  ///< The list's index in its pool.
-        std::string label;                     ///< The label the native list carries.
-        std::wstring scratch;                  ///< UTF-16 scratch for the list's label.
-        /// The UTF-16 label of the list's last scope event and the caller's label it was widened from, kept across
-        /// recordings: a scope with the label of the one before it widens nothing.
+        Com<ID3D12CommandAllocator> allocator; // Reset when its frame slot is reused.
+        Com<ID3D12GraphicsCommandList9> list;  // Reset at each acquisition, closed by `CommandList::end`.
+        QueueType type = QueueType::Graphics;
+        uint32_t frameSlot = 0;
+        uint32_t ordinal = 0;
+        std::string label;
+        std::wstring scratch;
+        // Kept across recordings: a scope with the label of the one before it widens nothing.
         std::wstring eventLabel;
-        std::string eventSource; ///< The label `eventLabel` was widened from.
-        LastUpload upload;       ///< The list's last upload.
-        /// The buffers of the list's last indirect command, by the view-heap index its addresses carry, so a repeated
-        /// command finds them without the heap directory. Reset at each acquisition.
+        std::string eventSource;
+        LastUpload upload;
+        // So a repeated command finds them without the heap directory. Reset at each acquisition.
         IndirectBuffers indirect;
-        Binding binding;           ///< The lazy root binding.
-        BarrierScratch barriers;   ///< The scratch barrier batches are lowered into.
-        ListTimestamps timestamps; ///< The timestamps the list records.
-        DynamicState dynamic;      ///< The dynamic state the native list holds.
-        PassStorage pass;          ///< The native description of the list's last render pass.
-        /// The submission timing the recording writes its first and last timestamps into; null for none.
+        Binding binding;
+        BarrierScratch barriers;
+        ListTimestamps timestamps;
+        DynamicState dynamic;
+        PassStorage pass;
+        // Receives the recording's first and last timestamps; null for none.
         SubmitTimingState* submitTiming = nullptr;
-        /// The query pair the recording claimed in `submitTiming`.
         uint64_t submitPair = 0;
     };
 
-    /// The command lists of one frame slot: those taken since the slot was reused come first and the rest wait to be reused.
+    // Those taken since the slot was reused come first; the rest wait to be reused.
     struct ListPool
     {
-        std::mutex mutex;                                    ///< Guards the pool, because acquisition is free-threaded.
-        std::vector<std::unique_ptr<CommandListImpl>> lists; ///< Every list the slot ever needed.
-        size_t used = 0;                                     ///< How many of `lists` the open frame has taken.
+        std::mutex mutex; // Acquisition is free-threaded.
+        std::vector<std::unique_ptr<CommandListImpl>> lists;
+        size_t used = 0;
     };
 
-    /// The command list pools of a device, one per frame slot and `QueueType`; a device uses its first `framesInFlight` slots.
+    // A device's list pools, one per frame slot and `QueueType`; a device uses its first `framesInFlight` slots.
     class ListPools
     {
       public:
-        /// Takes a list of frame slot `slot`'s pool of `type` on `impl`, reusing one when the pool has one left, and returns it.
-        /// A list the pool grows by is one explicit allocation, counted in `cpuAllocations`, and gets its own allocator and a
-        /// closed native list of `type`, both named `rojorhi.list.<slot>.<graphics|compute|copy>.<ordinal>` and counted as one
-        /// `nativeCreateCalls` each; a refused creation logs and aborts, in every build. The pool's mutex is a leaf lock:
-        /// acquisition is not recording.
+        // A list the pool grows by is one explicit allocation, counted in `cpuAllocations`, with its own allocator and
+        // a closed native list, both named `rojorhi.list.<slot>.<graphics|compute|copy>.<ordinal>` and counted as one
+        // `nativeCreateCalls` each; a refused creation logs and aborts, in every build. The pool's mutex is a leaf
+        // lock: acquisition is not recording.
         CommandListImpl& acquire(DeviceImpl& impl, uint32_t slot, QueueType type);
 
-        /// Returns every list frame slot `slot` took to its pools, once the slot's frame has retired, after resetting the
-        /// allocator of each, one `nativeHostCalls` per list; a refused reset logs and aborts, in every build.
+        // Once the slot's frame has retired. Resets each list's allocator, one `nativeHostCalls` per list; a refused
+        // reset logs and aborts, in every build.
         void reset(DeviceImpl& impl, uint32_t slot);
 
-        /// Returns list `ordinal` of frame slot `slot`'s pool of `type`, which the pool has made. It takes the pool's mutex, so
-        /// it serves the retire hooks, never recording.
+        // Takes the pool's mutex, so it serves the retire hooks, never recording.
         CommandListImpl& at(uint32_t slot, QueueType type, uint32_t ordinal);
 
       private:
-        std::array<std::array<ListPool, 3>, 3> m_slots; ///< Indexed by frame slot, then by `QueueType`.
+        std::array<std::array<ListPool, 3>, 3> m_slots; // Indexed by frame slot, then by `QueueType`.
     };
 
-    /// Returns the device that acquired `list`, read from the list's core without a lock.
+    // Read from the list's core without a lock.
     DeviceImpl& deviceOf(const CommandListImpl& list);
 
-    /// Brings the compute side of `list` to what the caller bound before a dispatch, each call only where the native list
-    /// holds something else: the global root signature at the list's first dispatch or after a backend kernel or vendor
-    /// work switched it, the bound pipeline
-    /// after another displaced it, and the root block after `setRoot` or a root signature switch. A compute pipeline must be
-    /// bound.
+    // Each native call only where the native list holds something else: the global root signature at the first dispatch
+    // or after a backend kernel or vendor work switched it, the bound pipeline after another displaced it, and the root
+    // block after `setRoot` or a root signature switch. A compute pipeline must be bound.
     void flushCompute(CommandListImpl& list);
 
-    /// Brings the graphics side of `list` to what the caller bound before a draw, each call only where the native list holds
-    /// something else: the global root signature after vendor work, the bound pipeline, with its recorded depth bias when it
-    /// has `depthBias`, after another displaced it, and the root block after `setRoot` or a root signature switch. A list with
-    /// no root binds none. It writes no draw-record constant: a direct draw writes it, and an indirect draw's command
-    /// signature does; a root signature switch marks it unset. A graphics or mesh pipeline must be bound.
+    // Each native call only where the native list holds something else: the global root signature after vendor work,
+    // the bound pipeline, with its recorded depth bias when it has `depthBias`, after another displaced it, and the
+    // root block after `setRoot` or a root signature switch. It writes no draw-record constant: a direct draw writes
+    // it, and an indirect draw's command signature does. A graphics or mesh pipeline must be bound.
     void flushGraphics(CommandListImpl& list);
 
-    /// Brings `list`, a Graphics list, back after vendor work recorded on its native list, which may have set its own
-    /// descriptor heaps, root signatures and pipeline. It sets the device's view and sampler heaps again at once, one native
-    /// call, because clears and fills read them as well as draws and dispatches. It then marks the rest unknown: the global
-    /// root signature of each side, so a root signature set later follows the heaps, both root blocks, the draw-record
-    /// constant `b1`, the pipeline slot and the topology. The next dispatch, draw or `setPipeline` restores each.
+    // Vendor work may have set its own descriptor heaps, root signatures and pipeline. The device's heaps are set again
+    // at once, one native call, because clears and fills read them as well as draws and dispatches. The rest is marked
+    // unknown, so a root signature set later follows the heaps: the global root signature of each side, both root
+    // blocks, the draw-record constant b1, the pipeline slot and the topology.
     void resumeAfterVendorWork(CommandListImpl& list);
 
-    /// Sets the view of the whole of the buffer `indices`, from offset 0, as indices of `type` on `list`, unless the native
-    /// list holds that view: the indices of `type` that fit in the buffer and in the view's 32-bit size. Every indexed draw,
-    /// direct or indirect, binds its buffer here, so draws of one buffer share the view, and a draw of the buffer and type
-    /// the list holds reads no payload.
+    // Unless the native list holds that view. Every indexed draw, direct or indirect, binds its buffer here, so draws
+    // of one buffer share the view and a draw of the buffer and type the list holds reads no payload.
     void applyIndexBuffer(CommandListImpl& list, Buffer indices, IndexType type);
 } // namespace rojoRHI::d3d12

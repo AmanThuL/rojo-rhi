@@ -12,7 +12,6 @@
 #include <ranges>
 
 namespace rojoRHI::core {
-    //==================================================================================================================
     Clock join(const Clock& a, const Clock& b)
     {
         Clock joined{};
@@ -23,7 +22,6 @@ namespace rojoRHI::core {
         return joined;
     }
 
-    //==================================================================================================================
     Clock meet(const Clock& a, const Clock& b)
     {
         Clock met{};
@@ -34,18 +32,15 @@ namespace rojoRHI::core {
         return met;
     }
 
-    //==================================================================================================================
     bool covers(const Clock& clock, QueueType queue, uint64_t position)
     {
         return position != 0 && position <= clock[static_cast<size_t>(queue)];
     }
 
-    //==================================================================================================================
     FenceClocks::FenceClocks(uint64_t initial) : m_initial(initial)
     {
     }
 
-    //==================================================================================================================
     void FenceClocks::signal(uint64_t value, const Clock& clock)
     {
         ROJORHI_INTERNAL_ASSERT(value > m_initial && (m_values.empty() || value > m_values.back().first), "a fence value was signalled out of order");
@@ -63,7 +58,6 @@ namespace rojoRHI::core {
         m_values.emplace_back(value, clock);
     }
 
-    //==================================================================================================================
     void FenceClocks::prune(const Clock& host)
     {
         // The stored meets rise along the list, since each is at most the next, so the values the host clock covers are a
@@ -79,13 +73,11 @@ namespace rojoRHI::core {
         }
     }
 
-    //==================================================================================================================
     size_t FenceClocks::size() const
     {
         return m_values.size();
     }
 
-    //==================================================================================================================
     std::optional<Clock> FenceClocks::reached(uint64_t value) const
     {
         if (value <= m_initial)

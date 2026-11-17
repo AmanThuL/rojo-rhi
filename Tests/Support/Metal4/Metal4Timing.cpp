@@ -16,7 +16,6 @@
 #include <format>
 
 namespace rojoRHI::test {
-    //==================================================================================================================
     void requireTimed(CommandList list)
     {
         const core::CommandListCore& state = core::coreOf(list);
@@ -43,26 +42,22 @@ namespace rojoRHI::test {
         }
     }
 
-    //==================================================================================================================
     const core::RecordCounts& timedCounts(CommandList list)
     {
         requireTimed(list);
         return core::coreOf(list).counts;
     }
 
-    //==================================================================================================================
     uint64_t encoderLabel(CommandList list)
     {
         return CommandListImpl::of(list).state.markers ? 1 : 0;
     }
 
-    //==================================================================================================================
     uint64_t encoderLabel(Device device)
     {
         return DeviceImpl::of(device).markers ? 1 : 0;
     }
 
-    //==================================================================================================================
     uint64_t debugGroup(CommandList list)
     {
         return CommandListImpl::of(list).state.markers ? 1 : 0;

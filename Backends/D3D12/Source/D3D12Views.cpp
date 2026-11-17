@@ -23,20 +23,16 @@
 
 namespace rojoRHI {
     namespace {
-        /// The faces of one cube.
         constexpr uint32_t kCubeFaces = 6;
 
-        /// The mips and layers a view covers, its counts resolved against its texture.
         struct ViewExtent
         {
-            uint32_t baseMip = 0;   ///< The first mip.
-            uint32_t mips = 1;      ///< The mips covered.
-            uint32_t baseLayer = 0; ///< The first layer, a face for cube types.
-            uint32_t layers = 1;    ///< The layers covered.
+            uint32_t baseMip = 0;
+            uint32_t mips = 1;
+            uint32_t baseLayer = 0; // A face for cube types.
+            uint32_t layers = 1;
         };
 
-        //==============================================================================================================
-        /// Returns the mips and layers of `texture` that `range`, which the core accepted, covers.
         ViewExtent extentOf(const core::TextureRecord& texture, const SubresourceRange& range)
         {
             ViewExtent extent;
@@ -47,18 +43,15 @@ namespace rojoRHI {
             return extent;
         }
 
-        //==============================================================================================================
-        /// Returns true when a single-layer view of `texture` at `extent` needs an array dimension. A non-array dimension names
-        /// no layer and views slice 0 of an array resource, so it serves a view of layer 0 of any texture; a later layer of a
-        /// multi-layer resource takes the array dimension with one layer.
+        // Returns true when a single-layer view of `texture` at `extent` needs an array dimension. A non-array dimension names
+        // no layer and views slice 0 of an array resource, so it serves a view of layer 0 of any texture; a later layer of a
+        // multi-layer resource takes the array dimension with one layer.
         bool needsArray(const core::TextureRecord& texture, const ViewExtent& extent)
         {
             return texture.type != TextureType::Tex3D && texture.layers > 1 && extent.baseLayer != 0;
         }
 
-        //==============================================================================================================
-        /// Writes the view of `texture` that `desc`, which the core accepted, describes into view-heap slot `index` of `impl`.
-        /// The slot's payload holds a reference to `resource`, so the descriptor never outlives the resource it names.
+        // The slot's payload holds a reference to `resource`, so the descriptor never outlives the resource it names.
         void writeTextureView(DeviceImpl& impl, uint32_t index, ID3D12Resource* resource, const core::TextureRecord& texture, const TextureViewDesc& desc)
         {
             const D3D12_CPU_DESCRIPTOR_HANDLE handle = impl.descriptors.viewCpu(index);
@@ -74,15 +67,11 @@ namespace rojoRHI {
             }
         }
 
-        //==============================================================================================================
-        /// Returns the D3D12 filter type of `filter`.
         D3D12_FILTER_TYPE filterType(SamplerFilter filter)
         {
             return filter == SamplerFilter::Nearest ? D3D12_FILTER_TYPE_POINT : D3D12_FILTER_TYPE_LINEAR;
         }
 
-        //==============================================================================================================
-        /// Returns the D3D12 address mode of `address`.
         D3D12_TEXTURE_ADDRESS_MODE addressMode(SamplerAddress address)
         {
             switch (address)
@@ -94,8 +83,6 @@ namespace rojoRHI {
             return D3D12_TEXTURE_ADDRESS_MODE_WRAP;
         }
 
-        //==============================================================================================================
-        /// Returns the D3D12 comparison function of `compare`.
         D3D12_COMPARISON_FUNC comparisonFunc(CompareOp compare)
         {
             switch (compare)
@@ -112,9 +99,6 @@ namespace rojoRHI {
             return D3D12_COMPARISON_FUNC_NEVER;
         }
 
-        //==============================================================================================================
-        /// Returns the D3D12 sampler of `desc`, which the core accepted: the comparison filters when `compareEnable`, the
-        /// anisotropic ones when `maxAnisotropy` is above 1, every mip level reachable and no LOD bias.
         D3D12_SAMPLER_DESC samplerDesc(const SamplerDesc& desc)
         {
             const D3D12_FILTER_REDUCTION_TYPE reduction = desc.compareEnable ? D3D12_FILTER_REDUCTION_TYPE_COMPARISON : D3D12_FILTER_REDUCTION_TYPE_STANDARD;
@@ -139,8 +123,6 @@ namespace rojoRHI {
             return sampler;
         }
 
-        //==============================================================================================================
-        /// Returns the resource of `texture`, whose record the core accepted.
         ID3D12Resource* resourceOf(const core::TextureRecord& texture)
         {
             return static_cast<const d3d12::TexturePayload*>(texture.native)->resource;
@@ -148,14 +130,12 @@ namespace rojoRHI {
     } // namespace
 
     namespace d3d12 {
-        //==============================================================================================================
         D3D12_SHADER_RESOURCE_VIEW_DESC shaderResourceDesc(const core::TextureRecord& texture, const TextureViewDesc& desc)
         {
             const ViewExtent extent = extentOf(texture, desc.range);
             const UINT plane = desc.aspect == TextureAspect::Stencil ? 1u : 0u;
             D3D12_SHADER_RESOURCE_VIEW_DESC view = {};
             view.Format = viewFormat(texture.format, desc.format, desc.aspect, TextureUsage::Sampled);
-            // The stencil plane holds its value in the second component; it is read in the first, as on every backend.
             view.Shader4ComponentMapping =
                 desc.aspect == TextureAspect::Stencil ? kStencilMapping : static_cast<UINT>(D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING);
             switch (desc.type)
@@ -243,7 +223,6 @@ namespace rojoRHI {
             return view;
         }
 
-        //==============================================================================================================
         D3D12_UNORDERED_ACCESS_VIEW_DESC unorderedAccessDesc(const core::TextureRecord& texture, const TextureViewDesc& desc)
         {
             const ViewExtent extent = extentOf(texture, desc.range);
@@ -295,7 +274,6 @@ namespace rojoRHI {
             return view;
         }
 
-        //==============================================================================================================
         void retireView([[maybe_unused]] void* context, void* native)
         {
             if (native == nullptr)
@@ -306,7 +284,6 @@ namespace rojoRHI {
         }
     } // namespace d3d12
 
-    //==================================================================================================================
     Result<ViewIndex> Device::createView(Texture texture, const TextureViewDesc& desc)
     {
         DeviceImpl& impl = DeviceImpl::of(*this);
@@ -324,7 +301,6 @@ namespace rojoRHI {
         return index;
     }
 
-    //==================================================================================================================
     void Device::writeView(IndexRange range, uint32_t index, Texture texture, const TextureViewDesc& desc)
     {
         DeviceImpl& impl = DeviceImpl::of(*this);
@@ -340,19 +316,16 @@ namespace rojoRHI {
         writeTextureView(impl, range.base + index, resource, record, desc);
     }
 
-    //==================================================================================================================
     void Device::destroy(ViewIndex view)
     {
         core::destroyView(DeviceImpl::of(*this).core, view);
     }
 
-    //==================================================================================================================
     Result<IndexRange> Device::reserveViews(uint32_t count)
     {
         return core::reserveViews(DeviceImpl::of(*this).core, count);
     }
 
-    //==================================================================================================================
     Result<SamplerIndex> Device::createSampler(const SamplerDesc& desc)
     {
         DeviceImpl& impl = DeviceImpl::of(*this);
@@ -368,7 +341,6 @@ namespace rojoRHI {
         return index;
     }
 
-    //==================================================================================================================
     void Device::writeSampler(IndexRange range, uint32_t index, const SamplerDesc& desc)
     {
         DeviceImpl& impl = DeviceImpl::of(*this);
@@ -382,19 +354,16 @@ namespace rojoRHI {
         impl.device()->CreateSampler(&sampler, impl.descriptors.samplerCpu(range.base + index));
     }
 
-    //==================================================================================================================
     void Device::destroy(SamplerIndex sampler)
     {
         core::destroySampler(DeviceImpl::of(*this).core, sampler);
     }
 
-    //==================================================================================================================
     Result<IndexRange> Device::reserveSamplers(uint32_t count)
     {
         return core::reserveSamplers(DeviceImpl::of(*this).core, count);
     }
 
-    //==================================================================================================================
     void Device::release(IndexRange range)
     {
         core::releaseRange(DeviceImpl::of(*this).core, range);
