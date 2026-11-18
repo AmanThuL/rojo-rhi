@@ -264,6 +264,7 @@ namespace rojoRHI {
         void drawLoneMesh(CommandListImpl& list, uint64_t record)
         {
             MTL4::RenderCommandEncoder* encoder = metal4::ensureRender(list);
+            list.encoders.bindTable(list.core, list.state);
             metal4::applyDrawRecord(list, record);
             const metal4::PipelineState& pipeline = *list.draw.pipeline;
             {
@@ -283,6 +284,7 @@ namespace rojoRHI {
         void drawLone(CommandListImpl& list, uint64_t record, const metal4::BufferPayload* indices, MTL::IndexType type)
         {
             MTL4::RenderCommandEncoder* encoder = metal4::ensureRender(list);
+            list.encoders.bindTable(list.core, list.state);
             metal4::applyDrawRecord(list, record);
             {
                 // The validation layer autoreleases in a draw it checks.

@@ -185,7 +185,9 @@ namespace rojoRHI::core {
             limits.maxColorAttachments
         );
         ROJORHI_VU(!desc.colors.empty() || desc.depth.texture.bits != 0, "VU-rojo-cmd-0011", "the render pass has no attachment");
-        PassState pass;
+        // Filled in place: no check below reads the list's pass state, and a failed check aborts.
+        PassState& pass = list.pass;
+        resetPass(pass);
 #ifndef NDEBUG
         // The attachments' records feed the Debug-tier checks and the pass state they compare against; reading them takes
         // the texture pool's lock, which Release recording never does (ADR 0020).
@@ -226,7 +228,6 @@ namespace rojoRHI::core {
         pass.samples = summary.samples;
 #endif
         pass.area = desc.area;
-        list.pass = std::move(pass);
         logPass(list, desc);
         list.pipeline = {};
         recordScope(list, desc.label, "rojorhi.pass.unnamed", static_cast<uint32_t>(list.scopes.size()));
@@ -246,7 +247,7 @@ namespace rojoRHI::core {
             list.scopes.size() - list.passScopeBase
         );
         list.passOpen = false;
-        list.pass = {};
+        resetPass(list.pass);
         list.pipeline = {};
         endPassLog(list);
     }

@@ -215,12 +215,8 @@ namespace rojoRHI::d3d12 {
         }
     }
 
-    void requireSucceeded(DeviceImpl& impl, HRESULT result, std::string_view what)
+    void failRequired(DeviceImpl& impl, HRESULT result, std::string_view what)
     {
-        if (SUCCEEDED(result))
-        {
-            return;
-        }
         if (deviceRemoved(result))
         {
             reportRemoval(impl, what);

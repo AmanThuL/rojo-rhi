@@ -499,3 +499,83 @@ TEST_CASE("a resolve target resolved by two consecutive passes and then read rai
     device.destroy(done);
     destroyDevice(device);
 }
+
+TEST_CASE("a pass description kept into the list's next recording serves an equal pass; a pass on another texture binds its own", "[d3d12]")
+{
+    constexpr ClearColor kGreen{ 0.0f, 1.0f, 0.0f, 1.0f };
+    Device device = makeDevice();
+    const MessageCollection messages;
+    const Fence done = makeFence(device, "test.done");
+    const Texture first = makeColor(device, "test.first");
+    const Texture second = makeColor(device, "test.second");
+    const uint32_t framesInFlight = core::coreOf(device).framesInFlight();
+    // Each recording is its slot's one list, so the pool hands the same list out again; the frames between leave it alone.
+    const d3d12::ListState* kept = nullptr;
+    // One pass that clears `texture`, the texture read back after it; `beforePass` and `afterBegin` see the list's state.
+    const auto record = [&](Texture texture, Layout from, ClearColor clear, uint64_t value, auto&& beforePass, auto&& afterBegin) {
+        device.beginFrame();
+        CommandList list = device.acquireCommandList(QueueType::Graphics, "test.kept");
+        d3d12::ListState& state = stateOf(list);
+        CHECK((kept == nullptr || kept == &state));
+        kept = &state;
+        transitionAll(list, std::array{ texture }, from, Layout::ColorAttachment);
+        beforePass(state);
+        const std::array colors{ ColorAttachment{ .texture = texture, .load = LoadOp::Clear, .clear = clear } };
+        list.beginRenderPass(passOf(colors));
+        afterBegin(state);
+        list.endRenderPass();
+        transitionAll(list, std::array{ texture }, Layout::ColorAttachment, Layout::CopySrc);
+        submitAndWait(device, list, done, value);
+        std::vector<std::byte> texels =
+            test::readNativeTexture(DeviceImpl::of(device), payloadOf(device, texture).resource, 0, D3D12_BARRIER_LAYOUT_COPY_SOURCE);
+        device.endFrame();
+        for (uint32_t frame = 1; frame < framesInFlight; ++frame)
+        {
+            device.beginFrame();
+            device.endFrame();
+        }
+        return texels;
+    };
+    const auto nothing = [](d3d12::ListState&) {};
+    // The first recording describes its pass on the first texture.
+    CHECK(record(first, Layout::Undefined, ClearColor{ 1.0f, 0.0f, 0.0f, 1.0f }, 1, nothing, nothing) == filled({ 255, 0, 0, 255 }));
+    // The next recording finds that description still reusable, and a pass on the second texture describes its own: the
+    // second texture's render-target view and clear value, and the second texture is what the GPU clears.
+    const std::vector<std::byte> described = record(
+        second,
+        Layout::Undefined,
+        kGreen,
+        2,
+        [](d3d12::ListState& state) { CHECK(state.pass.reusable); },
+        [&](d3d12::ListState& state) {
+            REQUIRE(state.pass.targetCount == 1u);
+            CHECK(state.pass.colors[0].texture == second);
+            CHECK(state.pass.targets[0].cpuDescriptor.ptr == d3d12::targetView(payloadOf(device, second), 0, 0).ptr);
+            CHECK(state.pass.targets[0].BeginningAccess.Clear.ClearValue.Color[1] == 1.0f);
+        }
+    );
+    CHECK(described == filled({ 0, 255, 0, 255 }));
+    // A third recording repeats the second's pass, so it begins the kept description without describing it again: a clear
+    // value planted in that description after acquisition is the one the GPU clears with.
+    const std::vector<std::byte> reused = record(
+        second,
+        Layout::CopySrc,
+        kGreen,
+        3,
+        [](d3d12::ListState& state) {
+            CHECK(state.pass.reusable);
+            float* color = state.pass.targets[0].BeginningAccess.Clear.ClearValue.Color;
+            color[0] = 0.0f;
+            color[1] = 0.0f;
+            color[2] = 1.0f;
+            color[3] = 1.0f;
+        },
+        [](d3d12::ListState& state) { CHECK(state.pass.targets[0].BeginningAccess.Clear.ClearValue.Color[2] == 1.0f); }
+    );
+    CHECK(reused == filled({ 0, 0, 255, 255 }));
+    CHECK(messages.count() == 0u);
+    device.destroy(first);
+    device.destroy(second);
+    device.destroy(done);
+    destroyDevice(device);
+}

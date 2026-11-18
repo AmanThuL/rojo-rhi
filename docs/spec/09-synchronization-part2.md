@@ -1,7 +1,7 @@
 # 09. Synchronization, part 2
 
 **Status**: Accepted
-**API version**: 1.0.1
+**API version**: 1.0.2
 
 This part defines the three barrier kinds, the one batched call that records them, the cross-queue
 handoff of textures and the first use of aliased memory. The stage, access and layout vocabulary is

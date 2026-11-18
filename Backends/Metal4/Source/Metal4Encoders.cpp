@@ -168,6 +168,7 @@ namespace rojoRHI::metal4 {
         m_kind = EncoderKind::Render;
         m_holdsWork = false;
         m_ran = MTL::StageFragment;
+        m_tableBound = false;
         return m_render;
     }
 
@@ -190,11 +191,10 @@ namespace rojoRHI::metal4 {
         m_commandPools = state.commandPools;
         core::noteNativeCall(list);
         ++list.counts.encodersOpened;
-        // Every shader of a draw reads the reserved bindings through the list's table (ADR 0018). The object and mesh stages
-        // take it at the encoder's first mesh pipeline (`applyPipeline`), since each bound stage costs every draw after a
-        // table write.
-        m_render->setArgumentTable(state.table, MTL::RenderStageVertex | MTL::RenderStageFragment);
-        core::noteNativeCall(list);
+        // The vertex and fragment stages take the list's table before the encoder's first draw that reads it (`bindTable`),
+        // and the object and mesh stages at its first mesh pipeline (`applyPipeline`), since each bound stage costs every
+        // draw after a table write.
+        m_tableBound = false;
         // The pending barrier's part on every render stage waits at queue level before the pass's load actions and draws.
         emitAtOpen(list, m_barriers, m_render, kRenderStages);
         m_kind = EncoderKind::Render;

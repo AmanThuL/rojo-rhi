@@ -75,6 +75,25 @@ namespace rojoRHI {
             core::noteNativeCall(list.core);
             held = topology;
         }
+
+        // A hit selects its entry without a branch on which entry holds the handle: a recording that alternates two
+        // pipelines flips that branch at every bind, and the predictor misses it once the driver's work between two binds
+        // grows. A miss reads the payload through the handle pool's table, one acquire load and no lock (ADR 0020).
+        const d3d12::PipelineState* resolvePipeline(CommandListImpl& list, Pipeline pipeline)
+        {
+            d3d12::ResolvedPipelines& resolved = list.state.binding.resolved;
+            const bool older = pipeline.bits == resolved.handles[1];
+            if ((pipeline.bits == resolved.handles[0]) | older) [[likely]]
+            {
+                return resolved.states[older ? 1 : 0];
+            }
+            const auto* state = static_cast<const d3d12::PipelineState*>(list.core.device->pool<Pipeline>().native(pipeline));
+            resolved.handles[1] = resolved.handles[0];
+            resolved.states[1] = resolved.states[0];
+            resolved.handles[0] = pipeline.bits;
+            resolved.states[0] = state;
+            return state;
+        }
     } // namespace
 
     namespace d3d12 {
@@ -138,8 +157,9 @@ namespace rojoRHI {
     {
         CommandListImpl& list = CommandListImpl::of(*this);
         core::bindPipeline(list.core, pipeline);
-        // A record's payload is fixed from creation to retirement, so it is read with one load and no lock (ADR 0020).
-        const auto* state = static_cast<const d3d12::PipelineState*>(list.core.device->pool<Pipeline>().native(pipeline));
+        // A record's payload is fixed from creation to retirement, so it is read with no lock (ADR 0020), and the list's
+        // last two binds need no table at all.
+        const d3d12::PipelineState* state = resolvePipeline(list, pipeline);
         d3d12::Binding& binding = list.state.binding;
         binding.pipeline = state;
         // One pipeline slot serves both sides of a D3D12 list, so a bind is skipped only when its own side holds the pipeline.

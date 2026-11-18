@@ -30,7 +30,7 @@ namespace rojoRHI::metal4 {
         MTL::DepthStencilState* boundDepthStencil = nullptr; // Or, when `depthStencil` is null, the device's untested state.
         MTL::CullMode cull = MTL::CullModeNone;
         MTL::Winding winding = MTL::WindingCounterClockwise;
-        bool setsWinding = false; // The pipeline culls, tests stencil or has a fragment entry.
+        bool setsWinding = false; // The pipeline draws no points, and it culls, tests stencil or has a fragment entry.
         MTL::TriangleFillMode fill = MTL::TriangleFillModeFill;
         MTL::DepthClipMode depthClip = MTL::DepthClipModeClip;    // False clamps.
         bool depthBias = false;                                   // The recorded bias applies.

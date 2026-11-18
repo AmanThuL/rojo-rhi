@@ -25,6 +25,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
+#include <optional>
 #include <set>
 #include <span>
 #include <vector>
@@ -35,12 +36,15 @@ namespace {
     constexpr Viewport kViewport{ .width = 16.0f, .height = 16.0f };
     constexpr Rect2D kScissor{ 0, 0, 16, 16 };
 
-    // What a pass's render encoder calls when it opens with no barrier owed: the factory, the label when `list`'s
-    // encoders carry one, and the list's table.
+    // What a pass's render encoder calls when it opens with no barrier owed: the factory and the label when `list`'s
+    // encoders carry one.
     uint64_t openCalls(CommandList list)
     {
-        return 2 + test::encoderLabel(list);
+        return 1 + test::encoderLabel(list);
     }
+
+    // The list's table, which a pass's render encoder binds before its first draw that is not an execute.
+    constexpr uint64_t kTable = 1;
 
     // What the compute encoder of a pass's counted draws calls when it opens with no barrier owed: the factory and the
     // label when `list`'s encoders carry one. It runs only kernels, which bind the kernel table, so it binds no list table.
@@ -395,7 +399,8 @@ TEST_CASE("a kernel makes four calls on a new encoder, two once the encoder hold
     fixture.drawIndexedIndirect(list);
     CHECK(callsOf(list) - before == 2);
     // The kernels' encoder ends; the render encoder's open with its barrier, the pass's begin timestamp, the state, one
-    // execute per counted draw, whose commands bind their own records, the pass's end timestamp and its group.
+    // execute per counted draw, whose commands bind their own buffers, so the encoder binds no table, the pass's end
+    // timestamp and its group.
     before = callsOf(list);
     list.endRenderPass();
     CHECK(callsOf(list) - before == 1 + openCalls(list) + 1 + kPassBegin + kStateCalls + 4 + 2);
@@ -428,11 +433,11 @@ TEST_CASE("maxCount 1 with a count runs the writer kernel and binds the record f
     CHECK(indexed.indices == gpuAddressOf(kit.device.address(fixture.indices)));
     CHECK(indexed.indexLength == 3 * sizeof(uint32_t));
     // The indexed run's pipeline, parameters and dispatch; the kernels' encoder ends; the render encoder's open with its
-    // barrier, the pass's begin timestamp, the state, two native indirect draws each after binding its caller's record, the
-    // pass's end timestamp and its group.
+    // barrier, the pass's begin timestamp, the state, the table, two native indirect draws each after binding its caller's
+    // record, the pass's end timestamp and its group.
     before = callsOf(list);
     list.endRenderPass();
-    CHECK(callsOf(list) - before == 3 + 1 + openCalls(list) + 1 + kPassBegin + kStateCalls + 2 * 2 + 2);
+    CHECK(callsOf(list) - before == 3 + 1 + openCalls(list) + 1 + kPassBegin + kStateCalls + kTable + 2 * 2 + 2);
     CHECK(drawOf(list).tableDrawRecord == gpuAddressOf(kit.device.address(fixture.indexedRecords)));
     kit.run(std::array{ list });
 }
@@ -491,26 +496,38 @@ TEST_CASE("a lone record with no count after a direct draw does not split the pa
     kit.run(std::array{ list });
 }
 
-TEST_CASE("a list acquired again holds the zero record after a recording that left a draw's record bound", "[metal4]")
+TEST_CASE("a list acquired again keeps the record its last recording left bound until its first direct draw", "[metal4]")
 {
     Device device = *createDevice({ .scopeTimings = true });
     const uint32_t slots = core::coreOf(device).framesInFlight();
     const Fixture fixture(device);
+    // What the pass's first direct draw costs on a new list, whose table holds the zero record, and on one acquired again.
+    std::optional<uint64_t> freshCalls;
+    std::optional<uint64_t> againCalls;
     for (uint32_t frame = 0; frame < 2 * slots; ++frame)
     {
+        CAPTURE(frame);
         device.beginFrame();
         CommandList list = device.acquireCommandList(QueueType::Graphics, "test.indirect");
         REQUIRE(drawOf(list).zeroRecord != 0);
-        CHECK(drawOf(list).tableDrawRecord == drawOf(list).zeroRecord);
+        // Acquisition writes no record back, so a list acquired again holds the indirect draw's record its last recording
+        // left.
+        const bool fresh = drawOf(list).tableDrawRecord == drawOf(list).zeroRecord;
         fixture.begin(list);
-        // So a direct draw, which binds the zero record only when the table holds another, binds nothing.
+        const uint64_t before = callsOf(list);
         list.draw(3);
+        (fresh ? freshCalls : againCalls) = callsOf(list) - before;
         CHECK(drawOf(list).tableDrawRecord == drawOf(list).zeroRecord);
         fixture.drawIndirect(list, 1);
         list.endRenderPass();
         CHECK(drawOf(list).tableDrawRecord != drawOf(list).zeroRecord);
         finish(device, list);
     }
+    // The direct draw binds the zero record only where the table holds another: one `setAddress` more on a list acquired
+    // again.
+    REQUIRE(freshCalls.has_value());
+    REQUIRE(againCalls.has_value());
+    CHECK(*againCalls == *freshCalls + 1);
     destroyDevice(device);
 }
 
@@ -533,11 +550,11 @@ TEST_CASE("consecutive writer kernels of one kind run as one dispatch, and an en
     CHECK(callsOf(list) - before == 4 + 3);
     CHECK(encodersOf(list).kernelPipeline() == kernelsOf(kit.device).encodeDraw);
     // A writer after it starts a new run, dispatched when the kernels' encoder ends: its pipeline, parameters and dispatch.
-    // The render encoder then binds the writers' one caller record once, before the first of its five draws.
+    // The render encoder then binds the table and the writers' one caller record once, before the first of its five draws.
     fixture.drawWritten(list);
     before = callsOf(list);
     list.endRenderPass();
-    CHECK(callsOf(list) - before == 3 + 1 + openCalls(list) + 1 + kPassBegin + kStateCalls + 1 + 5 + 2);
+    CHECK(callsOf(list) - before == 3 + 1 + openCalls(list) + 1 + kPassBegin + kStateCalls + kTable + 1 + 5 + 2);
     CHECK(countsOf(list).encodersOpened == 2);
     kit.run(std::array{ list });
 }
@@ -598,8 +615,8 @@ TEST_CASE("a counted draw after a scope opened in the pass splits it and the res
     CHECK(drawOf(list).passGroups == 1);
     before = callsOf(list);
     // The scope's end ends the kernels' encoder and opens the resumed encoder with its barrier, which sets the held state
-    // again and pushes the group, then replays the execute, then writes the scope's end timestamp and pops the group. The
-    // split wrote no timestamp.
+    // again and pushes the group, then replays the execute, which needs no table, then writes the scope's end timestamp and
+    // pops the group. The split wrote no timestamp.
     list.endScope();
     CHECK(encodersOf(list).kind() == metal4::EncoderKind::Render);
     CHECK(callsOf(list) - before == 1 + openCalls(list) + 1 + kStateCalls + 1 + 1 + 2);

@@ -61,8 +61,16 @@ namespace rojoRHI::core {
             bool claimed = false;
         };
 
+        // Every entry before `firstUnclaimed` is claimed, so a claim starts its search there: the j-th claim of a frame
+        // whose pages are all standard costs what the first does.
+        struct Slot
+        {
+            std::vector<Entry> entries;
+            size_t firstUnclaimed = 0;
+        };
+
         mutable std::mutex m_mutex;
-        std::vector<std::vector<Entry>> m_slots;
+        std::vector<Slot> m_slots;
         std::atomic<uint64_t> m_growths = 0;
     };
 } // namespace rojoRHI::core

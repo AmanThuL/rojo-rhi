@@ -6,6 +6,7 @@
 
 #include <rojoRHI/RHI.h>
 
+#include "Base/Assert.h"
 #include "Core/NativeTable.h"
 #include "D3D12Common.h"
 
@@ -32,6 +33,27 @@ namespace rojoRHI::d3d12 {
 
     // The caller has checked `offset` against the buffer and `kMaxAddrOffset`.
     Addr encodeAddr(const BufferPayload& payload, uint64_t offset);
+
+    // As `encodeAddr`, for the buffer whose raw SRV sits at `viewIndex`; inline, for the upload path. Slot 0 of the view
+    // heap is reserved, so a buffer with no raw view, whose payload keeps `viewIndex` 0, fails the first check.
+    inline Addr encodeAddr(uint32_t viewIndex, uint64_t offset)
+    {
+        ROJORHI_INTERNAL_ASSERT(viewIndex != 0, "an address of a buffer with no raw view");
+        ROJORHI_INTERNAL_ASSERT(offset < kMaxAddrOffset, "an address offset past maxAddrOffset");
+        return Addr{ viewIndex, static_cast<uint32_t>(offset) };
+    }
+
+    // Whether `addr` points into the buffer whose raw SRV sits at `viewIndex`; the null address names none.
+    inline bool addrInBuffer(Addr addr, uint32_t viewIndex)
+    {
+        return viewIndex != 0 && addr.lo == viewIndex;
+    }
+
+    // The GPU address `addr` names in the buffer whose GPU base is `base`, when `addrInBuffer` holds for it.
+    inline D3D12_GPU_VIRTUAL_ADDRESS gpuAddress(D3D12_GPU_VIRTUAL_ADDRESS base, Addr addr)
+    {
+        return base + addr.hi;
+    }
 
     // Maps a view-heap index to the buffer whose raw SRV sits there, so an address decodes without a lock. An entry is
     // published before the buffer's handle is returned and cleared by its retire hook before the payload is freed.

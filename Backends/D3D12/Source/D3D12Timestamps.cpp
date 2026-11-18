@@ -19,6 +19,7 @@
 
 #include <algorithm>
 #include <array>
+#include <bit>
 #include <cstddef>
 #include <cstdint>
 #include <expected>
@@ -44,7 +45,7 @@ namespace rojoRHI::d3d12 {
             ListTimestamps::Heap heap;
             D3D12_QUERY_HEAP_DESC queries = {};
             queries.Type = state.type == QueueType::Copy ? D3D12_QUERY_HEAP_TYPE_COPY_QUEUE_TIMESTAMP : D3D12_QUERY_HEAP_TYPE_TIMESTAMP;
-            queries.Count = ListTimestamps::kHeapQueries;
+            queries.Count = state.timestamps.heapQueries();
             queries.NodeMask = 0;
             requireSucceeded(
                 impl, impl.device()->CreateQueryHeap(&queries, IID_PPV_ARGS(heap.queries.put())), std::format("ID3D12Device::CreateQueryHeap for {}", name)
@@ -55,7 +56,7 @@ namespace rojoRHI::d3d12 {
             properties.Type = D3D12_HEAP_TYPE_READBACK;
             D3D12_RESOURCE_DESC1 desc = {};
             desc.Dimension = D3D12_RESOURCE_DIMENSION_BUFFER;
-            desc.Width = uint64_t{ ListTimestamps::kHeapQueries } * sizeof(uint64_t);
+            desc.Width = uint64_t{ state.timestamps.heapQueries() } * sizeof(uint64_t);
             desc.Height = 1;
             desc.DepthOrArraySize = 1;
             desc.MipLevels = 1;
@@ -159,16 +160,26 @@ namespace rojoRHI::d3d12 {
         {
             // A device created without scope timings claims nothing, so its lists make no query heap or readback buffer and
             // resolve nothing at `end`.
-            const DeviceImpl& device = deviceOf(list);
+            DeviceImpl& device = deviceOf(list);
             const bool times = device.core.timesScopes() && state.ordinal <= kMaxOrdinal && writesTimestamps(device, state.type);
             gate = times ? Gate::Open : Gate::Closed;
+            if (times && previous > heapQueries())
+            {
+                // The last recording resolved one heap per `heapQueries()` queries, each a native call at `end` that the
+                // driver may make costly. Its ticks were read at the frame wait before this slot's reuse and the GPU is
+                // done with its heaps, so they go, and the first pair below makes one heap that holds every query that
+                // recording claimed; a recording that repeats it resolves once. A list never shrinks its heaps.
+                core::DeviceCounts::add(device.core.counts().nativeCreateCalls, 2 * heaps.size());
+                heaps.clear();
+                heapShift = static_cast<uint32_t>(std::countr_zero(std::bit_ceil(previous)));
+            }
         }
         if (gate == Gate::Closed || next + 2 > kMaxQueries)
         {
             return core::kNoTimestamp;
         }
         const uint32_t pair = next;
-        if (pair / kHeapQueries == heaps.size())
+        if ((pair >> heapShift) == heaps.size())
         {
             // The heap is the list's own, so its creation takes no lock.
             heaps.push_back(createHeap(deviceOf(list), state, heaps.size()));
@@ -179,6 +190,7 @@ namespace rojoRHI::d3d12 {
 
     void ListTimestamps::reset()
     {
+        previous = next;
         next = 0;
         gate = Gate::Unknown;
         open.clear();
@@ -186,13 +198,13 @@ namespace rojoRHI::d3d12 {
 
     double ListTimestamps::milliseconds(uint32_t pair, double frequency) const
     {
-        const size_t number = pair / kHeapQueries;
+        const size_t number = pair >> heapShift;
         if (number >= heaps.size() || frequency == 0.0)
         {
             return 0.0;
         }
         // READBACK memory is coherent for CPU reads once the frame fence shows the resolve complete.
-        const uint64_t* ticks = heaps[number].mapped + pair % kHeapQueries;
+        const uint64_t* ticks = heaps[number].mapped + indexOf(pair);
         const uint64_t begin = ticks[0];
         const uint64_t end = ticks[1];
         if (end < begin)
@@ -205,11 +217,12 @@ namespace rojoRHI::d3d12 {
     void resolveTimestamps(CommandListImpl& list)
     {
         const ListTimestamps& timestamps = list.state.timestamps;
+        const uint32_t heapQueries = timestamps.heapQueries();
         // Pairs fill the heaps in order, so every heap below the last claimed query was used, the last one up to it.
-        for (uint32_t first = 0; first < timestamps.next; first += ListTimestamps::kHeapQueries)
+        for (uint32_t first = 0; first < timestamps.next; first += heapQueries)
         {
-            const ListTimestamps::Heap& heap = timestamps.heaps[first / ListTimestamps::kHeapQueries];
-            const uint32_t used = std::min(timestamps.next - first, ListTimestamps::kHeapQueries);
+            const ListTimestamps::Heap& heap = timestamps.heapOf(first);
+            const uint32_t used = std::min(timestamps.next - first, heapQueries);
             list.state.list->ResolveQueryData(heap.queries.get(), D3D12_QUERY_TYPE_TIMESTAMP, 0, used, heap.readback.get(), 0);
             core::noteNativeCall(list.core);
         }

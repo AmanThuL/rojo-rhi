@@ -1,7 +1,7 @@
 # 05. Shader ABI (continued)
 
 **Status**: Accepted
-**API version**: 1.0.1
+**API version**: 1.0.2
 
 This part defines the vertex-stage input struct and the built-ins that give the draw's vertex,
 instance and draw identifiers one definition on every target. The model, the layout rules and the
@@ -125,5 +125,5 @@ passes its unmodified `VertexIds` parameter.
 
 | | Metal 4 | D3D12 | Vulkan |
 |---|---|---|---|
-| Lowering | every stage: the backend binds the record's address at `buffer(3)` for the draw, inside the indirect command buffer when a kernel encodes the batch, and the shader loads offset 0; a direct draw binds the device's zero record, four zero bytes every list's argument table holds when the list is acquired, so a direct draw binds it only after an indirect draw of the recording (ADR 0028) | root constant read from record offset 0 by the `ExecuteIndirect` command signature, or written as 0 by a direct draw when the list does not hold 0 there, which it does not after acquisition or an indirect draw | the backend binds the records' base address and stride, and the shader loads offset 0 of record `DrawIndex`; a direct draw binds a zero record, and `DrawIndex` is 0 |
+| Lowering | every stage: the backend binds the record's address at `buffer(3)` for the draw, inside the indirect command buffer when a kernel encodes the batch, and the shader loads offset 0; a direct draw binds the device's zero record, four zero bytes a list's argument table holds from its creation, only when the table holds another record, which an indirect draw of this or an earlier recording of the list leaves there (ADR 0028) | root constant read from record offset 0 by the `ExecuteIndirect` command signature, or written as 0 by a direct draw when the list does not hold 0 there, which it does not after acquisition or an indirect draw | the backend binds the records' base address and stride, and the shader loads offset 0 of record `DrawIndex`; a direct draw binds a zero record, and `DrawIndex` is 0 |
 | Cost | cheap: one load | native: unverified | cheap: one load |

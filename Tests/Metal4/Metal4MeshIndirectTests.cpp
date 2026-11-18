@@ -36,12 +36,15 @@ namespace {
     constexpr Viewport kViewport{ .width = 16.0f, .height = 16.0f };
     constexpr Rect2D kScissor{ 0, 0, 16, 16 };
 
-    // A render encoder that opens with no barrier owed: the factory, the label when the list's encoders carry one, and
-    // the list's table.
+    // A render encoder that opens with no barrier owed: the factory and the label when the list's encoders carry one.
     uint64_t openCalls(CommandList list)
     {
-        return 2 + test::encoderLabel(list);
+        return 1 + test::encoderLabel(list);
     }
+
+    // The list's table at the vertex and fragment stages, which a render encoder binds before its first draw that is not
+    // an execute.
+    constexpr uint64_t kTable = 1;
 
     // The compute encoder of a pass's counted draws, opening with no barrier owed: the factory and the label when the
     // list's encoders carry one.
@@ -202,10 +205,10 @@ TEST_CASE("a lone mesh record with a null count is one native indirect draw that
     CommandList list = kit.list(QueueType::Graphics, "test.meshIndirect");
     fixture.begin(list);
     uint64_t before = callsOf(list);
-    // The render encoder opens, writes the pass's begin timestamp and replays the state; then the record is bound at
-    // buffer(3) and drawn natively.
+    // The render encoder opens, writes the pass's begin timestamp and replays the state; then the table is bound, the record
+    // is bound at buffer(3) and drawn natively.
     list.drawMeshTasksIndirect(fixture.record(), 1);
-    CHECK(callsOf(list) - before == openCalls(list) + kPassBegin + kStateCalls + 2);
+    CHECK(callsOf(list) - before == openCalls(list) + kPassBegin + kStateCalls + kTable + 2);
     CHECK(encodersOf(list).kind() == metal4::EncoderKind::Render);
     CHECK(countsOf(list).encodersOpened == 1);
     CHECK(drawOf(list).prefix.empty());
@@ -252,11 +255,11 @@ TEST_CASE("a mesh draw with a count runs the writer kernel and one native indire
     CHECK((encodersOf(list).barriers().pendingSource & MTL::StageDispatch) != 0);
     CHECK((encodersOf(list).barriers().pendingDestination & meshStages) == meshStages);
     // The run's pipeline, kernel table, parameters and dispatch; the kernels' encoder ends; the render encoder's open with its
-    // barrier, the pass's begin timestamp, the state, the record's binding, the native indirect draw, the pass's end
-    // timestamp and its group.
+    // barrier, the pass's begin timestamp, the state, the table, the record's binding, the native indirect draw, the pass's
+    // end timestamp and its group.
     before = callsOf(list);
     list.endRenderPass();
-    CHECK(callsOf(list) - before == 4 + 1 + openCalls(list) + 1 + kPassBegin + kStateCalls + 2 + 2);
+    CHECK(callsOf(list) - before == 4 + 1 + openCalls(list) + 1 + kPassBegin + kStateCalls + kTable + 2 + 2);
     CHECK(drawOf(list).tableDrawRecord == gpuAddressOf(fixture.record(5)));
     // The draw ran in the stages its barrier covered, so nothing is owed after the pass.
     CHECK(encodersOf(list).barriers().pendingDestination == 0);
@@ -280,9 +283,10 @@ TEST_CASE("a counted mesh draw that splits a pass leaves the resumed encoder to 
     uint64_t before = callsOf(list);
     // The writer kernel's run dispatches (pipeline, kernel table, parameters, dispatch) and the kernels' encoder ends; the
     // resumed render encoder opens with its barrier and restores the held state, the table at the object and mesh stages
-    // first, as kStateCalls counts; then the counted draw's record and draw, and the direct draw's zero record and draw.
+    // first, as kStateCalls counts; then the table, the counted draw's record and draw, and the direct draw's zero record
+    // and draw.
     list.drawMeshTasks(1, 1, 1);
-    CHECK(callsOf(list) - before == 4 + 1 + openCalls(list) + 1 + kStateCalls + 2 + 2);
+    CHECK(callsOf(list) - before == 4 + 1 + openCalls(list) + 1 + kStateCalls + kTable + 2 + 2);
     CHECK(drawOf(list).held.meshStages);
     // A mesh pipeline set again on the resumed encoder sends only the pipelines.
     before = callsOf(list);
@@ -335,7 +339,7 @@ TEST_CASE("a mesh batch encodes an ICB whose commands bind the reserved buffers 
     list.drawMeshTasksIndirect(fixture.record(), 4);
     CHECK(paramsOf(list, drawOf(list).prefix.back()).objectThreads[0] == 0);
     // The kernels' encoder ends; the render encoder's open with its barrier, the pass's begin timestamp, the state, the
-    // root, each execute, the second pipeline, the pass's end timestamp and its group.
+    // root, each execute, the second pipeline, the pass's end timestamp and its group; the executes bind no table.
     before = callsOf(list);
     list.endRenderPass();
     CHECK(callsOf(list) - before == 1 + openCalls(list) + 1 + kPassBegin + kStateCalls + 1 + 3 + 1 + 2);

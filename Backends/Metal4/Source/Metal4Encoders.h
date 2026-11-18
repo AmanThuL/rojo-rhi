@@ -107,10 +107,24 @@ namespace rojoRHI::metal4 {
         // run.
         MTL4::RenderCommandEncoder* openRender(core::CommandListCore& list, ListState& state, const MTL4::RenderPassDescriptor* descriptor);
 
-        // The factory runs inside the autorelease pool the caller holds. Binds the list's argument table to the vertex
-        // and fragment stages (ADR 0018), then emits the pending barrier's part on every render stage. The encoder has
-        // run its fragment stage, where its load and store actions run; `markRan` adds the rest.
+        // The factory runs inside the autorelease pool the caller holds. Emits the pending barrier's part on every render
+        // stage; the table waits for `bindTable`. The encoder has run its fragment stage, where its load and store actions
+        // run; `markRan` adds the rest.
         MTL4::RenderCommandEncoder* openPass(core::CommandListCore& list, ListState& state, const MTL4::RenderPassDescriptor* descriptor);
+
+        // Every shader of a draw reads the reserved bindings through the list's table (ADR 0018), which the open render
+        // encoder takes at the vertex and fragment stages before its first draw that is not an execute: an indirect
+        // command buffer's commands bind their own buffers, so an encoder that only executes binds no table.
+        void bindTable(core::CommandListCore& list, const ListState& state)
+        {
+            if (m_tableBound) [[likely]]
+            {
+                return;
+            }
+            m_render->setArgumentTable(state.table, MTL::RenderStageVertex | MTL::RenderStageFragment);
+            core::noteNativeCall(list);
+            m_tableBound = true;
+        }
 
         // Its opening barrier's hold on `stages` is spent.
         void markRan(MTL::Stages stages)
@@ -271,6 +285,7 @@ namespace rojoRHI::metal4 {
         bool m_commandPools = false; // Taken when an encoder opens.
         MTL::Stages m_ran = 0;       // A render encoder has no stages getter, so it keeps them here.
         bool m_lingering = false;    // Its pass ended; it runs no further command.
+        bool m_tableBound = false;   // The open render encoder holds the list's table at its vertex and fragment stages.
         bool m_kernelsOnly = false;
         bool m_carryWaited = false;
         bool m_syncsAtEnd = false;                 // The open encoder carried a barrier to later lists at `end`.

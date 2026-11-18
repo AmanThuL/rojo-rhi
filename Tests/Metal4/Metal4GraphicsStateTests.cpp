@@ -14,7 +14,9 @@
 #include "Metal4Encoders.h"
 #include "Metal4PipelineState.h"
 #include "Support/Backend.h"
+#include "Support/GpuKit.h"
 #include "Support/Metal4/Metal4Timing.h"
+#include "Support/PassKit.h"
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -23,7 +25,9 @@
 #include <array>
 #include <cstddef>
 #include <cstdint>
+#include <format>
 #include <span>
+#include <string>
 #include <vector>
 
 using namespace rojoRHI;
@@ -32,12 +36,15 @@ namespace {
     constexpr Viewport kViewport{ .width = 16.0f, .height = 16.0f };
     constexpr Rect2D kScissor{ 0, 0, 16, 16 };
 
-    // What a pass's render encoder calls when it opens with no barrier owed: the factory, the label when `list`'s
-    // encoders carry one, and the table.
+    // What an encoder calls when it opens with no barrier owed: the factory and the label when `list`'s encoders carry one.
     uint64_t openCalls(CommandList list)
     {
-        return 2 + test::encoderLabel(list);
+        return 1 + test::encoderLabel(list);
     }
+
+    // The list's table, which the lazy compute encoder binds when it opens, and a pass's render encoder before its first
+    // draw.
+    constexpr uint64_t kTable = 1;
 
     // The begin timestamp a pass's first render encoder writes right after it opens.
     constexpr uint64_t kPassBegin = 1;
@@ -161,9 +168,9 @@ TEST_CASE("state recorded before the first draw waits in the prefix and replays 
     CHECK(prefixKinds(list) == std::vector{ Kind::Pipeline, Kind::Viewport, Kind::Scissor, Kind::Root, Kind::StencilReference, Kind::BlendColor });
     // The open and the pass's begin timestamp, then each entry in order: the pipeline with its counter-clockwise winding (it
     // has a fragment entry; the rest of its raster state is Metal's default), the viewport, the scissor, the table's root,
-    // the stencil reference and the blend color; then the draw.
+    // the stencil reference and the blend color; then the table and the draw.
     list.draw(3);
-    CHECK(callsOf(list) == base + openCalls(list) + kPassBegin + 7 + 1);
+    CHECK(callsOf(list) == base + openCalls(list) + kPassBegin + 7 + kTable + 1);
     CHECK(drawOf(list).prefix.empty());
     const metal4::RenderHeld& held = drawOf(list).held;
     CHECK(held.pipeline == stateOf(list, a));
@@ -184,7 +191,7 @@ TEST_CASE("state recorded before the first draw waits in the prefix and replays 
     CHECK(prefixKinds(list) == std::vector{ Kind::Pipeline, Kind::Viewport });
     const uint64_t before = callsOf(list);
     // The open and the pass's begin timestamp, the pipeline with its winding and the viewport, then the pass's end timestamp
-    // and its group; the encoder stays open until the list ends.
+    // and its group; the encoder draws nothing, so it binds no table, and stays open until the list ends.
     list.endRenderPass();
     CHECK(callsOf(list) == before + openCalls(list) + kPassBegin + 3 + 2);
     finish(device, list);
@@ -365,9 +372,10 @@ TEST_CASE("dynamic state equal to the encoder's sends no call; a new encoder aft
     metal4::splitPass(CommandListImpl::of(list));
     before = callsOf(list);
     // The open, then the held state of the encoder the split ended: the pipeline, the cull mode, the winding, the fill mode,
-    // the depth clip mode, the bias, the viewport, the scissor, the stencil reference and the blend color; then the draw.
+    // the depth clip mode, the bias, the viewport, the scissor, the stencil reference and the blend color; then the table
+    // and the draw.
     list.draw(3);
-    CHECK(callsOf(list) - before == openCalls(list) + 10 + 1);
+    CHECK(callsOf(list) - before == openCalls(list) + 10 + kTable + 1);
     CHECK(countsOf(list).encodersOpened == 2);
     const metal4::RenderHeld& replayed = drawOf(list).held;
     CHECK(replayed.pipeline == held.pipeline);
@@ -402,9 +410,9 @@ TEST_CASE("a pipeline without depthBias applies zero bias and the next depthBias
     list.setViewport(kViewport);
     list.setScissor(kScissor);
     // The open and the pass's begin timestamp, the pipeline and its winding (its bias, still zero, equals the encoder's), the
-    // bias, the viewport, the scissor and the draw.
+    // bias, the viewport, the scissor, the table and the draw.
     list.draw(3);
-    CHECK(callsOf(list) - before == openCalls(list) + kPassBegin + 5 + 1);
+    CHECK(callsOf(list) - before == openCalls(list) + kPassBegin + 5 + kTable + 1);
     const metal4::RenderHeld& held = drawOf(list).held;
     CHECK(held.bias == metal4::DepthBias{ 1.0f, 2.0f, 3.0f });
     // The pipeline and a zero bias.
@@ -425,9 +433,10 @@ TEST_CASE("a pipeline without depthBias applies zero bias and the next depthBias
     list.setViewport(kViewport);
     list.setScissor(kScissor);
     before = callsOf(list);
-    // The open and the pass's begin timestamp, the pipeline and its winding, the viewport, the scissor and the draw.
+    // The open and the pass's begin timestamp, the pipeline and its winding, the viewport, the scissor, the table and the
+    // draw.
     list.draw(3);
-    CHECK(callsOf(list) - before == openCalls(list) + kPassBegin + 4 + 1);
+    CHECK(callsOf(list) - before == openCalls(list) + kPassBegin + 4 + kTable + 1);
     CHECK(drawOf(list).bias == metal4::DepthBias{});
     list.endRenderPass();
     finish(device, list);
@@ -519,6 +528,151 @@ TEST_CASE("a stencil-only pipeline with no fragment entry sets the winding and a
     destroyDevice(device);
 }
 
+TEST_CASE("a point is drawn front-facing, on the front stencil state, under every cull mode and winding", "[metal4]")
+{
+    // A Point pipeline sends no winding, which rests on Metal facing a point the same under either winding; Apple documents
+    // the face only by vertex order. Each case primes the encoder's winding with a pipeline that sets it, then draws a point
+    // whose front stencil operation replaces with the reference and whose back one increments, so the stencil tells the
+    // face Metal applied, and a probe that passes only where the front operation ran.
+    constexpr uint32_t kCell = 16;
+    constexpr uint8_t kReference = 2;
+    struct Case
+    {
+        CullMode cull;
+        FrontFace face;
+    };
+    std::vector<Case> cases;
+    for (const CullMode cull : { CullMode::None, CullMode::Front, CullMode::Back })
+    {
+        for (const FrontFace face : { FrontFace::CounterClockwise, FrontFace::Clockwise })
+        {
+            cases.push_back(Case{ cull, face });
+        }
+    }
+    const auto width = static_cast<uint32_t>(cases.size()) * kCell;
+    test::GpuKit kit;
+    const std::vector<std::byte> blob = test::shaderLibraryFile("PointFaceOracle");
+    const ShaderLibrary library = *kit.device.loadShaderLibrary(blob, "test.pointFace");
+    const auto pipelineOf = [&](GraphicsPipelineDesc desc, ColorWriteMask face, ColorWriteMask probe) {
+        const std::array colors{ ColorTarget{ .format = Format::RGBA8Unorm, .writeMask = face },
+                                 ColorTarget{ .format = Format::RGBA8Unorm, .writeMask = probe } };
+        desc.colors = colors;
+        desc.depthFormat = Format::D32FloatS8;
+        desc.label = "test.pipeline";
+        const Result<Pipeline> pipeline = kit.device.createPipeline(desc);
+        INFO((pipeline ? std::string() : pipeline.error().message));
+        REQUIRE(pipeline.has_value());
+        return *pipeline;
+    };
+    // The probe culls nothing and has a fragment entry, so binding it sets its winding on the encoder.
+    const StencilFaceState equal{ .compare = CompareOp::Equal };
+    const auto probeOf = [&](FrontFace face) {
+        return pipelineOf(
+            GraphicsPipelineDesc{ .vertex = { library, "probeVertexMain" },
+                                  .fragment = { library, "probeFragmentMain" },
+                                  .raster = { .frontFace = face },
+                                  .depthStencil = { .stencilTest = true, .front = equal, .back = equal } },
+            ColorWriteMask::None,
+            ColorWriteMask::All
+        );
+    };
+    const std::array probes{ probeOf(FrontFace::CounterClockwise), probeOf(FrontFace::Clockwise) };
+    const StencilFaceState replace{ .pass = StencilOp::Replace };
+    const StencilFaceState increment{ .pass = StencilOp::IncrementClamp };
+    const auto textureOf = [&](Format format, TextureUsage usage) {
+        return *kit.device.createTexture(
+            TextureDesc{ .type = TextureType::Tex2D, .format = format, .extent = { width, kCell, 1 }, .usage = usage, .label = "test.target" }
+        );
+    };
+    const Texture face = textureOf(Format::RGBA8Unorm, TextureUsage::RenderTarget);
+    const Texture probe = textureOf(Format::RGBA8Unorm, TextureUsage::RenderTarget);
+    const Texture depth = textureOf(Format::D32FloatS8, TextureUsage::DepthStencil);
+    CommandList list = kit.list(QueueType::Graphics, "test.pointFace");
+    test::transition(list, face, Layout::Undefined, Layout::ColorAttachment);
+    test::transition(list, probe, Layout::Undefined, Layout::ColorAttachment);
+    test::transition(list, depth, Layout::Undefined, Layout::DepthStencilWrite);
+    const std::array colors{ ColorAttachment{ .texture = face, .load = LoadOp::Clear }, ColorAttachment{ .texture = probe, .load = LoadOp::Clear } };
+    list.beginRenderPass(
+        RenderPassDesc{
+            .colors = colors,
+            .depth =
+                DepthAttachment{
+                    .texture = depth, .load = LoadOp::Clear, .store = StoreOp::DontCare, .stencilLoad = LoadOp::Clear, .stencilStore = StoreOp::DontCare },
+            .area = { 0, 0, width, kCell },
+            .label = "test.pass" }
+    );
+    list.setStencilReference(kReference);
+    for (uint32_t i = 0; i < cases.size(); ++i)
+    {
+        CAPTURE(i);
+        const Pipeline point = pipelineOf(
+            GraphicsPipelineDesc{ .vertex = { library, "pointFaceVertexMain" },
+                                  .fragment = { library, "pointFaceFragmentMain" },
+                                  .primitive = PrimitiveClass::Point,
+                                  .raster = { .cull = cases[i].cull, .frontFace = cases[i].face },
+                                  .depthStencil = { .stencilTest = true, .front = replace, .back = increment } },
+            ColorWriteMask::All,
+            ColorWriteMask::None
+        );
+        const Pipeline primer = probes[cases[i].face == FrontFace::Clockwise ? 1 : 0];
+        list.setViewport(Viewport{ .x = static_cast<float>(i * kCell), .width = kCell, .height = kCell });
+        list.setScissor(Rect2D{ i * kCell, 0, kCell, kCell });
+        // The probe sets the case's winding and writes nothing: no texel of the cell holds the reference yet.
+        list.setPipeline(primer);
+        list.draw(3);
+        list.setPipeline(point);
+        list.draw(1);
+        // The encoder holds the case's winding as the point draws.
+        CHECK(drawOf(list).held.winding == (cases[i].face == FrontFace::Clockwise ? MTL::WindingClockwise : MTL::WindingCounterClockwise));
+        list.setPipeline(primer);
+        list.draw(3);
+    }
+    list.endRenderPass();
+    test::transition(list, face, Layout::ColorAttachment, Layout::CopySrc);
+    test::transition(list, probe, Layout::ColorAttachment, Layout::CopySrc);
+    kit.run(std::array{ list });
+    const TextureRegion region{ .extent = { width, kCell, 1 } };
+    const std::vector<std::byte> faces = kit.readTexture(face, region, Format::RGBA8Unorm);
+    const std::vector<std::byte> probed = kit.readTexture(probe, region, Format::RGBA8Unorm);
+    REQUIRE(faces.size() == size_t{ width } * kCell * 4);
+    REQUIRE(probed.size() == faces.size());
+    const auto texel = [&](const std::vector<std::byte>& bytes, uint32_t x, uint32_t y) {
+        const size_t at = (size_t{ y } * width + x) * 4;
+        return std::format("{} {} {} {}", int(bytes[at]), int(bytes[at + 1]), int(bytes[at + 2]), int(bytes[at + 3]));
+    };
+    // Each cell holds one point at its pixel (8, 8): drawn, red for a front face in the face target, and blue in the probe
+    // target, where the stencil holds the reference the front operation wrote. Every other texel stays clear.
+    uint32_t wrong = 0;
+    for (uint32_t y = 0; y < kCell; ++y)
+    {
+        for (uint32_t x = 0; x < width; ++x)
+        {
+            const bool point = x % kCell == 8 && y == 8;
+            const std::string expectedFace = point ? "255 0 0 255" : "0 0 0 0";
+            const std::string expectedProbe = point ? "0 0 255 255" : "0 0 0 0";
+            if (texel(faces, x, y) != expectedFace || texel(probed, x, y) != expectedProbe)
+            {
+                if (++wrong <= 8)
+                {
+                    UNSCOPED_INFO(
+                        std::format(
+                            "case {} ({}, {}): face {}, expected {}; probe {}, expected {}",
+                            x / kCell,
+                            x % kCell,
+                            y,
+                            texel(faces, x, y),
+                            expectedFace,
+                            texel(probed, x, y),
+                            expectedProbe
+                        )
+                    );
+                }
+            }
+        }
+    }
+    CHECK(wrong == 0);
+}
+
 TEST_CASE("setRoot outside a pass writes the table at once and an unchanged root sends nothing", "[metal4]")
 {
     Device device = *createDevice({ .scopeTimings = true, .debugMarkers = true });
@@ -544,7 +698,8 @@ TEST_CASE("setRoot outside a pass writes the table at once and an unchanged root
     list.setRoot(first);
     CHECK(callsOf(list) == before);
     CHECK(drawOf(list).tableRoot == gpuAddressOf(second));
-    // The open and the pass's begin timestamp, the root, the pass's end timestamp and its group; the encoder stays open.
+    // The open and the pass's begin timestamp, the root, the pass's end timestamp and its group; the encoder draws nothing,
+    // so it binds no table, and stays open.
     list.endRenderPass();
     CHECK(callsOf(list) - before == openCalls(list) + kPassBegin + 1 + 2);
     CHECK(drawOf(list).tableRoot == gpuAddressOf(first));
@@ -565,7 +720,7 @@ TEST_CASE("a compute pipeline bound before an unequal fill, or before a scope bo
     // Binding opens the lazy compute encoder (the factory, the label and the table) and sets the pipeline.
     uint64_t before = callsOf(list);
     list.setPipeline(pipeline);
-    CHECK(callsOf(list) - before == openCalls(list) + 1);
+    CHECK(callsOf(list) - before == openCalls(list) + kTable + 1);
     CHECK(encodersOf(list).kind() == metal4::EncoderKind::Compute);
     CHECK(encodersOf(list).kernelPipeline() == compute);
     CHECK(drawOf(list).compute == stateOf(list, pipeline));
@@ -590,7 +745,7 @@ TEST_CASE("a compute pipeline bound before an unequal fill, or before a scope bo
         // The dispatch path opens the encoder again and sets the pipeline; the list uses no carry fence, since no counted
         // draw has run on the device.
         metal4::applyComputePipeline(impl);
-        CHECK(callsOf(list) - before == openCalls(list) + 1);
+        CHECK(callsOf(list) - before == openCalls(list) + kTable + 1);
         CHECK(encodersOf(list).kernelPipeline() == compute);
         before = callsOf(list);
         metal4::applyComputePipeline(impl);
@@ -632,7 +787,7 @@ TEST_CASE("setPipeline with a compute pipeline, then a barrier, emits the barrie
     destroyDevice(device);
 }
 
-TEST_CASE("direct draws read drawId 0 from the device's zero record, which every list's table holds when acquired", "[metal4]")
+TEST_CASE("direct draws read drawId 0 from the device's zero record, which a list's table holds from its creation", "[metal4]")
 {
     Device device = *createDevice({ .scopeTimings = true });
     const ShaderLibrary library = standard(device);
@@ -664,9 +819,10 @@ TEST_CASE("direct draws read drawId 0 from the device's zero record, which every
         list.setScissor(kScissor);
         uint64_t before = callsOf(list);
         // The open and the pass's begin timestamp, the table at the object and mesh stages, the pipeline and its winding, the
-        // viewport and the scissor, then the draw: the table holds the zero record already.
+        // viewport and the scissor, then the table at the vertex and fragment stages and the draw: the table holds the zero
+        // record already.
         list.drawMeshTasks(1, 1, 1);
-        CHECK(callsOf(list) - before == openCalls(list) + kPassBegin + 5 + 1);
+        CHECK(callsOf(list) - before == openCalls(list) + kPassBegin + 5 + kTable + 1);
         before = callsOf(list);
         list.drawMeshTasks(2, 1, 1);
         CHECK(callsOf(list) - before == 1);
@@ -787,12 +943,12 @@ TEST_CASE("C8's sequence makes the calls the overhead note registers", "[metal4]
         list.draw(3);
         list.endRenderPass();
         // After the first pass, endEncoding of the previous pass's encoder, which stayed open; pushDebugGroup,
-        // writeTimestampIntoHeap; renderCommandEncoder, setLabel, setArgumentTable; the consumer barrier after the first pass;
-        // setRenderPipelineState, setFrontFacingWinding, setViewport, setScissorRect, drawPrimitives; writeTimestamp on the
-        // encoder and popDebugGroup. The winding call, one per encoder, is beyond the registered sequence: the pipeline has a
+        // writeTimestampIntoHeap; renderCommandEncoder, setLabel; the consumer barrier after the first pass;
+        // setRenderPipelineState, setFrontFacingWinding, setViewport, setScissorRect, setArgumentTable, drawPrimitives;
+        // writeTimestamp on the encoder and popDebugGroup. The winding call, one per encoder, is beyond the registered sequence: the pipeline has a
         // fragment entry, which may read the front face, and its counter-clockwise winding is not Metal's default.
         const uint64_t barrier = repetition > 0 ? 1 : 0;
-        CHECK(callsOf(list) - before == barrier + 2 + openCalls(list) + barrier + 5 + 2);
+        CHECK(callsOf(list) - before == barrier + 2 + openCalls(list) + barrier + 5 + kTable + 2);
         CHECK(countsOf(list).nativeBarriers - barriers == barrier);
     }
     finish(device, list);

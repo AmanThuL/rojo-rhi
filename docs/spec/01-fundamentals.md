@@ -1,7 +1,7 @@
 # 01. Fundamentals
 
 **Status**: Accepted
-**API version**: 1.0.1
+**API version**: 1.0.2
 
 This chapter defines what every other chapter assumes: the shapes of public type, how failure and
 misuse are reported, the threading contract, handles, and the shared value types. Labels, the

@@ -37,6 +37,16 @@ namespace rojoRHI::d3d12 {
         Foreign // Vendor work recorded on the list, such as an upscale.
     };
 
+    // A handle's bits name one allocation for the pool's whole life and a payload is fixed from creation to retirement,
+    // so a handle live when bound names the payload cached for its bits. A hit reads no table, so a list still
+    // recording after its frame retired, which breaks VU-rojo-device-0005 and goes unchecked in Release, can read a
+    // retired payload. Emptied at each acquisition, with the rest of `Binding`.
+    struct ResolvedPipelines
+    {
+        std::array<uint64_t, 2> handles = {}; // Newest first; 0 for an empty entry.
+        std::array<const PipelineState*, 2> states = {};
+    };
+
     // Kept lazily: `setRoot` stores the address and marks both sides dirty, and the next draw or dispatch binds it on
     // its side. Reset at each acquisition.
     struct Binding
@@ -50,6 +60,8 @@ namespace rojoRHI::d3d12 {
         ID3D12PipelineState* computePipeline = nullptr;
         ID3D12PipelineState* graphicsPipeline = nullptr;
         const PipelineState* pipeline = nullptr;
+        // The payloads of the last two pipelines `setPipeline` bound, so a list that alternates two reads no table.
+        ResolvedPipelines resolved;
     };
 
     // What the native list of a Graphics list holds, so a pass's starting values, the setters, `setPipeline` and the
@@ -78,13 +90,15 @@ namespace rojoRHI::d3d12 {
         IndexType indexType = IndexType::UInt32;
     };
 
-    // So a root pushed with `pushRoot` binds without a lookup in the heap directory. Reset at each acquisition.
+    // The arena page of the list's last upload, read from its payload once per page, so an upload writes nothing here
+    // and a root anywhere in that page, as `pushRoot` binds, resolves without a lookup in the heap directory: an
+    // address whose `lo` is the page's raw-view index names that page, which lives until the device is destroyed. Reset
+    // at each acquisition.
     struct LastUpload
     {
-        Buffer page;
-        const BufferPayload* payload = nullptr; // Fixed while the page lives.
-        Addr address = {};
-        D3D12_GPU_VIRTUAL_ADDRESS gpu = 0;
+        Buffer page;                        // Null until the list's first upload.
+        uint32_t viewIndex = 0;             // The page's raw-view index, the `lo` of each of its addresses; 0 while none.
+        D3D12_GPU_VIRTUAL_ADDRESS base = 0; // The page's GPU base address; 0 while none.
     };
 
     // Each by the view-heap index of its raw SRV.
@@ -97,7 +111,7 @@ namespace rojoRHI::d3d12 {
     };
 
     // The list's own, so recording allocates nothing and the resolve parameters `BeginRenderPass` points at stay where
-    // they are until `EndRenderPass`. Rewritten at each pass.
+    // they are until `EndRenderPass`. Rewritten at each pass that does not repeat the description it holds.
     struct PassStorage
     {
         // The first `targetCount` used.
@@ -111,38 +125,44 @@ namespace rojoRHI::d3d12 {
         uint32_t targetCount = 0;
         uint32_t resolveCount = 0;
         bool hasDepth = false;
-        // The caller's attachments the description was made from, so a pass that repeats them reuses it.
+        // The caller's attachments the description was made from, so a pass that repeats them reuses it, in a later
+        // recording of the list too: a handle's bits name one texture for the pool's whole life and its payload is fixed
+        // while it lives, so equal attachments of live textures describe the same native pass.
         std::array<ColorAttachment, D3D12_SIMULTANEOUS_RENDER_TARGET_COUNT> colors = {};
         DepthAttachment depthAttachment = {};
-        // False after acquisition, and after a pass with a resolve, whose barriers `EndRenderPass` reverses in place.
+        // False until the list's first pass, and after a pass with a resolve, whose barriers `EndRenderPass` reverses in
+        // place.
         bool reusable = false;
     };
 
     // Created when its frame slot's pool grows and kept while the pool hands the list out again. Everything recording
-    // touches is the list's own, so recording takes no lock.
+    // touches is the list's own, so recording takes no lock. The fields acquisition writes or reads come first, so a
+    // recording starts on few cache lines.
     struct ListState
     {
         Com<ID3D12CommandAllocator> allocator; // Reset when its frame slot is reused.
         Com<ID3D12GraphicsCommandList9> list;  // Reset at each acquisition, closed by `CommandList::end`.
+        // Receives the recording's first and last timestamps; null for none.
+        SubmitTimingState* submitTiming = nullptr;
+        uint64_t submitPair = 0;
         QueueType type = QueueType::Graphics;
         uint32_t frameSlot = 0;
         uint32_t ordinal = 0;
+        Binding binding;
+        LastUpload upload;
+        // So a repeated command finds them without the heap directory. Reset at each acquisition.
+        IndirectBuffers indirect;
+        DynamicState dynamic;
+        ListTimestamps timestamps;
         std::string label;
         std::wstring scratch;
         // Kept across recordings: a scope with the label of the one before it widens nothing.
         std::wstring eventLabel;
         std::string eventSource;
-        LastUpload upload;
-        // So a repeated command finds them without the heap directory. Reset at each acquisition.
-        IndirectBuffers indirect;
-        Binding binding;
+        // Kept across recordings, as the pass description is: a batch of one record that repeats the list's last one,
+        // in an earlier recording too, sends the lowering again.
         BarrierScratch barriers;
-        ListTimestamps timestamps;
-        DynamicState dynamic;
         PassStorage pass;
-        // Receives the recording's first and last timestamps; null for none.
-        SubmitTimingState* submitTiming = nullptr;
-        uint64_t submitPair = 0;
     };
 
     // Those taken since the slot was reused come first; the rest wait to be reused.

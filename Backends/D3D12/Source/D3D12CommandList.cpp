@@ -52,9 +52,8 @@ namespace rojoRHI {
         state.binding = {};
         state.upload = {};
         state.indirect = {};
-        state.pass.reusable = false;
-        state.barriers.single = d3d12::SingleBarrier::None;
-        // Reset leaves the native list's dynamic state unknown, so the list's first pass writes every starting value.
+        // Reset leaves the native list's dynamic state unknown, so the list's first pass writes every starting value. The
+        // pass description and the barrier scratch are kept: they describe native commands, not the list's state.
         state.dynamic = {};
         if (type != QueueType::Copy)
         {
@@ -99,15 +98,16 @@ namespace rojoRHI {
         const core::ArenaAllocation place = core::allocateFrameData(*list.device, list, bytes, alignment, d3d12::createArenaPage, list.device);
         d3d12::copySmall(place.memory, bytes.data(), bytes.size());
         d3d12::LastUpload& last = impl.state.upload;
-        if (place.page.bits != last.page.bits)
+        if (place.page.bits != last.page.bits) [[unlikely]]
         {
-            // The page's payload is fixed while the page lives, so it is read with one acquire load and no lock.
+            // The page's payload is fixed while the page lives, so it is read with one acquire load and no lock, once per page.
+            const auto* payload = static_cast<const d3d12::BufferPayload*>(list.device->pool<Buffer>().native(place.page));
             last.page = place.page;
-            last.payload = static_cast<const d3d12::BufferPayload*>(list.device->pool<Buffer>().native(place.page));
+            last.viewIndex = payload->viewIndex;
+            last.base = payload->base;
         }
-        last.address = d3d12::encodeAddr(*last.payload, place.offset);
-        last.gpu = last.payload->base + place.offset;
-        return last.address;
+        // The core kept the offset below maxAddrOffset.
+        return d3d12::encodeAddr(last.viewIndex, place.offset);
     }
 
     void CommandList::setRoot(Addr root)
@@ -115,11 +115,12 @@ namespace rojoRHI {
         CommandListImpl& list = CommandListImpl::of(*this);
         core::setRoot(list.core, root);
         // The address is bound lazily: the next draw binds it on the graphics side and the next dispatch on the compute side.
-        // A root the list uploaded last, as `pushRoot` binds, needs no lookup in the heap directory.
+        // A root in the page of the list's last upload, as `pushRoot` binds, needs no lookup in the heap directory: the
+        // page's raw-view index names it, and its base plus the offset is what the directory would give.
         d3d12::Binding& binding = list.state.binding;
         const d3d12::LastUpload& last = list.state.upload;
         binding.root =
-            root.lo == last.address.lo && root.hi == last.address.hi && last.gpu != 0 ? last.gpu : d3d12::rootAddress(d3d12::deviceOf(list).directory, root);
+            d3d12::addrInBuffer(root, last.viewIndex) ? d3d12::gpuAddress(last.base, root) : d3d12::rootAddress(d3d12::deviceOf(list).directory, root);
         binding.graphicsRootDirty = true;
         binding.computeRootDirty = true;
     }

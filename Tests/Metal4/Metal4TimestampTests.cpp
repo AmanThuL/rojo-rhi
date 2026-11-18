@@ -727,9 +727,10 @@ TEST_CASE("a pass whose encoder opens at endRenderPass writes both its timestamp
     CHECK(CommandListImpl::of(list).draw.passBegin == state.scopeLog.back().timestamp);
     const uint64_t encoders = state.counts.encodersOpened;
     list.endRenderPass();
-    // renderCommandEncoder, setLabel and setArgumentTable, the begin and end timestamps on the encoder, then popDebugGroup on
-    // the command buffer; the encoder, which runs the pass's clear and store, stays open until the list ends.
-    CHECK(state.counts.nativeRecordCalls == calls + 1 + 2 + label + 2 + 1);
+    // renderCommandEncoder and setLabel, the begin and end timestamps on the encoder, then popDebugGroup on the command
+    // buffer; the encoder, which runs the pass's clear and store and draws nothing, binds no table and stays open until the
+    // list ends.
+    CHECK(state.counts.nativeRecordCalls == calls + 1 + 1 + label + 2 + 1);
     CHECK(state.counts.encodersOpened == encoders + 1);
     CHECK(state.scopeLog.back().timestamp != core::kNoTimestamp);
     submitFrame(device, std::array{ list });
@@ -803,10 +804,11 @@ TEST_CASE("a scope that opens a pass's render encoder writes after the pass's be
     uint64_t calls = state.counts.nativeRecordCalls;
     list.beginScope("test.inner");
     test::requireTimed(list);
-    // The scope opened the render encoder (factory, label, table), which wrote the pass's begin timestamp and replayed the
-    // pipeline with its winding, the viewport and the scissor before the scope's group and begin timestamp.
+    // The scope opened the render encoder (factory, label), which wrote the pass's begin timestamp and replayed the pipeline
+    // with its winding, the viewport and the scissor before the scope's group and begin timestamp; the table waits for the
+    // draw.
     CHECK(state.scopeLog.back().timestamp == passPair + 2);
-    CHECK(state.counts.nativeRecordCalls == calls + 2 + label + 1 + 4 + 1 + 1);
+    CHECK(state.counts.nativeRecordCalls == calls + 1 + label + 1 + 4 + 1 + 1);
     CHECK(CommandListImpl::of(list).draw.passBegin == core::kNoTimestamp);
     list.draw(3);
     calls = state.counts.nativeRecordCalls;

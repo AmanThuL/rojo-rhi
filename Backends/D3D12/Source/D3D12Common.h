@@ -31,20 +31,39 @@ namespace rojoRHI {
 }
 
 namespace rojoRHI::d3d12 {
-    // A block of 16 to 256 bytes, as a root block or other frame data is, moves inline in 16-byte steps, the last
-    // ending at the block's end: `memcpy` of a size the compiler cannot see is a call into the C runtime, which costs
-    // more than such a copy. The ranges do not overlap.
+#if defined(_M_X64)
+    // One 16-byte move; the ranges do not overlap.
+    inline void copy16(std::byte* destination, const std::byte* source)
+    {
+        _mm_storeu_si128(reinterpret_cast<__m128i*>(destination), _mm_loadu_si128(reinterpret_cast<const __m128i*>(source)));
+    }
+#endif
+
+    // A block of 16 to 256 bytes, as a root block or other frame data is, moves inline in 16-byte steps, four to a loop
+    // trip, the last step ending at the block's end: `memcpy` of a size the compiler cannot see is a call into the C
+    // runtime, which costs more than such a copy. The ranges do not overlap. A size that is a multiple of 16 writes each
+    // byte once, which matters in write-combined upload memory, where a second write to a flushed line is a partial one.
     inline void copySmall(std::byte* destination, const std::byte* source, size_t size)
     {
 #if defined(_M_X64)
         if (size >= 16 && size <= 256)
         {
-            for (size_t offset = 0; offset + 16 < size; offset += 16)
+            size_t offset = 0;
+            // The trips stop short of the last 16 bytes, which the final step writes: a 256-byte root block takes three
+            // trips, three single steps and the final one.
+            for (; offset + 64 < size; offset += 64)
             {
-                _mm_storeu_si128(reinterpret_cast<__m128i*>(destination + offset), _mm_loadu_si128(reinterpret_cast<const __m128i*>(source + offset)));
+                copy16(destination + offset, source + offset);
+                copy16(destination + offset + 16, source + offset + 16);
+                copy16(destination + offset + 32, source + offset + 32);
+                copy16(destination + offset + 48, source + offset + 48);
             }
-            // The last step may cover bytes the loop already wrote, with the same values.
-            _mm_storeu_si128(reinterpret_cast<__m128i*>(destination + size - 16), _mm_loadu_si128(reinterpret_cast<const __m128i*>(source + size - 16)));
+            for (; offset + 16 < size; offset += 16)
+            {
+                copy16(destination + offset, source + offset);
+            }
+            // Of a size that is no multiple of 16, the last step covers bytes the step before it wrote, with the same values.
+            copy16(destination + size - 16, source + size - 16);
             return;
         }
 #endif
@@ -165,7 +184,16 @@ namespace rojoRHI::d3d12 {
     // `core::completeFence`. Logs and aborts, in every build, when no event can be made or armed or the wait fails.
     FenceWait waitForFence(ID3D12Fence* fence, uint64_t value, uint64_t timeoutNs, std::string_view what);
 
+    // The failure path of `requireSucceeded`, out of line.
+    [[noreturn]] void failRequired(DeviceImpl& impl, HRESULT result, std::string_view what);
+
     // For an entry that returns no Result: on failure, reports the removal when the device was removed, then logs the
-    // call and aborts, in every build.
-    void requireSucceeded(DeviceImpl& impl, HRESULT result, std::string_view what);
+    // call and aborts, in every build. Inline, so a success, as each list's `Reset` and `Close` are, costs one test.
+    inline void requireSucceeded(DeviceImpl& impl, HRESULT result, std::string_view what)
+    {
+        if (FAILED(result)) [[unlikely]]
+        {
+            failRequired(impl, result, what);
+        }
+    }
 } // namespace rojoRHI::d3d12

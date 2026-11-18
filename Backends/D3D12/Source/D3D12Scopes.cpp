@@ -52,8 +52,7 @@ namespace rojoRHI {
             {
                 return;
             }
-            const ListTimestamps::Heap& heap = timestamps.heaps[pair / ListTimestamps::kHeapQueries];
-            state.list->EndQuery(heap.queries.get(), D3D12_QUERY_TYPE_TIMESTAMP, pair % ListTimestamps::kHeapQueries);
+            state.list->EndQuery(timestamps.heapOf(pair).queries.get(), D3D12_QUERY_TYPE_TIMESTAMP, timestamps.indexOf(pair));
             core::noteNativeCall(list.core);
             // The frame wait finds the list by its ordinal and the ticks by the pair.
             record.timestamp = (state.ordinal << 16) | pair;
@@ -67,8 +66,7 @@ namespace rojoRHI {
             timestamps.open.pop_back();
             if (pair != core::kNoTimestamp)
             {
-                const ListTimestamps::Heap& heap = timestamps.heaps[pair / ListTimestamps::kHeapQueries];
-                state.list->EndQuery(heap.queries.get(), D3D12_QUERY_TYPE_TIMESTAMP, pair % ListTimestamps::kHeapQueries + 1);
+                state.list->EndQuery(timestamps.heapOf(pair).queries.get(), D3D12_QUERY_TYPE_TIMESTAMP, timestamps.indexOf(pair) + 1);
                 core::noteNativeCall(list.core);
             }
             if (list.core.device->marksScopes())

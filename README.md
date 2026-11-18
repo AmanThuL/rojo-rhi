@@ -1,33 +1,119 @@
 # RojoRHI
 
-RojoRHI is a thin rendering hardware interface in dependency-free C++23 over Metal 4 and D3D12, and
-[Supported platforms](#supported-platforms) gives the hardware each is tested on. It is
-address-first: a shader reaches its data through one root block of GPU addresses and heap indices,
-so there are no binding slots to declare. It is for engines and renderers that want the explicit
-model of the native APIs without writing each backend themselves.
+RojoRHI is an address-first rendering hardware interface in dependency-free C++23 over Metal 4
+and Direct3D 12.
 
-## Supported platforms
+[![Build and GPU-free checks](https://img.shields.io/github/actions/workflow/status/AmanThuL/rojo-rhi/ci.yml?label=build%20and%20GPU-free%20checks)](https://github.com/AmanThuL/rojo-rhi/actions/workflows/ci.yml)
+![Latest release](https://img.shields.io/github/v/release/AmanThuL/rojo-rhi)
+![License: Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-blue)
+![C++23](https://img.shields.io/badge/C%2B%2B-23-blue)
+![Metal 4: conformance passing on 1 GPU](https://img.shields.io/badge/Metal%204-conformance%20passing%20(1%20GPU)-brightgreen)
+![Direct3D 12: conformance passing on 1 GPU](https://img.shields.io/badge/Direct3D%2012-conformance%20passing%20(1%20GPU)-brightgreen)
 
-| Backend | OS | Minimum hardware | Tested on (GPU, driver, date) | Conformance | CPU overhead |
+## Why RojoRHI
+
+- **Address-first with no binding slots.** Shaders reach buffers through GPU addresses and heap
+  indices in one root block pushed per draw or dispatch. The Slang `RojoRHI` module owns that
+  binding, so shaders declare none.
+- **One backend per build, no virtual calls.** The backend is chosen at configure time, calls
+  resolve at compile time, and link-time optimization inlines small calls such as
+  `Device::capabilities`.
+- **Near-native CPU cost.** On an Apple M4 Pro, a draw with a 64-byte root block costs 67.6 ns,
+  against 66.0 ns in hand-written Metal 4 (+2.6%); [measured](docs/performance.md), not estimated.
+- **Full Debug validation, zero Release cost.** Every valid-usage rule in the API reference has a
+  runtime check and death test in Debug builds. Release builds leave them unchecked at no cost.
+- **Dependency-free public headers.** Headers under `Include/` contain no platform, windowing, or
+  third-party types.
+- **No hidden threads or locks.** RojoRHI creates no threads, and command recording takes no
+  locks in Release except when a command list claims a new frame-arena page.
+
+## A first dispatch
+
+This excerpt from the first compute example passes buffer GPU addresses in a root struct and
+dispatches work without declaring any binding slots.
+
+```cpp
+struct SaxpyRoot
+{
+    Addr x;
+    Addr y;
+    Addr result;
+    float a;
+    uint32_t count;
+};
+// ...
+Device device = check(createDevice({ .validation = example::kValidation, .label = "hello-compute" }), "createDevice");
+// ...
+Buffer xs = check(device.createBuffer({ .size = kBytes, .label = "x" }, std::as_bytes(std::span(x))), "createBuffer");
+Buffer ys = check(device.createBuffer({ .size = kBytes, .label = "y" }, std::as_bytes(std::span(y))), "createBuffer");
+Buffer result = check(device.createBuffer({ .size = kBytes, .usage = BufferUsage::ShaderWrite, .label = "result" }), "createBuffer");
+// ...
+device.beginFrame();
+CommandList list = device.acquireCommandList(QueueType::Compute, "saxpy");
+list.setPipeline(saxpy);
+list.pushRoot(SaxpyRoot{ .x = device.address(xs), .y = device.address(ys), .result = device.address(result), .a = kA, .count = kCount });
+list.dispatch((kCount + 63) / 64, 1, 1);
+const std::array toCopy{ BufferBarrier{
+    .buffer = result, .srcStage = Stage::ComputeShader, .srcAccess = Access::ShaderWrite, .dstStage = Stage::Copy, .dstAccess = Access::CopyRead } };
+list.barrier({}, toCopy);
+// ...
+device.queue(QueueType::Compute).submit(std::array{ list }, {}, computeDone);
+```
+
+```slang
+[shader("compute")]
+[numthreads(64, 1, 1)]
+void saxpy(uint3 thread : SV_DispatchThreadID)
+{
+    // Reads the block bound by pushRoot. The module owns that binding, so this shader declares none.
+    SaxpyRoot root = rojoRHI::root<SaxpyRoot>();
+    if (thread.x >= root.count)
+    {
+        return;
+    }
+
+    // load and store index elements of T past an Addr; only the module knows how each backend dereferences one.
+    float x = rojoRHI::load<float>(root.x, thread.x);
+    float y = rojoRHI::load<float>(root.y, thread.x);
+    rojoRHI::store<float>(root.result, thread.x, root.a * x + y);
+}
+```
+
+The shader reads the root block with `rojoRHI::root<SaxpyRoot>()` and indexes each buffer
+through its `Addr`, with no binding declared anywhere. See
+[`Examples/README.md`](Examples/README.md) for the complete program and further examples.
+
+## Performance against native code
+
+Each workload is written twice, once with RojoRHI and once directly in Metal 4 doing the same GPU
+work, and both run on an Apple M4 Pro in Release builds with validation off. Budgets and statistics
+are fixed before anything is timed; each configuration runs as 20 processes, each arm's figure is
+the median of its process medians, and the difference is the median of the paired differences.
+
+| Workload | RojoRHI | Native Metal 4 | Difference |
+|---|---:|---:|---:|
+| Per draw: a 64-byte root block and a draw, 1,000 a list | 67.6 ns | 66.0 ns | +2.6% |
+| Per pipeline switch and draw, 100 a list | 119.4 ns | 116.0 ns | +3.7% |
+
+RojoRHI itself makes no heap allocation per frame in any workload, and creates no pipeline or
+native object after warm-up. [`docs/performance.md`](docs/performance.md) has every budget of each
+backend's latest round, the ones still above budget included.
+
+## Platforms
+
+| Backend | OS | Minimum hardware | Tested on | Conformance | CPU cost against native |
 |---|---|---|---|---|---|
-| Metal 4 | macOS 26 or later | Apple silicon, GPU family Apple7 or newer | Apple M4 Pro, macOS 27.2.1, 2026-11-17 | passes (T1) | overhead budgets not yet met (2026-11-17) |
-| D3D12 | Windows 11 x64 | Feature level 12_2 (NVIDIA RTX 20, AMD RDNA 2, Intel Arc or newer) | NVIDIA GeForce RTX 3080 Ti, driver 621.14, 2026-11-17; other vendors unverified | conformant (T1) on one GPU | overhead budgets not yet met (2026-11-12) |
+| Metal 4 | macOS 26 or later | Apple silicon, GPU family Apple7 or newer | Apple M4 Pro, macOS 27.2.1 | passes, under Metal's validation layer | per operation within budget, 2.5 to 3.3% above native per draw in the three draw workloads; fixed cost per list above budget in two workloads and allocations in one; [full results](docs/performance.md) |
+| Direct3D 12 | Windows 11 x64 | Feature level 12_2 (NVIDIA RTX 20 series, AMD RDNA 2, Intel Arc or newer) | NVIDIA GeForce RTX 3080 Ti, driver 621.14; other vendors' GPUs not tested | passes on that one GPU, under GPU-based validation | above the project's budgets when last measured; [full results](docs/performance.md) |
 
-- **Conformance** "passes" means the conformance suite, which checks the results of every entry on
-  the GPU under the platform's validation layer, passes unchanged on the tested hardware. A backend
-  is verified only on the hardware the row names.
-- **CPU overhead** is measured against hand-written native code doing the same work, to budgets
-  fixed before the run: "met" or "not yet met".
-- The minimum hardware is checked when a device is created: a device below it fails creation, and
-  there is no reduced mode. The full list is in [the device chapter](docs/spec/02-device.md).
-- A test-only **Null** backend implements the whole interface with a validation tracker and runs on
-  any host, with no GPU. The `rojorhi_backend` option chooses the backend: `metal4` by default on
-  macOS, `null` elsewhere.
+A test-only Null backend implements the full interface with the validation tracker and runs on
+any host with no GPU. Minimum hardware is checked when a device is created, failing creation
+below it with no reduced mode; see [the device specification](docs/spec/02-device.md).
 
 ## API features
 
 What each backend offers, and which features a device reports for itself. Each backend's
-verification status is under [Supported platforms](#supported-platforms).
+verification status is under [Platforms](#platforms).
 
 | Feature | Metal 4 | D3D12 | Notes |
 |---|---|---|---|
@@ -66,31 +152,31 @@ xmake
 xmake test RojoRHITests/contract
 ```
 
-The test entries need a real GPU, and Debug builds run under the platform's validation layer
-(`MTL_DEBUG_LAYER=1` on macOS). The Null backend builds and tests on any host:
+On any host, without a GPU, the Null backend builds and runs the contract suite:
 
 ```
 xmake f -m debug -y --rojorhi_backend=null
 xmake test RojoRHITests/contract
 ```
 
-The examples fetch GLFW, so they are opt-in: `xmake f --rojorhi_examples=y`, then
-`xmake run 01_HelloCompute`. [`Examples/`](Examples/README.md) lists them.
+Examples fetch GLFW, so they are opt-in: `xmake f --rojorhi_examples=y`, then
+`xmake run 01_HelloCompute`. See [`Examples/README.md`](Examples/README.md).
 
 ## Documentation
 
-- [The API reference](docs/spec/00-conventions.md) states the semantics of every entry; start at
-  its conventions chapter.
+- [The API reference](docs/spec/00-conventions.md) specifies every entry, starting with
+  conventions.
 - [`Examples/`](Examples/README.md) holds small programs, from a first compute dispatch to
-  GPU-driven culling, mesh shaders, async compute and temporal upscaling.
-- [`CHANGELOG.md`](CHANGELOG.md) lists each version's changes, breaking ones marked.
-- [`CONTRIBUTING.md`](CONTRIBUTING.md) says how to report a bug, and [`SECURITY.md`](SECURITY.md)
-  how to report a vulnerability privately.
+  GPU-driven culling, mesh shaders, async compute, and temporal upscaling.
+- [`CHANGELOG.md`](CHANGELOG.md) records changes per release, with breaking changes marked.
+- [`CONTRIBUTING.md`](CONTRIBUTING.md) covers bug reports, and [`SECURITY.md`](SECURITY.md)
+  covers private vulnerability reports.
+
+## Versioning
 
 This repository carries releases only: one commit per version, tagged `vX.Y.Z`; pin a tag, not a
-branch. The version follows Semantic Versioning for the source interface: a removal or a narrowing
-needs a major version, and a new entry arrives in a minor version. No binary compatibility is
-promised; build RojoRHI from source.
+branch. Versions follow Semantic Versioning for the source interface, with no binary compatibility;
+build from source.
 
 ## Licence
 

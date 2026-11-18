@@ -27,19 +27,32 @@ namespace rojoRHI::core {
         // Every field starts afresh in place: one assignment resets the plain fields, and each container and string is cleared
         // and keeps its capacity, so no state is built, moved and destroyed for a recycled list.
         static_cast<ListFields&>(list) = ListFields{ .device = &core, .type = type, .frame = core.frameNumber() };
-        list.pass.colors.clear();
-        list.pass = PassState{ .colors = std::move(list.pass.colors) };
+        resetPass(list.pass);
         list.scopes.clear();
         list.label.assign(label.empty() ? std::string_view{ "rojorhi.commandlist.unnamed" } : label);
         list.scopeLog.clear();
         list.scopeCopySource.clear();
+#ifndef NDEBUG
+        // Only Debug-tier code writes them, so a Release list holds them empty and its acquisition leaves them untouched.
         list.pendingAccesses.clear();
         list.trackerLog.events.clear();
         list.trackerLog.commands.clear();
         list.trackerLog.command = 0;
         list.trackerLog.passUses.clear();
         list.trackerLog.images.clear();
+#endif
         core.noteListAcquired();
+    }
+
+    void resetPass(PassState& pass)
+    {
+        // Field by field, so the color formats keep their capacity and no state is built, moved and destroyed.
+        pass.colors.clear();
+        pass.depthFormat = Format::Undefined;
+        pass.samples = 1;
+        pass.area = {};
+        pass.viewportSet = false;
+        pass.scissorSet = false;
     }
 
     void checkRecording([[maybe_unused]] const CommandListCore& list)
@@ -94,17 +107,18 @@ namespace rojoRHI::core {
             core.noteListSubmitted();
         }
     }
-    ArenaAllocation allocateFrameData(
-        DeviceCore& core, CommandListCore& list, std::span<const std::byte> bytes, uint32_t alignment, ArenaPageSource source, void* context
+
+    void checkFrameDataChecked(
+        [[maybe_unused]] const DeviceCore& core,
+        [[maybe_unused]] const CommandListCore& list,
+        [[maybe_unused]] std::span<const std::byte> bytes,
+        [[maybe_unused]] uint32_t alignment
     )
     {
         ROJORHI_VU(!bytes.empty(), "VU-rojo-buffer-0015", "uploadFrameData was called with no bytes");
         ROJORHI_VU(std::has_single_bit(alignment), "VU-rojo-buffer-0016", "the alignment {} is not a power of two", alignment);
         ROJORHI_VU(core.frameOpen(), "VU-rojo-buffer-0017", "uploadFrameData was called with no frame open");
         checkRecording(list);
-        ++list.counts.frameDataUploads;
-        list.counts.frameArenaBytes += bytes.size();
-        return bumpArenaPage(core, list, bytes.size(), alignment, source, context);
     }
 
     void claimArenaPage(DeviceCore& core, CommandListCore& list, uint64_t size, ArenaPageSource source, void* context)

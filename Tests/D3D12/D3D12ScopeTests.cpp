@@ -307,6 +307,103 @@ TEST_CASE("end resolves each query heap the recording used, once", "[d3d12]")
     destroyDevice(device);
 }
 
+TEST_CASE("a list whose last recording needed two heaps takes one heap of every query it claimed, and resolves once", "[d3d12]")
+{
+    constexpr uint32_t kFramesInFlight = 2;
+    // One scope past the first heap: 258 queries, which a heap of 512 holds. The last scope, whose pair is queries 256 and
+    // 257, holds a fill of 16 MiB, so its end tick follows its begin tick and its duration is not zero.
+    constexpr uint32_t kScopes = kHeapScopes + 1;
+    constexpr uint32_t kGrown = 512;
+    constexpr uint64_t kFillBytes = 16ull << 20;
+    constexpr uint32_t kLastPair = 2 * kHeapScopes;
+    Device device = makeDevice(kFramesInFlight);
+    const MessageCollection messages;
+    Result<Buffer> created = device.createBuffer({ .size = kFillBytes, .usage = BufferUsage::ShaderWrite, .label = "test.timed" });
+    REQUIRE(created.has_value());
+    const Buffer timed = *created;
+    // The list the frames' shared slot hands out each time, kept past its submission to read its heaps.
+    const d3d12::ListState* kept = nullptr;
+    // The last scope's ticks, as the frame wait read them; `heap` and `index` place its pair in the list's heaps.
+    const auto checkLastTicks = [&](size_t heap, uint32_t index) {
+        REQUIRE(kept != nullptr);
+        REQUIRE(kept->timestamps.heaps.size() > heap);
+        const uint64_t* ticks = kept->timestamps.heaps[heap].mapped;
+        CHECK(ticks[index] != 0u);
+        CHECK(ticks[index + 1] > ticks[index]);
+        const std::span<const ScopeTiming> report = device.scopeTimings();
+        REQUIRE(report.size() == kScopes);
+        for (const ScopeTiming& timing : report)
+        {
+            checkDuration(timing);
+        }
+        CHECK(report.back().gpuMilliseconds > 0.0);
+    };
+    for (uint64_t frame = 1; frame <= 5; frame += kFramesInFlight)
+    {
+        INFO("frame " << frame);
+        device.beginFrame();
+        if (frame == 3)
+        {
+            // Frame 1's ticks, read at this frame wait before the release: its last pair opens the second heap of 256.
+            checkLastTicks(1, 0);
+        }
+        else if (frame == 5)
+        {
+            // Frame 3's ticks, read from the heap of 512 the release made: its last pair sits at 256 and 257.
+            CHECK(kept->timestamps.heapQueries() == kGrown);
+            checkLastTicks(0, kLastPair);
+        }
+        CommandList list = device.acquireCommandList(QueueType::Graphics, "test.list");
+        const d3d12::ListState& state = stateOf(list);
+        CHECK((kept == nullptr || kept == &state));
+        kept = &state;
+        const Counters before = device.counters();
+        recordScopes(list, kScopes - 1);
+        list.beginScope("");
+        list.fillBuffer(timed, 0, kFillBytes, 0x01020304u);
+        list.endScope();
+        const Counters after = device.counters();
+        if (frame == 1)
+        {
+            // Two heaps of 256 queries, each with its readback buffer.
+            CHECK(after.nativeCreateCalls - before.nativeCreateCalls == 4u);
+            CHECK(state.timestamps.heapQueries() == d3d12::ListTimestamps::kHeapQueries);
+            CHECK(state.timestamps.heaps.size() == 2u);
+        }
+        else if (frame == 3)
+        {
+            // The two heaps and their buffers released, one heap of 512 and its buffer made.
+            CHECK(after.nativeCreateCalls - before.nativeCreateCalls == 6u);
+            CHECK(after.gpuAllocations - before.gpuAllocations == 1u);
+            CHECK(state.timestamps.heapQueries() == kGrown);
+            CHECK(state.timestamps.heaps.size() == 1u);
+        }
+        else
+        {
+            // The grown heap holds the recording, so nothing is made or released.
+            CHECK(after.nativeCreateCalls == before.nativeCreateCalls);
+            CHECK(state.timestamps.heaps.size() == 1u);
+        }
+        CHECK(lastScope(list).timestamp == stamp(state.ordinal, kLastPair));
+        // One ResolveQueryData per heap used, then Close.
+        const uint64_t ending = recordCalls(list);
+        list.end();
+        CHECK(recordCalls(list) - ending == (frame == 1 ? 3u : 2u));
+        device.queue(QueueType::Graphics).submit(std::span(&list, 1), {}, {});
+        device.endFrame();
+        // The frame between leaves the list's slot alone.
+        device.beginFrame();
+        device.endFrame();
+    }
+    // The last recording's ticks, read when its slot is reused, sit in the grown heap.
+    device.beginFrame();
+    checkLastTicks(0, kLastPair);
+    device.endFrame();
+    CHECK(messages.all().empty());
+    device.destroy(timed);
+    destroyDevice(device);
+}
+
 TEST_CASE("a list that records no scope resolves nothing", "[d3d12]")
 {
     Device device = makeDevice();

@@ -1450,3 +1450,68 @@ TEST_CASE("discards that share their stages and destination add one global barri
     device.destroy(done);
     destroyDevice(device);
 }
+
+TEST_CASE("a list's one-record lowering is kept into its next recording: a different barrier lowers its own, the same one sends it", "[d3d12]")
+{
+    Device device = makeDevice();
+    const MessageCollection messages;
+    const Fence done = makeFence(device, "test.done");
+    const Texture first = makeColor(device, TextureUsage::RenderTarget, "test.first");
+    const Texture second = makeColor(device, TextureUsage::RenderTarget, "test.second");
+    const uint32_t framesInFlight = core::coreOf(device).framesInFlight();
+    // A discard into ColorAttachment waits for nothing, so each recording may repeat it whatever layout the texture holds.
+    const TextureBarrier toFirst = transition(first, Layout::Undefined, Layout::ColorAttachment, QueueType::Graphics);
+    const TextureBarrier toSecond = transition(second, Layout::Undefined, Layout::ColorAttachment, QueueType::Graphics);
+    // Each recording is its slot's one list, so the pool hands the same list out again; the frames between leave it alone.
+    d3d12::BarrierScratch* kept = nullptr;
+    const auto record = [&](const TextureBarrier& barrier, uint64_t value, auto&& afterAcquire) {
+        device.beginFrame();
+        CommandList list = device.acquireCommandList(QueueType::Graphics, "test.kept");
+        d3d12::BarrierScratch& scratch = CommandListImpl::of(list).state.barriers;
+        CHECK((kept == nullptr || kept == &scratch));
+        kept = &scratch;
+        afterAcquire(scratch);
+        const uint64_t calls = recordCalls(list);
+        const uint64_t barriers = nativeBarriers(list);
+        list.barrier({}, {}, std::array{ barrier });
+        // One native Barrier with one texture barrier, whether lowered now or sent again.
+        CHECK(recordCalls(list) - calls == 1u);
+        CHECK(nativeBarriers(list) - barriers == 1u);
+        CHECK(scratch.single == d3d12::SingleBarrier::Texture);
+        CHECK(scratch.globals.empty());
+        CHECK(scratch.textures.size() == 1u);
+        submitAndWait(device, list, done, value);
+        device.endFrame();
+        for (uint32_t frame = 1; frame < framesInFlight; ++frame)
+        {
+            device.beginFrame();
+            device.endFrame();
+        }
+    };
+    record(toFirst, 1, [](d3d12::BarrierScratch& scratch) { CHECK(scratch.single == d3d12::SingleBarrier::None); });
+    CHECK(kept->textures[0].pResource == payloadOf(device, first).resource);
+    const D3D12_BARRIER_SYNC lowered = kept->textures[0].SyncAfter;
+    CHECK(lowered != D3D12_BARRIER_SYNC_ALL);
+    // The next recording finds the first texture's record and lowering kept, and a barrier on the second texture lowers its
+    // own: its resource and its record.
+    record(toSecond, 2, [&](d3d12::BarrierScratch& scratch) {
+        CHECK(scratch.single == d3d12::SingleBarrier::Texture);
+        CHECK(scratch.lastTexture.texture == first);
+        // Planted after acquisition; a lowering of the new barrier writes its own sync over it.
+        scratch.textures[0].SyncAfter = D3D12_BARRIER_SYNC_ALL;
+    });
+    CHECK(kept->lastTexture.texture == second);
+    CHECK(kept->textures[0].pResource == payloadOf(device, second).resource);
+    CHECK(kept->textures[0].SyncAfter == lowered);
+    // A third recording repeats the second's barrier, so it sends the kept lowering without lowering it again: a wider sync
+    // planted after acquisition, which orders more and is still valid, is what the list sends.
+    record(toSecond, 3, [](d3d12::BarrierScratch& scratch) { scratch.textures[0].SyncAfter = D3D12_BARRIER_SYNC_ALL; });
+    CHECK(kept->lastTexture.texture == second);
+    CHECK(kept->textures[0].pResource == payloadOf(device, second).resource);
+    CHECK(kept->textures[0].SyncAfter == D3D12_BARRIER_SYNC_ALL);
+    CHECK(messages.count() == 0u);
+    device.destroy(first);
+    device.destroy(second);
+    device.destroy(done);
+    destroyDevice(device);
+}

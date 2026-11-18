@@ -16,20 +16,22 @@ namespace rojoRHI::d3d12 {
 
     enum class SingleBarrier : uint8_t
     {
-        None, // The last batch held several records, or none was recorded since acquisition.
+        None, // The last batch held several records, or the list has recorded none.
         Global,
         Buffer,
         Texture,
     };
 
     // The list's own, so recording takes no lock; grown, never shrunk. They hold the last batch until the next clears
-    // them and, when it was one record, that record: a batch that repeats it sends the arrays again unlowered.
+    // them and, when it was one record, that record: a batch that repeats it sends the arrays again unlowered, in a later
+    // recording of the list too. A lowering reads only the list's queue type, which its pool fixes, and payloads, which
+    // are fixed while their resources live, and a handle's bits name one resource for the pool's whole life.
     struct BarrierScratch
     {
         std::vector<D3D12_GLOBAL_BARRIER> globals;
         std::vector<D3D12_BUFFER_BARRIER> buffers;
         std::vector<D3D12_TEXTURE_BARRIER> textures;
-        SingleBarrier single = SingleBarrier::None; // Reset at each acquisition.
+        SingleBarrier single = SingleBarrier::None; // Kept across recordings.
         GlobalBarrier lastGlobal;
         BufferBarrier lastBuffer;
         TextureBarrier lastTexture;

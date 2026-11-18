@@ -297,7 +297,9 @@ namespace rojoRHI {
         state->boundDepthStencil = state->depthStencil != nullptr ? state->depthStencil : impl.depthStencils.untested();
         state->cull = metal4::cullMode(desc.raster.cull);
         state->winding = metal4::winding(desc.raster.frontFace);
-        state->setsWinding = desc.raster.cull != CullMode::None || desc.depthStencil.stencilTest || desc.fragment.library.bits != 0;
+        // Metal decides a primitive's face from the order of its vertices; a point has one, so a point pipeline sends none.
+        state->setsWinding =
+            desc.primitive != PrimitiveClass::Point && (desc.raster.cull != CullMode::None || desc.depthStencil.stencilTest || desc.fragment.library.bits != 0);
         state->fill = metal4::triangleFillMode(desc.raster.fill);
         state->depthClip = desc.raster.depthClip ? MTL::DepthClipModeClip : MTL::DepthClipModeClamp;
         state->depthBias = desc.raster.depthBias;

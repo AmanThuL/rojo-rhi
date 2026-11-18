@@ -113,8 +113,17 @@ TEST_CASE("a vertex pipeline's payload holds its raster state, list topology and
     {
         GraphicsPipelineDesc desc = standardDesc(library);
         desc.primitive = primitive;
-        CHECK(stateOf(device, create(device, desc)).listType == native);
+        const metal4::PipelineState& state = stateOf(device, create(device, desc));
+        CHECK(state.listType == native);
+        // Each has a fragment entry, which may read the front face; a point has one vertex, so no order of its vertices
+        // decides its face, and a point pipeline sends no winding.
+        CHECK(state.setsWinding == (primitive != PrimitiveClass::Point));
     }
+    // Not even when it culls and tests stencil.
+    const StencilFaceState replace{ .pass = StencilOp::Replace };
+    GraphicsPipelineDesc points = standardDesc(library, { .cull = CullMode::Back }, { .stencilTest = true, .front = replace, .back = replace });
+    points.primitive = PrimitiveClass::Point;
+    CHECK_FALSE(stateOf(device, create(device, points)).setsWinding);
     const DepthStencilState tested{ .depthTest = true, .depthWrite = true };
     const metal4::PipelineState& depth = stateOf(device, create(device, standardDesc(library, {}, tested)));
     CHECK(depth.depthStencil != nullptr);

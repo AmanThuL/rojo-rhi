@@ -1,7 +1,7 @@
 # 07. Command recording
 
 **Status**: Accepted
-**API version**: 1.0.1
+**API version**: 1.0.2
 
 A command list comes from a per-frame pool and returns to it when its frame retires. One thread
 records one list at a time; many lists record in parallel and are submitted in order ([queues and

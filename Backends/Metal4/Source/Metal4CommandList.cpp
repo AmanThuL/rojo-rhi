@@ -149,14 +149,8 @@ namespace rojoRHI {
         }
         list->encoders.setQueueStages(queueStages);
         list->draw.reset();
-        // A direct draw's drawId is 0, from the zero record, which the table holds unless the list's last recording left a
-        // draw's record there; writing it back now keeps a direct draw at one compare.
-        if (list->draw.tableDrawRecord != list->draw.zeroRecord)
-        {
-            state.table->setAddress(list->draw.zeroRecord, 3);
-            list->draw.tableDrawRecord = list->draw.zeroRecord;
-            core::DeviceCounts::add(impl.core.counts().nativeHostCalls);
-        }
+        // The table keeps the draw record the list's last recording left at `buffer(3)`: a direct draw binds the zero record
+        // only where the table holds another (`bindZeroRecord`), so a list that draws nothing directly writes none.
         for (NS::String* scopeLabel : state.scopeLabels)
         {
             scopeLabel->release();

@@ -154,6 +154,12 @@ namespace {
         // The growth per repetition, from the difference between `kLow` and `kHigh` repetitions of `each`.
         PerOperation perOperation(const Record& open, const std::function<void(CommandList, uint32_t)>& each, const Record& close)
         {
+            // A list's table keeps the draw record its last recording left, so each frame slot's list records the operation
+            // once first: the low and the high count then start from the same table.
+            for (uint32_t slot = 0; slot < DeviceDesc{}.framesInFlight; ++slot)
+            {
+                measure(1, open, each, close);
+            }
             const Counters low = measure(kLow, open, each, close);
             const Counters high = measure(kHigh, open, each, close);
             const auto per = [](uint64_t lowValue, uint64_t highValue) {
@@ -323,10 +329,11 @@ TEST_CASE("C10: a counted drawIndirect of 256 records is three native calls per 
         nothing
     );
     INFO("the per-pass total with one draw: calls " << pass.calls << ", barriers " << pass.barriers << ", encoders " << pass.encoders);
-    // Sixteen beyond the draw's three, and an encoder label each where encoders carry one: both encoders' opens and
+    // Fifteen beyond the draw's three, and an encoder label each where encoders carry one: both encoders' opens and
     // ends, the pass's debug group and its two timestamps, the kernels' pipeline and table, the barrier that orders
-    // the kernels before the vertex stage and the render encoder's state.
-    CHECK(pass.calls == slope.calls + 16 + 2 * label);
+    // the kernels before the vertex stage and the render encoder's state. The render encoder only executes, so it binds no
+    // table.
+    CHECK(pass.calls == slope.calls + 15 + 2 * label);
     CHECK(pass.barriers == 1);
     CHECK(pass.encoders == 2);
 }

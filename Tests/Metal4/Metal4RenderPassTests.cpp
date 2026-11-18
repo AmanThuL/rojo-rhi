@@ -183,10 +183,11 @@ TEST_CASE("a pass with no command opens its render encoder at endRenderPass", "[
     list.beginRenderPass(passOf(colors));
     CHECK(countsOf(list).nativeRecordCalls == 2 + 1);
     CHECK(countsOf(list).encodersOpened == 0);
-    // The factory, the label and the table, the begin and end timestamps on the encoder, and the pass's group popped on the
-    // command buffer; the encoder stays open, running no further command, until the next encoder or `end`.
+    // The factory and the label, the begin and end timestamps on the encoder, and the pass's group popped on the command
+    // buffer; the encoder draws nothing, so it binds no table, and stays open, running no further command, until the next
+    // encoder or `end`.
     list.endRenderPass();
-    CHECK(countsOf(list).nativeRecordCalls == 3 + 5 + label);
+    CHECK(countsOf(list).nativeRecordCalls == 3 + 4 + label);
     CHECK(countsOf(list).encodersOpened == 1);
     CHECK(countsOf(list).nativeBarriers == 0);
     CHECK(encodersOf(list).lingering());
@@ -203,9 +204,9 @@ TEST_CASE("a Store attachment costs no store-action call; DontCare and resolve a
     Device device = *createDevice({ .scopeTimings = true, .debugMarkers = true });
     device.beginFrame();
     CommandList list = device.acquireCommandList(QueueType::Graphics, "test.list");
-    // An empty pass's encoder records its factory, label when encoders carry one, table and the pass's two timestamps, then the pass's group pops; it
-    // ends at the next beginRenderPass.
-    const uint64_t base = 5 + test::encoderLabel(list);
+    // An empty pass's encoder records its factory, label when encoders carry one and the pass's two timestamps, then the
+    // pass's group pops; it binds no table, since it draws nothing, and ends at the next beginRenderPass.
+    const uint64_t base = 4 + test::encoderLabel(list);
     const MTL::RenderPassColorAttachmentDescriptor* color = nullptr;
     SECTION("color attachments")
     {
@@ -319,10 +320,10 @@ TEST_CASE("a scope inside a pass opens the render encoder and its debug group go
     const std::array colors{ ColorAttachment{ .texture = target, .load = LoadOp::Clear } };
     list.beginRenderPass(passOf(colors, {}, "test.pass"));
     REQUIRE(countsOf(list).nativeRecordCalls == 3);
-    // The factory, the label and the table, the pass's begin timestamp, then the group pushed on the encoder and the scope's
-    // begin timestamp.
+    // The factory and the label, the pass's begin timestamp, then the group pushed on the encoder and the scope's begin
+    // timestamp; no table, since nothing draws.
     list.beginScope("test.inner");
-    CHECK(countsOf(list).nativeRecordCalls == 3 + 5 + label);
+    CHECK(countsOf(list).nativeRecordCalls == 3 + 4 + label);
     CHECK(countsOf(list).encodersOpened == 1);
     CHECK(encodersOf(list).kind() == metal4::EncoderKind::Render);
     CHECK(drawOf(list).passGroups == 1);
@@ -330,13 +331,13 @@ TEST_CASE("a scope inside a pass opens the render encoder and its debug group go
     CHECK(textOf(stateOf(list).scopeLabels.back()) == "test.inner");
     // The end timestamp, then the group pops from the encoder, which stays open.
     list.endScope();
-    CHECK(countsOf(list).nativeRecordCalls == 8 + label + 2);
+    CHECK(countsOf(list).nativeRecordCalls == 7 + label + 2);
     CHECK(encodersOf(list).kind() == metal4::EncoderKind::Render);
     CHECK(drawOf(list).passGroups == 0);
     CHECK(stateOf(list).scopeLabels.size() == 1);
     // endRenderPass finds the encoder open: the pass's end timestamp, endEncoding and its group.
     list.endRenderPass();
-    CHECK(countsOf(list).nativeRecordCalls == 10 + label + 2);
+    CHECK(countsOf(list).nativeRecordCalls == 9 + label + 2);
     CHECK(countsOf(list).encodersOpened == 1);
     finish(device, list);
     destroyDevice(device);
@@ -353,23 +354,24 @@ TEST_CASE("a split stores, ends and resumes with Load, re-pushing the open in-pa
     list.beginRenderPass(passOf(colors, {}, "test.pass"));
     list.beginScope("test.a");
     list.beginScope("test.b");
-    REQUIRE(countsOf(list).nativeRecordCalls == 3 + 5 + label + 2);
+    // The encoder draws nothing, so it binds no table.
+    REQUIRE(countsOf(list).nativeRecordCalls == 3 + 4 + label + 2);
     const MTL::RenderPassColorAttachmentDescriptor* color = colorOf(list, 0);
     CHECK(color->loadAction() == MTL::LoadActionClear);
     CHECK(color->storeAction() == MTL::StoreActionUnknown);
     // Both groups pop from the encoder, the attachment stores and the encoder ends.
     metal4::splitPass(CommandListImpl::of(list));
-    CHECK(countsOf(list).nativeRecordCalls == 10 + label + 2 + 1 + 1);
+    CHECK(countsOf(list).nativeRecordCalls == 9 + label + 2 + 1 + 1);
     CHECK(encodersOf(list).kind() == metal4::EncoderKind::None);
     CHECK(drawOf(list).resuming);
     CHECK(drawOf(list).passGroups == 2);
     // Nothing is open, so a second split does nothing.
     metal4::splitPass(CommandListImpl::of(list));
-    CHECK(countsOf(list).nativeRecordCalls == 14 + label);
-    // The scope boundary resumes the pass: the factory, the label and the table, both groups again, then the end timestamp
-    // and the pop. The split wrote no timestamp.
+    CHECK(countsOf(list).nativeRecordCalls == 13 + label);
+    // The scope boundary resumes the pass: the factory and the label, both groups again, then the end timestamp and the
+    // pop. The split wrote no timestamp.
     list.endScope();
-    CHECK(countsOf(list).nativeRecordCalls == 14 + label + 2 + label + 2 + 2);
+    CHECK(countsOf(list).nativeRecordCalls == 13 + label + 1 + label + 2 + 2);
     CHECK(countsOf(list).encodersOpened == 2);
     CHECK(color->loadAction() == MTL::LoadActionLoad);
     CHECK(renderLabel(list) == std::string(label != 0 ? "test.b" : ""));
@@ -377,7 +379,7 @@ TEST_CASE("a split stores, ends and resumes with Load, re-pushing the open in-pa
     // The outer scope's end timestamp and pop; the caller's DontCare at the end, the pass's end timestamp, endEncoding and
     // its group.
     list.endRenderPass();
-    CHECK(countsOf(list).nativeRecordCalls == 20 + 2 * label + 2 + 1 + 1 + 1);
+    CHECK(countsOf(list).nativeRecordCalls == 18 + 2 * label + 2 + 1 + 1 + 1);
     CHECK_FALSE(drawOf(list).resuming);
     // The next pass loads as its caller asks.
     list.beginRenderPass(passOf(colors));

@@ -1,5 +1,30 @@
 # Changelog
 
+## 1.0.2 (2026-11-18)
+
+- `ROJORHI_VERSION_*` is 1.0.2. The interface and the shader ABI are unchanged.
+- A command list's frame-arena page claim, for `uploadFrameData` or a scope label, no longer costs
+  more for each list of the frame that claimed before it, on every backend. The claim searched the
+  frame slot's pages from the first, under the arena's lock, so the j-th list of a frame stepped
+  over the j - 1 pages already claimed; it now starts at the slot's first page that may be free.
+- Metal 4: a `Point` pipeline sends no `setFrontFacingWinding`, since Metal decides a primitive's
+  face from the order of its vertices and a point has one; chapter 07 part 2 states it.
+- Metal 4: `acquireCommandList` no longer writes the zero record back into the list's table. A
+  direct draw binds it only where the table holds another record, as it did; chapter 05 part 3
+  states it.
+- Metal 4: a render encoder binds the list's table before its first draw that is not an indirect
+  command buffer's execute, rather than when it opens, so a pass that only executes or draws
+  nothing binds none; chapter 07 part 2 states it.
+- D3D12: a command list whose recording needed more than one timestamp query heap releases them at
+  its next recording's first timed scope and makes one heap that holds every query that recording
+  claimed, rounded up to a power of two, at most 2^16. A list that times the same scopes each frame
+  thus resolves its timestamps once at `end`, rather than once per 128 scopes. The releases count in
+  `nativeCreateCalls`, and a list's heaps never shrink.
+- Documentation: the README leads with what RojoRHI offers, a first compute dispatch and measured
+  CPU costs against hand-written Metal 4, and states each backend's tested hardware in its platform
+  table. [`docs/performance.md`](docs/performance.md) publishes each backend's latest measured round
+  against native code, with every budget it missed.
+
 ## 1.0.1 (2026-11-17)
 
 - `ROJORHI_VERSION_*` is 1.0.1. The interface and its behaviour are unchanged.
@@ -10,6 +35,8 @@
 - Documentation: the README gives the supported platforms and the API features per backend, the
   examples explain their key steps, and source comments are cut to the contracts they state. No
   code changes.
+- Correction, after the release: pipeline caches saved by 1.0.0 become misses, after one warning,
+  because a blob's header carries the RojoRHI version. The cache refills.
 
 ## 1.0.0 (2026-11-16)
 

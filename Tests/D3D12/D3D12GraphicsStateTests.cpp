@@ -376,6 +376,89 @@ TEST_CASE("setPipeline sets PSO and topology once; the same pipeline again sends
     destroyDevice(device);
 }
 
+TEST_CASE("setPipeline reads a pipeline bound again in the recording from the list's pair, and acquisition empties the pair", "[d3d12]")
+{
+    REQUIRE(kD3D12LibrariesBuilt);
+    using Pair = std::array<uint64_t, 2>;
+    using States = std::array<const d3d12::PipelineState*, 2>;
+    Device device = makeDevice();
+    const MessageCollection messages;
+    const ShaderLibrary library = loadStandard(device);
+    const Pipeline a = standardPipeline(device, library);
+    const Pipeline b = standardPipeline(device, library, RasterState{ .cull = CullMode::Back });
+    const Pipeline c = standardPipeline(device, library, RasterState{ .cull = CullMode::Front });
+    const d3d12::PipelineState* stateA = &payloadOf(device, a);
+    const d3d12::PipelineState* stateB = &payloadOf(device, b);
+    const d3d12::PipelineState* stateC = &payloadOf(device, c);
+    const Texture target = makeTarget(device);
+    const Fence done = makeFence(device, "test.done");
+    const std::array colors{ ColorAttachment{ .texture = target, .load = LoadOp::Clear } };
+    device.beginFrame();
+    CommandList list = device.acquireCommandList(QueueType::Graphics, "test.pair");
+    d3d12::ListState& state = stateOf(list);
+    const d3d12::ResolvedPipelines& resolved = state.binding.resolved;
+    CHECK(resolved.handles == Pair{});
+    toColorAttachment(list, target);
+    list.beginRenderPass(passOver(colors));
+    list.setViewport(kFull);
+    list.setScissor(kFullRect);
+    // Each bind below changes the pipeline the native slot holds, so it sends SetPipelineState; the first also sets the
+    // topology, which every later bind finds held.
+    const auto bind = [&](Pipeline pipeline, const d3d12::PipelineState* expected, uint64_t calls = 1) {
+        const uint64_t before = recordCalls(list);
+        list.setPipeline(pipeline);
+        CHECK(recordCalls(list) - before == calls);
+        CHECK(state.binding.pipeline == expected);
+        CHECK(state.binding.graphicsPipeline == expected->pso);
+        list.draw(3);
+    };
+    bind(a, stateA, 2);
+    bind(b, stateB);
+    // The two handles bound last, newest first, with their payloads.
+    CHECK(resolved.handles == Pair{ b.bits, a.bits });
+    CHECK(resolved.states == States{ stateB, stateA });
+    // Alternating the two reads the pair and leaves it as it is.
+    for (int round = 0; round < 3; ++round)
+    {
+        bind(a, stateA);
+        bind(b, stateB);
+        CHECK(resolved.handles == Pair{ b.bits, a.bits });
+    }
+    // A hit reads the pair, not the handle pool's table: a payload planted for a's handle is the one bound.
+    d3d12::ResolvedPipelines& planted = state.binding.resolved;
+    planted.states[1] = stateC;
+    bind(a, stateC);
+    planted.states[1] = stateA;
+    bind(b, stateB);
+    CHECK(resolved.handles == Pair{ b.bits, a.bits });
+    // A third pipeline replaces the older entry; the evicted one is read from the table again when bound.
+    bind(c, stateC);
+    CHECK(resolved.handles == Pair{ c.bits, b.bits });
+    CHECK(resolved.states == States{ stateC, stateB });
+    bind(a, stateA);
+    CHECK(resolved.handles == Pair{ a.bits, c.bits });
+    CHECK(resolved.states == States{ stateA, stateC });
+    list.endRenderPass();
+    // The pair outlives the pass.
+    CHECK(resolved.handles == Pair{ a.bits, c.bits });
+    run(device, list, done);
+    // The slot's next frame hands the same list out again, its pair empty.
+    device.beginFrame();
+    device.endFrame();
+    device.beginFrame();
+    CommandList again = device.acquireCommandList(QueueType::Graphics, "test.pair");
+    REQUIRE(&stateOf(again) == &state);
+    CHECK(resolved.handles == Pair{});
+    CHECK(resolved.states == States{});
+    again.end();
+    device.queue(QueueType::Graphics).submit(std::span(&again, 1), {}, {});
+    device.endFrame();
+    CHECK(messages.count() == 0u);
+    device.destroy(target);
+    device.destroy(done);
+    destroyDevice(device);
+}
+
 TEST_CASE("a mesh pipeline sets no topology", "[d3d12]")
 {
     REQUIRE(kD3D12LibrariesBuilt);

@@ -49,8 +49,8 @@ namespace rojoRHI::metal4 {
         MTL::Viewport viewport = {};
         bool scissorKnown = false;
         MTL::ScissorRect scissor = {};
-        // A new encoder binds the table to the vertex and fragment stages only; the first mesh pipeline set on it adds
-        // the object and mesh stages.
+        // A new encoder's first draw binds the table to the vertex and fragment stages only; the first mesh pipeline set on
+        // it adds the object and mesh stages.
         bool meshStages = false;
     };
 
@@ -219,7 +219,7 @@ namespace rojoRHI::metal4 {
 
         uint64_t root = 0;      // The root recorded last, which may still wait in the prefix; 0 for none.
         uint64_t tableRoot = 0; // What the list's table holds at `buffer(0)`, as this recording wrote it; 0 for none.
-        // Only the list writes its table, so this holds across recordings. The zero record when the list is acquired.
+        // Only the list writes its table, so this holds across recordings. The zero record when the list is created.
         uint64_t tableDrawRecord = 0;
         // Fixed from the device's creation.
         uint64_t zeroRecord = 0;

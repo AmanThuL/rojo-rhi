@@ -1,7 +1,7 @@
 # 05. Shader ABI (continued)
 
 **Status**: Accepted
-**API version**: 1.0.1
+**API version**: 1.0.2
 **Entries**: none
 
 This part defines the per-file floating-point policy of the xmake shader rule, which

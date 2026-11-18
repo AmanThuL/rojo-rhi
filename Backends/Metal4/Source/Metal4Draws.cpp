@@ -23,9 +23,11 @@
 
 namespace rojoRHI {
     namespace {
-        // A direct draw's drawId is 0. One compare when the table already holds the zero record.
+        // A direct draw's drawId is 0. One compare when the table already holds the zero record, and one test when the
+        // encoder holds the table.
         void bindZeroRecord(CommandListImpl& list)
         {
+            list.encoders.bindTable(list.core, list.state);
             const metal4::DrawState& draw = list.draw;
             if (draw.tableDrawRecord != draw.zeroRecord) [[unlikely]]
             {

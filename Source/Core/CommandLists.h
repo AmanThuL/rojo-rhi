@@ -105,8 +105,12 @@ namespace rojoRHI::core {
     void checkAcquire(const DeviceCore& core);
 
     // Resets every field while keeping the capacity of its containers, and counts the list as unsubmitted for
-    // VU-rojo-device-0005.
+    // VU-rojo-device-0005. The pending accesses and the tracker log, which only Debug-tier code writes, are cleared in
+    // Debug builds only.
     void beginList(CommandListCore& list, DeviceCore& core, QueueType type, std::string_view label);
+
+    // Every field to its default, the color formats keeping their capacity.
+    void resetPass(PassState& pass);
 
     // VU-rojo-cmd-0063: the one check every recording entry but `end` calls first, except `allocateFrameData`, which
     // checks the upload's own rules before it.
@@ -161,12 +165,23 @@ namespace rojoRHI::core {
         return ArenaAllocation{ list.page.buffer, offset, place, list.page.address + offset };
     }
 
+    // The checks of `allocateFrameData`, in Debug builds only.
+    void checkFrameDataChecked(const DeviceCore& core, const CommandListCore& list, std::span<const std::byte> bytes, uint32_t alignment);
+
     // The upload's own rules come before VU-rojo-cmd-0063 on purpose: a list used after its frame ended is a submitted
     // list, and the closed frame (VU-rojo-buffer-0017) is what the caller got wrong. The backend copies `bytes` to `memory`
-    // and encodes the address.
-    ArenaAllocation allocateFrameData(
+    // and encodes the address. Inline, so a Release upload into a page with room makes no call.
+    inline ArenaAllocation allocateFrameData(
         DeviceCore& core, CommandListCore& list, std::span<const std::byte> bytes, uint32_t alignment, ArenaPageSource source, void* context
-    );
+    )
+    {
+#ifndef NDEBUG
+        checkFrameDataChecked(core, list, bytes, alignment);
+#endif
+        ++list.counts.frameDataUploads;
+        list.counts.frameArenaBytes += bytes.size();
+        return bumpArenaPage(core, list, bytes.size(), alignment, source, context);
+    }
 
     void checkSameDevice(const DeviceCore& owner, const DeviceCore& other, std::string_view kind);
 } // namespace rojoRHI::core

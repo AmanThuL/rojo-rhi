@@ -21,12 +21,19 @@ namespace rojoRHI::core {
     {
         std::lock_guard lock(m_mutex);
         ROJORHI_INTERNAL_ASSERT(slot < m_slots.size(), "a frame slot outside the device's slots was used");
-        std::vector<Entry>& entries = m_slots[slot];
-        for (Entry& entry : entries)
+        Slot& owner = m_slots[slot];
+        std::vector<Entry>& entries = owner.entries;
+        // A request larger than a standard page may pass over unclaimed smaller pages, which keep the cursor where it is.
+        for (size_t index = owner.firstUnclaimed; index < entries.size(); ++index)
         {
+            Entry& entry = entries[index];
             if (!entry.claimed && entry.page.size >= minSize)
             {
                 entry.claimed = true;
+                while (owner.firstUnclaimed < entries.size() && entries[owner.firstUnclaimed].claimed)
+                {
+                    ++owner.firstUnclaimed;
+                }
                 return entry.page;
             }
         }
@@ -48,6 +55,10 @@ namespace rojoRHI::core {
         }
         m_growths.fetch_add(1, std::memory_order_relaxed);
         entries.push_back(Entry{ *created, true });
+        if (owner.firstUnclaimed == entries.size() - 1)
+        {
+            owner.firstUnclaimed = entries.size();
+        }
         return *created;
     }
 
@@ -55,23 +66,26 @@ namespace rojoRHI::core {
     {
         std::lock_guard lock(m_mutex);
         ROJORHI_INTERNAL_ASSERT(slot < m_slots.size(), "a frame slot outside the device's slots was rewound");
-        for (Entry& entry : m_slots[slot])
+        Slot& owner = m_slots[slot];
+        for (Entry& entry : owner.entries)
         {
             entry.claimed = false;
         }
+        owner.firstUnclaimed = 0;
     }
 
     std::vector<Buffer> FrameArena::takePages()
     {
         std::lock_guard lock(m_mutex);
         std::vector<Buffer> taken;
-        for (std::vector<Entry>& entries : m_slots)
+        for (Slot& owner : m_slots)
         {
-            for (const Entry& entry : entries)
+            for (const Entry& entry : owner.entries)
             {
                 taken.push_back(entry.page.buffer);
             }
-            entries.clear();
+            owner.entries.clear();
+            owner.firstUnclaimed = 0;
         }
         return taken;
     }
@@ -80,9 +94,9 @@ namespace rojoRHI::core {
     {
         std::lock_guard lock(m_mutex);
         std::vector<Buffer> buffers;
-        for (const std::vector<Entry>& entries : m_slots)
+        for (const Slot& owner : m_slots)
         {
-            for (const Entry& entry : entries)
+            for (const Entry& entry : owner.entries)
             {
                 buffers.push_back(entry.page.buffer);
             }

@@ -21,15 +21,16 @@
 #include <mutex>
 
 namespace rojoRHI {
-    // The D3D12 encoding of an Addr is defined here and in the D3D12 branch of the shader module alone: `lo` is the
-    // view-heap index of the buffer's raw SRV, whose raw UAV, when it has one, sits at `lo + 1`, and `hi` is the byte offset
-    // into the buffer. No other file of the backend encodes, decodes or offsets an address.
+    // The D3D12 encoding of an Addr is defined here, in the inline helpers of D3D12Addr.h, and in the D3D12 branch of the
+    // shader module alone: `lo` is the view-heap index of the buffer's raw SRV, whose raw UAV, when it has one, sits at
+    // `lo + 1`, and `hi` is the byte offset into the buffer. No other file of the backend encodes, decodes or offsets an
+    // address.
     namespace d3d12 {
         Addr encodeAddr(const BufferPayload& payload, uint64_t offset)
         {
             ROJORHI_INTERNAL_ASSERT(payload.viewCount > 0, "an address of a buffer with no raw view");
             ROJORHI_INTERNAL_ASSERT(offset < kMaxAddrOffset, "an address offset past maxAddrOffset");
-            return Addr{ payload.viewIndex, static_cast<uint32_t>(offset) };
+            return encodeAddr(payload.viewIndex, offset);
         }
 
         void HeapDirectory::create(uint32_t capacity)

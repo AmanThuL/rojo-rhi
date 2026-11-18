@@ -65,11 +65,11 @@ int main()
     list.copyBuffer(result, 0, readback, 0, kBytes);
     list.end();
 
-    const std::array signal{ FenceValue{ done, 1 } };
-    device.queue(QueueType::Compute).submit(std::array{ list }, {}, signal);
-    // A frame retires on the graphics queue alone, so the graphics queue waits on `done` (here `signal` is the wait
-    // list) to join the frame's compute work into it before endFrame.
-    device.queue(QueueType::Graphics).submit({}, signal);
+    const std::array computeDone{ FenceValue{ done, 1 } };
+    device.queue(QueueType::Compute).submit(std::array{ list }, {}, computeDone);
+    // A frame retires on the graphics queue alone, so the graphics queue waits on `done` to join the frame's compute work
+    // into it before endFrame.
+    device.queue(QueueType::Graphics).submit({}, computeDone);
 
     device.endFrame();
 
