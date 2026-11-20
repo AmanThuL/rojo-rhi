@@ -55,20 +55,11 @@ namespace rojoRHI {
         // Reset leaves the native list's dynamic state unknown, so the list's first pass writes every starting value. The
         // pass description and the barrier scratch are kept: they describe native commands, not the list's state.
         state.dynamic = {};
-        if (type != QueueType::Copy)
-        {
-            // Shaders index both heaps directly, so they are set once per recording, before any root signature.
-            ID3D12DescriptorHeap* const heaps[] = { impl.descriptors.views(), impl.descriptors.samplers() };
-            state.list->SetDescriptorHeaps(2, heaps);
-            core::noteNativeCall(list.core);
-            if (type == QueueType::Graphics)
-            {
-                state.list->SetGraphicsRootSignature(impl.roots.global());
-                core::noteNativeCall(list.core);
-            }
-            // The compute side takes the global root signature at its first dispatch, so a list that dispatches nothing
-            // sets none.
-        }
+        // Acquisition sends no heaps and no root signature, so a list that only copies, uploads or fills sends neither.
+        // The heaps go before the first root signature that indexes them, set by the first graphics `setPipeline` or
+        // the first dispatch, and before a storage clear's shader-visible view; the fill kernel's root signature
+        // indexes no heap.
+        state.binding.graphicsSignatureOwed = type == QueueType::Graphics;
         // The native list keeps its name across recordings, so a list acquired again with the same label sends none.
         if (state.label != list.core.label)
         {
@@ -94,13 +85,13 @@ namespace rojoRHI {
     {
         CommandListImpl& impl = CommandListImpl::of(*this);
         core::CommandListCore& list = impl.core;
-        // Only a list with no page, or a full one, takes the arena's lock to claim a page (ADR 0020).
+        // Only a list with no page, or a full one, takes the arena's lock to claim a page (ADR 0041).
         const core::ArenaAllocation place = core::allocateFrameData(*list.device, list, bytes, alignment, d3d12::createArenaPage, list.device);
         d3d12::copySmall(place.memory, bytes.data(), bytes.size());
         d3d12::LastUpload& last = impl.state.upload;
         if (place.page.bits != last.page.bits) [[unlikely]]
         {
-            // The page's payload is fixed while the page lives, so it is read with one acquire load and no lock, once per page.
+            // The page's payload is fixed while the page lives, so it is read with acquire loads and no lock, once per page.
             const auto* payload = static_cast<const d3d12::BufferPayload*>(list.device->pool<Buffer>().native(place.page));
             last.page = place.page;
             last.viewIndex = payload->viewIndex;
@@ -121,7 +112,7 @@ namespace rojoRHI {
         const d3d12::LastUpload& last = list.state.upload;
         binding.root =
             d3d12::addrInBuffer(root, last.viewIndex) ? d3d12::gpuAddress(last.base, root) : d3d12::rootAddress(d3d12::deviceOf(list).directory, root);
-        binding.graphicsRootDirty = true;
+        binding.graphicsDirty |= d3d12::kGraphicsRootDirty;
         binding.computeRootDirty = true;
     }
 

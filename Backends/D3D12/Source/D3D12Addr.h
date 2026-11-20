@@ -57,7 +57,7 @@ namespace rojoRHI::d3d12 {
 
     // Maps a view-heap index to the buffer whose raw SRV sits there, so an address decodes without a lock. An entry is
     // published before the buffer's handle is returned and cleared by its retire hook before the payload is freed.
-    // `publish` and `clear` take a leaf mutex no other lock is taken under; `find` is one acquire load.
+    // `publish` and `clear` take a leaf mutex no other lock is taken under; `find` is two acquire loads, no lock.
     class HeapDirectory
     {
       public:

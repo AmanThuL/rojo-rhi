@@ -329,7 +329,7 @@ namespace rojoRHI {
         core::upscale(list.core, upscaler, params);
         const DeviceImpl& impl = d3d12::deviceOf(list);
         ROJORHI_INTERNAL_ASSERT(impl.fsr.fidelityFx.has_value(), "an upscale was recorded on a D3D12 device with no FidelityFX runtime");
-        // The context and the payloads are fixed from creation to retirement, so each is read with one load and no lock (ADR 0020).
+        // The context and the payloads are fixed from creation to retirement, so each is read with acquire loads and no lock (ADR 0041).
         ffxContext context = list.core.device->pool<Upscaler>().native(upscaler);
         const core::HandlePool<Texture, core::TextureRecord>& textures = list.core.device->pool<Texture>();
         const auto& color = *static_cast<const d3d12::TexturePayload*>(textures.native(params.color));

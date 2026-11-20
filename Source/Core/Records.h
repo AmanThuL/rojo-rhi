@@ -82,7 +82,7 @@ namespace rojoRHI::core {
         TileMap mapped = {}; // Sparse textures only.
         // Measured by the backend at creation; `bytes` zero when the core computes it from the registered tile extents.
         // Set before `allocate` and never changed while the texture lives: Release reads it without the pool's lock
-        // (ADR 0020).
+        // (ADR 0041).
         TileShape tiles = {};
         void* native = nullptr;
     };

@@ -112,7 +112,7 @@ namespace rojoRHI {
         core::clearTexture(list.core, texture, range, value);
         DeviceImpl& impl = d3d12::deviceOf(list);
         d3d12::ListState& state = list.state;
-        // The payload is fixed from creation to retirement, so it is read with one acquire load and no lock (ADR 0020).
+        // The payload is fixed from creation to retirement, so it is read with acquire loads and no lock (ADR 0041).
         const auto& payload = *static_cast<const d3d12::TexturePayload*>(list.core.device->pool<Texture>().native(texture));
         const QueueType type = list.core.type;
         // A Graphics list clears a render target or depth-stencil texture through the views it was created with; anything
@@ -162,9 +162,14 @@ namespace rojoRHI {
         }
         else
         {
+            // ClearUnorderedAccessViewFloat reads its view from the shader-visible heap, which must be set on the list.
+            if (!state.binding.heapsSet)
+            {
+                d3d12::setHeaps(list);
+            }
             for (uint32_t mip = subresources.IndexOrFirstMipLevel; mip < mipEnd; ++mip)
             {
-                // The clear reads the view from the shader-visible heap the list set at acquisition and from its CPU-only twin.
+                // The clear reads the view from the shader-visible heap and from its CPU-only twin.
                 const d3d12::TransientSlot slot = impl.descriptors.claimTransient(state.frameSlot);
                 const D3D12_UNORDERED_ACCESS_VIEW_DESC view = clearView(payload, mip, subresources);
                 impl.device()->CreateUnorderedAccessView(payload.resource, nullptr, &view, slot.cpu);

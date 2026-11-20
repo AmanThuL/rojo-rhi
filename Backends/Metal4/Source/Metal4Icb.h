@@ -38,7 +38,7 @@ namespace rojoRHI::metal4 {
 
     // Per kind, slot `i` serves the `i`-th counted draw of that kind in a recording, and the slots outlive the
     // recording. A list is acquired again only once its frame slot's work retired, so a slot replaced for a larger
-    // `maxCount` is no longer in use. Recording takes no lock (ADR 0020), so it only notes the buffers made and
+    // `maxCount` is no longer in use. Recording takes no lock (ADR 0041), so it only notes the buffers made and
     // replaced; `Queue::submit` hands them to the device residency set before the command buffer commits. Only the
     // list's recording thread touches it until submission.
     class IcbPool

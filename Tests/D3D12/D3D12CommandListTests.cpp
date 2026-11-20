@@ -194,15 +194,16 @@ namespace {
     }
 } // namespace
 
-TEST_CASE("a Graphics list's acquisition resets it, sets both heaps and the graphics root signature", "[d3d12]")
+TEST_CASE("a Graphics list's acquisition resets it and owes the heaps and the graphics root signature", "[d3d12]")
 {
     Device device = makeDevice();
     const MessageCollection messages;
     device.beginFrame();
     const uint32_t slot = openSlot(device);
     CommandList list = device.acquireCommandList(QueueType::Graphics, "test.graphics");
-    // Reset, SetDescriptorHeaps and SetGraphicsRootSignature; the compute side waits for the first dispatch.
-    CHECK(recordCalls(list) == 3u);
+    // Reset alone: the first graphics setPipeline sets the heaps and the global root signature, and the compute side
+    // waits for the first dispatch, so a list that never draws or dispatches sends neither.
+    CHECK(recordCalls(list) == 1u);
     const d3d12::ListState& state = stateOf(list);
     REQUIRE(state.list);
     REQUIRE(state.allocator);
@@ -214,7 +215,9 @@ TEST_CASE("a Graphics list's acquisition resets it, sets both heaps and the grap
     CHECK(objectName(state.list.get()) == L"test.graphics");
     CHECK(state.binding.root == 0u);
     CHECK(state.binding.computeRoot == d3d12::ComputeRoot::None);
-    CHECK(state.binding.drawIdDirty);
+    CHECK(state.binding.dirty(d3d12::kDrawIdDirty));
+    CHECK_FALSE(state.binding.heapsSet);
+    CHECK(state.binding.graphicsSignatureOwed);
     list.end();
     device.queue(QueueType::Graphics).submit(std::span(&list, 1), {}, {});
     device.endFrame();
@@ -222,7 +225,7 @@ TEST_CASE("a Graphics list's acquisition resets it, sets both heaps and the grap
     destroyDevice(device);
 }
 
-TEST_CASE("a Compute list sets the heaps, a Copy list only resets", "[d3d12]")
+TEST_CASE("a Compute list and a Copy list only reset", "[d3d12]")
 {
     Device device = makeDevice();
     const MessageCollection messages;
@@ -233,8 +236,10 @@ TEST_CASE("a Compute list sets the heaps, a Copy list only resets", "[d3d12]")
     CommandList graphics = device.acquireCommandList(QueueType::Graphics, "test.graphics");
     CommandList compute = device.acquireCommandList(QueueType::Compute, "test.compute");
     CommandList copy = device.acquireCommandList(QueueType::Copy, "test.copy");
-    // Reset and SetDescriptorHeaps; Reset alone. The compute root signature waits for the first dispatch.
-    CHECK(recordCalls(compute) == 2u);
+    // Reset alone for each: the heaps and the compute root signature wait for the first dispatch or storage clear.
+    CHECK(recordCalls(compute) == 1u);
+    CHECK_FALSE(stateOf(compute).binding.heapsSet);
+    CHECK_FALSE(stateOf(compute).binding.graphicsSignatureOwed);
     CHECK(stateOf(compute).binding.computeRoot == d3d12::ComputeRoot::None);
     CHECK(recordCalls(copy) == 1u);
     CHECK(stateOf(compute).list->GetType() == D3D12_COMMAND_LIST_TYPE_COMPUTE);
@@ -500,7 +505,7 @@ TEST_CASE("setRoot stores the buffer's GPU address plus the offset, marks both r
         const d3d12::BufferPayload* found = impl.directory.find(root.lo);
         REQUIRE(found != nullptr);
         CHECK(binding.root == found->base + root.hi);
-        CHECK(binding.graphicsRootDirty);
+        CHECK(binding.dirty(d3d12::kGraphicsRootDirty));
         CHECK(binding.computeRootDirty);
         lists[i].end();
     }
@@ -532,7 +537,7 @@ TEST_CASE("pushRoot binds the arena page's address plus its offset", "[d3d12]")
     REQUIRE(page != nullptr);
     const d3d12::Binding& binding = stateOf(list).binding;
     CHECK(binding.root == page->resource->GetGPUVirtualAddress() + pushed.hi);
-    CHECK(binding.graphicsRootDirty);
+    CHECK(binding.dirty(d3d12::kGraphicsRootDirty));
     CHECK(binding.computeRootDirty);
     list.end();
     device.queue(QueueType::Graphics).submit(std::span(&list, 1), {}, {});

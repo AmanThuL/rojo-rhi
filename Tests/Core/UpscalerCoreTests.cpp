@@ -117,7 +117,7 @@ TEST_CASE("prepareUpscaler resolves Auto and rejects an unlisted kind without al
 TEST_CASE("an upscale stores the frame it was recorded in", "[core]")
 {
 #ifdef NDEBUG
-    SKIP("the frame stamp is a Debug-tier check (ADR 0020)");
+    SKIP("the frame stamp is a Debug-tier check (ADR 0041)");
 #endif
     UpscaleKit kit;
     kit.upscale();

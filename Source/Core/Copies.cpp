@@ -213,7 +213,7 @@ namespace rojoRHI::core {
         noteCommand(list);
         ROJORHI_VU(!list.passOpen, "VU-rojo-cmd-0042", "copyBuffer was recorded with a render pass open");
 #ifndef NDEBUG
-        // The records feed the Debug-tier checks only; reading them takes the pools' locks (ADR 0020).
+        // The records feed the Debug-tier checks only; reading them takes the pools' locks (ADR 0041).
         const BufferRecord* from = list.device->pool<Buffer>().checked(src, false);
         const BufferRecord* to = list.device->pool<Buffer>().checked(dst, false);
         checkCopySource(*from);
@@ -250,7 +250,7 @@ namespace rojoRHI::core {
         noteCommand(list);
         ROJORHI_VU(!list.passOpen, "VU-rojo-cmd-0046", "copyBufferToTexture was recorded with a render pass open");
 #ifndef NDEBUG
-        // The records feed the Debug-tier checks only; reading them takes the pools' locks (ADR 0020).
+        // The records feed the Debug-tier checks only; reading them takes the pools' locks (ADR 0041).
         const BufferRecord* from = list.device->pool<Buffer>().checked(src, false);
         const TextureRecord* to = list.device->pool<Texture>().checked(dst, false);
         checkNotSwapchainImage(*to, "copyBufferToTexture");
@@ -285,7 +285,7 @@ namespace rojoRHI::core {
         noteCommand(list);
         ROJORHI_VU(!list.passOpen, "VU-rojo-cmd-0049", "copyTextureToBuffer was recorded with a render pass open");
 #ifndef NDEBUG
-        // The records feed the Debug-tier checks only; reading them takes the pools' locks (ADR 0020).
+        // The records feed the Debug-tier checks only; reading them takes the pools' locks (ADR 0041).
         const TextureRecord* from = list.device->pool<Texture>().checked(src, false);
         const BufferRecord* to = list.device->pool<Buffer>().checked(dst, false);
         checkNotSwapchainImage(*from, "copyTextureToBuffer");
@@ -320,7 +320,7 @@ namespace rojoRHI::core {
         noteCommand(list);
         ROJORHI_VU(!list.passOpen, "VU-rojo-cmd-0052", "copyTexture was recorded with a render pass open");
 #ifndef NDEBUG
-        // The records feed the Debug-tier checks only; reading them takes the pools' locks (ADR 0020).
+        // The records feed the Debug-tier checks only; reading them takes the pools' locks (ADR 0041).
         const TextureRecord* from = list.device->pool<Texture>().checked(src, false);
         const TextureRecord* to = list.device->pool<Texture>().checked(dst, false);
         checkNotSwapchainImage(*from, "copyTexture");
@@ -358,7 +358,7 @@ namespace rojoRHI::core {
         noteCommand(list);
         ROJORHI_VU(computeCopyProblem(list).empty(), "VU-rojo-cmd-0056", "fillBuffer: {}", computeCopyProblem(list));
 #ifndef NDEBUG
-        // The records feed the Debug-tier checks only; reading them takes the pools' locks (ADR 0020).
+        // The records feed the Debug-tier checks only; reading them takes the pools' locks (ADR 0041).
         const BufferRecord* to = list.device->pool<Buffer>().checked(dst, false);
         ROJORHI_VU(bufferRangeProblem(offset, size, to->size).empty(), "VU-rojo-cmd-0057", "fillBuffer: {}", bufferRangeProblem(offset, size, to->size));
         ROJORHI_VU(
@@ -376,7 +376,7 @@ namespace rojoRHI::core {
         noteCommand(list);
         ROJORHI_VU(computeCopyProblem(list).empty(), "VU-rojo-cmd-0060", "clearTexture: {}", computeCopyProblem(list));
 #ifndef NDEBUG
-        // The records feed the Debug-tier checks only; reading them takes the pools' locks (ADR 0020).
+        // The records feed the Debug-tier checks only; reading them takes the pools' locks (ADR 0041).
         const TextureRecord* target = list.device->pool<Texture>().checked(texture, false);
         checkNotSwapchainImage(*target, "clearTexture");
         ROJORHI_VU(value.depth >= 0.0f && value.depth <= 1.0f, "VU-rojo-cmd-0059", "clearTexture: the clear depth {} is outside [0, 1]", value.depth);

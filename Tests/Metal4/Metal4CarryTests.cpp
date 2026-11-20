@@ -417,3 +417,64 @@ TEST_CASE("a closing batch whose visibility includes ResourceAlias keeps the dis
     submitAndWait(kit.device, list);
     destroyDevice(kit.device);
 }
+
+TEST_CASE("a producer barrier for a kept batch folds into the carry at end", "[metal4]")
+{
+    test::PassKit kit(QueueType::Graphics, false, true);
+    const Buffer ordered = kit.buffer(BufferUsage::ShaderWrite, 256);
+    const bool fenced = GENERATE(false, true);
+    CAPTURE(fenced);
+    if (fenced)
+    {
+        runCountedDraw(kit);
+    }
+    CommandList list = kit.list;
+    // C6's shape: a fill, a batch the encoder keeps as a pair, a dispatch that spends it, and a batch after the last dispatch
+    // that the encoder owes at end. A buffer barrier adds no alias visibility, which would keep the dispatch stage out of the
+    // fence.
+    list.fillBuffer(ordered, 0, 256, 0);
+    order(list, ordered, Stage::Copy, Access::CopyWrite, Stage::ComputeShader, Access::ShaderRead);
+    list.setPipeline(kit.compute());
+    list.dispatch(1, 1, 1);
+    order(list, ordered, Stage::ComputeShader, Access::ShaderWrite, Stage::ComputeShader, Access::ShaderRead);
+    CHECK(barriersOf(list).keptDestination == MTL::StageDispatch);
+    CHECK(barriersOf(list).deferredDestination == MTL::StageDispatch);
+    const core::RecordCounts before = countsOf(list);
+    SECTION("one call names the carry and the kept work")
+    {
+        list.end();
+        if (fenced)
+        {
+            // updateFence of the stages the carry and the kept batch name, endEncoding and endCommandBuffer: no barrier, so no
+            // later counted draw's kernels are held back.
+            CHECK(countsOf(list).nativeBarriers == before.nativeBarriers);
+            CHECK(countsOf(list).nativeRecordCalls == before.nativeRecordCalls + 3);
+        }
+        else
+        {
+            // One barrierAfterStages for both, endEncoding and endCommandBuffer.
+            CHECK(countsOf(list).nativeBarriers == before.nativeBarriers + 1);
+            CHECK(countsOf(list).nativeRecordCalls == before.nativeRecordCalls + 3);
+        }
+    }
+    SECTION("a kept visibility the fence cannot flush keeps its barrier on a fenced list")
+    {
+        CommandListImpl::of(list).encoders.barriers().keptVisibility |= MTL4::VisibilityOptionResourceAlias;
+        list.end();
+        // The carry's own part still goes through the fence; the kept work goes in a barrierAfterStages with its visibility.
+        // Unfenced, both were one barrier already.
+        CHECK(countsOf(list).nativeBarriers == before.nativeBarriers + 1);
+        CHECK(countsOf(list).nativeRecordCalls == before.nativeRecordCalls + (fenced ? 4 : 3));
+    }
+    SECTION("a destination of IndirectArgs sends the dispatch stage to a barrier, which then names the kept work too")
+    {
+        CommandListImpl::of(list).encoders.barriers().argsNamed = true;
+        list.end();
+        CHECK(countsOf(list).nativeBarriers == before.nativeBarriers + 1);
+        CHECK(countsOf(list).nativeRecordCalls == before.nativeRecordCalls + 3);
+    }
+    CHECK(barriersOf(list).keptDestination == 0);
+    CHECK(barriersOf(list).pendingDestination == 0);
+    submitAndWait(kit.device, list);
+    destroyDevice(kit.device);
+}

@@ -73,7 +73,6 @@ namespace rojoRHI::metal4 {
         StencilReference,
         BlendColor,
         DepthBias,
-        Root,
         Execute,         // A counted draw's indirect command buffer, run over the range its kernel wrote.
         DrawIndirect,    // A counted draw of one record: its record bound at `buffer(3)`, one native indirect draw.
         IndexedIndirect, // A counted indexed draw of one record: its record bound at `buffer(3)`, one native indexed draw.
@@ -81,7 +80,7 @@ namespace rojoRHI::metal4 {
         MeshIndirect,    // A counted mesh draw of one record: its record bound at `buffer(3)`, one native indirect mesh draw.
     };
 
-    inline constexpr size_t kPrefixKinds = 12;
+    inline constexpr size_t kPrefixKinds = 11;
 
     // The leading `uint32` a vertex, task or mesh entry reads as `drawId`.
     inline constexpr uint64_t kZeroRecordBytes = 4;
@@ -92,8 +91,8 @@ namespace rojoRHI::metal4 {
         uint64_t range; // The GPU address of its `MTL::IndirectCommandBufferExecutionRange`.
     };
 
-    // The draw binds the caller's record at `buffer(3)`; the primitive type is the one in force when the draw was
-    // recorded.
+    // The draw binds the caller's record at `buffer(3)` and the root recorded before it at `buffer(0)`; the primitive
+    // type is the one in force when the draw was recorded.
     struct PrefixIndirect
     {
         uint64_t drawRecord; // The GPU address of the caller's `DrawIndirectArgs` or `DrawIndexedIndirectArgs` record.
@@ -102,20 +101,22 @@ namespace rojoRHI::metal4 {
         MTL::IndexType indexType; // IndexedIndirect only, as are indices and indexLength.
         uint64_t indices;
         uint64_t indexLength; // In bytes.
+        uint64_t root;        // The root recorded before the draw; 0 for none.
     };
 
-    // The draw binds the caller's record at `buffer(3)` and takes the threadgroup sizes of the pipeline bound when it
-    // was recorded.
+    // The draw binds the caller's record at `buffer(3)` and the root recorded before it at `buffer(0)`, and takes the
+    // threadgroup sizes of the pipeline bound when it was recorded.
     struct PrefixMesh
     {
         uint64_t record; // The GPU address of the `DrawMeshTasksIndirectArgs` record.
         uint64_t native; // The GPU address of the `MTL::DispatchThreadgroupsIndirectArguments` record.
         const PipelineState* pipeline;
+        uint64_t root; // The root recorded before the draw; 0 for none.
     };
 
     struct PrefixCommand
     {
-        PrefixKind kind = PrefixKind::Root; // Which member of the union holds the value.
+        PrefixKind kind = PrefixKind::Pipeline; // Which member of the union holds the value.
         union {
             const PipelineState* pipeline;
             MTL::Viewport viewport;
@@ -123,7 +124,6 @@ namespace rojoRHI::metal4 {
             uint32_t stencilReference;
             std::array<float, 4> color;
             std::array<float, 3> bias; // Constant, slope-scaled and clamp.
-            uint64_t root;
             PrefixExecute execute;
             PrefixIndirect indirect;
             PrefixMesh mesh;
@@ -217,7 +217,9 @@ namespace rojoRHI::metal4 {
         // since no draw between them could observe the first.
         std::array<uint32_t, kPrefixKinds> prefixLatest = {};
 
-        uint64_t root = 0;      // The root recorded last, which may still wait in the prefix; 0 for none.
+        // The root recorded last; 0 for none. Never in the prefix: a draw or dispatch writes it to the table when the table
+        // holds another, and a counted draw of one record keeps the root it needs in its prefix entry.
+        uint64_t root = 0;
         uint64_t tableRoot = 0; // What the list's table holds at `buffer(0)`, as this recording wrote it; 0 for none.
         // Only the list writes its table, so this holds across recordings. The zero record when the list is created.
         uint64_t tableDrawRecord = 0;
@@ -279,6 +281,8 @@ namespace rojoRHI::metal4 {
 
     void applyDepthBias(CommandListImpl& list, const DepthBias& bias);
 
+    // Writes `address` at `buffer(0)` of the list's table unless the table holds it. Called before each command that
+    // reads the table, never at `setRoot`, so an encoder that only executes writes none.
     void applyRoot(CommandListImpl& list, uint64_t address);
 
     // For the drawId of the next draw's vertex, task and mesh entries.

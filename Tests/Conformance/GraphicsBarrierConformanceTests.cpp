@@ -1411,3 +1411,272 @@ TEST_CASE("a barrier on a compute encoder that ran only copies orders the dispat
         CHECK(head(outB, tailB.size()) == tailB);
     }
 }
+
+TEST_CASE("a barrier an encoder kept and a later command of it spent still orders the next list's dispatch after the encoder's earlier work", "[conformance]")
+{
+    test::requireGpu();
+    test::GpuKit kit;
+    const Oracles oracles(kit);
+    // List 1's first encoder opens with a barrier, runs the 64 MiB kernel that writes the destination, keeps a batch for it and
+    // runs an unrelated dispatch, which spends the batch; the list then ends with nothing pending. List 2 reads the
+    // destination's tail with no barrier of its own, so the producer barrier that ends list 1's encoder is all that orders its
+    // dispatch after the kernel. With that barrier left out, the case failed in 199 of 200 runs on the Apple GPU tried.
+    const std::vector<std::byte> tail = test::pattern(kTail - 16, 61);
+    const Buffer source = sourceOf(kit, tail);
+    const Buffer destination = destinationOf(kit);
+    const Buffer unrelatedSource = sourceOf(kit, test::pattern(kTail - 16, 62));
+    const Buffer unrelatedDestination = destinationOf(kit);
+    const std::vector<std::byte> zeroes(kTail, std::byte{ 0 });
+    const Buffer out = kit.buffer(kTail, Memory::Gpu, BufferUsage::ShaderWrite, zeroes);
+    const GlobalBarrier computeToCompute{ .srcStage = Stage::ComputeShader,
+                                          .srcAccess = Access::ShaderWrite,
+                                          .dstStage = Stage::ComputeShader,
+                                          .dstAccess = Access::ShaderRead | Access::ShaderWrite };
+    const auto produced = BufferBarrier{ .buffer = destination,
+                                         .srcStage = Stage::ComputeShader,
+                                         .srcAccess = Access::ShaderWrite,
+                                         .dstStage = Stage::ComputeShader,
+                                         .dstAccess = Access::ShaderRead };
+    CommandList producer = kit.list(QueueType::Graphics, "test.producer");
+    producer.barrier(std::array{ computeToCompute });
+    oracles.produceOn(producer, source, destination);
+    producer.barrier({}, std::array{ produced });
+    oracles.copyOn(producer, kit.device.address(unrelatedSource, kTailOffset), kit.device.address(unrelatedDestination), static_cast<uint32_t>(kTail / 16));
+    CommandList consumer = kit.list(QueueType::Graphics, "test.consumer");
+    oracles.copyOn(consumer, kit.device.address(destination, kTailOffset), kit.device.address(out), static_cast<uint32_t>(kTail / 16));
+    kit.run(std::array{ producer, consumer });
+    const std::vector<std::byte> read = kit.readBuffer(out);
+    CHECK(std::vector<std::byte>(read.begin(), read.begin() + static_cast<std::ptrdiff_t>(tail.size())) == tail);
+}
+
+namespace {
+    // As `FragmentStoreOracle.slang` declares it.
+    struct StoreRoot
+    {
+        Addr destination;
+        uint32_t iterations;
+        uint32_t zero;
+        uint32_t edge;
+        std::array<uint32_t, 4> pad;
+    };
+
+    // Each fragment of one fullscreen draw over 2^22 pixels spins this many steps before its store, so each record has one
+    // writer and the pass runs for some milliseconds, long enough for a copy that is not ordered after it to run first.
+    constexpr uint32_t kSpin = 8192;
+
+    // The records `storeFragmentMain` writes for the pixels of a `kBigEdge` target that a copy of its buffer has not caught.
+    uint64_t staleRecords(std::span<const std::byte> bytes)
+    {
+        REQUIRE(bytes.size() == kCopyBytes);
+        uint64_t stale = 0;
+        for (uint32_t cell = 0; cell < kCopyElements; ++cell)
+        {
+            std::array<uint32_t, 4> record{};
+            std::memcpy(record.data(), bytes.data() + size_t{ cell } * sizeof(record), sizeof(record));
+            if (record != std::array<uint32_t, 4>{ cell, ~cell, 0xF00DF00Du, 0u })
+            {
+                ++stale;
+            }
+        }
+        return stale;
+    }
+} // namespace
+
+TEST_CASE("a list that ends owing a carry and a kept batch orders the next list's dispatch after both", "[conformance]")
+{
+    test::requireGpu();
+    // The first encoder opens with no barrier and runs a 64 MiB blit that writes the destination. A barrier from the copy
+    // to the dispatch stage follows; the encoder keeps it as its opening barrier and holds it back for its own later commands,
+    // and the unrelated dispatch after it spends it. A second batch, from dispatches to dispatches, is still held at the end
+    // of the list, which therefore owes a carry for it and, for the kept batch, a producer barrier, which Metal 4 folds into
+    // the carry: the kept batch's blit stage is not among the carry's sources. The next list reads the destination's tail with
+    // no barrier of its own. After a counted draw in an earlier frame (`fenced`) the carry goes through the fence for the dispatch
+    // stage; before it, through a barrier. On the Apple M4 Pro this case passed with the fold made to drop the kept sources too:
+    // the next dispatch was still ordered after the blit, so the case checks the order and
+    // the unit case of the fold pins the call counts and the kept state, not the source mask.
+    const bool fenced = GENERATE(false, true);
+    const bool two = GENERATE(false, true);
+    CAPTURE(fenced, two);
+    test::GpuKit kit;
+    const Oracles oracles(kit);
+    if (fenced)
+    {
+        const std::vector<std::byte> empty(64 * sizeof(DrawIndirectArgs), std::byte{ 0 });
+        runCountedFrame(kit, oracles.oracle(), oracles.target(), kit.buffer(empty.size(), Memory::Gpu, BufferUsage::IndirectArgs, empty));
+    }
+    const std::vector<std::byte> tail = test::pattern(kTail - 16, 71);
+    const Buffer source = sourceOf(kit, tail);
+    const Buffer destination = destinationOf(kit);
+    const Buffer unrelatedSource = sourceOf(kit, test::pattern(kTail - 16, 72));
+    const Buffer unrelatedDestination = destinationOf(kit);
+    const std::vector<std::byte> zeroes(kTail, std::byte{ 0 });
+    const Buffer out = kit.buffer(kTail, Memory::Gpu, BufferUsage::ShaderWrite, zeroes);
+    CommandList producer = kit.list(QueueType::Graphics, "test.producer");
+    producer.copyBuffer(source, 0, destination, 0, kCopyBytes);
+    producer.barrier(
+        {},
+        std::array{ BufferBarrier{ .buffer = destination,
+                                   .srcStage = Stage::Copy,
+                                   .srcAccess = Access::CopyWrite,
+                                   .dstStage = Stage::ComputeShader,
+                                   .dstAccess = Access::ShaderRead } }
+    );
+    oracles.copyOn(producer, kit.device.address(unrelatedSource, kTailOffset), kit.device.address(unrelatedDestination), static_cast<uint32_t>(kTail / 16));
+    producer.barrier({}, std::array{ computeWritten(unrelatedDestination, Stage::ComputeShader, Access::ShaderRead) });
+    CommandList consumer = kit.list(QueueType::Graphics, "test.consumer");
+    oracles.copyOn(consumer, kit.device.address(destination, kTailOffset), kit.device.address(out), static_cast<uint32_t>(kTail / 16));
+    submitInOrder(kit, producer, consumer, two);
+    const std::vector<std::byte> read = kit.readBuffer(out);
+    CHECK(std::vector<std::byte>(read.begin(), read.begin() + static_cast<std::ptrdiff_t>(tail.size())) == tail);
+}
+
+TEST_CASE("a copy after two barriers met before an empty compute encoder's first command follows the fragment work the first named", "[conformance]")
+{
+    test::requireGpu();
+    // A render pass writes a 64 MiB buffer from its fragment stage, a record for each pixel after a spin that keeps the pass
+    // running. Then, on the same list, a barrier from the fragment stage to the compute stage, a compute pipeline whose binding
+    // opens an empty compute encoder with that barrier as its opening barrier, a barrier from the compute stage to copies and
+    // no dispatch between them. Chapter 09's chain orders the copy after the fragment work through the two barriers, though no
+    // dispatch is between them, so the copy of the buffer holds every record. Without either barrier the copy read none on the
+    // Apple M4 Pro. With the second opening barrier's sources not widened it still read all, so the case checks the order and
+    // the unit case of the widening pins the call's masks.
+    test::GpuKit kit;
+    const Oracles oracles(kit);
+    const ShaderLibrary store = loadLibrary(kit.device, "FragmentStoreOracle");
+    const std::array targets{ ColorTarget{ .format = Format::RGBA16Float } };
+    const Pipeline producing =
+        graphicsOf(kit.device, GraphicsPipelineDesc{ .vertex = { oracles.draw, "fullscreenVertexMain" }, .fragment = { store, "storeFragmentMain" } }, targets);
+    const Texture target = oracles.bigTarget();
+    const Buffer produced = destinationOf(kit);
+    const Buffer copied = destinationOf(kit);
+    CommandList list = kit.list(QueueType::Graphics, "test.list");
+    const std::array colors{ ColorAttachment{ .texture = target, .load = LoadOp::Clear } };
+    list.beginRenderPass(RenderPassDesc{ .colors = colors, .area = kBigRect, .label = "test.producer" });
+    list.setPipeline(producing);
+    list.setViewport(Viewport{ .width = static_cast<float>(kBigEdge), .height = static_cast<float>(kBigEdge) });
+    list.setScissor(kBigRect);
+    list.pushRoot(StoreRoot{ .destination = kit.device.address(produced), .iterations = kSpin, .zero = 0, .edge = kBigEdge, .pad = {} });
+    list.draw(3);
+    list.endRenderPass();
+    list.barrier(
+        {},
+        std::array{ BufferBarrier{ .buffer = produced,
+                                   .srcStage = Stage::FragmentShader,
+                                   .srcAccess = Access::ShaderWrite,
+                                   .dstStage = Stage::ComputeShader,
+                                   .dstAccess = Access::ShaderRead } }
+    );
+    list.setPipeline(oracles.copy);
+    list.barrier(
+        {},
+        std::array{ BufferBarrier{
+            .buffer = produced, .srcStage = Stage::ComputeShader, .srcAccess = Access::ShaderWrite, .dstStage = Stage::Copy, .dstAccess = Access::CopyRead } }
+    );
+    list.copyBuffer(produced, 0, copied, 0, kCopyBytes);
+    kit.run(std::array{ list });
+    CHECK(staleRecords(kit.readBuffer(copied)) == 0);
+}
+
+namespace {
+    // A chain from the fragment stage to copies through the compute stage, S1 -> D1 then D1 -> D2, with a copy between the two
+    // barriers and no dispatch anywhere after the first. The fragment producer stores a record for each pixel of `produced`
+    // after a spin; the last copy reads it into `copied`, whose stale records the cases count.
+    struct UnrunChain
+    {
+        explicit UnrunChain(test::GpuKit& created)
+            : kit(created), oracles(created), store(loadLibrary(created.device, "FragmentStoreOracle")),
+              producing(graphicsOf(
+                  created.device,
+                  GraphicsPipelineDesc{ .vertex = { oracles.draw, "fullscreenVertexMain" }, .fragment = { store, "storeFragmentMain" } },
+                  std::array{ ColorTarget{ .format = Format::RGBA16Float } }
+              )),
+              target(oracles.bigTarget()), produced(destinationOf(created)), copied(destinationOf(created)),
+              unrelatedSource(sourceOf(created, test::pattern(kTail - 16, 73))), unrelatedDestination(destinationOf(created))
+        {
+        }
+
+        // The render pass that writes `produced`, the barrier from its fragment stage to the compute stage, and a copy
+        // of unrelated buffers, which runs no dispatch.
+        void begin(CommandList list) const
+        {
+            const std::array colors{ ColorAttachment{ .texture = target, .load = LoadOp::Clear } };
+            list.beginRenderPass(RenderPassDesc{ .colors = colors, .area = kBigRect, .label = "test.producer" });
+            list.setPipeline(producing);
+            list.setViewport(Viewport{ .width = static_cast<float>(kBigEdge), .height = static_cast<float>(kBigEdge) });
+            list.setScissor(kBigRect);
+            list.pushRoot(StoreRoot{ .destination = kit.device.address(produced), .iterations = kSpin, .zero = 0, .edge = kBigEdge, .pad = {} });
+            list.draw(3);
+            list.endRenderPass();
+            list.barrier(
+                {},
+                std::array{ BufferBarrier{ .buffer = produced,
+                                           .srcStage = Stage::FragmentShader,
+                                           .srcAccess = Access::ShaderWrite,
+                                           .dstStage = Stage::ComputeShader,
+                                           .dstAccess = Access::ShaderRead } }
+            );
+            list.copyBuffer(unrelatedSource, 0, unrelatedDestination, 0, kTail);
+        }
+
+        // The barrier from the compute stage to copies that extends the chain, and the copy it orders.
+        void end(CommandList list) const
+        {
+            list.barrier(
+                {},
+                std::array{ BufferBarrier{ .buffer = produced,
+                                           .srcStage = Stage::ComputeShader,
+                                           .srcAccess = Access::ShaderWrite,
+                                           .dstStage = Stage::Copy,
+                                           .dstAccess = Access::CopyRead } }
+            );
+            list.copyBuffer(produced, 0, copied, 0, kCopyBytes);
+        }
+
+        uint64_t stale() const
+        {
+            return staleRecords(kit.readBuffer(copied));
+        }
+
+        test::GpuKit& kit;
+        Oracles oracles;
+        ShaderLibrary store;
+        Pipeline producing;
+        Texture target;
+        Buffer produced;
+        Buffer copied;
+        Buffer unrelatedSource;
+        Buffer unrelatedDestination;
+    };
+} // namespace
+
+TEST_CASE("a copy after a chain through the compute stage follows the fragment work when the copy between the barriers ends its encoder", "[conformance]")
+{
+    test::requireGpu();
+    // On Metal 4 the copy between the barriers opens an encoder that holds the dispatch stage for the fragment work and runs no
+    // dispatch. The second barrier, already pending, ends it, and the unrun stage returns with the fragment source.
+    test::GpuKit kit;
+    const UnrunChain chain(kit);
+    CommandList list = kit.list(QueueType::Graphics, "test.list");
+    chain.begin(list);
+    chain.end(list);
+    kit.run(std::array{ list });
+    CHECK(chain.stale() == 0);
+}
+
+TEST_CASE("a copy after a chain through the compute stage follows the fragment work when a render pass lies between the barriers", "[conformance]")
+{
+    test::requireGpu();
+    // On Metal 4 the empty pass ends the copy's encoder before the second barrier exists, so only the unrun dispatch stage, still
+    // pending with the fragment source, carries that source to the last copy.
+    test::GpuKit kit;
+    const UnrunChain chain(kit);
+    const Texture between = chain.oracles.target();
+    CommandList list = kit.list(QueueType::Graphics, "test.list");
+    chain.begin(list);
+    const std::array colors{ ColorAttachment{ .texture = between, .load = LoadOp::Clear } };
+    list.beginRenderPass(RenderPassDesc{ .colors = colors, .area = kOracleRect, .label = "test.between" });
+    list.endRenderPass();
+    chain.end(list);
+    kit.run(std::array{ list });
+    CHECK(chain.stale() == 0);
+}

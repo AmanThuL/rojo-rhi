@@ -169,7 +169,7 @@ namespace rojoRHI {
         CommandListImpl& impl = CommandListImpl::of(*this);
         core::CommandListCore& list = impl.core;
         core::clearTexture(list, texture, range, value);
-        // A record's payload is fixed from creation to retirement, so it is read with one load and no lock (ADR 0020).
+        // A record's payload is fixed from creation to retirement, so it is read with one load and no lock (ADR 0041).
         const auto* native = static_cast<const MTL::Texture*>(list.device->pool<Texture>().native(texture));
         const Subresources subresources = resolve(native, range);
         // A render target or depth-stencil texture clears by load actions; a Compute list clears only textures made for

@@ -28,6 +28,11 @@ namespace rojoRHI {
             return;
         }
         MTL4::ComputeCommandEncoder* encoder = metal4::applyComputePipeline(list);
+        // Its shaders read the root recorded last, which the table takes here.
+        if (list.draw.root != list.draw.tableRoot)
+        {
+            metal4::applyRoot(list, list.draw.root);
+        }
         {
             // The Metal validation layer autoreleases in a dispatch it checks, so the dispatch holds a pool under it.
             const metal4::CommandPool pool(list.state.commandPools);
@@ -42,6 +47,11 @@ namespace rojoRHI {
         CommandListImpl& list = CommandListImpl::of(*this);
         core::dispatchIndirect(list.core, args);
         MTL4::ComputeCommandEncoder* encoder = metal4::applyComputePipeline(list);
+        // Its shaders read the root recorded last, which the table takes here.
+        if (list.draw.root != list.draw.tableRoot)
+        {
+            metal4::applyRoot(list, list.draw.root);
+        }
         {
             // The validation layer autoreleases in a dispatch it checks.
             const metal4::CommandPool pool(list.state.commandPools);

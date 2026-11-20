@@ -1,7 +1,7 @@
 # 05. Shader ABI
 
 **Status**: Accepted
-**API version**: 1.0.2
+**API version**: 1.0.3
 
 This chapter defines how a shader reaches data: the root block, the `RojoRHI.slang` module and the
 layout rules shared by C++ and Slang. It continues in [part 2](05-shader-abi-part2.md), which
@@ -209,7 +209,7 @@ without re-uploading it.
 
 | | Metal 4 | D3D12 | Vulkan |
 |---|---|---|---|
-| Call | `MTL4::ArgumentTable::setAddress(root, 0)` on the table bound to every stage | stores the GPU virtual address looked up from the `Addr`'s heap index plus its offset; the next draw binds it with `SetGraphicsRootShaderResourceView` and the next dispatch with `SetComputeRootShaderResourceView` on `t0` of the one global root signature | `vkCmdPushDataEXT` of the address, or a push-constant `Addr` |
+| Call | `MTL4::ArgumentTable::setAddress(root, 0)` on the table bound to every stage, written before the next draw that is not an execute of an indirect command buffer, or the next dispatch, unless this recording has already written it | stores the GPU virtual address looked up from the `Addr`'s heap index plus its offset; the next draw binds it with `SetGraphicsRootShaderResourceView` and the next dispatch with `SetComputeRootShaderResourceView` on `t0` of the one global root signature | `vkCmdPushDataEXT` of the address, or a push-constant `Addr` |
 | Cost | native: one table write | cheap: index→GPU VA lookup | native |
 | Constraint | none | 256-byte alignment of the root address; 65536-byte cap | none: the root is read through the pushed address |
 
@@ -239,7 +239,7 @@ build-time [layout check](#layout-checking) rejects a root type that breaks the 
 
 | | Metal 4 | D3D12 | Vulkan |
 |---|---|---|---|
-| Call | frame-arena copy, then `setAddress(copy, 0)` | frame-arena copy, then the root SRV write | frame-arena copy, then `vkCmdPushDataEXT` of its address |
+| Call | frame-arena copy, then `setRoot`'s write of it to the table | frame-arena copy, then the root SRV write | frame-arena copy, then `vkCmdPushDataEXT` of its address |
 | Cost | cheap: one suballocation and copy; Metal 4 has no inline root bytes | cheap: one suballocation and copy; root constants are not used, since the call returns an address | cheap: one suballocation and copy; inline push data is not used, for the same reason |
 
 ### `rojoRHI::root`

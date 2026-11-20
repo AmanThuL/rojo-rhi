@@ -78,7 +78,7 @@ namespace rojoRHI {
 
         // A hit selects its entry without a branch on which entry holds the handle: a recording that alternates two
         // pipelines flips that branch at every bind, and the predictor misses it once the driver's work between two binds
-        // grows. A miss reads the payload through the handle pool's table, one acquire load and no lock (ADR 0020).
+        // grows. A miss reads the payload through the handle pool's table, with acquire loads and no lock (ADR 0041).
         const d3d12::PipelineState* resolvePipeline(CommandListImpl& list, Pipeline pipeline)
         {
             d3d12::ResolvedPipelines& resolved = list.state.binding.resolved;
@@ -97,24 +97,24 @@ namespace rojoRHI {
     } // namespace
 
     namespace d3d12 {
-        void flushGraphics(CommandListImpl& list)
+        void flushGraphics(CommandListImpl& list, uint32_t reasons)
         {
             Binding& binding = list.state.binding;
             ROJORHI_INTERNAL_ASSERT(
                 binding.pipeline != nullptr && binding.pipeline->kind != PipelineKind::Compute, "a draw is recorded with no graphics pipeline bound"
             );
-            const PipelineState& pipeline = *binding.pipeline;
-            if (binding.graphicsSignatureDirty)
+            // A render pass begins with no pipeline bound and a draw needs one (chapter 07, VU-rojo-cmd-0023), so every draw
+            // follows a graphics setPipeline in its own pass, which set any root signature acquisition or vendor work left
+            // owed. Vendor work cannot be recorded inside a pass, so none comes between that setPipeline and this draw.
+            ROJORHI_INTERNAL_ASSERT(!binding.graphicsSignatureOwed, "a draw follows no graphics setPipeline since acquisition or vendor work");
+            uint32_t dirty = binding.graphicsDirty;
+            if ((dirty & reasons) == 0) [[likely]]
             {
-                // Vendor work may have left a root signature of its own; switching back drops every root argument, so the
-                // root and the draw-record constant are bound again.
-                list.state.list->SetGraphicsRootSignature(deviceOf(list).roots.global());
-                core::noteNativeCall(list.core);
-                binding.graphicsSignatureDirty = false;
-                binding.graphicsRootDirty = true;
-                binding.drawIdDirty = true;
+                return;
             }
-            if (binding.graphicsPipeline != pipeline.pso)
+            const PipelineState& pipeline = *binding.pipeline;
+            // The bit says the slot may hold another pipeline; whether it does is still the slot's own test.
+            if ((dirty & kGraphicsPipelineDirty) != 0 && binding.graphicsPipeline != pipeline.pso)
             {
                 // Another pipeline took the slot: whether D3D12 keeps a dynamic depth bias across it is unverified, so the
                 // recorded bias goes with the pipeline, as at `setPipeline`. The topology is input-assembler state and stays.
@@ -124,7 +124,7 @@ namespace rojoRHI {
                     sendDepthBias(list);
                 }
             }
-            if (binding.graphicsRootDirty)
+            if ((dirty & kGraphicsRootDirty) != 0)
             {
                 // A list with no root yet binds none: its shaders read no root block.
                 if (binding.root != 0)
@@ -132,17 +132,16 @@ namespace rojoRHI {
                     list.state.list->SetGraphicsRootShaderResourceView(0, binding.root);
                     core::noteNativeCall(list.core);
                 }
-                binding.graphicsRootDirty = false;
             }
             DynamicState& dynamic = list.state.dynamic;
-            if (dynamic.stencilReferenceOwed && pipeline.readsStencilReference) [[unlikely]]
+            if ((dirty & kStencilReferenceDirty) != 0 && dynamic.stencilReferenceOwed && pipeline.readsStencilReference) [[unlikely]]
             {
                 list.state.list->OMSetStencilRef(0);
                 core::noteNativeCall(list.core);
                 dynamic.stencilReference = uint8_t{ 0 };
                 dynamic.stencilReferenceOwed = false;
             }
-            if (dynamic.blendFactorOwed && pipeline.readsBlendFactor) [[unlikely]]
+            if ((dirty & kBlendFactorDirty) != 0 && dynamic.blendFactorOwed && pipeline.readsBlendFactor) [[unlikely]]
             {
                 const std::array<float, 4> zeros = {};
                 list.state.list->OMSetBlendFactor(zeros.data());
@@ -150,6 +149,13 @@ namespace rojoRHI {
                 dynamic.blendFactor = zeros;
                 dynamic.blendFactorOwed = false;
             }
+            if ((dirty & reasons & kDrawIdDirty) != 0)
+            {
+                list.state.list->SetGraphicsRoot32BitConstant(1, 0, 0);
+                core::noteNativeCall(list.core);
+            }
+            // Every reason but b1 is settled whichever draw this is; an indirect draw leaves b1 to the next direct one.
+            binding.graphicsDirty = dirty & ~reasons;
         }
     } // namespace d3d12
 
@@ -157,7 +163,7 @@ namespace rojoRHI {
     {
         CommandListImpl& list = CommandListImpl::of(*this);
         core::bindPipeline(list.core, pipeline);
-        // A record's payload is fixed from creation to retirement, so it is read with no lock (ADR 0020), and the list's
+        // A record's payload is fixed from creation to retirement, so it is read with no lock (ADR 0041), and the list's
         // last two binds need no table at all.
         const d3d12::PipelineState* state = resolvePipeline(list, pipeline);
         d3d12::Binding& binding = list.state.binding;
@@ -171,13 +177,35 @@ namespace rojoRHI {
                 core::noteNativeCall(list.core);
                 binding.computePipeline = state->pso;
                 binding.graphicsPipeline = nullptr;
+                binding.graphicsDirty |= d3d12::kGraphicsPipelineDirty;
             }
             return;
+        }
+        if (binding.graphicsSignatureOwed) [[unlikely]]
+        {
+            // The list's first graphics pipeline, or its first after vendor work: no draw comes before this bind in its
+            // pass, so the global root signature is set here and the draw tests nothing for it. It indexes the heaps
+            // directly, so they go first. Setting it drops every root argument, so the root and the draw-record
+            // constant are bound again at the next draw.
+            if (!binding.heapsSet)
+            {
+                d3d12::setHeaps(list);
+            }
+            list.state.list->SetGraphicsRootSignature(d3d12::deviceOf(list).roots.global());
+            core::noteNativeCall(list.core);
+            binding.graphicsSignatureOwed = false;
+            binding.graphicsDirty |= d3d12::kGraphicsRootDirty | d3d12::kDrawIdDirty;
         }
         if (binding.graphicsPipeline != state->pso)
         {
             setGraphicsPso(list, state->pso);
         }
+        // The slot holds this pipeline now. A pass begins with no pipeline bound, so here is where a pass's owed
+        // starting values become owed to draws, and only to those of a pipeline that reads them.
+        const d3d12::DynamicState& dynamic = list.state.dynamic;
+        const uint32_t owed = (dynamic.stencilReferenceOwed && state->readsStencilReference ? d3d12::kStencilReferenceDirty : 0u) |
+                              (dynamic.blendFactorOwed && state->readsBlendFactor ? d3d12::kBlendFactorDirty : 0u);
+        binding.graphicsDirty = (binding.graphicsDirty & ~(d3d12::kGraphicsPipelineDirty | d3d12::kStencilReferenceDirty | d3d12::kBlendFactorDirty)) | owed;
         // Binding resets the topology to the list form of the pipeline's class (chapter 06); a mesh pipeline has none.
         if (state->kind == d3d12::PipelineKind::Graphics)
         {
@@ -235,6 +263,7 @@ namespace rojoRHI {
         }
         // Any other value replaces the starting one.
         dynamic.stencilReferenceOwed = false;
+        list.state.binding.graphicsDirty &= ~d3d12::kStencilReferenceDirty;
         std::optional<uint8_t>& held = dynamic.stencilReference;
         if (held == reference)
         {
@@ -257,6 +286,7 @@ namespace rojoRHI {
             return;
         }
         dynamic.blendFactorOwed = false;
+        list.state.binding.graphicsDirty &= ~d3d12::kBlendFactorDirty;
         std::optional<std::array<float, 4>>& held = dynamic.blendFactor;
         if (held == factor)
         {

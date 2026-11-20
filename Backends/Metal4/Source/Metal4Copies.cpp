@@ -27,7 +27,7 @@
 
 namespace rojoRHI {
     namespace {
-        // A record's payload is fixed from creation to retirement, so it is read with one load and no lock (ADR 0020).
+        // A record's payload is fixed from creation to retirement, so it is read with one load and no lock (ADR 0041).
         const MTL::Buffer* nativeBuffer(const core::CommandListCore& list, Buffer buffer)
         {
             return metal4::bufferPayload(*list.device, buffer)->buffer;

@@ -743,6 +743,110 @@ TEST_CASE("each counted draw sees the root recorded before it", "[conformance]")
     CHECK(difference.empty());
 }
 
+TEST_CASE("a direct draw after a counted draw reads the root recorded before it, not the one the counted draw read", "[conformance]")
+{
+    test::requireGpu();
+    test::GpuKit kit;
+    const ShaderLibrary oracle = loadLibrary(kit.device, "DrawOracle");
+    const ShaderLibrary fragment = loadLibrary(kit.device, "AbiFragment");
+    const Format format = Format::RGBA16Float;
+    const std::array targets{ ColorTarget{ .format = format } };
+    const Pipeline pipeline = *kit.device.createPipeline(
+        GraphicsPipelineDesc{
+            .vertex = { oracle, "oracleVertexMain" }, .fragment = { fragment, "fragmentMain" }, .colors = targets, .label = "test.abiFragment" }
+    );
+    // Two one-texel views of distinct values, one per root.
+    const std::array<std::array<float, 4>, 2> values{ std::array{ 0.25f, 0.5f, 0.75f, 1.0f }, std::array{ 0.5f, 0.25f, 0.125f, 1.0f } };
+    std::array<ViewIndex, 2> views{};
+    for (size_t i = 0; i < 2; ++i)
+    {
+        const std::array<uint16_t, 4> texel{ halfOf(values[i][0]), halfOf(values[i][1]), halfOf(values[i][2]), halfOf(values[i][3]) };
+        const std::array data{ TextureData{ std::as_bytes(std::span(texel)), sizeof(texel), 0 } };
+        const Texture sampled =
+            *kit.device.createTexture(TextureDesc{ .format = format, .extent = { 1, 1, 1 }, .usage = TextureUsage::Sampled, .label = "test.texel" }, data);
+        views[i] = *kit.device.createView(sampled, {});
+    }
+    const SamplerIndex sampler =
+        *kit.device.createSampler(SamplerDesc{ .filter = SamplerFilter::Nearest, .mipFilter = SamplerFilter::Nearest, .address = SamplerAddress::ClampToEdge });
+    const Texture target =
+        *kit.device.createTexture(TextureDesc{ .format = format, .extent = { kEdge, kEdge, 1 }, .usage = TextureUsage::RenderTarget, .label = "test.target" });
+    const std::vector<DrawIndirectArgs> first = drawRecords(4);
+    const std::vector<DrawIndirectArgs> second = drawRecords(4, 4);
+    const std::vector<DrawIndirectArgs> lone = drawRecords(1, 8);
+    const std::vector<DrawIndirectArgs> counted = drawRecords(1, 9);
+    const Buffer firstArgs = kit.buffer(sizeof(DrawIndirectArgs) * 4, Memory::Gpu, BufferUsage::IndirectArgs, bytesOf(std::span(first)));
+    const Buffer secondArgs = kit.buffer(sizeof(DrawIndirectArgs) * 4, Memory::Gpu, BufferUsage::IndirectArgs, bytesOf(std::span(second)));
+    const Buffer loneArgs = kit.buffer(sizeof(DrawIndirectArgs), Memory::Gpu, BufferUsage::IndirectArgs, bytesOf(std::span(lone)));
+    const Buffer countedArgs = kit.buffer(sizeof(DrawIndirectArgs), Memory::Gpu, BufferUsage::IndirectArgs, bytesOf(std::span(counted)));
+    const uint32_t one = 1;
+    const Buffer oneCount = kit.buffer(sizeof(one), Memory::Gpu, BufferUsage::IndirectArgs, std::as_bytes(std::span(&one, 1)));
+    struct FragmentRoot
+    {
+        uint32_t view;
+        uint32_t sampler;
+        uint32_t pad0;
+        uint32_t pad1;
+    };
+    const auto rootOf = [&](CommandList list, size_t i) {
+        return list.pushRoot(FragmentRoot{ static_cast<uint32_t>(views[i]), static_cast<uint32_t>(sampler), 0, 0 });
+    };
+    // A direct draw moved `row` rows down lands on drawId 0's pixel of that row.
+    const auto direct = [](CommandList list, uint32_t row) {
+        list.setViewport(Viewport{ .y = static_cast<float>(row), .width = static_cast<float>(kEdge), .height = static_cast<float>(kEdge) });
+        list.draw(3);
+        list.setViewport(kFull);
+    };
+    CommandList list = kit.list(QueueType::Graphics, "test.indirect");
+    const std::array colors{ ColorAttachment{ .texture = target, .load = LoadOp::Clear } };
+    test::transition(list, target, Layout::Undefined, Layout::ColorAttachment);
+    list.beginRenderPass(RenderPassDesc{ .colors = colors, .area = kFullRect, .label = "test.pass" });
+    list.setPipeline(pipeline);
+    list.setViewport(kFull);
+    list.setScissor(kFullRect);
+    // The first root, an execute whose commands bind it themselves, then the second root and the pass's first direct draw: it
+    // must read the second root, though the execute ran before it. The first root again for a direct draw, a lone record read
+    // with the second, and, after a split by an execute under the first, a direct draw that must write the first over the
+    // lone draw's second.
+    const Addr firstRoot = rootOf(list, 0);
+    list.drawIndirect(kit.device.address(firstArgs), 4);
+    const Addr secondRoot = rootOf(list, 1);
+    direct(list, 64);
+    list.setRoot(firstRoot);
+    direct(list, 65);
+    list.setRoot(secondRoot);
+    list.drawIndirect(kit.device.address(loneArgs), 1);
+    list.setRoot(firstRoot);
+    list.drawIndirect(kit.device.address(secondArgs), 4);
+    direct(list, 66);
+    // A one-record draw with a count waits for the next encoder under the second root, which the first replaces before the
+    // direct draw that opens it: the replay must write the second for the counted draw and the first for the direct one.
+    list.setRoot(secondRoot);
+    list.drawIndirect(kit.device.address(countedArgs), 1, kit.device.address(oneCount));
+    list.setRoot(firstRoot);
+    direct(list, 67);
+    list.endRenderPass();
+    test::transition(list, target, Layout::ColorAttachment, Layout::CopySrc);
+    kit.run(std::array{ list });
+    Image expected(format);
+    const auto add = [&expected](std::span<const DrawIndirectArgs> records, const std::array<float, 4>& value) {
+        for (const DrawIndirectArgs& record : records)
+        {
+            expected.set(record.drawId, { value[0] + static_cast<float>(record.drawId), value[1], value[2], value[3] });
+        }
+    };
+    add(first, values[0]);
+    add(second, values[0]);
+    add(lone, values[1]);
+    add(counted, values[1]);
+    expected.set(67 * kEdge, values[0]);
+    expected.set(64 * kEdge, values[1]);
+    expected.set(65 * kEdge, values[0]);
+    expected.set(66 * kEdge, values[0]);
+    const std::string difference = differences(kit.readTexture(target, TextureRegion{ .extent = { kEdge, kEdge, 1 } }, format), expected);
+    INFO(difference);
+    CHECK(difference.empty());
+}
+
 TEST_CASE("counted draws in two passes of one list and in lists recorded on two threads", "[conformance]")
 {
     test::requireGpu();

@@ -46,7 +46,7 @@ namespace rojoRHI::core {
     {
         DeviceCounts::add(core.counts().nativeSubmitCalls, wait.size() + signal.size());
 #ifndef NDEBUG
-        // The records are read only for the checks, which Release leaves out, so Release takes no pool lock here (ADR 0020).
+        // The records are read only for the checks, which Release leaves out, so Release takes no pool lock here (ADR 0041).
         for (const FenceValue& entry : wait)
         {
             [[maybe_unused]] const FenceRecord record = snapshot(core, entry.fence);

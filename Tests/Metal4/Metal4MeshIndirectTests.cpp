@@ -316,7 +316,7 @@ TEST_CASE("a mesh batch encodes an ICB whose commands bind the reserved buffers 
     REQUIRE(icbs.slots(metal4::IcbKind::Mesh) == 1);
     CHECK(icbs.capacity(metal4::IcbKind::Mesh, 0) == metal4::kIcbMinimumCommands);
     CHECK(icbs.buffer(metal4::IcbKind::Mesh, 0)->size() == metal4::kIcbMinimumCommands);
-    CHECK(prefixKinds(list) == std::vector{ Kind::Pipeline, Kind::Viewport, Kind::Scissor, Kind::Root, Kind::MeshExecute });
+    CHECK(prefixKinds(list) == std::vector{ Kind::Pipeline, Kind::Viewport, Kind::Scissor, Kind::MeshExecute });
     const metal4::PrefixCommand& execute = drawOf(list).prefix.back();
     CHECK(execute.execute.buffer == icbs.buffer(metal4::IcbKind::Mesh, 0));
     // Each command binds the root recorded at the call, the view and sampler tables and its record on every stage.
@@ -338,11 +338,11 @@ TEST_CASE("a mesh batch encodes an ICB whose commands bind the reserved buffers 
     list.setPipeline(fixture.meshOnly);
     list.drawMeshTasksIndirect(fixture.record(), 4);
     CHECK(paramsOf(list, drawOf(list).prefix.back()).objectThreads[0] == 0);
-    // The kernels' encoder ends; the render encoder's open with its barrier, the pass's begin timestamp, the state, the
-    // root, each execute, the second pipeline, the pass's end timestamp and its group; the executes bind no table.
+    // The kernels' encoder ends; the render encoder's open with its barrier, the pass's begin timestamp, the state,
+    // each execute, the second pipeline, the pass's end timestamp and its group; the executes bind no table.
     before = callsOf(list);
     list.endRenderPass();
-    CHECK(callsOf(list) - before == 1 + openCalls(list) + 1 + kPassBegin + kStateCalls + 1 + 3 + 1 + 2);
+    CHECK(callsOf(list) - before == 1 + openCalls(list) + 1 + kPassBegin + kStateCalls + 3 + 1 + 2);
     CHECK(encodersOf(list).barriers().pendingDestination == 0);
     kit.run(std::array{ list });
 }

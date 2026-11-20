@@ -288,11 +288,12 @@ TEST_CASE("the encoder after an upscale waits on its fence, once", "[metal4]")
         CHECK(countsOf(kit.kit.list).nativeRecordCalls == before.nativeRecordCalls + 4 + test::encoderLabel(kit.kit.list));
         // The first render encoder still owes its wait.
         CHECK(barriersOf(kit.kit.list).owedFenceStages == metal4::kRenderStages);
-        // A later compute encoder owes nothing: the barrier ends the encoder, and the next opens with the barrier and no wait.
+        // The barrier stays in the encoder, which waited already: its queue-level part at once, its encoder-level part and the
+        // copy after it.
         const core::RecordCounts second = countsOf(kit.kit.list);
         kit.kit.list.barrier(std::array{ copyToCopy() });
         kit.kit.list.copyBuffer(b, 0, a, 0, 256);
-        CHECK(countsOf(kit.kit.list).nativeRecordCalls == second.nativeRecordCalls + 1 + 2 + test::encoderLabel(kit.kit.list) + 1 + 1);
+        CHECK(countsOf(kit.kit.list).nativeRecordCalls == second.nativeRecordCalls + 1 + 1 + 1);
         submitAndWait(kit);
         destroyDevice(kit.kit.device);
     }

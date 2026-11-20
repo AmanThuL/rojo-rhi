@@ -620,22 +620,24 @@ TEST_CASE("the restore after vendor work sets the heaps at once and the rest at 
     d3d12::resumeAfterVendorWork(CommandListImpl::of(scene.list));
     // SetDescriptorHeaps alone.
     CHECK(recordCalls(scene.list) - before == 1u);
-    CHECK(binding.graphicsSignatureDirty);
+    CHECK(binding.heapsSet);
+    CHECK(binding.graphicsSignatureOwed);
     CHECK(binding.computeRoot == d3d12::ComputeRoot::Foreign);
-    CHECK(binding.graphicsRootDirty);
+    CHECK(binding.dirty(d3d12::kGraphicsRootDirty));
     CHECK(binding.computeRootDirty);
-    CHECK(binding.drawIdDirty);
+    CHECK(binding.dirty(d3d12::kDrawIdDirty));
     CHECK(binding.computePipeline == nullptr);
     CHECK(binding.graphicsPipeline == nullptr);
     CHECK(state.dynamic.topology == D3D_PRIMITIVE_TOPOLOGY_UNDEFINED);
     const RestoreCalls calls = recordAfter(scene);
     // SetComputeRootSignature, SetPipelineState, SetComputeRootShaderResourceView and Dispatch.
     CHECK(calls.dispatch == 4u);
-    // SetPipelineState and IASetPrimitiveTopology.
-    CHECK(calls.setPipeline == 2u);
-    // SetGraphicsRootSignature, SetGraphicsRootShaderResourceView, SetGraphicsRoot32BitConstant and DrawInstanced.
-    CHECK(calls.draw == 4u);
-    CHECK_FALSE(binding.graphicsSignatureDirty);
+    // SetGraphicsRootSignature, the first graphics bind after vendor work, SetPipelineState and IASetPrimitiveTopology;
+    // the restore set the heaps already.
+    CHECK(calls.setPipeline == 3u);
+    // SetGraphicsRootShaderResourceView, SetGraphicsRoot32BitConstant and DrawInstanced.
+    CHECK(calls.draw == 3u);
+    CHECK_FALSE(binding.graphicsSignatureOwed);
     CHECK(binding.computeRoot == d3d12::ComputeRoot::Global);
     run(scene);
     checkWritten(scene);
@@ -660,16 +662,16 @@ TEST_CASE("an upscale sets the heaps again and marks the root signatures, roots,
         (void)recordAfter(scene);
         const d3d12::ListState& state = stateOf(scene.list);
         const d3d12::Binding& binding = state.binding;
-        REQUIRE_FALSE(binding.graphicsRootDirty);
-        REQUIRE_FALSE(binding.drawIdDirty);
+        REQUIRE_FALSE(binding.dirty(d3d12::kGraphicsRootDirty));
+        REQUIRE_FALSE(binding.dirty(d3d12::kDrawIdDirty));
         REQUIRE(binding.graphicsPipeline != nullptr);
         REQUIRE(state.dynamic.topology == D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
         scene.list.upscale(upscaler, params);
-        CHECK(binding.graphicsSignatureDirty);
+        CHECK(binding.graphicsSignatureOwed);
         CHECK(binding.computeRoot == d3d12::ComputeRoot::Foreign);
-        CHECK(binding.graphicsRootDirty);
+        CHECK(binding.dirty(d3d12::kGraphicsRootDirty));
         CHECK(binding.computeRootDirty);
-        CHECK(binding.drawIdDirty);
+        CHECK(binding.dirty(d3d12::kDrawIdDirty));
         CHECK(binding.computePipeline == nullptr);
         CHECK(binding.graphicsPipeline == nullptr);
         CHECK(state.dynamic.topology == D3D_PRIMITIVE_TOPOLOGY_UNDEFINED);
@@ -733,10 +735,11 @@ TEST_CASE("an upscale counts one native call and the next dispatch, bind and dra
         const RestoreCalls calls = recordAfter(scene);
         // SetComputeRootSignature, SetPipelineState, SetComputeRootShaderResourceView and Dispatch.
         CHECK(calls.dispatch == 4u);
-        // SetPipelineState and IASetPrimitiveTopology.
-        CHECK(calls.setPipeline == 2u);
-        // SetGraphicsRootSignature, SetGraphicsRootShaderResourceView, SetGraphicsRoot32BitConstant and DrawInstanced.
-        CHECK(calls.draw == 4u);
+        // SetGraphicsRootSignature, the first graphics bind after the upscale, SetPipelineState and
+        // IASetPrimitiveTopology.
+        CHECK(calls.setPipeline == 3u);
+        // SetGraphicsRootShaderResourceView, SetGraphicsRoot32BitConstant and DrawInstanced.
+        CHECK(calls.draw == 3u);
         run(scene);
         CHECK(messages.count() == 0u);
         scene.device.destroy(upscaler);

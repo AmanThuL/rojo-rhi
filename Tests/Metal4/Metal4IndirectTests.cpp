@@ -559,7 +559,7 @@ TEST_CASE("consecutive writer kernels of one kind run as one dispatch, and an en
     kit.run(std::array{ list });
 }
 
-TEST_CASE("an execute replays after the root, pipeline and state recorded before it", "[metal4]")
+TEST_CASE("an execute replays after the pipeline and state recorded before it, and a lone draw keeps the root recorded before it", "[metal4]")
 {
     test::GpuKit kit(2, true);
     const Fixture fixture(kit.device);
@@ -567,6 +567,7 @@ TEST_CASE("an execute replays after the root, pipeline and state recorded before
     const std::array<std::byte, 256> zeroes{};
     const Addr first = list.uploadFrameData(zeroes, 256);
     const Addr second = list.uploadFrameData(zeroes, 256);
+    const Addr third = list.uploadFrameData(zeroes, 256);
     fixture.begin(list);
     list.setRoot(first);
     fixture.drawIndirect(list);
@@ -574,27 +575,29 @@ TEST_CASE("an execute replays after the root, pipeline and state recorded before
     list.setRoot(second);
     list.setViewport(Viewport{ .width = 8.0f, .height = 8.0f });
     fixture.drawWritten(list);
+    // A root recorded after the one-record draw does not reach its entry: the direct draw below writes it.
+    list.setRoot(third);
     // No entry merges across an execute: each sees the root and the pipeline recorded before it.
-    CHECK(
-        prefixKinds(list) ==
-        std::vector{ Kind::Pipeline, Kind::Viewport, Kind::Scissor, Kind::Root, Kind::Execute, Kind::Pipeline, Kind::Root, Kind::Viewport, Kind::DrawIndirect }
-    );
-    CHECK(drawOf(list).prefix[3].root == gpuAddressOf(first));
-    CHECK(drawOf(list).prefix[6].root == gpuAddressOf(second));
+    CHECK(prefixKinds(list) == std::vector{ Kind::Pipeline, Kind::Viewport, Kind::Scissor, Kind::Execute, Kind::Pipeline, Kind::Viewport, Kind::DrawIndirect });
+    // The root is no prefix entry: the execute's parameters and the one-record draw's entry carry theirs.
+    CHECK(drawOf(list).prefix[6].indirect.root == gpuAddressOf(second));
+    CHECK(drawOf(list).tableRoot == 0);
     // The execute's commands bind the root recorded before it, the view and sampler tables and their own records.
     const core::ArenaPage& page = core::coreOf(list).page;
-    const uint64_t range = drawOf(list).prefix[4].execute.range;
+    const uint64_t range = drawOf(list).prefix[3].execute.range;
     metal4::DrawParams params{};
     std::memcpy(&params, page.host + (range - (sizeof(metal4::DrawParams) + 16) - page.address), sizeof(params));
     CHECK(params.records == gpuAddressOf(kit.device.address(fixture.records)));
     CHECK(params.root == gpuAddressOf(first));
     CHECK(params.views == DeviceImpl::of(kit.device).viewTable->gpuAddress());
     CHECK(params.samplers == DeviceImpl::of(kit.device).samplerTable->gpuAddress());
+    // The execute and the one-record draw run first at the open, the latter under the second root, and the direct draw after
+    // them writes the root recorded last.
     list.draw(3);
     // The replay leaves the encoder holding what was recorded last.
     CHECK(drawOf(list).held.pipeline == drawOf(list).pipeline);
     CHECK(drawOf(list).held.viewport.width == 8.0);
-    CHECK(drawOf(list).tableRoot == gpuAddressOf(second));
+    CHECK(drawOf(list).tableRoot == gpuAddressOf(third));
     list.endRenderPass();
     kit.run(std::array{ list });
 }

@@ -190,7 +190,7 @@ namespace rojoRHI::core {
         resetPass(pass);
 #ifndef NDEBUG
         // The attachments' records feed the Debug-tier checks and the pass state they compare against; reading them takes
-        // the texture pool's lock, which Release recording never does (ADR 0020).
+        // the texture pool's lock, which Release recording never does (ADR 0041).
         AttachmentSummary summary;
         for (const ColorAttachment& attachment : desc.colors)
         {
@@ -282,7 +282,7 @@ namespace rojoRHI::core {
         noteCommand(list);
 #ifndef NDEBUG
         // The record feeds the Debug-tier checks and the bound state they compare against; reading it takes the pipeline
-        // pool's lock, which Release recording never does (ADR 0020).
+        // pool's lock, which Release recording never does (ADR 0041).
         const LookupResult<PipelineRecord> found = list.device->pool<Pipeline>().lookup(pipeline);
         ROJORHI_VU(found.status == LookupStatus::Ok, "VU-rojo-cmd-0020", "setPipeline was given handle {:#x}, which is not a live pipeline", pipeline.bits);
         const PipelineRecord& record = *found.record;

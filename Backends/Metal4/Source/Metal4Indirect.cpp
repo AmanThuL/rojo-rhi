@@ -71,8 +71,8 @@ namespace rojoRHI {
             return uint64_t{ address.lo } | uint64_t{ address.hi } << 32;
         }
 
-        // Only a list with no page, or a full one, takes the arena's lock to claim a page (ADR 0020). These bytes are
-        // no frame data, so they count as no upload.
+        // Only a list with no page, or a full one, takes the arena's lock to claim a page, here for the third kind of bytes
+        // ADR 0041 names: a backend's own kernel parameters. They are no frame data, so they count as no upload.
         Reservation reserve(CommandListImpl& list, uint64_t bytes)
         {
             core::DeviceCore& device = *list.core.device;
@@ -149,7 +149,7 @@ namespace rojoRHI {
             const Reservation place = reserve(list, metal4::kDrawReservation);
             const uint64_t base = place.address;
             const bool indexed = counted.kind == metal4::IcbKind::Indexed;
-            // A record's payload is fixed from creation to retirement, so it is read with one load and no lock (ADR 0020), and it
+            // A record's payload is fixed from creation to retirement, so it is read with one load and no lock (ADR 0041), and it
             // holds the index buffer's GPU address and length, so the draw sends the buffer no message.
             const metal4::BufferPayload* indices = indexed ? metal4::bufferPayload(device, counted.indices) : nullptr;
             metal4::DrawParams params{ .icb = 0,
@@ -190,7 +190,8 @@ namespace rojoRHI {
                                                            .primitive = draw.topology,
                                                            .indexType = counted.indexType,
                                                            .indices = params.indices,
-                                                           .indexLength = indexed ? indices->length : 0 };
+                                                           .indexLength = indexed ? indices->length : 0,
+                                                           .root = draw.root };
             }
             std::memcpy(place.memory, &params, sizeof(params));
             runKernel(list, kernel, base, groups, threads, counted.maxCount > 1 ? 0 : metal4::kDrawReservation, kDrawReads, split);
@@ -198,8 +199,7 @@ namespace rojoRHI {
             draw.appendBarrierEntry(command);
         }
 
-        // The prefix keeps calls in order, so the root the commands bind is the one the table holds at the execute. The
-        // bound pipeline gives the threadgroup sizes.
+        // The bound pipeline gives the threadgroup sizes.
         void recordCountedMesh(CommandListImpl& list, uint64_t records, uint32_t maxCount, uint64_t count)
         {
             const bool split = list.encoders.renderEncoder() != nullptr;
@@ -251,7 +251,7 @@ namespace rojoRHI {
             else
             {
                 command.kind = metal4::PrefixKind::MeshIndirect;
-                command.mesh = metal4::PrefixMesh{ .record = records, .native = base + metal4::kMeshOutputOffset, .pipeline = &pipeline };
+                command.mesh = metal4::PrefixMesh{ .record = records, .native = base + metal4::kMeshOutputOffset, .pipeline = &pipeline, .root = draw.root };
             }
             std::memcpy(place.memory, &params, sizeof(params));
             runKernel(list, kernel, base, groups, threads, maxCount > 1 ? 0 : metal4::kMeshReservation, kMeshReads, split);
@@ -265,6 +265,7 @@ namespace rojoRHI {
         {
             MTL4::RenderCommandEncoder* encoder = metal4::ensureRender(list);
             list.encoders.bindTable(list.core, list.state);
+            metal4::applyRoot(list, list.draw.root);
             metal4::applyDrawRecord(list, record);
             const metal4::PipelineState& pipeline = *list.draw.pipeline;
             {
@@ -285,6 +286,7 @@ namespace rojoRHI {
         {
             MTL4::RenderCommandEncoder* encoder = metal4::ensureRender(list);
             list.encoders.bindTable(list.core, list.state);
+            metal4::applyRoot(list, list.draw.root);
             metal4::applyDrawRecord(list, record);
             {
                 // The validation layer autoreleases in a draw it checks.
@@ -338,7 +340,7 @@ namespace rojoRHI {
         core::drawIndexedIndirect(list.core, indices, args, maxCount, count);
         if (lone(maxCount, count))
         {
-            // A record's payload is fixed from creation to retirement, so it is read with one load and no lock (ADR 0020).
+            // A record's payload is fixed from creation to retirement, so it is read with one load and no lock (ADR 0041).
             drawLone(list, addressOf(args), metal4::bufferPayload(*list.core.device, indices), metal4::indexType(type));
             return;
         }

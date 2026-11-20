@@ -221,7 +221,7 @@ namespace rojoRHI {
             {
                 return resolved.states[older ? 1 : 0];
             }
-            // A record's payload is fixed from creation to retirement, so it is read with no lock (ADR 0020).
+            // A record's payload is fixed from creation to retirement, so it is read with no lock (ADR 0041).
             const auto* state = static_cast<const metal4::PipelineState*>(list.core.device->pool<Pipeline>().native(pipeline));
             resolved.handles[1] = resolved.handles[0];
             resolved.states[1] = resolved.states[0];
@@ -305,7 +305,6 @@ namespace rojoRHI {
                 case PrefixKind::StencilReference: applyStencilReference(list, command.stencilReference); break;
                 case PrefixKind::BlendColor: applyBlendColor(list, command.color); break;
                 case PrefixKind::DepthBias: applyBiasValues(list, DepthBias{ command.bias[0], command.bias[1], command.bias[2] }); break;
-                case PrefixKind::Root: applyRoot(list, command.root); break;
                 case PrefixKind::Execute:
                 case PrefixKind::DrawIndirect:
                 case PrefixKind::IndexedIndirect:

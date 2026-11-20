@@ -326,12 +326,15 @@ namespace rojoRHI {
             {
                 // The task and mesh entries read the drawId from the caller's record; the native record holds no drawId.
                 list.encoders.bindTable(list.core, list.state);
+                applyRoot(list, command.mesh.root);
                 applyDrawRecord(list, command.mesh.record);
             }
             else if (command.kind == PrefixKind::DrawIndirect || command.kind == PrefixKind::IndexedIndirect)
             {
-                // So does the vertex entry; an indirect command buffer's commands bind their own buffers and take no table.
+                // So does the vertex entry, which also reads the root recorded before the draw; an indirect command buffer's commands
+                // bind their own buffers and take no table.
                 list.encoders.bindTable(list.core, list.state);
+                applyRoot(list, command.indirect.root);
                 applyDrawRecord(list, command.indirect.drawRecord);
             }
             {
@@ -389,7 +392,7 @@ namespace rojoRHI {
         // the pass's duration takes in the encoders its splits resume and not the kernels of counted draws ahead of it. A
         // command buffer's timestamp between encoders would slow the render encoder's draws.
         const uint32_t pair = metal4::claimPair(list);
-        // A record's payload is fixed from creation to retirement, so each texture is read with one load and no lock (ADR 0020).
+        // A record's payload is fixed from creation to retirement, so each texture is read with one load and no lock (ADR 0041).
         const auto& textures = list.core.device->pool<Texture>();
         metal4::DrawState& draw = list.draw;
         draw.colors.clear();

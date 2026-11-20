@@ -132,7 +132,7 @@ namespace rojoRHI::core {
 
     // Stamps the page's record with the list's frame for VU-rojo-buffer-0020 in Debug, and sets the list's limit to the
     // smaller of the page's size and `Limits::maxAddrOffset`. The claim is the one place Release recording takes a lock
-    // (ADR 0020), so it stays out of line.
+    // (ADR 0041), so it stays out of line.
     void claimArenaPage(DeviceCore& core, CommandListCore& list, uint64_t size, ArenaPageSource source, void* context);
 
     // Every arena page's host memory has this alignment, so rounding the cursor up to an alignment up to this one

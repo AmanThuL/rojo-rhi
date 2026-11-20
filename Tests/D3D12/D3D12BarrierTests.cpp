@@ -319,6 +319,84 @@ TEST_CASE("an empty batch records nothing", "[d3d12]")
     destroyDevice(device);
 }
 
+TEST_CASE("a texture barrier that keeps ColorAttachment with only render-target access and scope lowers to nothing, alone or batched", "[d3d12]")
+{
+    Device device = makeDevice();
+    const MessageCollection messages;
+    const Fence done = makeFence(device, "test.done");
+    const Texture target = makeColor(device, TextureUsage::RenderTarget, "test.target");
+    const Texture sampled = makeColor(device, TextureUsage::Sampled | TextureUsage::Storage, "test.sampled");
+    device.beginFrame();
+    CommandList list = device.acquireCommandList(QueueType::Graphics, "test.elided");
+    // The native calls and the Barrier calls `record` adds.
+    using Sent = std::array<uint64_t, 2>;
+    constexpr Sent kNothing{ 0, 0 };
+    constexpr Sent kOneBarrier{ 1, 1 };
+    const auto sent = [&](auto&& record) {
+        const uint64_t calls = recordCalls(list);
+        const uint64_t barriers = nativeBarriers(list);
+        record();
+        return Sent{ recordCalls(list) - calls, nativeBarriers(list) - barriers };
+    };
+    // A discard from Undefined is a real transition, however its sides read.
+    const TextureBarrier discard{ .texture = target,
+                                  .srcStage = Stage::ColorAttachment,
+                                  .dstStage = Stage::ColorAttachment,
+                                  .dstAccess = Access::ColorAttachmentRead | Access::ColorAttachmentWrite,
+                                  .oldLayout = Layout::Undefined,
+                                  .newLayout = Layout::ColorAttachment };
+    CHECK(sent([&] { list.barrier({}, {}, std::array{ discard }); }) == kOneBarrier);
+    CHECK(loweredTexture(list, 0).Flags == D3D12_TEXTURE_BARRIER_FLAG_DISCARD);
+
+    const TextureBarrier keep{ .texture = target,
+                               .srcStage = Stage::ColorAttachment,
+                               .srcAccess = Access::ColorAttachmentWrite,
+                               .dstStage = Stage::ColorAttachment,
+                               .dstAccess = Access::ColorAttachmentWrite,
+                               .oldLayout = Layout::ColorAttachment,
+                               .newLayout = Layout::ColorAttachment };
+    CHECK(sent([&] { list.barrier({}, {}, std::array{ keep }); }) == kNothing);
+    CHECK(scratchOf(list).textures.empty());
+    CHECK(scratchOf(list).globals.empty());
+    // A repeat sends the kept lowering, which is empty.
+    CHECK(sent([&] { list.barrier({}, {}, std::array{ keep }); }) == kNothing);
+    // A color-attachment read lowers to the same render-target access, as the barrier between C8's passes does.
+    TextureBarrier readWrite = keep;
+    readWrite.dstAccess = Access::ColorAttachmentRead | Access::ColorAttachmentWrite;
+    CHECK(sent([&] { list.barrier({}, {}, std::array{ readWrite }); }) == kNothing);
+    // Elided on purpose: an execution-only barrier in the color stage lowers to the same record as one naming its writes,
+    // since the layout's render-target access fills both sides, and the queue orders render-target work without one.
+    TextureBarrier executionOnly = keep;
+    executionOnly.srcAccess = Access::None;
+    executionOnly.dstAccess = Access::None;
+    CHECK(sent([&] { list.barrier({}, {}, std::array{ executionOnly }); }) == kNothing);
+
+    // Batched with another barrier, the batch sends one Barrier holding only the other record.
+    const std::array<GlobalBarrier, 1> globals = { GlobalBarrier{ Stage::Copy, Access::CopyWrite, Stage::ComputeShader, Access::ShaderRead } };
+    CHECK(sent([&] { list.barrier(globals, {}, std::array{ keep }); }) == kOneBarrier);
+    CHECK(scratchOf(list).globals.size() == 1u);
+    CHECK(scratchOf(list).textures.empty());
+    const std::array<TextureBarrier, 2> batch = { keep, transition(sampled, Layout::Undefined, Layout::ShaderRead, QueueType::Graphics) };
+    CHECK(sent([&] { list.barrier({}, {}, batch); }) == kOneBarrier);
+    REQUIRE(scratchOf(list).textures.size() == 1u);
+    CHECK(scratchOf(list).textures[0].pResource == payloadOf(device, sampled).resource);
+
+    // A source in every scope names more than render-target sync, so the barrier is sent.
+    TextureBarrier fromAll = keep;
+    fromAll.srcStage = Stage::All;
+    CHECK(sent([&] { list.barrier({}, {}, std::array{ fromAll }); }) == kOneBarrier);
+    CHECK(loweredTexture(list, 0).SyncBefore == D3D12_BARRIER_SYNC_ALL);
+    const std::array<TextureBarrier, 1> toCopy = { transition(target, Layout::ColorAttachment, Layout::CopySrc, QueueType::Graphics) };
+    CHECK(sent([&] { list.barrier({}, {}, toCopy); }) == kOneBarrier);
+    submitAndWait(device, list, done, 1);
+    device.endFrame();
+    CHECK(messages.count() == 0u);
+    device.destroy(target);
+    device.destroy(sampled);
+    device.destroy(done);
+    destroyDevice(device);
+}
+
 TEST_CASE("the stage table lowers each Stage as chapter 09 says on a Graphics list", "[d3d12]")
 {
     constexpr QueueType kGraphics = QueueType::Graphics;
@@ -1271,10 +1349,10 @@ TEST_CASE("a global barrier names a layout's accesses only where that layout adm
     destroyDevice(device);
 }
 
-TEST_CASE("a discard behind a source stage adds the global barrier the native frame records", "[d3d12]")
+TEST_CASE("a discard behind a source stage adds the global barrier chapter 09 lowers it to", "[d3d12]")
 {
-    // The benchmark's native arm records these global barriers for its composed frame and C10, and its [host] case pins
-    // the same values; a change to the lowering here changes the arm the overhead rounds compare against.
+    // The benchmark's native arm once recorded these global barriers too. Since the native-arm audit (#21) it writes its
+    // barriers as a native author does and records none, so this case alone pins R's lowering.
     Device device = makeDevice();
     const Texture color = makeTexture(
         device,

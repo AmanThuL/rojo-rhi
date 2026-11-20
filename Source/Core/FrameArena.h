@@ -30,7 +30,7 @@ namespace rojoRHI::core {
 
     // A slot owns pages that a command list claims whole, so a list bumps a cursor in its page with no lock. Only
     // claiming takes the arena's lock, and creating a page, a growth event, takes the buffer pool's lock inside it
-    // (ADR 0020). Lists of one frame claim concurrently. Pages keep their memory and become claimable again when the
+    // (ADR 0041). Lists of one frame claim concurrently. Pages keep their memory and become claimable again when the
     // slot is reused.
     class FrameArena
     {

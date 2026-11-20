@@ -211,6 +211,53 @@ TEST_CASE("a fill records the kernel's root signature, pipeline, root view, cons
     destroyDevice(device);
 }
 
+TEST_CASE("a Graphics list that copies, uploads and fills sends no descriptor heaps and no root signature of its own", "[d3d12]")
+{
+    constexpr uint64_t kSize = 256;
+    constexpr uint32_t kPattern = 0xA1B2C3D4u;
+    Device device = makeDevice();
+    const MessageCollection messages;
+    std::vector<std::byte> source(kSize);
+    writeWords(source, 0, kSize, 0x11223344u);
+    const Result<Buffer> created = device.createBuffer({ .size = kSize, .label = "test.source" }, source);
+    REQUIRE(created.has_value());
+    const Buffer copied = *created;
+    const Buffer target = makeWritable(device, kSize, "test.target");
+    const Buffer filled = makeWritable(device, kSize, "test.filled");
+    const Fence done = makeFence(device, "test.done");
+    device.beginFrame();
+    CommandList list = device.acquireCommandList(QueueType::Graphics, "test.graphics");
+    const d3d12::Binding& binding = stateOf(list).binding;
+    // Reset alone: the heaps and the global root signature wait for the first command that reads them.
+    CHECK(recordCalls(list) == 1u);
+    CHECK_FALSE(binding.heapsSet);
+    CHECK(binding.graphicsSignatureOwed);
+    list.copyBuffer(copied, 0, target, 0, kSize);
+    (void)list.pushRoot(TestRoot{ { 1, 2, 3, 4 } });
+    // The fill kernel's root signature indexes no heap, so the fill sends its five calls and no SetDescriptorHeaps.
+    list.fillBuffer(filled, 0, kSize, kPattern);
+    list.end();
+    // Reset, CopyBufferRegion, the fill's five calls and Close.
+    CHECK(recordCalls(list) == 8u);
+    CHECK_FALSE(binding.heapsSet);
+    CHECK(binding.graphicsSignatureOwed);
+    CHECK(binding.computeRoot == d3d12::ComputeRoot::Kernel);
+    const std::array<FenceValue, 1> signal{ FenceValue{ done, 1 } };
+    device.queue(QueueType::Graphics).submit(std::span(&list, 1), {}, signal);
+    device.endFrame();
+    REQUIRE(device.wait({ done, 1 }, UINT64_MAX));
+    CHECK(test::readNativeBuffer(DeviceImpl::of(device), resourceOf(device, target), kSize) == source);
+    std::vector<std::byte> expected(kSize);
+    writeWords(expected, 0, kSize, kPattern);
+    CHECK(test::readNativeBuffer(DeviceImpl::of(device), resourceOf(device, filled), kSize) == expected);
+    CHECK(messages.count() == 0u);
+    device.destroy(done);
+    device.destroy(filled);
+    device.destroy(target);
+    device.destroy(copied);
+    destroyDevice(device);
+}
+
 TEST_CASE("a fill right after a fill records only its root view, constants and dispatch", "[d3d12]")
 {
     constexpr uint64_t kHalf = 256;
@@ -249,12 +296,12 @@ TEST_CASE("a fill marks the compute root dirty and leaves the graphics side alon
     CommandList list = device.acquireCommandList(QueueType::Graphics, "test.graphics");
     const d3d12::Binding& binding = stateOf(list).binding;
     REQUIRE_FALSE(binding.computeRootDirty);
-    REQUIRE_FALSE(binding.graphicsRootDirty);
+    REQUIRE_FALSE(binding.dirty(d3d12::kGraphicsRootDirty));
     list.fillBuffer(first, 0, kSize, 0x11223344u);
     CHECK(binding.computeRoot == d3d12::ComputeRoot::Kernel);
     CHECK(binding.computePipeline == impl.kernels.fill());
     CHECK(binding.computeRootDirty);
-    CHECK_FALSE(binding.graphicsRootDirty);
+    CHECK_FALSE(binding.dirty(d3d12::kGraphicsRootDirty));
     CHECK(binding.graphicsPipeline == nullptr);
     CHECK(binding.root == 0u);
     // A root set before a fill stays bound for the graphics side and is bound again on the compute side.
@@ -264,7 +311,7 @@ TEST_CASE("a fill marks the compute root dirty and leaves the graphics side alon
     list.fillBuffer(second, 0, kSize, 0x55667788u);
     CHECK(binding.root == root);
     CHECK(binding.computeRootDirty);
-    CHECK(binding.graphicsRootDirty);
+    CHECK(binding.dirty(d3d12::kGraphicsRootDirty));
     CHECK(binding.computeRoot == d3d12::ComputeRoot::Kernel);
     submitAndWait(device, list, done, 1);
     std::vector<std::byte> expected(kSize);

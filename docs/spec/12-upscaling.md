@@ -1,7 +1,7 @@
 # 12. Upscaling
 
 **Status**: Accepted
-**API version**: 1.0.2
+**API version**: 1.0.3
 
 An upscaler reconstructs a high-resolution image from a jittered low-resolution frame, its depth,
 its motion and the upscaler's private history. The interface mirrors the former v1 temporal scaler
@@ -235,4 +235,4 @@ group on a device with debug markers.
 | | Metal 4 | D3D12 | Vulkan |
 |---|---|---|---|
 | Call | set the scaler's inputs, then `MTL4FX::TemporalScaler::encodeToCommandBuffer` between encoders | FSR `ffxDispatch` with `ffxDispatchDescUpscale` on the Graphics list, inside the upscale's PIX event with `debugMarkers` and, when timed, its timestamp pair; FidelityFX records its own legacy barriers from the states the inputs name and back. Then `SetDescriptorHeaps` sets the backend's heaps again, and the global root signature of each side, the root block, `b1`, the pipeline and the topology are left for the next dispatch, draw or `setPipeline` to set again; no lock; unverified: DLSS `NGX_D3D12_EVALUATE_DLSS_EXT`; XeSS `xessD3D12Execute` | unverified: FSR `ffxDispatch`; DLSS `NGX_VULKAN_EVALUATE_DLSS_EXT`; XeSS `xessVKExecute` |
-| Cost | cheap: ends the open compute encoder; a carrier encoder waits at queue level for every earlier stage and an `MTL::Fence` carries that into MetalFX's own encoders, and the list's end waits on the fence and holds back every later stage | cheap: one `SetDescriptorHeaps` after the vendor call; the next dispatch or draw sets its side's global root signature, root block and `b1` again, and the pipeline and topology are set again | cheap: the backend rebinds its descriptor heap and push data after the vendor call |
+| Cost | cheap: ends the open compute encoder; a carrier encoder waits at queue level for every earlier stage and an `MTL::Fence` carries that into MetalFX's own encoders, and the list's end waits on the fence and holds back every later stage | cheap: one `SetDescriptorHeaps` after the vendor call; the next dispatch or graphics `setPipeline` sets its side's global root signature, the next dispatch or draw the root block when one is set and the next direct draw `b1` again, and the pipeline and topology are set again | cheap: the backend rebinds its descriptor heap and push data after the vendor call |

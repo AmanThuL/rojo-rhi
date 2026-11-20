@@ -228,6 +228,42 @@ TEST_CASE("a fence round trip through another queue orders a same-queue pair wit
 #endif
 }
 
+TEST_CASE("a texture moved by a barrier with no destination is read on the same queue behind a fence round trip", "[contract]")
+{
+#ifdef NDEBUG
+    SKIP("validation exists only in a Debug build");
+#else
+    PassKit kit(QueueType::Graphics, true);
+    const Texture written = kit.texture();
+    const Buffer staging = storage(kit);
+    const Buffer readback = kit.buffer(BufferUsage::ShaderWrite, 64 * 1024);
+    const TextureRegion region{ .extent = { PassKit::kSize, 1, 1 } };
+    const Fence fence = *kit.device.createFence(0, "test.fence");
+    const std::array<FenceValue, 1> signalled{ FenceValue{ fence, 1 } };
+    const std::array<FenceValue, 1> returned{ FenceValue{ fence, 2 } };
+    const std::array<TextureBarrier, 1> toWrite{ TextureBarrier{
+        .texture = written, .dstStage = Stage::Copy, .dstAccess = Access::CopyWrite, .oldLayout = Layout::Undefined, .newLayout = Layout::CopyDst } };
+    kit.list.barrier({}, {}, toWrite);
+    kit.list.copyBufferToTexture(staging, BufferTextureLayout{ .rowPitch = 256 }, written, region);
+    // Only the layout changes: the destination names no stage, because the later read waits on the round trip.
+    const std::array<TextureBarrier, 1> toRead{ TextureBarrier{ .texture = written,
+                                                                .srcStage = Stage::Copy,
+                                                                .srcAccess = Access::CopyWrite,
+                                                                .dstStage = Stage::None,
+                                                                .dstAccess = Access::None,
+                                                                .oldLayout = Layout::CopyDst,
+                                                                .newLayout = Layout::CopySrc } };
+    kit.list.barrier({}, {}, toRead);
+    submitTo(kit.device, kit.list, QueueType::Graphics, {}, signalled);
+    // Compute touches nothing; it only passes the value on.
+    kit.device.queue(QueueType::Compute).submit({}, signalled, returned);
+    CommandList later = kit.device.acquireCommandList(QueueType::Graphics, "test.later");
+    later.copyTextureToBuffer(written, region, readback, BufferTextureLayout{ .rowPitch = 256 });
+    submitTo(kit.device, later, QueueType::Graphics, returned);
+    close(kit);
+#endif
+}
+
 TEST_CASE("reads of a buffer on two queues need no fence", "[contract]")
 {
 #ifdef NDEBUG

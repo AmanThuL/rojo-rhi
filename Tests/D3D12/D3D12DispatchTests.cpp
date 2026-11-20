@@ -245,9 +245,9 @@ TEST_CASE("setPipeline with a compute pipeline sets it at once and a dispatch af
     CHECK(binding.graphicsPipeline == nullptr);
     before = recordCalls(list);
     list.dispatch(1, 1, 1);
-    // The first dispatch also sets the global root signature and binds the root: SetComputeRootSignature,
-    // SetComputeRootShaderResourceView and Dispatch.
-    CHECK(recordCalls(list) - before == 3u);
+    // The first dispatch also sets the heaps, then the global root signature that indexes them, and binds the root:
+    // SetDescriptorHeaps, SetComputeRootSignature, SetComputeRootShaderResourceView and Dispatch.
+    CHECK(recordCalls(list) - before == 4u);
     before = recordCalls(list);
     list.setPipeline(pipeline);
     // The native list holds the pipeline already.
@@ -260,6 +260,63 @@ TEST_CASE("setPipeline with a compute pipeline sets it at once and a dispatch af
     CHECK(readCells(device, output, kGroupCells) == bytesOf(expectedGrid(1, 1, 1, kUntouched, kGroupCells)));
     CHECK(messages.count() == 0u);
     device.destroy(done);
+    device.destroy(output);
+    destroyDevice(device);
+}
+
+TEST_CASE("a Compute list's first dispatch sets the heaps, then the global root signature", "[d3d12]")
+{
+    REQUIRE(kD3D12LibrariesBuilt);
+    Device device = makeDevice();
+    const MessageCollection messages;
+    const Pipeline pipeline = oraclePipeline(device);
+    const Buffer output = outputBuffer(device, kGroupCells);
+    const Fence computed = makeFence(device, "test.computed");
+    const Fence done = makeFence(device, "test.done");
+    device.beginFrame();
+    CommandList compute = device.acquireCommandList(QueueType::Compute, "test.compute");
+    const d3d12::Binding& binding = stateOf(compute).binding;
+    // Reset alone: a Compute list owes no graphics root signature, and its heaps wait for the first dispatch.
+    CHECK(recordCalls(compute) == 1u);
+    CHECK_FALSE(binding.heapsSet);
+    CHECK_FALSE(binding.graphicsSignatureOwed);
+    // SetPipelineState, at once; the bind reads no heap.
+    uint64_t before = recordCalls(compute);
+    compute.setPipeline(pipeline);
+    CHECK(recordCalls(compute) - before == 1u);
+    CHECK_FALSE(binding.heapsSet);
+    (void)compute.pushRoot(rootOf(device, output, 1, 1));
+    // SetDescriptorHeaps, then SetComputeRootSignature, which indexes them directly, then
+    // SetComputeRootShaderResourceView and Dispatch. The counts cannot show the order; the debug layer's clean run is
+    // its evidence.
+    before = recordCalls(compute);
+    compute.dispatch(1, 1, 1);
+    CHECK(recordCalls(compute) - before == 4u);
+    CHECK(binding.heapsSet);
+    CHECK(binding.computeRoot == d3d12::ComputeRoot::Global);
+    // The second dispatch writes the same cells, so a barrier orders it after the first; it is outside the count.
+    compute.barrier(
+        std::array{ GlobalBarrier{
+            .srcStage = Stage::ComputeShader, .srcAccess = Access::ShaderWrite, .dstStage = Stage::ComputeShader, .dstAccess = Access::ShaderWrite } }
+    );
+    // Dispatch alone.
+    before = recordCalls(compute);
+    compute.dispatch(1, 1, 1);
+    CHECK(recordCalls(compute) - before == 1u);
+    compute.end();
+    const std::array<FenceValue, 1> signal{ FenceValue{ computed, 1 } };
+    device.queue(QueueType::Compute).submit(std::span(&compute, 1), {}, signal);
+    // The frame's Graphics submission joins the compute queue.
+    CommandList graphics = device.acquireCommandList(QueueType::Graphics, "test.join");
+    graphics.end();
+    const std::array<FenceValue, 1> doneSignal{ FenceValue{ done, 1 } };
+    device.queue(QueueType::Graphics).submit(std::span(&graphics, 1), signal, doneSignal);
+    device.endFrame();
+    REQUIRE(device.wait({ done, 1 }, UINT64_MAX));
+    CHECK(readCells(device, output, kGroupCells) == bytesOf(expectedGrid(1, 1, 1, kUntouched, kGroupCells)));
+    CHECK(messages.count() == 0u);
+    device.destroy(done);
+    device.destroy(computed);
     device.destroy(output);
     destroyDevice(device);
 }
@@ -286,12 +343,13 @@ TEST_CASE("setRoot then dispatch writes the compute root once; a second dispatch
         CHECK(binding.computeRootDirty);
         before = recordCalls(list);
         list.dispatch(1, 1, 1);
-        // SetComputeRootShaderResourceView and Dispatch, after SetComputeRootSignature at the list's first dispatch.
-        CHECK(recordCalls(list) - before == (first ? 3u : 2u));
+        // SetComputeRootShaderResourceView and Dispatch, after SetDescriptorHeaps and SetComputeRootSignature at the
+        // list's first dispatch.
+        CHECK(recordCalls(list) - before == (first ? 4u : 2u));
         first = false;
         CHECK_FALSE(binding.computeRootDirty);
         // The graphics side still owes the root to the next draw.
-        CHECK(binding.graphicsRootDirty);
+        CHECK(binding.dirty(d3d12::kGraphicsRootDirty));
         before = recordCalls(list);
         list.dispatch(1, 1, 1);
         CHECK(recordCalls(list) - before == 1u);
@@ -345,7 +403,8 @@ TEST_CASE("a fill between two dispatches sets the caller's pipeline and root aga
     );
     uint64_t before = recordCalls(list);
     list.dispatch(1, 1, 1);
-    // SetComputeRootSignature, SetPipelineState, SetComputeRootShaderResourceView and Dispatch.
+    // SetComputeRootSignature, SetPipelineState, SetComputeRootShaderResourceView and Dispatch; the first dispatch set the
+    // heaps.
     CHECK(recordCalls(list) - before == 4u);
     CHECK(binding.computeRoot == d3d12::ComputeRoot::Global);
     CHECK(binding.computePipeline == payload.pso);
@@ -385,8 +444,9 @@ TEST_CASE("dispatchIndirect is one ExecuteIndirect after the flush", "[d3d12]")
     (void)list.pushRoot(rootOf(device, output, 2, 3));
     uint64_t before = recordCalls(list);
     list.dispatchIndirect(device.address(args, kRecordOffset));
-    // SetComputeRootSignature at the list's first dispatch, SetComputeRootShaderResourceView and ExecuteIndirect.
-    CHECK(recordCalls(list) - before == 3u);
+    // SetDescriptorHeaps and SetComputeRootSignature at the list's first dispatch, SetComputeRootShaderResourceView and
+    // ExecuteIndirect.
+    CHECK(recordCalls(list) - before == 4u);
     before = recordCalls(list);
     list.dispatchIndirect(device.address(args, kRecordOffset));
     // ExecuteIndirect alone.

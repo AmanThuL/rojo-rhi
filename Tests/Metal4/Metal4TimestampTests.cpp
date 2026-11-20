@@ -18,6 +18,7 @@
 
 #include <Metal/Metal.hpp>
 
+#include <algorithm>
 #include <array>
 #include <cmath>
 #include <cstddef>
@@ -43,6 +44,13 @@ namespace {
         {
             g_warnings.emplace_back(message);
         }
+    }
+
+    size_t refusalWarnings()
+    {
+        return static_cast<size_t>(std::ranges::count_if(g_warnings, [](const std::string& text) {
+            return text.find("Metal refused timestamp heap") != std::string::npos;
+        }));
     }
 
     const metal4::Timestamps& timestampsOf(Device device)
@@ -626,11 +634,88 @@ TEST_CASE("a heap Metal refuses is asked for again after its slot's reuse, and c
     CHECK(late.claim(0, counts) == 0);
     CHECK(late.heap(0, 0) != nullptr);
     CHECK(counts.nativeCreateCalls.load() == created + 1);
-    // Each device logs the first refusal only.
+    // Recording only noted the refusals: the sink takes a lock, and Release recording takes none (ADR 0041).
+    CHECK(g_warnings.empty());
+    // Each device warns of its first refusal only, once, when the frame begins; a device that met none warns nothing.
+    std::vector<metal4::Timestamps*> everyone;
+    for (metal4::Timestamps& timestamps : full)
+    {
+        everyone.push_back(&timestamps);
+    }
+    everyone.push_back(&late);
+    for (metal4::Timestamps* timestamps : everyone)
+    {
+        timestamps->reportRefusal();
+        timestamps->reportRefusal();
+    }
     CHECK(g_warnings.size() == 2);
+    REQUIRE(!g_warnings.empty());
+    CHECK(g_warnings.front().find("Metal refused timestamp heap") != std::string::npos);
     {
         const metal4::AutoreleasePool pool;
         late.release();
+        for (metal4::Timestamps& timestamps : full)
+        {
+            timestamps.release();
+        }
+        native->release();
+    }
+    setMessageCallback(nullptr, nullptr);
+}
+
+TEST_CASE("a timestamp heap Metal refuses while a list records warns at the next beginFrame, once", "[metal4]")
+{
+    // Recording takes no lock but the arena's (ADR 0041), and the message sink takes one, so the claim that meets the refusal
+    // notes it and the device warns when the next frame begins. Storages fill Metal's heaps until it refuses one.
+    constexpr uint32_t kSlotPairs = metal4::Timestamps::kSlotHeaps * metal4::Timestamps::kHeapEntries / 2;
+    g_warnings.clear();
+    setMessageCallback(collectWarning, nullptr);
+    const metal4::AutoreleasePool outer;
+    MTL::Device* native = MTL::CreateSystemDefaultDevice();
+    REQUIRE(native != nullptr);
+    core::DeviceCounts counts;
+    std::deque<metal4::Timestamps> full;
+    bool refused = false;
+    while (!refused && full.size() < 8)
+    {
+        metal4::Timestamps& timestamps = full.emplace_back();
+        timestamps.create(native);
+        for (uint32_t pair = 0; pair < kSlotPairs && !refused; ++pair)
+        {
+            refused = timestamps.claim(0, counts) == core::kNoTimestamp;
+        }
+    }
+    REQUIRE(refused);
+    // The storages' own refusal is not reported until they are asked to, so the device's warning is the only one counted.
+    g_warnings.clear();
+    Device device = *createDevice({ .scopeTimings = true });
+    device.beginFrame();
+    CommandList list = device.acquireCommandList(QueueType::Graphics, "test.list");
+    recordScopes(list, 3);
+    // Metal refused the scopes' heap while the list recorded; nothing was said yet, and the scopes go untimed.
+    CHECK(refusalWarnings() == 0);
+    CHECK(core::coreOf(list).scopeLog.front().timestamp == core::kNoTimestamp);
+    submitFrame(device, std::array{ list });
+    CHECK(refusalWarnings() == 0);
+    device.endFrame();
+    CHECK(refusalWarnings() == 0);
+    device.beginFrame();
+    CHECK(refusalWarnings() == 1);
+    // Once per device: later frames that meet the refusal again warn nothing more.
+    for (uint32_t frame = 0; frame < 4; ++frame)
+    {
+        CommandList again = device.acquireCommandList(QueueType::Graphics, "test.again");
+        recordScopes(again, 1);
+        submitFrame(device, std::array{ again });
+        device.endFrame();
+        device.beginFrame();
+    }
+    // Other warnings may follow (a frame whose scopes went untimed says so); only the refusal's count matters.
+    CHECK(refusalWarnings() == 1);
+    device.endFrame();
+    destroyDevice(device);
+    {
+        const metal4::AutoreleasePool pool;
         for (metal4::Timestamps& timestamps : full)
         {
             timestamps.release();

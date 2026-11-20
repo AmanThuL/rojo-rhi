@@ -453,6 +453,8 @@ namespace rojoRHI {
         DeviceImpl& impl = DeviceImpl::of(*this);
         // The core waits for the frame whose slot it reuses through the waitFrame hook, after its own checks.
         impl.core.beginFrame();
+        // The warning for a timestamp heap Metal refused while recording, which recording could not emit (ADR 0041).
+        impl.timestamps.reportRefusal();
         // Once a counted draw's kernels have run, the lists of this frame on carry the dispatch stage of a barrier they owe at
         // their end through the carry fence, which those kernels do not wait on; every list of the earlier frames, which used
         // no fence, was submitted before them.

@@ -1,6 +1,6 @@
 //----------------------------------------------------------------------------------------------------------------------
 /// @file Metal4Draws.cpp
-/// @brief Implements the root binding and the direct draw entries for the Metal 4 backend.
+/// @brief Implements the root recording and the direct draw entries for the Metal 4 backend.
 //----------------------------------------------------------------------------------------------------------------------
 
 #include "Metal4Device.h"
@@ -23,12 +23,16 @@
 
 namespace rojoRHI {
     namespace {
-        // A direct draw's drawId is 0. One compare when the table already holds the zero record, and one test when the
-        // encoder holds the table.
+        // A direct draw's drawId is 0, and its shaders read the root recorded last. One compare when the table already holds
+        // the zero record, one when it holds the root, and one test when the encoder holds the table.
         void bindZeroRecord(CommandListImpl& list)
         {
             list.encoders.bindTable(list.core, list.state);
             const metal4::DrawState& draw = list.draw;
+            if (draw.root != draw.tableRoot)
+            {
+                metal4::applyRoot(list, draw.root);
+            }
             if (draw.tableDrawRecord != draw.zeroRecord) [[unlikely]]
             {
                 metal4::applyDrawRecord(list, draw.zeroRecord);
@@ -85,18 +89,10 @@ namespace rojoRHI {
         CommandListImpl& list = CommandListImpl::of(*this);
         core::setRoot(list.core, root);
         const uint64_t address = uint64_t{ root.lo } | uint64_t{ root.hi } << 32;
-        // A counted mesh draw's commands bind the root recorded before the draw themselves.
+        // The table takes it at the first draw or dispatch that reads it (`bindZeroRecord`, `applyRoot`), as it takes its bind,
+        // so an encoder that only executes writes none. A counted draw's commands bind the root recorded before it
+        // themselves, and a counted draw of one record keeps it in its prefix entry.
         list.draw.root = address;
-        if (list.draw.passOpen && list.encoders.renderEncoder() == nullptr)
-        {
-            // Inside a pass whose encoder is closed the root waits in the prefix, so a command replayed there sees the root
-            // recorded before it.
-            metal4::PrefixCommand command{ .kind = metal4::PrefixKind::Root };
-            command.root = address;
-            list.draw.record(command);
-            return;
-        }
-        metal4::applyRoot(list, address);
     }
 
     void CommandList::draw(uint32_t vertices, uint32_t instances, uint32_t firstVertex, [[maybe_unused]] uint32_t firstInstance)
@@ -137,7 +133,7 @@ namespace rojoRHI {
         }
         MTL4::RenderCommandEncoder* encoder = metal4::ensureRender(list);
         bindZeroRecord(list);
-        // A record's payload is fixed from creation to retirement, so it is read with one load and no lock (ADR 0020), and it
+        // A record's payload is fixed from creation to retirement, so it is read with one load and no lock (ADR 0041), and it
         // holds the buffer's GPU address and length, so the draw sends the buffer no message.
         const metal4::BufferPayload& buffer = *metal4::bufferPayload(*list.core.device, indices);
         const uint64_t offset = uint64_t{ firstIndex } * (type == IndexType::UInt16 ? 2 : 4);

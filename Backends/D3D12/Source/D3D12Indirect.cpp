@@ -25,7 +25,7 @@ namespace rojoRHI {
         // again.
         void execute(CommandListImpl& list, ID3D12CommandSignature* signature, Addr args, uint32_t maxCount, Addr count)
         {
-            // A buffer's payload is published before its handle is returned, so the directory finds it with one acquire load,
+            // A buffer's payload is published before its handle is returned, so the directory finds it with acquire loads,
             // and the list keeps what it found for the next command of the same buffers. The null address names the reserved
             // view-heap slot 0, where the directory finds no buffer.
             d3d12::IndirectBuffers& last = list.state.indirect;
@@ -46,7 +46,7 @@ namespace rojoRHI {
             const uint64_t countOffset = counted == nullptr ? 0u : count.hi;
             list.state.list->ExecuteIndirect(signature, maxCount, records->resource, args.hi, countResource, countOffset);
             core::noteNativeCall(list.core);
-            list.state.binding.drawIdDirty = true;
+            list.state.binding.graphicsDirty |= d3d12::kDrawIdDirty;
         }
     } // namespace
 
@@ -59,7 +59,7 @@ namespace rojoRHI {
         {
             return;
         }
-        d3d12::flushGraphics(list);
+        d3d12::flushGraphics(list, d3d12::kIndirectDrawDirty);
         execute(list, d3d12::deviceOf(list).roots.draw(), args, maxCount, count);
     }
 
@@ -71,7 +71,7 @@ namespace rojoRHI {
         {
             return;
         }
-        d3d12::flushGraphics(list);
+        d3d12::flushGraphics(list, d3d12::kIndirectDrawDirty);
         // The records choose their first index and base vertex, so they read the same whole-buffer view a direct draw sets.
         d3d12::applyIndexBuffer(list, indices, type);
         execute(list, d3d12::deviceOf(list).roots.drawIndexed(), args, maxCount, count);
@@ -86,7 +86,7 @@ namespace rojoRHI {
             return;
         }
         // The task and mesh entries read drawId from b1 as the vertex stage does (ADR 0018), so the signature writes it here too.
-        d3d12::flushGraphics(list);
+        d3d12::flushGraphics(list, d3d12::kIndirectDrawDirty);
         execute(list, d3d12::deviceOf(list).roots.mesh(), args, maxCount, count);
     }
 } // namespace rojoRHI

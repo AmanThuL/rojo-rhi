@@ -30,8 +30,11 @@ namespace rojoRHI::core {
         uint64_t offset = 0;
     };
 
-    // The one site of VU-rojo-buffer-0009 and VU-rojo-buffer-0020; a null address resolves to a null buffer unchecked. Callers
-    // call it in Debug only: it takes the buffer pool's lock, which Release recording never does (ADR 0020). VU-rojo-buffer-0020
-    // misses an address into a page a later frame claimed again, and any address reached through root data, memory or a shader.
+#ifndef NDEBUG
+    // The one site of VU-rojo-buffer-0009 and VU-rojo-buffer-0020; a null address resolves to a null buffer unchecked. It takes
+    // the buffer pool's lock, which Release recording never does (ADR 0041), so it exists in Debug builds only and a Release
+    // build cannot call it. VU-rojo-buffer-0020 misses an address into a page a later frame claimed again, and any address
+    // reached through root data, memory or a shader.
     ResolvedAddr resolveAddr(DeviceCore& core, const CommandListCore& list, Addr addr);
+#endif
 } // namespace rojoRHI::core

@@ -98,9 +98,15 @@ namespace rojoRHI::metal4 {
             // Metal limits the counter heaps per process or on the system. The refusal holds until the slot's reuse, so a
             // frame asks Metal at most once per heap; the scopes that need this heap go untimed.
             state.refused[number].store(true, std::memory_order_relaxed);
-            if (!m_refusalLogged.exchange(true, std::memory_order_relaxed))
+            // Recording takes no lock and the message sink does (ADR 0041), so only the device's first refusal is noted here
+            // and `reportRefusal`, called by `Device::beginFrame`, warns.
+            uint32_t none = kNone;
+            if (m_refusal.compare_exchange_strong(none, kRecording, std::memory_order_relaxed))
             {
-                ROJORHI_LOG_WARN("Metal refused timestamp heap {} of frame slot {}, so scopes go untimed: {}", number, slot, describe(error));
+                m_refusalSlot = slot;
+                m_refusalNumber = number;
+                m_refusalError = describe(error);
+                m_refusal.store(kRecorded, std::memory_order_release);
             }
             return false;
         }
@@ -114,6 +120,19 @@ namespace rojoRHI::metal4 {
         }
         core::DeviceCounts::add(counts.nativeCreateCalls);
         return true;
+    }
+
+    void Timestamps::reportRefusal()
+    {
+        if (m_refusal.load(std::memory_order_acquire) != kRecorded)
+        {
+            return;
+        }
+        uint32_t recorded = kRecorded;
+        if (m_refusal.compare_exchange_strong(recorded, kReported, std::memory_order_acquire))
+        {
+            ROJORHI_LOG_WARN("Metal refused timestamp heap {} of frame slot {}, so scopes go untimed: {}", m_refusalNumber, m_refusalSlot, m_refusalError);
+        }
     }
 
     uint32_t Timestamps::used(const Slot& slot) const

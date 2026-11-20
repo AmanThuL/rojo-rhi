@@ -268,7 +268,7 @@ namespace rojoRHI {
         CommandListImpl& impl = CommandListImpl::of(*this);
         core::CommandListCore& list = impl.core;
         core::upscale(list, upscaler, params);
-        // The payloads are read without a lock (ADR 0020): the upscaler and the textures stay live until the frame retires.
+        // The payloads are read without a lock (ADR 0041): the upscaler and the textures stay live until the frame retires.
         auto* state = static_cast<metal4::UpscalerState*>(list.device->pool<Upscaler>().native(upscaler));
         const auto& textures = list.device->pool<Texture>();
         // MetalFX encodes its own encoders on the command buffer, which takes them only between encoders.

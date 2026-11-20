@@ -1,7 +1,7 @@
 # 01. Fundamentals
 
 **Status**: Accepted
-**API version**: 1.0.2
+**API version**: 1.0.3
 
 This chapter defines what every other chapter assumes: the shapes of public type, how failure and
 misuse are reported, the threading contract, handles, and the shared value types. Labels, the
@@ -64,7 +64,7 @@ entry point; the classes below state what is safe. An entry's semantics name its
 | Class | Rule | Entry points |
 |---|---|---|
 | Free-threaded | Any thread, concurrently with any other call except those the other classes exclude; may lock internally. | `createDevice`; every `Device::create*`, `Device::loadShaderLibrary`, `Device::pipelineCacheData`, `Device::destroy`; view and sampler slot calls (`reserveViews`, `writeView`, `reserveSamplers`, `writeSampler`, `release`); `Device::queue`, `Device::acquireCommandList`; queries (`capabilities`, `formatCapabilities`, `tileShape`, `address`, `cpuPointer`, `completedValue`, `counters`); `Device::wait`; `Device::beginCapture`, `Device::endCapture`; `setMessageCallback` |
-| Per command list | One thread at a time per `CommandList`; different lists record in parallel. In Release builds takes no locks, except when a list claims a new frame-arena page, for `uploadFrameData` or for the label of a debug scope; a Debug-tier check may take the lock of the pool it reads (ADR 0020). | every `CommandList::` member, including `uploadFrameData` |
+| Per command list | One thread at a time per `CommandList`; different lists record in parallel. In Release builds takes no locks, except when a list claims a new frame-arena page: for `uploadFrameData` or `pushRoot`, for the label of a debug scope, and on Metal 4 for the kernel parameters of a counted draw, of a `fillBuffer` and of a `clearTexture` the backend runs as a kernel; a Debug-tier check may take the lock of the pool it reads (ADR 0041). The rule holds with native validation off: while D3D12's debug layer or GPU-based validation, or Metal's validation layer, is active, the layer and RojoRHI's relay of its messages may lock (ADR 0043). | every `CommandList::` member, including `uploadFrameData` |
 | Per queue | One thread at a time per `Queue`; submissions to one queue are serialized by the caller. | `Queue::submit`, `Queue::present`, `Queue::mapTiles` |
 | Per swapchain | One thread at a time per `Swapchain`, ordered with the `Queue::present` that consumes it. | `Swapchain::acquire`, `Swapchain::resize` |
 | Frame | One thread at a time, never concurrent with a call that uses the open frame. | `Device::beginFrame`, `Device::endFrame`, `Device::scopeTimings` |

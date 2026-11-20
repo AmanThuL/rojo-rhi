@@ -219,7 +219,7 @@ namespace rojoRHI {
         // A pass with the attachments of the list's last pass, which had no resolve, keeps its description.
         if (!repeatsPass(pass, desc))
         {
-            // Payloads are fixed while their textures live, so each is read with one acquire load and no lock (ADR 0020).
+            // Payloads are fixed while their textures live, so each is read with acquire loads and no lock (ADR 0041).
             const auto& texturePool = list.core.device->pool<Texture>();
             pass.targetCount = static_cast<uint32_t>(desc.colors.size());
             pass.resolveCount = 0;

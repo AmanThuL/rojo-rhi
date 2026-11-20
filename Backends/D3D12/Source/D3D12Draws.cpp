@@ -41,7 +41,7 @@ namespace rojoRHI {
             {
                 return;
             }
-            // A record's payload is fixed from creation to retirement, so it is read with one load and no lock (ADR 0020).
+            // A record's payload is fixed from creation to retirement, so it is read with acquire loads and no lock (ADR 0041).
             const auto& buffer = *static_cast<const BufferPayload*>(list.core.device->pool<Buffer>().native(indices));
             const D3D12_INDEX_BUFFER_VIEW view = indexView(buffer, type);
             dynamic.indexHandle = indices;
@@ -58,18 +58,12 @@ namespace rojoRHI {
     } // namespace d3d12
 
     namespace {
-        // Writes 0 to the draw-record constant b1, which `rojoRHI::drawId` reads for a direct draw, unless the native
-        // list holds 0 there: after acquisition it holds no value, and after an indirect draw the last record's.
+        // Also writes 0 to the draw-record constant b1, which `rojoRHI::drawId` reads for a direct draw, unless the
+        // native list holds 0 there: after acquisition it holds no value; after an indirect draw the runtime has reset it
+        // to 0, so that write is redundant but kept.
         void prepareDirect(CommandListImpl& list)
         {
-            d3d12::flushGraphics(list);
-            d3d12::Binding& binding = list.state.binding;
-            if (binding.drawIdDirty)
-            {
-                list.state.list->SetGraphicsRoot32BitConstant(1, 0, 0);
-                core::noteNativeCall(list.core);
-                binding.drawIdDirty = false;
-            }
+            d3d12::flushGraphics(list, d3d12::kDirectDrawDirty);
         }
     } // namespace
 

@@ -1,5 +1,94 @@
 # Changelog
 
+## 1.0.3 (2026-11-20)
+
+- `ROJORHI_VERSION_*` is 1.0.3. The public headers and the shader ABI are unchanged.
+- Fix, Metal 4: a compute encoder that kept a barrier batch and ran a command after it now orders
+  its earlier work before later encoders and lists. The kept batch's `barrierAfterEncoderStages`
+  orders only the encoder's own later commands, so a write, a barrier, another command in the same
+  encoder, then a read in a later list with no second barrier could race. Such an encoder now emits
+  one `barrierAfterStages` before `endEncoding`, from the kept sources it ran to the destinations
+  spent, unless the barrier pending at its end already names them; at a list's `end` that work
+  joins the carry's calls instead of adding one. Chapter 09 states it.
+- Fix, Metal 4: an encoder that emits two barriers before its first command records no coverage
+  for them, so a later batch from the first barrier's sources to the second's destinations ends the
+  encoder and is ordered at the next one. It stayed in the encoder, which emits nothing for a source
+  stage it lacks, so a blit could run after fragment work no barrier ordered it after. The second
+  barrier now also waits for what the first waited for. Chapter 09 states it.
+- Metal 4: a barrier in a compute encoder that has already run a command in its destination stages
+  stays in the encoder as a queue-level and an encoder-level barrier, rather than ending it, unless
+  another batch is pending or the barrier needs visibility the encoder's opening barrier lacks. In
+  the composed frame's ambient-occlusion list this makes 2 native calls fewer, two barriers more
+  and one allocation fewer. Chapter 09 states it.
+- Metal 4: the `Copy` stage of a texture barrier whose `newLayout` is `CopySrc` is the blit stage
+  alone, since that layout is only read by copies, which this backend runs as blits; a list that
+  ends after such a copy no longer carries the dispatch and fragment stages to later lists. Chapter
+  09 states it.
+- Metal 4: the root reaches `buffer(0)` of the list's argument table before the first draw that is
+  not an execute of an indirect command buffer, or the first dispatch, that reads it, rather than at
+  `pushRoot`, so an encoder that only executes indirect command buffers writes none. Chapters 05 and
+  07 state it.
+- Metal 4: Release recording takes no lock but the frame-arena page claim's. A new arena page joins
+  the residency set through a lock-free list that each submission drains before it commits the set,
+  so the page is resident before the first submission that uses it, and a submission whose set is
+  unchanged reads two atomics instead of one. A timestamp heap that Metal refuses is reported once
+  per device, by the next `beginFrame`, rather than when a list claims it.
+- D3D12: a texture barrier that keeps `ColorAttachment` and names only color-attachment access in
+  the `ColorAttachment` stage on both sides sends no native call, since render-target access needs
+  no flush between sequential writes; a batch of only such barriers makes no `Barrier` call and
+  counts no `nativeBarriers`. Chapter 09 states it.
+- D3D12: `acquireCommandList` sends `Reset` and nothing more. The descriptor heaps are set at a
+  list's first graphics `setPipeline`, dispatch or storage clear, the graphics root signature at its
+  first graphics `setPipeline` and the compute one at its first dispatch, so a list that only
+  copies, uploads or fills sets none of them. After an upscale, the next dispatch or graphics
+  `setPipeline` sets its side's root signature again. Chapters 07 and 12 state it.
+- D3D12: a draw tests the reasons its graphics state must be flushed as one word; the native calls
+  of every sequence are unchanged.
+- Reference: chapter 09 states that a fence orders two uses of the same memory, on one queue as
+  between two: a pair a fence orders needs no barrier, `VU-rojo-sync-0021` and `VU-rojo-sync-0024`
+  bind only the pairs no fence orders, and a barrier that only changes a texture's layout may name
+  no destination, `Stage::None`, when a fence orders every later use of what it covers. The
+  validation tracker already judged pairs this way.
+- Reference: chapters 01 and 07 list each frame-arena page claim Release recording may lock for:
+  frame data (`uploadFrameData`, `pushRoot`), a debug scope's label and, on Metal 4, the kernel
+  parameters of a counted draw, a kernel `fillBuffer` and a kernel `clearTexture`, which Metal 4 has
+  claimed since 1.0.0 (ADR 0041). The
+  rule holds with native validation off; while D3D12's debug layer or GPU-based validation, or
+  Metal's validation layer, is active, the layer and RojoRHI's relay of its messages may lock (ADR
+  0043).
+- Performance: [`docs/performance.md`](docs/performance.md) carries Metal 4's sixth round and
+  D3D12's second against native code. Every budget either round missed was predicted with its cause
+  before timing, came in within its predicted bound, and is tracked for a future release.
+  - Metal 4, on an Apple M4 Pro under macOS 27.2.1: a 256-byte upload's fixed cost per command list,
+    timed as a batch of 64 lists, is 83 ns against a budget of 18 (predicted at most 115), the cost
+    of a list outside its entries: the pool's mutex and the label compare at acquisition, the first
+    frame-arena claim and the autorelease pool `end` opens. A render pass at 10,000 a list costs
+    195.79 ns more than native against a budget of 189.67 (predicted at most 300), RojoRHI's own
+    work in its seven entries a pass, about 80 ns of it in the two native calls native code does not
+    make, the argument table's bind and the winding. The composed frame makes 146 heap allocations
+    on its recording thread against native's 145, for the wait on the queue's carry fence in a
+    compute encoder that dispatches, which the backend keeps because the fence saves GPU time.
+    Every other budget is met, the composed frame's GPU time 0.67% below native's, and RojoRHI's own
+    allocations are zero in every frame.
+  - D3D12, conformant (T1) on one GPU, an NVIDIA GeForce RTX 3080 Ti on driver 621.14, with its
+    overhead budgets not yet met and other vendors unverified: CPU time misses in seven rows. The
+    fixed cost per command list of a draw with a root block, an indexed draw, a pipeline switch and
+    draw, and a render pass, 1,488, 1,386, 1,241 and 1,295 ns against budgets of 1,019, 1,014, 1,082
+    and 981 (predicted at most 2,000, 1,900, 1,800 and 1,900), is the work of a list outside its
+    entries: the core's list begin, the first draw's flush, the core's pass begin and the scope's
+    begin, and `setPipeline`'s resolve and topology. A pipeline switch and draw costs 10.89 ns more
+    than native against 10.00 (at most 16), in the pipeline's resolve, the topology and the draw's
+    flush; a render pass 108.64 ns more against 43.86 (at most 130), in the scope's and the pass's
+    bookkeeping, the starting state chapter 06 asks of every pass and the core's work for a barrier
+    the lowering leaves out; and a counted indirect draw 12.00 ns more against 6.01 (at most 24), in
+    the draw's flush, the checks of its cached indices and its call count. The composed frame's GPU
+    time, the allocations, the native calls and the pipelines after warm-up meet their budgets.
+- Known issue, D3D12: on the RTX 3080 Ti with driver 621.14, a Debug process with GPU-based
+  validation has three times blocked forever in `destroyDevice`, at the device's final release
+  inside the driver, each on a full test run that created a fresh D3D12 shader cache entry; 20
+  further such runs, with and without validation, did not hang. It has never been seen with
+  validation off. It is tracked for a future release.
+
 ## 1.0.2 (2026-11-18)
 
 - `ROJORHI_VERSION_*` is 1.0.2. The interface and the shader ABI are unchanged.

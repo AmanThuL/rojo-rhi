@@ -220,3 +220,36 @@ TEST_CASE("VU-rojo-queue-0005 a buffer is filled on Compute over a placed textur
         submitTo(kit.device, compute, QueueType::Compute);
     });
 }
+
+TEST_CASE("VU-rojo-sync-0024 a texture moved by a barrier with no destination is read on the same queue with no wait on the round trip", "[contract][death]")
+{
+    ROJORHI_EXPECT_DEATH("VU-rojo-sync-0024", [] {
+        PassKit kit(QueueType::Graphics, true);
+        const Texture written = texture(kit, TextureUsage::Sampled);
+        const Buffer staging = storage(kit);
+        const Buffer readback = kit.buffer(BufferUsage::ShaderWrite, 64 * 1024);
+        const TextureRegion region{ .extent = { PassKit::kSize, 1, 1 } };
+        const Fence fence = *kit.device.createFence(0, "test.fence");
+        const std::array<FenceValue, 1> signalled{ FenceValue{ fence, 1 } };
+        const std::array<FenceValue, 1> returned{ FenceValue{ fence, 2 } };
+        const std::array<TextureBarrier, 1> toWrite{ TextureBarrier{
+            .texture = written, .dstStage = Stage::Copy, .dstAccess = Access::CopyWrite, .oldLayout = Layout::Undefined, .newLayout = Layout::CopyDst } };
+        kit.list.barrier({}, {}, toWrite);
+        kit.list.copyBufferToTexture(staging, BufferTextureLayout{ .rowPitch = 256 }, written, region);
+        const std::array<TextureBarrier, 1> toRead{ TextureBarrier{ .texture = written,
+                                                                    .srcStage = Stage::Copy,
+                                                                    .srcAccess = Access::CopyWrite,
+                                                                    .dstStage = Stage::None,
+                                                                    .dstAccess = Access::None,
+                                                                    .oldLayout = Layout::CopyDst,
+                                                                    .newLayout = Layout::CopySrc } };
+        kit.list.barrier({}, {}, toRead);
+        submitTo(kit.device, kit.list, QueueType::Graphics, {}, signalled);
+        kit.device.queue(QueueType::Compute).submit({}, signalled, returned);
+        // The barrier names no destination and the later submission does not wait on the value Compute returned, so the
+        // read follows the write with nothing ordering them.
+        CommandList later = kit.device.acquireCommandList(QueueType::Graphics, "test.later");
+        later.copyTextureToBuffer(written, region, readback, BufferTextureLayout{ .rowPitch = 256 });
+        submitTo(kit.device, later, QueueType::Graphics);
+    });
+}

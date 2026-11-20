@@ -409,12 +409,16 @@ TEST_CASE("a Storage-only texture clears once per mip through two transient desc
         device.beginFrame();
         CommandList list = device.acquireCommandList(QueueType::Graphics, "test.clear");
         record(list, enter(texture));
+        const d3d12::Binding& binding = CommandListImpl::of(list).state.binding;
+        CHECK_FALSE(binding.heapsSet);
         const uint64_t calls = recordCalls(list);
         const uint64_t barriers = nativeBarriers(list);
         const uint64_t writes = descriptorWrites(device);
         list.clearTexture(texture, {}, { .color = kFirst });
-        // Two barriers and one ClearUnorderedAccessViewFloat per mip, each through a ring view written twice.
-        CHECK(recordCalls(list) - calls == 2u + desc.mips);
+        CHECK(binding.heapsSet);
+        // Two barriers, SetDescriptorHeaps, since the list has read no shader-visible view before, and one
+        // ClearUnorderedAccessViewFloat per mip, each through a ring view written twice.
+        CHECK(recordCalls(list) - calls == 3u + desc.mips);
         CHECK(nativeBarriers(list) - barriers == 2u);
         CHECK(descriptorWrites(device) - writes == 2u * desc.mips);
         record(list, toCopySrc(texture));
@@ -454,7 +458,8 @@ TEST_CASE("a Storage-only texture clears on a Compute list", "[d3d12]")
     const uint64_t barriers = nativeBarriers(compute);
     const uint64_t writes = descriptorWrites(device);
     compute.clearTexture(texture, {}, { .color = { -2.5f, 0.0f, 0.0f, 0.0f } });
-    CHECK(recordCalls(compute) - calls == 2u + 2u);
+    // Two barriers, SetDescriptorHeaps for the list's first shader-visible view and one clear per mip.
+    CHECK(recordCalls(compute) - calls == 3u + 2u);
     CHECK(nativeBarriers(compute) - barriers == 2u);
     CHECK(descriptorWrites(device) - writes == 4u);
     record(compute, toCopySrc(texture));
@@ -778,9 +783,11 @@ TEST_CASE("a clear right after a fill binds no root signature or pipeline", "[d3
     list.fillBuffer(*buffer, 0, kSize, kPattern);
     const uint64_t calls = recordCalls(list);
     list.clearTexture(texture, {}, { .color = { 2.0f, 0.0f, 0.0f, 0.0f } });
-    // The bracket and one clear: the heaps the list set at acquisition are all ClearUnorderedAccessViewFloat needs.
-    CHECK(recordCalls(list) - calls == 3u);
+    // The bracket, SetDescriptorHeaps and one clear: the fill kernel's root signature indexes no heap, so the fill set
+    // none, and the heaps are all ClearUnorderedAccessViewFloat needs.
+    CHECK(recordCalls(list) - calls == 4u);
     const d3d12::Binding& binding = CommandListImpl::of(list).state.binding;
+    CHECK(binding.heapsSet);
     CHECK(binding.computeRoot == d3d12::ComputeRoot::Kernel);
     CHECK(binding.computePipeline == impl.kernels.fill());
     record(list, toCopySrc(texture));

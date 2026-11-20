@@ -30,7 +30,7 @@ namespace rojoRHI {
         d3d12::ListState& state = list.state;
         d3d12::Binding& binding = state.binding;
         ID3D12PipelineState* fill = impl.kernels.fill();
-        // The payload is fixed from creation to retirement, so it is read with one acquire load and no lock.
+        // The payload is fixed from creation to retirement, so it is read with acquire loads and no lock.
         const auto& payload = *static_cast<const d3d12::BufferPayload*>(list.core.device->pool<Buffer>().native(dst));
         // A list's compute side keeps the kernel bound until a dispatch rebinds the caller's, so fills in a row bind it once.
         if (binding.computeRoot != d3d12::ComputeRoot::Kernel || binding.computePipeline != fill)
@@ -43,6 +43,7 @@ namespace rojoRHI {
             binding.computePipeline = fill;
             // A list holds one pipeline for both sides, so the fill's replaces any graphics pipeline.
             binding.graphicsPipeline = nullptr;
+            binding.graphicsDirty |= d3d12::kGraphicsPipelineDirty;
         }
         // The compute side holds the kernel root signature, so the next dispatch binds the global one and the root again.
         binding.computeRootDirty = true;

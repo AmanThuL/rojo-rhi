@@ -246,8 +246,10 @@ namespace rojoRHI {
             DeviceImpl& impl = *static_cast<DeviceImpl*>(core.retireHooks().context);
             const BufferDesc desc{ .size = size, .memory = Memory::Upload, .usage = BufferUsage::IndirectArgs, .label = kArenaLabel };
             core::BufferRecord record = core::prepareBuffer(core, desc, {}, {}, {});
-            // The page's raw view is taken here, inside the arena's claim, the one lock recording may take (ADR 0020); the view
-            // allocator's lock and then the buffer pool's are each released before the next is taken.
+            // The page's raw view is taken here, inside the arena's claim, the one lock Release recording takes with native
+            // validation off (ADR 0041, ADR 0043); only a claim that creates a page reaches here. The view allocator's lock, the
+            // buffer pool's and the directory's are each released before the next is taken. The view allocator and the
+            // directory are leaves, so the order stays acyclic (d3d12-backend.md, "Threading and lock order").
             const NativeBufferDesc native{ .size = size, .memory = Memory::Upload, .writable = false, .views = true, .label = record.label };
             Result<BufferPayload*> payload = createPayload(impl, native, {});
             if (!payload)

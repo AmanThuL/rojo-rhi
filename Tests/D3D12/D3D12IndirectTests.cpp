@@ -309,13 +309,13 @@ TEST_CASE("an indirect draw after setRoot costs the root SRV and one ExecuteIndi
     uint64_t before = recordCalls(list);
     list.drawIndirect(device.address(args), 1);
     CHECK(recordCalls(list) - before == 2u);
-    CHECK_FALSE(binding.graphicsRootDirty);
-    CHECK(binding.drawIdDirty);
+    CHECK_FALSE(binding.dirty(d3d12::kGraphicsRootDirty));
+    CHECK(binding.dirty(d3d12::kDrawIdDirty));
     // ExecuteIndirect alone.
     before = recordCalls(list);
     list.drawIndirect(device.address(args), 1);
     CHECK(recordCalls(list) - before == 1u);
-    CHECK(binding.drawIdDirty);
+    CHECK(binding.dirty(d3d12::kDrawIdDirty));
     list.endRenderPass();
     run(device, list, done);
     CHECK(messages.count() == 0u);
@@ -351,7 +351,7 @@ TEST_CASE("a direct draw after an indirect draw writes b1 once; a second direct 
     uint64_t before = recordCalls(list);
     list.drawIndirect(device.address(args), 1);
     CHECK(recordCalls(list) - before == 2u);
-    CHECK(binding.drawIdDirty);
+    CHECK(binding.dirty(d3d12::kDrawIdDirty));
     // The root and ExecuteIndirect again, for the record that draws nothing.
     (void)list.pushRoot(VertexRoot{ device.address(directOutput), 0, kVertices });
     before = recordCalls(list);
@@ -361,7 +361,7 @@ TEST_CASE("a direct draw after an indirect draw writes b1 once; a second direct 
     before = recordCalls(list);
     list.draw(kVertices);
     CHECK(recordCalls(list) - before == 2u);
-    CHECK_FALSE(binding.drawIdDirty);
+    CHECK_FALSE(binding.dirty(d3d12::kDrawIdDirty));
     // DrawInstanced alone: the list holds 0 in b1.
     before = recordCalls(list);
     list.draw(kVertices);
@@ -399,12 +399,12 @@ TEST_CASE("drawMeshTasksIndirect is one ExecuteIndirect, and the next direct mes
     uint64_t before = recordCalls(list);
     list.drawMeshTasks(1, 1, 1);
     CHECK(recordCalls(list) - before == 2u);
-    CHECK_FALSE(binding.drawIdDirty);
+    CHECK_FALSE(binding.dirty(d3d12::kDrawIdDirty));
     // ExecuteIndirect alone.
     before = recordCalls(list);
     list.drawMeshTasksIndirect(device.address(args), 1);
     CHECK(recordCalls(list) - before == 1u);
-    CHECK(binding.drawIdDirty);
+    CHECK(binding.dirty(d3d12::kDrawIdDirty));
     // b1 and DispatchMesh, then DispatchMesh alone.
     before = recordCalls(list);
     list.drawMeshTasks(1, 1, 1);
@@ -513,8 +513,8 @@ TEST_CASE("maxCount 0 records nothing", "[d3d12]")
     list.drawMeshTasksIndirect(device.address(meshArgs), 0);
     CHECK(afterBind - before == 1u);
     CHECK(recordCalls(list) == afterBind);
-    CHECK(state.binding.graphicsRootDirty);
-    CHECK_FALSE(state.binding.drawIdDirty);
+    CHECK(state.binding.dirty(d3d12::kGraphicsRootDirty));
+    CHECK_FALSE(state.binding.dirty(d3d12::kDrawIdDirty));
     CHECK(state.dynamic.indexBuffer.BufferLocation == 0u);
     list.endRenderPass();
     run(device, list, done);

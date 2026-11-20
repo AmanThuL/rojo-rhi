@@ -1,7 +1,7 @@
 # 09. Synchronization
 
 **Status**: Accepted
-**API version**: 1.0.2
+**API version**: 1.0.3
 
 Barriers are explicit and batched. Nothing is tracked in Release builds: the caller, usually a
 render graph, states every dependency, and RojoRHI lowers it without inspecting resource state.
@@ -120,7 +120,7 @@ A bit set of pipeline stages, modelled on D3D12 enhanced barriers and Vulkan syn
 | `ComputeShader` | `MTL::StageDispatch` | `SYNC_COMPUTE_SHADING` | `COMPUTE_SHADER` |
 | `ColorAttachment` | `MTL::StageFragment` | `SYNC_RENDER_TARGET` | `COLOR_ATTACHMENT_OUTPUT` |
 | `DepthStencil` | `MTL::StageFragment` | `SYNC_DEPTH_STENCIL` | `EARLY_FRAGMENT_TESTS \| LATE_FRAGMENT_TESTS` |
-| `Copy` | `MTL::StageBlit \| MTL::StageDispatch \| MTL::StageFragment`: blits, the backend kernels of `fillBuffer` and `clearTexture`, and a `clearTexture` run as a render-pass load action | `SYNC_COPY`, plus `SYNC_COMPUTE_SHADING` for the `fillBuffer` kernel and `SYNC_RENDER_TARGET`, `SYNC_DEPTH_STENCIL` or `SYNC_CLEAR_UNORDERED_ACCESS_VIEW` for `clearTexture`, which the backend brackets with transitions from `CopyDst` into the render-target, depth-stencil-write or unordered-access layout and back; on a `Compute` list without `SYNC_RENDER_TARGET` and `SYNC_DEPTH_STENCIL`, on a `Copy` list `SYNC_COPY` alone | `COPY \| CLEAR` |
+| `Copy` | `MTL::StageBlit \| MTL::StageDispatch \| MTL::StageFragment`: blits, the backend kernels of `fillBuffer` and `clearTexture`, and a `clearTexture` run as a render-pass load action; the `Copy` bit of a texture barrier's destination whose `newLayout` is `CopySrc` is `MTL::StageBlit` alone, since that layout is used only as the source of a copy, which this backend runs as a blit, and a fill or a clear needs another layout and a barrier of its own | `SYNC_COPY`, plus `SYNC_COMPUTE_SHADING` for the `fillBuffer` kernel and `SYNC_RENDER_TARGET`, `SYNC_DEPTH_STENCIL` or `SYNC_CLEAR_UNORDERED_ACCESS_VIEW` for `clearTexture`, which the backend brackets with transitions from `CopyDst` into the render-target, depth-stencil-write or unordered-access layout and back; on a `Compute` list without `SYNC_RENDER_TARGET` and `SYNC_DEPTH_STENCIL`, on a `Copy` list `SYNC_COPY` alone | `COPY \| CLEAR` |
 | `Resolve` | `MTL::StageFragment` (store-action resolve) | `SYNC_RENDER_TARGET \| SYNC_RESOLVE`: a resolve target stays in `LAYOUT_RENDER_TARGET` outside the backend's resolve transitions, whose render-target scope the barrier chains with | `COLOR_ATTACHMENT_OUTPUT` (render-pass resolve) |
 | `AllGraphics` | the union of its bits: `MTL::StageDispatch \| MTL::StageVertex \| MTL::StageObject \| MTL::StageMesh \| MTL::StageFragment`, with `MTL::StageDispatch` from `IndirectArgs` for the argument-encoding kernel | `SYNC_DRAW \| SYNC_EXECUTE_INDIRECT \| SYNC_RESOLVE` | `ALL_GRAPHICS` |
 | `All` | `MTL::StageAll` | `SYNC_ALL` | `ALL_COMMANDS` |

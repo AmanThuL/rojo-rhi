@@ -20,6 +20,9 @@ using test::PassKit;
 
 TEST_CASE("an address resolves to its buffer, record and byte offset", "[core]")
 {
+#ifdef NDEBUG
+    SKIP("resolveAddr takes the buffer pool's lock, so it exists in Debug builds only (ADR 0041)");
+#else
     PassKit kit;
     const Buffer buffer = kit.buffer(BufferUsage::IndirectArgs, 512);
     core::DeviceCore& device = core::coreOf(kit.device);
@@ -29,19 +32,27 @@ TEST_CASE("an address resolves to its buffer, record and byte offset", "[core]")
     REQUIRE(at.record != nullptr);
     CHECK(at.record->size == 512);
     kit.finish();
+#endif
 }
 
 TEST_CASE("the null address resolves to no buffer and issues no rule", "[core]")
 {
+#ifdef NDEBUG
+    SKIP("resolveAddr takes the buffer pool's lock, so it exists in Debug builds only (ADR 0041)");
+#else
     PassKit kit;
     const core::ResolvedAddr at = core::resolveAddr(core::coreOf(kit.device), core::coreOf(kit.list), Addr{});
     CHECK(at.buffer.bits == 0);
     CHECK(at.record == nullptr);
     kit.finish();
+#endif
 }
 
 TEST_CASE("frame data resolves on a list of the frame that produced it", "[core]")
 {
+#ifdef NDEBUG
+    SKIP("resolveAddr takes the buffer pool's lock, so it exists in Debug builds only (ADR 0041)");
+#else
     PassKit kit;
     const std::array<std::byte, 8> bytes = {};
     const Addr data = kit.list.uploadFrameData(bytes, 256);
@@ -50,6 +61,7 @@ TEST_CASE("frame data resolves on a list of the frame that produced it", "[core]
     CHECK(at.offset == 0);
     CHECK(at.record->label == "rojorhi.frameArena.page");
     kit.finish();
+#endif
 }
 
 TEST_CASE("an arena page's record holds the frame of the list that claimed it in Debug builds", "[core]")

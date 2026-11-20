@@ -107,23 +107,28 @@ namespace rojoRHI::d3d12 {
         return *static_cast<DeviceImpl*>(list.core.device->retireHooks().context);
     }
 
+    void setHeaps(CommandListImpl& list)
+    {
+        const DeviceImpl& impl = deviceOf(list);
+        ID3D12DescriptorHeap* const heaps[] = { impl.descriptors.views(), impl.descriptors.samplers() };
+        list.state.list->SetDescriptorHeaps(2, heaps);
+        core::noteNativeCall(list.core);
+        list.state.binding.heapsSet = true;
+    }
+
     void resumeAfterVendorWork(CommandListImpl& list)
     {
         ListState& state = list.state;
-        const DeviceImpl& impl = deviceOf(list);
         // Shaders index both heaps directly, so the heaps are set before the root signatures the next commands set again.
-        ID3D12DescriptorHeap* const heaps[] = { impl.descriptors.views(), impl.descriptors.samplers() };
-        state.list->SetDescriptorHeaps(2, heaps);
-        core::noteNativeCall(list.core);
+        setHeaps(list);
         Binding& binding = state.binding;
-        binding.graphicsSignatureDirty = true;
+        binding.graphicsSignatureOwed = true;
         binding.computeRoot = ComputeRoot::Foreign;
-        binding.graphicsRootDirty = true;
         binding.computeRootDirty = true;
-        binding.drawIdDirty = true;
         // One pipeline slot serves both sides, and neither holds a known pipeline now.
         binding.computePipeline = nullptr;
         binding.graphicsPipeline = nullptr;
+        binding.graphicsDirty |= kGraphicsPipelineDirty | kGraphicsRootDirty | kDrawIdDirty;
         // Every draw after the vendor work follows a setPipeline in a later pass, which sets a topology the list does not hold.
         state.dynamic.topology = D3D_PRIMITIVE_TOPOLOGY_UNDEFINED;
     }

@@ -64,19 +64,20 @@ namespace rojoRHI {
                 return std::unexpected(Error{ ErrorCategory::OutOfMemory, std::format("no device memory for {} bytes of a frame arena page", size) });
             }
             buffer->setLabel(makeString(record.label));
-            // The page joins the device set inside the arena's claim, the one lock recording may take (ADR 0020).
-            impl.residency.add(buffer);
             std::unique_ptr<BufferPayload> payload = makeBufferPayload(core, buffer);
             record.native = payload.get();
             Result<Buffer> page = core::addFrameArenaPage(core, std::move(record));
             if (!page)
             {
-                impl.residency.remove(buffer);
                 buffer->release();
                 return std::unexpected(std::move(page.error()));
             }
             // The pool's record owns the payload now; the retire hook frees it.
-            const BufferPayload* owned = payload.release();
+            BufferPayload* owned = payload.release();
+            // The claim holds the arena's lock and the buffer pool's creation, and nothing that waits on native work: the page
+            // joins the device residency set at the next commit, which any submission or staged copy makes before a list that
+            // uses the page can run (ADR 0041). `Residency::add` would wait behind a `commit` in flight.
+            impl.residency.addDeferred(buffer, owned->residencyJoin);
 #ifndef NDEBUG
             // Only Debug checks decode addresses, so only Debug builds keep the address map.
             impl.addresses.insert(owned->address, size, core::HandlePool<Buffer, core::BufferRecord>::slotIndex(*page), buffer);
@@ -205,7 +206,7 @@ namespace rojoRHI {
     Addr CommandList::uploadFrameData(std::span<const std::byte> bytes, uint32_t alignment)
     {
         core::CommandListCore& list = CommandListImpl::of(*this).core;
-        // Only a list with no page, or a full one, takes the arena's lock to claim a page (ADR 0020).
+        // Only a list with no page, or a full one, takes the arena's lock to claim a page (ADR 0041).
         const core::ArenaAllocation place = core::allocateFrameData(*list.device, list, bytes, alignment, metal4::createArenaPage, list.device);
         std::memcpy(place.memory, bytes.data(), bytes.size());
         return Addr{ static_cast<uint32_t>(place.address), static_cast<uint32_t>(place.address >> 32) };

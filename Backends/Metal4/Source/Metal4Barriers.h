@@ -57,9 +57,25 @@ namespace rojoRHI::metal4 {
         MTL::Stages openSource = 0;      // Empty when the opening emitted none.
         MTL::Stages openDestination = 0; // The open encoder's stages its opening barrier held back; empty when it emitted none.
         MTL4::VisibilityOptions openVisibility = 0;
+        // The stages a compute encoder had run a command in when `barrierInOpen` made its barrier the opening one, and has
+        // run none in since: the queue-level part orders only commands the encoder encodes after it, so these stages
+        // still count as unrun for the encoder's end. Empty for an opening barrier emitted before any command.
+        MTL::Stages preRan = 0;
+        // The stages and visibility two opening barriers of one encoder held back, which `openSource`, `openDestination` and
+        // `openVisibility` do not stand for: the unions of two barriers order less than each does. They only return to the
+        // pending barrier with the stages no command ran in.
+        MTL::Stages mergedSource = 0;
+        MTL::Stages mergedDestination = 0;
+        MTL4::VisibilityOptions mergedVisibility = 0;
         MTL::Stages deferredSource = 0;      // Held back until a command in one of its stages.
         MTL::Stages deferredDestination = 0; // All of the open encoder's; empty when none is held back.
         MTL4::VisibilityOptions deferredVisibility = 0;
+        // What the open compute encoder's own commands spent of the barriers it kept: the sources it ran in, the destination
+        // stages a command followed in, and their visibility. Nothing later orders that work, so the encoder ends with a
+        // producer barrier for it.
+        MTL::Stages keptSource = 0;
+        MTL::Stages keptDestination = 0;
+        MTL4::VisibilityOptions keptVisibility = 0;
         // MetalFX's encoders update it when they finish. The first compute and the first render encoder after the
         // upscale each wait on it before their opening barrier, and the trailing encoder waits on it at
         // `CommandList::end`.
@@ -102,11 +118,43 @@ namespace rojoRHI::metal4 {
         // it.
         void returnUnrun(MTL::Stages ran)
         {
-            const MTL::Stages unrun = openDestination & ~ran;
+            const MTL::Stages unrun = (openDestination | mergedDestination) & ~ran;
             if (unrun != 0)
             {
-                merge(openSource, unrun, openVisibility);
+                merge(openSource | mergedSource, unrun, openVisibility | mergedVisibility);
             }
+        }
+
+        // The encoder's opening barrier meets one emitted before its first command: neither stands for both.
+        void mergeOpened(MTL::Stages source, MTL::Stages destination, MTL4::VisibilityOptions visibility)
+        {
+            mergedSource |= source | openSource;
+            mergedDestination |= destination | openDestination;
+            mergedVisibility |= visibility | openVisibility;
+            openSource = 0;
+            openDestination = 0;
+            openVisibility = 0;
+        }
+
+        void keep(MTL::Stages source, MTL::Stages destination, MTL4::VisibilityOptions visibility)
+        {
+            keptSource |= source;
+            keptDestination |= destination;
+            keptVisibility |= visibility;
+        }
+
+        // Whether a barrier from `source` to `destination` with `visibility` orders what the encoder, which ran `ran`,
+        // spent of its kept ones.
+        bool keptWithin(MTL::Stages ran, MTL::Stages source, MTL::Stages destination, MTL4::VisibilityOptions visibility) const
+        {
+            return (keptSource & ran & ~source) == 0 && (keptDestination & ~destination) == 0 && (keptVisibility & ~visibility) == 0;
+        }
+
+        void clearKept()
+        {
+            keptSource = 0;
+            keptDestination = 0;
+            keptVisibility = 0;
         }
 
         void clearOpen()
@@ -114,6 +162,10 @@ namespace rojoRHI::metal4 {
             openSource = 0;
             openDestination = 0;
             openVisibility = 0;
+            preRan = 0;
+            mergedSource = 0;
+            mergedDestination = 0;
+            mergedVisibility = 0;
         }
 
         void reset()
@@ -122,13 +174,18 @@ namespace rojoRHI::metal4 {
         }
     };
 
-    // The dispatch stage when the barrier holds it, the list uses the carry fence, no barrier of the list named
-    // `IndirectArgs` as a destination, and the pending visibility has no `ResourceAlias`, which a fence cannot flush;
-    // else none.
+    // The dispatch stage among `destination` when the list uses the carry fence, no barrier of the list named
+    // `IndirectArgs` as a destination, and `visibility` has no `ResourceAlias`, which a fence cannot flush; else none.
+    inline MTL::Stages fencedStages(const BarrierState& barriers, const MTL::Fence* carry, MTL::Stages destination, MTL4::VisibilityOptions visibility)
+    {
+        const bool fenced = carry != nullptr && !barriers.argsNamed && (visibility & MTL4::VisibilityOptionResourceAlias) == 0;
+        return fenced ? destination & MTL::StageDispatch : MTL::Stages{ 0 };
+    }
+
+    // The same for the pending barrier.
     inline MTL::Stages fencedStages(const BarrierState& barriers, const MTL::Fence* carry)
     {
-        const bool fenced = carry != nullptr && !barriers.argsNamed && (barriers.pendingVisibility & MTL4::VisibilityOptionResourceAlias) == 0;
-        return fenced ? barriers.pendingDestination & MTL::StageDispatch : MTL::Stages{ 0 };
+        return fencedStages(barriers, carry, barriers.pendingDestination, barriers.pendingVisibility);
     }
 
     // The upscale's fence wait comes first, for every stage of the encoder's kind (a render encoder's `stages` may be

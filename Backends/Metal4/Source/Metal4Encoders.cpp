@@ -31,14 +31,25 @@ namespace rojoRHI::metal4 {
             {
                 // An encoder opened with no command, as binding a compute pipeline opens it, may meet a barrier before its
                 // first command: the barrier merged into the pending one, which this encoder owes before any command. It
-                // waits at queue level like the opening barrier, and what it covers joins what the opening covered.
+                // waits at queue level like the opening barrier.
                 const MTL::Stages source = m_barriers.openSource;
                 const MTL::Stages destination = m_barriers.openDestination;
                 const MTL4::VisibilityOptions visibility = m_barriers.openVisibility;
+                const bool second = destination != 0 || m_barriers.mergedDestination != 0;
+                if (second)
+                {
+                    // The chain rule orders this barrier's destinations after what the earlier opening waited for too, when its
+                    // sources name that opening's destinations: the sources it waited for join this one's. Widening only waits
+                    // more.
+                    m_barriers.pendingSource |= source | m_barriers.mergedSource;
+                }
                 emitAtOpen(list, m_barriers, m_compute, kComputeStages);
-                m_barriers.openSource |= source;
-                m_barriers.openDestination |= destination;
-                m_barriers.openVisibility |= visibility;
+                if (second)
+                {
+                    // Two barriers order S1 -> D1 and S2 -> D2, which is less than their unions: the encoder records no coverage
+                    // on their strength. What they held back still returns to the pending barrier if no command ran in it.
+                    m_barriers.mergeOpened(source, destination, visibility);
+                }
             }
             waitCarry(list, command);
             // A command follows: the encoder-level barrier held back goes before it when it holds the command's stage back.
@@ -118,16 +129,21 @@ namespace rojoRHI::metal4 {
 
     bool Encoders::barrierInOpen(core::CommandListCore& list, MTL::Stages source, MTL::Stages destination, MTL4::VisibilityOptions visibility)
     {
-        if (m_kind != EncoderKind::Compute || m_kernelsOnly || m_barriers.openDestination != 0)
+        if (m_kind != EncoderKind::Compute || m_kernelsOnly || m_barriers.openDestination != 0 || m_barriers.mergedDestination != 0)
+        {
+            return false;
+        }
+        // A batch still pending waits for sources the pair would not name, and a chain through it needs them in one barrier,
+        // as the merge into the pending barrier gives.
+        if (m_barriers.pendingDestination != 0)
         {
             return false;
         }
         // stages() reads the stages the encoder's commands ran in; it records nothing. A command already run in a destination
-        // stage lies before the barrier, so the pair could not stand for an opening barrier there.
-        if ((m_compute->stages() & destination) != 0)
-        {
-            return false;
-        }
+        // stage lies before the barrier: the queue-level part, which orders the commands encoded after it, still orders the
+        // later ones, and the encoder-level part orders the earlier ones, but the pair no longer stands for the opening barrier
+        // of those stages until a command in them follows (`preRan`).
+        const MTL::Stages before = m_compute->stages() & destination;
         // The queue-level barrier orders only earlier encoders' work, and Metal may apply it earlier in the encoder, which
         // only waits more; the encoder-level part orders the encoder's own work before its next command in `destination`.
         m_compute->barrierAfterQueueStages(source, destination, visibility);
@@ -136,6 +152,7 @@ namespace rojoRHI::metal4 {
         m_barriers.openSource = source;
         m_barriers.openDestination = destination;
         m_barriers.openVisibility = visibility;
+        m_barriers.preRan = before;
         m_barriers.defer(source, destination, visibility);
         return true;
     }
@@ -251,7 +268,12 @@ namespace rojoRHI::metal4 {
     {
         // An encoder-level barrier still held back orders nothing in later encoders, so it waits for them at queue level.
         m_barriers.queueDeferred();
-        m_barriers.returnUnrun(ranStages());
+        m_barriers.returnUnrun(ranSinceOpen());
+    }
+
+    MTL::Stages Encoders::ranSinceOpen() const
+    {
+        return ranStages() & ~m_barriers.preRan;
     }
 
     MTL::Stages Encoders::ranStages() const
@@ -282,34 +304,65 @@ namespace rojoRHI::metal4 {
         }
         BarrierState& barriers = m_barriers;
         const MTL::Stages ran = ranStages();
+        const MTL::Stages ranSince = ranSinceOpen();
         // Every source stage the encoder's opening barrier waited for at queue level lies before a command the encoder ran in
         // a stage that barrier held, and any other source work lies in the encoder: once the stages it ran complete, every
         // source the pending barrier names has completed, in this list and in earlier ones. A list that upscaled owes
         // MetalFX's work, which only its fence orders, so its trailing encoder emits what is owed.
-        const bool covered = (barriers.pendingSource & ~barriers.openSource) == 0 && (barriers.openDestination & ran) != 0;
+        const bool covered = (barriers.pendingSource & ~barriers.openSource) == 0 && (barriers.openDestination & ranSince) != 0;
         if (barriers.pendingDestination != 0 && barriers.owedFence == nullptr && covered)
         {
             MTL4::CommandEncoder* encoder =
                 m_kind == EncoderKind::Compute ? static_cast<MTL4::CommandEncoder*>(m_compute) : static_cast<MTL4::CommandEncoder*>(m_render);
-            const MTL::Stages after = (barriers.pendingSource | barriers.openDestination) & ran;
-            MTL::Stages destination = barriers.pendingDestination;
-            if (const MTL::Stages carried = fencedStages(barriers, m_carryFence); carried != 0)
+            const MTL::Stages after = (barriers.pendingSource & ran) | (barriers.openDestination & ranSince);
+            // Later dispatches wait on the fence, and a counted draw's kernels, which read only records an IndirectArgs barrier
+            // orders, do not: a barrier from these stages to the dispatch stage would hold them back too.
+            const MTL::Stages carried = fencedStages(barriers, m_carryFence);
+            MTL::Stages fenceAfter = carried != 0 ? after : 0;
+            MTL::Stages barrierAfter = 0;
+            MTL::Stages barrierDestination = barriers.pendingDestination & ~carried;
+            MTL4::VisibilityOptions barrierVisibility = 0;
+            if (barrierDestination != 0)
             {
-                // Later dispatches wait on the fence, and a counted draw's kernels, which read only records an IndirectArgs
-                // barrier orders, do not: a barrier from these stages to the dispatch stage would hold them back too.
-                encoder->updateFence(m_carryFence, after);
+                barrierAfter = after;
+                barrierVisibility = barriers.pendingVisibility;
+            }
+            // The work the encoder's kept barriers spent is owed a producer barrier too, unless this carry names it already.
+            // It folds in, so a list end that owed both emits one: the part the fence may carry joins the fence update, which
+            // has no visibility option, and the rest joins the barrier. Each source named is a stage the encoder ran, so the
+            // union orders every pair its parts ordered.
+            const MTL::Stages keptAfter = barriers.keptSource & ran;
+            if (keptAfter != 0 && barriers.keptDestination != 0 && !barriers.keptWithin(ran, after, barriers.pendingDestination, barriers.pendingVisibility))
+            {
+                const MTL::Stages keptCarried = fencedStages(barriers, m_carryFence, barriers.keptDestination, barriers.keptVisibility);
+                const MTL::Stages keptRest = barriers.keptDestination & ~keptCarried;
+                if (keptCarried != 0)
+                {
+                    fenceAfter |= keptAfter;
+                }
+                if (keptRest != 0)
+                {
+                    barrierAfter |= keptAfter;
+                    barrierDestination |= keptRest;
+                    barrierVisibility |= barriers.keptVisibility;
+                }
+            }
+            if (fenceAfter != 0)
+            {
+                encoder->updateFence(m_carryFence, fenceAfter);
                 core::noteNativeCall(list);
-                destination &= ~carried;
                 m_syncsAtEnd = true;
             }
-            if (destination != 0)
+            if (barrierDestination != 0)
             {
                 // Every later encoder on the queue, in a later list, waits in these stages for the encoder's work.
-                encoder->barrierAfterStages(after, destination, barriers.pendingVisibility);
+                encoder->barrierAfterStages(barrierAfter, barrierDestination, barrierVisibility);
                 core::noteNativeCall(list);
                 ++list.counts.nativeBarriers;
                 m_syncsAtEnd = true;
             }
+            // The carry orders the work the encoder's kept barriers spent as well: folded in, or named by it already.
+            barriers.clearKept();
             barriers.pendingSource = 0;
             barriers.pendingDestination = 0;
             barriers.pendingVisibility = 0;
@@ -333,6 +386,7 @@ namespace rojoRHI::metal4 {
         }
         if (m_kind == EncoderKind::Compute)
         {
+            endKept(list);
             {
                 // The validation layer autoreleases when a compute encoder that waited on the carry fence, updated it or
                 // holds back later encoders ends; without it nothing does. Only its first dispatch and the carry at `end`
@@ -362,6 +416,25 @@ namespace rojoRHI::metal4 {
         m_syncsAtEnd = false;
         m_kernelPipeline = nullptr;
         m_barriers.clearOpen();
+        m_barriers.clearKept();
+    }
+
+    void Encoders::endKept(core::CommandListCore& list)
+    {
+        const BarrierState& barriers = m_barriers;
+        const MTL::Stages after = barriers.keptSource & m_compute->stages();
+        // A barrier the encoder kept orders its own later commands only, and a command of the encoder has spent it, so
+        // nothing orders the work it waited for before the later encoders: one producer barrier does, unless the barrier
+        // still pending already names that work, which the next consumer barrier then covers as an earlier pass.
+        if (after == 0 || barriers.keptDestination == 0 ||
+            barriers.keptWithin(m_compute->stages(), barriers.pendingSource, barriers.pendingDestination, barriers.pendingVisibility))
+        {
+            return;
+        }
+        m_compute->barrierAfterStages(after, barriers.keptDestination, barriers.keptVisibility);
+        core::noteNativeCall(list);
+        ++list.counts.nativeBarriers;
+        m_syncsAtEnd = true;
     }
 
     void Encoders::releaseEnded()

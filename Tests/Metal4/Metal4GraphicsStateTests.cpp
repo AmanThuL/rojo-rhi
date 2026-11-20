@@ -165,10 +165,10 @@ TEST_CASE("state recorded before the first draw waits in the prefix and replays 
     CHECK(callsOf(list) == base);
     CHECK(countsOf(list).encodersOpened == 0);
     using Kind = metal4::PrefixKind;
-    CHECK(prefixKinds(list) == std::vector{ Kind::Pipeline, Kind::Viewport, Kind::Scissor, Kind::Root, Kind::StencilReference, Kind::BlendColor });
-    // The open and the pass's begin timestamp, then each entry in order: the pipeline with its counter-clockwise winding (it
-    // has a fragment entry; the rest of its raster state is Metal's default), the viewport, the scissor, the table's root,
-    // the stencil reference and the blend color; then the table and the draw.
+    CHECK(prefixKinds(list) == std::vector{ Kind::Pipeline, Kind::Viewport, Kind::Scissor, Kind::StencilReference, Kind::BlendColor });
+    // The root joins no prefix: the draw writes it. The open and the pass's begin timestamp, then each entry in order: the
+    // pipeline with its counter-clockwise winding (it has a fragment entry; the rest of its raster state is Metal's default),
+    // the viewport, the scissor, the stencil reference and the blend color; then the table, the table's root and the draw.
     list.draw(3);
     CHECK(callsOf(list) == base + openCalls(list) + kPassBegin + 7 + kTable + 1);
     CHECK(drawOf(list).prefix.empty());
@@ -673,35 +673,71 @@ TEST_CASE("a point is drawn front-facing, on the front stencil state, under ever
     CHECK(wrong == 0);
 }
 
-TEST_CASE("setRoot outside a pass writes the table at once and an unchanged root sends nothing", "[metal4]")
+TEST_CASE("setRoot writes nothing until a draw or a dispatch reads the root, and an unchanged root sends nothing", "[metal4]")
 {
     Device device = *createDevice({ .scopeTimings = true, .debugMarkers = true });
+    const ShaderLibrary library = standard(device);
+    const Pipeline graphics = vertexPipeline(device, library);
+    const Pipeline compute = *device.createPipeline(ComputePipelineDesc{ .compute = { library, "csMain" }, .label = "test.compute" });
     const Texture target = makeTexture(device, Format::RGBA8Unorm);
     device.beginFrame();
     CommandList list = device.acquireCommandList(QueueType::Graphics, "test.list");
     const Addr first = uploadRoot(list);
     const Addr second = uploadRoot(list);
+    const Addr third = uploadRoot(list);
+    // Outside a pass the root waits too: the dispatch writes it, once, and an unchanged root sends nothing.
+    list.setPipeline(compute);
     uint64_t before = callsOf(list);
     list.setRoot(first);
-    CHECK(callsOf(list) - before == 1);
-    CHECK(drawOf(list).tableRoot == gpuAddressOf(first));
-    list.setRoot(first);
-    CHECK(callsOf(list) - before == 1);
     list.setRoot(second);
-    CHECK(callsOf(list) - before == 2);
+    CHECK(callsOf(list) == before);
+    CHECK(drawOf(list).tableRoot == 0);
+    list.dispatch(1, 1, 1);
+    CHECK(callsOf(list) - before == 1 + 1);
     CHECK(drawOf(list).tableRoot == gpuAddressOf(second));
-    // Inside a pass, before its encoder opens, the root waits in the prefix; the open writes the last one.
+    list.setRoot(second);
+    before = callsOf(list);
+    list.dispatch(1, 1, 1);
+    CHECK(callsOf(list) - before == 1);
+    list.setRoot(first);
+    before = callsOf(list);
+    list.dispatch(1, 1, 1);
+    CHECK(callsOf(list) - before == 1 + 1);
+    CHECK(drawOf(list).tableRoot == gpuAddressOf(first));
+    // Inside a pass, before its encoder opens, the root is no prefix entry either; the first draw writes the last one.
     const std::array colors{ ColorAttachment{ .texture = target, .load = LoadOp::Clear } };
     list.beginRenderPass(passOf(colors));
+    list.setPipeline(graphics);
     before = callsOf(list);
     list.setRoot(second);
-    list.setRoot(first);
+    list.setRoot(third);
     CHECK(callsOf(list) == before);
-    CHECK(drawOf(list).tableRoot == gpuAddressOf(second));
-    // The open and the pass's begin timestamp, the root, the pass's end timestamp and its group; the encoder draws nothing,
-    // so it binds no table, and stays open.
+    CHECK(drawOf(list).tableRoot == gpuAddressOf(first));
+    // The encoder draws nothing, so it binds no table and writes no root, and stays open.
     list.endRenderPass();
-    CHECK(callsOf(list) - before == openCalls(list) + kPassBegin + 1 + 2);
+    CHECK(drawOf(list).tableRoot == gpuAddressOf(first));
+    list.beginRenderPass(passOf(colors));
+    list.setPipeline(graphics);
+    list.setViewport(kViewport);
+    list.setScissor(kScissor);
+    list.draw(3);
+    CHECK(drawOf(list).tableRoot == gpuAddressOf(third));
+    // An open encoder writes nothing at `setRoot` either: the next draw does.
+    before = callsOf(list);
+    list.setRoot(second);
+    CHECK(callsOf(list) == before);
+    list.draw(3);
+    CHECK(callsOf(list) - before == 1 + 1);
+    CHECK(drawOf(list).tableRoot == gpuAddressOf(second));
+    list.draw(3);
+    CHECK(callsOf(list) - before == 1 + 1 + 1);
+    list.endRenderPass();
+    // A pass that only executes or draws leaves its root in the table, and a dispatch after it writes the one recorded since.
+    list.setRoot(first);
+    list.setPipeline(compute);
+    before = callsOf(list);
+    list.dispatch(1, 1, 1);
+    CHECK(callsOf(list) - before == 1 + 1);
     CHECK(drawOf(list).tableRoot == gpuAddressOf(first));
     finish(device, list);
     destroyDevice(device);

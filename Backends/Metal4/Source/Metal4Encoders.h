@@ -69,8 +69,8 @@ namespace rojoRHI::metal4 {
         void dispatchRun(core::CommandListCore& list);
 
         // Holds the barrier in the open encoder when it holds work, does not linger, every source lies among those its
-        // opening barrier waited for and its destination stages among those that barrier held back; the stages it lacks
-        // join the pending barrier. Returns false, changing nothing, otherwise.
+        // opening barrier waited for, its destination stages among those that barrier held back and its visibility within
+        // that barrier's; the stages it lacks join the pending barrier. Returns false, changing nothing, otherwise.
         bool holdInOpen(MTL::Stages source, MTL::Stages destination, MTL4::VisibilityOptions visibility)
         {
             if (m_lingering || !m_holdsWork)
@@ -79,7 +79,7 @@ namespace rojoRHI::metal4 {
             }
             const MTL::Stages open = stages();
             const MTL::Stages covered = destination & open;
-            if ((source & ~m_barriers.openSource) != 0 || (covered & ~m_barriers.openDestination) != 0)
+            if ((source & ~m_barriers.openSource) != 0 || (covered & ~m_barriers.openDestination) != 0 || (visibility & ~m_barriers.openVisibility) != 0)
             {
                 return false;
             }
@@ -138,9 +138,10 @@ namespace rojoRHI::metal4 {
         void carry(core::CommandListCore& list, ListState& state, MTL::Fence* fence);
 
         // Emitted inside the open compute encoder instead of ending it, when its opening barrier covered nothing, it
-        // runs more than backend kernels and it ran no command in `destination` yet. Since every later command in
-        // `destination` follows the pair, it then counts as the encoder's opening barrier. Returns false, emitting
-        // nothing, otherwise.
+        // runs more than backend kernels and no batch is pending, whose sources the pair would not name. Every later
+        // command in `destination` follows the pair, so it counts as the encoder's opening barrier for the stages a
+        // command follows it in; the stages the encoder ran before it stay apart (`BarrierState::preRan`). Returns
+        // false, emitting nothing, otherwise.
         bool barrierInOpen(core::CommandListCore& list, MTL::Stages source, MTL::Stages destination, MTL4::VisibilityOptions visibility);
 
         // What is still held back joins the pending barrier now, as `close` would add it, while what its opening
@@ -149,7 +150,9 @@ namespace rojoRHI::metal4 {
 
         // Carries the barrier the list still owes on the open encoder when the encoder covers its sources: every
         // pending source lies among those its opening barrier waited for, and it ran a command in a stage that barrier
-        // held. A list that upscaled carries nothing here; `emitTrailing` emits what is owed.
+        // held after it. The producer barrier the encoder owes for the batches it kept folds into that carry: its sources
+        // join the carry's, and its destinations join the carry's barrier, or the fence update where the fence may carry
+        // them. A list that upscaled carries nothing here; `emitTrailing` emits what is owed.
         void finish(core::CommandListCore& list);
 
         // At the list's acquisition: the graphics queue's fence for a graphics list acquired once a counted draw's
@@ -272,7 +275,14 @@ namespace rojoRHI::metal4 {
 
         void settle();
 
+        // On the compute encoder about to end: the producer barrier for the work its kept barriers spent.
+        void endKept(core::CommandListCore& list);
+
         MTL::Stages ranStages() const;
+
+        // The stages the encoder ran a command in after its opening barrier: all it ran, less those it ran only before a
+        // barrier `barrierInOpen` made the opening one.
+        MTL::Stages ranSinceOpen() const;
 
         // Unless the encoder waited already, runs only backend kernels, the command is not in the dispatch stage or the
         // list uses no carry fence.

@@ -1,16 +1,16 @@
 # 07. Command recording
 
 **Status**: Accepted
-**API version**: 1.0.2
+**API version**: 1.0.3
 
 A command list comes from a per-frame pool and returns to it when its frame retires. One thread
 records one list at a time; many lists record in parallel and are submitted in order ([queues and
 frames](10-queues-and-frames.md)). In Release builds recording takes no locks, except when a list
-claims a new frame-arena page, for `uploadFrameData` or for the label of a debug scope (including
-those of render passes and upscales); a Debug-tier check may take the lock of the pool whose record
-it reads (ADR 0020). Metal 4 columns describe
-the implemented backend, D3D12 columns the backend [conventions](00-conventions.md) describes, and
-Vulkan columns the design oracle. This chapter continues in [draws, dispatches and
+claims a new frame-arena page, for frame data, a debug scope's label or a backend's kernel
+parameters ([fundamentals](01-fundamentals.md) names them); a Debug-tier check may lock the pool it
+reads (ADR 0041). Metal 4 columns
+describe the implemented backend, D3D12 columns the backend [conventions](00-conventions.md)
+describes, and Vulkan columns the design oracle. This chapter continues in [draws, dispatches and
 scopes](07-command-recording-part2.md) and [copies and clears](07-command-recording-part3.md).
 
 **Only render passes have scope.** Compute and copy commands are valid anywhere outside a render
@@ -82,7 +82,7 @@ that frame's `Device::endFrame`, as `VU-rojo-device-0005` of
 
 | | Metal 4 | D3D12 | Vulkan |
 |---|---|---|---|
-| Call | pooled `MTL4::CommandBuffer`, `MTL4::CommandBuffer::beginCommandBuffer` with the list's own `MTL4::CommandAllocator` of its frame slot, reset when the slot is reused | `Reset` with the list's own `ID3D12CommandAllocator` of its frame slot, reset when the slot is reused; a `Graphics` list then sets both descriptor heaps and the graphics global root signature, a `Compute` list the heaps; the compute root signature waits for the list's first dispatch | `vkBeginCommandBuffer` from a per-frame pool; for `Graphics` and `Compute` lists, then the descriptor heaps |
+| Call | pooled `MTL4::CommandBuffer`, `MTL4::CommandBuffer::beginCommandBuffer` with the list's own `MTL4::CommandAllocator` of its frame slot, reset when the slot is reused | `Reset` with the list's own `ID3D12CommandAllocator` of its frame slot, reset when the slot is reused, and nothing more. The descriptor heaps and each global root signature wait for first use: whichever comes first of a graphics `setPipeline`, a dispatch and a storage clear sets the heaps, once a recording; the first graphics `setPipeline` then sets the graphics root signature and the first dispatch the compute one. A list that only copies, uploads or fills sets none of them | `vkBeginCommandBuffer` from a per-frame pool; for `Graphics` and `Compute` lists, then the descriptor heaps |
 | Cost | native | native | native |
 
 ### `CommandList::end`

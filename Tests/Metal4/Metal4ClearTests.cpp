@@ -182,12 +182,11 @@ TEST_CASE("a Storage-only clear dispatches one kernel per mip on the compute enc
 TEST_CASE("a clear's render encoder emits the render part of a pending barrier and leaves none at end", "[metal4]")
 {
     Device device = *createDevice({ .scopeTimings = true });
-    const Buffer a = *device.createBuffer({ .size = 256, .label = "test.a" });
     const Buffer b = *device.createBuffer({ .size = 256, .usage = BufferUsage::ShaderWrite, .label = "test.b" });
     const Texture target = makeTexture(device, TextureType::Tex2D, Format::RGBA8Unorm, TextureUsage::RenderTarget, { 8, 8, 1 });
     device.beginFrame();
     CommandList list = device.acquireCommandList(QueueType::Graphics, "test.list");
-    list.copyBuffer(a, 0, b, 0, 256);
+    // No encoder is open, so the batch is pending whole.
     list.barrier(std::array{ copyToCopy() });
     const metal4::BarrierState& barriers = encodersOf(list).barriers();
     REQUIRE(barriers.pendingDestination == (MTL::StageBlit | MTL::StageDispatch | MTL::StageFragment));
@@ -195,7 +194,7 @@ TEST_CASE("a clear's render encoder emits the render part of a pending barrier a
     list.clearTexture(target, {}, ClearValue{ .color = { 1.0f, 0.0f, 0.0f, 1.0f } });
     // The render encoder emits the fragment part; the blit and dispatch parts wait for the next compute encoder.
     CHECK(countsOf(list).nativeBarriers == 1);
-    CHECK(countsOf(list).encodersOpened == 2);
+    CHECK(countsOf(list).encodersOpened == 1);
     CHECK(barriers.pendingDestination == metal4::kComputeStages);
     // A blit and a dispatch on the next compute encoder, whose opening barrier emits the rest.
     list.fillBuffer(b, 0, 64, 0x55555555u);
@@ -204,7 +203,7 @@ TEST_CASE("a clear's render encoder emits the render part of a pending barrier a
     CHECK(barriers.pendingDestination == 0);
     list.end();
     // Nothing was owed at the end, so no trailing encoder opened.
-    CHECK(countsOf(list).encodersOpened == 3);
+    CHECK(countsOf(list).encodersOpened == 2);
     CHECK(countsOf(list).nativeBarriers == 2);
     submitAndWait(device, std::array{ list });
     destroyDevice(device);

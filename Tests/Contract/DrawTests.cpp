@@ -116,6 +116,43 @@ TEST_CASE("indirect draws take records and an optional count from IndirectArgs b
     kit.finish();
 }
 
+TEST_CASE("a pass records a root, executes, then draws directly under each root recorded, and a dispatch follows", "[contract]")
+{
+    PassKit kit;
+    // Ten records of one triangle each, so the executes draw something on a backend that runs them.
+    std::array<DrawIndirectArgs, 10> draws{};
+    for (uint32_t i = 0; i < draws.size(); ++i)
+    {
+        draws[i] = DrawIndirectArgs{ .drawId = i, .vertexCount = 3, .instanceCount = 1 };
+    }
+    const Addr records = kit.list.uploadFrameData(std::as_bytes(std::span(draws)), 4);
+    const Addr first = kit.list.pushRoot(Root{ .albedo = 1 });
+    kit.readyToDraw();
+    // An execute, a direct draw that reads the root recorded before the execute, a root, a direct and a lone draw, then a root
+    // and a draw that follow a lone one.
+    kit.list.setRoot(first);
+    kit.list.drawIndirect(records, 10);
+    kit.list.draw(3);
+    const Addr second = kit.list.pushRoot(Root{ .albedo = 2 });
+    kit.list.draw(3);
+    kit.list.drawIndirect(records, 1);
+    kit.list.setRoot(first);
+    kit.list.draw(3);
+    kit.list.setRoot(second);
+    kit.list.drawIndirect(records, 10);
+    kit.list.endRenderPass();
+    // A pass whose encoder only executes, then a dispatch under the root recorded last.
+    kit.readyToDraw();
+    kit.list.setRoot(first);
+    kit.list.drawIndirect(records, 10);
+    kit.list.endRenderPass();
+    kit.list.setPipeline(kit.compute());
+    kit.list.dispatch(1, 1, 1);
+    kit.list.setRoot(second);
+    kit.list.dispatch(1, 1, 1);
+    kit.finish();
+}
+
 TEST_CASE("frame data serves as the records and count of indirect commands", "[contract]")
 {
     PassKit kit;

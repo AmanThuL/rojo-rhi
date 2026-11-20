@@ -1,6 +1,6 @@
 //----------------------------------------------------------------------------------------------------------------------
 /// @file D3D12Barriers.cpp
-/// @brief Implements the lowering of barrier batches to one D3D12 enhanced `Barrier` call per batch.
+/// @brief Implements the lowering of barrier batches to at most one D3D12 enhanced `Barrier` call per batch.
 //----------------------------------------------------------------------------------------------------------------------
 
 #include "D3D12Barriers.h"
@@ -524,7 +524,19 @@ namespace rojoRHI {
                        a.oldLayout == b.oldLayout && a.newLayout == b.newLayout && sameSides(a, b);
             }
 
-            // One group per non-empty kind: the debug layer warns on an empty group.
+            // Render-target access needs no flush between sequential writes, so a texture barrier that keeps
+            // LAYOUT_RENDER_TARGET and names only that access and its scope on both sides changes no state and orders
+            // nothing the queue does not already order.
+            bool ordersNothing(const D3D12_TEXTURE_BARRIER& lowered)
+            {
+                return lowered.LayoutBefore == D3D12_BARRIER_LAYOUT_RENDER_TARGET && lowered.LayoutAfter == D3D12_BARRIER_LAYOUT_RENDER_TARGET &&
+                       lowered.AccessBefore == D3D12_BARRIER_ACCESS_RENDER_TARGET && lowered.AccessAfter == D3D12_BARRIER_ACCESS_RENDER_TARGET &&
+                       lowered.SyncBefore == D3D12_BARRIER_SYNC_RENDER_TARGET && lowered.SyncAfter == D3D12_BARRIER_SYNC_RENDER_TARGET &&
+                       lowered.Flags == D3D12_TEXTURE_BARRIER_FLAG_NONE;
+            }
+
+            // One group per non-empty kind: the debug layer warns on an empty group. A batch whose every record lowered
+            // to nothing sends no call.
             void sendScratch(ListState& state, core::CommandListCore& list)
             {
                 const BarrierScratch& scratch = state.barriers;
@@ -550,6 +562,10 @@ namespace rojoRHI {
                     groups[count].NumBarriers = static_cast<UINT32>(scratch.textures.size());
                     groups[count].pTextureBarriers = scratch.textures.data();
                     ++count;
+                }
+                if (count == 0)
+                {
+                    return;
                 }
                 state.list->Barrier(count, groups.data());
                 core::noteNativeCall(list);
@@ -583,7 +599,7 @@ namespace rojoRHI {
         {
             d3d12::lowerGlobal(global, type, scratch.globals);
         }
-        // Payloads are fixed while their resources live, so each is read with one acquire load and no lock (ADR 0020).
+        // Payloads are fixed while their resources live, so each is read with acquire loads and no lock (ADR 0041).
         const auto& bufferPool = list.device->pool<Buffer>();
         for (const BufferBarrier& buffer : buffers)
         {
@@ -646,6 +662,11 @@ namespace rojoRHI {
             // A barrier from Undefined names LAYOUT_UNDEFINED and discards whatever layout the texture is in, which also
             // initializes the compression metadata of a render-target, depth-stencil or unordered-access texture.
             lowered.Flags = texture.oldLayout == Layout::Undefined ? D3D12_TEXTURE_BARRIER_FLAG_DISCARD : D3D12_TEXTURE_BARRIER_FLAG_NONE;
+            if (d3d12::ordersNothing(lowered))
+            {
+                scratch.textures.pop_back();
+                continue;
+            }
             if (texture.oldLayout == Layout::Undefined && texture.srcStage != Stage::None)
             {
                 // A discard alone does not wait for the writes of its SyncBefore stages on every driver: on NVIDIA 621.14 the

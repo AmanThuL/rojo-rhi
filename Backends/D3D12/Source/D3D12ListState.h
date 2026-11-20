@@ -47,21 +47,46 @@ namespace rojoRHI::d3d12 {
         std::array<const PipelineState*, 2> states = {};
     };
 
+    // The reasons a draw has graphics state to send, one bit each of `Binding::graphicsDirty`, so a draw with nothing
+    // to send tests one word. Each bit is set where its reason becomes true and cleared by the draw that settles it.
+    // Another pipeline took the slot both sides share: a compute bind or dispatch, the fill kernel or vendor work.
+    inline constexpr uint32_t kGraphicsPipelineDirty = 1u << 0;
+    inline constexpr uint32_t kGraphicsRootDirty = 1u << 1;
+    // The pass's starting stencil reference is owed and the bound pipeline reads it; `DynamicState` keeps what is owed
+    // while a pipeline that reads nothing is bound, so its draws test no bit.
+    inline constexpr uint32_t kStencilReferenceDirty = 1u << 2;
+    inline constexpr uint32_t kBlendFactorDirty = 1u << 3; // As `kStencilReferenceDirty`, for the starting blend factor.
+    // The draw-record constant b1 holds no value since the root signature was set, or an indirect draw left it: the runtime
+    // resets it to 0 after ExecuteIndirect, so that write is redundant but kept. Only a direct draw writes 0 there.
+    inline constexpr uint32_t kDrawIdDirty = 1u << 4;
+    inline constexpr uint32_t kDirectDrawDirty = kGraphicsPipelineDirty | kGraphicsRootDirty | kStencilReferenceDirty | kBlendFactorDirty | kDrawIdDirty;
+    // An indirect draw's command signature writes b1 itself, so it leaves that bit set for the next direct draw.
+    inline constexpr uint32_t kIndirectDrawDirty = kDirectDrawDirty & ~kDrawIdDirty;
+
     // Kept lazily: `setRoot` stores the address and marks both sides dirty, and the next draw or dispatch binds it on
     // its side. Reset at each acquisition.
     struct Binding
     {
         D3D12_GPU_VIRTUAL_ADDRESS root = 0;
-        bool graphicsRootDirty = false;
+        uint32_t graphicsDirty = kDrawIdDirty;
         bool computeRootDirty = false;
-        bool drawIdDirty = true;
-        bool graphicsSignatureDirty = false; // Vendor work may have set a root signature of its own.
+        // The native list holds no global graphics root signature: a Graphics list from acquisition, any list after
+        // vendor work. The next graphics `setPipeline` sets it, so a list that binds no graphics pipeline sends none.
+        bool graphicsSignatureOwed = false;
+        // The device's shader-visible heaps are set on the native list. The first command that reads them sets them, so
+        // a list that only copies, uploads or fills sends no `SetDescriptorHeaps`.
+        bool heapsSet = false;
         ComputeRoot computeRoot = ComputeRoot::None;
         ID3D12PipelineState* computePipeline = nullptr;
         ID3D12PipelineState* graphicsPipeline = nullptr;
         const PipelineState* pipeline = nullptr;
         // The payloads of the last two pipelines `setPipeline` bound, so a list that alternates two reads no table.
         ResolvedPipelines resolved;
+
+        bool dirty(uint32_t reasons) const
+        {
+            return (graphicsDirty & reasons) != 0;
+        }
     };
 
     // What the native list of a Graphics list holds, so a pass's starting values, the setters, `setPipeline` and the
@@ -73,7 +98,8 @@ namespace rojoRHI::d3d12 {
         std::optional<uint8_t> stencilReference;
         std::optional<std::array<float, 4>> blendFactor;
         // The open pass's starting stencil reference, 0, is owed: the native list holds another or an unknown value and
-        // no draw has read it since the pass began. The first draw whose pipeline reads it sends it;
+        // no draw has read it since the pass began. A pass begins with no pipeline bound, so `setPipeline` marks
+        // `kStencilReferenceDirty` for a pipeline that reads it, and that pipeline's first draw sends it;
         // `setStencilReference` settles it.
         bool stencilReferenceOwed = false;
         bool blendFactorOwed = false; // As `stencilReferenceOwed`, for the starting blend factor of zeros.
@@ -202,17 +228,25 @@ namespace rojoRHI::d3d12 {
     // block after `setRoot` or a root signature switch. A compute pipeline must be bound.
     void flushCompute(CommandListImpl& list);
 
-    // Each native call only where the native list holds something else: the global root signature after vendor work,
-    // the bound pipeline, with its recorded depth bias when it has `depthBias`, after another displaced it, and the
-    // root block after `setRoot` or a root signature switch. It writes no draw-record constant: a direct draw writes
-    // it, and an indirect draw's command signature does. A graphics or mesh pipeline must be bound.
-    void flushGraphics(CommandListImpl& list);
+    // Each native call only where the native list holds something else: the bound pipeline, with its recorded depth
+    // bias when it has `depthBias`, after another displaced it, the root block after `setRoot` or a root signature
+    // switch, the pass's owed starting values the pipeline reads, and, where `reasons` holds `kDrawIdDirty`, 0 to the
+    // draw-record constant. `reasons` is `kDirectDrawDirty` or `kIndirectDrawDirty`; a draw with none of them set
+    // returns after one test. A graphics or mesh pipeline must be bound, and the global root signature is the graphics
+    // `setPipeline`'s to set.
+    void flushGraphics(CommandListImpl& list, uint32_t reasons);
 
     // Vendor work may have set its own descriptor heaps, root signatures and pipeline. The device's heaps are set again
-    // at once, one native call, because clears and fills read them as well as draws and dispatches. The rest is marked
-    // unknown, so a root signature set later follows the heaps: the global root signature of each side, both root
-    // blocks, the draw-record constant b1, the pipeline slot and the topology.
+    // at once, one native call, so every later reader finds them as `Binding::heapsSet` says. The rest is marked
+    // unknown, so a root signature set later follows the heaps: the global root signature of each side, owed to the
+    // next graphics `setPipeline` and the next dispatch, both root blocks, the draw-record constant b1, the pipeline
+    // slot and the topology.
     void resumeAfterVendorWork(CommandListImpl& list);
+
+    // Sets the device's view and sampler heaps on the native list, one native call. Shaders index both directly, so
+    // D3D12 needs them set before a root signature that indexes them is (HLSL SM 6.6 dynamic resources): a first
+    // global root signature of either side, and a storage clear, call this first unless `Binding::heapsSet` says so.
+    void setHeaps(CommandListImpl& list);
 
     // Unless the native list holds that view. Every indexed draw, direct or indirect, binds its buffer here, so draws
     // of one buffer share the view and a draw of the buffer and type the list holds reads no payload.

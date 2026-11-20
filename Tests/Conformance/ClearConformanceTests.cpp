@@ -414,6 +414,84 @@ TEST_CASE("a barrier orders a load-action clear before a copy that reads it", "[
     }
 }
 
+namespace {
+    // Runs the chain through `CopySrc` on a texture of `usage`: a Storage-only texture clears by kernel, a render target by
+    // the load action of a render pass.
+    void copySrcChain(TextureUsage usage)
+    {
+        test::requireGpu();
+        test::GpuKit kit;
+        // The barrier into `CopySrc` names `Copy`, which a backend may narrow to the copy's own stage, since the clear needs
+        // `CopyDst` and a barrier of its own; that barrier's `Copy` source must still wait for the copy, and the clear must not
+        // run before the read.
+        constexpr uint32_t kEdge = 4096;
+        constexpr uint32_t kTail = 64;
+        const TextureDesc desc{ .format = Format::RGBA8Unorm, .extent = { kEdge, kEdge, 1 }, .usage = usage, .label = "test.texture" };
+        const Texture texture = *kit.device.createTexture(desc);
+        const TextureRegion corner{ .offset = { kEdge - kTail, kEdge - kTail, 0 }, .extent = { kTail, kTail, 1 } };
+        const BufferTextureLayout layout{ .rowPitch = kTail * 4 };
+        const Buffer readback = kit.buffer(uint64_t{ kTail } * kTail * 4, Memory::Readback);
+        const TextureBarrier clearedToRead{ .texture = texture,
+                                            .srcStage = Stage::Copy,
+                                            .srcAccess = Access::CopyWrite,
+                                            .dstStage = Stage::Copy,
+                                            .dstAccess = Access::CopyRead,
+                                            .oldLayout = Layout::CopyDst,
+                                            .newLayout = Layout::CopySrc };
+        constexpr uint32_t kRounds = 4;
+        const auto color = [](uint32_t round) { return ClearColor{ static_cast<float>(round + 1) / 255.0f, 0.0f, 0.2f, 0.6f }; };
+        const auto expected = [](uint32_t round) {
+            return repeated(bytesOf(std::array<uint8_t, 4>{ static_cast<uint8_t>(round + 1), 0, 51, 153 }), uint64_t{ kTail } * kTail);
+        };
+        SECTION("within one list")
+        {
+            for (uint32_t round = 0; round < kRounds; ++round)
+            {
+                CAPTURE(round);
+                CommandList list = kit.list(QueueType::Graphics, "test.list");
+                move(list, texture, round == 0 ? Layout::Undefined : Layout::CopySrc, Layout::CopyDst);
+                list.clearTexture(texture, {}, ClearValue{ .color = color(round) });
+                list.barrier({}, {}, std::array{ clearedToRead });
+                list.copyTextureToBuffer(texture, corner, readback, layout);
+                kit.run(std::array{ list });
+                CHECK(kit.read(readback) == expected(round));
+            }
+        }
+        SECTION("the whole chain in one submission")
+        {
+            // Each list's end carries the barrier into `CopySrc`, and the next list's first batch moves the texture on to a clear.
+            std::vector<CommandList> lists;
+            std::vector<Buffer> readbacks;
+            for (uint32_t round = 0; round < kRounds; ++round)
+            {
+                readbacks.push_back(kit.buffer(uint64_t{ kTail } * kTail * 4, Memory::Readback));
+                CommandList list = kit.list(QueueType::Graphics, "test.list");
+                move(list, texture, round == 0 ? Layout::Undefined : Layout::CopySrc, Layout::CopyDst);
+                list.clearTexture(texture, {}, ClearValue{ .color = color(round) });
+                list.barrier({}, {}, std::array{ clearedToRead });
+                list.copyTextureToBuffer(texture, corner, readbacks.back(), layout);
+                lists.push_back(list);
+            }
+            kit.run(lists);
+            for (uint32_t round = 0; round < kRounds; ++round)
+            {
+                CAPTURE(round);
+                CHECK(kit.read(readbacks[round]) == expected(round));
+            }
+        }
+    }
+} // namespace
+
+TEST_CASE("a barrier into CopySrc leaves a later kernel clear of the texture ordered after the copy that read it", "[conformance]")
+{
+    copySrcChain(TextureUsage::Storage);
+}
+
+TEST_CASE("a barrier into CopySrc leaves a later load-action clear of the texture ordered after the copy that read it", "[conformance]")
+{
+    copySrcChain(TextureUsage::RenderTarget);
+}
+
 TEST_CASE("a barrier orders a copy into a texture before a load-action clear of it", "[conformance]")
 {
     test::requireGpu();

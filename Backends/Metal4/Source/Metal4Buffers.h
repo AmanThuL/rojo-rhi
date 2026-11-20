@@ -9,6 +9,7 @@
 #include "Core/DeviceCore.h"
 #include "Core/HandlePool.h"
 #include "Core/Records.h"
+#include "Metal4Residency.h"
 
 #include <Metal/Metal.hpp>
 
@@ -23,6 +24,9 @@ namespace rojoRHI::metal4 {
         MTL::Buffer* buffer = nullptr; // One retained reference.
         uint64_t address = 0;
         uint64_t length = 0; // The bytes Metal allocated, at least the requested size.
+        // A frame-arena page's deferred join of the device residency set (`Residency::addDeferred`); unused by other buffers.
+        // `retireBuffer` removes the buffer from the set before it frees the payload, which takes the node off the list.
+        Residency::Pending residencyJoin;
     };
 
     // One acquire load and no lock (`HandlePool::native`); null for the null handle.

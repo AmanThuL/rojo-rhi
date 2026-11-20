@@ -169,6 +169,92 @@ TEST_CASE("the Compute queue discards a render target the Graphics queue left in
     CHECK(wrong == 0u);
 }
 
+// The frame's albedo and material shape: a pair on one queue that only a fence round trip through another queue orders.
+TEST_CASE("a texture a barrier moved with no destination is read on the same queue behind a fence round trip", "[conformance]")
+{
+    test::requireGpu();
+#ifndef NDEBUG
+    constexpr bool kValidation = true;
+#else
+    constexpr bool kValidation = false;
+#endif
+    // 4,096 groups of 64 threads, each spinning long enough that a read the round trip failed to hold back sees texels the
+    // slow write has not stored.
+    constexpr uint32_t kSlowEdge = 512;
+    constexpr uint32_t kSlowSpins = 1u << 20;
+    constexpr uint64_t kSlowPitch = kSlowEdge * 4;
+    test::GpuKit kit(2, false, kValidation);
+    const ShaderLibrary library = *kit.device.loadShaderLibrary(test::shaderLibraryFile("BarrierOracle"), "BarrierOracle");
+    const Pipeline pipeline = *kit.device.createPipeline(ComputePipelineDesc{ .compute = { library, "delayedFillMain" }, .label = "test.slowFill" });
+    const Texture texture = *kit.device.createTexture(
+        TextureDesc{ .format = Format::RGBA8Unorm, .extent = { kSlowEdge, kSlowEdge, 1 }, .usage = TextureUsage::Storage, .label = "test.texture" }
+    );
+    const ViewIndex view = *kit.device.createView(texture, TextureViewDesc{ .usage = TextureUsage::Storage });
+    const Buffer readback = kit.buffer(kSlowPitch * kSlowEdge, Memory::Readback);
+    const Fence fence = *kit.device.createFence(0, "test.roundTrip");
+    // One fence: a setup submission signals 1, which the host waits on; Graphics then signals 2 (F1), Compute waits on it and
+    // signals 3 (F2), and the later Graphics submission waits on 3 and signals 4, which the host waits on.
+    const std::array<FenceValue, 1> seeded{ FenceValue{ fence, 1 } };
+    const std::array<FenceValue, 1> f1{ FenceValue{ fence, 2 } };
+    const std::array<FenceValue, 1> f2{ FenceValue{ fence, 3 } };
+    const std::array<FenceValue, 1> f3{ FenceValue{ fence, 4 } };
+    // Setup fills the texture with blue and leaves it in ShaderWrite. The new texture's contents are undefined, so without
+    // the seed a texel a late copy read could happen to hold red; now every texel the round trip fails to order is blue.
+    CommandList seed = kit.list(QueueType::Graphics, "test.seed");
+    const std::array<TextureBarrier, 1> toWrite{ TextureBarrier{ .texture = texture,
+                                                                 .dstStage = Stage::ComputeShader,
+                                                                 .dstAccess = Access::ShaderWrite,
+                                                                 .oldLayout = Layout::Undefined,
+                                                                 .newLayout = Layout::ShaderWrite } };
+    seed.barrier({}, {}, toWrite);
+    seed.setPipeline(pipeline);
+    seed.pushRoot(DelayRoot{ .view = static_cast<uint32_t>(view), .spins = 0, .width = kSlowEdge, .height = kSlowEdge, .value = { 0.0f, 0.0f, 1.0f, 1.0f } });
+    seed.dispatch(kSlowEdge / 8, kSlowEdge / 8, 1);
+    seed.end();
+    kit.device.queue(QueueType::Graphics).submit(std::array{ seed }, {}, seeded);
+    // The host has observed the seed, which orders it before the writer. The writer starts from ShaderWrite, so it records
+    // no barrier from Undefined, which would discard the seed.
+    REQUIRE(kit.device.wait(seeded[0], UINT64_MAX));
+    // Graphics writes the texture and moves it for copies with a barrier whose destination names no stage and no access.
+    CommandList writer = kit.list(QueueType::Graphics, "test.writer");
+    writer.setPipeline(pipeline);
+    writer.pushRoot(
+        DelayRoot{ .view = static_cast<uint32_t>(view), .spins = kSlowSpins, .width = kSlowEdge, .height = kSlowEdge, .value = { 1.0f, 0.0f, 0.0f, 1.0f } }
+    );
+    writer.dispatch(kSlowEdge / 8, kSlowEdge / 8, 1);
+    const std::array<TextureBarrier, 1> toCopy{ TextureBarrier{ .texture = texture,
+                                                                .srcStage = Stage::ComputeShader,
+                                                                .srcAccess = Access::ShaderWrite,
+                                                                .dstStage = Stage::None,
+                                                                .dstAccess = Access::None,
+                                                                .oldLayout = Layout::ShaderWrite,
+                                                                .newLayout = Layout::CopySrc } };
+    writer.barrier({}, {}, toCopy);
+    writer.end();
+    // A later submission on the same queue reads it with no barrier of its own; only the round trip orders the two.
+    CommandList reader = kit.list(QueueType::Graphics, "test.reader");
+    reader.copyTextureToBuffer(
+        texture,
+        TextureRegion{ .extent = { kSlowEdge, kSlowEdge, 1 } },
+        readback,
+        BufferTextureLayout{ .offset = 0, .rowPitch = static_cast<uint32_t>(kSlowPitch), .rowsPerImage = kSlowEdge }
+    );
+    reader.end();
+    kit.device.queue(QueueType::Graphics).submit(std::array{ writer }, {}, f1);
+    // Compute touches nothing; it passes the value on.
+    kit.device.queue(QueueType::Compute).submit({}, f1, f2);
+    kit.device.queue(QueueType::Graphics).submit(std::array{ reader }, f2, f3);
+    REQUIRE(kit.device.wait(f3[0], UINT64_MAX));
+    const std::vector<std::byte> got = kit.read(readback);
+    const std::array<std::byte, 4> red{ std::byte{ 255 }, std::byte{ 0 }, std::byte{ 0 }, std::byte{ 255 } };
+    uint64_t wrong = 0;
+    for (uint64_t texel = 0; texel < uint64_t{ kSlowEdge } * kSlowEdge; ++texel)
+    {
+        wrong += std::memcmp(got.data() + texel * 4, red.data(), red.size()) == 0 ? 0 : 1;
+    }
+    CHECK(wrong == 0u);
+}
+
 TEST_CASE("fills and copies chained through the three queues by fences end with each step's bytes", "[conformance]")
 {
     test::requireGpu();

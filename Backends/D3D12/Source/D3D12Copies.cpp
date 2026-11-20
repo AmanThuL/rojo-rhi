@@ -84,7 +84,7 @@ namespace rojoRHI {
             return box;
         }
 
-        // The payload is fixed from creation to retirement, so it is read with one load and no lock (ADR 0020).
+        // The payload is fixed from creation to retirement, so it is read with acquire loads and no lock (ADR 0041).
         const d3d12::TexturePayload& texturePayload(const core::CommandListCore& list, Texture texture)
         {
             return *static_cast<const d3d12::TexturePayload*>(list.device->pool<Texture>().native(texture));

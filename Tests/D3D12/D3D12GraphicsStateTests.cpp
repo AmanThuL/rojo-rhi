@@ -287,7 +287,7 @@ TEST_CASE("the first draw after setRoot costs the root, b1 and the draw; the nex
     CommandList list = device.acquireCommandList(QueueType::Graphics, "test.draw");
     const d3d12::Binding& binding = stateOf(list).binding;
     // The draw-record constant is unset after acquisition.
-    CHECK(binding.drawIdDirty);
+    CHECK(binding.dirty(d3d12::kDrawIdDirty));
     toColorAttachment(list, target);
     const std::array colors{ ColorAttachment{ .texture = target, .load = LoadOp::Clear } };
     list.beginRenderPass(passOver(colors));
@@ -296,13 +296,13 @@ TEST_CASE("the first draw after setRoot costs the root, b1 and the draw; the nex
     list.setScissor(kFullRect);
     const Addr root = list.pushRoot(UnreadRoot{});
     CHECK(binding.root == d3d12::rootAddress(DeviceImpl::of(device).directory, root));
-    CHECK(binding.graphicsRootDirty);
+    CHECK(binding.dirty(d3d12::kGraphicsRootDirty));
     // SetGraphicsRootShaderResourceView, SetGraphicsRoot32BitConstant and DrawInstanced.
     uint64_t before = recordCalls(list);
     list.draw(3);
     CHECK(recordCalls(list) - before == 3u);
-    CHECK_FALSE(binding.graphicsRootDirty);
-    CHECK_FALSE(binding.drawIdDirty);
+    CHECK_FALSE(binding.dirty(d3d12::kGraphicsRootDirty));
+    CHECK_FALSE(binding.dirty(d3d12::kDrawIdDirty));
     // The compute side still owes the root to the next dispatch.
     CHECK(binding.computeRootDirty);
     before = recordCalls(list);
@@ -338,10 +338,11 @@ TEST_CASE("setPipeline sets PSO and topology once; the same pipeline again sends
     toColorAttachment(list, target);
     const std::array colors{ ColorAttachment{ .texture = target, .load = LoadOp::Clear } };
     list.beginRenderPass(passOver(colors));
-    // SetPipelineState and IASetPrimitiveTopology.
+    // The list's first graphics pipeline: SetDescriptorHeaps and SetGraphicsRootSignature, which acquisition no longer
+    // sends, then SetPipelineState and IASetPrimitiveTopology.
     uint64_t before = recordCalls(list);
     list.setPipeline(pipeline);
-    CHECK(recordCalls(list) - before == 2u);
+    CHECK(recordCalls(list) - before == 4u);
     CHECK(state.binding.pipeline == &payload);
     CHECK(state.binding.graphicsPipeline == payload.pso);
     CHECK(state.binding.computePipeline == nullptr);
@@ -368,6 +369,123 @@ TEST_CASE("setPipeline sets PSO and topology once; the same pipeline again sends
     list.setPipeline(pipeline);
     CHECK(recordCalls(list) - before == 0u);
     CHECK(state.binding.pipeline == &payload);
+    list.endRenderPass();
+    run(device, list, done);
+    CHECK(messages.count() == 0u);
+    device.destroy(target);
+    device.destroy(done);
+    destroyDevice(device);
+}
+
+TEST_CASE("a Graphics list's first graphics setPipeline sets the heaps and the global root signature, and the next sets neither", "[d3d12]")
+{
+    REQUIRE(kD3D12LibrariesBuilt);
+    Device device = makeDevice();
+    const MessageCollection messages;
+    const ShaderLibrary library = loadStandard(device);
+    const Pipeline pipeline = standardPipeline(device, library);
+    const Pipeline culled = standardPipeline(device, library, RasterState{ .cull = CullMode::Back });
+    const Texture target = makeTarget(device);
+    const Fence done = makeFence(device, "test.done");
+    device.beginFrame();
+    CommandList list = device.acquireCommandList(QueueType::Graphics, "test.first");
+    const d3d12::Binding& binding = stateOf(list).binding;
+    // Acquisition sends Reset alone and leaves both owed.
+    CHECK(recordCalls(list) == 1u);
+    CHECK_FALSE(binding.heapsSet);
+    CHECK(binding.graphicsSignatureOwed);
+    toColorAttachment(list, target);
+    const std::array colors{ ColorAttachment{ .texture = target, .load = LoadOp::Clear } };
+    list.beginRenderPass(passOver(colors));
+    // The pass sends neither: it begins with no pipeline bound.
+    CHECK_FALSE(binding.heapsSet);
+    CHECK(binding.graphicsSignatureOwed);
+    // SetDescriptorHeaps, then SetGraphicsRootSignature, which indexes them directly, then SetPipelineState and
+    // IASetPrimitiveTopology. The counts cannot show the order; setPipeline sets the heaps before the signature, and
+    // the debug layer's clean run below is the order's evidence.
+    uint64_t before = recordCalls(list);
+    list.setPipeline(pipeline);
+    CHECK(recordCalls(list) - before == 4u);
+    CHECK(binding.heapsSet);
+    CHECK_FALSE(binding.graphicsSignatureOwed);
+    // Setting the signature drops every root argument, so b1 stays owed to the draw.
+    CHECK(binding.dirty(d3d12::kDrawIdDirty));
+    // Another pipeline: SetPipelineState alone, the topology held.
+    before = recordCalls(list);
+    list.setPipeline(culled);
+    CHECK(recordCalls(list) - before == 1u);
+    list.setViewport(kFull);
+    list.setScissor(kFullRect);
+    // b1 and DrawInstanced: a list without a root binds none.
+    before = recordCalls(list);
+    list.draw(3);
+    CHECK(recordCalls(list) - before == 2u);
+    list.endRenderPass();
+    // The next pass binds the first pipeline again: SetPipelineState alone, no heaps and no root signature.
+    list.barrier({}, {}, std::array{ betweenPasses(target) });
+    list.beginRenderPass(passOver(colors));
+    before = recordCalls(list);
+    list.setPipeline(pipeline);
+    CHECK(recordCalls(list) - before == 1u);
+    list.setViewport(kFull);
+    list.setScissor(kFullRect);
+    before = recordCalls(list);
+    list.draw(3);
+    CHECK(recordCalls(list) - before == 1u);
+    list.endRenderPass();
+    run(device, list, done);
+    CHECK(messages.count() == 0u);
+    device.destroy(target);
+    device.destroy(done);
+    destroyDevice(device);
+}
+
+TEST_CASE("the first graphics setPipeline after vendor work sets the global root signature again, without the heaps", "[d3d12]")
+{
+    REQUIRE(kD3D12LibrariesBuilt);
+    Device device = makeDevice();
+    const MessageCollection messages;
+    const Pipeline pipeline = standardPipeline(device, loadStandard(device));
+    const Texture target = makeTarget(device);
+    const Fence done = makeFence(device, "test.done");
+    device.beginFrame();
+    CommandList list = device.acquireCommandList(QueueType::Graphics, "test.vendor");
+    const d3d12::Binding& binding = stateOf(list).binding;
+    toColorAttachment(list, target);
+    const std::array colors{ ColorAttachment{ .texture = target, .load = LoadOp::Clear } };
+    list.beginRenderPass(passOver(colors));
+    list.setPipeline(pipeline);
+    list.setViewport(kFull);
+    list.setScissor(kFullRect);
+    list.draw(3);
+    list.endRenderPass();
+    // Vendor work leaves its own root signature on the native list. The fill kernel's stands in for it, outside the
+    // count, so a draw that kept it instead of the global one would fail the debug layer's check below.
+    CommandListImpl::of(list).state.list->SetGraphicsRootSignature(DeviceImpl::of(device).roots.kernel());
+    // What an upscale does after its vendor work, between two passes as chapter 07 places every upscale: the heaps at
+    // once, SetDescriptorHeaps alone, and the graphics root signature owed to the next graphics bind.
+    uint64_t before = recordCalls(list);
+    d3d12::resumeAfterVendorWork(CommandListImpl::of(list));
+    CHECK(recordCalls(list) - before == 1u);
+    CHECK(binding.heapsSet);
+    CHECK(binding.graphicsSignatureOwed);
+    list.barrier({}, {}, std::array{ betweenPasses(target) });
+    list.beginRenderPass(passOver(colors));
+    // SetGraphicsRootSignature, SetPipelineState and IASetPrimitiveTopology: the heaps are already the device's.
+    before = recordCalls(list);
+    list.setPipeline(pipeline);
+    CHECK(recordCalls(list) - before == 3u);
+    CHECK_FALSE(binding.graphicsSignatureOwed);
+    // The pipeline again sends nothing.
+    before = recordCalls(list);
+    list.setPipeline(pipeline);
+    CHECK(recordCalls(list) - before == 0u);
+    list.setViewport(kFull);
+    list.setScissor(kFullRect);
+    // b1 and DrawInstanced: the switch dropped b1, and the list has no root to bind.
+    before = recordCalls(list);
+    list.draw(3);
+    CHECK(recordCalls(list) - before == 2u);
     list.endRenderPass();
     run(device, list, done);
     CHECK(messages.count() == 0u);
@@ -403,7 +521,7 @@ TEST_CASE("setPipeline reads a pipeline bound again in the recording from the li
     list.setViewport(kFull);
     list.setScissor(kFullRect);
     // Each bind below changes the pipeline the native slot holds, so it sends SetPipelineState; the first also sets the
-    // topology, which every later bind finds held.
+    // heaps, the global root signature and the topology, which every later bind finds held.
     const auto bind = [&](Pipeline pipeline, const d3d12::PipelineState* expected, uint64_t calls = 1) {
         const uint64_t before = recordCalls(list);
         list.setPipeline(pipeline);
@@ -412,7 +530,7 @@ TEST_CASE("setPipeline reads a pipeline bound again in the recording from the li
         CHECK(state.binding.graphicsPipeline == expected->pso);
         list.draw(3);
     };
-    bind(a, stateA, 2);
+    bind(a, stateA, 4);
     bind(b, stateB);
     // The two handles bound last, newest first, with their payloads.
     CHECK(resolved.handles == Pair{ b.bits, a.bits });
@@ -477,10 +595,10 @@ TEST_CASE("a mesh pipeline sets no topology", "[d3d12]")
     toColorAttachment(list, target);
     const std::array colors{ ColorAttachment{ .texture = target, .load = LoadOp::Clear } };
     list.beginRenderPass(passOver(colors));
-    // SetPipelineState alone.
+    // The list's first graphics pipeline sets the heaps and the global root signature, then SetPipelineState alone.
     uint64_t before = recordCalls(list);
     list.setPipeline(mesh);
-    CHECK(recordCalls(list) - before == 1u);
+    CHECK(recordCalls(list) - before == 3u);
     CHECK(state.binding.graphicsPipeline == payload.pso);
     CHECK(state.dynamic.topology == D3D_PRIMITIVE_TOPOLOGY_UNDEFINED);
     list.setViewport(kFull);
@@ -678,10 +796,11 @@ TEST_CASE("a depthBias pipeline re-issues the recorded bias at every setPipeline
     toColorAttachment(list, target);
     const std::array colors{ ColorAttachment{ .texture = target, .load = LoadOp::Clear } };
     list.beginRenderPass(passOver(colors));
-    // SetPipelineState, IASetPrimitiveTopology and RSSetDepthBias with the pass's zero bias.
+    // SetDescriptorHeaps and SetGraphicsRootSignature at the list's first graphics pipeline, then SetPipelineState,
+    // IASetPrimitiveTopology and RSSetDepthBias with the pass's zero bias.
     uint64_t before = recordCalls(list);
     list.setPipeline(biased);
-    CHECK(recordCalls(list) - before == 3u);
+    CHECK(recordCalls(list) - before == 5u);
     // Recorded and sent once; the same values again send nothing.
     before = recordCalls(list);
     list.setDepthBias(4.0f, 0.5f, 0.125f);
@@ -813,8 +932,8 @@ TEST_CASE("a zero-count draw, indexed draw or mesh draw records nothing", "[d3d1
     list.drawMeshTasks(1, 1, 0);
     CHECK(recordCalls(list) - before == 0u);
     // No flush, no index buffer and no draw was recorded.
-    CHECK(state.binding.graphicsRootDirty);
-    CHECK(state.binding.drawIdDirty);
+    CHECK(state.binding.dirty(d3d12::kGraphicsRootDirty));
+    CHECK(state.binding.dirty(d3d12::kDrawIdDirty));
     CHECK(state.dynamic.indexBuffer.BufferLocation == 0u);
     list.endRenderPass();
     run(device, list, done);
@@ -846,7 +965,7 @@ TEST_CASE("setRoot before the pass, a fill, then the pass: the first draw binds 
     CHECK(binding.computeRoot == d3d12::ComputeRoot::Kernel);
     CHECK(binding.graphicsPipeline == nullptr);
     // The kernel touches the compute side alone: the graphics side still owes the caller's root.
-    CHECK(binding.graphicsRootDirty);
+    CHECK(binding.dirty(d3d12::kGraphicsRootDirty));
     CHECK(binding.root == d3d12::rootAddress(DeviceImpl::of(device).directory, root));
     toColorAttachment(list, target);
     const std::array colors{ ColorAttachment{ .texture = target, .load = LoadOp::Clear } };
@@ -918,12 +1037,13 @@ TEST_CASE("C8's sequence costs the native minimum + 1", "[d3d12]")
         counts[6] = recordCalls(list) - before;
     }
     // The first pass: BeginEvent, EndQuery and BeginRenderPass, its starting values owed to a draw that reads them;
-    // SetPipelineState and IASetPrimitiveTopology; RSSetViewports; RSSetScissorRects; b1 and DrawInstanced; EndRenderPass,
-    // EndQuery, EndEvent.
-    CHECK(repetitions[0] == Counts{ 0, 3, 2, 1, 1, 2, 3 });
-    // Every later pass: Barrier; BeginEvent, EndQuery, BeginRenderPass; the pipeline, viewport and scissor held; DrawInstanced;
-    // EndRenderPass, EndQuery, EndEvent. Eight calls, each entry at its native minimum.
-    CHECK(repetitions[1] == Counts{ 1, 3, 0, 0, 0, 1, 3 });
+    // SetDescriptorHeaps, SetGraphicsRootSignature, SetPipelineState and IASetPrimitiveTopology, the list's first graphics
+    // pipeline; RSSetViewports; RSSetScissorRects; b1 and DrawInstanced; EndRenderPass, EndQuery, EndEvent.
+    CHECK(repetitions[0] == Counts{ 0, 3, 4, 1, 1, 2, 3 });
+    // Every later pass: no Barrier, since the barrier between passes keeps LAYOUT_RENDER_TARGET and render-target access;
+    // BeginEvent, EndQuery, BeginRenderPass; the pipeline, viewport and scissor held; DrawInstanced; EndRenderPass, EndQuery,
+    // EndEvent. Seven calls, each entry at its native minimum.
+    CHECK(repetitions[1] == Counts{ 0, 3, 0, 0, 0, 1, 3 });
     CHECK(repetitions[2] == repetitions[1]);
     run(device, list, done);
     CHECK(messages.count() == 0u);

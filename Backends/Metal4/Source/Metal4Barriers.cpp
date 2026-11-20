@@ -28,10 +28,22 @@ namespace rojoRHI {
                 return (stages & mask) != Stage::None;
             }
 
-            void addSides(BatchLowering& lowered, Stage srcStage, Access srcAccess, Stage dstStage, Access dstAccess)
+            // A texture in `CopySrc` is used only as the source of a copy (`VU-rojo-sync-0004`), and every texture copy of this
+            // backend runs as a blit: the `Copy` bit of such a destination holds blits alone, not the kernels and load actions a
+            // fill or a clear may run as, which need another layout and a barrier of their own.
+            MTL::Stages destinationStages(Stage dstStage, Layout newLayout)
+            {
+                if (newLayout != Layout::CopySrc || !any(dstStage, Stage::Copy) || dstStage == Stage::All)
+                {
+                    return metalStages(dstStage);
+                }
+                return metalStages(dstStage & ~Stage::Copy) | MTL::StageBlit;
+            }
+
+            void addSides(BatchLowering& lowered, Stage srcStage, Access srcAccess, Stage dstStage, Access dstAccess, Layout newLayout = Layout::Undefined)
             {
                 lowered.source |= metalStages(srcStage);
-                lowered.destination |= metalStages(dstStage);
+                lowered.destination |= destinationStages(dstStage, newLayout);
                 if (srcAccess != Access::None || dstAccess != Access::None)
                 {
                     lowered.visibility |= MTL4::VisibilityOptionDevice;
@@ -64,7 +76,7 @@ namespace rojoRHI {
                 }
                 for (const TextureBarrier& texture : textures)
                 {
-                    addSides(lowered, texture.srcStage, texture.srcAccess, texture.dstStage, texture.dstAccess);
+                    addSides(lowered, texture.srcStage, texture.srcAccess, texture.dstStage, texture.dstAccess, texture.newLayout);
                     if (texture.oldLayout == Layout::Undefined && (lowered.visibility & MTL4::VisibilityOptionResourceAlias) == 0)
                     {
                         // A discard of a placed texture may follow another resource in its memory, and a newly mapped tile
@@ -103,9 +115,9 @@ namespace rojoRHI {
                     return;
                 }
                 // A source may lie in an earlier encoder or an earlier list, which only a queue-level barrier orders. An open
-                // compute encoder that has not yet run a command in the destination stages takes it, with the encoder-level
-                // part for its own work; otherwise the open encoder ends, and the next encoders to open emit the barrier for
-                // their stages.
+                // compute encoder takes it, with the encoder-level part for its own work, unless another batch is pending,
+                // whose sources the queue-level barrier would then lack; otherwise the open encoder ends, and the next
+                // encoders to open emit the barrier for their stages.
                 const MTL::Stages open = encoders.stages();
                 const MTL::Stages covered = destination & open;
                 if (encoders.holdsWork() && covered != 0 && encoders.barrierInOpen(list, source, covered, visibility))
@@ -116,11 +128,13 @@ namespace rojoRHI {
                     }
                     return;
                 }
+                // The batch joins the pending barrier first, so the closing encoder sees it when it decides whether it owes a producer
+                // barrier: the next encoder's consumer barrier then covers its work.
+                barriers.merge(source, destination, visibility);
                 if (encoders.holdsWork())
                 {
                     encoders.close(list);
                 }
-                barriers.merge(source, destination, visibility);
             }
 
             // Drops the stages no encoder of the list's queue runs. Inlined into both callers, so the batch of one
@@ -252,12 +266,16 @@ namespace rojoRHI {
             {
                 return;
             }
+            // A command in these stages follows the opening barrier now.
+            barriers.preRan &= ~held;
             const MTL::Stages after = barriers.deferredSource & stages;
             if (after != 0)
             {
                 encoder->barrierAfterEncoderStages(after, held, barriers.deferredVisibility);
                 core::noteNativeCall(list);
                 ++list.counts.nativeBarriers;
+                // This orders the encoder's later commands only; the encoder's end tells the later encoders.
+                barriers.keep(after, held, barriers.deferredVisibility);
             }
             // The stages no command has run in since stay held, for a later command in them or, if the encoder closes first,
             // for the pending barrier.

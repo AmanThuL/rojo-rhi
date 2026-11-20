@@ -75,7 +75,8 @@ TEST_CASE("frame data lands in a resident Shared page at the address uploadFrame
     MTL::Buffer* native = nativeOf(device, page);
     REQUIRE(native != nullptr);
     CHECK(native->storageMode() == MTL::StorageModeShared);
-    CHECK(impl.residency.contains(native));
+    // The claim only queued the join (ADR 0041): the page is resident once a submission has committed the set.
+    CHECK_FALSE(impl.residency.contains(native));
     {
         const metal4::AutoreleasePool pool;
         CHECK(metal4::toStdString(native->label()) == "rojorhi.frameArena.page");
@@ -96,6 +97,7 @@ TEST_CASE("frame data lands in a resident Shared page at the address uploadFrame
 #endif
     }
     endAndSubmit(device, list);
+    CHECK(impl.residency.contains(native));
     device.endFrame();
     destroyDevice(device);
 }

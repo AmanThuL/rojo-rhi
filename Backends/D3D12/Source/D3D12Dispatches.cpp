@@ -27,7 +27,11 @@ namespace rojoRHI {
             if (binding.computeRoot != ComputeRoot::Global)
             {
                 // The list has none yet, or a backend kernel or vendor work left its own; setting the global one drops every
-                // root argument, so the root is bound again below.
+                // root argument, so the root is bound again below. It indexes the heaps directly, so they go first.
+                if (!binding.heapsSet)
+                {
+                    setHeaps(list);
+                }
                 state.list->SetComputeRootSignature(deviceOf(list).roots.global());
                 core::noteNativeCall(list.core);
                 binding.computeRoot = ComputeRoot::Global;
@@ -40,6 +44,7 @@ namespace rojoRHI {
                 core::noteNativeCall(list.core);
                 binding.computePipeline = pso;
                 binding.graphicsPipeline = nullptr;
+                binding.graphicsDirty |= kGraphicsPipelineDirty;
             }
             if (binding.computeRootDirty)
             {
@@ -72,7 +77,7 @@ namespace rojoRHI {
         CommandListImpl& list = CommandListImpl::of(*this);
         core::dispatchIndirect(list.core, args);
         d3d12::flushCompute(list);
-        // The buffer's payload is published before its handle is returned, so the directory finds it with one acquire load.
+        // The buffer's payload is published before its handle is returned, so the directory finds it with acquire loads.
         DeviceImpl& impl = d3d12::deviceOf(list);
         const d3d12::BufferPayload* buffer = impl.directory.find(args.lo);
         ROJORHI_INTERNAL_ASSERT(buffer != nullptr, "the arguments of an indirect dispatch name no live buffer");

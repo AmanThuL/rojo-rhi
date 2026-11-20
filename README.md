@@ -1,7 +1,7 @@
 # RojoRHI
 
-RojoRHI is an address-first rendering hardware interface in dependency-free C++23 over Metal 4
-and Direct3D 12.
+RojoRHI is an address-first rendering hardware interface in dependency-free C++23, with native
+Metal 4 and native Direct3D 12 behind one Slang shader ABI.
 
 [![Build and GPU-free checks](https://img.shields.io/github/actions/workflow/status/AmanThuL/rojo-rhi/ci.yml?label=build%20and%20GPU-free%20checks)](https://github.com/AmanThuL/rojo-rhi/actions/workflows/ci.yml)
 ![Latest release](https://img.shields.io/github/v/release/AmanThuL/rojo-rhi)
@@ -10,27 +10,75 @@ and Direct3D 12.
 ![Metal 4: conformance passing on 1 GPU](https://img.shields.io/badge/Metal%204-conformance%20passing%20(1%20GPU)-brightgreen)
 ![Direct3D 12: conformance passing on 1 GPU](https://img.shields.io/badge/Direct3D%2012-conformance%20passing%20(1%20GPU)-brightgreen)
 
-## Why RojoRHI
+## What it is, and who it is for
 
-- **Address-first with no binding slots.** Shaders reach buffers through GPU addresses and heap
-  indices in one root block pushed per draw or dispatch. The Slang `RojoRHI` module owns that
-  binding, so shaders declare none.
-- **One backend per build, no virtual calls.** The backend is chosen at configure time, calls
-  resolve at compile time, and link-time optimization inlines small calls such as
-  `Device::capabilities`.
-- **Near-native CPU cost.** On an Apple M4 Pro, a draw with a 64-byte root block costs 67.6 ns,
-  against 66.0 ns in hand-written Metal 4 (+2.6%); [measured](docs/performance.md), not estimated.
-- **Full Debug validation, zero Release cost.** Every valid-usage rule in the API reference has a
-  runtime check and death test in Debug builds. Release builds leave them unchecked at no cost.
-- **Dependency-free public headers.** Headers under `Include/` contain no platform, windowing, or
-  third-party types.
-- **No hidden threads or locks.** RojoRHI creates no threads, and command recording takes no
-  locks in Release except when a command list claims a new frame-arena page.
+RojoRHI is for teams writing a new GPU-driven renderer who write their own shaders in Slang. A
+shader reaches its data through one root block per draw or dispatch, the GPU addresses inside it
+and heap indices inside it. There are no binding slots, descriptor sets or pipeline layouts, and
+one Slang module, `RojoRHI`, is the only code that knows how each backend lowers that model.
+
+That combination is narrow, and when last surveyed it was empty: of the open-source rendering
+hardware interfaces read on 2026-10-11, none combined Direct3D 12, Metal 4 and a pointer-first
+root model. [NoGraphicsAPI](https://github.com/sebbbi/NoGraphicsAPI), the library by the author
+of the "No Graphics API" proposal that RojoRHI's shader-facing model follows, has a native Metal 4
+backend among others and no Direct3D 12 backend.
+
+What it is not:
+
+- **Not a backend for an existing engine.** It has no binding slots and no vertex-input state, so
+  shaders written against slots or vertex layouts do not port onto it; every shader imports the
+  `RojoRHI` module and pulls its own vertices.
+- **Not a mobile or web interface.** The backends are Metal 4 on Apple silicon Macs and Direct3D 12
+  on Windows 11.
+- **Not a wide-compatibility layer.** Each backend has one hardware floor, checked when a device
+  is created; below it creation fails, and there is no reduced mode.
+
+## How a shader reaches its data
+
+- **One root block, bound by address.** `CommandList::pushRoot(value)` allocates, copies and binds
+  per-draw data from the frame's upload memory in one call. `CommandList::setRoot(Addr)` binds a
+  root the caller already has, so a static root is built once and never re-uploaded.
+- **`Addr`, an 8-byte value naming buffer memory.** On Metal 4 it is a GPU virtual address; on
+  Direct3D 12 it is a raw-buffer heap index and a byte offset, because HLSL and DXIL have no
+  pointers. Structs shared between C++ and Slang carry `Addr`, never a raw 64-bit pointer, and
+  shaders read through it with `rojoRHI::load<T>` and `rojoRHI::store<T>`.
+- **Heap indices.** `ViewIndex` and `SamplerIndex` are 32-bit indices into two global heaps;
+  shaders fetch textures and samplers by index.
+- **One definition of the built-ins.** `vertexIndex()`, `instanceIndex()` and `drawId()` mean the
+  same on every backend.
+- **Vertices are pulled by the shader**, and a pipeline holds only state a backend bakes at
+  creation. Shaders are compiled offline; RojoRHI never compiles a shader at run time.
+
+The cost of this model is published entry by entry. Dereferencing an `Addr` is native on Metal 4
+and costly on Direct3D 12, one descriptor fetch per distinct base, so the API reference recommends
+root fields and heap indices for hot per-draw data
+([shader ABI, part 2](docs/spec/05-shader-abi-part2.md)). [The cost
+summary](docs/spec/A-cost-summary.md) gives every entry's cost class on each backend.
+
+## What the shader ABI checks for you
+
+The same Slang source compiles to a Metal library and to DXIL. Every struct shared between C++ and
+Slang is checked at build time against Slang reflection, and the build fails when the layouts
+drift apart. The build writes the shader ABI version, `ROJORHI_SHADER_ABI_VERSION` (now 3), into
+each compiled library, and `Device::loadShaderLibrary` refuses a library built for another version
+with `ShaderAbiMismatch` instead of running a stale shader.
+
+## Validation in Debug, nothing in Release
+
+- **Misuse is fatal in Debug builds.** Every valid-usage rule in the API reference has a check and
+  a death test. Release builds leave the checks out and pay nothing for them.
+- **A backend-neutral tracker.** Selected with `DeviceDesc::validation` in Debug builds, it checks
+  every barrier and observable access, cross-queue ordering and lifetimes, and reports a violation
+  the same way on every backend. It checks necessity as well as sufficiency: a missing barrier is
+  reported even on a GPU that happens to run correctly without it
+  ([diagnostics](docs/spec/14-diagnostics.md)).
+- **A Null backend.** Test-only, it implements the whole interface with the tracker and runs on
+  any host with no GPU.
 
 ## A first dispatch
 
-This excerpt from the first compute example passes buffer GPU addresses in a root struct and
-dispatches work without declaring any binding slots.
+This excerpt from `01_HelloCompute` passes buffer addresses in a root block and dispatches with no
+binding declared anywhere.
 
 ```cpp
 struct SaxpyRoot
@@ -61,6 +109,8 @@ device.queue(QueueType::Compute).submit(std::array{ list }, {}, computeDone);
 ```
 
 ```slang
+import RojoRHI;
+// ... SaxpyRoot, declared with rojoRHI::Addr fields
 [shader("compute")]
 [numthreads(64, 1, 1)]
 void saxpy(uint3 thread : SV_DispatchThreadID)
@@ -79,36 +129,51 @@ void saxpy(uint3 thread : SV_DispatchThreadID)
 }
 ```
 
-The shader reads the root block with `rojoRHI::root<SaxpyRoot>()` and indexes each buffer
-through its `Addr`, with no binding declared anywhere. See
-[`Examples/README.md`](Examples/README.md) for the complete program and further examples.
+[`Examples/README.md`](Examples/README.md) has the complete program and six more: a triangle with
+no vertex layout, 256 textures in one instanced draw each picked by heap index, a compute pass
+that culls 16,384 objects into counted indirect draws found through `drawId`, task and mesh
+shaders with no vertex or index buffers, async compute ordered by two timeline fences, and
+temporal upscaling. Debug builds run them under the tracker, so a missing or wrong barrier stops
+the program with the valid-usage identifier it breaks.
 
 ## Performance against native code
 
 Each workload is written twice, once with RojoRHI and once directly in Metal 4 doing the same GPU
-work, and both run on an Apple M4 Pro in Release builds with validation off. Budgets and statistics
-are fixed before anything is timed; each configuration runs as 20 processes, each arm's figure is
-the median of its process medians, and the difference is the median of the paired differences.
+work, and both run on an Apple M4 Pro under macOS 27.2.1 in Release builds with validation off.
+Budgets and statistics are fixed before anything is timed; each configuration runs as 20
+processes, each arm's figure is the median of its process medians, and the difference is the
+median of the paired differences.
 
 | Workload | RojoRHI | Native Metal 4 | Difference |
 |---|---:|---:|---:|
-| Per draw: a 64-byte root block and a draw, 1,000 a list | 67.6 ns | 66.0 ns | +2.6% |
-| Per pipeline switch and draw, 100 a list | 119.4 ns | 116.0 ns | +3.7% |
+| Per draw: a 64-byte root block and a draw, 1,000 a list | 67.79 ns | 65.99 ns | +2.64% |
+| Per pipeline switch and draw, 100 a list | 119.79 ns | 116.04 ns | +3.23% |
 
-RojoRHI itself makes no heap allocation per frame in any workload, and creates no pipeline or
-native object after warm-up. [`docs/performance.md`](docs/performance.md) has every budget of each
-backend's latest round, the ones still above budget included.
+The composed frame's GPU time, 2,130.39 µs against 2,145.70 µs, meets its budget of at most 1%
+above native. RojoRHI itself makes no heap allocation per frame in any workload, and creates no
+pipeline or native object after warm-up. The same round missed its budgets in three places, each
+predicted with its cause before it was timed: a render pass at 10,000 a list, the fixed cost per
+list in one workload, and the composed frame's allocations: it makes one more a frame than native
+code, inside Metal, in a fence wait the barrier design keeps.
+[`docs/performance.md`](docs/performance.md) has every budget of each backend's latest round, the
+missed ones included.
+
+Other properties that keep the cost visible: one backend per build, chosen when xmake configures,
+with no virtual calls, and link-time optimization inlines small calls such as
+`Device::capabilities`. RojoRHI creates no threads, and command recording takes no locks in
+Release with native validation off, except when a command list claims a new frame-arena page.
 
 ## Platforms
 
 | Backend | OS | Minimum hardware | Tested on | Conformance | CPU cost against native |
 |---|---|---|---|---|---|
-| Metal 4 | macOS 26 or later | Apple silicon, GPU family Apple7 or newer | Apple M4 Pro, macOS 27.2.1 | passes, under Metal's validation layer | per operation within budget, 2.5 to 3.3% above native per draw in the three draw workloads; fixed cost per list above budget in two workloads and allocations in one; [full results](docs/performance.md) |
+| Metal 4 | macOS 26 or later | Apple silicon, GPU family Apple7 or newer | Apple M4 Pro, macOS 27.2.1 | passes, under Metal's validation layer | per operation within budget but for a render pass at 10,000 a list; fixed cost per list above budget in one workload; one more allocation a frame than native, inside Metal; [full results](docs/performance.md) |
 | Direct3D 12 | Windows 11 x64 | Feature level 12_2 (NVIDIA RTX 20 series, AMD RDNA 2, Intel Arc or newer) | NVIDIA GeForce RTX 3080 Ti, driver 621.14; other vendors' GPUs not tested | passes on that one GPU, under GPU-based validation | above the project's budgets when last measured; [full results](docs/performance.md) |
 
-A test-only Null backend implements the full interface with the validation tracker and runs on
-any host with no GPU. Minimum hardware is checked when a device is created, failing creation
-below it with no reduced mode; see [the device specification](docs/spec/02-device.md).
+Minimum hardware is checked when a device is created, failing creation below it with no reduced
+mode; see [the device specification](docs/spec/02-device.md). Public headers live under
+`Include/rojoRHI/`, are included as `<rojoRHI/RHI.h>`, and name no platform, windowing or
+third-party type. An optional ImGui adapter builds as a separate target.
 
 ## API features
 
@@ -165,9 +230,10 @@ Examples fetch GLFW, so they are opt-in: `xmake f --rojorhi_examples=y`, then
 ## Documentation
 
 - [The API reference](docs/spec/00-conventions.md) specifies every entry, starting with
-  conventions.
+  conventions; [the shader ABI](docs/spec/05-shader-abi.md) and [the cost
+  summary](docs/spec/A-cost-summary.md) are the chapters to read first.
 - [`Examples/`](Examples/README.md) holds small programs, from a first compute dispatch to
-  GPU-driven culling, mesh shaders, async compute, and temporal upscaling.
+  GPU-driven culling, mesh shaders, async compute and temporal upscaling.
 - [`CHANGELOG.md`](CHANGELOG.md) records changes per release, with breaking changes marked.
 - [`CONTRIBUTING.md`](CONTRIBUTING.md) covers bug reports, and [`SECURITY.md`](SECURITY.md)
   covers private vulnerability reports.

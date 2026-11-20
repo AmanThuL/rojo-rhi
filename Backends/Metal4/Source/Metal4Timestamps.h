@@ -17,6 +17,7 @@
 #include <cstdint>
 #include <optional>
 #include <span>
+#include <string>
 
 namespace rojoRHI {
     struct CommandListImpl;
@@ -51,6 +52,11 @@ namespace rojoRHI::metal4 {
         {
             return m_slots[slot].heaps[number].load(std::memory_order_acquire);
         }
+
+        // Warns once per device when Metal refused a heap since the device was created, and does nothing otherwise or on a
+        // later call. A claim only records the refusal, because the sink takes a lock and recording takes none (ADR 0041);
+        // `Device::beginFrame` calls this. Free-threaded; one acquire load when nothing was refused.
+        void reportRefusal();
 
         // The first call after the slot's reuse resolves each used heap once; later calls for other queues read what it
         // resolved. Opens an autorelease pool.
@@ -89,7 +95,20 @@ namespace rojoRHI::metal4 {
         MTL::Device* m_device = nullptr; // The device owns it.
         uint64_t m_frequency = 0;        // Ticks per second.
         std::array<Slot, kSlots> m_slots;
-        std::atomic<bool> m_refusalLogged = false; // Each device logs one refusal.
+        // The first refusal of the device, recorded by the claim that met it and reported by `reportRefusal`. Free of locks:
+        // the claim that moves `m_refusal` from `kNone` to `kRecording` alone writes the three fields, then publishes them
+        // as `kRecorded`; the report moves it to `kReported` once. Later refusals record nothing.
+        enum Refusal : uint32_t
+        {
+            kNone,
+            kRecording,
+            kRecorded,
+            kReported,
+        };
+        std::atomic<uint32_t> m_refusal = kNone;
+        uint32_t m_refusalSlot = 0;
+        uint32_t m_refusalNumber = 0;
+        std::string m_refusalError;
     };
 
     // Precise keeps each timestamp at its place among the encoder's commands; at an encoder's start and end, and after

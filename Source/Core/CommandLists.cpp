@@ -127,7 +127,7 @@ namespace rojoRHI::core {
         list.page = core.arena().claim(slot, size, core.capabilities().limits.maxBufferSize, source, context);
 #ifndef NDEBUG
         // Only Debug-tier code reads the claiming frame (VU-rojo-buffer-0020 and the tracker's references), so a Release claim
-        // takes no buffer-pool lock to write it (ADR 0020).
+        // takes no buffer-pool lock to write it (ADR 0041).
         core.pool<Buffer>().update(list.page.buffer, [&](BufferRecord& record) { record.arenaFrame = list.frame; });
 #endif
         ROJORHI_INTERNAL_ASSERT(

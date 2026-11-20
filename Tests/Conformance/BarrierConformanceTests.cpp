@@ -227,6 +227,36 @@ TEST_CASE("a barrier at the start of a list orders the previous list's copy on t
     CHECK(kit.read(readback) == tailOf(source));
 }
 
+TEST_CASE("a barrier after a copy in the same encoder orders the previous list's copy and its own", "[conformance]")
+{
+    test::requireGpu();
+    test::GpuKit kit;
+    const std::vector<std::byte> earlier = test::pattern(kBig, 11);
+    const std::vector<std::byte> own = test::pattern(kBig, 12);
+    const Buffer earlierSource = kit.buffer(kBig, Memory::Upload, BufferUsage::None, earlier);
+    const Buffer ownSource = kit.buffer(kBig, Memory::Upload, BufferUsage::None, own);
+    const Buffer earlierTarget = kit.buffer(kBig, Memory::Gpu, BufferUsage::None, test::pattern(kBig, 13));
+    const Buffer ownTarget = kit.buffer(kBig, Memory::Gpu, BufferUsage::None, test::pattern(kBig, 14));
+    const Buffer scratch = kit.buffer(kTail, Memory::Gpu, BufferUsage::None, test::pattern(kTail, 15));
+    const Buffer scratchTarget = kit.buffer(kTail, Memory::Gpu, BufferUsage::None);
+    const Buffer earlierReadback = kit.buffer(kTail, Memory::Readback);
+    const Buffer ownReadback = kit.buffer(kTail, Memory::Readback);
+    CommandList producer = kit.list(QueueType::Graphics, "test.producer");
+    producer.copyBuffer(earlierSource, 0, earlierTarget, 0, kBig);
+    // The consumer's encoder has copied before the barrier, so the barrier lies after a command in its destination stage:
+    // the work of the producer's encoder is ordered by the barrier's queue-level part, the encoder's own slow copy by its
+    // encoder-level part, and only the barrier orders either.
+    CommandList consumer = kit.list(QueueType::Graphics, "test.consumer");
+    consumer.copyBuffer(scratch, 0, scratchTarget, 0, kTail);
+    consumer.copyBuffer(ownSource, 0, ownTarget, 0, kBig);
+    consumer.barrier(std::array{ copyToCopy() });
+    consumer.copyBuffer(earlierTarget, kBig - kTail, earlierReadback, 0, kTail);
+    consumer.copyBuffer(ownTarget, kBig - kTail, ownReadback, 0, kTail);
+    kit.run(std::array{ producer, consumer });
+    CHECK(kit.read(earlierReadback) == tailOf(earlier));
+    CHECK(kit.read(ownReadback) == tailOf(own));
+}
+
 TEST_CASE("a barrier at the end of a list orders the next list's copy on the queue", "[conformance]")
 {
     test::requireGpu();

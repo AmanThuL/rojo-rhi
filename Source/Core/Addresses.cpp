@@ -7,8 +7,9 @@
 
 #include "Base/Assert.h"
 
+#ifndef NDEBUG
 namespace rojoRHI::core {
-    ResolvedAddr resolveAddr(DeviceCore& core, [[maybe_unused]] const CommandListCore& list, Addr addr)
+    ResolvedAddr resolveAddr(DeviceCore& core, const CommandListCore& list, Addr addr)
     {
         if (addr.lo == 0 && addr.hi == 0)
         {
@@ -25,9 +26,8 @@ namespace rojoRHI::core {
         );
         if (!live)
         {
-            return ResolvedAddr{}; // Release only: the address is not a buffer's, and nothing here may read it.
+            return ResolvedAddr{};
         }
-#ifndef NDEBUG
         // The claiming frame changes under the pool's lock when a list claims the page, so it is read under that lock too.
         uint64_t arenaFrame = 0;
         core.pool<Buffer>().update(live->handle, [&](const BufferRecord& record) { arenaFrame = record.arenaFrame; });
@@ -40,7 +40,7 @@ namespace rojoRHI::core {
             list.label,
             list.frame
         );
-#endif
         return ResolvedAddr{ live->handle, live->record, decoded.offset };
     }
 } // namespace rojoRHI::core
+#endif
