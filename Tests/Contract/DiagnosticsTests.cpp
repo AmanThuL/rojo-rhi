@@ -217,6 +217,41 @@ TEST_CASE("scopeTimings is empty again for the next retired frame when it had no
     destroyDevice(device);
 }
 
+TEST_CASE("a device that neither times nor marks scopes records nested scopes in two recordings of a pooled list, with no warning", "[contract]")
+{
+    Device device = *createDevice(DeviceDesc{ .framesInFlight = 2 });
+    // Only the recordings' warnings are collected: whatever creation logs is not this case's.
+    g_warnings.clear();
+    setMessageCallback(collectWarning, nullptr);
+    // The slot's next frame hands the list out again, so the second recording is the same pooled list's.
+    const auto record = [&] {
+        CommandList list = device.acquireCommandList(QueueType::Graphics, "test.list");
+        list.beginScope("outer");
+        list.beginScope("inner");
+        list.endScope();
+        list.beginScope("");
+        list.endScope();
+        list.endScope();
+        submit(device, list);
+    };
+    device.beginFrame();
+    record();
+    device.endFrame();
+    idleFrames(device, 1);
+    device.beginFrame();
+    CHECK(device.scopeTimings().empty());
+    record();
+    device.endFrame();
+    // Two frames in flight: the second recording's frame is reported by the beginFrame two frames after it.
+    idleFrames(device, 1);
+    device.beginFrame();
+    CHECK(device.scopeTimings().empty());
+    device.endFrame();
+    destroyDevice(device);
+    setMessageCallback(nullptr, nullptr);
+    CHECK(g_warnings.empty());
+}
+
 TEST_CASE("every render pass forms a scope labeled with the pass label, defaulted when empty", "[contract]")
 {
     Device device = *createDevice(DeviceDesc{ .scopeTimings = true, .framesInFlight = 2 });

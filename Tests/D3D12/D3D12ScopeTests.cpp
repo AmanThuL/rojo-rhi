@@ -437,7 +437,9 @@ TEST_CASE("a device without scopeTimings records each scope's event alone, makes
     list.beginScope("");
     CHECK(recordCalls(list) - calls == 1u);
     CHECK(lastScope(list).timestamp == core::kNoTimestamp);
-    CHECK(state.timestamps.open == std::vector<uint32_t>{ core::kNoTimestamp });
+    // The first claim closed the gate, so the scope pushed nothing for its end to pop.
+    CHECK(state.timestamps.gate == d3d12::ListTimestamps::Gate::Closed);
+    CHECK(state.timestamps.open.empty());
     list.endScope();
     CHECK(recordCalls(list) - calls == 2u);
     CHECK(state.timestamps.next == 0u);
@@ -451,6 +453,50 @@ TEST_CASE("a device without scopeTimings records each scope's event alone, makes
     device.queue(QueueType::Graphics).submit(std::span(&list, 1), {}, {});
     retireOpenFrame(device);
     CHECK(device.scopeTimings().empty());
+    device.endFrame();
+    CHECK(messages.all().empty());
+    destroyDevice(device);
+}
+
+TEST_CASE("a list that times no scope keeps its gate closed across recordings and claims nothing", "[d3d12]")
+{
+    // A device that neither times nor marks scopes: a scope's begin and end send no native call at all.
+    Result<Device> created = createDevice({ .framesInFlight = 2 });
+    REQUIRE(created.has_value());
+    Device device = *created;
+    const MessageCollection messages;
+    const auto record = [&](CommandList list) {
+        const d3d12::ListState& state = stateOf(list);
+        const uint64_t calls = recordCalls(list);
+        list.beginScope("outer");
+        list.beginScope("inner");
+        CHECK(state.timestamps.gate == d3d12::ListTimestamps::Gate::Closed);
+        CHECK(state.timestamps.open.empty());
+        list.endScope();
+        list.endScope();
+        CHECK(recordCalls(list) == calls);
+        CHECK(state.timestamps.next == 0u);
+        CHECK(state.timestamps.heaps.empty());
+        CHECK(core::coreOf(list).scopeLog.size() == 2u);
+        list.end();
+        device.queue(QueueType::Graphics).submit(std::span(&list, 1), {}, {});
+    };
+    device.beginFrame();
+    CommandList list = device.acquireCommandList(QueueType::Graphics, "test.list");
+    const d3d12::ListState& state = stateOf(list);
+    // Acquisition does not know the gate yet: the recording's first scope decides it, and it closes.
+    CHECK(state.timestamps.gate == d3d12::ListTimestamps::Gate::Unknown);
+    record(list);
+    device.endFrame();
+    device.beginFrame();
+    device.endFrame();
+    device.beginFrame();
+    // The slot's next frame hands out the same list with its gate still closed: the device, the ordinal and the queue
+    // type it was decided by are the list's for its life.
+    CommandList again = device.acquireCommandList(QueueType::Graphics, "test.list");
+    REQUIRE(&stateOf(again) == &state);
+    CHECK(state.timestamps.gate == d3d12::ListTimestamps::Gate::Closed);
+    record(again);
     device.endFrame();
     CHECK(messages.all().empty());
     destroyDevice(device);

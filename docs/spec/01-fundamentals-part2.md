@@ -1,7 +1,7 @@
 # 01. Fundamentals, part 2
 
 **Status**: Accepted
-**API version**: 1.0.3
+**API version**: 1.0.4
 
 This part continues [fundamentals](01-fundamentals.md) with labels, the message callback and the
 version macros. Notation and cost classes follow [conventions](00-conventions.md).

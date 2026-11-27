@@ -1,7 +1,7 @@
 # 02. Device
 
 **Status**: Accepted
-**API version**: 1.0.3
+**API version**: 1.0.4
 
 The `Device` owns every resource, queue and frame slot RojoRHI creates. This chapter specifies its
 creation and teardown, the capabilities it reports, the frame calls that pace the CPU against the

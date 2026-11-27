@@ -57,11 +57,12 @@
 -- The work runs in before_build so the generated headers exist before the target's C++ compiles. Each output is
 -- skipped while it is newer than every entry, every module under moduledir and slang.includedirs, the compiler
 -- and this rule. A shader library is also rebuilt when its metallib or DXIL, reflection, SPIR-V or the packaging
--- tool is newer. Each entry file's compile policy (the compiler's path and version, the -I directories in order
--- and the precision flags) is recorded in <name>.precision, written after every output of the file is built: a
--- record that is missing or names another policy removes the record and every output of the file first, so a
--- changed policy, or a build that failed partway, rebuilds the whole file under one policy. The first build
--- after the record was introduced rebuilds every file once.
+-- tool is newer. Each entry file's compile policy (the compiler's path and version, the -I directories in order,
+-- whether the Metal toolchain and DXIL probes passed, and the precision flags) is recorded in <name>.precision,
+-- written after every output of the file is built: a record that is missing or names another policy removes the
+-- record and every output of the file first, so a changed policy or a probe that flips between builds rebuilds
+-- the whole file under one policy, even when the build that changed it failed partway. The first build after
+-- the record was introduced, or after it gained the probes, rebuilds every file once.
 
 -- Script scope does not see this file's locals, so the helpers live inside the callback.
 rule("rojorhi.slang")
@@ -296,11 +297,13 @@ rule("rojorhi.slang")
         for _, dir in ipairs(includedirs) do
             table.join2(include_args, {"-I", dir})
         end
-        -- Each file's record names the compiler, its version and the -I directories besides its precision flags.
+        -- Each file's record names the compiler, its version, the -I directories and both probes besides its
+        -- precision flags, so a probe that flips rebuilds every output of the file, not only those it gates.
         local version_out, version_err = os.iorunv(slangc, {"-version"})
         local version = ((version_out or "") .. (version_err or "")):trim()
-        local common_policy = format("slangc %s %s\nincludes %s\n", path.absolute(slangc), version,
-                                     table.concat(include_args, " "))
+        local common_policy = format("slangc %s %s\nincludes %s\nmetallib %s\ndxil %s\n", path.absolute(slangc),
+                                     version, table.concat(include_args, " "), has_metal and "yes" or "no",
+                                     dxil_available and "yes" or "no")
         for _, source in ipairs(sources) do
             local name = path.basename(source)
             local entries = entries_of[source]

@@ -81,7 +81,7 @@ namespace rojoRHI {
         // grows. A miss reads the payload through the handle pool's table, with acquire loads and no lock (ADR 0041).
         const d3d12::PipelineState* resolvePipeline(CommandListImpl& list, Pipeline pipeline)
         {
-            d3d12::ResolvedPipelines& resolved = list.state.binding.resolved;
+            d3d12::ResolvedPipelines& resolved = list.state.resolved;
             const bool older = pipeline.bits == resolved.handles[1];
             if ((pipeline.bits == resolved.handles[0]) | older) [[likely]]
             {

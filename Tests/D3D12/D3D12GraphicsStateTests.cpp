@@ -494,7 +494,7 @@ TEST_CASE("the first graphics setPipeline after vendor work sets the global root
     destroyDevice(device);
 }
 
-TEST_CASE("setPipeline reads a pipeline bound again in the recording from the list's pair, and acquisition empties the pair", "[d3d12]")
+TEST_CASE("setPipeline reads a pipeline bound again from the list's pair, which outlives the recording", "[d3d12]")
 {
     REQUIRE(kD3D12LibrariesBuilt);
     using Pair = std::array<uint64_t, 2>;
@@ -514,7 +514,7 @@ TEST_CASE("setPipeline reads a pipeline bound again in the recording from the li
     device.beginFrame();
     CommandList list = device.acquireCommandList(QueueType::Graphics, "test.pair");
     d3d12::ListState& state = stateOf(list);
-    const d3d12::ResolvedPipelines& resolved = state.binding.resolved;
+    const d3d12::ResolvedPipelines& resolved = state.resolved;
     CHECK(resolved.handles == Pair{});
     toColorAttachment(list, target);
     list.beginRenderPass(passOver(colors));
@@ -543,7 +543,7 @@ TEST_CASE("setPipeline reads a pipeline bound again in the recording from the li
         CHECK(resolved.handles == Pair{ b.bits, a.bits });
     }
     // A hit reads the pair, not the handle pool's table: a payload planted for a's handle is the one bound.
-    d3d12::ResolvedPipelines& planted = state.binding.resolved;
+    d3d12::ResolvedPipelines& planted = state.resolved;
     planted.states[1] = stateC;
     bind(a, stateC);
     planted.states[1] = stateA;
@@ -560,18 +560,97 @@ TEST_CASE("setPipeline reads a pipeline bound again in the recording from the li
     // The pair outlives the pass.
     CHECK(resolved.handles == Pair{ a.bits, c.bits });
     run(device, list, done);
-    // The slot's next frame hands the same list out again, its pair empty.
+    // The slot's next frame hands the same list out again with its pair kept, so its first bind of a reads no table.
     device.beginFrame();
     device.endFrame();
     device.beginFrame();
     CommandList again = device.acquireCommandList(QueueType::Graphics, "test.pair");
     REQUIRE(&stateOf(again) == &state);
-    CHECK(resolved.handles == Pair{});
-    CHECK(resolved.states == States{});
+    CHECK(resolved.handles == Pair{ a.bits, c.bits });
+    CHECK(resolved.states == States{ stateA, stateC });
+    // The new recording's first bind of a hits the kept pair: a payload planted for a's handle is the one bound. Acquisition
+    // left the native list empty, so the bind still sends the heaps, the root signature, the PSO and the topology.
+    planted.states[0] = stateC;
+    toColorAttachment(again, target);
+    again.beginRenderPass(passOver(colors));
+    again.setViewport(kFull);
+    again.setScissor(kFullRect);
+    const uint64_t first = recordCalls(again);
+    again.setPipeline(a);
+    CHECK(recordCalls(again) - first == 4u);
+    CHECK(state.binding.pipeline == stateC);
+    CHECK(state.binding.graphicsPipeline == stateC->pso);
+    again.draw(3);
+    again.endRenderPass();
+    planted.states[0] = stateA;
     again.end();
-    device.queue(QueueType::Graphics).submit(std::span(&again, 1), {}, {});
+    const std::array<FenceValue, 1> finished{ FenceValue{ done, 2 } };
+    device.queue(QueueType::Graphics).submit(std::span(&again, 1), {}, finished);
     device.endFrame();
+    REQUIRE(device.wait({ done, 2 }, UINT64_MAX));
     CHECK(messages.count() == 0u);
+    device.destroy(target);
+    device.destroy(done);
+    destroyDevice(device);
+}
+
+TEST_CASE("a pipeline destroyed between two recordings of a pooled list is never returned for the live pipeline after it", "[d3d12]")
+{
+    REQUIRE(kD3D12LibrariesBuilt);
+    Device device = makeDevice();
+    const MessageCollection messages;
+    const ShaderLibrary library = loadStandard(device);
+    const Pipeline a = standardPipeline(device, library);
+    const d3d12::PipelineState* stateA = &payloadOf(device, a);
+    const Texture target = makeTarget(device);
+    const Fence done = makeFence(device, "test.done");
+    const std::array colors{ ColorAttachment{ .texture = target, .load = LoadOp::Clear } };
+    // Records one pass that binds `pipeline` and draws, checking inside the pass what the bind left bound.
+    const auto record = [&](CommandList list, Pipeline pipeline, const d3d12::PipelineState* expected) {
+        toColorAttachment(list, target);
+        list.beginRenderPass(passOver(colors));
+        list.setViewport(kFull);
+        list.setScissor(kFullRect);
+        list.setPipeline(pipeline);
+        CHECK(stateOf(list).binding.pipeline == expected);
+        CHECK(stateOf(list).binding.graphicsPipeline == expected->pso);
+        list.draw(3);
+        list.endRenderPass();
+    };
+    // Bind a, submit and destroy it, then let its frame retire so its handle slot can be issued again.
+    device.beginFrame();
+    CommandList list = device.acquireCommandList(QueueType::Graphics, "test.reuse");
+    d3d12::ListState& state = stateOf(list);
+    record(list, a, stateA);
+    run(device, list, done);
+    device.destroy(a);
+    // Three empty frames retire a's release; the fourth is the list's frame slot again (two frames in flight).
+    for (int frame = 0; frame < 3; ++frame)
+    {
+        device.beginFrame();
+        device.endFrame();
+    }
+    device.beginFrame();
+    // Another pipeline takes a's slot with the next generation, so only the generation tells the two handles apart.
+    const Pipeline b = standardPipeline(device, library, RasterState{ .cull = CullMode::Back });
+    const d3d12::PipelineState* stateB = &payloadOf(device, b);
+    CHECK(static_cast<uint32_t>(b.bits) == static_cast<uint32_t>(a.bits));
+    CHECK(b.bits != a.bits);
+    // The same pooled list, recording again, still holds a's dead entry; binding b reads b's payload, not a's.
+    CommandList again = device.acquireCommandList(QueueType::Graphics, "test.reuse");
+    REQUIRE(&stateOf(again) == &state);
+    CHECK(state.resolved.handles[0] == a.bits);
+    record(again, b, stateB);
+    CHECK(state.resolved.handles == std::array<uint64_t, 2>{ b.bits, a.bits });
+    CHECK(state.resolved.states == std::array<const d3d12::PipelineState*, 2>{ stateB, stateA });
+    again.end();
+    // The second draw's messages arrive by the time the GPU finishes it.
+    const std::array<FenceValue, 1> finished{ FenceValue{ done, 2 } };
+    device.queue(QueueType::Graphics).submit(std::span(&again, 1), {}, finished);
+    device.endFrame();
+    REQUIRE(device.wait({ done, 2 }, UINT64_MAX));
+    CHECK(messages.count() == 0u);
+    device.destroy(b);
     device.destroy(target);
     device.destroy(done);
     destroyDevice(device);

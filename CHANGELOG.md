@@ -1,5 +1,53 @@
 # Changelog
 
+## 1.0.4 (2026-11-26)
+
+- `ROJORHI_VERSION_*` is 1.0.4. The public headers and the shader ABI, `ROJORHI_SHADER_ABI_VERSION`
+  3, are unchanged, as are the pins of Slang (v2026.14.1), DXC (v1.9.2607) and the Agility SDK
+  (1.619.6).
+- Fix, build: the shader rule's per-file `.precision` record also names whether the Metal toolchain
+  and DXIL were found, so a toolchain that appears or disappears between builds rebuilds every
+  output of each entry file under one policy, rather than only the outputs it gates.
+- D3D12: a pooled command list keeps the pair of the last two pipelines it bound across
+  recordings, so a recording's first `setPipeline` no longer reads the handle pool's table. The
+  pair's key is a handle's whole bits, its generation included, so an entry whose pipeline was
+  destroyed between recordings matches only that destroyed handle.
+- D3D12: a command list whose scopes are not timed decides so once for its life, since what decides
+  it, the device, the list's ordinal and its queue type, does not change for a pooled list; a scope
+  on it no longer claims, pushes and pops an empty timestamp pair. A list whose scopes are timed
+  decides again at each recording, as before.
+- Performance: [`docs/performance.md`](docs/performance.md) carries D3D12's third round against
+  native code, on a new machine, so no figure of it is compared with round 2's. Every budget it
+  missed was predicted with its cause before timing, came in within its predicted bound, and is
+  tracked for a future release.
+  - D3D12, conformant (T1) on one GPU, an NVIDIA GeForce RTX 3080 Ti on driver 621.14, with its
+    overhead budgets not yet met and other vendors unverified, measured with an Intel Core i9-14900K
+    under Windows 11 build 26300 in two sessions: CPU time misses in three rows. The fixed cost per
+    command list of a draw with a root block, 592.3 and 493.6 ns above native against budgets of
+    414.2 and 414.3 (predicted at most 970), is the work of a list outside its entries: the core's
+    list begin, the root constant `drawId` needs and the frame arena's first claim. A render pass's
+    fixed cost, 529.9 and 624.4 ns against 398.6 and 398.4 (at most 1,200), is the pass's scope
+    and the pass itself; its cost per pass, 68.56 and 70.22 ns more than native against 35.00
+    (at most 90), is the scope's bookkeeping, the starting state chapter 06 asks of every pass, the
+    core's work for a barrier the lowering leaves out, and a part that moves with where the
+    executable is loaded, whose mechanism is not yet known. The fixed cost of a dispatch with a root
+    block is not settled, 294.2 ns against 360.8 in one session and 392.2 against 360.5 in the
+    other. Every other cost meets its budget in both sessions, the pipeline switch and draw and the
+    counted indirect draw included; a 256-byte upload reads 0.00 ns above
+    native against 5.00, now that the native code writes its frame data to the same GPU upload heap
+    as RojoRHI. The composed frame's GPU time, 741.09 µs against 740.85 µs, the allocations, the
+    native calls and the pipelines after warm-up meet their budgets. Two GPU figures outside the
+    composed frame are reported with causes found after the round: a dispatch and barrier, 5.49% to
+    5.81% above native from 100 a list, and a dispatch with a root block at 100,000 a list, +5.32%.
+    The first is RojoRHI's shader-read barrier also naming constant-buffer access on a global
+    barrier, about 0.083 µs a barrier on this GPU and driver, kept in 1.0.4 and dropped in the next
+    minor release; the second, found in that configuration alone, follows the GPU's idle time before
+    each frame, which is longer for RojoRHI because it spends 0.66 ms more recording the frame, and
+    is 0.11% with the GPU's clock held. Nothing is claimed for frames that keep the GPU busy while
+    recording.
+- Known issue, D3D12: the rare block in `destroyDevice` under GPU-based validation, recorded with
+  1.0.3, is not fixed in this release and is still tracked for a future one.
+
 ## 1.0.3 (2026-11-20)
 
 - `ROJORHI_VERSION_*` is 1.0.3. The public headers and the shader ABI are unchanged.

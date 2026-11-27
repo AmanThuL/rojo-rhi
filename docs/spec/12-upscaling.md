@@ -1,7 +1,7 @@
 # 12. Upscaling
 
 **Status**: Accepted
-**API version**: 1.0.3
+**API version**: 1.0.4
 
 An upscaler reconstructs a high-resolution image from a jittered low-resolution frame, its depth,
 its motion and the upscaler's private history. The interface mirrors the former v1 temporal scaler

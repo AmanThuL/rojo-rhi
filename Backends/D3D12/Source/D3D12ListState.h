@@ -37,10 +37,13 @@ namespace rojoRHI::d3d12 {
         Foreign // Vendor work recorded on the list, such as an upscale.
     };
 
-    // A handle's bits name one allocation for the pool's whole life and a payload is fixed from creation to retirement,
-    // so a handle live when bound names the payload cached for its bits. A hit reads no table, so a list still
-    // recording after its frame retired, which breaks VU-rojo-device-0005 and goes unchecked in Release, can read a
-    // retired payload. Emptied at each acquisition, with the rest of `Binding`.
+    // A handle's bits, slot, generation and tag, name one allocation for the pool's whole life: releasing a slot advances
+    // its generation, and a slot whose generation reaches the limit is never reused. A payload is fixed from creation to
+    // retirement. So a live handle names the payload cached for its bits, and an entry whose pipeline was destroyed
+    // matches only that dead handle, never a live one. Kept across recordings, so a pooled list's first bind of a
+    // pipeline it bound before reads no table. A hit reads no table either, so binding a destroyed pipeline, which
+    // VU-rojo-cmd-0020 refuses in Debug and Release leaves unchecked, can read a retired payload, as a
+    // list still recording after its frame retired (VU-rojo-device-0005) can.
     struct ResolvedPipelines
     {
         std::array<uint64_t, 2> handles = {}; // Newest first; 0 for an empty entry.
@@ -80,8 +83,6 @@ namespace rojoRHI::d3d12 {
         ID3D12PipelineState* computePipeline = nullptr;
         ID3D12PipelineState* graphicsPipeline = nullptr;
         const PipelineState* pipeline = nullptr;
-        // The payloads of the last two pipelines `setPipeline` bound, so a list that alternates two reads no table.
-        ResolvedPipelines resolved;
 
         bool dirty(uint32_t reasons) const
         {
@@ -175,6 +176,9 @@ namespace rojoRHI::d3d12 {
         uint32_t frameSlot = 0;
         uint32_t ordinal = 0;
         Binding binding;
+        // The payloads of the last two pipelines `setPipeline` bound, so a list that alternates two reads no table. Kept
+        // across recordings, unlike `Binding`.
+        ResolvedPipelines resolved;
         LastUpload upload;
         // So a repeated command finds them without the heap directory. Reset at each acquisition.
         IndirectBuffers indirect;

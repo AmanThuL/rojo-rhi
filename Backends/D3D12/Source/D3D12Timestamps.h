@@ -62,8 +62,10 @@ namespace rojoRHI::d3d12 {
             const uint64_t* mapped = nullptr; // Mapped while the list lives.
         };
 
-        // Decided at the recording's first claim: the device, the list's ordinal and its queue type do not change while
-        // it records.
+        // Decided at the recording's first claim from the device, the list's ordinal and its queue type, none of which
+        // changes while the pooled list lives. An open gate is decided again at each recording, which also releases the
+        // last recording's extra heaps; a closed one stays closed, so a list that times nothing claims nothing and
+        // keeps no `open` entry for the rest of its life.
         enum class Gate : uint8_t
         {
             Unknown,
@@ -76,7 +78,7 @@ namespace rojoRHI::d3d12 {
         uint32_t previous = 0; // The queries the list's last recording claimed.
         // Each heap holds `1 << heapShift` queries: `kHeapQueries` until the list grows them.
         uint32_t heapShift = static_cast<uint32_t>(std::countr_zero(kHeapQueries));
-        Gate gate = Gate::Unknown;  // Reset at each acquisition.
+        Gate gate = Gate::Unknown;  // Reset at each acquisition unless closed.
         std::vector<uint32_t> open; // Innermost last; `core::kNoTimestamp` for an untimed scope.
 
         uint32_t heapQueries() const

@@ -45,8 +45,18 @@ namespace rojoRHI {
                 state.list->BeginEvent(kUnicodeEvent, state.eventLabel.c_str(), static_cast<UINT>((state.eventLabel.size() + 1) * sizeof(wchar_t)));
                 core::noteNativeCall(list.core);
             }
+            // A closed gate claims nothing and pushes nothing for the scope's end to pop, so a list that times no scope
+            // pays a test of the gate and no more. The first claim of a recording decides an unknown gate.
             ListTimestamps& timestamps = state.timestamps;
+            if (timestamps.gate == ListTimestamps::Gate::Closed)
+            {
+                return;
+            }
             const uint32_t pair = timestamps.claimPair(list);
+            if (timestamps.gate == ListTimestamps::Gate::Closed)
+            {
+                return;
+            }
             timestamps.open.push_back(pair);
             if (pair == core::kNoTimestamp)
             {
@@ -62,12 +72,16 @@ namespace rojoRHI {
         {
             ListState& state = list.state;
             ListTimestamps& timestamps = state.timestamps;
-            const uint32_t pair = timestamps.open.back();
-            timestamps.open.pop_back();
-            if (pair != core::kNoTimestamp)
+            // The gate cannot close while a scope is open, so a closed one here pushed nothing at the scope's begin.
+            if (timestamps.gate != ListTimestamps::Gate::Closed)
             {
-                state.list->EndQuery(timestamps.heapOf(pair).queries.get(), D3D12_QUERY_TYPE_TIMESTAMP, timestamps.indexOf(pair) + 1);
-                core::noteNativeCall(list.core);
+                const uint32_t pair = timestamps.open.back();
+                timestamps.open.pop_back();
+                if (pair != core::kNoTimestamp)
+                {
+                    state.list->EndQuery(timestamps.heapOf(pair).queries.get(), D3D12_QUERY_TYPE_TIMESTAMP, timestamps.indexOf(pair) + 1);
+                    core::noteNativeCall(list.core);
+                }
             }
             if (list.core.device->marksScopes())
             {

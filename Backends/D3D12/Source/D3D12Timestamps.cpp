@@ -192,7 +192,11 @@ namespace rojoRHI::d3d12 {
     {
         previous = next;
         next = 0;
-        gate = Gate::Unknown;
+        // A closed gate was decided by what does not change for the list, so it is not decided again.
+        if (gate != Gate::Closed)
+        {
+            gate = Gate::Unknown;
+        }
         open.clear();
     }
 

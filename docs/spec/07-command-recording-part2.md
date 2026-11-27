@@ -1,7 +1,7 @@
 # 07. Command recording: draws, dispatches and scopes
 
 **Status**: Accepted
-**API version**: 1.0.3
+**API version**: 1.0.4
 
 This part of the command-recording chapter ([command recording](07-command-recording.md)) defines
 pipeline binding, direct draws and dispatches, and debug scopes. A shader finds its data through

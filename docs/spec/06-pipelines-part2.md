@@ -1,7 +1,7 @@
 # 06. Pipelines: creation and dynamic state
 
 **Status**: Accepted
-**API version**: 1.0.3
+**API version**: 1.0.4
 
 This part of the pipelines chapter ([pipelines](06-pipelines.md)) defines compute pipelines,
 pipeline creation, the pipeline cache and the dynamic state set on the command list.
